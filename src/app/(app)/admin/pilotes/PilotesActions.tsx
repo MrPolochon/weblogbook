@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Settings, Trash2, X } from 'lucide-react';
+import { Settings, Trash2, X, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 
 export default function PilotesActions({
@@ -82,6 +82,13 @@ export default function PilotesActions({
           <Settings className="h-4 w-4" />
         </Link>
       )}
+      <Link
+        href={`/admin/pilotes/${piloteId}/logbook`}
+        className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-sky-400"
+        title="Voir le logbook"
+      >
+        <BookOpen className="h-4 w-4" />
+      </Link>
       <button
         onClick={handleDeleteClick}
         disabled={deleting}

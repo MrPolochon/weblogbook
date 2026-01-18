@@ -23,11 +23,17 @@ export default async function AdminPiloteEditPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <Link href="/admin/pilotes" className="text-slate-400 hover:text-slate-200">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <h1 className="text-2xl font-semibold text-slate-100">Modifier {p.identifiant}</h1>
+        <Link
+          href={`/admin/pilotes/${id}/logbook`}
+          className="btn-secondary inline-flex items-center gap-2"
+        >
+          Voir le logbook
+        </Link>
       </div>
       <EditPiloteForm
         piloteId={p.id}

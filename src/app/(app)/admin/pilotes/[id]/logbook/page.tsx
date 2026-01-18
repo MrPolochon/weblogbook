@@ -1,56 +1,60 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { formatDuree } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Plus } from 'lucide-react';
+import { ArrowLeft, BookOpen } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
 
-export default async function LogbookPage() {
+export default async function AdminPiloteLogbookPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id: piloteId } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  if (!user) redirect('/login');
 
-  const { data: profile } = await supabase
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  if (profile?.role !== 'admin') redirect('/admin');
+
+  const admin = createAdminClient();
+  const { data: p } = await admin
     .from('profiles')
-    .select('heures_initiales_minutes, blocked_until')
-    .eq('id', user.id)
+    .select('id, identifiant, heures_initiales_minutes')
+    .eq('id', piloteId)
     .single();
 
-  const blocked = profile?.blocked_until
-    ? new Date(profile.blocked_until) > new Date()
-    : false;
+  if (!p) notFound();
 
-  const { data: vols } = await supabase
+  const { data: vols } = await admin
     .from('vols')
     .select(`
       id, duree_minutes, depart_utc, statut, compagnie_libelle, type_vol, role_pilote,
       refusal_count, refusal_reason,
       type_avion:types_avion(nom, constructeur)
     `)
-    .eq('pilote_id', user.id)
+    .eq('pilote_id', piloteId)
     .order('depart_utc', { ascending: false });
 
   const totalValides = (vols || []).filter((v) => v.statut === 'validé');
   const totalMinutes =
-    (profile?.heures_initiales_minutes ?? 0) +
+    (p.heures_initiales_minutes ?? 0) +
     totalValides.reduce((s, v) => s + (v.duree_minutes || 0), 0);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-slate-100">Mon logbook</h1>
-        {!blocked && (
-          <Link href="/logbook/nouveau" className="btn-primary inline-flex gap-2">
-            <Plus className="h-4 w-4" />
-            Nouveau vol
-          </Link>
-        )}
-        {blocked && (
-          <p className="text-amber-400 text-sm">
-            Vous ne pouvez pas ajouter de vol pour le moment.
-          </p>
-        )}
+      <div className="flex flex-wrap items-center gap-4">
+        <Link href={`/admin/pilotes/${piloteId}`} className="text-slate-400 hover:text-slate-200">
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <h1 className="text-2xl font-semibold text-slate-100 flex items-center gap-2">
+          <BookOpen className="h-6 w-6" />
+          Logbook de {p.identifiant}
+        </h1>
       </div>
 
       <div className="card">
@@ -81,13 +85,7 @@ export default async function LogbookPage() {
                 {vols.map((v) => (
                   <tr key={v.id} className="border-b border-slate-700/50">
                     <td className="py-3 pr-4 text-slate-300">
-                      {(v.statut === 'refusé' && (v.refusal_count ?? 0) < 3) || v.statut === 'en_attente' ? (
-                        <Link href={`/logbook/vol/${v.id}`} className="text-sky-400 hover:underline">
-                          {format(new Date(v.depart_utc), 'dd MMM yyyy HH:mm', { locale: fr })}
-                        </Link>
-                      ) : (
-                        format(new Date(v.depart_utc), 'dd MMM yyyy HH:mm', { locale: fr })
-                      )}
+                      {format(new Date(v.depart_utc), 'dd MMM yyyy HH:mm', { locale: fr })}
                     </td>
                     <td className="py-3 pr-4 text-slate-300">
                       {(v.type_avion as { nom?: string })?.nom || '—'}
