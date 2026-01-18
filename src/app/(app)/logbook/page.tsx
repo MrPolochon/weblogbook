@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
 import { formatDuree } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -21,12 +22,15 @@ export default async function LogbookPage() {
     ? new Date(profile.blocked_until) > new Date()
     : false;
 
-  const { data: vols } = await supabase
+  const admin = createAdminClient();
+  const { data: vols } = await admin
     .from('vols')
     .select(`
       id, duree_minutes, depart_utc, statut, compagnie_libelle, type_vol, role_pilote,
+      aeroport_depart, aeroport_arrivee, instruction_type,
       refusal_count, refusal_reason,
-      type_avion:types_avion(nom, constructeur)
+      type_avion:types_avion(nom, constructeur),
+      instructeur:profiles!vols_instructeur_id_fkey(identifiant)
     `)
     .eq('pilote_id', user.id)
     .order('depart_utc', { ascending: false });
@@ -68,6 +72,8 @@ export default async function LogbookPage() {
               <thead>
                 <tr className="border-b border-slate-600 text-left text-slate-400">
                   <th className="pb-2 pr-4">Date</th>
+                  <th className="pb-2 pr-4">Départ</th>
+                  <th className="pb-2 pr-4">Arrivée</th>
                   <th className="pb-2 pr-4">Appareil</th>
                   <th className="pb-2 pr-4">Compagnie</th>
                   <th className="pb-2 pr-4">Durée</th>
@@ -89,12 +95,22 @@ export default async function LogbookPage() {
                         format(new Date(v.depart_utc), 'dd MMM yyyy HH:mm', { locale: fr })
                       )}
                     </td>
+                    <td className="py-3 pr-4 text-slate-300">{v.aeroport_depart || '—'}</td>
+                    <td className="py-3 pr-4 text-slate-300">{v.aeroport_arrivee || '—'}</td>
                     <td className="py-3 pr-4 text-slate-300">
                       {(v.type_avion as { nom?: string })?.nom || '—'}
                     </td>
                     <td className="py-3 pr-4 text-slate-300">{v.compagnie_libelle || '—'}</td>
                     <td className="py-3 pr-4 text-slate-300">{formatDuree(v.duree_minutes || 0)}</td>
-                    <td className="py-3 pr-4 text-slate-300">{v.type_vol}</td>
+                    <td className="py-3 pr-4 text-slate-300">
+                      {v.type_vol}
+                      {v.type_vol === 'Instruction' && (v.instructeur || v.instruction_type) && (
+                        <span className="block text-xs text-slate-500 mt-0.5">
+                          par {(Array.isArray(v.instructeur) ? v.instructeur[0] : v.instructeur)?.identifiant ?? '—'}
+                          {v.instruction_type ? ` — ${v.instruction_type}` : ''}
+                        </span>
+                      )}
+                    </td>
                     <td className="py-3 pr-4 text-slate-300">{v.role_pilote}</td>
                     <td className="py-3 pr-4">
                       <span
