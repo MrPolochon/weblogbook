@@ -33,6 +33,7 @@ export default function VolEditForm({
   typesAvion,
   compagnies,
   admins,
+  successRedirect,
 }: {
   volId: string;
   typeAvionId: string;
@@ -50,6 +51,7 @@ export default function VolEditForm({
   typesAvion: T[];
   compagnies: C[];
   admins: Admin[];
+  successRedirect?: string;
 }) {
   const router = useRouter();
   const [type_avion_id, setTypeAvionId] = useState(typeAvionId);
@@ -128,7 +130,7 @@ export default function VolEditForm({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      router.push('/logbook');
+      router.push(successRedirect || '/logbook');
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');

@@ -41,7 +41,7 @@ export async function PATCH(
     if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
     if (vol.pilote_id !== user.id && !isAdmin) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     if (vol.statut === 'validé' && !isAdmin) return NextResponse.json({ error: 'Impossible de modifier un vol validé' }, { status: 400 });
-    if (vol.statut === 'refusé' && (vol.refusal_count ?? 0) >= 3) {
+    if (vol.statut === 'refusé' && (vol.refusal_count ?? 0) >= 3 && !isAdmin) {
       return NextResponse.json({ error: 'Ce vol a été refusé 3 fois. Veuillez en créer un nouveau.' }, { status: 400 });
     }
 

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { formatDuree } from '@/lib/utils';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { ArrowLeft, BookOpen } from 'lucide-react';
+import { ArrowLeft, BookOpen, Pencil } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
 
 export default async function AdminCompagnieLogbookPage({
@@ -86,7 +86,7 @@ export default async function AdminCompagnieLogbookPage({
                   <th className="pb-2 pr-4">Type</th>
                   <th className="pb-2 pr-4">Rôle</th>
                   <th className="pb-2 pr-4">Statut</th>
-                  <th className="pb-2 w-10"> </th>
+                  <th className="pb-2 w-20"> </th>
                 </tr>
               </thead>
               <tbody>
@@ -132,7 +132,16 @@ export default async function AdminCompagnieLogbookPage({
                       </span>
                     </td>
                     <td className="py-3">
-                      <VolDeleteButton volId={v.id} />
+                      <div className="flex items-center gap-1">
+                        <Link
+                          href={`/logbook/vol/${v.id}?from=admin-compagnie&cid=${compagnieId}`}
+                          className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-sky-400"
+                          title="Modifier"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Link>
+                        <VolDeleteButton volId={v.id} />
+                      </div>
                     </td>
                   </tr>
                 ))}
