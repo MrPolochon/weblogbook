@@ -28,7 +28,7 @@ export const AEROPORTS_PTFS = [
   { code: 'ISKP', nom: 'Skopelos Airfield' },
 ] as const;
 
-export const CODES_OACI_VALIDES = new Set(AEROPORTS_PTFS.map((a) => a.code));
+export const CODES_OACI_VALIDES: Set<string> = new Set(AEROPORTS_PTFS.map((a) => a.code));
 
 export function getAeroportLabel(code: string | null | undefined): string {
   if (!code) return '—';
