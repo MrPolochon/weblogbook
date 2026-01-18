@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import NavBar from '@/components/NavBar';
 import AdminModeBg from '@/components/AdminModeBg';
@@ -20,10 +21,24 @@ export default async function AppLayout({
 
   const isAdmin = profile?.role === 'admin';
 
+  let pendingVolsCount = 0;
+  if (isAdmin) {
+    try {
+      const admin = createAdminClient();
+      const { count } = await admin
+        .from('vols')
+        .select('*', { count: 'exact', head: true })
+        .eq('statut', 'en_attente');
+      pendingVolsCount = count ?? 0;
+    } catch {
+      pendingVolsCount = 0;
+    }
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       <AdminModeBg />
-      <NavBar isAdmin={isAdmin} />
+      <NavBar isAdmin={isAdmin} pendingVolsCount={pendingVolsCount} />
       <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
     </div>
   );

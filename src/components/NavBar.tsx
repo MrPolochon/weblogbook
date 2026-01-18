@@ -17,7 +17,7 @@ export function setInterfaceMode(mode: 'admin' | 'pilote') {
   if (typeof window !== 'undefined') localStorage.setItem(MODE_KEY, mode);
 }
 
-export default function NavBar({ isAdmin }: { isAdmin: boolean }) {
+export default function NavBar({ isAdmin, pendingVolsCount = 0 }: { isAdmin: boolean; pendingVolsCount?: number }) {
   const pathname = usePathname();
   const router = useRouter();
   const mode = typeof window !== 'undefined' ? getInterfaceMode() : 'pilote';
@@ -61,7 +61,7 @@ export default function NavBar({ isAdmin }: { isAdmin: boolean }) {
             <Link
               href="/admin"
               className={cn(
-                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
                 pathname.startsWith('/admin')
                   ? 'bg-slate-700/50 text-sky-300'
                   : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
@@ -69,6 +69,14 @@ export default function NavBar({ isAdmin }: { isAdmin: boolean }) {
             >
               <LayoutDashboard className="h-4 w-4" />
               Admin
+              {pendingVolsCount > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white ring-2 ring-slate-900"
+                  title={`${pendingVolsCount} vol(s) en attente`}
+                >
+                  {pendingVolsCount > 99 ? '99+' : pendingVolsCount}
+                </span>
+              )}
             </Link>
           )}
           <Link

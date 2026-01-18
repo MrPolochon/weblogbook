@@ -36,7 +36,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -47,7 +47,31 @@ export async function DELETE(
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
+    if (id === user.id) {
+      return NextResponse.json({ error: 'Vous ne pouvez pas supprimer votre propre compte.' }, { status: 400 });
+    }
+
     const admin = createAdminClient();
+    const { data: target } = await admin.from('profiles').select('role').eq('id', id).single();
+    if (!target) return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
+
+    if (target.role === 'admin') {
+      const { count } = await admin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
+      if ((count ?? 0) <= 1) {
+        return NextResponse.json({ error: 'Il doit rester au moins un administrateur.' }, { status: 400 });
+      }
+      const body = await request.json().catch(() => ({})) as { superadminPassword?: string };
+      const expected = process.env.SUPERADMIN_PASSWORD;
+      if (!expected || expected.length === 0) {
+        return NextResponse.json(
+          { error: 'Mot de passe superadmin non configuré. Définissez SUPERADMIN_PASSWORD dans les variables d\'environnement.' },
+          { status: 500 }
+        );
+      }
+      if (body?.superadminPassword !== expected) {
+        return NextResponse.json({ error: 'Mot de passe superadmin incorrect.' }, { status: 400 });
+      }
+    }
 
     const { data: vols } = await admin.from('vols').select('id, type_avion_id, compagnie_libelle, duree_minutes, depart_utc, arrivee_utc, type_vol, commandant_bord, role_pilote').eq('pilote_id', id);
     const purgeAt = new Date();
