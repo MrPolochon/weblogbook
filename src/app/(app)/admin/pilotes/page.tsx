@@ -18,7 +18,7 @@ export default async function AdminPilotesPage() {
   const pilotes = (profiles || []).filter((p) => p.role !== 'admin');
   const admins = (profiles || []).filter((p) => p.role === 'admin');
 
-  const renderRow = (p: (typeof profiles)[0], isAdminRole: boolean) => {
+  const renderRow = (p: (typeof pilotes)[number], isAdminRole: boolean) => {
     const blocked = p.blocked_until ? new Date(p.blocked_until) > new Date() : false;
     return (
       <tr key={p.id} className="border-b border-slate-700/50">
