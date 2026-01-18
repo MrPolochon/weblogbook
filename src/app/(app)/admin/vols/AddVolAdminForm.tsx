@@ -1,0 +1,163 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+type T = { id: string; nom: string; constructeur?: string };
+type C = { id: string; nom: string };
+type P = { id: string; identifiant: string };
+
+export default function AddVolAdminForm({
+  typesAvion,
+  compagnies,
+  profiles,
+}: {
+  typesAvion: T[];
+  compagnies: C[];
+  profiles: P[];
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pilote_id, setPiloteId] = useState('');
+  const [type_avion_id, setTypeAvionId] = useState('');
+  const [compagnie_id, setCompagnieId] = useState('');
+  const [pourMoiMemo, setPourMoiMemo] = useState(false);
+  const [duree_minutes, setDureeMinutes] = useState('');
+  const [depart_utc, setDepartUtc] = useState('');
+  const [type_vol, setTypeVol] = useState<'IFR' | 'VFR'>('VFR');
+  const [commandant_bord, setCommandantBord] = useState('');
+  const [role_pilote, setRolePilote] = useState<'Pilote' | 'Co-pilote'>('Pilote');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const compagnieLibelle = pourMoiMemo ? 'Pour moi-même' : (compagnies.find((c) => c.id === compagnie_id)?.nom ?? '');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!pilote_id || !type_avion_id || (!pourMoiMemo && !compagnie_id)) {
+      setError('Pilote, type d\'avion et compagnie requis.');
+      return;
+    }
+    const d = parseInt(duree_minutes, 10);
+    if (isNaN(d) || d < 1 || !depart_utc || !commandant_bord.trim()) {
+      setError('Durée, départ et commandant requis.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/vols', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pilote_id,
+          type_avion_id,
+          compagnie_id: pourMoiMemo ? null : compagnie_id,
+          compagnie_libelle: pourMoiMemo ? 'Pour moi-même' : compagnieLibelle,
+          duree_minutes: d,
+          depart_utc,
+          type_vol,
+          commandant_bord: commandant_bord.trim(),
+          role_pilote,
+          created_by_admin: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setOpen(false);
+      setPiloteId('');
+      setTypeAvionId('');
+      setCompagnieId('');
+      setPourMoiMemo(false);
+      setDureeMinutes('');
+      setDepartUtc('');
+      setCommandantBord('');
+      router.refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="btn-secondary"
+      >
+        {open ? 'Annuler' : 'Ajouter un vol pour un pilote'}
+      </button>
+      {open && (
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <div>
+            <label className="label">Pilote *</label>
+            <select className="input" value={pilote_id} onChange={(e) => setPiloteId(e.target.value)} required>
+              <option value="">— Choisir —</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>{p.identifiant}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Type d&apos;avion *</label>
+            <select className="input" value={type_avion_id} onChange={(e) => setTypeAvionId(e.target.value)} required>
+              <option value="">— Choisir —</option>
+              {typesAvion.map((t) => (
+                <option key={t.id} value={t.id}>{t.nom} {t.constructeur ? `(${t.constructeur})` : ''}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Compagnie *</label>
+            <div className="flex items-center gap-2 mb-2">
+              <input type="checkbox" id="moi" checked={pourMoiMemo} onChange={(e) => { setPourMoiMemo(e.target.checked); if (e.target.checked) setCompagnieId(''); }} />
+              <label htmlFor="moi" className="text-sm text-slate-300">Pour moi-même</label>
+            </div>
+            {!pourMoiMemo && (
+              <select className="input" value={compagnie_id} onChange={(e) => setCompagnieId(e.target.value)} required>
+                <option value="">— Choisir —</option>
+                {compagnies.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nom}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Durée (min) *</label>
+              <input type="number" className="input" value={duree_minutes} onChange={(e) => setDureeMinutes(e.target.value)} min={1} required />
+            </div>
+            <div>
+              <label className="label">Départ (UTC) *</label>
+              <input type="datetime-local" className="input" value={depart_utc} onChange={(e) => setDepartUtc(e.target.value)} required />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Type vol *</label>
+              <select className="input" value={type_vol} onChange={(e) => setTypeVol(e.target.value as 'IFR' | 'VFR')}>
+                <option value="VFR">VFR</option>
+                <option value="IFR">IFR</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Rôle *</label>
+              <select className="input" value={role_pilote} onChange={(e) => setRolePilote(e.target.value as 'Pilote' | 'Co-pilote')}>
+                <option value="Pilote">Pilote</option>
+                <option value="Co-pilote">Co-pilote</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Commandant de bord *</label>
+            <input type="text" className="input" value={commandant_bord} onChange={(e) => setCommandantBord(e.target.value)} required />
+          </div>
+          {error && <p className="text-red-400 text-sm">{error}</p>}
+          <button type="submit" className="btn-primary" disabled={loading}>{loading ? 'Ajout…' : 'Ajouter (validé)'}</button>
+        </form>
+      )}
+    </div>
+  );
+}
