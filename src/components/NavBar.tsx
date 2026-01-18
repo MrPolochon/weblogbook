@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, LayoutDashboard, FileText, User, LogOut, Switch } from 'lucide-react';
+import { BookOpen, LayoutDashboard, FileText, User, LogOut, ArrowLeftRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -91,7 +91,7 @@ export default function NavBar({ isAdmin }: { isAdmin: boolean }) {
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-slate-100"
               title={mode === 'pilote' ? 'Passer en interface Admin' : 'Passer en interface Pilote'}
             >
-              <Switch className="h-4 w-4" />
+              <ArrowLeftRight className="h-4 w-4" />
               {mode === 'pilote' ? 'Admin' : 'Pilote'}
             </button>
           )}
