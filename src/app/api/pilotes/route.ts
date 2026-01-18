@@ -13,10 +13,11 @@ export async function POST(request: Request) {
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { identifiant, password } = body;
+    const { identifiant, password, role: roleParam } = body;
     if (!identifiant || typeof identifiant !== 'string' || !password || typeof password !== 'string') {
       return NextResponse.json({ error: 'Identifiant et mot de passe requis' }, { status: 400 });
     }
+    const role = roleParam === 'admin' ? 'admin' : 'pilote';
     const id = String(identifiant).trim().toLowerCase();
     if (!id || id.length < 2) return NextResponse.json({ error: 'Identifiant trop court' }, { status: 400 });
     if (password.length < 8) return NextResponse.json({ error: 'Le mot de passe doit faire au moins 8 caractères' }, { status: 400 });
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
     const { error: profileErr } = await admin.from('profiles').insert({
       id: u.user.id,
       identifiant: id,
-      role: 'pilote',
+      role,
       heures_initiales_minutes: 0,
     });
 

@@ -2,6 +2,18 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const isSetup = pathname === '/setup';
+  const isLogin = pathname === '/login';
+  const isAuthCallback = pathname.startsWith('/auth/');
+  const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin';
+
+  // Routes publiques : aucune requête Supabase, réponse immédiate (évite blocage mobile)
+  if (isAuthCallback || isApiPublic || isSetup || isLogin) {
+    return NextResponse.next({ request });
+  }
+
+  // Routes protégées : vérifier la session
   let response = NextResponse.next({ request });
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,18 +31,6 @@ export async function middleware(request: NextRequest) {
       },
     }
   );
-  await supabase.auth.getUser();
-
-  const { pathname } = request.nextUrl;
-  const isSetup = pathname === '/setup';
-  const isLogin = pathname === '/login';
-  const isAuthCallback = pathname.startsWith('/auth/');
-  const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin';
-
-  if (isAuthCallback || isApiPublic) return response;
-  if (isSetup || isLogin) return response;
-
-  // Toutes les autres routes : besoin d'être connecté (sauf assets, _next, etc.)
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     const url = request.nextUrl.clone();

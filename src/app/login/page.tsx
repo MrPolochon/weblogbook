@@ -14,13 +14,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
 
   useEffect(() => {
-    fetch('/api/has-admin', { cache: 'no-store' })
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 10000);
+    fetch('/api/has-admin', { cache: 'no-store', signal: ctrl.signal })
       .then((r) => r.json())
       .then((d) => {
+        clearTimeout(t);
         if (!d.hasAdmin) router.replace('/setup');
         else setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        clearTimeout(t);
+        setLoading(false);
+      });
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
   }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -83,6 +93,9 @@ export default function LoginPage() {
           <button type="submit" className="btn-primary w-full" disabled={submitting}>
             {submitting ? 'Connexion…' : 'Se connecter'}
           </button>
+          <p className="text-slate-500 text-xs mt-4 text-center">
+            Premier accès ? <a href="/setup" className="text-slate-300 underline">Créer le premier admin</a>
+          </p>
         </form>
       </div>
     </div>

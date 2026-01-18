@@ -13,13 +13,23 @@ export default function SetupPage() {
   const [password, setPassword] = useState('');
 
   useEffect(() => {
-    fetch('/api/has-admin', { cache: 'no-store' })
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 10000);
+    fetch('/api/has-admin', { cache: 'no-store', signal: ctrl.signal })
       .then((r) => r.json())
       .then((d) => {
+        clearTimeout(t);
         if (d.hasAdmin) router.replace('/login');
         else setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        clearTimeout(t);
+        setLoading(false);
+      });
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
   }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {

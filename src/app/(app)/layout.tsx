@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import NavBar from '@/components/NavBar';
+import AdminModeBg from '@/components/AdminModeBg';
 
 export default async function AppLayout({
   children,
@@ -21,6 +22,7 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-screen flex flex-col">
+      <AdminModeBg />
       <NavBar isAdmin={isAdmin} />
       <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
     </div>
