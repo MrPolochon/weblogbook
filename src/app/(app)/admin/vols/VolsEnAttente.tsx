@@ -15,8 +15,8 @@ type Vol = {
   type_vol: string;
   role_pilote: string;
   refusal_reason: string | null;
-  pilote?: { identifiant: string } | null;
-  type_avion?: { nom: string } | null;
+  pilote?: { identifiant?: string } | { identifiant?: string }[] | null;
+  type_avion?: { nom?: string } | { nom?: string }[] | null;
 };
 
 export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
@@ -77,9 +77,9 @@ export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
           <div key={v.id} className="rounded-lg border border-slate-700/50 bg-slate-800/20 p-4">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="text-sm text-slate-300 space-y-1">
-                <p><span className="text-slate-500">Pilote:</span> {(v.pilote as { identifiant?: string } | null)?.identifiant ?? '—'}</p>
+                <p><span className="text-slate-500">Pilote:</span> {(Array.isArray(v.pilote) ? v.pilote[0] : v.pilote)?.identifiant ?? '—'}</p>
                 <p><span className="text-slate-500">Date:</span> {format(new Date(v.depart_utc), 'dd MMM yyyy HH:mm', { locale: fr })} UTC</p>
-                <p><span className="text-slate-500">Appareil:</span> {(v.type_avion as { nom?: string } | null)?.nom ?? '—'}</p>
+                <p><span className="text-slate-500">Appareil:</span> {(Array.isArray(v.type_avion) ? v.type_avion[0] : v.type_avion)?.nom ?? '—'}</p>
                 <p><span className="text-slate-500">Compagnie:</span> {v.compagnie_libelle}</p>
                 <p><span className="text-slate-500">Durée:</span> {formatDuree(v.duree_minutes)} — {v.type_vol} — {v.role_pilote}</p>
               </div>
