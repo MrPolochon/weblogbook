@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
 
   useEffect(() => {
-    fetch('/api/has-admin')
+    fetch('/api/has-admin', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => {
         if (!d.hasAdmin) router.replace('/setup');
