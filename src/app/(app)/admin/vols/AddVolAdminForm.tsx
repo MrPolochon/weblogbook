@@ -2,11 +2,19 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { addMinutes, subMinutes } from 'date-fns';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
 type T = { id: string; nom: string; constructeur?: string };
 type C = { id: string; nom: string };
 type P = { id: string; identifiant: string };
+
+function parseUtcLocal(s: string): Date | null {
+  if (!s) return null;
+  const z = /Z$/.test(s) ? s : s + 'Z';
+  const d = new Date(z);
+  return isNaN(d.getTime()) ? null : d;
+}
 
 export default function AddVolAdminForm({
   typesAvion,
@@ -28,7 +36,8 @@ export default function AddVolAdminForm({
   const [aeroport_depart, setAeroportDepart] = useState('');
   const [aeroport_arrivee, setAeroportArrivee] = useState('');
   const [duree_minutes, setDureeMinutes] = useState('');
-  const [depart_utc, setDepartUtc] = useState('');
+  const [heure_mode, setHeureMode] = useState<'depart' | 'arrivee'>('depart');
+  const [heure_utc, setHeureUtc] = useState('');
   const [type_vol, setTypeVol] = useState<'IFR' | 'VFR' | 'Instruction'>('VFR');
   const [instructeur_id, setInstructeurId] = useState('');
   const [instruction_type, setInstructionType] = useState('');
@@ -38,6 +47,25 @@ export default function AddVolAdminForm({
   const [error, setError] = useState<string | null>(null);
 
   const compagnieLibelle = pourMoiMemo ? 'Pour moi-même' : (compagnies.find((c) => c.id === compagnie_id)?.nom ?? '');
+
+  function computeDepartUtc(): string {
+    const d = parseUtcLocal(heure_utc);
+    if (!d) return '';
+    if (heure_mode === 'depart') return d.toISOString();
+    const dur = parseInt(duree_minutes, 10);
+    if (isNaN(dur) || dur < 1) return d.toISOString();
+    return subMinutes(d, dur).toISOString();
+  }
+
+  function handleHeureModeChange(m: 'depart' | 'arrivee') {
+    if (m === heure_mode) return;
+    const dur = parseInt(duree_minutes, 10);
+    const d = parseUtcLocal(heure_utc);
+    if (d && !isNaN(dur) && dur >= 1) {
+      setHeureUtc((m === 'arrivee' ? addMinutes(d, dur) : subMinutes(d, dur)).toISOString().slice(0, 16));
+    }
+    setHeureMode(m);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -51,12 +79,17 @@ export default function AddVolAdminForm({
       return;
     }
     const d = parseInt(duree_minutes, 10);
-    if (isNaN(d) || d < 1 || !depart_utc || !commandant_bord.trim()) {
-      setError('Durée, départ et commandant requis.');
+    if (isNaN(d) || d < 1 || !heure_utc || !commandant_bord.trim()) {
+      setError('Durée, heure (départ ou arrivée) et commandant requis.');
       return;
     }
     if (type_vol === 'Instruction' && (!instructeur_id || !instruction_type.trim())) {
       setError('Vol d\'instruction : instructeur et type d\'instruction requis.');
+      return;
+    }
+    const depart_utc = computeDepartUtc();
+    if (!depart_utc) {
+      setError('Heure invalide.');
       return;
     }
     setLoading(true);
@@ -91,7 +124,8 @@ export default function AddVolAdminForm({
       setAeroportDepart('');
       setAeroportArrivee('');
       setDureeMinutes('');
-      setDepartUtc('');
+      setHeureMode('depart');
+      setHeureUtc('');
       setTypeVol('VFR');
       setInstructeurId('');
       setInstructionType('');
@@ -173,9 +207,31 @@ export default function AddVolAdminForm({
               <label className="label">Durée (min) *</label>
               <input type="number" className="input" value={duree_minutes} onChange={(e) => setDureeMinutes(e.target.value)} min={1} required />
             </div>
-            <div>
-              <label className="label">Départ (UTC) *</label>
-              <input type="datetime-local" className="input" value={depart_utc} onChange={(e) => setDepartUtc(e.target.value)} required />
+            <div className="space-y-2">
+              <span className="label block">Heure (UTC) *</span>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                  <input type="radio" name="heure_mode" checked={heure_mode === 'depart'} onChange={() => handleHeureModeChange('depart')} className="rounded" />
+                  Départ
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                  <input type="radio" name="heure_mode" checked={heure_mode === 'arrivee'} onChange={() => handleHeureModeChange('arrivee')} className="rounded" />
+                  Arrivée
+                </label>
+              </div>
+              <input type="datetime-local" className="input" value={heure_utc} onChange={(e) => setHeureUtc(e.target.value)} required />
+              {heure_utc && parseInt(duree_minutes, 10) >= 1 && (() => {
+                const dur = parseInt(duree_minutes, 10);
+                const pd = parseUtcLocal(heure_utc);
+                if (!pd || isNaN(dur)) return null;
+                const other = heure_mode === 'depart' ? addMinutes(pd, dur) : subMinutes(pd, dur);
+                return (
+                  <p className="text-xs text-slate-500">
+                    {heure_mode === 'depart' ? 'Arrivée calculée : ' : 'Départ calculé : '}
+                    {String(other.getUTCHours()).padStart(2, '0')}:{String(other.getUTCMinutes()).padStart(2, '0')}
+                  </p>
+                );
+              })()}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">

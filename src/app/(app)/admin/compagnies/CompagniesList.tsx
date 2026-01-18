@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { Trash2, BookOpen } from 'lucide-react';
 
 type C = { id: string; nom: string };
 
@@ -31,13 +32,22 @@ export default function CompagniesList({ compagnies }: { compagnies: C[] }) {
         {compagnies.map((c) => (
           <li key={c.id} className="flex items-center justify-between py-1">
             <span className="text-slate-200">{c.nom}</span>
-            <button
-              onClick={() => handleDelete(c.id, c.nom)}
-              disabled={deleting === c.id}
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-red-400 disabled:opacity-50"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/admin/compagnies/${c.id}/logbook`}
+                className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-sky-400"
+                title="Voir le logbook"
+              >
+                <BookOpen className="h-4 w-4" />
+              </Link>
+              <button
+                onClick={() => handleDelete(c.id, c.nom)}
+                disabled={deleting === c.id}
+                className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-red-400 disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           </li>
         ))}
       </ul>

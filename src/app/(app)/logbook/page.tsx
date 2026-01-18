@@ -26,7 +26,7 @@ export default async function LogbookPage() {
   const { data: vols } = await admin
     .from('vols')
     .select(`
-      id, duree_minutes, depart_utc, statut, compagnie_libelle, type_vol, role_pilote,
+      id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote,
       aeroport_depart, aeroport_arrivee, instruction_type,
       refusal_count, refusal_reason,
       type_avion:types_avion(nom, constructeur),
@@ -89,14 +89,18 @@ export default async function LogbookPage() {
                     <td className="py-3 pr-4 text-slate-300">
                       {(v.statut === 'refusé' && (v.refusal_count ?? 0) < 3) || v.statut === 'en_attente' ? (
                         <Link href={`/logbook/vol/${v.id}`} className="text-sky-400 hover:underline">
-                          {format(new Date(v.depart_utc), 'dd MMM yyyy HH:mm', { locale: fr })}
+                          {format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })}
                         </Link>
                       ) : (
-                        format(new Date(v.depart_utc), 'dd MMM yyyy HH:mm', { locale: fr })
+                        format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })
                       )}
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">{v.aeroport_depart || '—'}</td>
-                    <td className="py-3 pr-4 text-slate-300">{v.aeroport_arrivee || '—'}</td>
+                    <td className="py-3 pr-4 text-slate-300">
+                      {v.aeroport_depart || '—'} {format(new Date(v.depart_utc), 'HH:mm')}
+                    </td>
+                    <td className="py-3 pr-4 text-slate-300">
+                      {v.aeroport_arrivee || '—'} {v.arrivee_utc ? format(new Date(v.arrivee_utc), 'HH:mm') : '—'}
+                    </td>
                     <td className="py-3 pr-4 text-slate-300">
                       {(v.type_avion as { nom?: string })?.nom || '—'}
                     </td>
