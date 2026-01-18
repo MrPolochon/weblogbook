@@ -33,7 +33,7 @@ export default function SetupPage() {
         body: JSON.stringify({ identifiant: identifiant.trim(), password }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) || data.error) {
+      if (!res.ok || data.error) {
         throw new Error(data.error || 'Erreur lors de la création');
       }
       const supabase = createClient();
