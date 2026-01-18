@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { addMinutes, parseISO } from 'date-fns';
+import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 
 export async function POST(request: Request) {
   try {
@@ -19,9 +20,13 @@ export async function POST(request: Request) {
       type_avion_id,
       compagnie_id,
       compagnie_libelle,
+      aeroport_depart,
+      aeroport_arrivee,
       duree_minutes,
       depart_utc,
       type_vol,
+      instructeur_id: instructeurId,
+      instruction_type: instructionType,
       commandant_bord,
       role_pilote,
       created_by_admin,
@@ -38,8 +43,19 @@ export async function POST(request: Request) {
     }
 
     if (!type_avion_id || !compagnie_libelle || typeof duree_minutes !== 'number' || duree_minutes < 1 ||
-        !depart_utc || !['IFR', 'VFR'].includes(type_vol) || !commandant_bord || !['Pilote', 'Co-pilote'].includes(role_pilote)) {
+        !depart_utc || !['IFR', 'VFR', 'Instruction'].includes(type_vol) || !commandant_bord || !['Pilote', 'Co-pilote'].includes(role_pilote)) {
       return NextResponse.json({ error: 'Champs requis manquants ou invalides' }, { status: 400 });
+    }
+    if (!aeroport_depart || !CODES_OACI_VALIDES.has(String(aeroport_depart).toUpperCase()) ||
+        !aeroport_arrivee || !CODES_OACI_VALIDES.has(String(aeroport_arrivee).toUpperCase())) {
+      return NextResponse.json({ error: 'Aéroport de départ et d\'arrivée requis (code OACI PTFS valide)' }, { status: 400 });
+    }
+    if (type_vol === 'Instruction') {
+      if (!body.instructeur_id || !body.instruction_type || typeof body.instruction_type !== 'string' || !String(body.instruction_type).trim()) {
+        return NextResponse.json({ error: 'Vol d\'instruction : instructeur (admin) et type d\'instruction requis.' }, { status: 400 });
+      }
+      const { data: inst } = await supabase.from('profiles').select('id').eq('id', body.instructeur_id).eq('role', 'admin').single();
+      if (!inst) return NextResponse.json({ error: 'L\'instructeur doit être un administrateur.' }, { status: 400 });
     }
 
     const depStr = /Z$/.test(String(depart_utc)) ? String(depart_utc) : String(depart_utc) + 'Z';
@@ -51,10 +67,14 @@ export async function POST(request: Request) {
       type_avion_id,
       compagnie_id: compagnie_id || null,
       compagnie_libelle: String(compagnie_libelle).trim() || 'Pour moi-même',
+      aeroport_depart: String(aeroport_depart).toUpperCase(),
+      aeroport_arrivee: String(aeroport_arrivee).toUpperCase(),
       duree_minutes,
       depart_utc: dep.toISOString(),
       arrivee_utc: arrivee.toISOString(),
       type_vol,
+      instructeur_id: type_vol === 'Instruction' ? instructeurId : null,
+      instruction_type: type_vol === 'Instruction' && instructionType ? String(instructionType).trim() : null,
       commandant_bord: String(commandant_bord).trim(),
       role_pilote,
       statut: isAdmin && created_by_admin ? 'validé' : 'en_attente',

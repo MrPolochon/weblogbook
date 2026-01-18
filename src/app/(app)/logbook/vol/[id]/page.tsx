@@ -18,7 +18,7 @@ export default async function LogbookVolEditPage({
     .from('vols')
     .select(`
       id, pilote_id, type_avion_id, compagnie_id, compagnie_libelle, duree_minutes, depart_utc,
-      type_vol, commandant_bord, role_pilote, statut, refusal_count, refusal_reason
+      type_vol, aeroport_depart, aeroport_arrivee, instructeur_id, instruction_type, commandant_bord, role_pilote, statut, refusal_count, refusal_reason
     `)
     .eq('id', id)
     .single();
@@ -28,9 +28,10 @@ export default async function LogbookVolEditPage({
   if (vol.statut === 'validé') redirect('/logbook');
   if (vol.statut === 'refusé' && (vol.refusal_count ?? 0) >= 3) redirect('/logbook');
 
-  const [{ data: types }, { data: compagnies }] = await Promise.all([
+  const [{ data: types }, { data: compagnies }, { data: admins }] = await Promise.all([
     supabase.from('types_avion').select('id, nom, constructeur').order('ordre'),
     supabase.from('compagnies').select('id, nom').order('nom'),
+    supabase.from('profiles').select('id, identifiant').eq('role', 'admin').order('identifiant'),
   ]);
 
   const departLocal = vol.depart_utc ? new Date(vol.depart_utc).toISOString().slice(0, 16) : '';
@@ -56,13 +57,18 @@ export default async function LogbookVolEditPage({
         typeAvionId={vol.type_avion_id}
         compagnieId={vol.compagnie_id}
         compagnieLibelle={vol.compagnie_libelle}
+        aeroportDepart={vol.aeroport_depart ?? ''}
+        aeroportArrivee={vol.aeroport_arrivee ?? ''}
         dureeMinutes={vol.duree_minutes}
         departUtc={departLocal}
-        typeVol={vol.type_vol as 'IFR' | 'VFR'}
+        typeVol={(vol.type_vol as 'IFR' | 'VFR' | 'Instruction') || 'VFR'}
+        instructeurId={vol.instructeur_id ?? ''}
+        instructionType={vol.instruction_type ?? ''}
         commandantBord={vol.commandant_bord}
         rolePilote={vol.role_pilote as 'Pilote' | 'Co-pilote'}
         typesAvion={types || []}
         compagnies={compagnies || []}
+        admins={admins || []}
       />
     </div>
   );

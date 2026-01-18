@@ -2,24 +2,32 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
 type TypeAvion = { id: string; nom: string; constructeur: string };
 type Compagnie = { id: string; nom: string };
+type Admin = { id: string; identifiant: string };
 
 export default function VolForm({
   typesAvion,
   compagnies,
+  admins,
 }: {
   typesAvion: TypeAvion[];
   compagnies: Compagnie[];
+  admins: Admin[];
 }) {
   const router = useRouter();
   const [type_avion_id, setTypeAvionId] = useState('');
   const [compagnie_id, setCompagnieId] = useState('');
   const [pourMoiMemo, setPourMoiMemo] = useState(false);
+  const [aeroport_depart, setAeroportDepart] = useState('');
+  const [aeroport_arrivee, setAeroportArrivee] = useState('');
   const [duree_minutes, setDureeMinutes] = useState('');
   const [depart_utc, setDepartUtc] = useState('');
-  const [type_vol, setTypeVol] = useState<'IFR' | 'VFR'>('VFR');
+  const [type_vol, setTypeVol] = useState<'IFR' | 'VFR' | 'Instruction'>('VFR');
+  const [instructeur_id, setInstructeurId] = useState('');
+  const [instruction_type, setInstructionType] = useState('');
   const [commandant_bord, setCommandantBord] = useState('');
   const [role_pilote, setRolePilote] = useState<'Pilote' | 'Co-pilote'>('Pilote');
   const [loading, setLoading] = useState(false);
@@ -31,8 +39,12 @@ export default function VolForm({
     e.preventDefault();
     setError(null);
     const d = parseInt(duree_minutes, 10);
-    if (!type_avion_id || (!pourMoiMemo && !compagnie_id) || isNaN(d) || d < 1 || !depart_utc || !commandant_bord.trim()) {
+    if (!type_avion_id || (!pourMoiMemo && !compagnie_id) || !aeroport_depart || !aeroport_arrivee || isNaN(d) || d < 1 || !depart_utc || !commandant_bord.trim()) {
       setError('Veuillez remplir tous les champs requis.');
+      return;
+    }
+    if (type_vol === 'Instruction' && (!instructeur_id || !instruction_type.trim())) {
+      setError('Pour un vol d\'instruction : choisir l\'admin instructeur et indiquer le type d\'instruction.');
       return;
     }
     setLoading(true);
@@ -44,9 +56,13 @@ export default function VolForm({
           type_avion_id,
           compagnie_id: pourMoiMemo ? null : compagnie_id,
           compagnie_libelle: pourMoiMemo ? 'Pour moi-même' : compagnieLibelle,
+          aeroport_depart,
+          aeroport_arrivee,
           duree_minutes: d,
           depart_utc: depart_utc,
           type_vol,
+          instructeur_id: type_vol === 'Instruction' ? instructeur_id : null,
+          instruction_type: type_vol === 'Instruction' ? instruction_type.trim() : null,
           commandant_bord: commandant_bord.trim(),
           role_pilote,
         }),
@@ -109,6 +125,27 @@ export default function VolForm({
 
       <div className="grid grid-cols-2 gap-4">
         <div>
+          <label className="label">Aéroport de départ *</label>
+          <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
+            <option value="">— Choisir —</option>
+            {AEROPORTS_PTFS.map((a) => (
+              <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Aéroport d&apos;arrivée *</label>
+          <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required>
+            <option value="">— Choisir —</option>
+            {AEROPORTS_PTFS.map((a) => (
+              <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
           <label className="label">Durée (minutes) *</label>
           <input
             type="number"
@@ -134,9 +171,10 @@ export default function VolForm({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="label">Type de vol *</label>
-          <select className="input" value={type_vol} onChange={(e) => setTypeVol(e.target.value as 'IFR' | 'VFR')}>
+          <select className="input" value={type_vol} onChange={(e) => setTypeVol(e.target.value as 'IFR' | 'VFR' | 'Instruction')}>
             <option value="VFR">VFR</option>
             <option value="IFR">IFR</option>
+            <option value="Instruction">Instruction</option>
           </select>
         </div>
         <div>
@@ -147,6 +185,30 @@ export default function VolForm({
           </select>
         </div>
       </div>
+
+      {type_vol === 'Instruction' && (
+        <div className="space-y-4 rounded-lg border border-slate-600/50 bg-slate-800/30 p-4">
+          <div>
+            <label className="label">Admin / instructeur avec qui vous avez fait le vol *</label>
+            <select className="input" value={instructeur_id} onChange={(e) => setInstructeurId(e.target.value)}>
+              <option value="">— Choisir —</option>
+              {admins.map((a) => (
+                <option key={a.id} value={a.id}>{a.identifiant}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Type de vol d&apos;instruction *</label>
+            <input
+              type="text"
+              className="input"
+              value={instruction_type}
+              onChange={(e) => setInstructionType(e.target.value)}
+              placeholder="ex. IFR initial, VFR de nuit, perfectionnement..."
+            />
+          </div>
+        </div>
+      )}
 
       <div>
         <label className="label">Nom / pseudo du commandant de bord *</label>

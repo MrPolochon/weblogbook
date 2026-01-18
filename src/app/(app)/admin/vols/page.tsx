@@ -17,14 +17,17 @@ export default async function AdminVolsPage() {
   const admin = createAdminClient();
   const [{ data: vols }, { data: types }, { data: compagnies }, { data: profiles }] = await Promise.all([
     admin.from('vols').select(`
-      id, duree_minutes, depart_utc, statut, compagnie_libelle, type_vol, role_pilote, refusal_reason,
+      id, duree_minutes, depart_utc, statut, compagnie_libelle, type_vol, role_pilote, refusal_reason, instruction_type,
       pilote:profiles!vols_pilote_id_fkey(identifiant),
-      type_avion:types_avion(nom)
+      type_avion:types_avion(nom),
+      instructeur:profiles!vols_instructeur_id_fkey(identifiant)
     `).eq('statut', 'en_attente').order('created_at', { ascending: true }),
     admin.from('types_avion').select('id, nom, constructeur').order('ordre'),
     admin.from('compagnies').select('id, nom').order('nom'),
-    admin.from('profiles').select('id, identifiant').order('identifiant'),
+    admin.from('profiles').select('id, identifiant, role').order('identifiant'),
   ]);
+
+  const admins = (profiles || []).filter((p: { role?: string }) => p.role === 'admin');
 
   return (
     <div className="space-y-6">
@@ -39,6 +42,7 @@ export default async function AdminVolsPage() {
         typesAvion={types || []}
         compagnies={compagnies || []}
         profiles={profiles || []}
+        admins={admins}
       />
 
       <VolsEnAttente vols={vols || []} />

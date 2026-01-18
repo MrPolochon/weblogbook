@@ -2,42 +2,58 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
 type T = { id: string; nom: string; constructeur?: string };
 type C = { id: string; nom: string };
+type Admin = { id: string; identifiant: string };
 
 export default function VolEditForm({
   volId,
   typeAvionId,
   compagnieId,
   compagnieLibelle,
+  aeroportDepart,
+  aeroportArrivee,
   dureeMinutes,
   departUtc,
   typeVol,
+  instructeurId,
+  instructionType,
   commandantBord,
   rolePilote,
   typesAvion,
   compagnies,
+  admins,
 }: {
   volId: string;
   typeAvionId: string;
   compagnieId: string | null;
   compagnieLibelle: string;
+  aeroportDepart: string;
+  aeroportArrivee: string;
   dureeMinutes: number;
   departUtc: string;
-  typeVol: 'IFR' | 'VFR';
+  typeVol: 'IFR' | 'VFR' | 'Instruction';
+  instructeurId: string;
+  instructionType: string;
   commandantBord: string;
   rolePilote: 'Pilote' | 'Co-pilote';
   typesAvion: T[];
   compagnies: C[];
+  admins: Admin[];
 }) {
   const router = useRouter();
   const [type_avion_id, setTypeAvionId] = useState(typeAvionId);
   const [compagnie_id, setCompagnieId] = useState(compagnieId || '');
   const [pourMoiMemo, setPourMoiMemo] = useState(compagnieLibelle === 'Pour moi-même');
+  const [aeroport_depart, setAeroportDepart] = useState(aeroportDepart || '');
+  const [aeroport_arrivee, setAeroportArrivee] = useState(aeroportArrivee || '');
   const [duree_minutes, setDureeMinutes] = useState(String(dureeMinutes));
   const [depart_utc, setDepartUtc] = useState(departUtc);
   const [type_vol, setTypeVol] = useState(typeVol);
+  const [instructeur_id, setInstructeurId] = useState(instructeurId || '');
+  const [instruction_type, setInstructionType] = useState(instructionType || '');
   const [commandant_bord, setCommandantBord] = useState(commandantBord);
   const [role_pilote, setRolePilote] = useState(rolePilote);
   const [loading, setLoading] = useState(false);
@@ -49,8 +65,12 @@ export default function VolEditForm({
     e.preventDefault();
     setError(null);
     const d = parseInt(duree_minutes, 10);
-    if (!type_avion_id || (!pourMoiMemo && !compagnie_id) || isNaN(d) || d < 1 || !depart_utc || !commandant_bord.trim()) {
+    if (!type_avion_id || (!pourMoiMemo && !compagnie_id) || !aeroport_depart || !aeroport_arrivee || isNaN(d) || d < 1 || !depart_utc || !commandant_bord.trim()) {
       setError('Veuillez remplir tous les champs requis.');
+      return;
+    }
+    if (type_vol === 'Instruction' && (!instructeur_id || !instruction_type.trim())) {
+      setError('Pour un vol d\'instruction : choisir l\'admin instructeur et indiquer le type d\'instruction.');
       return;
     }
     setLoading(true);
@@ -62,9 +82,13 @@ export default function VolEditForm({
           type_avion_id,
           compagnie_id: pourMoiMemo ? null : compagnie_id,
           compagnie_libelle: pourMoiMemo ? 'Pour moi-même' : compagnieLib,
+          aeroport_depart,
+          aeroport_arrivee,
           duree_minutes: d,
           depart_utc,
           type_vol,
+          instructeur_id: type_vol === 'Instruction' ? instructeur_id : null,
+          instruction_type: type_vol === 'Instruction' ? instruction_type.trim() : null,
           commandant_bord: commandant_bord.trim(),
           role_pilote,
         }),
@@ -108,6 +132,26 @@ export default function VolEditForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
+          <label className="label">Aéroport de départ *</label>
+          <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
+            <option value="">— Choisir —</option>
+            {AEROPORTS_PTFS.map((a) => (
+              <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Aéroport d&apos;arrivée *</label>
+          <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required>
+            <option value="">— Choisir —</option>
+            {AEROPORTS_PTFS.map((a) => (
+              <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
           <label className="label">Durée (minutes) *</label>
           <input type="number" className="input" value={duree_minutes} onChange={(e) => setDureeMinutes(e.target.value)} min={1} required />
         </div>
@@ -119,9 +163,10 @@ export default function VolEditForm({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="label">Type de vol *</label>
-          <select className="input" value={type_vol} onChange={(e) => setTypeVol(e.target.value as 'IFR' | 'VFR')}>
+          <select className="input" value={type_vol} onChange={(e) => setTypeVol(e.target.value as 'IFR' | 'VFR' | 'Instruction')}>
             <option value="VFR">VFR</option>
             <option value="IFR">IFR</option>
+            <option value="Instruction">Instruction</option>
           </select>
         </div>
         <div>
@@ -132,6 +177,23 @@ export default function VolEditForm({
           </select>
         </div>
       </div>
+      {type_vol === 'Instruction' && (
+        <div className="space-y-4 rounded-lg border border-slate-600/50 bg-slate-800/30 p-4">
+          <div>
+            <label className="label">Admin / instructeur *</label>
+            <select className="input" value={instructeur_id} onChange={(e) => setInstructeurId(e.target.value)}>
+              <option value="">— Choisir —</option>
+              {admins.map((a) => (
+                <option key={a.id} value={a.id}>{a.identifiant}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Type de vol d&apos;instruction *</label>
+            <input type="text" className="input" value={instruction_type} onChange={(e) => setInstructionType(e.target.value)} placeholder="ex. IFR initial, VFR de nuit..." />
+          </div>
+        </div>
+      )}
       <div>
         <label className="label">Nom / pseudo du commandant de bord *</label>
         <input type="text" className="input" value={commandant_bord} onChange={(e) => setCommandantBord(e.target.value)} required />

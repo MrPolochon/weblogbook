@@ -12,9 +12,10 @@ export default async function NouveauVolPage() {
   const { data: profile } = await supabase.from('profiles').select('blocked_until').eq('id', user.id).single();
   if (profile?.blocked_until && new Date(profile.blocked_until) > new Date()) redirect('/logbook');
 
-  const [{ data: types }, { data: compagnies }] = await Promise.all([
+  const [{ data: types }, { data: compagnies }, { data: admins }] = await Promise.all([
     supabase.from('types_avion').select('id, nom, constructeur').order('ordre'),
     supabase.from('compagnies').select('id, nom').order('nom'),
+    supabase.from('profiles').select('id, identifiant').eq('role', 'admin').order('identifiant'),
   ]);
 
   return (
@@ -25,7 +26,7 @@ export default async function NouveauVolPage() {
         </Link>
         <h1 className="text-2xl font-semibold text-slate-100">Nouveau vol</h1>
       </div>
-      <VolForm typesAvion={types || []} compagnies={compagnies || []} />
+      <VolForm typesAvion={types || []} compagnies={compagnies || []} admins={admins || []} />
     </div>
   );
 }

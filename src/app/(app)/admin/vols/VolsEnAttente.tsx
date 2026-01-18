@@ -15,8 +15,10 @@ type Vol = {
   type_vol: string;
   role_pilote: string;
   refusal_reason: string | null;
+  instruction_type?: string | null;
   pilote?: { identifiant?: string } | { identifiant?: string }[] | null;
   type_avion?: { nom?: string } | { nom?: string }[] | null;
+  instructeur?: { identifiant?: string } | { identifiant?: string }[] | null;
 };
 
 export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
@@ -82,6 +84,9 @@ export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
                 <p><span className="text-slate-500">Appareil:</span> {(Array.isArray(v.type_avion) ? v.type_avion[0] : v.type_avion)?.nom ?? '—'}</p>
                 <p><span className="text-slate-500">Compagnie:</span> {v.compagnie_libelle}</p>
                 <p><span className="text-slate-500">Durée:</span> {formatDuree(v.duree_minutes)} — {v.type_vol} — {v.role_pilote}</p>
+                {v.type_vol === 'Instruction' && (
+                  <p><span className="text-slate-500">Instruction:</span> par {(Array.isArray(v.instructeur) ? v.instructeur[0] : v.instructeur)?.identifiant ?? '—'} — {v.instruction_type || '—'}</p>
+                )}
               </div>
               <div className="flex flex-col gap-2">
                 <input
