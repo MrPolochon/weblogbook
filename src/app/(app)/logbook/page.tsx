@@ -26,13 +26,15 @@ export default async function LogbookPage() {
   const { data: vols } = await admin
     .from('vols')
     .select(`
-      id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote,
+      id, pilote_id, copilote_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote,
       aeroport_depart, aeroport_arrivee, instruction_type,
       refusal_count, refusal_reason,
       type_avion:types_avion(nom, constructeur),
-      instructeur:profiles!vols_instructeur_id_fkey(identifiant)
+      instructeur:profiles!vols_instructeur_id_fkey(identifiant),
+      pilote:profiles!vols_pilote_id_fkey(identifiant),
+      copilote:profiles!vols_copilote_id_fkey(identifiant)
     `)
-    .eq('pilote_id', user.id)
+    .or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id}`)
     .order('depart_utc', { ascending: false });
 
   const totalValides = (vols || []).filter((v) => v.statut === 'validé');
@@ -114,6 +116,15 @@ export default async function LogbookPage() {
                           {v.instruction_type ? ` — ${v.instruction_type}` : ''}
                         </span>
                       )}
+                      {v.copilote_id && (() => {
+                        const estPilote = v.pilote_id === user.id;
+                        const autre = estPilote ? (Array.isArray(v.copilote) ? v.copilote[0] : v.copilote) : (Array.isArray(v.pilote) ? v.pilote[0] : v.pilote);
+                        return (
+                          <span className="block text-xs text-slate-500 mt-0.5">
+                            {estPilote ? 'Copilote: ' : 'Pilote: '}{autre?.identifiant ?? '—'}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-3 pr-4 text-slate-300">{v.role_pilote}</td>
                     <td className="py-3 pr-4">

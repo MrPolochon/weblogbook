@@ -30,9 +30,13 @@ export default function VolEditForm({
   instructionType,
   commandantBord,
   rolePilote,
+  isCurrentUserPilote,
+  piloteId,
+  copiloteId,
   typesAvion,
   compagnies,
   admins,
+  autresProfiles,
   successRedirect,
 }: {
   volId: string;
@@ -48,9 +52,13 @@ export default function VolEditForm({
   instructionType: string;
   commandantBord: string;
   rolePilote: 'Pilote' | 'Co-pilote';
+  isCurrentUserPilote: boolean;
+  piloteId: string;
+  copiloteId: string;
   typesAvion: T[];
   compagnies: C[];
   admins: Admin[];
+  autresProfiles: { id: string; identifiant: string }[];
   successRedirect?: string;
 }) {
   const router = useRouter();
@@ -67,6 +75,7 @@ export default function VolEditForm({
   const [instruction_type, setInstructionType] = useState(instructionType || '');
   const [commandant_bord, setCommandantBord] = useState(commandantBord);
   const [role_pilote, setRolePilote] = useState(rolePilote);
+  const [autrePersonneId, setAutrePersonneId] = useState(isCurrentUserPilote ? (copiloteId || '') : (piloteId || ''));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,30 +112,39 @@ export default function VolEditForm({
       setError('Pour un vol d\'instruction : choisir l\'admin instructeur et indiquer le type d\'instruction.');
       return;
     }
+    if (role_pilote === 'Co-pilote' && !autrePersonneId) {
+      setError(isCurrentUserPilote ? 'Qui était le copilote ?' : 'Qui était le pilote (commandant) ?');
+      return;
+    }
     const depart_utc = computeDepartUtc();
     if (!depart_utc) {
       setError('Heure invalide.');
       return;
+    }
+    const body: Record<string, unknown> = {
+      type_avion_id,
+      compagnie_id: pourMoiMemo ? null : compagnie_id,
+      compagnie_libelle: pourMoiMemo ? 'Pour moi-même' : compagnieLib,
+      aeroport_depart,
+      aeroport_arrivee,
+      duree_minutes: d,
+      depart_utc,
+      type_vol,
+      instructeur_id: type_vol === 'Instruction' ? instructeur_id : null,
+      instruction_type: type_vol === 'Instruction' ? instruction_type.trim() : null,
+      commandant_bord: commandant_bord.trim(),
+      role_pilote,
+    };
+    if (role_pilote === 'Co-pilote') {
+      if (isCurrentUserPilote) body.copilote_id = autrePersonneId;
+      else body.pilote_id = autrePersonneId;
     }
     setLoading(true);
     try {
       const res = await fetch(`/api/vols/${volId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type_avion_id,
-          compagnie_id: pourMoiMemo ? null : compagnie_id,
-          compagnie_libelle: pourMoiMemo ? 'Pour moi-même' : compagnieLib,
-          aeroport_depart,
-          aeroport_arrivee,
-          duree_minutes: d,
-          depart_utc,
-          type_vol,
-          instructeur_id: type_vol === 'Instruction' ? instructeur_id : null,
-          instruction_type: type_vol === 'Instruction' ? instruction_type.trim() : null,
-          commandant_bord: commandant_bord.trim(),
-          role_pilote,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
@@ -228,12 +246,23 @@ export default function VolEditForm({
         </div>
         <div>
           <label className="label">Rôle *</label>
-          <select className="input" value={role_pilote} onChange={(e) => setRolePilote(e.target.value as 'Pilote' | 'Co-pilote')}>
+          <select className="input" value={role_pilote} onChange={(e) => { setRolePilote(e.target.value as 'Pilote' | 'Co-pilote'); if (e.target.value === 'Pilote') setAutrePersonneId(''); }}>
             <option value="Pilote">Pilote</option>
             <option value="Co-pilote">Co-pilote</option>
           </select>
         </div>
       </div>
+      {role_pilote === 'Co-pilote' && (
+        <div>
+          <label className="label">{isCurrentUserPilote ? 'Qui était le copilote ? *' : 'Qui était le pilote (commandant de bord) ? *'}</label>
+          <select className="input" value={autrePersonneId} onChange={(e) => setAutrePersonneId(e.target.value)}>
+            <option value="">— Choisir —</option>
+            {autresProfiles.map((p) => (
+              <option key={p.id} value={p.id}>{p.identifiant}</option>
+            ))}
+          </select>
+        </div>
+      )}
       {type_vol === 'Instruction' && (
         <div className="space-y-4 rounded-lg border border-slate-600/50 bg-slate-800/30 p-4">
           <div>

@@ -33,10 +33,11 @@ export default async function AdminCompagnieLogbookPage({
   const { data: vols } = await admin
     .from('vols')
     .select(`
-      id, duree_minutes, depart_utc, arrivee_utc, statut, type_vol, role_pilote,
+      id, pilote_id, copilote_id, duree_minutes, depart_utc, arrivee_utc, statut, type_vol, role_pilote,
       aeroport_depart, aeroport_arrivee, instruction_type,
       type_avion:types_avion(nom, constructeur),
       pilote:profiles!vols_pilote_id_fkey(identifiant),
+      copilote:profiles!vols_copilote_id_fkey(identifiant),
       instructeur:profiles!vols_instructeur_id_fkey(identifiant)
     `)
     .eq('compagnie_id', compagnieId)
@@ -114,6 +115,12 @@ export default async function AdminCompagnieLogbookPage({
                         <span className="block text-xs text-slate-500 mt-0.5">
                           par {(Array.isArray(v.instructeur) ? v.instructeur[0] : v.instructeur)?.identifiant ?? '—'}
                           {v.instruction_type ? ` — ${v.instruction_type}` : ''}
+                        </span>
+                      )}
+                      {v.copilote_id && (
+                        <span className="block text-xs text-slate-500 mt-0.5">
+                          Pilote: {(Array.isArray(v.pilote) ? v.pilote[0] : v.pilote)?.identifiant ?? '—'}
+                          {' — Copilote: '}{(Array.isArray(v.copilote) ? v.copilote[0] : v.copilote)?.identifiant ?? '—'}
                         </span>
                       )}
                     </td>

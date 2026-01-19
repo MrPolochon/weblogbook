@@ -43,6 +43,8 @@ export default function AddVolAdminForm({
   const [instruction_type, setInstructionType] = useState('');
   const [commandant_bord, setCommandantBord] = useState('');
   const [role_pilote, setRolePilote] = useState<'Pilote' | 'Co-pilote'>('Pilote');
+  const [pilote_commandid, setPiloteCommandantId] = useState('');
+  const [copilote_id, setCopiloteId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,9 +72,16 @@ export default function AddVolAdminForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!pilote_id || !type_avion_id || (!pourMoiMemo && !compagnie_id)) {
-      setError('Pilote, type d\'avion et compagnie requis.');
-      return;
+    if (role_pilote === 'Co-pilote') {
+      if (!pilote_commandid || !copilote_id || !type_avion_id || (!pourMoiMemo && !compagnie_id)) {
+        setError('Pilote, copilote, type d\'avion et compagnie requis.');
+        return;
+      }
+    } else {
+      if (!pilote_id || !type_avion_id || (!pourMoiMemo && !compagnie_id)) {
+        setError('Pilote, type d\'avion et compagnie requis.');
+        return;
+      }
     }
     if (!aeroport_depart || !aeroport_arrivee) {
       setError('Aéroports de départ et d\'arrivée requis.');
@@ -92,32 +101,40 @@ export default function AddVolAdminForm({
       setError('Heure invalide.');
       return;
     }
+    const body: Record<string, unknown> = {
+      type_avion_id,
+      compagnie_id: pourMoiMemo ? null : compagnie_id,
+      compagnie_libelle: pourMoiMemo ? 'Pour moi-même' : compagnieLibelle,
+      aeroport_depart,
+      aeroport_arrivee,
+      duree_minutes: d,
+      depart_utc,
+      type_vol,
+      instructeur_id: type_vol === 'Instruction' ? instructeur_id : null,
+      instruction_type: type_vol === 'Instruction' ? instruction_type.trim() : null,
+      commandant_bord: commandant_bord.trim(),
+      role_pilote,
+      created_by_admin: true,
+    };
+    if (role_pilote === 'Co-pilote') {
+      body.pilote_id = pilote_commandid;
+      body.copilote_id = copilote_id;
+    } else {
+      body.pilote_id = pilote_id;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/vols', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          pilote_id,
-          type_avion_id,
-          compagnie_id: pourMoiMemo ? null : compagnie_id,
-          compagnie_libelle: pourMoiMemo ? 'Pour moi-même' : compagnieLibelle,
-          aeroport_depart,
-          aeroport_arrivee,
-          duree_minutes: d,
-          depart_utc,
-          type_vol,
-          instructeur_id: type_vol === 'Instruction' ? instructeur_id : null,
-          instruction_type: type_vol === 'Instruction' ? instruction_type.trim() : null,
-          commandant_bord: commandant_bord.trim(),
-          role_pilote,
-          created_by_admin: true,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       setOpen(false);
       setPiloteId('');
+      setPiloteCommandantId('');
+      setCopiloteId('');
       setTypeAvionId('');
       setCompagnieId('');
       setPourMoiMemo(false);
@@ -130,6 +147,7 @@ export default function AddVolAdminForm({
       setInstructeurId('');
       setInstructionType('');
       setCommandantBord('');
+      setRolePilote('Pilote');
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -149,15 +167,39 @@ export default function AddVolAdminForm({
       </button>
       {open && (
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div>
-            <label className="label">Pilote *</label>
-            <select className="input" value={pilote_id} onChange={(e) => setPiloteId(e.target.value)} required>
-              <option value="">— Choisir —</option>
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>{p.identifiant}</option>
-              ))}
-            </select>
-          </div>
+          {role_pilote === 'Pilote' && (
+            <div>
+              <label className="label">Pilote *</label>
+              <select className="input" value={pilote_id} onChange={(e) => setPiloteId(e.target.value)}>
+                <option value="">— Choisir —</option>
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>{p.identifiant}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {role_pilote === 'Co-pilote' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Pilote (commandant) *</label>
+                <select className="input" value={pilote_commandid} onChange={(e) => setPiloteCommandantId(e.target.value)}>
+                  <option value="">— Choisir —</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.identifiant}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Co-pilote *</label>
+                <select className="input" value={copilote_id} onChange={(e) => setCopiloteId(e.target.value)}>
+                  <option value="">— Choisir —</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.identifiant}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
           <div>
             <label className="label">Type d&apos;avion *</label>
             <select className="input" value={type_avion_id} onChange={(e) => setTypeAvionId(e.target.value)} required>
@@ -245,7 +287,7 @@ export default function AddVolAdminForm({
             </div>
             <div>
               <label className="label">Rôle *</label>
-              <select className="input" value={role_pilote} onChange={(e) => setRolePilote(e.target.value as 'Pilote' | 'Co-pilote')}>
+              <select className="input" value={role_pilote} onChange={(e) => { setRolePilote(e.target.value as 'Pilote' | 'Co-pilote'); if (e.target.value === 'Pilote') { setPiloteCommandantId(''); setCopiloteId(''); } }}>
                 <option value="Pilote">Pilote</option>
                 <option value="Co-pilote">Co-pilote</option>
               </select>

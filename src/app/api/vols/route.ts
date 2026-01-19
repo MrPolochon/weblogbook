@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { addMinutes, parseISO } from 'date-fns';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
@@ -30,16 +31,39 @@ export async function POST(request: Request) {
       commandant_bord,
       role_pilote,
       created_by_admin,
-      pilote_id,
+      pilote_id: piloteIdBody,
+      copilote_id: copiloteIdBody,
     } = body;
 
     const isAdmin = profile.role === 'admin';
-    const targetPiloteId = isAdmin && pilote_id ? pilote_id : profile.id;
-    if (isAdmin && pilote_id && pilote_id !== profile.id) {
-      const { data: target } = await supabase.from('profiles').select('id').eq('id', pilote_id).single();
-      if (!target) return NextResponse.json({ error: 'Pilote introuvable' }, { status: 400 });
-    } else if (!isAdmin && pilote_id) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+    let targetPiloteId: string;
+    let targetCopiloteId: string | null = null;
+    let copiloteConfirme = false;
+
+    if (role_pilote === 'Co-pilote') {
+      if (isAdmin && created_by_admin) {
+        if (!piloteIdBody || !copiloteIdBody) return NextResponse.json({ error: 'Vol Co-pilote : pilote et copilote requis.' }, { status: 400 });
+        const { data: p1 } = await supabase.from('profiles').select('id').eq('id', piloteIdBody).single();
+        const { data: p2 } = await supabase.from('profiles').select('id').eq('id', copiloteIdBody).single();
+        if (!p1 || !p2) return NextResponse.json({ error: 'Pilote ou copilote introuvable.' }, { status: 400 });
+        targetPiloteId = piloteIdBody;
+        targetCopiloteId = copiloteIdBody;
+        copiloteConfirme = true;
+      } else {
+        if (!piloteIdBody) return NextResponse.json({ error: 'Qui était le pilote (commandant de bord) ?' }, { status: 400 });
+        if (piloteIdBody === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être le pilote et le copilote.' }, { status: 400 });
+        const { data: p } = await supabase.from('profiles').select('id').eq('id', piloteIdBody).single();
+        if (!p) return NextResponse.json({ error: 'Pilote introuvable.' }, { status: 400 });
+        targetPiloteId = piloteIdBody;
+        targetCopiloteId = user.id;
+      }
+    } else {
+      targetPiloteId = (isAdmin && piloteIdBody) ? piloteIdBody : profile.id;
+      if (isAdmin && piloteIdBody) {
+        const { data: target } = await supabase.from('profiles').select('id').eq('id', piloteIdBody).single();
+        if (!target) return NextResponse.json({ error: 'Pilote introuvable' }, { status: 400 });
+      }
+      if (!isAdmin && piloteIdBody) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
     if (!type_avion_id || !compagnie_libelle || typeof duree_minutes !== 'number' || duree_minutes < 1 ||
@@ -64,6 +88,8 @@ export async function POST(request: Request) {
 
     const row = {
       pilote_id: targetPiloteId,
+      copilote_id: targetCopiloteId,
+      copilote_confirme_par_pilote: copiloteConfirme,
       type_avion_id,
       compagnie_id: compagnie_id || null,
       compagnie_libelle: String(compagnie_libelle).trim() || 'Pour moi-même',
@@ -82,7 +108,10 @@ export async function POST(request: Request) {
       created_by_user_id: isAdmin && created_by_admin ? user.id : null,
     };
 
-    const { data, error } = await supabase.from('vols').insert(row).select('id').single();
+    const insertClient = (role_pilote === 'Co-pilote' && !isAdmin) || (isAdmin && created_by_admin)
+      ? createAdminClient()
+      : supabase;
+    const { data, error } = await insertClient.from('vols').insert(row).select('id').single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true, id: data.id });
   } catch (e) {

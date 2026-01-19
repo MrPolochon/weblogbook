@@ -4,6 +4,7 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import VolEditForm from './VolEditForm';
+import ConfirmerCopiloteButton from '@/components/ConfirmerCopiloteButton';
 
 export default async function LogbookVolEditPage({
   params,
@@ -33,25 +34,30 @@ export default async function LogbookVolEditPage({
   const { data: vol } = await (isAdmin ? admin : supabase)
     .from('vols')
     .select(`
-      id, pilote_id, type_avion_id, compagnie_id, compagnie_libelle, duree_minutes, depart_utc,
-      type_vol, aeroport_depart, aeroport_arrivee, instructeur_id, instruction_type, commandant_bord, role_pilote, statut, refusal_count, refusal_reason
+      id, pilote_id, copilote_id, copilote_confirme_par_pilote, type_avion_id, compagnie_id, compagnie_libelle, duree_minutes, depart_utc,
+      type_vol, aeroport_depart, aeroport_arrivee, instructeur_id, instruction_type, commandant_bord, role_pilote, statut, refusal_count, refusal_reason,
+      copilote:profiles!vols_copilote_id_fkey(identifiant)
     `)
     .eq('id', id)
     .single();
 
   if (!vol) notFound();
-  if (vol.pilote_id !== user.id && !isAdmin) redirect('/logbook');
+  const isPiloteOrCopilote = vol.pilote_id === user.id || vol.copilote_id === user.id;
+  if (!isPiloteOrCopilote && !isAdmin) redirect('/logbook');
   if (vol.statut === 'validé' && !isAdmin) redirect('/logbook');
   if (vol.statut === 'refusé' && (vol.refusal_count ?? 0) >= 3 && !isAdmin) redirect('/logbook');
 
   const client = isAdmin ? admin : supabase;
-  const [{ data: types }, { data: compagnies }, { data: admins }] = await Promise.all([
+  const [{ data: types }, { data: compagnies }, { data: admins }, { data: allProfiles }] = await Promise.all([
     client.from('types_avion').select('id, nom, constructeur').order('ordre'),
     client.from('compagnies').select('id, nom').order('nom'),
     client.from('profiles').select('id, identifiant').eq('role', 'admin').order('identifiant'),
+    client.from('profiles').select('id, identifiant').order('identifiant'),
   ]);
 
+  const autresProfiles = (allProfiles || []).filter((p) => p.id !== user.id);
   const departLocal = vol.depart_utc ? new Date(vol.depart_utc).toISOString().slice(0, 16) : '';
+  const identifiantCopilote = (Array.isArray(vol.copilote) ? vol.copilote[0] : vol.copilote)?.identifiant ?? '';
 
   return (
     <div className="space-y-6">
@@ -63,6 +69,14 @@ export default async function LogbookVolEditPage({
           {vol.statut === 'refusé' ? 'Modifier et renvoyer' : 'Modifier le vol'}
         </h1>
       </div>
+      {vol.pilote_id === user.id && vol.copilote_id && !vol.copilote_confirme_par_pilote && (
+        <div className="card border-sky-500/30 bg-sky-500/5">
+          <p className="text-sm text-slate-300 mb-2">
+            {identifiantCopilote} a indiqué que vous étiez le pilote et lui le copilote pour ce vol. Confirmez-vous ?
+          </p>
+          <ConfirmerCopiloteButton volId={vol.id} identifiantCopilote={identifiantCopilote || '—'} />
+        </div>
+      )}
       {vol.statut === 'refusé' && vol.refusal_reason && (
         <div className="card border-amber-500/30 bg-amber-500/5">
           <p className="text-sm text-slate-400">Raison du refus :</p>
@@ -83,9 +97,13 @@ export default async function LogbookVolEditPage({
         instructionType={vol.instruction_type ?? ''}
         commandantBord={vol.commandant_bord}
         rolePilote={vol.role_pilote as 'Pilote' | 'Co-pilote'}
+        isCurrentUserPilote={vol.pilote_id === user.id}
+        piloteId={vol.pilote_id ?? ''}
+        copiloteId={vol.copilote_id ?? ''}
         typesAvion={types || []}
         compagnies={compagnies || []}
         admins={admins || []}
+        autresProfiles={autresProfiles}
         successRedirect={backHref}
       />
     </div>
