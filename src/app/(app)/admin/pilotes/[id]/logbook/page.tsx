@@ -42,6 +42,7 @@ export default async function AdminPiloteLogbookPage({
       copilote:profiles!vols_copilote_id_fkey(identifiant)
     `)
     .or(`pilote_id.eq.${piloteId},copilote_id.eq.${piloteId}`)
+    .in('statut', ['en_attente', 'validé', 'refusé'])
     .order('depart_utc', { ascending: false });
 
   const totalValides = (vols || []).filter((v) => v.statut === 'validé');

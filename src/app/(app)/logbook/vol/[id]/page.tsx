@@ -4,7 +4,6 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import VolEditForm from './VolEditForm';
-import ConfirmerCopiloteButton from '@/components/ConfirmerCopiloteButton';
 
 export default async function LogbookVolEditPage({
   params,
@@ -26,6 +25,7 @@ export default async function LogbookVolEditPage({
   const cid = Array.isArray(searchParams?.cid) ? searchParams.cid[0] : searchParams?.cid;
 
   const backHref =
+    from === 'confirmer' ? '/logbook/a-confirmer' :
     from === 'admin-pilote' && pid ? `/admin/pilotes/${pid}/logbook` :
     from === 'admin-compagnie' && cid ? `/admin/compagnies/${cid}/logbook` :
     '/logbook';
@@ -35,8 +35,7 @@ export default async function LogbookVolEditPage({
     .from('vols')
     .select(`
       id, pilote_id, copilote_id, copilote_confirme_par_pilote, type_avion_id, compagnie_id, compagnie_libelle, duree_minutes, depart_utc,
-      type_vol, aeroport_depart, aeroport_arrivee, instructeur_id, instruction_type, commandant_bord, role_pilote, statut, refusal_count, refusal_reason,
-      copilote:profiles!vols_copilote_id_fkey(identifiant)
+      type_vol, aeroport_depart, aeroport_arrivee, instructeur_id, instruction_type, commandant_bord, role_pilote, statut, refusal_count, refusal_reason
     `)
     .eq('id', id)
     .single();
@@ -57,7 +56,9 @@ export default async function LogbookVolEditPage({
 
   const autresProfiles = (allProfiles || []).filter((p) => p.id !== user.id);
   const departLocal = vol.depart_utc ? new Date(vol.depart_utc).toISOString().slice(0, 16) : '';
-  const identifiantCopilote = (Array.isArray(vol.copilote) ? vol.copilote[0] : vol.copilote)?.identifiant ?? '';
+  const isConfirmationPilote = vol.statut === 'en_attente_confirmation_pilote' && vol.pilote_id === user.id;
+  const isConfirmationCopilote = vol.statut === 'en_attente_confirmation_copilote' && vol.copilote_id === user.id;
+  const isConfirmationMode = isConfirmationPilote || isConfirmationCopilote;
 
   return (
     <div className="space-y-6">
@@ -66,15 +67,20 @@ export default async function LogbookVolEditPage({
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <h1 className="text-2xl font-semibold text-slate-100">
-          {vol.statut === 'refusé' ? 'Modifier et renvoyer' : 'Modifier le vol'}
+          {isConfirmationMode
+            ? 'Confirmer et envoyer aux admins'
+            : vol.statut === 'refusé'
+              ? 'Modifier et renvoyer'
+              : 'Modifier le vol'}
         </h1>
       </div>
-      {vol.pilote_id === user.id && vol.copilote_id && !vol.copilote_confirme_par_pilote && (
+      {isConfirmationMode && (
         <div className="card border-sky-500/30 bg-sky-500/5">
-          <p className="text-sm text-slate-300 mb-2">
-            {identifiantCopilote} a indiqué que vous étiez le pilote et lui le copilote pour ce vol. Confirmez-vous ?
+          <p className="text-sm text-slate-300">
+            {isConfirmationPilote
+              ? 'Un co-pilote vous a indiqué comme pilote pour ce vol. Vérifiez ou corrigez les informations ci‑dessous, puis cliquez sur « Confirmer et envoyer aux admins ». Le vol sera ensuite soumis aux admins et apparaîtra dans les deux logbooks.'
+              : 'Un pilote vous a indiqué comme co-pilote pour ce vol. Vérifiez ou corrigez les informations ci‑dessous, puis cliquez sur « Confirmer et envoyer aux admins ». Le vol sera ensuite soumis aux admins et apparaîtra dans les deux logbooks.'}
           </p>
-          <ConfirmerCopiloteButton volId={vol.id} identifiantCopilote={identifiantCopilote || '—'} />
         </div>
       )}
       {vol.statut === 'refusé' && vol.refusal_reason && (
@@ -105,6 +111,7 @@ export default async function LogbookVolEditPage({
         admins={admins || []}
         autresProfiles={autresProfiles}
         successRedirect={backHref}
+        isConfirmationMode={isConfirmationMode}
       />
     </div>
   );

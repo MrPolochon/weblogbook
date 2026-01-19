@@ -23,9 +23,8 @@ export default async function LogbookPage() {
     : false;
 
   const admin = createAdminClient();
-  const { data: vols } = await admin
-    .from('vols')
-    .select(`
+  const [{ data: vols }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }] = await Promise.all([
+    admin.from('vols').select(`
       id, pilote_id, copilote_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote,
       aeroport_depart, aeroport_arrivee, instruction_type,
       refusal_count, refusal_reason,
@@ -33,9 +32,10 @@ export default async function LogbookPage() {
       instructeur:profiles!vols_instructeur_id_fkey(identifiant),
       pilote:profiles!vols_pilote_id_fkey(identifiant),
       copilote:profiles!vols_copilote_id_fkey(identifiant)
-    `)
-    .or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id}`)
-    .order('depart_utc', { ascending: false });
+    `).or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id}`).in('statut', ['en_attente', 'validé', 'refusé']).order('depart_utc', { ascending: false }),
+    supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, pilote:profiles!vols_pilote_id_fkey(identifiant)').eq('copilote_id', user.id).eq('statut', 'en_attente_confirmation_pilote').order('depart_utc', { ascending: false }),
+    supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_copilote').order('depart_utc', { ascending: false }),
+  ]);
 
   const totalValides = (vols || []).filter((v) => v.statut === 'validé');
   const totalMinutes =
@@ -63,6 +63,48 @@ export default async function LogbookPage() {
         <h2 className="text-lg font-medium text-slate-200 mb-1">Total temps de vol</h2>
         <p className="text-3xl font-bold text-sky-400">{formatDuree(totalMinutes)}</p>
       </div>
+
+      {volsEnAttentePilote && volsEnAttentePilote.length > 0 && (
+        <div className="card border-amber-500/30 bg-amber-500/5">
+          <h2 className="text-lg font-medium text-amber-200 mb-2">En attente que le pilote confirme</h2>
+          <p className="text-sm text-slate-400 mb-3">Vous avez indiqué ces vols comme co-pilote. Ils n’apparaîtront dans les logbooks qu’après confirmation du pilote.</p>
+          <ul className="space-y-2">
+            {volsEnAttentePilote.map((v) => (
+              <li key={v.id} className="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-0">
+                <span className="text-slate-300">
+                  {format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
+                  {' · Pilote: '}{(Array.isArray(v.pilote) ? v.pilote[0] : v.pilote)?.identifiant ?? '—'}
+                </span>
+                <span className="flex items-center gap-2">
+                  <Link href={`/logbook/vol/${v.id}`} className="text-sm text-sky-400 hover:underline">Modifier</Link>
+                  <VolDeleteButton volId={v.id} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {volsEnAttenteCopilote && volsEnAttenteCopilote.length > 0 && (
+        <div className="card border-amber-500/30 bg-amber-500/5">
+          <h2 className="text-lg font-medium text-amber-200 mb-2">En attente que le co-pilote confirme</h2>
+          <p className="text-sm text-slate-400 mb-3">Vous avez indiqué ces vols avec un co-pilote. Ils n'apparaîtront dans les logbooks qu'après confirmation du co-pilote.</p>
+          <ul className="space-y-2">
+            {volsEnAttenteCopilote.map((v) => (
+              <li key={v.id} className="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-0">
+                <span className="text-slate-300">
+                  {format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
+                  {' · Co-pilote: '}{(Array.isArray(v.copilote) ? v.copilote[0] : v.copilote)?.identifiant ?? '—'}
+                </span>
+                <span className="flex items-center gap-2">
+                  <Link href={`/logbook/vol/${v.id}`} className="text-sm text-sky-400 hover:underline">Modifier</Link>
+                  <VolDeleteButton volId={v.id} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="card">
         <h2 className="text-lg font-medium text-slate-200 mb-4">Vols</h2>

@@ -56,6 +56,7 @@ export async function POST(request: Request) {
         if (!p) return NextResponse.json({ error: 'Pilote introuvable.' }, { status: 400 });
         targetPiloteId = piloteIdBody;
         targetCopiloteId = user.id;
+        copiloteConfirme = false;
       }
     } else {
       targetPiloteId = (isAdmin && piloteIdBody) ? piloteIdBody : profile.id;
@@ -64,6 +65,13 @@ export async function POST(request: Request) {
         if (!target) return NextResponse.json({ error: 'Pilote introuvable' }, { status: 400 });
       }
       if (!isAdmin && piloteIdBody) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+      if (copiloteIdBody) {
+        if (copiloteIdBody === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être le pilote et le copilote.' }, { status: 400 });
+        const { data: co } = await supabase.from('profiles').select('id').eq('id', copiloteIdBody).single();
+        if (!co) return NextResponse.json({ error: 'Co-pilote introuvable.' }, { status: 400 });
+        targetCopiloteId = copiloteIdBody;
+        copiloteConfirme = false;
+      }
     }
 
     if (!type_avion_id || !compagnie_libelle || typeof duree_minutes !== 'number' || duree_minutes < 1 ||
@@ -103,7 +111,13 @@ export async function POST(request: Request) {
       instruction_type: type_vol === 'Instruction' && instructionType ? String(instructionType).trim() : null,
       commandant_bord: String(commandant_bord).trim(),
       role_pilote,
-      statut: isAdmin && created_by_admin ? 'validé' : 'en_attente',
+      statut: isAdmin && created_by_admin
+        ? 'validé'
+        : role_pilote === 'Co-pilote' && !isAdmin
+          ? 'en_attente_confirmation_pilote'
+          : targetCopiloteId
+            ? 'en_attente_confirmation_copilote'
+            : 'en_attente',
       created_by_admin: Boolean(created_by_admin && isAdmin),
       created_by_user_id: isAdmin && created_by_admin ? user.id : null,
     };

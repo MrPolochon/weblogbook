@@ -41,6 +41,7 @@ export default async function AdminCompagnieLogbookPage({
       instructeur:profiles!vols_instructeur_id_fkey(identifiant)
     `)
     .eq('compagnie_id', compagnieId)
+    .in('statut', ['en_attente', 'validé', 'refusé'])
     .order('depart_utc', { ascending: false });
 
   const totalValides = (vols || []).filter((v) => v.statut === 'validé');

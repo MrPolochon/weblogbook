@@ -19,17 +19,6 @@ export async function PATCH(
 
     const body = await request.json();
 
-    if (body.confirmer_copilote === true) {
-      const { data: vol } = await supabase.from('vols').select('pilote_id, copilote_id, copilote_confirme_par_pilote').eq('id', id).single();
-      if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
-      if (vol.pilote_id !== user.id) return NextResponse.json({ error: 'Seul le pilote peut confirmer le copilote.' }, { status: 403 });
-      if (!vol.copilote_id) return NextResponse.json({ error: 'Ce vol n\'a pas de copilote.' }, { status: 400 });
-      if (vol.copilote_confirme_par_pilote) return NextResponse.json({ ok: true });
-      const { error } = await supabase.from('vols').update({ copilote_confirme_par_pilote: true }).eq('id', id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      return NextResponse.json({ ok: true });
-    }
-
     if (body.statut === 'validé' || body.statut === 'refusé') {
       if (!isAdmin) return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
       const { data: vol } = await supabase.from('vols').select('id, pilote_id, statut').eq('id', id).single();
@@ -122,6 +111,15 @@ export async function PATCH(
     const dep = parseISO(depStr);
     const arrivee = addMinutes(dep, duree_minutes);
 
+    const isConfirmingByPilote = vol.statut === 'en_attente_confirmation_pilote' && vol.pilote_id === user.id;
+    const isConfirmingByCopilote = vol.statut === 'en_attente_confirmation_copilote' && vol.copilote_id === user.id;
+
+    const statutFinal = (isConfirmingByPilote || isConfirmingByCopilote)
+      ? 'en_attente'
+      : (vol.statut === 'en_attente_confirmation_pilote' || vol.statut === 'en_attente_confirmation_copilote')
+        ? vol.statut
+        : 'en_attente';
+
     const updates: Record<string, unknown> = {
       type_avion_id,
       compagnie_id: compagnie_id || null,
@@ -138,10 +136,12 @@ export async function PATCH(
       role_pilote,
       pilote_id: piloteId,
       copilote_id: role_pilote === 'Co-pilote' && copiloteId ? copiloteId : null,
-      copilote_confirme_par_pilote: role_pilote === 'Co-pilote' && copiloteId
-        ? (piloteId === vol.pilote_id && copiloteId === vol.copilote_id ? (vol.copilote_confirme_par_pilote ?? false) : false)
-        : false,
-      statut: 'en_attente',
+      copilote_confirme_par_pilote: isConfirmingByPilote
+        ? true
+        : role_pilote === 'Co-pilote' && copiloteId
+          ? (piloteId === vol.pilote_id && copiloteId === vol.copilote_id ? (vol.copilote_confirme_par_pilote ?? false) : false)
+          : false,
+      statut: statutFinal,
       refusal_reason: null,
       editing_by_pilot_id: null,
       editing_started_at: null,

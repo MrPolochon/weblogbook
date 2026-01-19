@@ -38,6 +38,7 @@ export default function VolEditForm({
   admins,
   autresProfiles,
   successRedirect,
+  isConfirmationMode,
 }: {
   volId: string;
   typeAvionId: string;
@@ -60,6 +61,7 @@ export default function VolEditForm({
   admins: Admin[];
   autresProfiles: { id: string; identifiant: string }[];
   successRedirect?: string;
+  isConfirmationMode?: boolean;
 }) {
   const router = useRouter();
   const [type_avion_id, setTypeAvionId] = useState(typeAvionId);
@@ -286,7 +288,7 @@ export default function VolEditForm({
       </div>
       {error && <p className="text-red-400 text-sm">{error}</p>}
       <button type="submit" className="btn-primary" disabled={loading}>
-        {loading ? 'Envoi…' : 'Enregistrer et renvoyer'}
+        {loading ? 'Envoi…' : isConfirmationMode ? 'Confirmer et envoyer aux admins' : 'Enregistrer et renvoyer'}
       </button>
     </form>
   );

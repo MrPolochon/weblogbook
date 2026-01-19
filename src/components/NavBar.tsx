@@ -17,7 +17,7 @@ export function setInterfaceMode(mode: 'admin' | 'pilote') {
   if (typeof window !== 'undefined') localStorage.setItem(MODE_KEY, mode);
 }
 
-export default function NavBar({ isAdmin, pendingVolsCount = 0 }: { isAdmin: boolean; pendingVolsCount?: number }) {
+export default function NavBar({ isAdmin, pendingVolsCount = 0, volsAConfirmerCount = 0 }: { isAdmin: boolean; pendingVolsCount?: number; volsAConfirmerCount?: number }) {
   const pathname = usePathname();
   const router = useRouter();
   const mode = typeof window !== 'undefined' ? getInterfaceMode() : 'pilote';
@@ -48,7 +48,7 @@ export default function NavBar({ isAdmin, pendingVolsCount = 0 }: { isAdmin: boo
           <Link
             href="/logbook"
             className={cn(
-              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
               pathname.startsWith('/logbook')
                 ? 'bg-slate-700/50 text-sky-300'
                 : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
@@ -56,7 +56,29 @@ export default function NavBar({ isAdmin, pendingVolsCount = 0 }: { isAdmin: boo
           >
             <BookOpen className="h-4 w-4" />
             Mon logbook
+            {volsAConfirmerCount > 0 && (
+              <span
+                className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white ring-2 ring-slate-900"
+                title={`${volsAConfirmerCount} vol(s) à confirmer (vous avez été indiqué comme pilote ou co-pilote)`}
+              >
+                {volsAConfirmerCount > 99 ? '99+' : volsAConfirmerCount}
+              </span>
+            )}
           </Link>
+          {volsAConfirmerCount > 0 && (
+            <Link
+              href="/logbook/a-confirmer"
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors bg-red-900/40 text-red-300 hover:bg-red-900/60',
+                pathname === '/logbook/a-confirmer' ? 'ring-1 ring-red-500' : ''
+              )}
+            >
+              À confirmer
+              <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
+                {volsAConfirmerCount > 99 ? '99+' : volsAConfirmerCount}
+              </span>
+            </Link>
+          )}
           {isAdmin && (
             <Link
               href="/admin"

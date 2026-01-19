@@ -44,6 +44,7 @@ export default function VolForm({
   const [commandant_bord, setCommandantBord] = useState('');
   const [role_pilote, setRolePilote] = useState<'Pilote' | 'Co-pilote'>('Pilote');
   const [pilote_id, setPiloteId] = useState('');
+  const [copilote_id, setCopiloteId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -108,6 +109,7 @@ export default function VolForm({
           commandant_bord: commandant_bord.trim(),
           role_pilote,
           pilote_id: role_pilote === 'Co-pilote' ? pilote_id : undefined,
+          copilote_id: role_pilote === 'Pilote' && copilote_id ? copilote_id : undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -256,12 +258,25 @@ export default function VolForm({
         </div>
         <div>
           <label className="label">Rôle *</label>
-          <select className="input" value={role_pilote} onChange={(e) => { setRolePilote(e.target.value as 'Pilote' | 'Co-pilote'); if (e.target.value === 'Pilote') setPiloteId(''); }}>
+          <select className="input" value={role_pilote} onChange={(e) => { setRolePilote(e.target.value as 'Pilote' | 'Co-pilote'); if (e.target.value === 'Pilote') { setPiloteId(''); } else setCopiloteId(''); }}>
             <option value="Pilote">Pilote</option>
             <option value="Co-pilote">Co-pilote</option>
           </select>
         </div>
       </div>
+
+      {role_pilote === 'Pilote' && (
+        <div>
+          <label className="label">Qui était votre co-pilote ? (optionnel)</label>
+          <select className="input" value={copilote_id} onChange={(e) => setCopiloteId(e.target.value)}>
+            <option value="">— Aucun —</option>
+            {autresProfiles.map((p) => (
+              <option key={p.id} value={p.id}>{p.identifiant}</option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500 mt-1">Le co-pilote recevra une notification pour confirmer ce vol. Après sa confirmation, il sera envoyé aux admins et apparaîtra dans les deux logbooks.</p>
+        </div>
+      )}
 
       {role_pilote === 'Co-pilote' && (
         <div>
@@ -272,7 +287,7 @@ export default function VolForm({
               <option key={p.id} value={p.id}>{p.identifiant}</option>
             ))}
           </select>
-          <p className="text-xs text-slate-500 mt-1">Le pilote devra confirmer que vous étiez bien son copilote. Le vol apparaîtra dans les deux logbooks.</p>
+          <p className="text-xs text-slate-500 mt-1">Le pilote recevra une notification pour confirmer ce vol. Après sa confirmation, il sera envoyé aux admins et apparaîtra dans les deux logbooks.</p>
         </div>
       )}
 
