@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Radio, LayoutDashboard, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export default function AtcNavBar({ isAdmin, canAccessPilote }: { isAdmin: boolean; canAccessPilote: boolean }) {
+export default function AtcNavBar({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -41,14 +41,6 @@ export default function AtcNavBar({ isAdmin, canAccessPilote }: { isAdmin: boole
             >
               <LayoutDashboard className="h-4 w-4" />
               Admin ATC
-            </Link>
-          )}
-          {canAccessPilote && (
-            <Link
-              href="/logbook"
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            >
-              Espace pilote
             </Link>
           )}
         </nav>

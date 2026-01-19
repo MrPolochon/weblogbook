@@ -22,12 +22,10 @@ export default async function AtcLayout({
   const canAccessAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
   if (!canAccessAtc) redirect('/logbook');
 
-  const canAccessPilote = profile?.role !== 'atc';
-
   return (
     <div className="min-h-screen flex flex-col">
       <AtcModeBg isAdmin={isAdmin} />
-      <AtcNavBar isAdmin={isAdmin} canAccessPilote={canAccessPilote} />
+      <AtcNavBar isAdmin={isAdmin} />
       <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
     </div>
   );
