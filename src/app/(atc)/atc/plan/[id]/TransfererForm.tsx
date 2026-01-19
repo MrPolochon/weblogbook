@@ -35,7 +35,7 @@ export default function TransfererForm({ planId }: { planId: string }) {
   }
 
   async function handleAutomonitoring() {
-    if (!confirm('Mettre ce plan en autosurveillance ? Il sera visible par tous les ATC comme « vol non contrôlé ».') return;
+    if (!confirm('Mettre ce plan en autosurveillance ? Il sera visible par tous les ATC comme « vol non contrôlé ».') ) return;
     setLoadingAuto(true);
     try {
       const res = await fetch(`/api/plans-vol/${planId}`, {
