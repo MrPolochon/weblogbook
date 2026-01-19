@@ -33,9 +33,16 @@ export default function VolFormMilitaire({ pilotesArmee }: { pilotesArmee: Profi
   const [role_pilote, setRolePilote] = useState<'Pilote' | 'Co-pilote'>('Pilote');
   const [pilote_id, setPiloteId] = useState('');
   const [copilote_id, setCopiloteId] = useState('');
+  const [equipage_ids, setEquipageIds] = useState<string[]>([]);
   const [callsign, setCallsign] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isEscadrilleOuEscadron = escadrille_ou_escadron === 'escadrille' || escadrille_ou_escadron === 'escadron';
+
+  function toggleEquipage(id: string) {
+    setEquipageIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
 
   function computeDepartUtc(): string {
     const d = parseUtcLocal(heure_utc);
@@ -73,10 +80,10 @@ export default function VolFormMilitaire({ pilotesArmee }: { pilotesArmee: Profi
         setError('Précisez la nature du vol militaire (champ « Autre »).');
         return;
       }
-    }
-    if (role_pilote === 'Co-pilote' && !pilote_id) {
-      setError('Qui était le pilote (commandant de bord) ?');
-      return;
+      if (role_pilote === 'Co-pilote' && !pilote_id) {
+        setError('Qui était le pilote (commandant de bord) ?');
+        return;
+      }
     }
     const depart_utc = computeDepartUtc();
     if (!depart_utc) {
@@ -99,9 +106,10 @@ export default function VolFormMilitaire({ pilotesArmee }: { pilotesArmee: Profi
           duree_minutes: d,
           depart_utc,
           commandant_bord: commandant_bord.trim(),
-          role_pilote,
-          pilote_id: role_pilote === 'Co-pilote' ? pilote_id : undefined,
-          copilote_id: role_pilote === 'Pilote' && copilote_id ? copilote_id : undefined,
+          role_pilote: isEscadrilleOuEscadron ? 'Pilote' : role_pilote,
+          pilote_id: isEscadrilleOuEscadron ? undefined : (role_pilote === 'Co-pilote' ? pilote_id : undefined),
+          copilote_id: isEscadrilleOuEscadron ? undefined : (role_pilote === 'Pilote' && copilote_id ? copilote_id : undefined),
+          equipage_ids: isEscadrilleOuEscadron ? equipage_ids : undefined,
           callsign: callsign.trim() || undefined,
         }),
       });
@@ -133,7 +141,17 @@ export default function VolFormMilitaire({ pilotesArmee }: { pilotesArmee: Profi
         <div className="space-y-2 mt-1">
           {(['escadrille', 'escadron', 'autre'] as const).map((k) => (
             <label key={k} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-              <input type="radio" name="esc" checked={escadrille_ou_escadron === k} onChange={() => { setEscadrilleOuEscadron(k); if (k !== 'autre') setNatureVolMilitaire(''); }} className="rounded" />
+              <input
+                type="radio"
+                name="esc"
+                checked={escadrille_ou_escadron === k}
+                onChange={() => {
+                  setEscadrilleOuEscadron(k);
+                  if (k === 'autre') { setEquipageIds([]); setNatureVolMilitaire(''); }
+                  else { setNatureVolMilitaire(''); setNatureVolMilitaireAutre(''); setPiloteId(''); setCopiloteId(''); }
+                }}
+                className="rounded"
+              />
               {LIB_ESC[k]}
             </label>
           ))}
@@ -202,39 +220,59 @@ export default function VolFormMilitaire({ pilotesArmee }: { pilotesArmee: Profi
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Rôle *</label>
-          <select className="input" value={role_pilote} onChange={(e) => { setRolePilote(e.target.value as 'Pilote' | 'Co-pilote'); setPiloteId(''); setCopiloteId(''); }}>
-            <option value="Pilote">Pilote</option>
-            <option value="Co-pilote">Co-pilote</option>
-          </select>
-        </div>
-      </div>
-
-      {role_pilote === 'Pilote' && (
-        <div>
-          <label className="label">Co-pilote (optionnel)</label>
-          <select className="input" value={copilote_id} onChange={(e) => setCopiloteId(e.target.value)}>
-            <option value="">— Aucun —</option>
+      {isEscadrilleOuEscadron && (
+        <div className="rounded-lg border border-slate-600/50 bg-slate-800/30 p-4">
+          <label className="label block mb-2">Pilotes du vol (vous êtes inclus). Ajoutez les autres participants :</label>
+          <p className="text-xs text-slate-500 mb-3">Tous les pilotes sélectionnés auront ce vol dans leur logbook.</p>
+          <div className="flex flex-wrap gap-3 max-h-40 overflow-y-auto">
             {pilotesArmee.map((p) => (
-              <option key={p.id} value={p.id}>{p.identifiant}</option>
+              <label key={p.id} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                <input type="checkbox" checked={equipage_ids.includes(p.id)} onChange={() => toggleEquipage(p.id)} className="rounded" />
+                {p.identifiant}
+              </label>
             ))}
-          </select>
-          <p className="text-xs text-slate-500 mt-1">Seuls les utilisateurs avec le rôle Armée peuvent être ajoutés.</p>
+          </div>
+          {pilotesArmee.length === 0 && <p className="text-slate-500 text-sm">Aucun autre pilote avec le rôle Armée.</p>}
         </div>
       )}
 
-      {role_pilote === 'Co-pilote' && (
-        <div>
-          <label className="label">Pilote (commandant de bord) *</label>
-          <select className="input" value={pilote_id} onChange={(e) => setPiloteId(e.target.value)}>
-            <option value="">— Choisir —</option>
-            {pilotesArmee.map((p) => (
-              <option key={p.id} value={p.id}>{p.identifiant}</option>
-            ))}
-          </select>
-        </div>
+      {!isEscadrilleOuEscadron && (
+        <>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Rôle *</label>
+              <select className="input" value={role_pilote} onChange={(e) => { setRolePilote(e.target.value as 'Pilote' | 'Co-pilote'); setPiloteId(''); setCopiloteId(''); }}>
+                <option value="Pilote">Pilote</option>
+                <option value="Co-pilote">Co-pilote</option>
+              </select>
+            </div>
+          </div>
+
+          {role_pilote === 'Pilote' && (
+            <div>
+              <label className="label">Co-pilote (optionnel)</label>
+              <select className="input" value={copilote_id} onChange={(e) => setCopiloteId(e.target.value)}>
+                <option value="">— Aucun —</option>
+                {pilotesArmee.map((p) => (
+                  <option key={p.id} value={p.id}>{p.identifiant}</option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500 mt-1">Seuls les utilisateurs avec le rôle Armée peuvent être ajoutés.</p>
+            </div>
+          )}
+
+          {role_pilote === 'Co-pilote' && (
+            <div>
+              <label className="label">Pilote (commandant de bord) *</label>
+              <select className="input" value={pilote_id} onChange={(e) => setPiloteId(e.target.value)}>
+                <option value="">— Choisir —</option>
+                {pilotesArmee.map((p) => (
+                  <option key={p.id} value={p.id}>{p.identifiant}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </>
       )}
 
       <div>

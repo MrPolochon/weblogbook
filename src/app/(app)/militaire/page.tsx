@@ -17,20 +17,31 @@ export default async function MilitairePage() {
   if (!profile?.armee && profile?.role !== 'admin') redirect('/logbook');
 
   const admin = createAdminClient();
-  const { data: vols } = await admin
-    .from('vols')
-    .select(`
-      id, pilote_id, copilote_id, chef_escadron_id, duree_minutes, depart_utc, arrivee_utc, statut, type_avion_militaire, role_pilote, callsign,
-      escadrille_ou_escadron, nature_vol_militaire, nature_vol_militaire_autre, aeroport_depart, aeroport_arrivee,
-      pilote:profiles!vols_pilote_id_fkey(identifiant),
-      copilote:profiles!vols_copilote_id_fkey(identifiant)
-    `)
-    .eq('type_vol', 'Vol militaire')
-    .or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id},chef_escadron_id.eq.${user.id}`)
-    .in('statut', ['en_attente', 'validé', 'refusé'])
-    .order('depart_utc', { ascending: false });
+  const selectVols = `
+    id, pilote_id, copilote_id, chef_escadron_id, duree_minutes, depart_utc, arrivee_utc, statut, type_avion_militaire, role_pilote, callsign,
+    escadrille_ou_escadron, nature_vol_militaire, nature_vol_militaire_autre, aeroport_depart, aeroport_arrivee,
+    pilote:profiles!vols_pilote_id_fkey(identifiant),
+    copilote:profiles!vols_copilote_id_fkey(identifiant),
+    equipage:vols_equipage_militaire(profile_id)
+  `;
 
-  const totalValides = (vols || []).filter((v) => v.statut === 'validé');
+  const [{ data: vols1 }, { data: eqData }] = await Promise.all([
+    admin.from('vols').select(selectVols).eq('type_vol', 'Vol militaire').or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id},chef_escadron_id.eq.${user.id}`).in('statut', ['en_attente', 'validé', 'refusé']).order('depart_utc', { ascending: false }),
+    admin.from('vols_equipage_militaire').select('vol_id').eq('profile_id', user.id),
+  ]);
+
+  const volIdsEq = [...new Set((eqData || []).map((r) => r.vol_id))];
+  let vols2: typeof vols1 = [];
+  if (volIdsEq.length > 0) {
+    const { data } = await admin.from('vols').select(selectVols).eq('type_vol', 'Vol militaire').in('id', volIdsEq).in('statut', ['en_attente', 'validé', 'refusé']).order('depart_utc', { ascending: false });
+    vols2 = data || [];
+  }
+
+  const byId = new Map((vols1 || []).map((v) => [v.id, v]));
+  for (const v of vols2) { if (!byId.has(v.id)) byId.set(v.id, v); }
+  const vols = Array.from(byId.values()).sort((a, b) => new Date(b.depart_utc).getTime() - new Date(a.depart_utc).getTime());
+
+  const totalValides = vols.filter((v) => v.statut === 'validé');
   const totalMinutes = totalValides.reduce((s, v) => s + (v.duree_minutes || 0), 0);
 
   const libNature = (n: string | null, a: string | null) => {
@@ -87,7 +98,7 @@ export default async function MilitairePage() {
                     <td className="py-3 pr-4 text-slate-300">{v.escadrille_ou_escadron === 'escadrille' ? 'Escadrille' : v.escadrille_ou_escadron === 'escadron' ? 'Escadron' : v.escadrille_ou_escadron || '—'}</td>
                     <td className="py-3 pr-4 text-slate-300">{libNature(v.nature_vol_militaire, v.nature_vol_militaire_autre)}</td>
                     <td className="py-3 pr-4 text-slate-300">{formatDuree(v.duree_minutes || 0)}</td>
-                    <td className="py-3 pr-4 text-slate-300">{v.chef_escadron_id === user.id ? 'Chef d\'escadron' : v.copilote_id === user.id ? 'Co-pilote' : 'Pilote'}</td>
+                    <td className="py-3 pr-4 text-slate-300">{v.chef_escadron_id === user.id ? 'Chef d\'escadron' : v.copilote_id === user.id ? 'Co-pilote' : v.pilote_id === user.id ? 'Pilote' : (Array.isArray(v.equipage) ? v.equipage : []).some((e: { profile_id?: string }) => e.profile_id === user.id) ? 'Membre' : 'Pilote'}</td>
                     <td className="py-3 pr-4">
                       <span className={v.statut === 'validé' ? 'text-emerald-400' : v.statut === 'refusé' ? 'text-red-400' : 'text-amber-400'}>
                         {v.statut === 'validé' ? 'Validé' : v.statut === 'refusé' ? 'Refusé' : 'En attente'}

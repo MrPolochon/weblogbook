@@ -30,22 +30,34 @@ export default async function AdminPiloteLogbookPage({
 
   if (!p) notFound();
 
-  const { data: vols } = await admin
-    .from('vols')
-    .select(`
-      id, pilote_id, copilote_id, instructeur_id, chef_escadron_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote, callsign, type_avion_militaire,
-      aeroport_depart, aeroport_arrivee, instruction_type,
-      refusal_count, refusal_reason,
-      type_avion:types_avion(nom, constructeur),
-      instructeur:profiles!vols_instructeur_id_fkey(identifiant),
-      pilote:profiles!vols_pilote_id_fkey(identifiant),
-      copilote:profiles!vols_copilote_id_fkey(id,identifiant)
-    `)
-    .or(`pilote_id.eq.${piloteId},copilote_id.eq.${piloteId},instructeur_id.eq.${piloteId},chef_escadron_id.eq.${piloteId}`)
-    .in('statut', ['en_attente', 'validé', 'refusé'])
-    .order('depart_utc', { ascending: false });
+  const selectVols = `
+    id, pilote_id, copilote_id, instructeur_id, chef_escadron_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote, callsign, type_avion_militaire,
+    aeroport_depart, aeroport_arrivee, instruction_type,
+    refusal_count, refusal_reason,
+    type_avion:types_avion(nom, constructeur),
+    instructeur:profiles!vols_instructeur_id_fkey(identifiant),
+    pilote:profiles!vols_pilote_id_fkey(identifiant),
+    copilote:profiles!vols_copilote_id_fkey(id,identifiant),
+    equipage:vols_equipage_militaire(profile_id)
+  `;
 
-  const totalValides = (vols || []).filter((v) => v.statut === 'validé');
+  const [{ data: vols1 }, { data: eqData }] = await Promise.all([
+    admin.from('vols').select(selectVols).or(`pilote_id.eq.${piloteId},copilote_id.eq.${piloteId},instructeur_id.eq.${piloteId},chef_escadron_id.eq.${piloteId}`).in('statut', ['en_attente', 'validé', 'refusé']).order('depart_utc', { ascending: false }),
+    admin.from('vols_equipage_militaire').select('vol_id').eq('profile_id', piloteId),
+  ]);
+
+  const volIdsEq = [...new Set((eqData || []).map((r) => r.vol_id))];
+  let vols2: typeof vols1 = [];
+  if (volIdsEq.length > 0) {
+    const { data } = await admin.from('vols').select(selectVols).in('id', volIdsEq).in('statut', ['en_attente', 'validé', 'refusé']).order('depart_utc', { ascending: false });
+    vols2 = data || [];
+  }
+
+  const byId = new Map((vols1 || []).map((v) => [v.id, v]));
+  for (const v of vols2) { if (!byId.has(v.id)) byId.set(v.id, v); }
+  const vols = Array.from(byId.values()).sort((a, b) => new Date(b.depart_utc).getTime() - new Date(a.depart_utc).getTime());
+
+  const totalValides = vols.filter((v) => v.statut === 'validé');
   const totalMinutes =
     (p.heures_initiales_minutes ?? 0) +
     totalValides.reduce((s, v) => s + (v.duree_minutes || 0), 0);
@@ -122,7 +134,7 @@ export default async function AdminPiloteLogbookPage({
                         </span>
                       )}
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">{v.chef_escadron_id === piloteId ? 'Chef d\'escadron' : v.instructeur_id === piloteId ? 'Instructeur' : v.copilote_id === piloteId ? 'Co-pilote' : v.role_pilote}</td>
+                    <td className="py-3 pr-4 text-slate-300">{v.chef_escadron_id === piloteId ? 'Chef d\'escadron' : v.instructeur_id === piloteId ? 'Instructeur' : v.copilote_id === piloteId ? 'Co-pilote' : v.pilote_id === piloteId ? v.role_pilote : (Array.isArray(v.equipage) ? v.equipage : []).some((e: { profile_id?: string }) => e.profile_id === piloteId) ? 'Membre' : v.role_pilote}</td>
                     <td className="py-3 pr-4">
                       <span
                         className={

@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { Users, Clock, Building2, Plane, FileText } from 'lucide-react';
+import { Users, Clock, Building2, Plane, FileText, Shield } from 'lucide-react';
 
 const links = [
   { href: '/admin/vols', label: 'Vols en attente', icon: Clock },
+  { href: '/admin/militaire', label: 'Vols militaires', icon: Shield },
   { href: '/admin/pilotes', label: 'Pilotes', icon: Users },
   { href: '/admin/compagnies', label: 'Compagnies', icon: Building2 },
   { href: '/admin/types-avion', label: 'Types d\'avion', icon: Plane },

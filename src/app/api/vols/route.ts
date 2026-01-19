@@ -37,6 +37,7 @@ export async function POST(request: Request) {
         pilote_id: pidB,
         copilote_id: cidB,
         callsign: csB,
+        equipage_ids: equipageIdsBody,
       } = body;
       if (!tam || !(AVIONS_MILITAIRES as readonly string[]).includes(String(tam).trim())) {
         return NextResponse.json({ error: 'Type d\'avion militaire invalide.' }, { status: 400 });
@@ -55,27 +56,48 @@ export async function POST(request: Request) {
       if (!ad || !CODES_OACI_VALIDES.has(String(ad).toUpperCase()) || !aa || !CODES_OACI_VALIDES.has(String(aa).toUpperCase())) {
         return NextResponse.json({ error: 'Aéroports de départ et d\'arrivée requis (code OACI valide).' }, { status: 400 });
       }
-      if (typeof dm !== 'number' || dm < 1 || !du || !cb || !['Pilote', 'Co-pilote'].includes(String(rp))) {
+      if (typeof dm !== 'number' || dm < 1 || !du || !cb) {
         return NextResponse.json({ error: 'Champs requis manquants ou invalides.' }, { status: 400 });
       }
+
+      const isEscadrilleOuEscadron = eoe === 'escadrille' || eoe === 'escadron';
       let targetPiloteId: string;
       let targetCopiloteId: string | null = null;
-      if (rp === 'Co-pilote') {
-        if (!pidB) return NextResponse.json({ error: 'Qui était le pilote (commandant) ?' }, { status: 400 });
-        if (pidB === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être pilote et co-pilote.' }, { status: 400 });
-        const { data: pp } = await supabase.from('profiles').select('id, armee').eq('id', pidB).single();
-        if (!pp || !pp.armee) return NextResponse.json({ error: 'Le pilote doit avoir le rôle Armée.' }, { status: 400 });
-        targetPiloteId = pidB;
-        targetCopiloteId = user.id;
-      } else {
+      let rolePiloteVal: string;
+
+      if (isEscadrilleOuEscadron) {
         targetPiloteId = user.id;
-        if (cidB) {
-          if (cidB === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être pilote et co-pilote.' }, { status: 400 });
-          const { data: cp } = await supabase.from('profiles').select('id, armee').eq('id', cidB).single();
-          if (!cp || !cp.armee) return NextResponse.json({ error: 'Le co-pilote doit avoir le rôle Armée.' }, { status: 400 });
-          targetCopiloteId = cidB;
+        targetCopiloteId = null;
+        rolePiloteVal = 'Pilote';
+        const equipageIds: string[] = Array.isArray(equipageIdsBody) ? equipageIdsBody.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
+        for (const eid of equipageIds) {
+          if (eid === user.id) continue;
+          const { data: ep } = await supabase.from('profiles').select('id, armee').eq('id', eid).single();
+          if (!ep || !ep.armee) return NextResponse.json({ error: 'Tous les pilotes de l\'équipage doivent avoir le rôle Armée.' }, { status: 400 });
+        }
+      } else {
+        if (!rp || !['Pilote', 'Co-pilote'].includes(String(rp))) {
+          return NextResponse.json({ error: 'Rôle pilote requis.' }, { status: 400 });
+        }
+        rolePiloteVal = String(rp);
+        if (rp === 'Co-pilote') {
+          if (!pidB) return NextResponse.json({ error: 'Qui était le pilote (commandant) ?' }, { status: 400 });
+          if (pidB === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être pilote et co-pilote.' }, { status: 400 });
+          const { data: pp } = await supabase.from('profiles').select('id, armee').eq('id', pidB).single();
+          if (!pp || !pp.armee) return NextResponse.json({ error: 'Le pilote doit avoir le rôle Armée.' }, { status: 400 });
+          targetPiloteId = pidB;
+          targetCopiloteId = user.id;
+        } else {
+          targetPiloteId = user.id;
+          if (cidB) {
+            if (cidB === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être pilote et co-pilote.' }, { status: 400 });
+            const { data: cp } = await supabase.from('profiles').select('id, armee').eq('id', cidB).single();
+            if (!cp || !cp.armee) return NextResponse.json({ error: 'Le co-pilote doit avoir le rôle Armée.' }, { status: 400 });
+            targetCopiloteId = cidB;
+          }
         }
       }
+
       const depStr = /Z$/.test(String(du)) ? String(du) : String(du) + 'Z';
       const dep = parseISO(depStr);
       const arrivee = addMinutes(dep, dm);
@@ -100,7 +122,7 @@ export async function POST(request: Request) {
         instructeur_id: null,
         instruction_type: null,
         commandant_bord: String(cb).trim(),
-        role_pilote: String(rp),
+        role_pilote: rolePiloteVal,
         callsign: csB != null && String(csB).trim() ? String(csB).trim() : null,
         statut: 'en_attente',
         created_by_admin: false,
@@ -108,6 +130,16 @@ export async function POST(request: Request) {
       };
       const { data, error } = await supabase.from('vols').insert(row).select('id').single();
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+      if (isEscadrilleOuEscadron) {
+        const equipageIds: string[] = Array.isArray(equipageIdsBody) ? equipageIdsBody.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
+        const tous = [...new Set([user.id, ...equipageIds])];
+        if (tous.length > 0) {
+          const admin = createAdminClient();
+          await admin.from('vols_equipage_militaire').insert(tous.map((pid) => ({ vol_id: data.id, profile_id: pid })));
+        }
+      }
+
       return NextResponse.json({ ok: true, id: data.id });
     }
 
