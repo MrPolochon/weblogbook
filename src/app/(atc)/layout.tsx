@@ -26,7 +26,7 @@ export default async function AtcLayout({
   const canAccessAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
   if (!canAccessAtc) redirect('/logbook');
 
-  const { data: session } = await supabase.from('atc_sessions').select('id, aeroport, position').eq('user_id', user.id).single();
+  const { data: session } = await supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single();
   const enService = !!session;
 
   let plansAuto: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
@@ -51,7 +51,7 @@ export default async function AtcLayout({
     <div className="min-h-screen flex flex-col">
       <AutoRefresh intervalSeconds={8} />
       <AtcModeBg isAdmin={isAdmin} />
-      <AtcNavBar isAdmin={isAdmin} enService={enService} />
+      <AtcNavBar isAdmin={isAdmin} enService={enService} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} />
       <div className="flex flex-1 w-full min-h-0">
         {enService && (
           <aside className="w-44 flex-shrink-0 border-r border-slate-300 bg-slate-100 py-3 px-2 flex flex-col">
