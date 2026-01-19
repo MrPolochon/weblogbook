@@ -212,7 +212,7 @@ export default function VolEditForm({
     } else if (role_pilote === 'Co-pilote') {
       if (isCurrentUserPilote) body.copilote_id = autrePersonneId || null;
       else body.pilote_id = autrePersonneId;
-    } else if (isCurrentUserPilote && copiloteId && type_vol !== 'Instruction') {
+    } else if (isCurrentUserPilote && copiloteId) {
       body.copilote_id = autrePersonneId || null;
     }
     setLoading(true);
