@@ -88,7 +88,7 @@ export default async function LogbookPage() {
       {volsEnAttenteCopilote && volsEnAttenteCopilote.length > 0 && (
         <div className="card border-amber-500/30 bg-amber-500/5">
           <h2 className="text-lg font-medium text-amber-200 mb-2">En attente que le co-pilote confirme</h2>
-          <p className="text-sm text-slate-400 mb-3">Vous avez indiqué ces vols avec un co-pilote. Ils n'apparaîtront dans les logbooks qu'après confirmation du co-pilote.</p>
+          <p className="text-sm text-slate-400 mb-3">Vous avez indiqué ces vols avec un co-pilote. Ils n&apos;apparaîtront dans les logbooks qu&apos;après confirmation du co-pilote.</p>
           <ul className="space-y-2">
             {volsEnAttenteCopilote.map((v) => (
               <li key={v.id} className="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-0">
