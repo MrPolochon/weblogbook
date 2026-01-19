@@ -55,7 +55,7 @@ export async function PATCH(
       const isHolder = plan.current_holder_user_id === user.id;
       const canAtc = isAdmin || isHolder;
       if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui détient le plan ou un admin peut accepter.' }, { status: 403 });
-      if (plan.statut !== 'en_attente') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
+      if (plan.statut !== 'en_attente' && plan.statut !== 'depose') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
 
       const { error } = await supabase.from('plans_vol').update({ statut: 'accepte' }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -68,7 +68,7 @@ export async function PATCH(
       const isHolder = plan.current_holder_user_id === user.id;
       const canAtc = isAdmin || isHolder;
       if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui détient le plan ou un admin peut refuser.' }, { status: 403 });
-      if (plan.statut !== 'en_attente') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
+      if (plan.statut !== 'en_attente' && plan.statut !== 'depose') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
       const reason = body.refusal_reason != null ? String(body.refusal_reason).trim() : '';
       if (!reason) return NextResponse.json({ error: 'La raison du refus est obligatoire.' }, { status: 400 });
 

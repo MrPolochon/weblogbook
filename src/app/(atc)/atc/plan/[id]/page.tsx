@@ -7,6 +7,8 @@ import ConfirmerClotureButton from './ConfirmerClotureButton';
 import AccepterPlanButton from './AccepterPlanButton';
 import RefuserPlanForm from './RefuserPlanForm';
 
+export const dynamic = 'force-dynamic';
+
 const STATUT_LIB: Record<string, string> = {
   depose: 'Déposé',
   en_attente: 'En attente ATC',
@@ -37,7 +39,8 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
   const isAdmin = profile?.role === 'admin';
   const isHolder = plan.current_holder_user_id === user.id;
   const showConfirmerCloture = plan.statut === 'en_attente_cloture' && (isHolder || isAdmin);
-  const showAccepterRefuser = plan.statut === 'en_attente' && (isHolder || isAdmin);
+  // Toujours afficher Accepter/Refuser quand le plan est en attente (l’API impose holder ou admin)
+  const showAccepterRefuser = plan.statut === 'en_attente' || plan.statut === 'depose';
 
   return (
     <div className="space-y-6">
