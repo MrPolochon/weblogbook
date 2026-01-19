@@ -5,6 +5,13 @@ import { Radio } from 'lucide-react';
 import SeMettreEnServiceForm from '../SeMettreEnServiceForm';
 import HorsServiceButton from '../HorsServiceButton';
 
+const STATUT_LIB: Record<string, string> = {
+  en_attente: 'En attente',
+  accepte: 'Accepté',
+  en_cours: 'En cours',
+  en_attente_cloture: 'Clôture demandée',
+};
+
 export default async function AtcPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -47,9 +54,12 @@ export default async function AtcPage() {
           ) : (
             <ul className="space-y-2">
               {plansChezMoi.map((p) => (
-                <li key={p.id} className="flex items-center justify-between py-2 border-b border-slate-200 last:border-0">
+                <li key={p.id} className="flex items-center justify-between gap-2 py-2 border-b border-slate-200 last:border-0">
                   <span className="text-slate-700">{p.numero_vol} — {p.aeroport_depart} → {p.aeroport_arrivee}</span>
-                  <Link href={`/atc/plan/${p.id}`} className="text-sm text-sky-600 hover:underline">Voir</Link>
+                  <span className="flex items-center gap-2">
+                    <span className={p.statut === 'en_attente_cloture' ? 'text-amber-600 text-sm font-medium' : 'text-slate-500 text-sm'}>{STATUT_LIB[p.statut] ?? p.statut}</span>
+                    <Link href={`/atc/plan/${p.id}`} className="text-sm text-sky-600 hover:underline">Voir</Link>
+                  </span>
                 </li>
               ))}
             </ul>

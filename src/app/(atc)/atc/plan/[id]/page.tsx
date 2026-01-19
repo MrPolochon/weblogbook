@@ -5,6 +5,17 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import ConfirmerClotureButton from './ConfirmerClotureButton';
 
+const STATUT_LIB: Record<string, string> = {
+  depose: 'Déposé',
+  en_attente: 'En attente ATC',
+  accepte: 'Accepté',
+  refuse: 'Refusé',
+  en_cours: 'En cours',
+  automonitoring: 'Autosurveillance',
+  en_attente_cloture: 'Clôture demandée',
+  cloture: 'Clôturé',
+};
+
 export default async function AtcPlanPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -34,7 +45,7 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
         <h1 className="text-2xl font-semibold text-slate-900">Plan de vol {plan.numero_vol}</h1>
       </div>
       <div className="card">
-        <p className="text-slate-700">{plan.aeroport_depart} → {plan.aeroport_arrivee} · {plan.type_vol} · {plan.statut}</p>
+        <p className="text-slate-700">{plan.aeroport_depart} → {plan.aeroport_arrivee} · {plan.type_vol} · {STATUT_LIB[plan.statut] ?? plan.statut}</p>
         {plan.instructions && <p className="text-slate-600 mt-2">Instructions : {plan.instructions}</p>}
         {showConfirmerCloture && (
           <div className="mt-4 pt-4 border-t border-slate-200">
