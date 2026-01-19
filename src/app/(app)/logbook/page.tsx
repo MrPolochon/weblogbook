@@ -213,7 +213,7 @@ export default async function LogbookPage() {
                         );
                       })()}
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">{v.instructeur_id === user.id ? 'Instructeur' : v.role_pilote}</td>
+                    <td className="py-3 pr-4 text-slate-300">{v.instructeur_id === user.id ? 'Instructeur' : v.copilote_id === user.id ? 'Co-pilote' : v.role_pilote}</td>
                     <td className="py-3 pr-4">
                       <span
                         className={

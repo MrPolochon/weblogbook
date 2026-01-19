@@ -120,7 +120,7 @@ export default async function AdminPiloteLogbookPage({
                         </span>
                       )}
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">{v.instructeur_id === piloteId ? 'Instructeur' : v.role_pilote}</td>
+                    <td className="py-3 pr-4 text-slate-300">{v.instructeur_id === piloteId ? 'Instructeur' : v.copilote_id === piloteId ? 'Co-pilote' : v.role_pilote}</td>
                     <td className="py-3 pr-4">
                       <span
                         className={
