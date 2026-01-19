@@ -81,14 +81,13 @@ export async function PATCH(
     }
 
     if (action === 'instructions') {
-      const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
       const isAdmin = profile?.role === 'admin';
       const isHolder = plan.current_holder_user_id === user.id;
-      const canAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
-      // Détenteur actuel, admin, ou tout ATC si le plan est en autosurveillance
-      const canEdit = isAdmin || isHolder || (plan.automonitoring && canAtc);
-      if (!canEdit) return NextResponse.json({ error: 'Seul le détenteur du plan, un admin, ou un ATC (si autosurveillance) peut modifier les instructions.' }, { status: 403 });
-      if (plan.statut !== 'accepte' && plan.statut !== 'en_cours' && !plan.automonitoring) return NextResponse.json({ error: 'Plan non accepté, non en cours ou non en autosurveillance.' }, { status: 400 });
+      // En autosurveillance : les instructions ne sont pas modifiables
+      const canEdit = (isAdmin || isHolder) && !plan.automonitoring;
+      if (!canEdit) return NextResponse.json({ error: 'Seul le détenteur du plan ou un admin peut modifier les instructions (pas en autosurveillance).' }, { status: 403 });
+      if (plan.statut !== 'accepte' && plan.statut !== 'en_cours') return NextResponse.json({ error: 'Plan non accepté ou non en cours.' }, { status: 400 });
       const instructions = body.instructions != null ? String(body.instructions) : '';
       const { error: err } = await supabase.from('plans_vol').update({ instructions: instructions.trim() || null }).eq('id', id);
       if (err) return NextResponse.json({ error: err.message }, { status: 400 });
@@ -103,6 +102,11 @@ export async function PATCH(
       const canTransfer = isAdmin || isHolder || (plan.automonitoring && canAtc);
       if (!canTransfer) return NextResponse.json({ error: 'Seul le détenteur du plan, un admin, ou un ATC (si autosurveillance) peut transférer.' }, { status: 403 });
       if (plan.statut !== 'accepte' && plan.statut !== 'en_cours' && !plan.automonitoring) return NextResponse.json({ error: 'Plan non accepté, non en cours ou non en autosurveillance.' }, { status: 400 });
+      // En autosurveillance : seuls les ATC en service (avec une position) peuvent prendre/transférer
+      if (plan.automonitoring && !isAdmin) {
+        const { data: atcSess } = await supabase.from('atc_sessions').select('id').eq('user_id', user.id).single();
+        if (!atcSess) return NextResponse.json({ error: 'Mettez-vous en service pour prendre ou transférer un plan en autosurveillance.' }, { status: 403 });
+      }
 
       if (body.automonitoring === true) {
         const { error: err } = await supabase.from('plans_vol').update({

@@ -8,6 +8,7 @@ import AccepterPlanButton from './AccepterPlanButton';
 import RefuserPlanForm from './RefuserPlanForm';
 import InstructionsForm from './InstructionsForm';
 import TransfererForm from './TransfererForm';
+import PrendrePlanButton from './PrendrePlanButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,14 +38,17 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
 
   if (!plan) notFound();
 
+  const { data: atcSession } = await supabase.from('atc_sessions').select('aeroport, position').eq('user_id', user.id).single();
+  if (plan.automonitoring && !atcSession) redirect('/atc');
+
   const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
   const isAdmin = profile?.role === 'admin';
   const isHolder = plan.current_holder_user_id === user.id;
-  const canAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
   const showConfirmerCloture = plan.statut === 'en_attente_cloture' && (isHolder || isAdmin);
   // Toujours afficher Accepter/Refuser quand le plan est en attente (l’API impose holder ou admin)
   const showAccepterRefuser = plan.statut === 'en_attente' || plan.statut === 'depose';
-  const showInstructionsTransfer = ((plan.statut === 'accepte' || plan.statut === 'en_cours') && (isHolder || isAdmin)) || (Boolean(plan.automonitoring) && canAtc);
+  // En autosurveillance : pas de formulaire d’instructions (lecture seule), pas de transfer classique
+  const showInstructionsTransfer = (plan.statut === 'accepte' || plan.statut === 'en_cours') && (isHolder || isAdmin) && !plan.automonitoring;
 
   return (
     <div className="space-y-6">
@@ -64,7 +68,14 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
           <p className="text-slate-600 mt-2 text-sm"><span className="font-medium text-slate-700">SID départ :</span> {plan.sid_depart || '—'} · <span className="font-medium text-slate-700">STAR arrivée :</span> {plan.star_arrivee || '—'}</p>
         )}
         {plan.refusal_reason && <p className="text-red-600 mt-2 text-sm"><span className="font-medium">Raison du refus :</span> {plan.refusal_reason}</p>}
-        {plan.instructions && !showInstructionsTransfer && <p className="text-slate-600 mt-2">Instructions : {plan.instructions}</p>}
+        {plan.instructions && !showInstructionsTransfer && <p className="text-slate-600 mt-2">Instructions : {plan.instructions}{plan.automonitoring && <span className="text-slate-400 text-xs ml-1">(lecture seule)</span>}</p>}
+        {plan.automonitoring && (
+          <div className="mt-4 pt-4 border-t border-slate-200 flex flex-wrap items-center gap-3">
+            <p className="text-slate-600 text-sm">En autosurveillance · les instructions ne sont pas modifiables.</p>
+            <PrendrePlanButton planId={plan.id} aeroport={atcSession!.aeroport} position={atcSession!.position} />
+            <Link href="/atc" className="text-sm text-slate-500 hover:text-slate-700">Sortir</Link>
+          </div>
+        )}
         {showConfirmerCloture && (
           <div className="mt-4 pt-4 border-t border-slate-200">
             <p className="text-slate-600 text-sm mb-2">Le pilote a demandé la clôture du vol.</p>
@@ -88,8 +99,8 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
         )}
-        {!showConfirmerCloture && !showAccepterRefuser && !showInstructionsTransfer && plan.statut !== 'cloture' && plan.statut !== 'refuse' && (
-          <p className="text-slate-500 text-sm mt-4">Ce plan est géré par un autre ATC ou en autosurveillance.</p>
+        {!showConfirmerCloture && !showAccepterRefuser && !showInstructionsTransfer && !plan.automonitoring && plan.statut !== 'cloture' && plan.statut !== 'refuse' && (
+          <p className="text-slate-500 text-sm mt-4">Ce plan est géré par un autre ATC.</p>
         )}
       </div>
     </div>
