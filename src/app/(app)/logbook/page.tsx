@@ -51,10 +51,15 @@ export default async function LogbookPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold text-slate-100">Mon logbook</h1>
         {!blocked && (
-          <Link href="/logbook/nouveau" className="btn-primary inline-flex gap-2">
-            <Plus className="h-4 w-4" />
-            Nouveau vol
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/logbook/depot-plan-vol" className="btn-secondary inline-flex gap-2">
+              Déposer le plan de vol
+            </Link>
+            <Link href="/logbook/nouveau" className="btn-primary inline-flex gap-2">
+              <Plus className="h-4 w-4" />
+              Nouveau vol
+            </Link>
+          </div>
         )}
         {blocked && (
           <p className="text-amber-400 text-sm">

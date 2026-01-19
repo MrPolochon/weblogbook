@@ -18,6 +18,16 @@ body.admin-mode {
   background: #1a2744;
 }
 
+/* Espace ATC : admin = blanc, ATC = gris */
+body.atc-admin-bg {
+  background: #f8fafc;
+  color: #0f172a;
+}
+body.atc-normal-bg {
+  background: #94a3b8;
+  color: #0f172a;
+}
+
 @layer components {
   .btn {
     @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:pointer-events-none;

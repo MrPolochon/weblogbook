@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
+  const [espaceAtc, setEspaceAtc] = useState(false);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -40,9 +41,19 @@ export default function LoginPage() {
     try {
       const email = identifiantToEmail(identifiant);
       const supabase = createClient();
-      const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+      const { data: signData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
       if (signInErr) throw new Error(signInErr.message || 'Identifiant ou mot de passe incorrect.');
-      router.replace('/logbook');
+      const uid = signData?.user?.id;
+      if (!uid) { router.replace('/logbook'); router.refresh(); return; }
+      const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', uid).single();
+      if (espaceAtc) {
+        const canAtc = profile?.role === 'admin' || profile?.role === 'atc' || profile?.atc;
+        if (!canAtc) throw new Error('Ce compte n\'a pas accès à l\'espace ATC.');
+        router.replace('/atc');
+      } else {
+        if (profile?.role === 'atc') throw new Error('Ce compte est uniquement ATC. Cochez « Espace ATC » pour vous connecter.');
+        router.replace('/logbook');
+      }
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur de connexion');
@@ -89,6 +100,10 @@ export default function LoginPage() {
               autoComplete="current-password"
             />
           </div>
+          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+            <input type="checkbox" checked={espaceAtc} onChange={(e) => setEspaceAtc(e.target.checked)} className="rounded" />
+            Espace ATC
+          </label>
           {error && <p className="text-red-400 text-sm">{error}</p>}
           <button type="submit" className="btn-primary w-full" disabled={submitting}>
             {submitting ? 'Connexion…' : 'Se connecter'}

@@ -19,6 +19,8 @@ export default async function AppLayout({
     .eq('id', user.id)
     .single();
 
+  if (profile?.role === 'atc') redirect('/atc');
+
   const isAdmin = profile?.role === 'admin';
   const isArmee = Boolean(profile?.armee);
 

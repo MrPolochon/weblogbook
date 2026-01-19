@@ -9,6 +9,7 @@ export default function CreatePiloteForm() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'pilote' | 'admin'>('pilote');
   const [armee, setArmee] = useState(false);
+  const [atc, setAtc] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -23,7 +24,7 @@ export default function CreatePiloteForm() {
       const res = await fetch('/api/pilotes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifiant: identifiant.trim(), password, role, armee }),
+        body: JSON.stringify({ identifiant: identifiant.trim(), password, role, armee, atc }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) throw new Error(data.error || 'Erreur');
@@ -33,6 +34,7 @@ export default function CreatePiloteForm() {
       setPassword('');
       setRole('pilote');
       setArmee(false);
+      setAtc(false);
       setTimeout(() => setSuccess(false), 3000);
       router.refresh();
     } catch (err: unknown) {
@@ -80,15 +82,15 @@ export default function CreatePiloteForm() {
             <option value="admin">Admin</option>
           </select>
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="armee"
-            checked={armee}
-            onChange={(e) => setArmee(e.target.checked)}
-            className="rounded"
-          />
-          <label htmlFor="armee" className="label cursor-pointer">Armée (Espace militaire)</label>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={armee} onChange={(e) => setArmee(e.target.checked)} className="rounded" />
+            <span className="text-slate-300">Armée</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={atc} onChange={(e) => setAtc(e.target.checked)} className="rounded" />
+            <span className="text-slate-300">ATC</span>
+          </label>
         </div>
         <button type="submit" className="btn-primary" disabled={loading}>
           {loading ? 'Création…' : 'Créer'}

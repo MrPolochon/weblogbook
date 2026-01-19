@@ -1,0 +1,58 @@
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { NextResponse } from 'next/server';
+import { ATC_POSITIONS } from '@/lib/atc-positions';
+import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
+
+export async function POST(request: Request) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+
+    const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
+    const canAtc = profile?.role === 'admin' || profile?.role === 'atc' || profile?.atc;
+    if (!canAtc) return NextResponse.json({ error: 'Accès ATC requis.' }, { status: 403 });
+
+    const body = await request.json();
+    const { aeroport, position } = body;
+    const ap = String(aeroport || '').toUpperCase();
+    if (!CODES_OACI_VALIDES.has(ap)) return NextResponse.json({ error: 'Aéroport invalide.' }, { status: 400 });
+    if (!position || !(ATC_POSITIONS as readonly string[]).includes(String(position))) {
+      return NextResponse.json({ error: 'Position invalide (Delivery, Clairance, Ground, Tower, APP, DEP, Center).' }, { status: 400 });
+    }
+
+    const admin = createAdminClient();
+    const { data: existing } = await admin.from('atc_sessions').select('id').eq('aeroport', ap).eq('position', position).single();
+    if (existing) return NextResponse.json({ error: 'Position déjà prise.' }, { status: 400 });
+
+    const { data: mySession } = await supabase.from('atc_sessions').select('id').eq('user_id', user.id).single();
+    if (mySession) return NextResponse.json({ error: 'Vous avez déjà une session. Mettez-vous hors service d\'abord.' }, { status: 400 });
+
+    const { error } = await supabase.from('atc_sessions').insert({ user_id: user.id, aeroport: ap, position: String(position) });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error('ATC session POST:', e);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  }
+}
+
+export async function DELETE() {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+
+    const admin = createAdminClient();
+    const { count } = await admin.from('plans_vol').select('*', { count: 'exact', head: true }).eq('current_holder_user_id', user.id).in('statut', ['en_attente', 'en_cours', 'accepte']);
+    if ((count ?? 0) > 0) return NextResponse.json({ error: 'Vous avez des plans de vol. Transférez-les ou clôturez-les avant de vous mettre hors service.' }, { status: 400 });
+
+    const { error } = await supabase.from('atc_sessions').delete().eq('user_id', user.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error('ATC session DELETE:', e);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  }
+}

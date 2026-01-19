@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function EditPiloteForm({
   piloteId,
   identifiant: identifiantInitial,
   armee: armeeInitial,
+  atc: atcInitial,
   heuresInitiales,
   blockedUntil,
   blockReason,
@@ -14,6 +15,7 @@ export default function EditPiloteForm({
   piloteId: string;
   identifiant: string;
   armee: boolean;
+  atc: boolean;
   heuresInitiales: number;
   blockedUntil: string | null;
   blockReason: string | null;
@@ -21,12 +23,14 @@ export default function EditPiloteForm({
   const router = useRouter();
   const [identifiant, setIdentifiant] = useState(identifiantInitial);
   const [armee, setArmee] = useState(armeeInitial);
+  const [atc, setAtc] = useState(atcInitial);
   const [heures, setHeures] = useState(String(heuresInitiales));
   const [blockMinutes, setBlockMinutes] = useState('');
   const [blockReasonVal, setBlockReasonVal] = useState(blockReason ?? '');
   const [loading, setLoading] = useState(false);
   const [loadingReset, setLoadingReset] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setAtc(atcInitial); }, [atcInitial]);
 
   const isBlocked = blockedUntil ? new Date(blockedUntil) > new Date() : false;
 
@@ -40,7 +44,7 @@ export default function EditPiloteForm({
       const res = await fetch(`/api/pilotes/${piloteId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifiant: id, armee }),
+        body: JSON.stringify({ identifiant: id, armee, atc }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
@@ -149,7 +153,7 @@ export default function EditPiloteForm({
   return (
     <div className="card space-y-6">
       <form onSubmit={handleSaveIdentifiantArmee} className="space-y-4">
-        <h2 className="text-lg font-medium text-slate-200">Identifiant et rôle Armée</h2>
+        <h2 className="text-lg font-medium text-slate-200">Identifiant et rôles</h2>
         <div>
           <label className="label">Identifiant de connexion</label>
           <input
@@ -160,18 +164,18 @@ export default function EditPiloteForm({
             placeholder="ex: jdupont"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="armee-edit"
-            checked={armee}
-            onChange={(e) => setArmee(e.target.checked)}
-            className="rounded"
-          />
-          <label htmlFor="armee-edit" className="label cursor-pointer">Rôle Armée (Espace militaire)</label>
+        <div className="flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={armee} onChange={(e) => setArmee(e.target.checked)} className="rounded" />
+            <span className="text-slate-300">Armée (Espace militaire)</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={atc} onChange={(e) => setAtc(e.target.checked)} className="rounded" />
+            <span className="text-slate-300">ATC (Espace ATC)</span>
+          </label>
         </div>
         <button type="submit" className="btn-primary" disabled={loading}>
-          {loading ? 'Enregistrement…' : 'Enregistrer identifiant / Armée'}
+          {loading ? 'Enregistrement…' : 'Enregistrer identifiant / rôles'}
         </button>
       </form>
 
