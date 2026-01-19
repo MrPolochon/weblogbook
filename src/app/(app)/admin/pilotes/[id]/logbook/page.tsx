@@ -39,7 +39,7 @@ export default async function AdminPiloteLogbookPage({
       type_avion:types_avion(nom, constructeur),
       instructeur:profiles!vols_instructeur_id_fkey(identifiant),
       pilote:profiles!vols_pilote_id_fkey(identifiant),
-      copilote:profiles!vols_copilote_id_fkey(identifiant)
+      copilote:profiles!vols_copilote_id_fkey(id,identifiant)
     `)
     .or(`pilote_id.eq.${piloteId},copilote_id.eq.${piloteId},instructeur_id.eq.${piloteId}`)
     .in('statut', ['en_attente', 'validé', 'refusé'])

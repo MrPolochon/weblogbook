@@ -33,7 +33,7 @@ export default async function LogbookPage() {
       type_avion:types_avion(nom, constructeur),
       instructeur:profiles!vols_instructeur_id_fkey(identifiant),
       pilote:profiles!vols_pilote_id_fkey(identifiant),
-      copilote:profiles!vols_copilote_id_fkey(identifiant)
+      copilote:profiles!vols_copilote_id_fkey(id,identifiant)
     `).or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id},instructeur_id.eq.${user.id}`).in('statut', ['en_attente', 'validé', 'refusé']).order('depart_utc', { ascending: false }),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, pilote:profiles!vols_pilote_id_fkey(identifiant)').eq('copilote_id', user.id).eq('statut', 'en_attente_confirmation_pilote').order('depart_utc', { ascending: false }),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_copilote').order('depart_utc', { ascending: false }),
@@ -213,7 +213,7 @@ export default async function LogbookPage() {
                         );
                       })()}
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">{v.instructeur_id === user.id ? 'Instructeur' : v.copilote_id === user.id ? 'Co-pilote' : v.role_pilote}</td>
+                    <td className="py-3 pr-4 text-slate-300">{v.instructeur_id === user.id ? 'Instructeur' : (v.copilote_id === user.id || (Array.isArray(v.copilote) ? v.copilote[0] : v.copilote)?.id === user.id) ? 'Co-pilote' : v.role_pilote}</td>
                     <td className="py-3 pr-4">
                       <span
                         className={
