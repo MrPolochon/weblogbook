@@ -31,7 +31,7 @@ export default function RefuserPlanForm({ planId }: { planId: string }) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-      <label className="text-sm font-medium text-slate-700">Raison du refus (obligatoire)</label>
+      <label className="text-sm font-semibold text-slate-900">Raison du refus (obligatoire)</label>
       <textarea value={raison} onChange={(e) => setRaison(e.target.value)} className="input min-h-[80px]" placeholder="Ex. Altitude non conforme, itinéraire non publié…" required />
       <button type="submit" disabled={loading} className="self-start rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">
         {loading ? '…' : 'Refuser le plan'}

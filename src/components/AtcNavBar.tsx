@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Radio, LayoutDashboard, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export default function AtcNavBar({ isAdmin }: { isAdmin: boolean }) {
+export default function AtcNavBar({ isAdmin, enService }: { isAdmin: boolean; enService: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -25,7 +25,7 @@ export default function AtcNavBar({ isAdmin }: { isAdmin: boolean }) {
             href="/atc"
             className={cn(
               'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-              pathname === '/atc' ? 'bg-sky-100 text-sky-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              pathname === '/atc' ? 'bg-sky-100 text-sky-800' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
             )}
           >
             <Radio className="h-4 w-4" />
@@ -36,7 +36,7 @@ export default function AtcNavBar({ isAdmin }: { isAdmin: boolean }) {
               href="/atc/admin"
               className={cn(
                 'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                pathname.startsWith('/atc/admin') ? 'bg-sky-100 text-sky-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                pathname.startsWith('/atc/admin') ? 'bg-sky-100 text-sky-800' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
               )}
             >
               <LayoutDashboard className="h-4 w-4" />
@@ -44,15 +44,17 @@ export default function AtcNavBar({ isAdmin }: { isAdmin: boolean }) {
             </Link>
           )}
         </nav>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-red-600"
-          >
-            <LogOut className="h-4 w-4" />
-            Déconnexion
-          </button>
-        </div>
+        {!enService && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-red-600"
+            >
+              <LogOut className="h-4 w-4" />
+              Déconnexion
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

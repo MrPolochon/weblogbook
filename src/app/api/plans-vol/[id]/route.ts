@@ -21,7 +21,7 @@ export async function PATCH(
     const { action } = body;
 
     const admin = createAdminClient();
-    const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut, current_holder_user_id, automonitoring').eq('id', id).single();
+    const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut, current_holder_user_id, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at').eq('id', id).single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
 
     if (action === 'cloture') {
@@ -35,7 +35,7 @@ export async function PATCH(
       const closDirect = !plan.current_holder_user_id || plan.automonitoring === true || (plan.statut !== 'accepte' && plan.statut !== 'en_cours');
       const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
 
-      const { error } = await supabase.from('plans_vol').update({ statut: newStatut }).eq('id', id);
+      const { error } = await admin.from('plans_vol').update({ statut: newStatut }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ ok: true, statut: newStatut, direct: closDirect });
     }
@@ -48,7 +48,7 @@ export async function PATCH(
       if (!canAtc) return NextResponse.json({ error: 'Seul l’ATC qui détient le plan ou un admin peut confirmer la clôture.' }, { status: 403 });
       if (plan.statut !== 'en_attente_cloture') return NextResponse.json({ error: 'Aucune demande de clôture en attente.' }, { status: 400 });
 
-      const { error } = await supabase.from('plans_vol').update({ statut: 'cloture' }).eq('id', id);
+      const { error } = await admin.from('plans_vol').update({ statut: 'cloture' }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
@@ -61,7 +61,7 @@ export async function PATCH(
       if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui détient le plan ou un admin peut accepter.' }, { status: 403 });
       if (plan.statut !== 'en_attente' && plan.statut !== 'depose') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
 
-      const { error } = await supabase.from('plans_vol').update({ statut: 'accepte' }).eq('id', id);
+      const { error } = await admin.from('plans_vol').update({ statut: 'accepte' }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
@@ -76,7 +76,7 @@ export async function PATCH(
       const reason = body.refusal_reason != null ? String(body.refusal_reason).trim() : '';
       if (!reason) return NextResponse.json({ error: 'La raison du refus est obligatoire.' }, { status: 400 });
 
-      const { error } = await supabase.from('plans_vol').update({ statut: 'refuse', refusal_reason: reason }).eq('id', id);
+      const { error } = await admin.from('plans_vol').update({ statut: 'refuse', refusal_reason: reason }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
@@ -112,7 +112,7 @@ export async function PATCH(
       }
       if (!holder) return NextResponse.json({ error: 'Aucune fréquence ATC de votre aéroport de départ ou d\'arrivée est en ligne. Réessayez plus tard.' }, { status: 400 });
 
-      const { error: err } = await supabase.from('plans_vol').update({
+      const { error: err } = await admin.from('plans_vol').update({
         aeroport_depart: ad,
         aeroport_arrivee: aa,
         numero_vol: String(numero_vol).trim(),
@@ -143,7 +143,7 @@ export async function PATCH(
       if (!canEdit) return NextResponse.json({ error: 'Seul le détenteur du plan ou un admin peut modifier les instructions (pas en autosurveillance).' }, { status: 403 });
       if (plan.statut !== 'accepte' && plan.statut !== 'en_cours') return NextResponse.json({ error: 'Plan non accepté ou non en cours.' }, { status: 400 });
       const instructions = body.instructions != null ? String(body.instructions) : '';
-      const { error: err } = await supabase.from('plans_vol').update({ instructions: instructions.trim() || null }).eq('id', id);
+      const { error: err } = await admin.from('plans_vol').update({ instructions: instructions.trim() || null }).eq('id', id);
       if (err) return NextResponse.json({ error: err.message }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
@@ -163,11 +163,14 @@ export async function PATCH(
       }
 
       if (body.automonitoring === true) {
-        const { error: err } = await supabase.from('plans_vol').update({
+        const { error: err } = await admin.from('plans_vol').update({
           current_holder_user_id: null,
           current_holder_position: null,
           current_holder_aeroport: null,
           automonitoring: true,
+          pending_transfer_aeroport: null,
+          pending_transfer_position: null,
+          pending_transfer_at: null,
         }).eq('id', id);
         if (err) return NextResponse.json({ error: err.message }, { status: 400 });
         return NextResponse.json({ ok: true });
@@ -178,15 +181,37 @@ export async function PATCH(
       if (!aeroport || !position) return NextResponse.json({ error: 'Aéroport et position requis (ou automonitoring: true).' }, { status: 400 });
       if (!CODES_OACI_VALIDES.has(aeroport)) return NextResponse.json({ error: 'Aéroport invalide.' }, { status: 400 });
       if (!(ATC_POSITIONS as readonly string[]).includes(String(position))) return NextResponse.json({ error: 'Position invalide.' }, { status: 400 });
+      if (plan.pending_transfer_aeroport != null) return NextResponse.json({ error: 'Un transfert est déjà en attente d\'acceptation. Attendez 1 min ou l\'acceptation par la position cible.' }, { status: 400 });
 
       const { data: sess } = await admin.from('atc_sessions').select('user_id').eq('aeroport', aeroport).eq('position', String(position)).single();
       if (!sess?.user_id) return NextResponse.json({ error: 'Aucun ATC en ligne à cette position pour cet aéroport.' }, { status: 400 });
 
-      const { error: err } = await supabase.from('plans_vol').update({
-        current_holder_user_id: sess.user_id,
-        current_holder_position: String(position),
-        current_holder_aeroport: aeroport,
+      // Mise en attente : la position cible doit accepter sous 1 min, sinon renvoi à l'ATC d'avant
+      const { error: err } = await admin.from('plans_vol').update({
+        pending_transfer_aeroport: aeroport,
+        pending_transfer_position: String(position),
+        pending_transfer_at: new Date().toISOString(),
+      }).eq('id', id);
+      if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'accepter_transfert') {
+      const { data: sess } = await supabase.from('atc_sessions').select('aeroport, position').eq('user_id', user.id).single();
+      if (!sess) return NextResponse.json({ error: 'Mettez-vous en service pour accepter un transfert.' }, { status: 403 });
+      if (!plan.pending_transfer_aeroport || plan.pending_transfer_position !== sess.position || plan.pending_transfer_aeroport !== sess.aeroport)
+        return NextResponse.json({ error: 'Ce transfert ne vous est pas destiné ou a expiré.' }, { status: 403 });
+      const oneMinAgo = new Date(Date.now() - 60000).toISOString();
+      if (plan.pending_transfer_at && plan.pending_transfer_at < oneMinAgo) return NextResponse.json({ error: 'Ce transfert a expiré (1 min).' }, { status: 400 });
+
+      const { error: err } = await admin.from('plans_vol').update({
+        current_holder_user_id: user.id,
+        current_holder_position: sess.position,
+        current_holder_aeroport: sess.aeroport,
         automonitoring: false,
+        pending_transfer_aeroport: null,
+        pending_transfer_position: null,
+        pending_transfer_at: null,
       }).eq('id', id);
       if (err) return NextResponse.json({ error: err.message }, { status: 400 });
       return NextResponse.json({ ok: true });

@@ -55,10 +55,10 @@ export default function TransfererForm({ planId }: { planId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm font-medium text-slate-700">Transférer à une autre position (même aéroport ou autre)</p>
+      <p className="text-sm font-semibold text-slate-900">Transférer à une autre position (même aéroport ou autre)</p>
       <form onSubmit={handleTransfer} className="flex flex-wrap items-end gap-2">
         <div>
-          <label className="block text-xs text-slate-500 mb-0.5">Aéroport</label>
+          <label className="block text-sm font-medium text-slate-800 mb-0.5">Aéroport</label>
           <select className="input min-w-[140px]" value={aeroport} onChange={(e) => setAeroport(e.target.value)} required>
             <option value="">— Choisir —</option>
             {AEROPORTS_PTFS.map((a) => (
@@ -67,7 +67,7 @@ export default function TransfererForm({ planId }: { planId: string }) {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-0.5">Position</label>
+          <label className="block text-sm font-medium text-slate-800 mb-0.5">Position</label>
           <select className="input min-w-[130px]" value={position} onChange={(e) => setPosition(e.target.value)} required>
             <option value="">— Choisir —</option>
             {ATC_POSITIONS.map((p) => (

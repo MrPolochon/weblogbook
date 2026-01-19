@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import NavBar from '@/components/NavBar';
 import AdminModeBg from '@/components/AdminModeBg';
+import AutoRefresh from '@/components/AutoRefresh';
 
 export default async function AppLayout({
   children,
@@ -52,6 +53,7 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-screen flex flex-col">
+      <AutoRefresh intervalSeconds={12} />
       <AdminModeBg />
       <NavBar isAdmin={isAdmin} isArmee={isArmee} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} />
       <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
