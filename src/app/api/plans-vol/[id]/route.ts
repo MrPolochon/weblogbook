@@ -49,6 +49,34 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
+    if (action === 'accepter') {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      const isAdmin = profile?.role === 'admin';
+      const isHolder = plan.current_holder_user_id === user.id;
+      const canAtc = isAdmin || isHolder;
+      if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui détient le plan ou un admin peut accepter.' }, { status: 403 });
+      if (plan.statut !== 'en_attente') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
+
+      const { error } = await supabase.from('plans_vol').update({ statut: 'accepte' }).eq('id', id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'refuser') {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      const isAdmin = profile?.role === 'admin';
+      const isHolder = plan.current_holder_user_id === user.id;
+      const canAtc = isAdmin || isHolder;
+      if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui détient le plan ou un admin peut refuser.' }, { status: 403 });
+      if (plan.statut !== 'en_attente') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
+      const reason = body.refusal_reason != null ? String(body.refusal_reason).trim() : '';
+      if (!reason) return NextResponse.json({ error: 'La raison du refus est obligatoire.' }, { status: 400 });
+
+      const { error } = await supabase.from('plans_vol').update({ statut: 'refuse', refusal_reason: reason }).eq('id', id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
     return NextResponse.json({ error: 'Action inconnue.' }, { status: 400 });
   } catch (e) {
     console.error('plans-vol PATCH:', e);

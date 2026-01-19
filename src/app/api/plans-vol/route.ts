@@ -3,7 +3,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 
-const FALLBACK_ORDER = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
+// Ordre de priorité pour recevoir un nouveau plan de vol (par aéroport) :
+// Delivery et Clairance d’abord ; si les deux sont hors ligne, Ground peut accepter ;
+// si Ground est hors ligne, Tower ; puis DEP, APP, Center.
+const ORDRE_ACCEPTATION_PLANS = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
 
 export async function POST(request: Request) {
   try {
@@ -32,7 +35,7 @@ export async function POST(request: Request) {
     const airportsToCheck = ad === aa ? [ad] : [ad, aa];
     let holder: { user_id: string; position: string; aeroport: string } | null = null;
     for (const apt of airportsToCheck) {
-      for (const pos of FALLBACK_ORDER) {
+      for (const pos of ORDRE_ACCEPTATION_PLANS) {
         const { data: s } = await admin.from('atc_sessions').select('user_id').eq('aeroport', apt).eq('position', pos).single();
         if (s?.user_id) { holder = { user_id: s.user_id, position: pos, aeroport: apt }; break; }
       }
