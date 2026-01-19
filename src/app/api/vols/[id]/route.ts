@@ -112,9 +112,15 @@ export async function PATCH(
       if (!inst) return NextResponse.json({ error: 'L\'instructeur doit être un administrateur.' }, { status: 400 });
     }
 
+    const isConfirmingByPilote = vol.statut === 'en_attente_confirmation_pilote' && vol.pilote_id === user.id;
+    const isConfirmingByCopilote = vol.statut === 'en_attente_confirmation_copilote' && vol.copilote_id === user.id;
+
     let piloteId = vol.pilote_id;
     let copiloteId = vol.copilote_id;
-    if (role_pilote === 'Co-pilote') {
+    if (isConfirmingByPilote || isConfirmingByCopilote) {
+      piloteId = vol.pilote_id;
+      copiloteId = vol.copilote_id;
+    } else if (role_pilote === 'Co-pilote') {
       if (vol.copilote_id === user.id) {
         if (!piloteIdBody) return NextResponse.json({ error: 'Qui était le pilote (commandant) ?' }, { status: 400 });
         if (piloteIdBody === user.id) return NextResponse.json({ error: 'Le pilote ne peut pas être vous-même.' }, { status: 400 });
@@ -142,9 +148,6 @@ export async function PATCH(
     const depStr = /Z$/.test(String(depart_utc)) ? String(depart_utc) : String(depart_utc) + 'Z';
     const dep = parseISO(depStr);
     const arrivee = addMinutes(dep, duree_minutes);
-
-    const isConfirmingByPilote = vol.statut === 'en_attente_confirmation_pilote' && vol.pilote_id === user.id;
-    const isConfirmingByCopilote = vol.statut === 'en_attente_confirmation_copilote' && vol.copilote_id === user.id;
 
     let statutFinal: string;
     if (vol.statut === 'refuse_par_copilote' && vol.pilote_id === user.id) {
@@ -206,18 +209,23 @@ export async function DELETE(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    const { data: vol } = await supabase.from('vols').select('pilote_id, copilote_id').eq('id', id).single();
+    const admin = createAdminClient();
+    const { data: vol } = await admin.from('vols').select('pilote_id, copilote_id, type_vol, instructeur_id').eq('id', id).single();
     if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     const isAdmin = profile?.role === 'admin';
     const isPiloteOrCopilote = vol.pilote_id === user.id || vol.copilote_id === user.id;
+    const isInstructeur = vol.instructeur_id === user.id;
+    const isVolInstruction = vol.type_vol === 'Instruction' && vol.instructeur_id;
 
-    if (!isAdmin && !isPiloteOrCopilote) {
-      return NextResponse.json({ error: 'Vous ne pouvez supprimer que vos propres vols.' }, { status: 403 });
+    if (isVolInstruction) {
+      if (!isAdmin && !isInstructeur) return NextResponse.json({ error: 'Pour un vol d\'instruction, seul l\'instructeur peut supprimer le vol.' }, { status: 403 });
+    } else {
+      if (!isAdmin && !isPiloteOrCopilote) return NextResponse.json({ error: 'Vous ne pouvez supprimer que vos propres vols.' }, { status: 403 });
     }
 
-    const { error } = await createAdminClient().from('vols').delete().eq('id', id);
+    const { error } = await admin.from('vols').delete().eq('id', id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {

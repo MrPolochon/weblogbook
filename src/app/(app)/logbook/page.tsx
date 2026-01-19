@@ -14,9 +14,11 @@ export default async function LogbookPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('heures_initiales_minutes, blocked_until')
+    .select('heures_initiales_minutes, blocked_until, role')
     .eq('id', user.id)
     .single();
+
+  const isAdmin = profile?.role === 'admin';
 
   const blocked = profile?.blocked_until
     ? new Date(profile.blocked_until) > new Date()
@@ -111,7 +113,7 @@ export default async function LogbookPage() {
       {volsEnAttenteInstructeur && volsEnAttenteInstructeur.length > 0 && (
         <div className="card border-sky-500/30 bg-sky-500/5">
           <h2 className="text-lg font-medium text-sky-200 mb-2">En attente que l&apos;instructeur confirme</h2>
-          <p className="text-sm text-slate-400 mb-3">Vols d&apos;instruction. L&apos;instructeur indiqué validera directement — le vol ne passe pas par la file des admins.</p>
+          <p className="text-sm text-slate-400 mb-3">Vols d&apos;instruction. L&apos;instructeur indiqué validera directement — le vol ne passe pas par la file des admins. Seul l&apos;instructeur peut supprimer.</p>
           <ul className="space-y-2">
             {volsEnAttenteInstructeur.map((v) => (
               <li key={v.id} className="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-0">
@@ -121,7 +123,6 @@ export default async function LogbookPage() {
                 </span>
                 <span className="flex items-center gap-2">
                   <Link href={`/logbook/vol/${v.id}`} className="text-sm text-sky-400 hover:underline">Modifier</Link>
-                  <VolDeleteButton volId={v.id} />
                 </span>
               </li>
             ))}
@@ -227,7 +228,10 @@ export default async function LogbookPage() {
                       </span>
                     </td>
                     <td className="py-3">
-                      <VolDeleteButton volId={v.id} />
+                      <VolDeleteButton
+                        volId={v.id}
+                        canDelete={isAdmin || (v.type_vol === 'Instruction' && v.instructeur_id ? v.instructeur_id === user.id : (v.pilote_id === user.id || v.copilote_id === user.id))}
+                      />
                     </td>
                   </tr>
                 ))}

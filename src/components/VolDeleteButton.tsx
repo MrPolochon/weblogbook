@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
 
-export default function VolDeleteButton({ volId }: { volId: string }) {
+export default function VolDeleteButton({ volId, canDelete = true }: { volId: string; canDelete?: boolean }) {
+  if (!canDelete) return null;
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
 
