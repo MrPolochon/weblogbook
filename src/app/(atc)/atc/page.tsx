@@ -13,7 +13,7 @@ export default async function AtcPage() {
   const admin = createAdminClient();
   const [{ data: session }, { data: plansChezMoi }] = await Promise.all([
     supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single(),
-    admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee, statut').eq('current_holder_user_id', user.id).in('statut', ['en_attente', 'en_cours', 'accepte']),
+    admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee, statut').eq('current_holder_user_id', user.id).in('statut', ['en_attente', 'en_cours', 'accepte', 'en_attente_cloture']),
   ]);
 
   return (

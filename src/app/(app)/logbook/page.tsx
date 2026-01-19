@@ -52,6 +52,9 @@ export default async function LogbookPage() {
         <h1 className="text-2xl font-semibold text-slate-100">Mon logbook</h1>
         {!blocked && (
           <div className="flex flex-wrap gap-2">
+            <Link href="/logbook/plans-vol" className="btn-secondary inline-flex gap-2">
+              Mes plans de vol
+            </Link>
             <Link href="/logbook/depot-plan-vol" className="btn-secondary inline-flex gap-2">
               Déposer le plan de vol
             </Link>

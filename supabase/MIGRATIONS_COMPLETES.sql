@@ -107,7 +107,7 @@ CREATE TABLE IF NOT EXISTS public.plans_vol (
   sid_depart TEXT,
   star_arrivee TEXT,
   statut TEXT NOT NULL DEFAULT 'depose' CHECK (statut IN (
-    'depose', 'en_attente', 'accepte', 'refuse', 'en_cours', 'automonitoring', 'cloture'
+    'depose', 'en_attente', 'accepte', 'refuse', 'en_cours', 'automonitoring', 'en_attente_cloture', 'cloture'
   )),
   refusal_reason TEXT,
   instructions TEXT,
@@ -173,3 +173,9 @@ CREATE POLICY "plans_vol_update" ON public.plans_vol FOR UPDATE TO authenticated
 DROP TRIGGER IF EXISTS plans_vol_updated_at ON public.plans_vol;
 CREATE TRIGGER plans_vol_updated_at BEFORE UPDATE ON public.plans_vol
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+-- ----- 9b) Statut en_attente_cloture (plans de vol) — exécuter si plans_vol existe déjà -----
+ALTER TABLE public.plans_vol DROP CONSTRAINT IF EXISTS plans_vol_statut_check;
+ALTER TABLE public.plans_vol ADD CONSTRAINT plans_vol_statut_check CHECK (statut IN (
+  'depose', 'en_attente', 'accepte', 'refuse', 'en_cours', 'automonitoring', 'en_attente_cloture', 'cloture'
+));
