@@ -38,10 +38,42 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    const { data: vol } = await supabase.from('vols').select('pilote_id, copilote_id, copilote_confirme_par_pilote, statut, refusal_count').eq('id', id).single();
+    if (body.refuser_copilote === true) {
+      const { data: vol } = await supabase.from('vols').select('pilote_id, copilote_id, statut').eq('id', id).single();
+      if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
+      if (vol.copilote_id !== user.id) return NextResponse.json({ error: 'Seul le co-pilote indiqué peut refuser.' }, { status: 403 });
+      if (vol.statut !== 'en_attente_confirmation_copilote') return NextResponse.json({ error: 'Ce vol n\'est pas en attente de votre confirmation.' }, { status: 400 });
+      const { error } = await createAdminClient().from('vols').update({ statut: 'refuse_par_copilote' }).eq('id', id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.confirmer_instructeur === true) {
+      const { data: vol } = await supabase.from('vols').select('instructeur_id, statut').eq('id', id).single();
+      if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
+      if (vol.instructeur_id !== user.id) return NextResponse.json({ error: 'Seul l\'instructeur indiqué peut confirmer.' }, { status: 403 });
+      if (vol.statut !== 'en_attente_confirmation_instructeur') return NextResponse.json({ error: 'Ce vol n\'est pas en attente de votre confirmation.' }, { status: 400 });
+      const { error } = await createAdminClient().from('vols').update({ statut: 'validé', refusal_reason: null, editing_by_pilot_id: null, editing_started_at: null }).eq('id', id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.refuser_instructeur === true) {
+      const { data: vol } = await supabase.from('vols').select('instructeur_id, statut, refusal_count').eq('id', id).single();
+      if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
+      if (vol.instructeur_id !== user.id) return NextResponse.json({ error: 'Seul l\'instructeur indiqué peut refuser.' }, { status: 403 });
+      if (vol.statut !== 'en_attente_confirmation_instructeur') return NextResponse.json({ error: 'Ce vol n\'est pas en attente de votre confirmation.' }, { status: 400 });
+      const updates: Record<string, unknown> = { statut: 'refusé', refusal_reason: body.refusal_reason ?? null, refusal_count: (vol.refusal_count ?? 0) + 1, editing_by_pilot_id: null, editing_started_at: null };
+      const { error } = await createAdminClient().from('vols').update(updates).eq('id', id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
+    const { data: vol } = await supabase.from('vols').select('pilote_id, copilote_id, copilote_confirme_par_pilote, instructeur_id, statut, refusal_count').eq('id', id).single();
     if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
     const isPiloteOrCopilote = vol.pilote_id === user.id || vol.copilote_id === user.id;
-    if (!isPiloteOrCopilote && !isAdmin) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+    const isInstructeurEnAttente = vol.instructeur_id === user.id && vol.statut === 'en_attente_confirmation_instructeur';
+    if (!isPiloteOrCopilote && !isAdmin && !isInstructeurEnAttente) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     if (vol.statut === 'validé' && !isAdmin) return NextResponse.json({ error: 'Impossible de modifier un vol validé' }, { status: 400 });
     if (vol.statut === 'refusé' && (vol.refusal_count ?? 0) >= 3 && !isAdmin) {
       return NextResponse.json({ error: 'Ce vol a été refusé 3 fois. Veuillez en créer un nouveau.' }, { status: 400 });
@@ -104,7 +136,7 @@ export async function PATCH(
       }
     } else {
       piloteId = user.id;
-      copiloteId = null;
+      copiloteId = copiloteIdBody ?? null;
     }
 
     const depStr = /Z$/.test(String(depart_utc)) ? String(depart_utc) : String(depart_utc) + 'Z';
@@ -114,11 +146,18 @@ export async function PATCH(
     const isConfirmingByPilote = vol.statut === 'en_attente_confirmation_pilote' && vol.pilote_id === user.id;
     const isConfirmingByCopilote = vol.statut === 'en_attente_confirmation_copilote' && vol.copilote_id === user.id;
 
-    const statutFinal = (isConfirmingByPilote || isConfirmingByCopilote)
-      ? 'en_attente'
-      : (vol.statut === 'en_attente_confirmation_pilote' || vol.statut === 'en_attente_confirmation_copilote')
-        ? vol.statut
-        : 'en_attente';
+    let statutFinal: string;
+    if (vol.statut === 'refuse_par_copilote' && vol.pilote_id === user.id) {
+      statutFinal = copiloteId ? 'en_attente_confirmation_copilote' : 'en_attente';
+    } else if (isConfirmingByPilote || isConfirmingByCopilote) {
+      statutFinal = 'en_attente';
+    } else if (vol.statut === 'en_attente_confirmation_pilote' || vol.statut === 'en_attente_confirmation_copilote') {
+      statutFinal = vol.statut;
+    } else if (type_vol === 'Instruction' && instructeurId) {
+      statutFinal = 'en_attente_confirmation_instructeur';
+    } else {
+      statutFinal = 'en_attente';
+    }
 
     const updates: Record<string, unknown> = {
       type_avion_id,
@@ -135,7 +174,7 @@ export async function PATCH(
       commandant_bord: String(commandant_bord).trim(),
       role_pilote,
       pilote_id: piloteId,
-      copilote_id: role_pilote === 'Co-pilote' && copiloteId ? copiloteId : null,
+      copilote_id: copiloteId ?? null,
       copilote_confirme_par_pilote: isConfirmingByPilote
         ? true
         : role_pilote === 'Co-pilote' && copiloteId

@@ -23,18 +23,20 @@ export default async function LogbookPage() {
     : false;
 
   const admin = createAdminClient();
-  const [{ data: vols }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }] = await Promise.all([
+  const [{ data: vols }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }] = await Promise.all([
     admin.from('vols').select(`
-      id, pilote_id, copilote_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote,
+      id, pilote_id, copilote_id, instructeur_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote,
       aeroport_depart, aeroport_arrivee, instruction_type,
       refusal_count, refusal_reason,
       type_avion:types_avion(nom, constructeur),
       instructeur:profiles!vols_instructeur_id_fkey(identifiant),
       pilote:profiles!vols_pilote_id_fkey(identifiant),
       copilote:profiles!vols_copilote_id_fkey(identifiant)
-    `).or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id}`).in('statut', ['en_attente', 'validé', 'refusé']).order('depart_utc', { ascending: false }),
+    `).or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id},instructeur_id.eq.${user.id}`).in('statut', ['en_attente', 'validé', 'refusé']).order('depart_utc', { ascending: false }),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, pilote:profiles!vols_pilote_id_fkey(identifiant)').eq('copilote_id', user.id).eq('statut', 'en_attente_confirmation_pilote').order('depart_utc', { ascending: false }),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_copilote').order('depart_utc', { ascending: false }),
+    supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'refuse_par_copilote').order('depart_utc', { ascending: false }),
+    admin.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, instructeur:profiles!vols_instructeur_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_instructeur').order('depart_utc', { ascending: false }),
   ]);
 
   const totalValides = (vols || []).filter((v) => v.statut === 'validé');
@@ -95,6 +97,48 @@ export default async function LogbookPage() {
                 <span className="text-slate-300">
                   {format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
                   {' · Co-pilote: '}{(Array.isArray(v.copilote) ? v.copilote[0] : v.copilote)?.identifiant ?? '—'}
+                </span>
+                <span className="flex items-center gap-2">
+                  <Link href={`/logbook/vol/${v.id}`} className="text-sm text-sky-400 hover:underline">Modifier</Link>
+                  <VolDeleteButton volId={v.id} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {volsEnAttenteInstructeur && volsEnAttenteInstructeur.length > 0 && (
+        <div className="card border-sky-500/30 bg-sky-500/5">
+          <h2 className="text-lg font-medium text-sky-200 mb-2">En attente que l&apos;instructeur confirme</h2>
+          <p className="text-sm text-slate-400 mb-3">Vols d&apos;instruction. L&apos;instructeur indiqué validera directement — le vol ne passe pas par la file des admins.</p>
+          <ul className="space-y-2">
+            {volsEnAttenteInstructeur.map((v) => (
+              <li key={v.id} className="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-0">
+                <span className="text-slate-300">
+                  {format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
+                  {' · Instructeur: '}{(Array.isArray(v.instructeur) ? v.instructeur[0] : v.instructeur)?.identifiant ?? '—'}
+                </span>
+                <span className="flex items-center gap-2">
+                  <Link href={`/logbook/vol/${v.id}`} className="text-sm text-sky-400 hover:underline">Modifier</Link>
+                  <VolDeleteButton volId={v.id} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {volsRefuseParCopilote && volsRefuseParCopilote.length > 0 && (
+        <div className="card border-red-500/30 bg-red-500/5">
+          <h2 className="text-lg font-medium text-red-200 mb-2">Le co-pilote a refusé de confirmer</h2>
+          <p className="text-sm text-slate-400 mb-3">Le co-pilote indiqué a refusé d&apos;être associé à ces vols. Modifiez le co-pilote ou retirez-le pour renvoyer le vol.</p>
+          <ul className="space-y-2">
+            {volsRefuseParCopilote.map((v) => (
+              <li key={v.id} className="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-0">
+                <span className="text-slate-300">
+                  {format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
+                  {' · Co-pilote indiqué: '}{(Array.isArray(v.copilote) ? v.copilote[0] : v.copilote)?.identifiant ?? '—'}
                 </span>
                 <span className="flex items-center gap-2">
                   <Link href={`/logbook/vol/${v.id}`} className="text-sm text-sky-400 hover:underline">Modifier</Link>
@@ -168,7 +212,7 @@ export default async function LogbookPage() {
                         );
                       })()}
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">{v.role_pilote}</td>
+                    <td className="py-3 pr-4 text-slate-300">{v.instructeur_id === user.id ? 'Instructeur' : v.role_pilote}</td>
                     <td className="py-3 pr-4">
                       <span
                         className={

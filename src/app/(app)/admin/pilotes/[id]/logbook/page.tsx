@@ -33,7 +33,7 @@ export default async function AdminPiloteLogbookPage({
   const { data: vols } = await admin
     .from('vols')
     .select(`
-      id, pilote_id, copilote_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote,
+      id, pilote_id, copilote_id, instructeur_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote,
       aeroport_depart, aeroport_arrivee, instruction_type,
       refusal_count, refusal_reason,
       type_avion:types_avion(nom, constructeur),
@@ -41,7 +41,7 @@ export default async function AdminPiloteLogbookPage({
       pilote:profiles!vols_pilote_id_fkey(identifiant),
       copilote:profiles!vols_copilote_id_fkey(identifiant)
     `)
-    .or(`pilote_id.eq.${piloteId},copilote_id.eq.${piloteId}`)
+    .or(`pilote_id.eq.${piloteId},copilote_id.eq.${piloteId},instructeur_id.eq.${piloteId}`)
     .in('statut', ['en_attente', 'validé', 'refusé'])
     .order('depart_utc', { ascending: false });
 
@@ -120,7 +120,7 @@ export default async function AdminPiloteLogbookPage({
                         </span>
                       )}
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">{v.role_pilote}</td>
+                    <td className="py-3 pr-4 text-slate-300">{v.instructeur_id === piloteId ? 'Instructeur' : v.role_pilote}</td>
                     <td className="py-3 pr-4">
                       <span
                         className={

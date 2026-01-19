@@ -117,7 +117,9 @@ export async function POST(request: Request) {
           ? 'en_attente_confirmation_pilote'
           : targetCopiloteId
             ? 'en_attente_confirmation_copilote'
-            : 'en_attente',
+            : type_vol === 'Instruction'
+              ? 'en_attente_confirmation_instructeur'
+              : 'en_attente',
       created_by_admin: Boolean(created_by_admin && isAdmin),
       created_by_user_id: isAdmin && created_by_admin ? user.id : null,
     };

@@ -36,11 +36,13 @@ export default async function AppLayout({
     }
   }
   try {
-    const [{ count: c1 }, { count: c2 }] = await Promise.all([
+    const admin = createAdminClient();
+    const [{ count: c1 }, { count: c2 }, { count: c3 }] = await Promise.all([
       supabase.from('vols').select('*', { count: 'exact', head: true }).eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_pilote'),
       supabase.from('vols').select('*', { count: 'exact', head: true }).eq('copilote_id', user.id).eq('statut', 'en_attente_confirmation_copilote'),
+      admin.from('vols').select('*', { count: 'exact', head: true }).eq('instructeur_id', user.id).eq('statut', 'en_attente_confirmation_instructeur'),
     ]);
-    volsAConfirmerCount = (c1 ?? 0) + (c2 ?? 0);
+    volsAConfirmerCount = (c1 ?? 0) + (c2 ?? 0) + (c3 ?? 0);
   } catch {
     volsAConfirmerCount = 0;
   }
