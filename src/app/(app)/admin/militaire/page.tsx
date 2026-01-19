@@ -130,3 +130,4 @@ export default async function AdminMilitairePage() {
       </div>
     </div>
   );
+}
