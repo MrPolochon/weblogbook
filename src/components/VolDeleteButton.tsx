@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
 
 export default function VolDeleteButton({ volId, canDelete = true }: { volId: string; canDelete?: boolean }) {
-  if (!canDelete) return null;
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
+
+  if (!canDelete) return null;
 
   async function handleClick() {
     if (!confirm('Supprimer ce vol ?')) return;
