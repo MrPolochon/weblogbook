@@ -155,8 +155,13 @@ export async function PATCH(
         copiloteId = copiloteIdBody;
       }
     } else {
-      piloteId = user.id;
-      copiloteId = copiloteIdBody ?? null;
+      if (isAdmin) {
+        piloteId = vol.pilote_id;
+        copiloteId = vol.copilote_id ?? null;
+      } else {
+        piloteId = user.id;
+        copiloteId = copiloteIdBody ?? null;
+      }
     }
 
     const depStr = /Z$/.test(String(depart_utc)) ? String(depart_utc) : String(depart_utc) + 'Z';
