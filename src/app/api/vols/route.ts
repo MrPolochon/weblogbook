@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { addMinutes, parseISO } from 'date-fns';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
+import { AVIONS_MILITAIRES, NATURES_VOL_MILITAIRE } from '@/lib/avions-militaires';
 
 export async function POST(request: Request) {
   try {
@@ -10,13 +11,106 @@ export async function POST(request: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('id, role, blocked_until').eq('id', user.id).single();
+    const { data: profile } = await supabase.from('profiles').select('id, role, blocked_until, armee').eq('id', user.id).single();
     if (!profile) return NextResponse.json({ error: 'Profil introuvable' }, { status: 403 });
     if (profile.blocked_until && new Date(profile.blocked_until) > new Date()) {
       return NextResponse.json({ error: 'Vous ne pouvez pas ajouter de vol pour le moment.' }, { status: 403 });
     }
 
     const body = await request.json();
+    const type_vol = body.type_vol;
+
+    // --- Vol militaire ---
+    if (type_vol === 'Vol militaire') {
+      if (!profile.armee) return NextResponse.json({ error: 'Réservé aux utilisateurs avec le rôle Armée.' }, { status: 403 });
+      const {
+        type_avion_militaire: tam,
+        escadrille_ou_escadron: eoe,
+        nature_vol_militaire: nvm,
+        nature_vol_militaire_autre: nvma,
+        aeroport_depart: ad,
+        aeroport_arrivee: aa,
+        duree_minutes: dm,
+        depart_utc: du,
+        commandant_bord: cb,
+        role_pilote: rp,
+        pilote_id: pidB,
+        copilote_id: cidB,
+        callsign: csB,
+      } = body;
+      if (!tam || !AVIONS_MILITAIRES.includes(String(tam).trim())) {
+        return NextResponse.json({ error: 'Type d\'avion militaire invalide.' }, { status: 400 });
+      }
+      if (!['escadrille', 'escadron', 'autre'].includes(String(eoe))) {
+        return NextResponse.json({ error: 'Indiquez si le vol était en escadrille, en escadron ou autre.' }, { status: 400 });
+      }
+      if (eoe === 'autre') {
+        if (!nvm || !NATURES_VOL_MILITAIRE.includes(String(nvm))) {
+          return NextResponse.json({ error: 'Nature du vol militaire requise (entraînement, escorte, sauvetage, reconnaissance ou autre).' }, { status: 400 });
+        }
+        if (nvm === 'autre' && (!nvma || !String(nvma).trim())) {
+          return NextResponse.json({ error: 'Précisez la nature du vol (champ autre).' }, { status: 400 });
+        }
+      }
+      if (!ad || !CODES_OACI_VALIDES.has(String(ad).toUpperCase()) || !aa || !CODES_OACI_VALIDES.has(String(aa).toUpperCase())) {
+        return NextResponse.json({ error: 'Aéroports de départ et d\'arrivée requis (code OACI valide).' }, { status: 400 });
+      }
+      if (typeof dm !== 'number' || dm < 1 || !du || !cb || !['Pilote', 'Co-pilote'].includes(String(rp))) {
+        return NextResponse.json({ error: 'Champs requis manquants ou invalides.' }, { status: 400 });
+      }
+      let targetPiloteId: string;
+      let targetCopiloteId: string | null = null;
+      if (rp === 'Co-pilote') {
+        if (!pidB) return NextResponse.json({ error: 'Qui était le pilote (commandant) ?' }, { status: 400 });
+        if (pidB === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être pilote et co-pilote.' }, { status: 400 });
+        const { data: pp } = await supabase.from('profiles').select('id, armee').eq('id', pidB).single();
+        if (!pp || !pp.armee) return NextResponse.json({ error: 'Le pilote doit avoir le rôle Armée.' }, { status: 400 });
+        targetPiloteId = pidB;
+        targetCopiloteId = user.id;
+      } else {
+        targetPiloteId = user.id;
+        if (cidB) {
+          if (cidB === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être pilote et co-pilote.' }, { status: 400 });
+          const { data: cp } = await supabase.from('profiles').select('id, armee').eq('id', cidB).single();
+          if (!cp || !cp.armee) return NextResponse.json({ error: 'Le co-pilote doit avoir le rôle Armée.' }, { status: 400 });
+          targetCopiloteId = cidB;
+        }
+      }
+      const depStr = /Z$/.test(String(du)) ? String(du) : String(du) + 'Z';
+      const dep = parseISO(depStr);
+      const arrivee = addMinutes(dep, dm);
+      const row = {
+        pilote_id: targetPiloteId,
+        copilote_id: targetCopiloteId,
+        copilote_confirme_par_pilote: false,
+        type_avion_id: null,
+        compagnie_id: null,
+        compagnie_libelle: 'Vol militaire',
+        type_avion_militaire: String(tam).trim(),
+        escadrille_ou_escadron: String(eoe),
+        chef_escadron_id: eoe === 'escadron' ? user.id : null,
+        nature_vol_militaire: eoe === 'autre' ? String(nvm) : null,
+        nature_vol_militaire_autre: eoe === 'autre' && nvm === 'autre' && nvma ? String(nvma).trim() : null,
+        aeroport_depart: String(ad).toUpperCase(),
+        aeroport_arrivee: String(aa).toUpperCase(),
+        duree_minutes: dm,
+        depart_utc: dep.toISOString(),
+        arrivee_utc: arrivee.toISOString(),
+        type_vol: 'Vol militaire',
+        instructeur_id: null,
+        instruction_type: null,
+        commandant_bord: String(cb).trim(),
+        role_pilote: String(rp),
+        callsign: csB != null && String(csB).trim() ? String(csB).trim() : null,
+        statut: 'en_attente',
+        created_by_admin: false,
+        created_by_user_id: null,
+      };
+      const { data, error } = await supabase.from('vols').insert(row).select('id').single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ ok: true, id: data.id });
+    }
+
     const {
       type_avion_id,
       compagnie_id,
@@ -25,7 +119,6 @@ export async function POST(request: Request) {
       aeroport_arrivee,
       duree_minutes,
       depart_utc,
-      type_vol,
       instructeur_id: instructeurId,
       instruction_type: instructionType,
       commandant_bord,

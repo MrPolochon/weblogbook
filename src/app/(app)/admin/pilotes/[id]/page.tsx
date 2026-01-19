@@ -14,12 +14,11 @@ export default async function AdminPiloteEditPage({
 
   const { data: p } = await supabase
     .from('profiles')
-    .select('id, identifiant, role, heures_initiales_minutes, blocked_until, block_reason')
+    .select('id, identifiant, role, armee, heures_initiales_minutes, blocked_until, block_reason')
     .eq('id', id)
     .single();
 
   if (!p) notFound();
-  if (p.role === 'admin') redirect('/admin/pilotes');
 
   return (
     <div className="space-y-6">
@@ -37,6 +36,8 @@ export default async function AdminPiloteEditPage({
       </div>
       <EditPiloteForm
         piloteId={p.id}
+        identifiant={p.identifiant ?? ''}
+        armee={Boolean(p.armee)}
         heuresInitiales={p.heures_initiales_minutes ?? 0}
         blockedUntil={p.blocked_until}
         blockReason={p.block_reason}

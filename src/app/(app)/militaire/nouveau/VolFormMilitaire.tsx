@@ -1,0 +1,256 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { addMinutes, subMinutes } from 'date-fns';
+import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { AVIONS_MILITAIRES, NATURES_VOL_MILITAIRE } from '@/lib/avions-militaires';
+
+type Profil = { id: string; identifiant: string };
+
+function parseUtcLocal(s: string): Date | null {
+  if (!s) return null;
+  const z = /Z$/.test(s) ? s : s + 'Z';
+  const d = new Date(z);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+const LIB_ESC = { escadrille: 'Vol en escadrille', escadron: 'Vol en escadron (vous = chef d\'escadron)', autre: 'Ni l\'un ni l\'autre (précisez la nature)' } as const;
+const LIB_NATURE: Record<string, string> = { entrainement: 'Entraînement', escorte: 'Escorte', sauvetage: 'Sauvetage', reconnaissance: 'Reconnaissance', autre: 'Autre' };
+
+export default function VolFormMilitaire({ pilotesArmee }: { pilotesArmee: Profil[] }) {
+  const router = useRouter();
+  const [type_avion_militaire, setTypeAvionMilitaire] = useState('');
+  const [escadrille_ou_escadron, setEscadrilleOuEscadron] = useState<'escadrille' | 'escadron' | 'autre'>('escadrille');
+  const [nature_vol_militaire, setNatureVolMilitaire] = useState<string>('');
+  const [nature_vol_militaire_autre, setNatureVolMilitaireAutre] = useState('');
+  const [aeroport_depart, setAeroportDepart] = useState('');
+  const [aeroport_arrivee, setAeroportArrivee] = useState('');
+  const [duree_minutes, setDureeMinutes] = useState('');
+  const [heure_mode, setHeureMode] = useState<'depart' | 'arrivee'>('depart');
+  const [heure_utc, setHeureUtc] = useState('');
+  const [commandant_bord, setCommandantBord] = useState('');
+  const [role_pilote, setRolePilote] = useState<'Pilote' | 'Co-pilote'>('Pilote');
+  const [pilote_id, setPiloteId] = useState('');
+  const [copilote_id, setCopiloteId] = useState('');
+  const [callsign, setCallsign] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function computeDepartUtc(): string {
+    const d = parseUtcLocal(heure_utc);
+    if (!d) return '';
+    if (heure_mode === 'depart') return d.toISOString();
+    const dur = parseInt(duree_minutes, 10);
+    if (isNaN(dur) || dur < 1) return d.toISOString();
+    return subMinutes(d, dur).toISOString();
+  }
+
+  function handleHeureModeChange(m: 'depart' | 'arrivee') {
+    if (m === heure_mode) return;
+    const dur = parseInt(duree_minutes, 10);
+    const d = parseUtcLocal(heure_utc);
+    if (d && !isNaN(dur) && dur >= 1) {
+      setHeureUtc((m === 'arrivee' ? addMinutes(d, dur) : subMinutes(d, dur)).toISOString().slice(0, 16));
+    }
+    setHeureMode(m);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const d = parseInt(duree_minutes, 10);
+    if (!type_avion_militaire || !aeroport_depart || !aeroport_arrivee || isNaN(d) || d < 1 || !heure_utc || !commandant_bord.trim()) {
+      setError('Veuillez remplir tous les champs requis.');
+      return;
+    }
+    if (escadrille_ou_escadron === 'autre') {
+      if (!nature_vol_militaire) {
+        setError('Indiquez la nature du vol (entraînement, escorte, sauvetage, reconnaissance ou autre).');
+        return;
+      }
+      if (nature_vol_militaire === 'autre' && !nature_vol_militaire_autre.trim()) {
+        setError('Précisez la nature du vol militaire (champ « Autre »).');
+        return;
+      }
+    }
+    if (role_pilote === 'Co-pilote' && !pilote_id) {
+      setError('Qui était le pilote (commandant de bord) ?');
+      return;
+    }
+    const depart_utc = computeDepartUtc();
+    if (!depart_utc) {
+      setError('Heure invalide.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/vols', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type_vol: 'Vol militaire',
+          type_avion_militaire: type_avion_militaire.trim(),
+          escadrille_ou_escadron,
+          nature_vol_militaire: escadrille_ou_escadron === 'autre' ? nature_vol_militaire : null,
+          nature_vol_militaire_autre: escadrille_ou_escadron === 'autre' && nature_vol_militaire === 'autre' ? nature_vol_militaire_autre.trim() : null,
+          aeroport_depart,
+          aeroport_arrivee,
+          duree_minutes: d,
+          depart_utc,
+          commandant_bord: commandant_bord.trim(),
+          role_pilote,
+          pilote_id: role_pilote === 'Co-pilote' ? pilote_id : undefined,
+          copilote_id: role_pilote === 'Pilote' && copilote_id ? copilote_id : undefined,
+          callsign: callsign.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      router.push('/militaire');
+      router.refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="card space-y-4 max-w-xl">
+      <div>
+        <label className="label">Type d&apos;avion *</label>
+        <select className="input" value={type_avion_militaire} onChange={(e) => setTypeAvionMilitaire(e.target.value)} required>
+          <option value="">— Choisir —</option>
+          {AVIONS_MILITAIRES.map((nom) => (
+            <option key={nom} value={nom}>{nom}</option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <span className="label block">Type de vol militaire *</span>
+        <div className="space-y-2 mt-1">
+          {(['escadrille', 'escadron', 'autre'] as const).map((k) => (
+            <label key={k} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+              <input type="radio" name="esc" checked={escadrille_ou_escadron === k} onChange={() => { setEscadrilleOuEscadron(k); if (k !== 'autre') setNatureVolMilitaire(''); }} className="rounded" />
+              {LIB_ESC[k]}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {escadrille_ou_escadron === 'autre' && (
+        <div className="space-y-2 rounded-lg border border-slate-600/50 bg-slate-800/30 p-4">
+          <span className="label block">Nature du vol *</span>
+          <div className="flex flex-wrap gap-3">
+            {NATURES_VOL_MILITAIRE.map((n) => (
+              <label key={n} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                <input type="radio" name="nature" checked={nature_vol_militaire === n} onChange={() => setNatureVolMilitaire(n)} className="rounded" />
+                {LIB_NATURE[n] || n}
+              </label>
+            ))}
+          </div>
+          {nature_vol_militaire === 'autre' && (
+            <div>
+              <label className="label">Précisez la nature *</label>
+              <input type="text" className="input" value={nature_vol_militaire_autre} onChange={(e) => setNatureVolMilitaireAutre(e.target.value)} placeholder="ex. mission spéciale…" />
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Aéroport de départ *</label>
+          <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
+            <option value="">— Choisir —</option>
+            {AEROPORTS_PTFS.map((a) => (
+              <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Aéroport d&apos;arrivée *</label>
+          <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required>
+            <option value="">— Choisir —</option>
+            {AEROPORTS_PTFS.map((a) => (
+              <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Durée (minutes) *</label>
+          <input type="number" className="input" value={duree_minutes} onChange={(e) => setDureeMinutes(e.target.value)} min={1} required />
+        </div>
+        <div className="space-y-2">
+          <span className="label block">Heure (UTC) *</span>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+              <input type="radio" name="heure_mode" checked={heure_mode === 'depart'} onChange={() => handleHeureModeChange('depart')} className="rounded" />
+              Départ
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+              <input type="radio" name="heure_mode" checked={heure_mode === 'arrivee'} onChange={() => handleHeureModeChange('arrivee')} className="rounded" />
+              Arrivée
+            </label>
+          </div>
+          <input type="datetime-local" className="input" value={heure_utc} onChange={(e) => setHeureUtc(e.target.value)} required />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Rôle *</label>
+          <select className="input" value={role_pilote} onChange={(e) => { setRolePilote(e.target.value as 'Pilote' | 'Co-pilote'); setPiloteId(''); setCopiloteId(''); }}>
+            <option value="Pilote">Pilote</option>
+            <option value="Co-pilote">Co-pilote</option>
+          </select>
+        </div>
+      </div>
+
+      {role_pilote === 'Pilote' && (
+        <div>
+          <label className="label">Co-pilote (optionnel)</label>
+          <select className="input" value={copilote_id} onChange={(e) => setCopiloteId(e.target.value)}>
+            <option value="">— Aucun —</option>
+            {pilotesArmee.map((p) => (
+              <option key={p.id} value={p.id}>{p.identifiant}</option>
+            ))}
+          </select>
+          <p className="text-xs text-slate-500 mt-1">Seuls les utilisateurs avec le rôle Armée peuvent être ajoutés.</p>
+        </div>
+      )}
+
+      {role_pilote === 'Co-pilote' && (
+        <div>
+          <label className="label">Pilote (commandant de bord) *</label>
+          <select className="input" value={pilote_id} onChange={(e) => setPiloteId(e.target.value)}>
+            <option value="">— Choisir —</option>
+            {pilotesArmee.map((p) => (
+              <option key={p.id} value={p.id}>{p.identifiant}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div>
+        <label className="label">Nom / pseudo du commandant de bord *</label>
+        <input type="text" className="input" value={commandant_bord} onChange={(e) => setCommandantBord(e.target.value)} required />
+      </div>
+
+      <div>
+        <label className="label">Callsign / N° de vol</label>
+        <input type="text" className="input" value={callsign} onChange={(e) => setCallsign(e.target.value)} placeholder="ex. AF123… (optionnel)" />
+      </div>
+
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+      <button type="submit" className="btn-primary" disabled={loading}>
+        {loading ? 'Envoi…' : 'Soumettre'}
+      </button>
+    </form>
+  );
+}

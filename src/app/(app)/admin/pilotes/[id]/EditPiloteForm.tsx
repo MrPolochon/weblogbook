@@ -5,23 +5,72 @@ import { useRouter } from 'next/navigation';
 
 export default function EditPiloteForm({
   piloteId,
+  identifiant: identifiantInitial,
+  armee: armeeInitial,
   heuresInitiales,
   blockedUntil,
   blockReason,
 }: {
   piloteId: string;
+  identifiant: string;
+  armee: boolean;
   heuresInitiales: number;
   blockedUntil: string | null;
   blockReason: string | null;
 }) {
   const router = useRouter();
+  const [identifiant, setIdentifiant] = useState(identifiantInitial);
+  const [armee, setArmee] = useState(armeeInitial);
   const [heures, setHeures] = useState(String(heuresInitiales));
   const [blockMinutes, setBlockMinutes] = useState('');
   const [blockReasonVal, setBlockReasonVal] = useState(blockReason ?? '');
   const [loading, setLoading] = useState(false);
+  const [loadingReset, setLoadingReset] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isBlocked = blockedUntil ? new Date(blockedUntil) > new Date() : false;
+
+  async function handleSaveIdentifiantArmee(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const id = String(identifiant).trim().toLowerCase();
+      if (!id || id.length < 2) throw new Error('Identifiant trop court');
+      const res = await fetch(`/api/pilotes/${piloteId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifiant: id, armee }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      router.refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResetPassword() {
+    if (!confirm('Réinitialiser le mot de passe à 1234567890 ? L\'utilisateur devra se reconnecter.')) return;
+    setError(null);
+    setLoadingReset(true);
+    try {
+      const res = await fetch(`/api/pilotes/${piloteId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset_password: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      router.refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoadingReset(false);
+    }
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -99,6 +148,47 @@ export default function EditPiloteForm({
 
   return (
     <div className="card space-y-6">
+      <form onSubmit={handleSaveIdentifiantArmee} className="space-y-4">
+        <h2 className="text-lg font-medium text-slate-200">Identifiant et rôle Armée</h2>
+        <div>
+          <label className="label">Identifiant de connexion</label>
+          <input
+            type="text"
+            className="input max-w-xs"
+            value={identifiant}
+            onChange={(e) => setIdentifiant(e.target.value)}
+            placeholder="ex: jdupont"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="armee-edit"
+            checked={armee}
+            onChange={(e) => setArmee(e.target.checked)}
+            className="rounded"
+          />
+          <label htmlFor="armee-edit" className="label cursor-pointer">Rôle Armée (Espace militaire)</label>
+        </div>
+        <button type="submit" className="btn-primary" disabled={loading}>
+          {loading ? 'Enregistrement…' : 'Enregistrer identifiant / Armée'}
+        </button>
+      </form>
+
+      <div>
+        <h2 className="text-lg font-medium text-slate-200 mb-2">Mot de passe</h2>
+        <button
+          type="button"
+          onClick={handleResetPassword}
+          className="btn-secondary"
+          disabled={loadingReset}
+        >
+          {loadingReset ? 'Envoi…' : 'Réinitialiser le mot de passe (1234567890)'}
+        </button>
+      </div>
+
+      <hr className="border-slate-700" />
+
       <form onSubmit={handleSave} className="space-y-4">
         <h2 className="text-lg font-medium text-slate-200">Heures initiales</h2>
         <div>

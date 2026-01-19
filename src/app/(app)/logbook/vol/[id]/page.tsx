@@ -35,13 +35,15 @@ export default async function LogbookVolEditPage({
     .from('vols')
     .select(`
       id, pilote_id, copilote_id, copilote_confirme_par_pilote, type_avion_id, compagnie_id, compagnie_libelle, duree_minutes, depart_utc,
-      type_vol, aeroport_depart, aeroport_arrivee, instructeur_id, instruction_type, commandant_bord, role_pilote, callsign, statut, refusal_count, refusal_reason,
+      type_vol, aeroport_depart, aeroport_arrivee, instructeur_id, instruction_type, commandant_bord, role_pilote, callsign, statut, refusal_count, refusal_reason, chef_escadron_id,
       copilote:profiles!vols_copilote_id_fkey(identifiant)
     `)
     .eq('id', id)
     .single();
 
   if (!vol) notFound();
+  if (vol.type_vol === 'Vol militaire') redirect('/militaire');
+
   const isPiloteOrCopilote = vol.pilote_id === user.id || vol.copilote_id === user.id;
   const isInstructeurEnAttente = vol.instructeur_id === user.id && vol.statut === 'en_attente_confirmation_instructeur';
   if (!isPiloteOrCopilote && !isAdmin && !isInstructeurEnAttente) redirect('/logbook');

@@ -34,7 +34,7 @@ export default async function LogbookPage() {
       instructeur:profiles!vols_instructeur_id_fkey(identifiant),
       pilote:profiles!vols_pilote_id_fkey(identifiant),
       copilote:profiles!vols_copilote_id_fkey(id,identifiant)
-    `).or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id},instructeur_id.eq.${user.id}`).in('statut', ['en_attente', 'validé', 'refusé']).order('depart_utc', { ascending: false }),
+    `).or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id},instructeur_id.eq.${user.id}`).neq('type_vol', 'Vol militaire').in('statut', ['en_attente', 'validé', 'refusé']).order('depart_utc', { ascending: false }),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, pilote:profiles!vols_pilote_id_fkey(identifiant)').eq('copilote_id', user.id).eq('statut', 'en_attente_confirmation_pilote').order('depart_utc', { ascending: false }),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_copilote').order('depart_utc', { ascending: false }),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'refuse_par_copilote').order('depart_utc', { ascending: false }),

@@ -15,11 +15,12 @@ export default async function AppLayout({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, armee')
     .eq('id', user.id)
     .single();
 
   const isAdmin = profile?.role === 'admin';
+  const isArmee = Boolean(profile?.armee);
 
   let pendingVolsCount = 0;
   let volsAConfirmerCount = 0;
@@ -50,7 +51,7 @@ export default async function AppLayout({
   return (
     <div className="min-h-screen flex flex-col">
       <AdminModeBg />
-      <NavBar isAdmin={isAdmin} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} />
+      <NavBar isAdmin={isAdmin} isArmee={isArmee} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} />
       <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
     </div>
   );

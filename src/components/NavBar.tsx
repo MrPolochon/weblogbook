@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, LayoutDashboard, FileText, User, LogOut, ArrowLeftRight } from 'lucide-react';
+import { BookOpen, LayoutDashboard, FileText, User, LogOut, ArrowLeftRight, Shield } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -17,7 +17,7 @@ export function setInterfaceMode(mode: 'admin' | 'pilote') {
   if (typeof window !== 'undefined') localStorage.setItem(MODE_KEY, mode);
 }
 
-export default function NavBar({ isAdmin, pendingVolsCount = 0, volsAConfirmerCount = 0 }: { isAdmin: boolean; pendingVolsCount?: number; volsAConfirmerCount?: number }) {
+export default function NavBar({ isAdmin, isArmee = false, pendingVolsCount = 0, volsAConfirmerCount = 0 }: { isAdmin: boolean; isArmee?: boolean; pendingVolsCount?: number; volsAConfirmerCount?: number }) {
   const pathname = usePathname();
   const router = useRouter();
   const mode = typeof window !== 'undefined' ? getInterfaceMode() : 'pilote';
@@ -77,6 +77,20 @@ export default function NavBar({ isAdmin, pendingVolsCount = 0, volsAConfirmerCo
               <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
                 {volsAConfirmerCount > 99 ? '99+' : volsAConfirmerCount}
               </span>
+            </Link>
+          )}
+          {isArmee && (
+            <Link
+              href="/militaire"
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                pathname.startsWith('/militaire')
+                  ? 'bg-slate-700/50 text-sky-300'
+                  : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+              )}
+            >
+              <Shield className="h-4 w-4" />
+              Espace militaire
             </Link>
           )}
           {isAdmin && (

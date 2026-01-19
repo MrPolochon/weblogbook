@@ -8,6 +8,7 @@ export default function CreatePiloteForm() {
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'pilote' | 'admin'>('pilote');
+  const [armee, setArmee] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -22,7 +23,7 @@ export default function CreatePiloteForm() {
       const res = await fetch('/api/pilotes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifiant: identifiant.trim(), password, role }),
+        body: JSON.stringify({ identifiant: identifiant.trim(), password, role, armee }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) throw new Error(data.error || 'Erreur');
@@ -31,6 +32,7 @@ export default function CreatePiloteForm() {
       setIdentifiant('');
       setPassword('');
       setRole('pilote');
+      setArmee(false);
       setTimeout(() => setSuccess(false), 3000);
       router.refresh();
     } catch (err: unknown) {
@@ -77,6 +79,16 @@ export default function CreatePiloteForm() {
             <option value="pilote">Pilote</option>
             <option value="admin">Admin</option>
           </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="armee"
+            checked={armee}
+            onChange={(e) => setArmee(e.target.checked)}
+            className="rounded"
+          />
+          <label htmlFor="armee" className="label cursor-pointer">Armée (Espace militaire)</label>
         </div>
         <button type="submit" className="btn-primary" disabled={loading}>
           {loading ? 'Création…' : 'Créer'}

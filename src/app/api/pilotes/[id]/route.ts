@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { identifiantToEmail } from '@/lib/constants';
 
 export async function PATCH(
   request: Request,
@@ -15,7 +16,7 @@ export async function PATCH(
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { heures_initiales_minutes, blocked_until, block_reason } = body;
+    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, armee: armeeBody } = body;
 
     const updates: Record<string, unknown> = {};
     if (typeof heures_initiales_minutes === 'number' && heures_initiales_minutes >= 0) {
@@ -24,8 +25,25 @@ export async function PATCH(
     if (blocked_until === null) updates.blocked_until = null;
     else if (blocked_until && typeof blocked_until === 'string') updates.blocked_until = blocked_until;
     if (block_reason !== undefined) updates.block_reason = block_reason == null ? null : String(block_reason);
+    if (armeeBody !== undefined) updates.armee = Boolean(armeeBody);
 
     const admin = createAdminClient();
+
+    if (identifiantBody != null && typeof identifiantBody === 'string') {
+      const newId = String(identifiantBody).trim().toLowerCase();
+      if (!newId || newId.length < 2) return NextResponse.json({ error: 'Identifiant trop court' }, { status: 400 });
+      const { data: existing } = await admin.from('profiles').select('id').eq('identifiant', newId).neq('id', id).single();
+      if (existing) return NextResponse.json({ error: 'Cet identifiant est déjà utilisé' }, { status: 400 });
+      updates.identifiant = newId;
+      const { error: authErr } = await admin.auth.admin.updateUserById(id, { email: identifiantToEmail(newId) });
+      if (authErr) return NextResponse.json({ error: authErr.message || 'Erreur mise à jour identifiant' }, { status: 400 });
+    }
+
+    if (reset_password === true) {
+      const { error: pwdErr } = await admin.auth.admin.updateUserById(id, { password: '1234567890' });
+      if (pwdErr) return NextResponse.json({ error: pwdErr.message || 'Erreur réinitialisation MDP' }, { status: 400 });
+    }
+
     const { error } = await admin.from('profiles').update(updates).eq('id', id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true });

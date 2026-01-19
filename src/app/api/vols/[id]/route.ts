@@ -231,17 +231,21 @@ export async function DELETE(
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const admin = createAdminClient();
-    const { data: vol } = await admin.from('vols').select('pilote_id, copilote_id, type_vol, instructeur_id').eq('id', id).single();
+    const { data: vol } = await admin.from('vols').select('pilote_id, copilote_id, type_vol, instructeur_id, chef_escadron_id').eq('id', id).single();
     if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     const isAdmin = profile?.role === 'admin';
     const isPiloteOrCopilote = vol.pilote_id === user.id || vol.copilote_id === user.id;
     const isInstructeur = vol.instructeur_id === user.id;
+    const isChefEscadron = vol.chef_escadron_id === user.id;
     const isVolInstruction = vol.type_vol === 'Instruction' && vol.instructeur_id;
+    const isVolMilitaire = vol.type_vol === 'Vol militaire';
 
     if (isVolInstruction) {
       if (!isAdmin && !isInstructeur) return NextResponse.json({ error: 'Pour un vol d\'instruction, seul l\'instructeur peut supprimer le vol.' }, { status: 403 });
+    } else if (isVolMilitaire) {
+      if (!isAdmin && !isPiloteOrCopilote && !isChefEscadron) return NextResponse.json({ error: 'Vous ne pouvez supprimer que vos propres vols militaires.' }, { status: 403 });
     } else {
       if (!isAdmin && !isPiloteOrCopilote) return NextResponse.json({ error: 'Vous ne pouvez supprimer que vos propres vols.' }, { status: 403 });
     }

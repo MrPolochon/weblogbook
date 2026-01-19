@@ -3,8 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatDuree } from '@/lib/utils';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
 import { Check, X, Trash2 } from 'lucide-react';
 
 type Vol = {
@@ -17,6 +15,7 @@ type Vol = {
   callsign?: string | null;
   refusal_reason: string | null;
   instruction_type?: string | null;
+  type_avion_militaire?: string | null;
   pilote?: { identifiant?: string } | { identifiant?: string }[] | null;
   type_avion?: { nom?: string } | { nom?: string }[] | null;
   instructeur?: { identifiant?: string } | { identifiant?: string }[] | null;
@@ -81,8 +80,8 @@ export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="text-sm text-slate-300 space-y-1">
                 <p><span className="text-slate-500">Pilote:</span> {(Array.isArray(v.pilote) ? v.pilote[0] : v.pilote)?.identifiant ?? '—'}</p>
-                <p><span className="text-slate-500">Date:</span> {format(new Date(v.depart_utc), 'dd MMM yyyy HH:mm', { locale: fr })} UTC</p>
-                <p><span className="text-slate-500">Appareil:</span> {(Array.isArray(v.type_avion) ? v.type_avion[0] : v.type_avion)?.nom ?? '—'}</p>
+                <p><span className="text-slate-500">Date (UTC):</span> {new Date(v.depart_utc).toLocaleString('fr-FR', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</p>
+                <p><span className="text-slate-500">Appareil:</span> {v.type_vol === 'Vol militaire' ? (v.type_avion_militaire || '—') : ((Array.isArray(v.type_avion) ? v.type_avion[0] : v.type_avion)?.nom ?? '—')}</p>
                 <p><span className="text-slate-500">Compagnie:</span> {v.compagnie_libelle}</p>
                 <p><span className="text-slate-500">Durée:</span> {formatDuree(v.duree_minutes)} — {v.type_vol} — {v.role_pilote}{v.callsign ? ` — Callsign: ${v.callsign}` : ''}</p>
                 {v.type_vol === 'Instruction' && (
