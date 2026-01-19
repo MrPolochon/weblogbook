@@ -42,6 +42,7 @@ export default function VolEditForm({
   readOnly,
   isRefuseParCopilote,
   isConfirmationInstructeur,
+  callsign: callsignInitial,
 }: {
   volId: string;
   typeAvionId: string;
@@ -59,6 +60,7 @@ export default function VolEditForm({
   isCurrentUserPilote: boolean;
   piloteId: string;
   copiloteId: string;
+  callsign?: string;
   typesAvion: T[];
   compagnies: C[];
   admins: Admin[];
@@ -83,6 +85,7 @@ export default function VolEditForm({
   const [instruction_type, setInstructionType] = useState(instructionType || '');
   const [commandant_bord, setCommandantBord] = useState(commandantBord);
   const [role_pilote, setRolePilote] = useState(rolePilote);
+  const [callsign, setCallsign] = useState(callsignInitial || '');
   const [autrePersonneId, setAutrePersonneId] = useState(isCurrentUserPilote ? (copiloteId || '') : (piloteId || ''));
   const [loading, setLoading] = useState(false);
   const [loadingRefuser, setLoadingRefuser] = useState(false);
@@ -206,6 +209,7 @@ export default function VolEditForm({
       instruction_type: type_vol === 'Instruction' ? instruction_type.trim() : null,
       commandant_bord: commandant_bord.trim(),
       role_pilote,
+      callsign: callsign.trim() || null,
     };
     if (type_vol === 'Instruction') {
       if (role_pilote === 'Co-pilote') body.pilote_id = instructeur_id;
@@ -370,6 +374,10 @@ export default function VolEditForm({
       <div>
         <label className="label">Nom / pseudo du commandant de bord *</label>
         <input type="text" className="input" value={commandant_bord} onChange={(e) => setCommandantBord(e.target.value)} required disabled={readOnly} />
+      </div>
+      <div>
+        <label className="label">Callsign / N° de vol</label>
+        <input type="text" className="input" value={callsign} onChange={(e) => setCallsign(e.target.value)} placeholder="ex. AF123, F-GKTA… (optionnel)" disabled={readOnly} />
       </div>
       {error && <p className="text-red-400 text-sm">{error}</p>}
       {isConfirmationInstructeur ? (

@@ -33,7 +33,7 @@ export default async function AdminPiloteLogbookPage({
   const { data: vols } = await admin
     .from('vols')
     .select(`
-      id, pilote_id, copilote_id, instructeur_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote,
+      id, pilote_id, copilote_id, instructeur_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote, callsign,
       aeroport_depart, aeroport_arrivee, instruction_type,
       refusal_count, refusal_reason,
       type_avion:types_avion(nom, constructeur),
@@ -81,6 +81,7 @@ export default async function AdminPiloteLogbookPage({
                   <th className="pb-2 pr-4">Arrivée</th>
                   <th className="pb-2 pr-4">Appareil</th>
                   <th className="pb-2 pr-4">Compagnie</th>
+                  <th className="pb-2 pr-4">Callsign</th>
                   <th className="pb-2 pr-4">Durée</th>
                   <th className="pb-2 pr-4">Type</th>
                   <th className="pb-2 pr-4">Rôle</th>
@@ -104,6 +105,7 @@ export default async function AdminPiloteLogbookPage({
                       {(v.type_avion as { nom?: string })?.nom || '—'}
                     </td>
                     <td className="py-3 pr-4 text-slate-300">{v.compagnie_libelle || '—'}</td>
+                    <td className="py-3 pr-4 text-slate-300">{v.callsign || '—'}</td>
                     <td className="py-3 pr-4 text-slate-300">{formatDuree(v.duree_minutes || 0)}</td>
                     <td className="py-3 pr-4 text-slate-300">
                       {v.type_vol}

@@ -45,6 +45,7 @@ export default function AddVolAdminForm({
   const [role_pilote, setRolePilote] = useState<'Pilote' | 'Co-pilote'>('Pilote');
   const [pilote_commandid, setPiloteCommandantId] = useState('');
   const [copilote_id, setCopiloteId] = useState('');
+  const [callsign, setCallsign] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,6 +123,7 @@ export default function AddVolAdminForm({
     } else {
       body.pilote_id = pilote_id;
     }
+    body.callsign = callsign.trim() || undefined;
     setLoading(true);
     try {
       const res = await fetch('/api/vols', {
@@ -147,6 +149,7 @@ export default function AddVolAdminForm({
       setInstructeurId('');
       setInstructionType('');
       setCommandantBord('');
+      setCallsign('');
       setRolePilote('Pilote');
       router.refresh();
     } catch (err: unknown) {
@@ -313,6 +316,10 @@ export default function AddVolAdminForm({
           <div>
             <label className="label">Commandant de bord *</label>
             <input type="text" className="input" value={commandant_bord} onChange={(e) => setCommandantBord(e.target.value)} required />
+          </div>
+          <div>
+            <label className="label">Callsign / N° de vol</label>
+            <input type="text" className="input" value={callsign} onChange={(e) => setCallsign(e.target.value)} placeholder="ex. AF123, F-GKTA… (optionnel)" />
           </div>
           {error && <p className="text-red-400 text-sm">{error}</p>}
           <button type="submit" className="btn-primary" disabled={loading}>{loading ? 'Ajout…' : 'Ajouter (validé)'}</button>

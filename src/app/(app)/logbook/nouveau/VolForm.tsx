@@ -45,6 +45,7 @@ export default function VolForm({
   const [role_pilote, setRolePilote] = useState<'Pilote' | 'Co-pilote'>('Pilote');
   const [pilote_id, setPiloteId] = useState('');
   const [copilote_id, setCopiloteId] = useState('');
+  const [callsign, setCallsign] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,6 +111,7 @@ export default function VolForm({
           role_pilote,
           pilote_id: role_pilote === 'Co-pilote' ? (type_vol === 'Instruction' ? instructeur_id : pilote_id) : undefined,
           copilote_id: type_vol !== 'Instruction' && role_pilote === 'Pilote' && copilote_id ? copilote_id : undefined,
+          callsign: callsign.trim() || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -323,6 +325,17 @@ export default function VolForm({
           value={commandant_bord}
           onChange={(e) => setCommandantBord(e.target.value)}
           required
+        />
+      </div>
+
+      <div>
+        <label className="label">Callsign / N° de vol</label>
+        <input
+          type="text"
+          className="input"
+          value={callsign}
+          onChange={(e) => setCallsign(e.target.value)}
+          placeholder="ex. AF123, F-GKTA… (optionnel)"
         />
       </div>
 

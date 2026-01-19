@@ -17,7 +17,7 @@ export default async function AdminVolsPage() {
   const admin = createAdminClient();
   const [{ data: vols }, { data: types }, { data: compagnies }, { data: profiles }] = await Promise.all([
     admin.from('vols').select(`
-      id, duree_minutes, depart_utc, statut, compagnie_libelle, type_vol, role_pilote, refusal_reason, instruction_type,
+      id, duree_minutes, depart_utc, statut, compagnie_libelle, type_vol, role_pilote, callsign, refusal_reason, instruction_type,
       pilote:profiles!vols_pilote_id_fkey(identifiant),
       type_avion:types_avion(nom),
       instructeur:profiles!vols_instructeur_id_fkey(identifiant)

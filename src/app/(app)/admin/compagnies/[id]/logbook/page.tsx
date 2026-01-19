@@ -33,7 +33,7 @@ export default async function AdminCompagnieLogbookPage({
   const { data: vols } = await admin
     .from('vols')
     .select(`
-      id, pilote_id, copilote_id, duree_minutes, depart_utc, arrivee_utc, statut, type_vol, role_pilote,
+      id, pilote_id, copilote_id, duree_minutes, depart_utc, arrivee_utc, statut, type_vol, role_pilote, callsign,
       aeroport_depart, aeroport_arrivee, instruction_type,
       type_avion:types_avion(nom, constructeur),
       pilote:profiles!vols_pilote_id_fkey(identifiant),
@@ -84,6 +84,7 @@ export default async function AdminCompagnieLogbookPage({
                   <th className="pb-2 pr-4">Arrivée</th>
                   <th className="pb-2 pr-4">Appareil</th>
                   <th className="pb-2 pr-4">Pilote</th>
+                  <th className="pb-2 pr-4">Callsign</th>
                   <th className="pb-2 pr-4">Durée</th>
                   <th className="pb-2 pr-4">Type</th>
                   <th className="pb-2 pr-4">Rôle</th>
@@ -109,6 +110,7 @@ export default async function AdminCompagnieLogbookPage({
                     <td className="py-3 pr-4 text-slate-300">
                       {(Array.isArray(v.pilote) ? v.pilote[0] : v.pilote)?.identifiant ?? '—'}
                     </td>
+                    <td className="py-3 pr-4 text-slate-300">{v.callsign || '—'}</td>
                     <td className="py-3 pr-4 text-slate-300">{formatDuree(v.duree_minutes || 0)}</td>
                     <td className="py-3 pr-4 text-slate-300">
                       {v.type_vol}

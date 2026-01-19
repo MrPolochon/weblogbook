@@ -33,6 +33,7 @@ export async function POST(request: Request) {
       created_by_admin,
       pilote_id: piloteIdBody,
       copilote_id: copiloteIdBody,
+      callsign: callsignBody,
     } = body;
 
     const isAdmin = profile.role === 'admin';
@@ -111,6 +112,7 @@ export async function POST(request: Request) {
       instruction_type: type_vol === 'Instruction' && instructionType ? String(instructionType).trim() : null,
       commandant_bord: String(commandant_bord).trim(),
       role_pilote,
+      callsign: callsignBody != null && String(callsignBody).trim() ? String(callsignBody).trim() : null,
       statut: isAdmin && created_by_admin
         ? 'validé'
         : role_pilote === 'Co-pilote' && !isAdmin

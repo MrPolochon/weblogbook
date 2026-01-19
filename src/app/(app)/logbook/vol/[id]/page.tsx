@@ -35,7 +35,7 @@ export default async function LogbookVolEditPage({
     .from('vols')
     .select(`
       id, pilote_id, copilote_id, copilote_confirme_par_pilote, type_avion_id, compagnie_id, compagnie_libelle, duree_minutes, depart_utc,
-      type_vol, aeroport_depart, aeroport_arrivee, instructeur_id, instruction_type, commandant_bord, role_pilote, statut, refusal_count, refusal_reason,
+      type_vol, aeroport_depart, aeroport_arrivee, instructeur_id, instruction_type, commandant_bord, role_pilote, callsign, statut, refusal_count, refusal_reason,
       copilote:profiles!vols_copilote_id_fkey(identifiant)
     `)
     .eq('id', id)
@@ -124,6 +124,7 @@ export default async function LogbookVolEditPage({
         instructionType={vol.instruction_type ?? ''}
         commandantBord={vol.commandant_bord}
         rolePilote={vol.role_pilote as 'Pilote' | 'Co-pilote'}
+        callsign={vol.callsign || ''}
         isCurrentUserPilote={vol.pilote_id === user.id}
         piloteId={vol.pilote_id ?? ''}
         copiloteId={vol.copilote_id ?? ''}

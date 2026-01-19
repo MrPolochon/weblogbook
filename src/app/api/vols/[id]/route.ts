@@ -94,6 +94,7 @@ export async function PATCH(
       role_pilote,
       pilote_id: piloteIdBody,
       copilote_id: copiloteIdBody,
+      callsign: callsignBody,
     } = body;
 
     if (!type_avion_id || !compagnie_libelle || typeof duree_minutes !== 'number' || duree_minutes < 1 ||
@@ -195,6 +196,7 @@ export async function PATCH(
       instruction_type: type_vol === 'Instruction' && instructionType ? String(instructionType).trim() : null,
       commandant_bord: String(commandant_bord).trim(),
       role_pilote,
+      callsign: callsignBody != null && String(callsignBody).trim() ? String(callsignBody).trim() : null,
       pilote_id: piloteId,
       copilote_id: copiloteId ?? null,
       copilote_confirme_par_pilote: isConfirmingByPilote
