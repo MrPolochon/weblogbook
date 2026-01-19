@@ -133,7 +133,7 @@ export async function POST(request: Request) {
 
       if (isEscadrilleOuEscadron) {
         const equipageIds: string[] = Array.isArray(equipageIdsBody) ? equipageIdsBody.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
-        const tous = [...new Set([user.id, ...equipageIds])];
+        const tous = Array.from(new Set([user.id, ...equipageIds]));
         if (tous.length > 0) {
           const admin = createAdminClient();
           await admin.from('vols_equipage_militaire').insert(tous.map((pid) => ({ vol_id: data.id, profile_id: pid })));

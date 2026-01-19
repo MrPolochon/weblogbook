@@ -30,7 +30,7 @@ export default async function MilitairePage() {
     admin.from('vols_equipage_militaire').select('vol_id').eq('profile_id', user.id),
   ]);
 
-  const volIdsEq = [...new Set((eqData || []).map((r) => r.vol_id))];
+  const volIdsEq = Array.from(new Set((eqData || []).map((r) => r.vol_id)));
   let vols2: typeof vols1 = [];
   if (volIdsEq.length > 0) {
     const { data } = await admin.from('vols').select(selectVols).eq('type_vol', 'Vol militaire').in('id', volIdsEq).in('statut', ['en_attente', 'validé', 'refusé']).order('depart_utc', { ascending: false });
