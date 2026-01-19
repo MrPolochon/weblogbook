@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
     // --- Vol militaire ---
     if (type_vol === 'Vol militaire') {
-      if (!profile.armee) return NextResponse.json({ error: 'Réservé aux utilisateurs avec le rôle Armée.' }, { status: 403 });
+      if (!profile.armee && profile.role !== 'admin') return NextResponse.json({ error: 'Réservé aux utilisateurs avec le rôle Armée (ou aux admins).' }, { status: 403 });
       const {
         type_avion_militaire: tam,
         escadrille_ou_escadron: eoe,
@@ -38,14 +38,14 @@ export async function POST(request: Request) {
         copilote_id: cidB,
         callsign: csB,
       } = body;
-      if (!tam || !AVIONS_MILITAIRES.includes(String(tam).trim())) {
+      if (!tam || !(AVIONS_MILITAIRES as readonly string[]).includes(String(tam).trim())) {
         return NextResponse.json({ error: 'Type d\'avion militaire invalide.' }, { status: 400 });
       }
       if (!['escadrille', 'escadron', 'autre'].includes(String(eoe))) {
         return NextResponse.json({ error: 'Indiquez si le vol était en escadrille, en escadron ou autre.' }, { status: 400 });
       }
       if (eoe === 'autre') {
-        if (!nvm || !NATURES_VOL_MILITAIRE.includes(String(nvm))) {
+        if (!nvm || !(NATURES_VOL_MILITAIRE as readonly string[]).includes(String(nvm))) {
           return NextResponse.json({ error: 'Nature du vol militaire requise (entraînement, escorte, sauvetage, reconnaissance ou autre).' }, { status: 400 });
         }
         if (nvm === 'autre' && (!nvma || !String(nvma).trim())) {

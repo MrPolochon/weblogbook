@@ -13,8 +13,8 @@ export default async function MilitairePage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase.from('profiles').select('armee, heures_initiales_minutes').eq('id', user.id).single();
-  if (!profile?.armee) redirect('/logbook');
+  const { data: profile } = await supabase.from('profiles').select('armee, role, heures_initiales_minutes').eq('id', user.id).single();
+  if (!profile?.armee && profile?.role !== 'admin') redirect('/logbook');
 
   const admin = createAdminClient();
   const { data: vols } = await admin

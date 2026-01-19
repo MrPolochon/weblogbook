@@ -9,7 +9,7 @@ export default async function ComptePage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('identifiant, role')
+    .select('identifiant, role, armee')
     .eq('id', user.id)
     .single();
 
@@ -20,7 +20,7 @@ export default async function ComptePage() {
         <p className="text-slate-400 text-sm">Identifiant</p>
         <p className="text-slate-100 font-medium">{profile?.identifiant ?? '—'}</p>
       </div>
-      <CompteForm />
+      <CompteForm armee={Boolean(profile?.armee)} isAdmin={profile?.role === 'admin'} />
     </div>
   );
 }

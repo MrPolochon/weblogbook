@@ -9,8 +9,8 @@ export default async function NouveauVolMilitairePage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase.from('profiles').select('armee, blocked_until').eq('id', user.id).single();
-  if (!profile?.armee) redirect('/militaire');
+  const { data: profile } = await supabase.from('profiles').select('armee, role, blocked_until').eq('id', user.id).single();
+  if (!profile?.armee && profile?.role !== 'admin') redirect('/militaire');
   if (profile?.blocked_until && new Date(profile.blocked_until) > new Date()) redirect('/militaire');
 
   const { data: pilotesArmee } = await supabase

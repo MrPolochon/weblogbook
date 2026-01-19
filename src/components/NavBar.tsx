@@ -79,7 +79,7 @@ export default function NavBar({ isAdmin, isArmee = false, pendingVolsCount = 0,
               </span>
             </Link>
           )}
-          {isArmee && (
+          {(isArmee || isAdmin) && (
             <Link
               href="/militaire"
               className={cn(
