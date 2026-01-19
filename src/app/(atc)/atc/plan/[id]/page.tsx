@@ -89,13 +89,17 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
             <div className="border-t border-slate-100 pt-3">
               <RefuserPlanForm planId={plan.id} />
             </div>
+            <div className="border-t border-slate-100 pt-3">
+              <p className="text-slate-800 text-sm mb-2">Si le plan vous a été attribué par erreur, transférez-le à la bonne position.</p>
+              <TransfererForm planId={plan.id} aeroportSession={atcSession?.aeroport ?? ''} allowAutomonitoring={false} />
+            </div>
           </div>
         )}
         {showInstructionsTransfer && (
           <div className="mt-4 pt-4 border-t border-slate-200 space-y-4">
             <InstructionsForm planId={plan.id} initial={plan.instructions || ''} />
             <div className="border-t border-slate-100 pt-3">
-              <TransfererForm planId={plan.id} />
+              <TransfererForm planId={plan.id} aeroportSession={atcSession?.aeroport ?? ''} />
             </div>
           </div>
         )}

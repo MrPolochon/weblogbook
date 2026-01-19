@@ -31,17 +31,20 @@ export default async function AtcLayout({
 
   let plansAuto: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansAAccepter: { id: string; numero_vol: string }[] = [];
+  let plansAccepter: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   if (enService && session) {
     const admin = createAdminClient();
     const oneMinAgo = new Date(Date.now() - 60000).toISOString();
     await admin.from('plans_vol').update({ pending_transfer_aeroport: null, pending_transfer_position: null, pending_transfer_at: null }).lt('pending_transfer_at', oneMinAgo);
 
-    const [{ data: dataAuto }, { data: dataAccept }] = await Promise.all([
+    const [{ data: dataAuto }, { data: dataAccept }, { data: dataPlansAccepter }] = await Promise.all([
       admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('automonitoring', true).in('statut', ['accepte', 'en_cours']),
       admin.from('plans_vol').select('id, numero_vol').eq('pending_transfer_aeroport', session.aeroport).eq('pending_transfer_position', session.position),
+      admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).in('statut', ['depose', 'en_attente']),
     ]);
     plansAuto = dataAuto ?? [];
     plansAAccepter = dataAccept ?? [];
+    plansAccepter = dataPlansAccepter ?? [];
   }
 
   return (
@@ -73,7 +76,7 @@ export default async function AtcLayout({
           </aside>
         )}
         <main className="flex-1 min-w-0 mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
-        {enService && <AtcAcceptTransfertSidebar plans={plansAAccepter} />}
+        {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} />}
       </div>
     </div>
   );
