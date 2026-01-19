@@ -24,11 +24,13 @@ export default async function MesPlansVolPage() {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   if (profile?.role === 'atc') redirect('/logbook');
 
-  const { data: plans } = await supabase
+  const { data: raw } = await supabase
     .from('plans_vol')
     .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min')
     .eq('pilote_id', user.id)
     .order('created_at', { ascending: false });
+  // Masquer les plans refusés et clôturés (la liste reste vide s’il n’y a que ceux-là)
+  const plans = (raw || []).filter((p: { statut: string }) => !['refuse', 'cloture'].includes(p.statut));
 
   return (
     <div className="space-y-6">

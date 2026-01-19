@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
+import { ATC_POSITIONS } from '@/lib/atc-positions';
 
 const STATUTS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring'];
 
@@ -28,7 +30,8 @@ export async function PATCH(
       if (plan.statut === 'refuse' || plan.statut === 'cloture') return NextResponse.json({ error: 'Ce plan ne peut pas être clôturé.' }, { status: 400 });
       if (!STATUTS_OUVERTS.includes(plan.statut)) return NextResponse.json({ error: 'Statut invalide pour clôture.' }, { status: 400 });
 
-      const closDirect = !plan.current_holder_user_id || plan.automonitoring === true;
+      // Clôture directe si : pas de détenteur, autosurveillance, ou aucun ATC n’a encore accepté (statut ≠ accepte/en_cours)
+      const closDirect = !plan.current_holder_user_id || plan.automonitoring === true || (plan.statut !== 'accepte' && plan.statut !== 'en_cours');
       const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
 
       const { error } = await supabase.from('plans_vol').update({ statut: newStatut }).eq('id', id);
@@ -74,6 +77,60 @@ export async function PATCH(
 
       const { error } = await supabase.from('plans_vol').update({ statut: 'refuse', refusal_reason: reason }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'instructions') {
+      const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
+      const isAdmin = profile?.role === 'admin';
+      const isHolder = plan.current_holder_user_id === user.id;
+      const canAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
+      // Détenteur actuel, admin, ou tout ATC si le plan est en autosurveillance
+      const canEdit = isAdmin || isHolder || (plan.automonitoring && canAtc);
+      if (!canEdit) return NextResponse.json({ error: 'Seul le détenteur du plan, un admin, ou un ATC (si autosurveillance) peut modifier les instructions.' }, { status: 403 });
+      if (plan.statut !== 'accepte' && plan.statut !== 'en_cours' && !plan.automonitoring) return NextResponse.json({ error: 'Plan non accepté, non en cours ou non en autosurveillance.' }, { status: 400 });
+      const instructions = body.instructions != null ? String(body.instructions) : '';
+      const { error: err } = await supabase.from('plans_vol').update({ instructions: instructions.trim() || null }).eq('id', id);
+      if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'transferer') {
+      const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
+      const isAdmin = profile?.role === 'admin';
+      const isHolder = plan.current_holder_user_id === user.id;
+      const canAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
+      const canTransfer = isAdmin || isHolder || (plan.automonitoring && canAtc);
+      if (!canTransfer) return NextResponse.json({ error: 'Seul le détenteur du plan, un admin, ou un ATC (si autosurveillance) peut transférer.' }, { status: 403 });
+      if (plan.statut !== 'accepte' && plan.statut !== 'en_cours' && !plan.automonitoring) return NextResponse.json({ error: 'Plan non accepté, non en cours ou non en autosurveillance.' }, { status: 400 });
+
+      if (body.automonitoring === true) {
+        const { error: err } = await supabase.from('plans_vol').update({
+          current_holder_user_id: null,
+          current_holder_position: null,
+          current_holder_aeroport: null,
+          automonitoring: true,
+        }).eq('id', id);
+        if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+        return NextResponse.json({ ok: true });
+      }
+
+      const aeroport = String(body.aeroport || '').toUpperCase();
+      const position = body.position;
+      if (!aeroport || !position) return NextResponse.json({ error: 'Aéroport et position requis (ou automonitoring: true).' }, { status: 400 });
+      if (!CODES_OACI_VALIDES.has(aeroport)) return NextResponse.json({ error: 'Aéroport invalide.' }, { status: 400 });
+      if (!(ATC_POSITIONS as readonly string[]).includes(String(position))) return NextResponse.json({ error: 'Position invalide.' }, { status: 400 });
+
+      const { data: sess } = await admin.from('atc_sessions').select('user_id').eq('aeroport', aeroport).eq('position', String(position)).single();
+      if (!sess?.user_id) return NextResponse.json({ error: 'Aucun ATC en ligne à cette position pour cet aéroport.' }, { status: 400 });
+
+      const { error: err } = await supabase.from('plans_vol').update({
+        current_holder_user_id: sess.user_id,
+        current_holder_position: String(position),
+        current_holder_aeroport: aeroport,
+        automonitoring: false,
+      }).eq('id', id);
+      if (err) return NextResponse.json({ error: err.message }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
 

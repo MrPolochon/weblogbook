@@ -6,6 +6,8 @@ import { ArrowLeft } from 'lucide-react';
 import ConfirmerClotureButton from './ConfirmerClotureButton';
 import AccepterPlanButton from './AccepterPlanButton';
 import RefuserPlanForm from './RefuserPlanForm';
+import InstructionsForm from './InstructionsForm';
+import TransfererForm from './TransfererForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,18 +31,20 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
   const admin = createAdminClient();
   const { data: plan } = await admin
     .from('plans_vol')
-    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, instructions, intentions_vol, sid_depart, star_arrivee, porte, temps_prev_min, refusal_reason, current_holder_user_id')
+    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, instructions, intentions_vol, sid_depart, star_arrivee, porte, temps_prev_min, refusal_reason, current_holder_user_id, automonitoring')
     .eq('id', id)
     .single();
 
   if (!plan) notFound();
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
   const isAdmin = profile?.role === 'admin';
   const isHolder = plan.current_holder_user_id === user.id;
+  const canAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
   const showConfirmerCloture = plan.statut === 'en_attente_cloture' && (isHolder || isAdmin);
   // Toujours afficher Accepter/Refuser quand le plan est en attente (l’API impose holder ou admin)
   const showAccepterRefuser = plan.statut === 'en_attente' || plan.statut === 'depose';
+  const showInstructionsTransfer = ((plan.statut === 'accepte' || plan.statut === 'en_cours') && (isHolder || isAdmin)) || (Boolean(plan.automonitoring) && canAtc);
 
   return (
     <div className="space-y-6">
@@ -60,7 +64,7 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
           <p className="text-slate-600 mt-2 text-sm"><span className="font-medium text-slate-700">SID départ :</span> {plan.sid_depart || '—'} · <span className="font-medium text-slate-700">STAR arrivée :</span> {plan.star_arrivee || '—'}</p>
         )}
         {plan.refusal_reason && <p className="text-red-600 mt-2 text-sm"><span className="font-medium">Raison du refus :</span> {plan.refusal_reason}</p>}
-        {plan.instructions && <p className="text-slate-600 mt-2">Instructions : {plan.instructions}</p>}
+        {plan.instructions && !showInstructionsTransfer && <p className="text-slate-600 mt-2">Instructions : {plan.instructions}</p>}
         {showConfirmerCloture && (
           <div className="mt-4 pt-4 border-t border-slate-200">
             <p className="text-slate-600 text-sm mb-2">Le pilote a demandé la clôture du vol.</p>
@@ -74,11 +78,18 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
             <div className="border-t border-slate-100 pt-3">
               <RefuserPlanForm planId={plan.id} />
             </div>
-            <p className="text-slate-500 text-sm">Transférer vers une autre position : à venir.</p>
           </div>
         )}
-        {!showConfirmerCloture && !showAccepterRefuser && plan.statut !== 'cloture' && plan.statut !== 'refuse' && (
-          <p className="text-slate-500 text-sm mt-4">Ce plan n&apos;est plus en attente. Transférer : à venir.</p>
+        {showInstructionsTransfer && (
+          <div className="mt-4 pt-4 border-t border-slate-200 space-y-4">
+            <InstructionsForm planId={plan.id} initial={plan.instructions || ''} />
+            <div className="border-t border-slate-100 pt-3">
+              <TransfererForm planId={plan.id} />
+            </div>
+          </div>
+        )}
+        {!showConfirmerCloture && !showAccepterRefuser && !showInstructionsTransfer && plan.statut !== 'cloture' && plan.statut !== 'refuse' && (
+          <p className="text-slate-500 text-sm mt-4">Ce plan est géré par un autre ATC ou en autosurveillance.</p>
         )}
       </div>
     </div>
