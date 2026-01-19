@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { ArrowLeft, FileText } from 'lucide-react';
+import { ArrowLeft, FileText, AlertCircle } from 'lucide-react';
 import PlanVolCloturerButton from './PlanVolCloturerButton';
 
 const STATUT_LIB: Record<string, string> = {
@@ -26,11 +26,12 @@ export default async function MesPlansVolPage() {
 
   const { data: raw } = await supabase
     .from('plans_vol')
-    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min')
+    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason')
     .eq('pilote_id', user.id)
     .order('created_at', { ascending: false });
   // Masquer les plans refusés et clôturés (la liste reste vide s’il n’y a que ceux-là)
-  const plans = (raw || []).filter((p: { statut: string }) => !['refuse', 'cloture'].includes(p.statut));
+  const plans = (raw || []).filter((p: { statut: string }) => p.statut !== 'cloture');
+  const plansRefuses = plans.filter((p: { statut: string }) => p.statut === 'refuse');
 
   return (
     <div className="space-y-6">
@@ -43,6 +44,16 @@ export default async function MesPlansVolPage() {
           Mes plans de vol
         </h1>
       </div>
+
+      {plansRefuses.length > 0 && (
+        <div className="rounded-lg border-2 border-red-500/60 bg-red-500/15 p-4 flex items-start gap-3">
+          <AlertCircle className="h-6 w-6 flex-shrink-0 text-red-400" />
+          <div>
+            <p className="font-semibold text-red-200">Attention — {plansRefuses.length} plan(s) de vol refusé(s) par l&apos;ATC</p>
+            <p className="text-sm text-red-100/90 mt-1">Modifiez les éléments indiqués et renvoyez votre plan pour une nouvelle instruction.</p>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         {!plans || plans.length === 0 ? (
@@ -80,9 +91,20 @@ export default async function MesPlansVolPage() {
                       >
                         {STATUT_LIB[p.statut] ?? p.statut}
                       </span>
+                      {p.statut === 'refuse' && (p as { refusal_reason?: string }).refusal_reason && (
+                        <p className="text-xs text-red-300/80 mt-0.5 truncate max-w-[200px]" title={(p as { refusal_reason?: string }).refusal_reason}>
+                          {(p as { refusal_reason?: string }).refusal_reason}
+                        </p>
+                      )}
                     </td>
                     <td className="py-3">
-                      <PlanVolCloturerButton planId={p.id} statut={p.statut} />
+                      {p.statut === 'refuse' ? (
+                        <Link href={`/logbook/plans-vol/${p.id}/modifier`} className="text-red-400 hover:text-red-300 font-medium">
+                          Modifier et renvoyer
+                        </Link>
+                      ) : (
+                        <PlanVolCloturerButton planId={p.id} statut={p.statut} />
+                      )}
                     </td>
                   </tr>
                 ))}

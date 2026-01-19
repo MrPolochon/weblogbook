@@ -25,7 +25,7 @@ export default async function LogbookPage() {
     : false;
 
   const admin = createAdminClient();
-  const [{ data: vols }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }] = await Promise.all([
+  const [{ data: vols }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }, { data: plansVolRefuses }] = await Promise.all([
     admin.from('vols').select(`
       id, pilote_id, copilote_id, instructeur_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote, callsign,
       aeroport_depart, aeroport_arrivee, instruction_type,
@@ -39,6 +39,7 @@ export default async function LogbookPage() {
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_copilote').order('depart_utc', { ascending: false }),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'refuse_par_copilote').order('depart_utc', { ascending: false }),
     admin.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, instructeur:profiles!vols_instructeur_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_instructeur').order('depart_utc', { ascending: false }),
+    admin.from('plans_vol').select('id').eq('pilote_id', user.id).eq('statut', 'refuse'),
   ]);
 
   const totalValides = (vols || []).filter((v) => v.statut === 'validé');
@@ -52,8 +53,13 @@ export default async function LogbookPage() {
         <h1 className="text-2xl font-semibold text-slate-100">Mon logbook</h1>
         {!blocked && (
           <div className="flex flex-wrap gap-2">
-            <Link href="/logbook/plans-vol" className="btn-secondary inline-flex gap-2">
+            <Link href="/logbook/plans-vol" className="btn-secondary inline-flex gap-2 items-center">
               Mes plans de vol
+              {(plansVolRefuses?.length ?? 0) > 0 && (
+                <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white" title="Plan(s) refusé(s) par l'ATC">
+                  {plansVolRefuses!.length}
+                </span>
+              )}
             </Link>
             <Link href="/logbook/depot-plan-vol" className="btn-secondary inline-flex gap-2">
               Déposer le plan de vol
@@ -75,6 +81,16 @@ export default async function LogbookPage() {
         <h2 className="text-lg font-medium text-slate-200 mb-1">Total temps de vol</h2>
         <p className="text-3xl font-bold text-sky-400">{formatDuree(totalMinutes)}</p>
       </div>
+
+      {plansVolRefuses && plansVolRefuses.length > 0 && (
+        <div className="card border-red-500/40 bg-red-500/10">
+          <h2 className="text-lg font-medium text-red-200 mb-2">Plan(s) de vol refusé(s) par l&apos;ATC</h2>
+          <p className="text-sm text-slate-400 mb-3">L&apos;ATC a refusé {plansVolRefuses.length} plan(s) de vol. Modifiez-les selon les indications et renvoyez-les.</p>
+          <Link href="/logbook/plans-vol" className="inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+            Voir et modifier les plans refusés
+          </Link>
+        </div>
+      )}
 
       {volsEnAttentePilote && volsEnAttentePilote.length > 0 && (
         <div className="card border-amber-500/30 bg-amber-500/5">
