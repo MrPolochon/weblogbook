@@ -81,7 +81,7 @@ export default function VolForm({
       setError('Pour un vol d\'instruction : choisir l\'admin instructeur et indiquer le type d\'instruction.');
       return;
     }
-    if (role_pilote === 'Co-pilote' && !pilote_id) {
+    if (role_pilote === 'Co-pilote' && type_vol !== 'Instruction' && !pilote_id) {
       setError('Qui était le pilote (commandant de bord) ?');
       return;
     }
@@ -108,8 +108,8 @@ export default function VolForm({
           instruction_type: type_vol === 'Instruction' ? instruction_type.trim() : null,
           commandant_bord: commandant_bord.trim(),
           role_pilote,
-          pilote_id: role_pilote === 'Co-pilote' ? pilote_id : undefined,
-          copilote_id: role_pilote === 'Pilote' && copilote_id ? copilote_id : undefined,
+          pilote_id: role_pilote === 'Co-pilote' ? (type_vol === 'Instruction' ? instructeur_id : pilote_id) : undefined,
+          copilote_id: type_vol !== 'Instruction' && role_pilote === 'Pilote' && copilote_id ? copilote_id : undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -265,7 +265,7 @@ export default function VolForm({
         </div>
       </div>
 
-      {role_pilote === 'Pilote' && (
+      {role_pilote === 'Pilote' && type_vol !== 'Instruction' && (
         <div>
           <label className="label">Qui était votre co-pilote ? (optionnel)</label>
           <select className="input" value={copilote_id} onChange={(e) => setCopiloteId(e.target.value)}>
@@ -278,7 +278,7 @@ export default function VolForm({
         </div>
       )}
 
-      {role_pilote === 'Co-pilote' && (
+      {role_pilote === 'Co-pilote' && type_vol !== 'Instruction' && (
         <div>
           <label className="label">Qui était le pilote (commandant de bord) ? *</label>
           <select className="input" value={pilote_id} onChange={(e) => setPiloteId(e.target.value)}>

@@ -51,7 +51,7 @@ export async function POST(request: Request) {
         copiloteConfirme = true;
       } else {
         if (!piloteIdBody) return NextResponse.json({ error: 'Qui était le pilote (commandant de bord) ?' }, { status: 400 });
-        if (piloteIdBody === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être le pilote et le copilote.' }, { status: 400 });
+        if (type_vol !== 'Instruction' && piloteIdBody === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être le pilote et le copilote.' }, { status: 400 });
         const { data: p } = await supabase.from('profiles').select('id').eq('id', piloteIdBody).single();
         if (!p) return NextResponse.json({ error: 'Pilote introuvable.' }, { status: 400 });
         targetPiloteId = piloteIdBody;
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
         if (!target) return NextResponse.json({ error: 'Pilote introuvable' }, { status: 400 });
       }
       if (!isAdmin && piloteIdBody) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-      if (copiloteIdBody) {
+      if (copiloteIdBody && type_vol !== 'Instruction') {
         if (copiloteIdBody === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être le pilote et le copilote.' }, { status: 400 });
         const { data: co } = await supabase.from('profiles').select('id').eq('id', copiloteIdBody).single();
         if (!co) return NextResponse.json({ error: 'Co-pilote introuvable.' }, { status: 400 });
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
       depart_utc: dep.toISOString(),
       arrivee_utc: arrivee.toISOString(),
       type_vol,
-      instructeur_id: type_vol === 'Instruction' ? instructeurId : null,
+      instructeur_id: type_vol === 'Instruction' ? (instructeurId ?? null) : null,
       instruction_type: type_vol === 'Instruction' && instructionType ? String(instructionType).trim() : null,
       commandant_bord: String(commandant_bord).trim(),
       role_pilote,

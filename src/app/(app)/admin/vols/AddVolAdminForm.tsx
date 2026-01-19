@@ -178,7 +178,7 @@ export default function AddVolAdminForm({
               </select>
             </div>
           )}
-          {role_pilote === 'Co-pilote' && (
+          {role_pilote === 'Co-pilote' && type_vol !== 'Instruction' && (
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="label">Pilote (commandant) *</label>
@@ -279,7 +279,7 @@ export default function AddVolAdminForm({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Type vol *</label>
-              <select className="input" value={type_vol} onChange={(e) => setTypeVol(e.target.value as 'IFR' | 'VFR' | 'Instruction')}>
+              <select className="input" value={type_vol} onChange={(e) => { const v = e.target.value as 'IFR' | 'VFR' | 'Instruction'; setTypeVol(v); if (v === 'Instruction') setRolePilote('Pilote'); }}>
                 <option value="VFR">VFR</option>
                 <option value="IFR">IFR</option>
                 <option value="Instruction">Instruction</option>

@@ -184,7 +184,7 @@ export default function VolEditForm({
       setError('Pour un vol d\'instruction : choisir l\'admin instructeur et indiquer le type d\'instruction.');
       return;
     }
-    if (role_pilote === 'Co-pilote' && !autrePersonneId && !(isCurrentUserPilote && copiloteId)) {
+    if (type_vol !== 'Instruction' && role_pilote === 'Co-pilote' && !autrePersonneId && !(isCurrentUserPilote && copiloteId)) {
       setError(isCurrentUserPilote ? 'Qui était le copilote ?' : 'Qui était le pilote (commandant) ?');
       return;
     }
@@ -207,10 +207,12 @@ export default function VolEditForm({
       commandant_bord: commandant_bord.trim(),
       role_pilote,
     };
-    if (role_pilote === 'Co-pilote') {
+    if (type_vol === 'Instruction') {
+      if (role_pilote === 'Co-pilote') body.pilote_id = instructeur_id;
+    } else if (role_pilote === 'Co-pilote') {
       if (isCurrentUserPilote) body.copilote_id = autrePersonneId || null;
       else body.pilote_id = autrePersonneId;
-    } else if (isCurrentUserPilote && copiloteId) {
+    } else if (isCurrentUserPilote && copiloteId && type_vol !== 'Instruction') {
       body.copilote_id = autrePersonneId || null;
     }
     setLoading(true);
@@ -326,7 +328,7 @@ export default function VolEditForm({
           </select>
         </div>
       </div>
-      {((role_pilote === 'Co-pilote' || copiloteId) && isCurrentUserPilote) && (
+      {type_vol !== 'Instruction' && ((role_pilote === 'Co-pilote' || copiloteId) && isCurrentUserPilote) && (
         <div>
           <label className="label">{role_pilote === 'Co-pilote' ? 'Qui était le copilote ? *' : 'Co-pilote (modifier ou retirer)'}</label>
           <select className="input" value={autrePersonneId} onChange={(e) => setAutrePersonneId(e.target.value)} disabled={readOnly}>
@@ -337,7 +339,7 @@ export default function VolEditForm({
           </select>
         </div>
       )}
-      {role_pilote === 'Co-pilote' && !isCurrentUserPilote && (
+      {type_vol !== 'Instruction' && role_pilote === 'Co-pilote' && !isCurrentUserPilote && (
         <div>
           <label className="label">Qui était le pilote (commandant de bord) ? *</label>
           <select className="input" value={autrePersonneId} onChange={(e) => setAutrePersonneId(e.target.value)} disabled={readOnly}>

@@ -120,6 +120,20 @@ export async function PATCH(
     if (isConfirmingByPilote || isConfirmingByCopilote) {
       piloteId = vol.pilote_id;
       copiloteId = vol.copilote_id;
+    } else if (type_vol === 'Instruction') {
+      if (role_pilote === 'Pilote') {
+        piloteId = user.id;
+        copiloteId = null;
+      } else if (vol.copilote_id === user.id) {
+        piloteId = instructeurId;
+        copiloteId = user.id;
+      } else if (vol.pilote_id === user.id) {
+        piloteId = user.id;
+        copiloteId = vol.copilote_id;
+      } else if (isAdmin) {
+        piloteId = vol.pilote_id;
+        copiloteId = vol.copilote_id;
+      }
     } else if (role_pilote === 'Co-pilote') {
       if (vol.copilote_id === user.id) {
         if (!piloteIdBody) return NextResponse.json({ error: 'Qui était le pilote (commandant) ?' }, { status: 400 });
