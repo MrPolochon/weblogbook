@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import AdminAtcGrades from './AdminAtcGrades';
 import AdminCreateAtcForm from './AdminCreateAtcForm';
+import AdminAtcComptes from './AdminAtcComptes';
 
 export default async function AtcAdminPage() {
   const supabase = await createClient();
@@ -12,7 +13,10 @@ export default async function AtcAdminPage() {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   if (profile?.role !== 'admin') redirect('/atc');
 
-  const { data: grades } = await supabase.from('atc_grades').select('id, nom, ordre').order('ordre', { ascending: true });
+  const [{ data: grades }, { data: atcComptes }] = await Promise.all([
+    supabase.from('atc_grades').select('id, nom, ordre').order('ordre', { ascending: true }),
+    supabase.from('profiles').select('id, identifiant, role, atc, atc_grade_id').or('role.eq.atc,atc.eq.true').order('identifiant'),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -25,6 +29,7 @@ export default async function AtcAdminPage() {
 
       <AdminAtcGrades grades={grades || []} />
       <AdminCreateAtcForm grades={grades || []} />
+      <AdminAtcComptes comptes={atcComptes || []} grades={grades || []} />
     </div>
   );
 }

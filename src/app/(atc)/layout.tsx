@@ -18,13 +18,19 @@ export default async function AtcLayout({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, atc')
+    .select('role, atc, atc_grade_id')
     .eq('id', user.id)
     .single();
 
   const isAdmin = profile?.role === 'admin';
   const canAccessAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
   if (!canAccessAtc) redirect('/logbook');
+
+  let gradeNom: string | null = null;
+  if (profile?.atc_grade_id) {
+    const { data: g } = await supabase.from('atc_grades').select('nom').eq('id', profile.atc_grade_id).single();
+    gradeNom = g?.nom ?? null;
+  }
 
   const { data: session } = await supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single();
   const enService = !!session;
@@ -51,7 +57,7 @@ export default async function AtcLayout({
     <div className="min-h-screen flex flex-col">
       <AutoRefresh intervalSeconds={8} />
       <AtcModeBg isAdmin={isAdmin} />
-      <AtcNavBar isAdmin={isAdmin} enService={enService} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} />
+      <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} />
       <div className="flex flex-1 w-full min-h-0">
         {enService && (
           <aside className="w-44 flex-shrink-0 border-r border-slate-300 bg-slate-100 py-3 px-2 flex flex-col">

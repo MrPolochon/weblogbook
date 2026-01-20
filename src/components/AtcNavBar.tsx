@@ -31,10 +31,12 @@ function AtcSessionCompte({ aeroport, position, startedAt }: { aeroport: string;
 export default function AtcNavBar({
   isAdmin,
   enService,
+  gradeNom,
   sessionInfo,
 }: {
   isAdmin: boolean;
   enService: boolean;
+  gradeNom?: string | null;
   sessionInfo?: { aeroport: string; position: string; started_at: string } | null;
 }) {
   const pathname = usePathname();
@@ -90,6 +92,11 @@ export default function AtcNavBar({
           )}
         </div>
         <div className="flex justify-end items-center gap-2">
+          {gradeNom && (
+            <span className="hidden sm:inline text-sm font-medium text-slate-600 px-2 py-1 rounded bg-slate-100" title="Votre grade ATC">
+              {gradeNom}
+            </span>
+          )}
           <Link
             href="/atc/compte"
             className={cn(

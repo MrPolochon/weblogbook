@@ -18,14 +18,22 @@ export default async function AdminPilotesPage() {
   const pilotes = (profiles || []).filter((p) => p.role !== 'admin');
   const admins = (profiles || []).filter((p) => p.role === 'admin');
 
-  const renderRow = (p: (typeof pilotes)[number], isAdminRole: boolean) => {
+  const renderRow = (p: (typeof pilotes)[number] | (typeof admins)[number], isAdminRole: boolean) => {
     const blocked = p.blocked_until ? new Date(p.blocked_until) > new Date() : false;
+    const sansEspacePilote = p.role === 'atc';
     return (
       <tr key={p.id} className="border-b border-slate-700/50">
         <td className="py-3 pr-4 font-medium text-slate-200">{p.identifiant}</td>
-        <td className="py-3 pr-4 text-slate-300">{p.role === 'admin' ? 'admin' : 'pilote'}</td>
+        <td className="py-3 pr-4 text-slate-300">{p.role === 'admin' ? 'admin' : p.role === 'atc' ? 'atc' : 'pilote'}</td>
         <td className="py-3 pr-4 text-slate-300">{p.armee ? 'Oui' : '—'}</td>
         <td className="py-3 pr-4 text-slate-300">{p.atc ? 'Oui' : '—'}</td>
+        <td className="py-3 pr-4">
+          {sansEspacePilote ? (
+            <span className="inline-flex items-center rounded bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-300" title="Pas d'accès à l'espace pilote">ATC uniquement</span>
+          ) : (
+            <span className="text-slate-500">Oui</span>
+          )}
+        </td>
         <td className="py-3 pr-4 text-slate-300">{formatDuree(p.heures_initiales_minutes ?? 0)}</td>
         <td className="py-3 pr-4">
           {blocked ? (
@@ -70,6 +78,7 @@ export default async function AdminPilotesPage() {
                   <th className="pb-2 pr-4">Pilote / Admin</th>
                   <th className="pb-2 pr-4">Armée</th>
                   <th className="pb-2 pr-4">ATC</th>
+                  <th className="pb-2 pr-4">Espace pilote</th>
                   <th className="pb-2 pr-4">Heures initiales</th>
                   <th className="pb-2 pr-4">Blocage</th>
                   <th className="pb-2 pr-4">Créé le</th>
@@ -95,6 +104,7 @@ export default async function AdminPilotesPage() {
                   <th className="pb-2 pr-4">Pilote / Admin</th>
                   <th className="pb-2 pr-4">Armée</th>
                   <th className="pb-2 pr-4">ATC</th>
+                  <th className="pb-2 pr-4">Espace pilote</th>
                   <th className="pb-2 pr-4">Heures initiales</th>
                   <th className="pb-2 pr-4">Blocage</th>
                   <th className="pb-2 pr-4">Créé le</th>
