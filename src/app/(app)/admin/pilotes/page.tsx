@@ -48,7 +48,7 @@ export default async function AdminPilotesPage() {
           {format(new Date(p.created_at), 'dd MMM yyyy', { locale: fr })}
         </td>
         <td className="py-3">
-          <PilotesActions piloteId={p.id} identifiant={p.identifiant} isAdmin={isAdminRole} />
+          <PilotesActions piloteId={p.id} identifiant={p.identifiant} isAdmin={isAdminRole} role={p.role} />
         </td>
       </tr>
     );

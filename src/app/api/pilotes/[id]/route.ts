@@ -16,7 +16,7 @@ export async function PATCH(
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, armee: armeeBody, atc: atcBody, atc_grade_id: atcGradeIdBody } = body;
+    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, armee: armeeBody, atc: atcBody, atc_grade_id: atcGradeIdBody, role: roleBody } = body;
 
     const updates: Record<string, unknown> = {};
     if (typeof heures_initiales_minutes === 'number' && heures_initiales_minutes >= 0) {
@@ -30,6 +30,23 @@ export async function PATCH(
     if (atcGradeIdBody !== undefined) updates.atc_grade_id = (atcGradeIdBody === null || atcGradeIdBody === '') ? null : atcGradeIdBody;
 
     const admin = createAdminClient();
+
+    // Rôle Armée requiert l'accès pilote : interdire armee=true pour role=atc
+    if (armeeBody === true) {
+      const { data: t } = await admin.from('profiles').select('role').eq('id', id).single();
+      if (t?.role === 'atc') return NextResponse.json({ error: 'Le rôle Armée requiert l\'accès à l\'espace pilote. Accordez d\'abord l\'accès pilote.' }, { status: 400 });
+    }
+
+    if (roleBody === 'pilote' || roleBody === 'atc') {
+      const { data: target } = await admin.from('profiles').select('role').eq('id', id).single();
+      if (!target) return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
+      if (target.role === 'admin') return NextResponse.json({ error: 'Impossible de modifier le rôle d\'un admin.' }, { status: 400 });
+      if (roleBody === 'pilote' && target.role !== 'atc') return NextResponse.json({ error: 'Seul un compte ATC uniquement peut recevoir l\'accès pilote.' }, { status: 400 });
+      if (roleBody === 'atc' && target.role !== 'pilote') return NextResponse.json({ error: 'Seul un pilote avec ATC peut devenir ATC uniquement.' }, { status: 400 });
+      updates.role = roleBody;
+      updates.atc = true;
+      if (roleBody === 'atc') updates.armee = false; // Armée requiert l'accès pilote
+    }
 
     if (identifiantBody != null && typeof identifiantBody === 'string') {
       const newId = String(identifiantBody).trim().toLowerCase();

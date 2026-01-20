@@ -9,10 +9,12 @@ export default function PilotesActions({
   piloteId,
   identifiant,
   isAdmin,
+  role,
 }: {
   piloteId: string;
   identifiant: string;
   isAdmin: boolean;
+  role?: string;
 }) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
@@ -82,13 +84,15 @@ export default function PilotesActions({
           <Settings className="h-4 w-4" />
         </Link>
       )}
-      <Link
-        href={`/admin/pilotes/${piloteId}/logbook`}
-        className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-sky-400"
-        title="Voir le logbook"
-      >
-        <BookOpen className="h-4 w-4" />
-      </Link>
+      {role !== 'atc' && (
+        <Link
+          href={`/admin/pilotes/${piloteId}/logbook`}
+          className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-sky-400"
+          title="Voir le logbook"
+        >
+          <BookOpen className="h-4 w-4" />
+        </Link>
+      )}
       <button
         onClick={handleDeleteClick}
         disabled={deleting}

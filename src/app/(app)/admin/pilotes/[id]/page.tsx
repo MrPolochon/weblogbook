@@ -27,16 +27,19 @@ export default async function AdminPiloteEditPage({
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <h1 className="text-2xl font-semibold text-slate-100">Modifier {p.identifiant}</h1>
-        <Link
-          href={`/admin/pilotes/${id}/logbook`}
-          className="btn-secondary inline-flex items-center gap-2"
-        >
-          Voir le logbook
-        </Link>
+        {p.role !== 'atc' && (
+          <Link
+            href={`/admin/pilotes/${id}/logbook`}
+            className="btn-secondary inline-flex items-center gap-2"
+          >
+            Voir le logbook
+          </Link>
+        )}
       </div>
       <EditPiloteForm
         piloteId={p.id}
         identifiant={p.identifiant ?? ''}
+        role={p.role ?? 'pilote'}
         armee={Boolean(p.armee)}
         atc={Boolean(p.atc)}
         heuresInitiales={p.heures_initiales_minutes ?? 0}

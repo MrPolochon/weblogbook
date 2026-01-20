@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
-export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'default' }: { armee: boolean; isAdmin: boolean; variant?: 'default' | 'atc' }) {
+export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'default', showArmee = true }: { armee: boolean; isAdmin: boolean; variant?: 'default' | 'atc'; showArmee?: boolean }) {
   const isAtc = variant === 'atc';
   const textTitle = isAtc ? 'text-slate-800' : 'text-slate-200';
   const textMuted = isAtc ? 'text-slate-600' : 'text-slate-400';
@@ -68,10 +68,10 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
 
   return (
     <>
-      {isAdmin && (
+      {isAdmin && showArmee && (
         <div className="card">
           <h2 className={`text-lg font-medium mb-4 ${textTitle}`}>Rôle Armée (Espace militaire)</h2>
-          <p className={`${textMuted} text-sm mb-3`}>En tant qu&apos;admin, vous pouvez vous attribuer le rôle Armée pour accéder à l&apos;Espace militaire.</p>
+          <p className={`${textMuted} text-sm mb-3`}>En tant qu&apos;admin, vous pouvez vous attribuer le rôle Armée pour accéder à l&apos;Espace militaire. Le rôle Armée requiert l&apos;accès à l&apos;espace pilote.</p>
           <form onSubmit={handleArmeeSubmit} className="space-y-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={armee} onChange={(e) => setArmee(e.target.checked)} className="rounded" />

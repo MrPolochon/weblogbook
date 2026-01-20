@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 export default function EditPiloteForm({
   piloteId,
   identifiant: identifiantInitial,
+  role: roleInitial,
   armee: armeeInitial,
   atc: atcInitial,
   heuresInitiales,
@@ -14,6 +15,7 @@ export default function EditPiloteForm({
 }: {
   piloteId: string;
   identifiant: string;
+  role: string;
   armee: boolean;
   atc: boolean;
   heuresInitiales: number;
@@ -24,6 +26,8 @@ export default function EditPiloteForm({
   const [identifiant, setIdentifiant] = useState(identifiantInitial);
   const [armee, setArmee] = useState(armeeInitial);
   const [atc, setAtc] = useState(atcInitial);
+  const [accesPilote, setAccesPilote] = useState(false);
+  const isAtcOnly = roleInitial === 'atc';
   const [heures, setHeures] = useState(String(heuresInitiales));
   const [blockMinutes, setBlockMinutes] = useState('');
   const [blockReasonVal, setBlockReasonVal] = useState(blockReason ?? '');
@@ -41,10 +45,16 @@ export default function EditPiloteForm({
     try {
       const id = String(identifiant).trim().toLowerCase();
       if (!id || id.length < 2) throw new Error('Identifiant trop court');
+      const body: { identifiant: string; armee: boolean; atc?: boolean; role?: string } = { identifiant: id, armee: isAtcOnly ? false : armee };
+      if (isAtcOnly) {
+        if (accesPilote) body.role = 'pilote';
+      } else {
+        body.atc = atc;
+      }
       const res = await fetch(`/api/pilotes/${piloteId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifiant: id, armee, atc }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
@@ -165,14 +175,23 @@ export default function EditPiloteForm({
           />
         </div>
         <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={armee} onChange={(e) => setArmee(e.target.checked)} className="rounded" />
-            <span className="text-slate-300">Armée (Espace militaire)</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={atc} onChange={(e) => setAtc(e.target.checked)} className="rounded" />
-            <span className="text-slate-300">ATC (Espace ATC)</span>
-          </label>
+          {!isAtcOnly && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={armee} onChange={(e) => setArmee(e.target.checked)} className="rounded" />
+              <span className="text-slate-300">Armée (Espace militaire)</span>
+            </label>
+          )}
+          {isAtcOnly ? (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={accesPilote} onChange={(e) => setAccesPilote(e.target.checked)} className="rounded" />
+              <span className="text-slate-300">Accès pilote (Espace pilote)</span>
+            </label>
+          ) : (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={atc} onChange={(e) => setAtc(e.target.checked)} className="rounded" />
+              <span className="text-slate-300">ATC (Espace ATC)</span>
+            </label>
+          )}
         </div>
         <button type="submit" className="btn-primary" disabled={loading}>
           {loading ? 'Enregistrement…' : 'Enregistrer identifiant / rôles'}

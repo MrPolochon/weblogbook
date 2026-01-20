@@ -9,6 +9,7 @@ type Compte = { id: string; identifiant: string; role: string; atc: boolean | nu
 export default function AdminAtcComptes({ comptes, grades }: { comptes: Compte[]; grades: Grade[] }) {
   const router = useRouter();
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [accesPiloteLoadingId, setAccesPiloteLoadingId] = useState<string | null>(null);
 
   function gradeNom(gradeId: string | null): string {
     if (!gradeId) return '—';
@@ -30,6 +31,24 @@ export default function AdminAtcComptes({ comptes, grades }: { comptes: Compte[]
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoadingId(null);
+    }
+  }
+
+  async function handleAccorderAccesPilote(profileId: string) {
+    setAccesPiloteLoadingId(profileId);
+    try {
+      const res = await fetch(`/api/pilotes/${profileId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'pilote' }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setAccesPiloteLoadingId(null);
     }
   }
 
@@ -68,7 +87,17 @@ export default function AdminAtcComptes({ comptes, grades }: { comptes: Compte[]
                 <td className="py-3 pr-4 text-slate-600">{p.role === 'atc' ? 'atc' : p.role + (p.atc ? ' + ATC' : '')}</td>
                 <td className="py-3 pr-4">
                   {sansEspacePilote ? (
-                    <span className="inline-flex items-center rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800" title="Pas d’accès à l’espace pilote">ATC uniquement</span>
+                    <span className="inline-flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex items-center rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800" title="Pas d’accès à l’espace pilote">ATC uniquement</span>
+                      <button
+                        type="button"
+                        onClick={() => handleAccorderAccesPilote(p.id)}
+                        disabled={accesPiloteLoadingId === p.id}
+                        className="text-xs font-medium text-sky-600 hover:text-sky-800 hover:underline disabled:opacity-50"
+                      >
+                        {accesPiloteLoadingId === p.id ? '…' : "Autoriser l'accès pilote"}
+                      </button>
+                    </span>
                   ) : (
                     <span className="text-slate-600">Oui</span>
                   )}

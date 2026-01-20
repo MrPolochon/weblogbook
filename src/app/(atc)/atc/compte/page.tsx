@@ -9,7 +9,7 @@ export default async function AtcComptePage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('identifiant, role, armee')
+    .select('identifiant, role')
     .eq('id', user.id)
     .single();
 
@@ -20,7 +20,7 @@ export default async function AtcComptePage() {
         <p className="text-slate-600 text-sm">Identifiant</p>
         <p className="text-slate-900 font-medium">{profile?.identifiant ?? '—'}</p>
       </div>
-      <CompteForm armee={Boolean(profile?.armee)} isAdmin={profile?.role === 'admin'} variant="atc" />
+      <CompteForm armee={false} isAdmin={profile?.role === 'admin'} variant="atc" showArmee={false} />
     </div>
   );
 }
