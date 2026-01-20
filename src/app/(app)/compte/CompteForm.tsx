@@ -4,7 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
-export default function CompteForm({ armee: armeeInitial, isAdmin }: { armee: boolean; isAdmin: boolean }) {
+export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'default' }: { armee: boolean; isAdmin: boolean; variant?: 'default' | 'atc' }) {
+  const isAtc = variant === 'atc';
+  const textTitle = isAtc ? 'text-slate-800' : 'text-slate-200';
+  const textMuted = isAtc ? 'text-slate-600' : 'text-slate-400';
+  const textCheck = isAtc ? 'text-slate-700' : 'text-slate-300';
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -66,12 +70,12 @@ export default function CompteForm({ armee: armeeInitial, isAdmin }: { armee: bo
     <>
       {isAdmin && (
         <div className="card">
-          <h2 className="text-lg font-medium text-slate-200 mb-4">Rôle Armée (Espace militaire)</h2>
-          <p className="text-slate-400 text-sm mb-3">En tant qu&apos;admin, vous pouvez vous attribuer le rôle Armée pour accéder à l&apos;Espace militaire.</p>
+          <h2 className={`text-lg font-medium mb-4 ${textTitle}`}>Rôle Armée (Espace militaire)</h2>
+          <p className={`${textMuted} text-sm mb-3`}>En tant qu&apos;admin, vous pouvez vous attribuer le rôle Armée pour accéder à l&apos;Espace militaire.</p>
           <form onSubmit={handleArmeeSubmit} className="space-y-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={armee} onChange={(e) => setArmee(e.target.checked)} className="rounded" />
-              <span className="text-slate-300">J&apos;ai le rôle Armée</span>
+              <span className={textCheck}>J&apos;ai le rôle Armée</span>
             </label>
             {messageArmee && (
               <p className={messageArmee.type === 'ok' ? 'text-emerald-400 text-sm' : 'text-red-400 text-sm'}>{messageArmee.text}</p>
@@ -83,7 +87,7 @@ export default function CompteForm({ armee: armeeInitial, isAdmin }: { armee: bo
         </div>
       )}
       <div className="card">
-      <h2 className="text-lg font-medium text-slate-200 mb-4">Changer le mot de passe</h2>
+      <h2 className={`text-lg font-medium mb-4 ${textTitle}`}>Changer le mot de passe</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="label">Nouveau mot de passe</label>
