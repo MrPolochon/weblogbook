@@ -25,7 +25,7 @@ export default async function LogbookPage() {
     : false;
 
   const admin = createAdminClient();
-  const [{ data: vols }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }, { data: plansVolRefuses }] = await Promise.all([
+  const [{ data: vols }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }, { data: plansVolRefuses }, { data: plansVolClotures }] = await Promise.all([
     admin.from('vols').select(`
       id, pilote_id, copilote_id, instructeur_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote, callsign,
       aeroport_depart, aeroport_arrivee, instruction_type,
@@ -40,6 +40,7 @@ export default async function LogbookPage() {
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'refuse_par_copilote').order('depart_utc', { ascending: false }),
     admin.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, instructeur:profiles!vols_instructeur_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_instructeur').order('depart_utc', { ascending: false }),
     admin.from('plans_vol').select('id').eq('pilote_id', user.id).eq('statut', 'refuse'),
+    admin.from('plans_vol').select('id, numero_vol').eq('pilote_id', user.id).eq('statut', 'cloture').not('accepted_at', 'is', null).not('cloture_at', 'is', null),
   ]);
 
   const totalValides = (vols || []).filter((v) => v.statut === 'validé');
@@ -88,6 +89,19 @@ export default async function LogbookPage() {
           <p className="text-sm text-slate-400 mb-3">L&apos;ATC a refusé {plansVolRefuses.length} plan(s) de vol. Modifiez-les selon les indications et renvoyez-les.</p>
           <Link href="/logbook/plans-vol" className="inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
             Voir et modifier les plans refusés
+          </Link>
+        </div>
+      )}
+
+      {plansVolClotures && plansVolClotures.length > 0 && (
+        <div className="card border-sky-500/40 bg-sky-500/10">
+          <h2 className="text-lg font-medium text-sky-200 mb-2">Plan(s) de vol clôturé(s) à enregistrer</h2>
+          <p className="text-sm text-slate-400 mb-3">
+            {plansVolClotures.length} plan{plansVolClotures.length > 1 ? 's' : ''} clôturé{plansVolClotures.length > 1 ? 's' : ''}. Cliquez sur &laquo; Nouveau vol &raquo; pour remplir le formulaire automatiquement.
+          </p>
+          <Link href="/logbook/nouveau" className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700">
+            <Plus className="h-4 w-4" />
+            Nouveau vol (remplissage plan de vol)
           </Link>
         </div>
       )}

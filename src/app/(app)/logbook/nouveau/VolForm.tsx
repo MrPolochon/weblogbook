@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMinutes, subMinutes } from 'date-fns';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+
+import type { PlanPreFill } from './NouveauVolClient';
 
 type TypeAvion = { id: string; nom: string; constructeur: string };
 type Compagnie = { id: string; nom: string };
@@ -23,11 +25,17 @@ export default function VolForm({
   compagnies,
   admins,
   autresProfiles,
+  planPreFill,
+  planId,
+  onClearPlan,
 }: {
   typesAvion: TypeAvion[];
   compagnies: Compagnie[];
   admins: Admin[];
   autresProfiles: Profil[];
+  planPreFill?: PlanPreFill | null;
+  planId?: string | null;
+  onClearPlan?: () => void;
 }) {
   const router = useRouter();
   const [type_avion_id, setTypeAvionId] = useState('');
@@ -48,6 +56,28 @@ export default function VolForm({
   const [callsign, setCallsign] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!planPreFill) return;
+    setAeroportDepart(planPreFill.aeroport_depart);
+    setAeroportArrivee(planPreFill.aeroport_arrivee);
+    setDureeMinutes(String(planPreFill.duree_minutes));
+    setHeureUtc(planPreFill.heure_utc);
+    setHeureMode('depart');
+    setTypeVol(planPreFill.type_vol);
+    setCallsign(planPreFill.callsign);
+  }, [planPreFill]);
+
+  function clearPlanFields() {
+    setAeroportDepart('');
+    setAeroportArrivee('');
+    setDureeMinutes('');
+    setHeureUtc('');
+    setHeureMode('depart');
+    setTypeVol('VFR');
+    setCallsign('');
+    onClearPlan?.();
+  }
 
   const compagnieLibelle = pourMoiMemo ? 'Pour moi-même' : (compagnies.find((c) => c.id === compagnie_id)?.nom ?? '');
 
@@ -112,6 +142,7 @@ export default function VolForm({
           pilote_id: role_pilote === 'Co-pilote' ? (type_vol === 'Instruction' ? instructeur_id : pilote_id) : undefined,
           copilote_id: type_vol !== 'Instruction' && role_pilote === 'Pilote' && copilote_id ? copilote_id : undefined,
           callsign: callsign.trim() || undefined,
+          plan_id: planId || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -127,6 +158,17 @@ export default function VolForm({
 
   return (
     <form onSubmit={handleSubmit} className="card space-y-4 max-w-xl">
+      {planId && onClearPlan && (
+        <div className="flex justify-end -mt-1 mb-1">
+          <button
+            type="button"
+            onClick={clearPlanFields}
+            className="text-xs text-slate-500 hover:text-slate-300 underline"
+          >
+            Ne pas copier les informations du plan de vol
+          </button>
+        </div>
+      )}
       <div>
         <label className="label">Type d&apos;avion *</label>
         <select

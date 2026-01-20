@@ -159,6 +159,7 @@ export async function POST(request: Request) {
       pilote_id: piloteIdBody,
       copilote_id: copiloteIdBody,
       callsign: callsignBody,
+      plan_id: planIdBody,
     } = body;
 
     const isAdmin = profile.role === 'admin';
@@ -256,6 +257,16 @@ export async function POST(request: Request) {
       : supabase;
     const { data, error } = await insertClient.from('vols').insert(row).select('id').single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    const planIdToUse = (typeof planIdBody === 'string' && planIdBody.trim()) ? planIdBody.trim() : null;
+    if (planIdToUse) {
+      const admin = createAdminClient();
+      const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut').eq('id', planIdToUse).single();
+      if (plan && plan.pilote_id === user.id && plan.statut === 'cloture') {
+        await admin.from('plans_vol').delete().eq('id', planIdToUse);
+      }
+    }
+
     return NextResponse.json({ ok: true, id: data.id });
   } catch (e) {
     console.error('Vol create error:', e);

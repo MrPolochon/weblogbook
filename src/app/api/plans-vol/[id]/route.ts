@@ -34,8 +34,10 @@ export async function PATCH(
       // Clôture directe si : pas de détenteur, autosurveillance, ou aucun ATC n’a encore accepté (statut ≠ accepte/en_cours)
       const closDirect = !plan.current_holder_user_id || plan.automonitoring === true || (plan.statut !== 'accepte' && plan.statut !== 'en_cours');
       const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
+      const payload: { statut: string; cloture_at?: string } = { statut: newStatut };
+      if (newStatut === 'cloture') payload.cloture_at = new Date().toISOString();
 
-      const { error } = await admin.from('plans_vol').update({ statut: newStatut }).eq('id', id);
+      const { error } = await admin.from('plans_vol').update(payload).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ ok: true, statut: newStatut, direct: closDirect });
     }
@@ -48,7 +50,7 @@ export async function PATCH(
       if (!canAtc) return NextResponse.json({ error: 'Seul l’ATC qui détient le plan ou un admin peut confirmer la clôture.' }, { status: 403 });
       if (plan.statut !== 'en_attente_cloture') return NextResponse.json({ error: 'Aucune demande de clôture en attente.' }, { status: 400 });
 
-      const { error } = await admin.from('plans_vol').update({ statut: 'cloture' }).eq('id', id);
+      const { error } = await admin.from('plans_vol').update({ statut: 'cloture', cloture_at: new Date().toISOString() }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
@@ -61,7 +63,7 @@ export async function PATCH(
       if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui détient le plan ou un admin peut accepter.' }, { status: 403 });
       if (plan.statut !== 'en_attente' && plan.statut !== 'depose') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
 
-      const { error } = await admin.from('plans_vol').update({ statut: 'accepte' }).eq('id', id);
+      const { error } = await admin.from('plans_vol').update({ statut: 'accepte', accepted_at: new Date().toISOString() }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
