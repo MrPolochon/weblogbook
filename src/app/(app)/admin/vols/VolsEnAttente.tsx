@@ -9,6 +9,7 @@ type Vol = {
   id: string;
   duree_minutes: number;
   depart_utc: string;
+  arrivee_utc?: string | null;
   compagnie_libelle: string;
   type_vol: string;
   role_pilote: string;
@@ -16,9 +17,16 @@ type Vol = {
   refusal_reason: string | null;
   instruction_type?: string | null;
   type_avion_militaire?: string | null;
+  aeroport_depart?: string | null;
+  aeroport_arrivee?: string | null;
+  commandant_bord?: string | null;
+  escadrille_ou_escadron?: string | null;
+  nature_vol_militaire?: string | null;
+  nature_vol_militaire_autre?: string | null;
   pilote?: { identifiant?: string } | { identifiant?: string }[] | null;
   type_avion?: { nom?: string } | { nom?: string }[] | null;
   instructeur?: { identifiant?: string } | { identifiant?: string }[] | null;
+  copilote?: { identifiant?: string } | { identifiant?: string }[] | null;
 };
 
 export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
@@ -80,12 +88,27 @@ export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="text-sm text-slate-300 space-y-1">
                 <p><span className="text-slate-500">Pilote:</span> {(Array.isArray(v.pilote) ? v.pilote[0] : v.pilote)?.identifiant ?? '—'}</p>
-                <p><span className="text-slate-500">Date (UTC):</span> {new Date(v.depart_utc).toLocaleString('fr-FR', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</p>
+                <p><span className="text-slate-500">Date et heure départ (UTC):</span> {new Date(v.depart_utc).toLocaleString('fr-FR', { timeZone: 'UTC', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}</p>
+                {(v.aeroport_depart || v.aeroport_arrivee) && (
+                  <p><span className="text-slate-500">Trajet:</span> {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}</p>
+                )}
+                {v.arrivee_utc && (
+                  <p><span className="text-slate-500">Heure arrivée (UTC):</span> {new Date(v.arrivee_utc).toLocaleTimeString('fr-FR', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: false })}</p>
+                )}
                 <p><span className="text-slate-500">Appareil:</span> {v.type_vol === 'Vol militaire' ? (v.type_avion_militaire || '—') : ((Array.isArray(v.type_avion) ? v.type_avion[0] : v.type_avion)?.nom ?? '—')}</p>
                 <p><span className="text-slate-500">Compagnie:</span> {v.compagnie_libelle}</p>
                 <p><span className="text-slate-500">Durée:</span> {formatDuree(v.duree_minutes)} — {v.type_vol} — {v.role_pilote}{v.callsign ? ` — Callsign: ${v.callsign}` : ''}</p>
+                {v.commandant_bord && (
+                  <p><span className="text-slate-500">Commandant de bord:</span> {v.commandant_bord}</p>
+                )}
+                {(Array.isArray(v.copilote) ? v.copilote[0] : v.copilote)?.identifiant && (
+                  <p><span className="text-slate-500">Co-pilote:</span> {(Array.isArray(v.copilote) ? v.copilote[0] : v.copilote)?.identifiant}</p>
+                )}
                 {v.type_vol === 'Instruction' && (
                   <p><span className="text-slate-500">Instruction:</span> par {(Array.isArray(v.instructeur) ? v.instructeur[0] : v.instructeur)?.identifiant ?? '—'} — {v.instruction_type || '—'}</p>
+                )}
+                {v.type_vol === 'Vol militaire' && (v.escadrille_ou_escadron || v.nature_vol_militaire || v.nature_vol_militaire_autre) && (
+                  <p><span className="text-slate-500">Vol militaire:</span> {[v.escadrille_ou_escadron, v.nature_vol_militaire === 'autre' ? v.nature_vol_militaire_autre : v.nature_vol_militaire].filter(Boolean).join(' — ') || '—'}</p>
                 )}
               </div>
               <div className="flex flex-col gap-2">
