@@ -228,3 +228,29 @@ export async function PATCH(
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
+
+/** Supprimer définitivement un plan clôturé sans l'enregistrer en vol (pilote uniquement). */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+
+    const admin = createAdminClient();
+    const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut').eq('id', id).single();
+    if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
+    if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan ne vous appartient pas.' }, { status: 403 });
+    if (plan.statut !== 'cloture') return NextResponse.json({ error: 'Seul un plan clôturé peut être supprimé ainsi (ne pas enregistrer).' }, { status: 400 });
+
+    const { error } = await admin.from('plans_vol').delete().eq('id', id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error('plans-vol DELETE:', e);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  }
+}

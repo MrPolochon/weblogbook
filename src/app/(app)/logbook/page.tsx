@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Plus } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
+import NePasEnregistrerPlanButton from './NePasEnregistrerPlanButton';
 
 export default async function LogbookPage() {
   const supabase = await createClient();
@@ -99,10 +100,16 @@ export default async function LogbookPage() {
           <p className="text-sm text-slate-400 mb-3">
             {plansVolClotures.length} plan{plansVolClotures.length > 1 ? 's' : ''} clôturé{plansVolClotures.length > 1 ? 's' : ''}. Cliquez sur &laquo; Nouveau vol &raquo; pour remplir le formulaire automatiquement.
           </p>
-          <Link href="/logbook/nouveau" className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700">
-            <Plus className="h-4 w-4" />
-            Nouveau vol (remplissage plan de vol)
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/logbook/nouveau" className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700">
+              <Plus className="h-4 w-4" />
+              Nouveau vol (remplissage plan de vol)
+            </Link>
+            <NePasEnregistrerPlanButton planId={plansVolClotures[0].id} />
+          </div>
+          <p className="text-xs text-slate-500 mt-2">
+            &laquo; Ne pas enregistrer ce vol &raquo; supprime définitivement le plan de vol sans créer de vol.
+          </p>
         </div>
       )}
 
