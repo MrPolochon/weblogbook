@@ -10,6 +10,7 @@ export default function AdminAtcComptes({ comptes, grades }: { comptes: Compte[]
   const router = useRouter();
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [accesPiloteLoadingId, setAccesPiloteLoadingId] = useState<string | null>(null);
+  const [revoquerLoadingId, setRevoquerLoadingId] = useState<string | null>(null);
 
   function gradeNom(gradeId: string | null): string {
     if (!gradeId) return '—';
@@ -49,6 +50,25 @@ export default function AdminAtcComptes({ comptes, grades }: { comptes: Compte[]
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setAccesPiloteLoadingId(null);
+    }
+  }
+
+  async function handleRevoquerAccesPilote(profileId: string) {
+    if (!confirm('Révoquer l\'accès à l\'espace pilote ? Le compte deviendra ATC uniquement (rôle Armée sera retiré).')) return;
+    setRevoquerLoadingId(profileId);
+    try {
+      const res = await fetch(`/api/pilotes/${profileId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: 'atc' }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setRevoquerLoadingId(null);
     }
   }
 
@@ -96,6 +116,18 @@ export default function AdminAtcComptes({ comptes, grades }: { comptes: Compte[]
                         className="text-xs font-medium text-sky-600 hover:text-sky-800 hover:underline disabled:opacity-50"
                       >
                         {accesPiloteLoadingId === p.id ? '…' : "Autoriser l'accès pilote"}
+                      </button>
+                    </span>
+                  ) : (p.role === 'pilote' && p.atc) ? (
+                    <span className="inline-flex flex-wrap items-center gap-1.5">
+                      <span className="text-slate-600">Oui</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRevoquerAccesPilote(p.id)}
+                        disabled={revoquerLoadingId === p.id}
+                        className="text-xs font-medium text-amber-600 hover:text-amber-800 hover:underline disabled:opacity-50"
+                      >
+                        {revoquerLoadingId === p.id ? '…' : "Révoquer l'accès pilote"}
                       </button>
                     </span>
                   ) : (

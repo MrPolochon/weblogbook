@@ -26,8 +26,9 @@ export default function EditPiloteForm({
   const [identifiant, setIdentifiant] = useState(identifiantInitial);
   const [armee, setArmee] = useState(armeeInitial);
   const [atc, setAtc] = useState(atcInitial);
-  const [accesPilote, setAccesPilote] = useState(false);
   const isAtcOnly = roleInitial === 'atc';
+  const isPiloteEtAtc = roleInitial === 'pilote' && atcInitial;
+  const [accesPilote, setAccesPilote] = useState(isAtcOnly ? false : isPiloteEtAtc);
   const [heures, setHeures] = useState(String(heuresInitiales));
   const [blockMinutes, setBlockMinutes] = useState('');
   const [blockReasonVal, setBlockReasonVal] = useState(blockReason ?? '');
@@ -35,6 +36,7 @@ export default function EditPiloteForm({
   const [loadingReset, setLoadingReset] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { setAtc(atcInitial); }, [atcInitial]);
+  useEffect(() => { setAccesPilote(roleInitial === 'atc' ? false : !!(roleInitial === 'pilote' && atcInitial)); }, [roleInitial, atcInitial]);
 
   const isBlocked = blockedUntil ? new Date(blockedUntil) > new Date() : false;
 
@@ -50,6 +52,7 @@ export default function EditPiloteForm({
         if (accesPilote) body.role = 'pilote';
       } else {
         body.atc = atc;
+        if (isPiloteEtAtc && !accesPilote) body.role = 'atc';
       }
       const res = await fetch(`/api/pilotes/${piloteId}`, {
         method: 'PATCH',
@@ -190,6 +193,12 @@ export default function EditPiloteForm({
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={atc} onChange={(e) => setAtc(e.target.checked)} className="rounded" />
               <span className="text-slate-300">ATC (Espace ATC)</span>
+            </label>
+          )}
+          {isPiloteEtAtc && (
+            <label className="flex items-center gap-2 cursor-pointer" title="Décocher pour révoquer l'accès à l'espace pilote (compte deviendra ATC uniquement)">
+              <input type="checkbox" checked={accesPilote} onChange={(e) => setAccesPilote(e.target.checked)} className="rounded" />
+              <span className="text-slate-300">Accès pilote (Espace pilote)</span>
             </label>
           )}
         </div>
