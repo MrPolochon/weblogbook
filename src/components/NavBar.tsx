@@ -2,42 +2,18 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, LayoutDashboard, FileText, User, LogOut, ArrowLeftRight, Shield } from 'lucide-react';
+import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
-
-const MODE_KEY = 'logbook_interface_mode';
-
-export function getInterfaceMode(): 'admin' | 'pilote' {
-  if (typeof window === 'undefined') return 'pilote';
-  return (localStorage.getItem(MODE_KEY) as 'admin' | 'pilote') || 'pilote';
-}
-
-export function setInterfaceMode(mode: 'admin' | 'pilote') {
-  if (typeof window !== 'undefined') localStorage.setItem(MODE_KEY, mode);
-}
 
 export default function NavBar({ isAdmin, isArmee = false, pendingVolsCount = 0, volsAConfirmerCount = 0 }: { isAdmin: boolean; isArmee?: boolean; pendingVolsCount?: number; volsAConfirmerCount?: number }) {
   const pathname = usePathname();
   const router = useRouter();
-  const mode = typeof window !== 'undefined' ? getInterfaceMode() : 'pilote';
 
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/login');
-    router.refresh();
-  }
-
-  function switchToAdmin() {
-    setInterfaceMode('admin');
-    router.push('/admin');
-    router.refresh();
-  }
-
-  function switchToPilote() {
-    setInterfaceMode('pilote');
-    router.push('/logbook');
     router.refresh();
   }
 
@@ -130,14 +106,14 @@ export default function NavBar({ isAdmin, isArmee = false, pendingVolsCount = 0,
         </nav>
         <div className="flex items-center gap-2">
           {isAdmin && (
-            <button
-              onClick={mode === 'pilote' ? switchToAdmin : switchToPilote}
+            <Link
+              href="/atc"
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-slate-100"
-              title={mode === 'pilote' ? 'Passer en interface Admin' : 'Passer en interface Pilote'}
+              title="Passer à l'espace ATC"
             >
-              <ArrowLeftRight className="h-4 w-4" />
-              {mode === 'pilote' ? 'Admin' : 'Pilote'}
-            </button>
+              <Radio className="h-4 w-4" />
+              Espace ATC
+            </Link>
           )}
           <Link
             href="/compte"

@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Radio, LayoutDashboard, LogOut } from 'lucide-react';
+import { Radio, LayoutDashboard, LogOut, FileText, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 
@@ -61,6 +61,16 @@ export default function AtcNavBar({
             <Radio className="h-4 w-4" />
             Tableau de bord ATC
           </Link>
+          <Link
+            href="/atc/documents"
+            className={cn(
+              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              pathname.startsWith('/atc/documents') ? 'bg-sky-100 text-sky-800' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+            )}
+          >
+            <FileText className="h-4 w-4" />
+            Documents
+          </Link>
           {isAdmin && (
             <Link
               href="/atc/admin"
@@ -79,7 +89,17 @@ export default function AtcNavBar({
             <AtcSessionCompte aeroport={sessionInfo.aeroport} position={sessionInfo.position} startedAt={sessionInfo.started_at} />
           )}
         </div>
-        <div className="flex justify-end">
+        <div className="flex justify-end items-center gap-2">
+          {isAdmin && (
+            <Link
+              href="/logbook"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+              title="Passer à l'espace pilotes"
+            >
+              <BookOpen className="h-4 w-4" />
+              Espace pilotes
+            </Link>
+          )}
           {!enService && (
             <button
               onClick={handleLogout}
