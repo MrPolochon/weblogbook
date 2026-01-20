@@ -12,7 +12,7 @@ export default async function AdminPilotesPage() {
 
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at')
+    .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc')
     .order('identifiant');
 
   const pilotes = (profiles || []).filter((p) => p.role !== 'admin');
@@ -24,6 +24,8 @@ export default async function AdminPilotesPage() {
       <tr key={p.id} className="border-b border-slate-700/50">
         <td className="py-3 pr-4 font-medium text-slate-200">{p.identifiant}</td>
         <td className="py-3 pr-4 text-slate-300">{p.role === 'admin' ? 'admin' : 'pilote'}</td>
+        <td className="py-3 pr-4 text-slate-300">{p.armee ? 'Oui' : '—'}</td>
+        <td className="py-3 pr-4 text-slate-300">{p.atc ? 'Oui' : '—'}</td>
         <td className="py-3 pr-4 text-slate-300">{formatDuree(p.heures_initiales_minutes ?? 0)}</td>
         <td className="py-3 pr-4">
           {blocked ? (
@@ -66,6 +68,8 @@ export default async function AdminPilotesPage() {
                 <tr className="border-b border-slate-600 text-left text-slate-400">
                   <th className="pb-2 pr-4">Identifiant</th>
                   <th className="pb-2 pr-4">Pilote / Admin</th>
+                  <th className="pb-2 pr-4">Armée</th>
+                  <th className="pb-2 pr-4">ATC</th>
                   <th className="pb-2 pr-4">Heures initiales</th>
                   <th className="pb-2 pr-4">Blocage</th>
                   <th className="pb-2 pr-4">Créé le</th>
@@ -89,6 +93,8 @@ export default async function AdminPilotesPage() {
                 <tr className="border-b border-slate-600 text-left text-slate-400">
                   <th className="pb-2 pr-4">Identifiant</th>
                   <th className="pb-2 pr-4">Pilote / Admin</th>
+                  <th className="pb-2 pr-4">Armée</th>
+                  <th className="pb-2 pr-4">ATC</th>
                   <th className="pb-2 pr-4">Heures initiales</th>
                   <th className="pb-2 pr-4">Blocage</th>
                   <th className="pb-2 pr-4">Créé le</th>
