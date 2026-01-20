@@ -1,9 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import CreateNotamForm from '@/app/(app)/notams/CreateNotamForm';
-import NotamCard from '@/app/(app)/notams/NotamCard';
-import NotamDeleteButton from '@/app/(app)/notams/NotamDeleteButton';
+import NotamsSection from '@/app/(app)/notams/NotamsSection';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,20 +31,7 @@ export default async function AtcNotamsPage() {
         <a href="https://umvie.com/guide-pratique-pour-lire-les-notam-et-rester-informe/" target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:underline">guide pour lire les NOTAM</a>.
       </p>
 
-      {isAdmin && <CreateNotamForm variant="atc" />}
-
-      <div className="card">
-        <h2 className="text-lg font-medium text-slate-800 mb-4">NOTAMs publiés</h2>
-        {!notams || notams.length === 0 ? (
-          <p className="text-slate-600">Aucun NOTAM.</p>
-        ) : (
-          <div className="space-y-4">
-            {notams.map((n) => (
-              <NotamCard key={n.id} n={n} variant="atc" adminDeleteButton={isAdmin ? <NotamDeleteButton notamId={n.id} variant="atc" /> : undefined} />
-            ))}
-          </div>
-        )}
-      </div>
+      <NotamsSection notams={notams} isAdmin={isAdmin} variant="atc" />
     </div>
   );
 }

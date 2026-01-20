@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
-export default function CreateNotamForm({ variant = 'default' }: { variant?: 'default' | 'atc' }) {
+export default function CreateNotamForm({ variant = 'default', embedded, onSuccess }: { variant?: 'default' | 'atc'; embedded?: boolean; onSuccess?: () => void }) {
   const router = useRouter();
   const [code_aeroport, setCodeAeroport] = useState('');
   const [du_at, setDuAt] = useState('');
@@ -69,6 +69,7 @@ export default function CreateNotamForm({ variant = 'default' }: { variant?: 'de
       setChampQ('');
       setPriorite('');
       setReferenceFr('');
+      onSuccess?.();
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
@@ -77,8 +78,9 @@ export default function CreateNotamForm({ variant = 'default' }: { variant?: 'de
     }
   }
 
+  const wrap = embedded ? `pt-4 border-t mt-4 ${isAtc ? 'border-slate-300' : 'border-slate-600/50'}` : 'card';
   return (
-    <div className={isAtc ? 'card' : 'card'}>
+    <div className={embedded ? wrap : 'card'}>
       <h2 className={`text-lg font-medium mb-4 ${isAtc ? 'text-slate-800' : 'text-slate-200'}`}>Créer un NOTAM</h2>
       <p className={`text-sm mb-4 ${isAtc ? 'text-slate-600' : 'text-slate-400'}`}>
         L&apos;identifiant est généré automatiquement : [code aéroport]-[Axxxx/AA]. Les heures sont en UTC. Champ A = lieu (code OACI ou coordonnées). Champ E = description en langage clair.
