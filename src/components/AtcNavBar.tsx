@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User } from 'lucide-react';
+import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 
@@ -72,6 +72,16 @@ export default function AtcNavBar({
           >
             <FileText className="h-4 w-4" />
             Documents
+          </Link>
+          <Link
+            href="/atc/notams"
+            className={cn(
+              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              pathname.startsWith('/atc/notams') ? 'bg-sky-100 text-sky-800' : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+            )}
+          >
+            <ScrollText className="h-4 w-4" />
+            NOTAMs
           </Link>
           {isAdmin && (
             <Link

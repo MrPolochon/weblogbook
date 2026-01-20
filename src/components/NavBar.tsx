@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield } from 'lucide-react';
+import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -102,6 +102,18 @@ export default function NavBar({ isAdmin, isArmee = false, pendingVolsCount = 0,
           >
             <FileText className="h-4 w-4" />
             Documents
+          </Link>
+          <Link
+            href="/notams"
+            className={cn(
+              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              pathname.startsWith('/notams')
+                ? 'bg-slate-700/50 text-sky-300'
+                : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+            )}
+          >
+            <ScrollText className="h-4 w-4" />
+            NOTAMs
           </Link>
         </nav>
         <div className="flex items-center gap-2">

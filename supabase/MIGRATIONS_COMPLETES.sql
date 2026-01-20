@@ -21,9 +21,11 @@ CREATE POLICY "vols_select_copilote" ON public.vols FOR SELECT TO authenticated
 CREATE INDEX IF NOT EXISTS idx_vols_copilote ON public.vols(copilote_id);
 
 -- ----- 3) Instruction (instructeur, type) -----
+-- On inclut 'Vol militaire' dès ici pour éviter une erreur 23514 si des vols militaires
+-- existent déjà quand on ré-applique les migrations (le bloc 7 ne fait que ré-ajouter la même liste).
 ALTER TABLE public.vols DROP CONSTRAINT IF EXISTS vols_type_vol_check;
 ALTER TABLE public.vols ADD CONSTRAINT vols_type_vol_check
-  CHECK (type_vol IN ('IFR', 'VFR', 'Instruction'));
+  CHECK (type_vol IN ('IFR', 'VFR', 'Instruction', 'Vol militaire'));
 
 ALTER TABLE public.vols
   ADD COLUMN IF NOT EXISTS instructeur_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
@@ -179,3 +181,35 @@ ALTER TABLE public.plans_vol DROP CONSTRAINT IF EXISTS plans_vol_statut_check;
 ALTER TABLE public.plans_vol ADD CONSTRAINT plans_vol_statut_check CHECK (statut IN (
   'depose', 'en_attente', 'accepte', 'refuse', 'en_cours', 'automonitoring', 'en_attente_cloture', 'cloture'
 ));
+
+-- ----- 10) NOTAMs -----
+CREATE TABLE IF NOT EXISTS public.notams (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  identifiant TEXT NOT NULL UNIQUE,
+  code_aeroport TEXT NOT NULL,
+  du_at TIMESTAMPTZ NOT NULL,
+  au_at TIMESTAMPTZ NOT NULL,
+  champ_a TEXT,
+  champ_e TEXT NOT NULL,
+  champ_d TEXT,
+  champ_q TEXT,
+  priorite TEXT,
+  reference_fr TEXT,
+  annule BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notams_au_at ON public.notams(au_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notams_annule ON public.notams(annule) WHERE annule = false;
+ALTER TABLE public.notams ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "notams_select_authenticated" ON public.notams;
+CREATE POLICY "notams_select_authenticated" ON public.notams FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "notams_insert_admin" ON public.notams;
+CREATE POLICY "notams_insert_admin" ON public.notams FOR INSERT TO authenticated
+  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+DROP POLICY IF EXISTS "notams_update_admin" ON public.notams;
+CREATE POLICY "notams_update_admin" ON public.notams FOR UPDATE TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+DROP POLICY IF EXISTS "notams_delete_admin" ON public.notams;
+CREATE POLICY "notams_delete_admin" ON public.notams FOR DELETE TO authenticated
+  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
