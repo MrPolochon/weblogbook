@@ -23,7 +23,7 @@ function formatDUAU(iso: string): string {
   return `${j} ${m} ${a} ${h}:${min}`;
 }
 
-export default function NotamCard({ n, variant = 'default' }: { n: Notam; variant?: 'default' | 'atc' }) {
+export default function NotamCard({ n, variant = 'default', adminDeleteButton }: { n: Notam; variant?: 'default' | 'atc'; adminDeleteButton?: React.ReactNode }) {
   const now = Date.now();
   const du = new Date(n.du_at).getTime();
   const au = new Date(n.au_at).getTime();
@@ -73,6 +73,7 @@ export default function NotamCard({ n, variant = 'default' }: { n: Notam; varian
           {!n.annule && expire && <p className="text-slate-500 text-xs">— Expiré —</p>}
           {!n.annule && aVenir && <p className="text-slate-500 text-xs">— À venir —</p>}
         </div>
+        {adminDeleteButton && <div className="flex-shrink-0">{adminDeleteButton}</div>}
       </div>
     </article>
   );
