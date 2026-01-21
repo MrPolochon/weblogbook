@@ -213,3 +213,7 @@ CREATE POLICY "notams_update_admin" ON public.notams FOR UPDATE TO authenticated
 DROP POLICY IF EXISTS "notams_delete_admin" ON public.notams;
 CREATE POLICY "notams_delete_admin" ON public.notams FOR DELETE TO authenticated
   USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+
+-- ----- 11) Temps total en service ATC -----
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS atc_temps_total_minutes INTEGER NOT NULL DEFAULT 0;

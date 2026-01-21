@@ -48,6 +48,14 @@ export async function DELETE() {
     const { count } = await admin.from('plans_vol').select('*', { count: 'exact', head: true }).eq('current_holder_user_id', user.id).in('statut', ['en_attente', 'en_cours', 'accepte', 'en_attente_cloture']);
     if ((count ?? 0) > 0) return NextResponse.json({ error: 'Vous avez des plans de vol. Transférez-les ou clôturez-les avant de vous mettre hors service.' }, { status: 400 });
 
+    const { data: session } = await supabase.from('atc_sessions').select('started_at').eq('user_id', user.id).single();
+    if (session?.started_at) {
+      const durationMinutes = Math.max(0, Math.floor((Date.now() - new Date(session.started_at).getTime()) / 60_000));
+      const { data: prof } = await supabase.from('profiles').select('atc_temps_total_minutes').eq('id', user.id).single();
+      const prev = (prof?.atc_temps_total_minutes ?? 0) | 0;
+      await supabase.from('profiles').update({ atc_temps_total_minutes: prev + durationMinutes }).eq('id', user.id);
+    }
+
     const { error } = await supabase.from('atc_sessions').delete().eq('user_id', user.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true });
