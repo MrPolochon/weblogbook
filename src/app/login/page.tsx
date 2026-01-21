@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
 
@@ -14,7 +13,6 @@ export default function LoginPage() {
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
   const [espaceAtc, setEspaceAtc] = useState(false);
-  const [logoError, setLogoError] = useState(false);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -64,30 +62,29 @@ export default function LoginPage() {
     }
   }
 
+  const fond = (
+    <div
+      className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: 'url(/ptfs-logo.png)' }}
+    />
+  );
+  const overlay = <div className="absolute inset-0 bg-slate-900/75" />;
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-slate-400">Chargement…</p>
+      <div className="min-h-screen relative flex items-center justify-center">
+        {fond}
+        {overlay}
+        <p className="relative z-10 text-slate-400">Chargement…</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="card w-full max-w-md">
-        {!logoError && (
-          <div className="flex justify-center mb-6">
-            <Image
-              src="/ptfs-logo.png"
-              alt="PTFS"
-              width={140}
-              height={140}
-              className="rounded-full object-cover"
-              priority
-              onError={() => setLogoError(true)}
-            />
-          </div>
-        )}
+    <div className="min-h-screen relative flex items-center justify-center p-4">
+      {fond}
+      {overlay}
+      <div className="relative z-10 card w-full max-w-md">
         <h1 className="text-xl font-semibold text-slate-100 mb-2">Connexion</h1>
         <p className="text-slate-400 text-sm mb-6">Identifiant et mot de passe fournis par votre administrateur.</p>
         <form onSubmit={handleSubmit} className="space-y-4">
