@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { ArrowLeft, FileText, AlertCircle } from 'lucide-react';
+import { ArrowLeft, FileText, AlertCircle, Bell } from 'lucide-react';
 import PlanVolCloturerButton from './PlanVolCloturerButton';
 
 const STATUT_LIB: Record<string, string> = {
@@ -32,6 +32,7 @@ export default async function MesPlansVolPage() {
   // Masquer les plans refusés et clôturés (la liste reste vide s’il n’y a que ceux-là)
   const plans = (raw || []).filter((p: { statut: string }) => p.statut !== 'cloture');
   const plansRefuses = plans.filter((p: { statut: string }) => p.statut === 'refuse');
+  const plansNonClotures = plans.filter((p: { statut: string }) => p.statut !== 'refuse');
 
   return (
     <div className="space-y-6">
@@ -44,6 +45,20 @@ export default async function MesPlansVolPage() {
           Mes plans de vol
         </h1>
       </div>
+
+      {plansNonClotures.length > 0 && (
+        <div className="rounded-lg border-2 border-amber-500/50 bg-amber-500/10 p-4 flex items-start gap-3">
+          <Bell className="h-6 w-6 flex-shrink-0 text-amber-400" />
+          <div>
+            <p className="font-semibold text-amber-200">
+              {plansNonClotures.length} plan{plansNonClotures.length > 1 ? 's' : ''} de vol non clôturé{plansNonClotures.length > 1 ? 's' : ''}
+            </p>
+            <p className="text-sm text-amber-100/90 mt-1">
+              Pensez à clôturer vos plans une fois le vol terminé pour finaliser l&apos;enregistrement.
+            </p>
+          </div>
+        </div>
+      )}
 
       {plansRefuses.length > 0 && (
         <div className="rounded-lg border-2 border-red-500/60 bg-red-500/15 p-4 flex items-start gap-3">
