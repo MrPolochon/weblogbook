@@ -20,7 +20,7 @@ export default async function AtcAdminPage() {
     supabase.from('atc_sessions').select('user_id, aeroport, position, started_at').order('aeroport').order('position'),
   ]);
 
-  const userIds = [...new Set((sessions || []).map((s) => s.user_id))];
+  const userIds = Array.from(new Set((sessions || []).map((s) => s.user_id)));
   const { data: profs } = userIds.length > 0 ? await supabase.from('profiles').select('id, identifiant').in('id', userIds) : { data: [] };
   const identifiantByUserId = new Map((profs || []).map((p) => [p.id, p.identifiant]));
   const sessionsEnLigne = (sessions || []).map((s) => ({
