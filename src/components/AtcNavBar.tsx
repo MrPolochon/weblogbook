@@ -56,7 +56,7 @@ export default function AtcNavBar({
   return (
     <header className="sticky top-0 z-50 border-b border-slate-300 bg-white/90 backdrop-blur">
       <div className="mx-auto grid h-14 max-w-6xl grid-cols-2 md:grid-cols-3 items-center gap-2 sm:gap-4 px-3 sm:px-4">
-        <nav className="flex flex-nowrap items-center gap-2 min-w-0 overflow-x-auto">
+        <nav className="flex flex-nowrap items-center gap-1 sm:gap-2 min-w-0 overflow-hidden">
           <Link href="/atc" className={cn(linkBase, pathname === '/atc' ? linkActive : linkInactive)}>
             <Radio className="h-4 w-4 flex-shrink-0" />
             <span className="hidden md:inline">Tableau de bord ATC</span>
