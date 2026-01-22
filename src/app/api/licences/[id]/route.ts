@@ -31,7 +31,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const { type, type_avion_id, langue, date_delivrance, date_expiration, a_vie, note } = body;
 
     const admin = createAdminClient();
-    const { data: existing } = await admin.from('licences_qualifications').select('type').eq('id', params.id).single();
+    const { data: existing } = await admin.from('licences_qualifications').select('type, a_vie').eq('id', params.id).single();
     if (!existing) return NextResponse.json({ error: 'Licence introuvable' }, { status: 404 });
 
     const updates: any = {};
