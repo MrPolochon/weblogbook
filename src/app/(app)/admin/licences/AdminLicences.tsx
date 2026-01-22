@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Award, Plus, Edit2, Trash2, X } from 'lucide-react';
+import { Award, Plus, Edit2, Trash2, X, Layers } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -46,6 +46,7 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
   const [licences, setLicences] = useState<Licence[]>([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [modeMultiple, setModeMultiple] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     type: '',
@@ -56,6 +57,15 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
     a_vie: false,
     note: '',
   });
+  const [multipleLicences, setMultipleLicences] = useState<Array<{
+    type: string;
+    type_avion_id: string;
+    langue: string;
+    date_delivrance: string;
+    date_expiration: string;
+    a_vie: boolean;
+    note: string;
+  }>>([{ type: '', type_avion_id: '', langue: '', date_delivrance: '', date_expiration: '', a_vie: false, note: '' }]);
 
   useEffect(() => {
     if (selectedPiloteId) {
@@ -74,6 +84,7 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
 
   function handleNew() {
     setEditingId(null);
+    setModeMultiple(false);
     setFormData({
       type: '',
       type_avion_id: '',
@@ -83,7 +94,43 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
       a_vie: false,
       note: '',
     });
+    setMultipleLicences([{ type: '', type_avion_id: '', langue: '', date_delivrance: '', date_expiration: '', a_vie: false, note: '' }]);
     setShowForm(true);
+  }
+
+  function handleNewMultiple() {
+    setEditingId(null);
+    setModeMultiple(true);
+    setFormData({
+      type: '',
+      type_avion_id: '',
+      langue: '',
+      date_delivrance: '',
+      date_expiration: '',
+      a_vie: false,
+      note: '',
+    });
+    setMultipleLicences([{ type: '', type_avion_id: '', langue: '', date_delivrance: '', date_expiration: '', a_vie: false, note: '' }]);
+    setShowForm(true);
+  }
+
+  function addMultipleRow() {
+    setMultipleLicences([...multipleLicences, { type: '', type_avion_id: '', langue: '', date_delivrance: '', date_expiration: '', a_vie: false, note: '' }]);
+  }
+
+  function removeMultipleRow(index: number) {
+    if (multipleLicences.length > 1) {
+      setMultipleLicences(multipleLicences.filter((_, i) => i !== index));
+    }
+  }
+
+  function updateMultipleRow(index: number, field: string, value: any) {
+    const updated = [...multipleLicences];
+    updated[index] = { ...updated[index], [field]: value };
+    if (field === 'a_vie' && value) {
+      updated[index].date_expiration = '';
+    }
+    setMultipleLicences(updated);
   }
 
   function handleEdit(lic: Licence) {
@@ -153,6 +200,67 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
     }
   }
 
+  async function handleSubmitMultiple(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedPiloteId) return;
+    
+    const validLicences = multipleLicences.filter((lic) => lic.type);
+    if (validLicences.length === 0) {
+      alert('Ajoutez au moins une licence avec un type');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const promises = validLicences.map(async (lic) => {
+        const body: any = {
+          user_id: selectedPiloteId,
+          type: lic.type,
+          a_vie: lic.a_vie,
+        };
+        if (lic.type === TYPE_QUALIFICATION_TYPE) {
+          if (!lic.type_avion_id) {
+            throw new Error('Type d\'avion requis pour Qualification Type');
+          }
+          body.type_avion_id = lic.type_avion_id;
+        }
+        if (TYPES_COM.includes(lic.type as any)) {
+          if (!lic.langue) {
+            throw new Error('Langue requise pour COM');
+          }
+          body.langue = lic.langue;
+        }
+        if (lic.date_delivrance) body.date_delivrance = lic.date_delivrance;
+        if (lic.date_expiration && !lic.a_vie) body.date_expiration = lic.date_expiration;
+        if (lic.note) body.note = lic.note;
+
+        const res = await fetch('/api/licences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || 'Erreur');
+        return d;
+      });
+
+      await Promise.all(promises);
+      setShowForm(false);
+      setModeMultiple(false);
+      router.refresh();
+      if (selectedPiloteId) {
+        const r = await fetch(`/api/licences?user_id=${selectedPiloteId}`);
+        const data = await r.json();
+        if (data.data) setLicences(data.data);
+      }
+      alert(`${validLicences.length} licence(s) ajoutée(s) avec succès`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleDelete(id: string) {
     if (!confirm('Supprimer cette licence ?')) return;
     setLoading(true);
@@ -205,15 +313,26 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
               <h2 className="text-lg font-medium text-slate-200">
                 Licences de {selectedPilote?.identifiant}
               </h2>
-              <button
-                type="button"
-                onClick={handleNew}
-                className="btn-primary flex items-center gap-2"
-                disabled={loading}
-              >
-                <Plus className="h-4 w-4" />
-                Ajouter
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleNewMultiple}
+                  className="btn-secondary flex items-center gap-2"
+                  disabled={loading}
+                >
+                  <Layers className="h-4 w-4" />
+                  Ajouter plusieurs
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNew}
+                  className="btn-primary flex items-center gap-2"
+                  disabled={loading}
+                >
+                  <Plus className="h-4 w-4" />
+                  Ajouter une
+                </button>
+              </div>
             </div>
 
             {loading && !showForm ? (
@@ -272,7 +391,7 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
             )}
           </div>
 
-          {showForm && (
+          {showForm && !modeMultiple && (
             <div className="card">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-medium text-slate-200">
@@ -393,6 +512,175 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
                   >
                     Annuler
                   </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {showForm && modeMultiple && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium text-slate-200">Ajouter plusieurs licences</h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForm(false);
+                    setModeMultiple(false);
+                  }}
+                  className="text-slate-400 hover:text-slate-300"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <form onSubmit={handleSubmitMultiple} className="space-y-4">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-600 text-left text-slate-400">
+                        <th className="pb-2 pr-2">Type</th>
+                        <th className="pb-2 pr-2">Avion</th>
+                        <th className="pb-2 pr-2">Langue</th>
+                        <th className="pb-2 pr-2">Délivré</th>
+                        <th className="pb-2 pr-2">Expire</th>
+                        <th className="pb-2 pr-2">À vie</th>
+                        <th className="pb-2 pr-2">Note</th>
+                        <th className="pb-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {multipleLicences.map((lic, index) => {
+                        const needsTypeAvion = lic.type === TYPE_QUALIFICATION_TYPE;
+                        const needsLangue = TYPES_COM.includes(lic.type as any);
+                        return (
+                          <tr key={index} className="border-b border-slate-700/50">
+                            <td className="py-2 pr-2">
+                              <select
+                                className="input py-1.5 text-sm"
+                                value={lic.type}
+                                onChange={(e) => updateMultipleRow(index, 'type', e.target.value)}
+                                required
+                              >
+                                <option value="">—</option>
+                                {TYPES.map((t) => (
+                                  <option key={t} value={t}>
+                                    {t}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="py-2 pr-2">
+                              {needsTypeAvion ? (
+                                <select
+                                  className="input py-1.5 text-sm"
+                                  value={lic.type_avion_id}
+                                  onChange={(e) => updateMultipleRow(index, 'type_avion_id', e.target.value)}
+                                  required
+                                >
+                                  <option value="">—</option>
+                                  {typesAvion.map((t) => (
+                                    <option key={t.id} value={t.id}>
+                                      {t.constructeur} {t.nom}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <span className="text-slate-500 text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="py-2 pr-2">
+                              {needsLangue ? (
+                                <input
+                                  type="text"
+                                  className="input py-1.5 text-sm"
+                                  value={lic.langue}
+                                  onChange={(e) => updateMultipleRow(index, 'langue', e.target.value)}
+                                  placeholder="Langue"
+                                  required
+                                />
+                              ) : (
+                                <span className="text-slate-500 text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="py-2 pr-2">
+                              <input
+                                type="date"
+                                className="input py-1.5 text-sm"
+                                value={lic.date_delivrance}
+                                onChange={(e) => updateMultipleRow(index, 'date_delivrance', e.target.value)}
+                              />
+                            </td>
+                            <td className="py-2 pr-2">
+                              {!lic.a_vie ? (
+                                <input
+                                  type="date"
+                                  className="input py-1.5 text-sm"
+                                  value={lic.date_expiration}
+                                  onChange={(e) => updateMultipleRow(index, 'date_expiration', e.target.value)}
+                                />
+                              ) : (
+                                <span className="text-slate-500 text-xs">À vie</span>
+                              )}
+                            </td>
+                            <td className="py-2 pr-2">
+                              <input
+                                type="checkbox"
+                                checked={lic.a_vie}
+                                onChange={(e) => updateMultipleRow(index, 'a_vie', e.target.checked)}
+                                className="rounded"
+                              />
+                            </td>
+                            <td className="py-2 pr-2">
+                              <input
+                                type="text"
+                                className="input py-1.5 text-sm"
+                                value={lic.note}
+                                onChange={(e) => updateMultipleRow(index, 'note', e.target.value)}
+                                placeholder="Note"
+                              />
+                            </td>
+                            <td className="py-2">
+                              {multipleLicences.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeMultipleRow(index)}
+                                  className="text-red-400 hover:text-red-300"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={addMultipleRow}
+                    className="btn-secondary flex items-center gap-2"
+                    disabled={loading}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Ajouter une ligne
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button type="submit" className="btn-primary" disabled={loading}>
+                      {loading ? 'Enregistrement…' : `Ajouter ${multipleLicences.filter((l) => l.type).length} licence(s)`}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowForm(false);
+                        setModeMultiple(false);
+                      }}
+                      className="btn-secondary"
+                      disabled={loading}
+                    >
+                      Annuler
+                    </button>
+                  </div>
                 </div>
               </form>
             </div>
