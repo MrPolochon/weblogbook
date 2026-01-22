@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import CompteForm from './CompteForm';
+import LicencesSection from '@/components/LicencesSection';
 
 export default async function ComptePage() {
   const supabase = await createClient();
@@ -21,6 +22,7 @@ export default async function ComptePage() {
         <p className="text-slate-100 font-medium">{profile?.identifiant ?? '—'}</p>
       </div>
       <CompteForm armee={Boolean(profile?.armee)} isAdmin={profile?.role === 'admin'} />
+      <LicencesSection userId={user.id} variant="default" />
     </div>
   );
 }
