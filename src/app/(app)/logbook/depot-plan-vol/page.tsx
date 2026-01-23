@@ -11,6 +11,44 @@ export default async function DepotPlanVolPage() {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   if (profile?.role === 'atc') redirect('/logbook');
 
+  const [{ data: employe }, { data: avionsCompagnie }, { data: inventairePersonnel }, { data: typesAvion }] = await Promise.all([
+    supabase.from('compagnies_employes').select('compagnie_id, compagnies(id, nom)').eq('user_id', user.id).single(),
+    supabase
+      .from('compagnies_employes')
+      .select('compagnie_id')
+      .eq('user_id', user.id)
+      .single()
+      .then((r) => {
+        if (r.data) {
+          return supabase
+            .from('compagnies_avions')
+            .select('id, type_avion_id, quantite, nom_avion, types_avion(nom, constructeur)')
+            .eq('compagnie_id', r.data.compagnie_id);
+        }
+        return { data: [] };
+      }),
+    supabase
+      .from('inventaire_pilote')
+      .select('id, type_avion_id, nom_avion, types_avion(nom, constructeur)')
+      .eq('user_id', user.id),
+    supabase.from('types_avion').select('id, nom, constructeur').order('ordre'),
+  ]);
+
+  const compagnieId = employe?.compagnie_id;
+  const compagnieNom = employe ? (employe.compagnies as any).nom : null;
+
+  const { data: avionsUtilises } = compagnieId
+    ? await supabase
+        .from('avions_utilisation')
+        .select('compagnie_avion_id')
+        .in('compagnie_avion_id', (avionsCompagnie?.data || []).map((a: any) => a.id))
+    : { data: [] };
+
+  const avionsDisponibles = (avionsCompagnie?.data || []).filter((a: any) => {
+    const utilise = (avionsUtilises || []).some((u: any) => u.compagnie_avion_id === a.id);
+    return !utilise;
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -19,7 +57,21 @@ export default async function DepotPlanVolPage() {
         </Link>
         <h1 className="text-2xl font-semibold text-slate-100">Déposer un plan de vol</h1>
       </div>
-      <DepotPlanVolForm />
+      <DepotPlanVolForm
+        compagnieId={compagnieId}
+        compagnieNom={compagnieNom}
+        avionsCompagnie={avionsDisponibles.map((a: any) => ({
+          id: a.id,
+          typeAvionId: a.type_avion_id,
+          nom: a.nom_avion || `${(a.types_avion as any).constructeur} ${(a.types_avion as any).nom}`,
+        }))}
+        inventairePersonnel={(inventairePersonnel || []).map((a: any) => ({
+          id: a.id,
+          typeAvionId: a.type_avion_id,
+          nom: a.nom_avion || `${(a.types_avion as any).constructeur} ${(a.types_avion as any).nom}`,
+        }))}
+        typesAvion={(typesAvion || []).map((t) => ({ id: t.id, nom: `${t.constructeur} ${t.nom}` }))}
+      />
     </div>
   );
 }

@@ -7,13 +7,13 @@ export default function CreatePiloteForm() {
   const router = useRouter();
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'pilote' | 'admin' | 'ifsa'>('pilote');
+  const [role, setRole] = useState<'pilote' | 'admin' | 'atc' | 'ifsa'>('pilote');
   const [armee, setArmee] = useState(false);
   const [atc, setAtc] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [lastCreatedRole, setLastCreatedRole] = useState<'pilote' | 'admin' | 'ifsa'>('pilote');
+  const [lastCreatedRole, setLastCreatedRole] = useState<'pilote' | 'admin' | 'atc' | 'ifsa'>('pilote');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -76,10 +76,11 @@ export default function CreatePiloteForm() {
           <select
             className="input"
             value={role}
-            onChange={(e) => setRole(e.target.value as 'pilote' | 'admin' | 'ifsa')}
+            onChange={(e) => setRole(e.target.value as 'pilote' | 'admin' | 'atc' | 'ifsa')}
           >
             <option value="pilote">Pilote</option>
             <option value="admin">Admin</option>
+            <option value="atc">ATC</option>
             <option value="ifsa">IFSA</option>
           </select>
         </div>
@@ -98,11 +99,7 @@ export default function CreatePiloteForm() {
         </button>
       </form>
       {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
-      {success && (
-        <p className="text-emerald-400 text-sm mt-2">
-          {lastCreatedRole === 'admin' ? 'Admin créé.' : lastCreatedRole === 'ifsa' ? 'IFSA créé.' : 'Pilote créé.'}
-        </p>
-      )}
+      {success && <p className="text-emerald-400 text-sm mt-2">{lastCreatedRole === 'admin' ? 'Admin créé.' : 'Pilote créé.'}</p>}
     </div>
   );
 }

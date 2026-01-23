@@ -9,28 +9,34 @@ export async function GET(request: Request) {
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    const typeCompte = searchParams.get('type'); // 'personnel' ou 'entreprise'
+    const userId = searchParams.get('user_id');
+    const compagnieId = searchParams.get('compagnie_id');
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     const isAdmin = profile?.role === 'admin';
 
-    let query = supabase.from('felitz_comptes').select('id, type_compte, vban, solde, compagnie_id, compagnies(nom)');
+    let targetUserId = user.id;
+    let targetCompagnieId = compagnieId || null;
 
-    if (typeCompte === 'personnel') {
-      query = query.eq('user_id', user.id).eq('type_compte', 'personnel');
-    } else if (typeCompte === 'entreprise') {
-      const { data: compagnie } = await supabase.from('compagnies').select('id').eq('pdg_user_id', user.id).single();
-      if (!compagnie && !isAdmin) {
-        return NextResponse.json({ error: 'Vous n\'êtes pas PDG d\'une compagnie' }, { status: 403 });
-      }
-      if (compagnie) {
-        query = query.eq('compagnie_id', compagnie.id).eq('type_compte', 'entreprise');
-      } else if (isAdmin) {
-        query = query.eq('type_compte', 'entreprise');
-      }
-    } else {
-      query = query.or(`user_id.eq.${user.id},compagnie_id.in.(SELECT id FROM compagnies WHERE pdg_user_id.eq.${user.id})`);
+    if (userId && isAdmin) {
+      targetUserId = userId;
+    } else if (userId && userId !== user.id) {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
+
+    if (compagnieId) {
+      if (!isAdmin) {
+        const { data: compagnie } = await supabase.from('compagnies').select('pdg_id').eq('id', compagnieId).single();
+        if (compagnie?.pdg_id !== user.id) {
+          return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+        }
+      }
+    }
+
+    const query = supabase.from('felitz_comptes').select('id, user_id, compagnie_id, vban, solde, created_at, compagnies(nom), profiles(identifiant)');
+    if (targetUserId) query.eq('user_id', targetUserId);
+    if (targetCompagnieId) query.eq('compagnie_id', targetCompagnieId);
+    else query.is('compagnie_id', null);
 
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -48,79 +54,35 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    const isAdmin = profile?.role === 'admin';
+    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { type_compte, compagnie_id } = body;
-
-    if (!type_compte || !['personnel', 'entreprise'].includes(type_compte)) {
-      return NextResponse.json({ error: 'type_compte invalide' }, { status: 400 });
-    }
+    const { user_id, compagnie_id } = body;
 
     const admin = createAdminClient();
-
-    if (type_compte === 'personnel') {
-      const { data: existing } = await admin.from('felitz_comptes').select('id').eq('user_id', user.id).eq('type_compte', 'personnel').single();
-      if (existing) {
-        return NextResponse.json({ error: 'Compte personnel déjà existant' }, { status: 400 });
-      }
-      const { data: vbanData, error: vbanErr } = await admin.rpc('generate_vban', { type_compte: 'personnel' });
-      if (vbanErr) {
-        console.error('Erreur RPC generate_vban:', vbanErr);
-        return NextResponse.json({ error: `Erreur génération VBAN: ${vbanErr.message}` }, { status: 500 });
-      }
-      const vban = (vbanData as string) || null;
-      if (!vban) return NextResponse.json({ error: 'Erreur génération VBAN: valeur vide' }, { status: 500 });
-      const { data, error } = await admin.from('felitz_comptes').insert({
-        user_id: user.id,
-        type_compte: 'personnel',
-        vban: vban,
-      }).select('id, vban').single();
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      return NextResponse.json({ ok: true, data });
-    } else {
-      if (!isAdmin) {
-        const { data: compagnie } = await admin.from('compagnies').select('id').eq('pdg_user_id', user.id).single();
-        if (!compagnie) {
-          return NextResponse.json({ error: 'Vous n\'êtes pas PDG d\'une compagnie' }, { status: 403 });
-        }
-        const targetCompagnieId = compagnie.id;
-        const { data: existing } = await admin.from('felitz_comptes').select('id').eq('compagnie_id', targetCompagnieId).eq('type_compte', 'entreprise').single();
-        if (existing) {
-          return NextResponse.json({ error: 'Compte entreprise déjà existant pour cette compagnie' }, { status: 400 });
-        }
-        const { data: vbanData, error: vbanErr } = await admin.rpc('generate_vban', { type_compte: 'entreprise' });
-        if (vbanErr) {
-          console.error('Erreur RPC generate_vban:', vbanErr);
-          return NextResponse.json({ error: `Erreur génération VBAN: ${vbanErr.message}` }, { status: 500 });
-        }
-        const vban = (vbanData as string) || null;
-        if (!vban) return NextResponse.json({ error: 'Erreur génération VBAN: valeur vide' }, { status: 500 });
-        const { data, error } = await admin.from('felitz_comptes').insert({
-          compagnie_id: targetCompagnieId,
-          type_compte: 'entreprise',
-          vban: vban,
-        }).select('id, vban').single();
-        if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-        return NextResponse.json({ ok: true, data });
-      } else {
-        if (!compagnie_id) return NextResponse.json({ error: 'compagnie_id requis pour admin' }, { status: 400 });
-        const { data: vbanData, error: vbanErr } = await admin.rpc('generate_vban', { type_compte: 'entreprise' });
-        if (vbanErr) {
-          console.error('Erreur RPC generate_vban:', vbanErr);
-          return NextResponse.json({ error: `Erreur génération VBAN: ${vbanErr.message}` }, { status: 500 });
-        }
-        const vban = (vbanData as string) || null;
-        if (!vban) return NextResponse.json({ error: 'Erreur génération VBAN: valeur vide' }, { status: 500 });
-        const { data, error } = await admin.from('felitz_comptes').insert({
-          compagnie_id,
-          type_compte: 'entreprise',
-          vban: vban,
-        }).select('id, vban').single();
-        if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-        return NextResponse.json({ ok: true, data });
-      }
+    if (user_id) {
+      const { data: existing } = await admin.from('felitz_comptes').select('id').eq('user_id', user_id).is('compagnie_id', null).single();
+      if (existing) return NextResponse.json({ error: 'Compte personnel déjà existant' }, { status: 400 });
     }
+
+    if (compagnie_id) {
+      const { data: existing } = await admin.from('felitz_comptes').select('id').eq('compagnie_id', compagnie_id).single();
+      if (existing) return NextResponse.json({ error: 'Compte entreprise déjà existant' }, { status: 400 });
+    }
+
+    const vban = compagnie_id
+      ? await admin.rpc('generate_vban_entreprise')
+      : await admin.rpc('generate_vban_personnel');
+
+    const { data, error } = await admin.from('felitz_comptes').insert({
+      user_id: user_id || null,
+      compagnie_id: compagnie_id || null,
+      vban: vban.data || vban,
+      solde: 0,
+    }).select('id').single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, id: data.id });
   } catch (e) {
     console.error('Felitz comptes POST:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

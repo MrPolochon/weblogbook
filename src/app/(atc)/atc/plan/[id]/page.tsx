@@ -32,7 +32,7 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
   const admin = createAdminClient();
   const { data: plan } = await admin
     .from('plans_vol')
-    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, instructions, intentions_vol, sid_depart, star_arrivee, porte, temps_prev_min, refusal_reason, current_holder_user_id, automonitoring, pending_transfer_aeroport, pending_transfer_position')
+    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, instructions, intentions_vol, sid_depart, star_arrivee, route_ifr, note_atc, vol_commercial, nature_cargo, porte, temps_prev_min, refusal_reason, current_holder_user_id, automonitoring, pending_transfer_aeroport, pending_transfer_position')
     .eq('id', id)
     .single();
 
@@ -66,6 +66,15 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
         {plan.type_vol === 'VFR' && plan.intentions_vol && <p className="text-slate-800 mt-2"><span className="font-medium text-slate-900">Intentions de vol :</span><br /><span className="text-sm text-slate-800">{plan.intentions_vol}</span></p>}
         {plan.type_vol === 'IFR' && (plan.sid_depart || plan.star_arrivee) && (
           <p className="text-slate-800 mt-2 text-sm"><span className="font-medium text-slate-900">SID départ :</span> {plan.sid_depart || '—'} · <span className="font-medium text-slate-900">STAR arrivée :</span> {plan.star_arrivee || '—'}</p>
+        )}
+        {plan.type_vol === 'IFR' && plan.route_ifr && (
+          <p className="text-slate-800 mt-2"><span className="font-medium text-slate-900">Route IFR :</span><br /><span className="text-sm text-slate-800 font-mono">{plan.route_ifr}</span></p>
+        )}
+        {plan.note_atc && (
+          <p className="text-slate-800 mt-2"><span className="font-medium text-slate-900">Note à l&apos;attention de l&apos;ATC :</span><br /><span className="text-sm text-slate-800">{plan.note_atc}</span></p>
+        )}
+        {plan.vol_commercial && (
+          <p className="text-slate-800 mt-2 text-sm"><span className="font-medium text-slate-900">Vol commercial</span>{plan.nature_cargo && <> · {plan.nature_cargo}</>}</p>
         )}
         {plan.refusal_reason && <p className="text-red-700 mt-2 text-sm"><span className="font-medium">Raison du refus :</span> {plan.refusal_reason}</p>}
         {plan.instructions && !showInstructionsTransfer && <p className="text-slate-800 mt-2">Instructions : {plan.instructions}{plan.automonitoring && <span className="text-slate-600 text-sm ml-1">(lecture seule)</span>}</p>}

@@ -27,20 +27,6 @@ export default async function AppLayout({
   const isAdmin = profile?.role === 'admin';
   const isArmee = Boolean(profile?.armee);
 
-  let hasCompagniePDG = false;
-  let hasCompagnie = false;
-  try {
-    const [{ count: countPDG }, { count: countEmp }] = await Promise.all([
-      supabase.from('compagnies').select('*', { count: 'exact', head: true }).eq('pdg_user_id', user.id),
-      supabase.from('compagnies_employes').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-    ]);
-    hasCompagniePDG = (countPDG ?? 0) > 0;
-    hasCompagnie = (countEmp ?? 0) > 0 || hasCompagniePDG;
-  } catch {
-    hasCompagniePDG = false;
-    hasCompagnie = false;
-  }
-
   let pendingVolsCount = 0;
   let volsAConfirmerCount = 0;
   let plansNonCloturesCount = 0;
@@ -80,7 +66,7 @@ export default async function AppLayout({
     <div className="min-h-screen flex flex-col">
       <AutoRefresh intervalSeconds={12} />
       <AdminModeBg />
-      <NavBar isAdmin={isAdmin} isArmee={isArmee} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} hasCompagniePDG={hasCompagniePDG} hasCompagnie={hasCompagnie} />
+      <NavBar isAdmin={isAdmin} isArmee={isArmee} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} />
       {plansNonCloturesCount > 0 && (
         <div className="border-b border-amber-500/40 bg-amber-500/15">
           <div className="mx-auto max-w-6xl px-4 py-2 flex items-center justify-center gap-2 flex-wrap">

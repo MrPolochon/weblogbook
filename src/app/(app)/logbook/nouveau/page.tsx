@@ -13,9 +13,17 @@ export default async function NouveauVolPage() {
   if (profile?.blocked_until && new Date(profile.blocked_until) > new Date()) redirect('/logbook');
 
   const admin = createAdminClient();
+  const { data: employe } = await supabase
+    .from('compagnies_employes')
+    .select('compagnie_id')
+    .eq('user_id', user.id)
+    .single();
+
   const [{ data: types }, { data: compagnies }, { data: admins }, { data: allProfiles }, { data: closedPlans }] = await Promise.all([
     supabase.from('types_avion').select('id, nom, constructeur').order('ordre'),
-    supabase.from('compagnies').select('id, nom').order('nom'),
+    employe
+      ? supabase.from('compagnies').select('id, nom').eq('id', employe.compagnie_id)
+      : supabase.from('compagnies').select('id, nom').limit(0),
     supabase.from('profiles').select('id, identifiant').eq('role', 'admin').order('identifiant'),
     supabase.from('profiles').select('id, identifiant').order('identifiant'),
     admin.from('plans_vol').select('id, aeroport_depart, aeroport_arrivee, type_vol, numero_vol, accepted_at, cloture_at').eq('pilote_id', user.id).eq('statut', 'cloture').not('accepted_at', 'is', null).not('cloture_at', 'is', null).order('cloture_at', { ascending: false }),

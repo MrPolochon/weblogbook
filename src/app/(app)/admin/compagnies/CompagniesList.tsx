@@ -34,6 +34,13 @@ export default function CompagniesList({ compagnies }: { compagnies: C[] }) {
             <span className="text-slate-200">{c.nom}</span>
             <div className="flex items-center gap-2">
               <Link
+                href={`/admin/compagnies/${c.id}`}
+                className="text-slate-300 hover:text-sky-400 hover:underline text-sm"
+                title="Gérer la compagnie"
+              >
+                Gérer
+              </Link>
+              <Link
                 href={`/admin/compagnies/${c.id}/logbook`}
                 className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-sky-400"
                 title="Voir le logbook"

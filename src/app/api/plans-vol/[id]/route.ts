@@ -21,7 +21,7 @@ export async function PATCH(
     const { action } = body;
 
     const admin = createAdminClient();
-    const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut, current_holder_user_id, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at').eq('id', id).single();
+    const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut, current_holder_user_id, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, aeroport_depart, aeroport_arrivee, type_vol, temps_prev_min, vol_commercial, nature_cargo, compagnie_avion_id, numero_vol').eq('id', id).single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
 
     if (action === 'cloture') {
@@ -34,8 +34,74 @@ export async function PATCH(
       // Clôture directe si : pas de détenteur, autosurveillance, ou aucun ATC n’a encore accepté (statut ≠ accepte/en_cours)
       const closDirect = !plan.current_holder_user_id || plan.automonitoring === true || (plan.statut !== 'accepte' && plan.statut !== 'en_cours');
       const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
+      
+      let finances: any = {};
+      if (newStatut === 'cloture' && plan.vol_commercial) {
+        const { data: vol } = await admin
+          .from('vols')
+          .select('id, duree_minutes, depart_utc, arrivee_utc')
+          .eq('plan_vol_id', id)
+          .single();
+        
+        const { calculerFinances } = await import('@/lib/calcul-financier');
+        finances = await calculerFinances(plan as any, vol);
+        
+        await admin.from('plans_vol').update({
+          nombre_passagers: finances.nombre_passagers,
+          cargo_kg: finances.cargo_kg,
+          revenue_total: finances.revenue_total,
+          taxes_aeroportuaires: finances.taxes_aeroportuaires,
+          revenue_effectif: finances.revenue_effectif,
+          salaire_pilote: finances.salaire_pilote,
+        }).eq('id', id);
+
+        if (finances.salaire_pilote > 0) {
+          const { data: comptePilote } = await admin.from('felitz_comptes').select('id, solde').eq('user_id', plan.pilote_id).is('compagnie_id', null).single();
+          if (comptePilote) {
+            await admin.from('felitz_comptes').update({ solde: Number(comptePilote.solde) + finances.salaire_pilote }).eq('id', comptePilote.id);
+            await admin.from('felitz_transactions').insert({
+              compte_id: comptePilote.id,
+              type: 'salaire',
+              montant: finances.salaire_pilote,
+              titre: 'Salaire vol',
+              plan_vol_id: id,
+            });
+          }
+        }
+
+        if (plan.compagnie_avion_id && finances.revenue_compagnie > 0) {
+          const { data: avionComp } = await admin.from('compagnies_avions').select('compagnie_id').eq('id', plan.compagnie_avion_id).single();
+          if (avionComp) {
+            const { data: compteComp } = await admin.from('felitz_comptes').select('id, solde').eq('compagnie_id', avionComp.compagnie_id).single();
+            if (compteComp) {
+              await admin.from('felitz_comptes').update({ solde: Number(compteComp.solde) + finances.revenue_compagnie }).eq('id', compteComp.id);
+              await admin.from('felitz_transactions').insert({
+                compte_id: compteComp.id,
+                type: 'revenue_vol',
+                montant: finances.revenue_compagnie,
+                titre: 'Revenue vol',
+                plan_vol_id: id,
+              });
+            }
+          }
+        }
+
+        await admin.from('messages').insert({
+          user_id: plan.pilote_id,
+          titre: 'Vol clôturé',
+          contenu: `Votre vol ${plan.numero_vol} a été clôturé.\n\nRevenue total: ${finances.revenue_total.toFixed(2)} €\nTaxes: ${finances.taxes_aeroportuaires.toFixed(2)} €\nRevenue effectif: ${finances.revenue_effectif.toFixed(2)} €\nSalaire: ${finances.salaire_pilote.toFixed(2)} €`,
+          type: 'cloture_vol',
+          plan_vol_id: id,
+        });
+      }
+
       const payload: { statut: string; cloture_at?: string } = { statut: newStatut };
-      if (newStatut === 'cloture') payload.cloture_at = new Date().toISOString();
+      if (newStatut === 'cloture') {
+        payload.cloture_at = new Date().toISOString();
+        if (plan.compagnie_avion_id) {
+          await admin.from('avions_utilisation').delete().eq('plan_vol_id', id);
+        }
+      }
 
       const { error } = await admin.from('plans_vol').update(payload).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -49,6 +115,70 @@ export async function PATCH(
       const canAtc = isAdmin || isHolder;
       if (!canAtc) return NextResponse.json({ error: 'Seul l’ATC qui détient le plan ou un admin peut confirmer la clôture.' }, { status: 403 });
       if (plan.statut !== 'en_attente_cloture') return NextResponse.json({ error: 'Aucune demande de clôture en attente.' }, { status: 400 });
+
+      let finances: any = {};
+      if (plan.vol_commercial) {
+        const { data: vol } = await admin
+          .from('vols')
+          .select('id, duree_minutes, depart_utc, arrivee_utc')
+          .eq('plan_vol_id', id)
+          .single();
+        
+        const { calculerFinances } = await import('@/lib/calcul-financier');
+        finances = await calculerFinances(plan as any, vol);
+        
+        await admin.from('plans_vol').update({
+          nombre_passagers: finances.nombre_passagers,
+          cargo_kg: finances.cargo_kg,
+          revenue_total: finances.revenue_total,
+          taxes_aeroportuaires: finances.taxes_aeroportuaires,
+          revenue_effectif: finances.revenue_effectif,
+          salaire_pilote: finances.salaire_pilote,
+        }).eq('id', id);
+
+        if (finances.salaire_pilote > 0) {
+          const { data: comptePilote } = await admin.from('felitz_comptes').select('id, solde').eq('user_id', plan.pilote_id).is('compagnie_id', null).single();
+          if (comptePilote) {
+            await admin.from('felitz_comptes').update({ solde: Number(comptePilote.solde) + finances.salaire_pilote }).eq('id', comptePilote.id);
+            await admin.from('felitz_transactions').insert({
+              compte_id: comptePilote.id,
+              type: 'salaire',
+              montant: finances.salaire_pilote,
+              titre: 'Salaire vol',
+              plan_vol_id: id,
+            });
+          }
+        }
+
+        if (plan.compagnie_avion_id && finances.revenue_compagnie > 0) {
+          const { data: avionComp } = await admin.from('compagnies_avions').select('compagnie_id').eq('id', plan.compagnie_avion_id).single();
+          if (avionComp) {
+            const { data: compteComp } = await admin.from('felitz_comptes').select('id, solde').eq('compagnie_id', avionComp.compagnie_id).single();
+            if (compteComp) {
+              await admin.from('felitz_comptes').update({ solde: Number(compteComp.solde) + finances.revenue_compagnie }).eq('id', compteComp.id);
+              await admin.from('felitz_transactions').insert({
+                compte_id: compteComp.id,
+                type: 'revenue_vol',
+                montant: finances.revenue_compagnie,
+                titre: 'Revenue vol',
+                plan_vol_id: id,
+              });
+            }
+          }
+        }
+
+        await admin.from('messages').insert({
+          user_id: plan.pilote_id,
+          titre: 'Vol clôturé',
+          contenu: `Votre vol ${plan.numero_vol} a été clôturé.\n\nRevenue total: ${finances.revenue_total.toFixed(2)} €\nTaxes: ${finances.taxes_aeroportuaires.toFixed(2)} €\nRevenue effectif: ${finances.revenue_effectif.toFixed(2)} €\nSalaire: ${finances.salaire_pilote.toFixed(2)} €`,
+          type: 'cloture_vol',
+          plan_vol_id: id,
+        });
+      }
+
+      if (plan.compagnie_avion_id) {
+        await admin.from('avions_utilisation').delete().eq('plan_vol_id', id);
+      }
 
       const { error } = await admin.from('plans_vol').update({ statut: 'cloture', cloture_at: new Date().toISOString() }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });

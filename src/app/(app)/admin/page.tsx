@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Users, Clock, Building2, Plane, FileText, Shield, Award } from 'lucide-react';
+import { Users, Clock, Building2, Plane, FileText, Shield, Award, ShoppingCart, MapPin } from 'lucide-react';
 
 const links = [
   { href: '/admin/vols', label: 'Vols en attente', icon: Clock },
@@ -9,6 +9,8 @@ const links = [
   { href: '/admin/types-avion', label: 'Types d\'avion', icon: Plane },
   { href: '/admin/documents', label: 'Documents', icon: FileText },
   { href: '/admin/licences', label: 'Licences et qualifications', icon: Award },
+  { href: '/admin/marketplace', label: 'Marketplace', icon: ShoppingCart },
+  { href: '/admin/taxes-aeroports', label: 'Taxes aéroports', icon: MapPin },
 ];
 
 export default function AdminPage() {
