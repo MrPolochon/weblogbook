@@ -20,7 +20,28 @@ export default async function DepotPlanVolPage() {
     .eq('pilote_id', user.id)
     .single();
 
-  // Récupérer la flotte de la compagnie si employé
+  // Vérifier si le pilote est PDG d'une compagnie
+  const { data: compagniePdg } = await admin.from('compagnies')
+    .select('id, nom, prix_billet_pax, prix_kg_cargo, pourcentage_salaire')
+    .eq('pdg_id', user.id)
+    .single();
+
+  // Déterminer la compagnie du pilote (employé OU PDG)
+  let compagnieId: string | null = null;
+  let compagnieInfo: { id: string; nom: string; prix_billet_pax: number; prix_kg_cargo: number; pourcentage_salaire: number } | null = null;
+
+  if (emploi?.compagnie_id) {
+    compagnieId = emploi.compagnie_id;
+    const compagniesData = emploi.compagnies;
+    compagnieInfo = compagniesData 
+      ? (Array.isArray(compagniesData) ? compagniesData[0] : compagniesData) as typeof compagnieInfo
+      : null;
+  } else if (compagniePdg) {
+    compagnieId = compagniePdg.id;
+    compagnieInfo = compagniePdg;
+  }
+
+  // Récupérer la flotte de la compagnie si employé ou PDG
   let flotteCompagnie: Array<{
     id: string;
     type_avion_id: string;
@@ -31,10 +52,10 @@ export default async function DepotPlanVolPage() {
     capacite_cargo_custom: number | null;
     types_avion: { id: string; nom: string; code_oaci: string | null; capacite_pax: number; capacite_cargo_kg: number } | null;
   }> = [];
-  if (emploi?.compagnie_id) {
+  if (compagnieId) {
     const { data: flotte } = await admin.from('compagnie_flotte')
       .select('*, types_avion(id, nom, code_oaci, capacite_pax, capacite_cargo_kg)')
-      .eq('compagnie_id', emploi.compagnie_id);
+      .eq('compagnie_id', compagnieId);
     
     // Calculer la disponibilité
     flotteCompagnie = await Promise.all((flotte || []).map(async (item) => {
@@ -68,12 +89,6 @@ export default async function DepotPlanVolPage() {
     };
   }));
 
-  // Compagnie info
-  const compagniesData = emploi?.compagnies;
-  const compagnie = compagniesData 
-    ? (Array.isArray(compagniesData) ? compagniesData[0] : compagniesData) as { id: string; nom: string; prix_billet_pax: number; prix_kg_cargo: number; pourcentage_salaire: number } | null
-    : null;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -86,7 +101,7 @@ export default async function DepotPlanVolPage() {
         </h1>
       </div>
       <DepotPlanVolForm 
-        compagnie={compagnie}
+        compagnie={compagnieInfo}
         flotteCompagnie={flotteCompagnie}
         inventairePersonnel={inventairePersonnel}
       />
