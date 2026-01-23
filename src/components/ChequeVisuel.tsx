@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2, Check, Banknote } from 'lucide-react';
 
 interface ChequeProps {
@@ -50,6 +50,11 @@ export default function ChequeVisuel({
 }: ChequeProps) {
   const [loading, setLoading] = useState(false);
   const [isEncaisse, setIsEncaisse] = useState(encaisse);
+  
+  // Synchroniser le state local avec la prop quand elle change (ex: après refresh)
+  useEffect(() => {
+    setIsEncaisse(encaisse);
+  }, [encaisse, id]);
   
   const dateObj = new Date(date);
   const dateFormatee = dateObj.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });

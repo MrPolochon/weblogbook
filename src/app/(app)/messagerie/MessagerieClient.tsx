@@ -93,6 +93,12 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
+    
+    // Mettre à jour le selectedMessage immédiatement pour refléter l'encaissement
+    if (selectedMessage && selectedMessage.id === id) {
+      setSelectedMessage({ ...selectedMessage, cheque_encaisse: true });
+    }
+    
     router.refresh();
   }
 
