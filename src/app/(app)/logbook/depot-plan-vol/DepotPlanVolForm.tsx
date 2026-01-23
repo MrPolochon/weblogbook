@@ -92,8 +92,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   const [generatedCargo, setGeneratedCargo] = useState(0);
   const [lastGeneratedKey, setLastGeneratedKey] = useState('');
   
-  // Vol sans ATC
-  const [volSansAtc, setVolSansAtc] = useState(false);
+  // Confirmation vol sans ATC (quand aucun ATC n'est disponible)
+  const [showNoAtcConfirm, setShowNoAtcConfirm] = useState(false);
   
   // Tarifs par liaison et saturation
   const [tarifsLiaisons, setTarifsLiaisons] = useState<TarifLiaison[]>([]);
@@ -244,9 +244,40 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     : generatedCargo * (selectedCompagnie?.prix_kg_cargo || 0);
   const salairePilote = Math.floor(revenuBrut * (selectedCompagnie?.pourcentage_salaire || 0) / 100);
 
+  // Préparer les données du formulaire
+  function getFormData(volSansAtc: boolean = false) {
+    const t = parseInt(temps_prev_min, 10);
+    return {
+      aeroport_depart,
+      aeroport_arrivee,
+      numero_vol: numero_vol.trim(),
+      porte: porte.trim() || undefined,
+      temps_prev_min: t,
+      type_vol,
+      intentions_vol: type_vol === 'VFR' ? intentions_vol.trim() : undefined,
+      sid_depart: type_vol === 'IFR' ? sid_depart.trim() : undefined,
+      star_arrivee: type_vol === 'IFR' ? star_arrivee.trim() : undefined,
+      route_ifr: type_vol === 'IFR' && route_ifr.trim() ? route_ifr.trim() : undefined,
+      note_atc: !volSansAtc && note_atc.trim() ? note_atc.trim() : undefined,
+      vol_commercial,
+      compagnie_id: vol_commercial && selectedCompagnieId ? selectedCompagnieId : undefined,
+      nature_transport: vol_commercial ? nature_transport : undefined,
+      flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : undefined,
+      inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : undefined,
+      nb_pax_genere: vol_commercial ? nbPax : undefined,
+      cargo_kg_genere: vol_commercial ? cargoKg : undefined,
+      revenue_brut: vol_commercial ? revenuBrut : undefined,
+      salaire_pilote: vol_commercial ? salairePilote : undefined,
+      prix_billet_utilise: vol_commercial ? prixBilletLiaison : undefined,
+      vol_sans_atc: volSansAtc,
+    };
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setShowNoAtcConfirm(false);
+    
     const t = parseInt(temps_prev_min, 10);
     if (!aeroport_depart || !aeroport_arrivee || !numero_vol.trim() || isNaN(t) || t < 1 || !type_vol) {
       setError('Remplissez tous les champs requis.');
@@ -270,30 +301,38 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       const res = await fetch('/api/plans-vol', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          aeroport_depart,
-          aeroport_arrivee,
-          numero_vol: numero_vol.trim(),
-          porte: porte.trim() || undefined,
-          temps_prev_min: t,
-          type_vol,
-          intentions_vol: type_vol === 'VFR' ? intentions_vol.trim() : undefined,
-          sid_depart: type_vol === 'IFR' ? sid_depart.trim() : undefined,
-          star_arrivee: type_vol === 'IFR' ? star_arrivee.trim() : undefined,
-          route_ifr: type_vol === 'IFR' && route_ifr.trim() ? route_ifr.trim() : undefined,
-          note_atc: note_atc.trim() || undefined,
-          vol_commercial,
-          compagnie_id: vol_commercial && selectedCompagnieId ? selectedCompagnieId : undefined,
-          nature_transport: vol_commercial ? nature_transport : undefined,
-          flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : undefined,
-          inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : undefined,
-          nb_pax_genere: vol_commercial ? nbPax : undefined,
-          cargo_kg_genere: vol_commercial ? cargoKg : undefined,
-          revenue_brut: vol_commercial ? revenuBrut : undefined,
-          salaire_pilote: vol_commercial ? salairePilote : undefined,
-          prix_billet_utilise: vol_commercial ? prixBilletLiaison : undefined,
-          vol_sans_atc: volSansAtc,
-        }),
+        body: JSON.stringify(getFormData(false)),
+      });
+      const data = await res.json().catch(() => ({}));
+      
+      // Si pas d'ATC disponible, proposer le vol sans ATC
+      if (!res.ok && data.error && data.error.includes('Aucune fréquence ATC')) {
+        setShowNoAtcConfirm(true);
+        setLoading(false);
+        return;
+      }
+      
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      router.push('/logbook/plans-vol');
+      router.refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Soumettre avec vol sans ATC
+  async function handleSubmitSansAtc() {
+    setError(null);
+    setShowNoAtcConfirm(false);
+    setLoading(true);
+    
+    try {
+      const res = await fetch('/api/plans-vol', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(getFormData(true)),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
@@ -574,42 +613,54 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       )}
       
       {/* Note pour l'ATC */}
-      {!volSansAtc && (
-        <div>
-          <label className="label">Note d&apos;attention pour l&apos;ATC (optionnel)</label>
-          <textarea 
-            className="input min-h-[60px]" 
-            value={note_atc} 
-            onChange={(e) => setNoteAtc(e.target.value)} 
-            placeholder="Ex: Premier vol, demande assistance..."
-          />
+      <div>
+        <label className="label">Note d&apos;attention pour l&apos;ATC (optionnel)</label>
+        <textarea 
+          className="input min-h-[60px]" 
+          value={note_atc} 
+          onChange={(e) => setNoteAtc(e.target.value)} 
+          placeholder="Ex: Premier vol, demande assistance..."
+        />
+      </div>
+
+      {/* Confirmation vol sans ATC */}
+      {showNoAtcConfirm && (
+        <div className="p-4 rounded-lg border-2 border-amber-500 bg-amber-500/20 space-y-3">
+          <div className="flex items-start gap-3">
+            <Radio className="h-6 w-6 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-amber-200">Aucun ATC disponible</p>
+              <p className="text-sm text-amber-300/80 mt-1">
+                Il n&apos;y a actuellement aucune fréquence ATC en ligne pour votre aéroport de départ ou d&apos;arrivée.
+              </p>
+              <p className="text-sm text-slate-300 mt-2">
+                Voulez-vous effectuer ce vol sans ATC ? Votre plan sera automatiquement accepté et mis en autosurveillance. Vous serez payé normalement à la clôture.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button 
+              type="button" 
+              onClick={handleSubmitSansAtc}
+              disabled={loading}
+              className="btn-primary bg-amber-600 hover:bg-amber-700 flex items-center gap-2"
+            >
+              <Radio className="h-4 w-4" />
+              {loading ? 'Envoi...' : 'Oui, voler sans ATC'}
+            </button>
+            <button 
+              type="button" 
+              onClick={() => setShowNoAtcConfirm(false)}
+              className="btn-secondary"
+            >
+              Annuler
+            </button>
+          </div>
         </div>
       )}
-
-      {/* Option vol sans ATC */}
-      <div className="p-4 rounded-lg border border-amber-500/30 bg-amber-500/10">
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input 
-            type="checkbox" 
-            checked={volSansAtc} 
-            onChange={(e) => setVolSansAtc(e.target.checked)}
-            className="w-5 h-5 rounded"
-          />
-          <div className="flex items-center gap-2">
-            <Radio className="h-5 w-5 text-amber-400" />
-            <span className="font-medium text-slate-200">Voler sans ATC</span>
-          </div>
-        </label>
-        {volSansAtc && (
-          <div className="mt-2 text-sm text-amber-300/80">
-            <p>⚠️ Votre plan de vol sera automatiquement accepté et mis en autosurveillance.</p>
-            <p>Vous serez payé normalement à la clôture du vol.</p>
-          </div>
-        )}
-      </div>
       
       {error && <p className="text-red-400 text-sm">{error}</p>}
-      <button type="submit" className="btn-primary" disabled={loading}>{loading ? 'Envoi…' : 'Déposer le plan de vol'}</button>
+      <button type="submit" className="btn-primary" disabled={loading || showNoAtcConfirm}>{loading ? 'Envoi…' : 'Déposer le plan de vol'}</button>
     </form>
   );
 }
