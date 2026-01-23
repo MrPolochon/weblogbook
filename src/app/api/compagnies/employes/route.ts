@@ -21,13 +21,13 @@ export async function POST(request: Request) {
       compagnie_id,
       user_id,
       heures_vol_compagnie_minutes: 0,
-    }).select('id').single();
+    }).select('compagnie_id, user_id').single();
 
     if (error) {
       if (error.code === '23505') return NextResponse.json({ error: 'Cet employé est déjà dans cette compagnie' }, { status: 400 });
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    return NextResponse.json({ ok: true, id: data.id });
+    return NextResponse.json({ ok: true, user_id: data?.user_id });
   } catch (e) {
     console.error('Compagnies employés POST:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

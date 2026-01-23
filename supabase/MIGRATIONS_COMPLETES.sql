@@ -536,6 +536,23 @@ CREATE TABLE IF NOT EXISTS public.compagnies_employes (
   PRIMARY KEY (compagnie_id, user_id)
 );
 
+-- IMPORTANT: Si la table existait déjà, elle pourrait ne pas avoir la colonne heures_vol_compagnie_minutes
+-- L'ajouter explicitement si elle n'existe pas
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'compagnies_employes' 
+    AND column_name = 'heures_vol_compagnie_minutes'
+  ) THEN
+    BEGIN
+      ALTER TABLE public.compagnies_employes 
+        ADD COLUMN heures_vol_compagnie_minutes INTEGER NOT NULL DEFAULT 0;
+    EXCEPTION WHEN duplicate_column THEN NULL; END;
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_compagnies_employes_user ON public.compagnies_employes(user_id);
 CREATE INDEX IF NOT EXISTS idx_compagnies_employes_compagnie ON public.compagnies_employes(compagnie_id);
 
