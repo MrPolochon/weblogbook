@@ -15,7 +15,7 @@ export default async function AdminTypesAvionPage() {
 
   const admin = createAdminClient();
   const { data: types } = await admin.from('types_avion')
-    .select('id, nom, constructeur, code_oaci, prix, capacite_pax, capacite_cargo_kg, ordre')
+    .select('id, nom, constructeur, code_oaci, categorie, prix, capacite_pax, capacite_cargo_kg, est_militaire, est_cargo, ordre')
     .order('ordre');
 
   return (

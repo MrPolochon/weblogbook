@@ -14,36 +14,40 @@ export default async function DepotPlanVolPage() {
 
   const admin = createAdminClient();
 
-  // Récupérer l'emploi du pilote (s'il est employé dans une compagnie)
-  const { data: emploi } = await admin.from('compagnie_employes')
+  // Récupérer TOUTES les compagnies où le pilote est employé
+  const { data: emplois } = await admin.from('compagnie_employes')
     .select('compagnie_id, compagnies(id, nom, prix_billet_pax, prix_kg_cargo, pourcentage_salaire)')
-    .eq('pilote_id', user.id)
-    .single();
+    .eq('pilote_id', user.id);
 
-  // Vérifier si le pilote est PDG d'une compagnie
-  const { data: compagniePdg } = await admin.from('compagnies')
+  // Récupérer TOUTES les compagnies où le pilote est PDG
+  const { data: compagniesPdg } = await admin.from('compagnies')
     .select('id, nom, prix_billet_pax, prix_kg_cargo, pourcentage_salaire')
-    .eq('pdg_id', user.id)
-    .single();
+    .eq('pdg_id', user.id);
 
-  // Déterminer la compagnie du pilote (employé OU PDG)
-  let compagnieId: string | null = null;
-  let compagnieInfo: { id: string; nom: string; prix_billet_pax: number; prix_kg_cargo: number; pourcentage_salaire: number } | null = null;
+  // Construire la liste de toutes les compagnies disponibles (employé + PDG)
+  type CompagnieOption = { id: string; nom: string; prix_billet_pax: number; prix_kg_cargo: number; pourcentage_salaire: number; role: 'employe' | 'pdg' };
+  const compagniesMap = new Map<string, CompagnieOption>();
 
-  if (emploi?.compagnie_id) {
-    compagnieId = emploi.compagnie_id;
-    const compagniesData = emploi.compagnies;
-    compagnieInfo = compagniesData 
-      ? (Array.isArray(compagniesData) ? compagniesData[0] : compagniesData) as typeof compagnieInfo
-      : null;
-  } else if (compagniePdg) {
-    compagnieId = compagniePdg.id;
-    compagnieInfo = compagniePdg;
-  }
+  // Ajouter les compagnies où il est employé
+  (emplois || []).forEach(e => {
+    const c = e.compagnies;
+    const cObj = c ? (Array.isArray(c) ? c[0] : c) as { id: string; nom: string; prix_billet_pax: number; prix_kg_cargo: number; pourcentage_salaire: number } : null;
+    if (cObj && !compagniesMap.has(cObj.id)) {
+      compagniesMap.set(cObj.id, { ...cObj, role: 'employe' });
+    }
+  });
 
-  // Récupérer la flotte de la compagnie si employé ou PDG
-  let flotteCompagnie: Array<{
+  // Ajouter les compagnies où il est PDG (priorité sur employé)
+  (compagniesPdg || []).forEach(c => {
+    compagniesMap.set(c.id, { ...c, role: 'pdg' });
+  });
+
+  const compagniesDisponibles = Array.from(compagniesMap.values());
+
+  // Récupérer la flotte de TOUTES les compagnies disponibles
+  type FlotteItem = {
     id: string;
+    compagnie_id: string;
     type_avion_id: string;
     quantite: number;
     disponibles: number;
@@ -51,14 +55,17 @@ export default async function DepotPlanVolPage() {
     capacite_pax_custom: number | null;
     capacite_cargo_custom: number | null;
     types_avion: { id: string; nom: string; code_oaci: string | null; capacite_pax: number; capacite_cargo_kg: number } | null;
-  }> = [];
-  if (compagnieId) {
+  };
+  let flotteParCompagnie: Record<string, FlotteItem[]> = {};
+  
+  if (compagniesDisponibles.length > 0) {
+    const compagnieIds = compagniesDisponibles.map(c => c.id);
     const { data: flotte } = await admin.from('compagnie_flotte')
       .select('*, types_avion(id, nom, code_oaci, capacite_pax, capacite_cargo_kg)')
-      .eq('compagnie_id', compagnieId);
+      .in('compagnie_id', compagnieIds);
     
-    // Calculer la disponibilité
-    flotteCompagnie = await Promise.all((flotte || []).map(async (item) => {
+    // Calculer la disponibilité pour chaque avion
+    const flotteWithDisponibilite = await Promise.all((flotte || []).map(async (item) => {
       const { count } = await admin.from('plans_vol')
         .select('*', { count: 'exact', head: true })
         .eq('flotte_avion_id', item.id)
@@ -69,6 +76,14 @@ export default async function DepotPlanVolPage() {
         disponibles: item.quantite - (count || 0)
       };
     }));
+
+    // Grouper par compagnie
+    flotteWithDisponibilite.forEach(item => {
+      if (!flotteParCompagnie[item.compagnie_id]) {
+        flotteParCompagnie[item.compagnie_id] = [];
+      }
+      flotteParCompagnie[item.compagnie_id].push(item);
+    });
   }
 
   // Récupérer l'inventaire personnel
@@ -101,8 +116,8 @@ export default async function DepotPlanVolPage() {
         </h1>
       </div>
       <DepotPlanVolForm 
-        compagnie={compagnieInfo}
-        flotteCompagnie={flotteCompagnie}
+        compagniesDisponibles={compagniesDisponibles}
+        flotteParCompagnie={flotteParCompagnie}
         inventairePersonnel={inventairePersonnel}
       />
     </div>

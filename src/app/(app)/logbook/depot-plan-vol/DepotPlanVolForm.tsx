@@ -38,15 +38,20 @@ interface Compagnie {
   prix_billet_pax: number;
   prix_kg_cargo: number;
   pourcentage_salaire: number;
+  role: 'employe' | 'pdg';
+}
+
+interface FlotteItemWithCompagnie extends FlotteItem {
+  compagnie_id: string;
 }
 
 interface Props {
-  compagnie: Compagnie | null;
-  flotteCompagnie: FlotteItem[];
+  compagniesDisponibles: Compagnie[];
+  flotteParCompagnie: Record<string, FlotteItemWithCompagnie[]>;
   inventairePersonnel: InventaireItem[];
 }
 
-export default function DepotPlanVolForm({ compagnie, flotteCompagnie, inventairePersonnel }: Props) {
+export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompagnie, inventairePersonnel }: Props) {
   const router = useRouter();
   const [aeroport_depart, setAeroportDepart] = useState('');
   const [aeroport_arrivee, setAeroportArrivee] = useState('');
@@ -62,6 +67,7 @@ export default function DepotPlanVolForm({ compagnie, flotteCompagnie, inventair
   
   // Commercial flight options
   const [vol_commercial, setVolCommercial] = useState(false);
+  const [selectedCompagnieId, setSelectedCompagnieId] = useState('');
   const [nature_transport, setNatureTransport] = useState<'passagers' | 'cargo'>('passagers');
   const [flotte_avion_id, setFlotteAvionId] = useState('');
   const [inventaire_avion_id, setInventaireAvionId] = useState('');
@@ -75,13 +81,29 @@ export default function DepotPlanVolForm({ compagnie, flotteCompagnie, inventair
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Get selected company and its fleet
+  const selectedCompagnie = compagniesDisponibles.find(c => c.id === selectedCompagnieId) || null;
+  const flotteCompagnie = selectedCompagnieId ? (flotteParCompagnie[selectedCompagnieId] || []) : [];
+  
   // Get selected aircraft info
   const selectedFlotte = flotteCompagnie.find(f => f.id === flotte_avion_id);
   const selectedInventaire = inventairePersonnel.find(i => i.id === inventaire_avion_id);
+  
+  // Auto-select company if only one available
+  useEffect(() => {
+    if (compagniesDisponibles.length === 1 && !selectedCompagnieId) {
+      setSelectedCompagnieId(compagniesDisponibles[0].id);
+    }
+  }, [compagniesDisponibles, selectedCompagnieId]);
+
+  // Reset flotte selection when company changes
+  useEffect(() => {
+    setFlotteAvionId('');
+  }, [selectedCompagnieId]);
 
   // Calculate revenue when commercial flight settings change
   useEffect(() => {
-    if (!vol_commercial || !compagnie) {
+    if (!vol_commercial || !selectedCompagnie) {
       setNbPax(0);
       setCargoKg(0);
       setRevenuBrut(0);
@@ -100,8 +122,8 @@ export default function DepotPlanVolForm({ compagnie, flotteCompagnie, inventair
       const minPax = Math.floor(capacitePax * 0.6);
       const maxPax = Math.floor(capacitePax * 0.95);
       const pax = Math.floor(Math.random() * (maxPax - minPax + 1)) + minPax;
-      const revenue = pax * compagnie.prix_billet_pax;
-      const salaire = Math.floor(revenue * compagnie.pourcentage_salaire / 100);
+      const revenue = pax * selectedCompagnie.prix_billet_pax;
+      const salaire = Math.floor(revenue * selectedCompagnie.pourcentage_salaire / 100);
       
       setNbPax(pax);
       setCargoKg(0);
@@ -112,15 +134,15 @@ export default function DepotPlanVolForm({ compagnie, flotteCompagnie, inventair
       const minCargo = Math.floor(capaciteCargo * 0.5);
       const maxCargo = Math.floor(capaciteCargo * 0.9);
       const cargo = Math.floor(Math.random() * (maxCargo - minCargo + 1)) + minCargo;
-      const revenue = cargo * compagnie.prix_kg_cargo;
-      const salaire = Math.floor(revenue * compagnie.pourcentage_salaire / 100);
+      const revenue = cargo * selectedCompagnie.prix_kg_cargo;
+      const salaire = Math.floor(revenue * selectedCompagnie.pourcentage_salaire / 100);
       
       setNbPax(0);
       setCargoKg(cargo);
       setRevenuBrut(revenue);
       setSalairePilote(salaire);
     }
-  }, [vol_commercial, flotte_avion_id, nature_transport, compagnie, selectedFlotte]);
+  }, [vol_commercial, flotte_avion_id, nature_transport, selectedCompagnie, selectedFlotte]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -134,6 +156,10 @@ export default function DepotPlanVolForm({ compagnie, flotteCompagnie, inventair
     if (type_vol === 'IFR' && (!sid_depart.trim() || !star_arrivee.trim())) { setError('SID de départ et STAR d\'arrivée requises pour IFR.'); return; }
     
     // Validation vol commercial
+    if (vol_commercial && !selectedCompagnieId) {
+      setError('Sélectionnez une compagnie pour un vol commercial.');
+      return;
+    }
     if (vol_commercial && !flotte_avion_id) {
       setError('Sélectionnez un appareil de la flotte pour un vol commercial.');
       return;
@@ -157,7 +183,7 @@ export default function DepotPlanVolForm({ compagnie, flotteCompagnie, inventair
           route_ifr: type_vol === 'IFR' && route_ifr.trim() ? route_ifr.trim() : undefined,
           note_atc: note_atc.trim() || undefined,
           vol_commercial,
-          compagnie_id: vol_commercial && compagnie ? compagnie.id : undefined,
+          compagnie_id: vol_commercial && selectedCompagnieId ? selectedCompagnieId : undefined,
           nature_transport: vol_commercial ? nature_transport : undefined,
           flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : undefined,
           inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : undefined,
@@ -183,8 +209,8 @@ export default function DepotPlanVolForm({ compagnie, flotteCompagnie, inventair
   return (
     <form onSubmit={handleSubmit} className="card space-y-4 max-w-2xl">
       {/* Type de vol (commercial ou personnel) */}
-      {compagnie && (
-        <div className="p-4 rounded-lg border border-sky-500/30 bg-sky-500/10">
+      {compagniesDisponibles.length > 0 && (
+        <div className="p-4 rounded-lg border border-sky-500/30 bg-sky-500/10 space-y-3">
           <label className="flex items-center gap-3 cursor-pointer">
             <input 
               type="checkbox" 
@@ -199,14 +225,42 @@ export default function DepotPlanVolForm({ compagnie, flotteCompagnie, inventair
             />
             <div className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-sky-400" />
-              <span className="font-medium text-slate-200">Vol commercial pour {compagnie.nom}</span>
+              <span className="font-medium text-slate-200">Vol commercial</span>
             </div>
           </label>
+          
+          {/* Sélection de la compagnie si plusieurs disponibles */}
+          {vol_commercial && compagniesDisponibles.length > 1 && (
+            <div>
+              <label className="label">Pour quelle compagnie ? *</label>
+              <select 
+                className="input w-full" 
+                value={selectedCompagnieId} 
+                onChange={(e) => setSelectedCompagnieId(e.target.value)}
+                required
+              >
+                <option value="">— Choisir une compagnie —</option>
+                {compagniesDisponibles.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nom} {c.role === 'pdg' ? '(PDG)' : '(Employé)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          
+          {/* Afficher le nom de la compagnie si une seule */}
+          {vol_commercial && compagniesDisponibles.length === 1 && selectedCompagnie && (
+            <p className="text-sm text-slate-300">
+              Vol pour <span className="font-semibold text-sky-300">{selectedCompagnie.nom}</span>
+              {selectedCompagnie.role === 'pdg' && <span className="text-amber-400 ml-1">(PDG)</span>}
+            </p>
+          )}
         </div>
       )}
 
       {/* Sélection de l'appareil */}
-      {vol_commercial && compagnie ? (
+      {vol_commercial && selectedCompagnie ? (
         <div className="space-y-3">
           <div>
             <label className="label">Appareil de la flotte *</label>
@@ -268,7 +322,7 @@ export default function DepotPlanVolForm({ compagnie, flotteCompagnie, inventair
                   <p className="text-slate-300">{cargoKg.toLocaleString('fr-FR')} kg cargo</p>
                 )}
                 <p className="text-slate-300">Revenu brut : {revenuBrut.toLocaleString('fr-FR')} F$</p>
-                <p className="text-emerald-300">Votre salaire ({compagnie.pourcentage_salaire}%) : {salairePilote.toLocaleString('fr-FR')} F$</p>
+                <p className="text-emerald-300">Votre salaire ({selectedCompagnie.pourcentage_salaire}%) : {salairePilote.toLocaleString('fr-FR')} F$</p>
               </div>
             </div>
           )}
