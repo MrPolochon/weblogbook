@@ -9,27 +9,125 @@ const ORDRE_ACCEPTATION_PLANS = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DE
 
 /**
  * Calcule le coefficient de ponctualité basé sur l'écart entre temps prévu et temps réel.
- * Plus l'écart est grand (retard ou avance), plus la pénalité est forte.
- * Retourne un coefficient entre 0.5 (50%) et 1.0 (100%)
  */
 function calculerCoefficientPonctualite(tempsPrevuMin: number, tempsReelMin: number): number {
   const ecart = Math.abs(tempsReelMin - tempsPrevuMin);
-  // Tolérance de 5 minutes sans pénalité
   if (ecart <= 5) return 1.0;
-  
-  // Pénalité de 3% par minute d'écart au-delà de la tolérance, max 50%
   const penalitePct = Math.min((ecart - 5) * 3, 50);
   return 1.0 - (penalitePct / 100);
 }
 
 /**
+ * Enregistre qu'un ATC a contrôlé un plan de vol.
+ */
+async function enregistrerControleATC(
+  admin: ReturnType<typeof createAdminClient>,
+  planVolId: string,
+  userId: string,
+  aeroport: string,
+  position: string
+): Promise<void> {
+  try {
+    await admin.from('atc_plans_controles').upsert({
+      plan_vol_id: planVolId,
+      user_id: userId,
+      aeroport,
+      position
+    }, { onConflict: 'plan_vol_id,user_id,aeroport,position' });
+  } catch (e) {
+    console.error('Erreur enregistrement controle ATC:', e);
+  }
+}
+
+/**
+ * Distribue les taxes aéroportuaires aux ATC qui ont contrôlé le vol.
+ */
+async function distribuerTaxesATC(
+  admin: ReturnType<typeof createAdminClient>,
+  planVolId: string,
+  revenuBrut: number,
+  aeroportArrivee: string,
+  typeVol: string,
+  numeroVol: string
+): Promise<{ taxesTotales: number; atcPayes: number }> {
+  // Récupérer les taxes de l'aéroport d'arrivée
+  const { data: taxesData } = await admin.from('taxes_aeroport')
+    .select('taxe_pourcent, taxe_vfr_pourcent')
+    .eq('code_oaci', aeroportArrivee)
+    .single();
+
+  // Taux par défaut si pas configuré
+  const tauxTaxe = typeVol === 'VFR' 
+    ? (taxesData?.taxe_vfr_pourcent || 5) 
+    : (taxesData?.taxe_pourcent || 2);
+
+  const taxesTotales = Math.round(revenuBrut * tauxTaxe / 100);
+  if (taxesTotales <= 0) return { taxesTotales: 0, atcPayes: 0 };
+
+  // Récupérer tous les ATC qui ont contrôlé ce vol
+  const { data: controles } = await admin.from('atc_plans_controles')
+    .select('user_id, aeroport, position')
+    .eq('plan_vol_id', planVolId);
+
+  if (!controles || controles.length === 0) {
+    return { taxesTotales, atcPayes: 0 };
+  }
+
+  // Grouper par aéroport pour partager équitablement
+  const parAeroport: Record<string, { user_id: string; position: string }[]> = {};
+  for (const c of controles) {
+    if (!parAeroport[c.aeroport]) parAeroport[c.aeroport] = [];
+    parAeroport[c.aeroport].push({ user_id: c.user_id, position: c.position });
+  }
+
+  const nbAeroports = Object.keys(parAeroport).length;
+  const taxesParAeroport = Math.round(taxesTotales / nbAeroports);
+
+  let atcPayes = 0;
+
+  for (const [aeroport, positions] of Object.entries(parAeroport)) {
+    const taxesParPosition = Math.round(taxesParAeroport / positions.length);
+    if (taxesParPosition <= 0) continue;
+
+    for (const { user_id } of positions) {
+      // Récupérer le compte personnel de l'ATC
+      const { data: compteAtc } = await admin.from('felitz_comptes')
+        .select('id')
+        .eq('proprietaire_id', user_id)
+        .eq('type', 'personnel')
+        .single();
+
+      if (!compteAtc) continue;
+
+      // Envoyer un chèque de taxes à l'ATC
+      await admin.from('messages').insert({
+        destinataire_id: user_id,
+        expediteur_id: null,
+        titre: `Taxes aéroportuaires - Vol ${numeroVol}`,
+        contenu: `Vous avez contrôlé le vol ${numeroVol} sur l'aéroport ${aeroport}.\n\nTaxe de ${tauxTaxe}% sur le revenu du vol.\nMontant de votre part: ${taxesParPosition.toLocaleString('fr-FR')} F$\n\nMerci pour votre service !`,
+        type_message: 'cheque_taxes_atc',
+        cheque_montant: taxesParPosition,
+        cheque_encaisse: false,
+        cheque_destinataire_compte_id: compteAtc.id,
+        cheque_libelle: `Taxes vol ${numeroVol} (${aeroport})`,
+        cheque_numero_vol: numeroVol,
+        cheque_pour_compagnie: false
+      });
+
+      atcPayes++;
+    }
+  }
+
+  return { taxesTotales, atcPayes };
+}
+
+/**
  * Envoie des chèques lors de la clôture d'un vol commercial.
- * Le pilote reçoit un chèque pour son salaire.
- * Le PDG de la compagnie reçoit un chèque pour les revenus de la compagnie.
  */
 async function envoyerChequesVol(
   admin: ReturnType<typeof createAdminClient>,
   plan: {
+    id: string;
     pilote_id: string;
     vol_commercial: boolean;
     compagnie_id: string | null;
@@ -38,31 +136,41 @@ async function envoyerChequesVol(
     temps_prev_min: number;
     accepted_at: string | null;
     numero_vol?: string;
+    aeroport_arrivee?: string;
+    type_vol?: string;
   },
   clotureAt: Date
-): Promise<{ success: boolean; message?: string; revenus?: { brut: number; net: number; salaire: number; coefficient: number; tempsReel: number } }> {
-  // Vérifier que c'est un vol commercial avec des revenus
+): Promise<{ success: boolean; message?: string; revenus?: { brut: number; net: number; salaire: number; taxes: number; coefficient: number; tempsReel: number } }> {
   if (!plan.vol_commercial || !plan.compagnie_id || !plan.revenue_brut || plan.revenue_brut <= 0) {
     return { success: true, message: 'Vol non commercial ou sans revenus' };
   }
 
-  // Calculer le temps réel de vol
-  let tempsReelMin = plan.temps_prev_min; // Par défaut si pas d'accepted_at
+  let tempsReelMin = plan.temps_prev_min;
   if (plan.accepted_at) {
     const acceptedAt = new Date(plan.accepted_at);
     const diffMs = clotureAt.getTime() - acceptedAt.getTime();
     tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
   }
 
-  // Calculer le coefficient de ponctualité
   const coefficient = calculerCoefficientPonctualite(plan.temps_prev_min, tempsReelMin);
-  
-  // Calculer les revenus effectifs
   const revenuEffectif = Math.round(plan.revenue_brut * coefficient);
-  const salaireEffectif = Math.round((plan.salaire_pilote || 0) * coefficient);
-  const revenuCompagnie = revenuEffectif - salaireEffectif;
+  
+  // Distribuer les taxes aux ATC
+  const numeroVol = plan.numero_vol || 'N/A';
+  const { taxesTotales } = await distribuerTaxesATC(
+    admin,
+    plan.id,
+    revenuEffectif,
+    plan.aeroport_arrivee || '',
+    plan.type_vol || 'IFR',
+    numeroVol
+  );
 
-  // Récupérer les infos de la compagnie
+  // Revenu après taxes
+  const revenuApresTaxes = revenuEffectif - taxesTotales;
+  const salaireEffectif = Math.round((plan.salaire_pilote || 0) * coefficient);
+  const revenuCompagnie = Math.max(0, revenuApresTaxes - salaireEffectif);
+
   const { data: compagnie } = await admin.from('compagnies')
     .select('nom, pdg_id')
     .eq('id', plan.compagnie_id)
@@ -72,7 +180,6 @@ async function envoyerChequesVol(
     return { success: false, message: 'Compagnie introuvable' };
   }
 
-  // Récupérer le compte personnel du pilote
   const { data: comptePilote } = await admin.from('felitz_comptes')
     .select('id')
     .eq('proprietaire_id', plan.pilote_id)
@@ -83,7 +190,6 @@ async function envoyerChequesVol(
     return { success: false, message: 'Compte Felitz du pilote introuvable' };
   }
 
-  // Récupérer le compte de la compagnie
   const { data: compteCompagnie } = await admin.from('felitz_comptes')
     .select('id')
     .eq('compagnie_id', plan.compagnie_id)
@@ -95,15 +201,14 @@ async function envoyerChequesVol(
   }
 
   const coeffPct = Math.round(coefficient * 100);
-  const numeroVol = plan.numero_vol || 'N/A';
 
-  // Envoyer un chèque au pilote pour son salaire
+  // Chèque salaire pilote
   if (salaireEffectif > 0) {
     await admin.from('messages').insert({
       destinataire_id: plan.pilote_id,
-      expediteur_id: null, // Système
+      expediteur_id: null,
       titre: `Salaire vol ${numeroVol}`,
-      contenu: `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min\nCoefficient de ponctualité: ${coeffPct}%\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`,
+      contenu: `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min\nCoefficient de ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesTotales.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`,
       type_message: 'cheque_salaire',
       cheque_montant: salaireEffectif,
       cheque_encaisse: false,
@@ -115,13 +220,13 @@ async function envoyerChequesVol(
     });
   }
 
-  // Envoyer un chèque au PDG pour les revenus de la compagnie
+  // Chèque revenu compagnie
   if (revenuCompagnie > 0 && compagnie.pdg_id) {
     await admin.from('messages').insert({
       destinataire_id: compagnie.pdg_id,
-      expediteur_id: null, // Système
+      expediteur_id: null,
       titre: `Revenu vol ${numeroVol} - ${compagnie.nom}`,
-      contenu: `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$\nRevenu net après salaire pilote: ${revenuCompagnie.toLocaleString('fr-FR')} F$\nCoefficient de ponctualité: ${coeffPct}%\n\nVeuillez encaisser le chèque ci-dessous au nom de ${compagnie.nom}.`,
+      contenu: `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$\nCoefficient ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesTotales.toLocaleString('fr-FR')} F$\nSalaire pilote: ${salaireEffectif.toLocaleString('fr-FR')} F$\nRevenu net: ${revenuCompagnie.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser le chèque ci-dessous.`,
       type_message: 'cheque_revenu_compagnie',
       cheque_montant: revenuCompagnie,
       cheque_encaisse: false,
@@ -137,8 +242,9 @@ async function envoyerChequesVol(
     success: true, 
     revenus: { 
       brut: plan.revenue_brut, 
-      net: revenuEffectif, 
+      net: revenuCompagnie, 
       salaire: salaireEffectif, 
+      taxes: taxesTotales,
       coefficient,
       tempsReel: tempsReelMin
     } 
@@ -159,7 +265,10 @@ export async function PATCH(
     const { action } = body;
 
     const admin = createAdminClient();
-    const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut, current_holder_user_id, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol').eq('id', id).single();
+    const { data: plan } = await admin.from('plans_vol')
+      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol')
+      .eq('id', id)
+      .single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
 
     if (action === 'cloture') {
@@ -169,7 +278,6 @@ export async function PATCH(
       if (plan.statut === 'refuse' || plan.statut === 'cloture') return NextResponse.json({ error: 'Ce plan ne peut pas etre cloture.' }, { status: 400 });
       if (!STATUTS_OUVERTS.includes(plan.statut)) return NextResponse.json({ error: 'Statut invalide pour cloture.' }, { status: 400 });
 
-      // Cloture directe si : pas de detenteur, autosurveillance, ou aucun ATC n'a encore accepte (statut != accepte/en_cours)
       const closDirect = !plan.current_holder_user_id || plan.automonitoring === true || (plan.statut !== 'accepte' && plan.statut !== 'en_cours');
       const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
       const clotureAt = new Date();
@@ -178,8 +286,6 @@ export async function PATCH(
       let paiementResult = null;
       if (newStatut === 'cloture') {
         payload.cloture_at = clotureAt.toISOString();
-        
-        // Envoyer les chèques pour les vols commerciaux
         paiementResult = await envoyerChequesVol(admin, plan, clotureAt);
         if (!paiementResult.success) {
           console.error('Erreur paiement vol:', paiementResult.message);
@@ -200,8 +306,6 @@ export async function PATCH(
       if (plan.statut !== 'en_attente_cloture') return NextResponse.json({ error: 'Aucune demande de cloture en attente.' }, { status: 400 });
 
       const clotureAt = new Date();
-      
-      // Envoyer les chèques pour les vols commerciaux
       const paiementResult = await envoyerChequesVol(admin, plan, clotureAt);
       if (!paiementResult.success) {
         console.error('Erreur paiement vol:', paiementResult.message);
@@ -219,6 +323,11 @@ export async function PATCH(
       const canAtc = isAdmin || isHolder;
       if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui detient le plan ou un admin peut accepter.' }, { status: 403 });
       if (plan.statut !== 'en_attente' && plan.statut !== 'depose') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
+
+      // Enregistrer que cet ATC a contrôlé ce vol
+      if (plan.current_holder_user_id && plan.current_holder_aeroport && plan.current_holder_position) {
+        await enregistrerControleATC(admin, id, plan.current_holder_user_id, plan.current_holder_aeroport, plan.current_holder_position);
+      }
 
       const { error } = await admin.from('plans_vol').update({ statut: 'accepte', accepted_at: new Date().toISOString() }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -271,6 +380,9 @@ export async function PATCH(
       }
       if (!holder) return NextResponse.json({ error: 'Aucune frequence ATC de votre aeroport de depart ou d\'arrivee est en ligne. Reessayez plus tard.' }, { status: 400 });
 
+      // Enregistrer le nouvel ATC qui reçoit le plan
+      await enregistrerControleATC(admin, id, holder.user_id, holder.aeroport, holder.position);
+
       const { error: err } = await admin.from('plans_vol').update({
         aeroport_depart: ad,
         aeroport_arrivee: aa,
@@ -297,7 +409,6 @@ export async function PATCH(
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
       const isAdmin = profile?.role === 'admin';
       const isHolder = plan.current_holder_user_id === user.id;
-      // En autosurveillance : les instructions ne sont pas modifiables
       const canEdit = (isAdmin || isHolder) && !plan.automonitoring;
       if (!canEdit) return NextResponse.json({ error: 'Seul le detenteur du plan ou un admin peut modifier les instructions (pas en autosurveillance).' }, { status: 403 });
       if (plan.statut !== 'accepte' && plan.statut !== 'en_cours') return NextResponse.json({ error: 'Plan non accepte ou non en cours.' }, { status: 400 });
@@ -317,7 +428,6 @@ export async function PATCH(
       const canTransferByStatut = ['accepte', 'en_cours'].includes(plan.statut) || plan.automonitoring
         || (['depose', 'en_attente'].includes(plan.statut) && (isHolder || isAdmin));
       if (!canTransferByStatut) return NextResponse.json({ error: 'Plan non accepte, non en cours ou non en autosurveillance.' }, { status: 400 });
-      // En autosurveillance : seuls les ATC en service (avec une position) peuvent prendre/transferer
       if (plan.automonitoring && !isAdmin) {
         const { data: atcSess } = await supabase.from('atc_sessions').select('id').eq('user_id', user.id).single();
         if (!atcSess) return NextResponse.json({ error: 'Mettez-vous en service pour prendre ou transferer un plan en autosurveillance.' }, { status: 403 });
@@ -348,7 +458,6 @@ export async function PATCH(
       const { data: sess } = await admin.from('atc_sessions').select('user_id').eq('aeroport', aeroport).eq('position', String(position)).single();
       if (!sess?.user_id) return NextResponse.json({ error: 'Aucun ATC en ligne a cette position pour cet aeroport.' }, { status: 400 });
 
-      // Mise en attente : la position cible doit accepter sous 1 min, sinon renvoi a l'ATC d'avant
       const { error: err } = await admin.from('plans_vol').update({
         pending_transfer_aeroport: aeroport,
         pending_transfer_position: String(position),
@@ -365,6 +474,9 @@ export async function PATCH(
         return NextResponse.json({ error: 'Ce transfert ne vous est pas destine ou a expire.' }, { status: 403 });
       const oneMinAgo = new Date(Date.now() - 60000).toISOString();
       if (plan.pending_transfer_at && plan.pending_transfer_at < oneMinAgo) return NextResponse.json({ error: 'Ce transfert a expire (1 min).' }, { status: 400 });
+
+      // Enregistrer que cet ATC a contrôlé ce vol
+      await enregistrerControleATC(admin, id, user.id, sess.aeroport, sess.position);
 
       const { error: err } = await admin.from('plans_vol').update({
         current_holder_user_id: user.id,
@@ -386,7 +498,6 @@ export async function PATCH(
   }
 }
 
-/** Supprimer definitivement un plan cloture sans l'enregistrer en vol (pilote uniquement). */
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }

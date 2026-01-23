@@ -35,11 +35,18 @@ export default async function AtcLayout({
   const { data: session } = await supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single();
   const enService = !!session;
 
+  const admin = createAdminClient();
+  
+  // Récupérer le nombre de messages non lus
+  const { count: messagesNonLusCount } = await admin.from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('destinataire_id', user.id)
+    .eq('lu', false);
+
   let plansAuto: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansAAccepter: { id: string; numero_vol: string }[] = [];
   let plansAccepter: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   if (enService && session) {
-    const admin = createAdminClient();
     const oneMinAgo = new Date(Date.now() - 60000).toISOString();
     await admin.from('plans_vol').update({ pending_transfer_aeroport: null, pending_transfer_position: null, pending_transfer_at: null }).lt('pending_transfer_at', oneMinAgo);
 
@@ -57,7 +64,7 @@ export default async function AtcLayout({
     <div className="min-h-screen flex flex-col">
       <AutoRefresh intervalSeconds={8} />
       <AtcModeBg isAdmin={isAdmin} />
-      <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} />
+      <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
       <div className="flex flex-1 w-full min-h-0">
         {enService && (
           <aside className="w-44 flex-shrink-0 border-r border-slate-300 bg-slate-100 py-3 px-2 flex flex-col">

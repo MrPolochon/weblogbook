@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText } from 'lucide-react';
+import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText, Mail } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 
@@ -33,11 +33,13 @@ export default function AtcNavBar({
   enService,
   gradeNom,
   sessionInfo,
+  messagesNonLusCount = 0,
 }: {
   isAdmin: boolean;
   enService: boolean;
   gradeNom?: string | null;
   sessionInfo?: { aeroport: string; position: string; started_at: string } | null;
+  messagesNonLusCount?: number;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -69,6 +71,16 @@ export default function AtcNavBar({
           <Link href="/atc/notams" className={cn(linkBase, pathname.startsWith('/atc/notams') ? linkActive : linkInactive)}>
             <ScrollText className="h-4 w-4 flex-shrink-0" />
             NOTAMs
+          </Link>
+          <Link href="/atc/messagerie" className={cn(linkBase, 'relative', pathname.startsWith('/atc/messagerie') ? linkActive : linkInactive)}>
+            <Mail className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden md:inline">Messagerie</span>
+            <span className="md:hidden">Msgs</span>
+            {messagesNonLusCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center px-1 rounded-full bg-red-500 text-white text-xs font-bold">
+                {messagesNonLusCount > 99 ? '99+' : messagesNonLusCount}
+              </span>
+            )}
           </Link>
           {isAdmin && (
             <Link href="/atc/admin" className={cn(linkBase, pathname.startsWith('/atc/admin') ? linkActive : linkInactive)}>

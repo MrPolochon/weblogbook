@@ -81,6 +81,19 @@ export async function POST(request: Request) {
     }).select('id').single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    // Enregistrer que cet ATC a contrôlé ce plan de vol
+    try {
+      await admin.from('atc_plans_controles').upsert({
+        plan_vol_id: data.id,
+        user_id: holder.user_id,
+        aeroport: holder.aeroport,
+        position: holder.position
+      }, { onConflict: 'plan_vol_id,user_id,aeroport,position' });
+    } catch (e) {
+      console.error('Erreur enregistrement controle ATC initial:', e);
+    }
+
     return NextResponse.json({ ok: true, id: data.id });
   } catch (e) {
     console.error('plans-vol POST:', e);

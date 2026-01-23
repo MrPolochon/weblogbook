@@ -44,13 +44,12 @@ function getIdentifiant(obj: { identifiant: string } | { identifiant: string }[]
   return obj.identifiant || 'Système';
 }
 
-export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant }: Props) {
+export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant }: Props) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'inbox' | 'cheques' | 'sent' | 'compose'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'cheques' | 'sent' | 'compose'>('cheques');
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Compose form
   const [composeDestinataire, setComposeDestinataire] = useState('');
   const [composeTitre, setComposeTitre] = useState('');
   const [composeContenu, setComposeContenu] = useState('');
@@ -138,17 +137,15 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   }
 
   const tabs = [
+    { id: 'cheques', label: 'Chèques taxes', icon: CreditCard, count: cheques.filter(m => !m.cheque_encaisse).length },
     { id: 'inbox', label: 'Boîte de réception', icon: Inbox, count: messagesNormaux.filter(m => !m.lu).length },
-    { id: 'cheques', label: 'Chèques', icon: CreditCard, count: cheques.filter(m => !m.cheque_encaisse).length },
     { id: 'sent', label: 'Envoyés', icon: Send, count: 0 },
     { id: 'compose', label: 'Nouveau', icon: Plus, count: 0 },
   ] as const;
 
   return (
     <div className="grid lg:grid-cols-3 gap-6">
-      {/* Sidebar - Liste des messages */}
       <div className="lg:col-span-1 space-y-4">
-        {/* Onglets */}
         <div className="flex flex-wrap gap-2">
           {tabs.map(tab => (
             <button
@@ -156,7 +153,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
               onClick={() => { setActiveTab(tab.id); setSelectedMessage(null); }}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === tab.id
-                  ? 'bg-violet-600 text-white'
+                  ? 'bg-emerald-600 text-white'
                   : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
               }`}
             >
@@ -171,7 +168,6 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
           ))}
         </div>
 
-        {/* Liste des messages */}
         <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden max-h-[600px] overflow-y-auto">
           {activeTab === 'compose' ? (
             <form onSubmit={handleSendMessage} className="p-4 space-y-4">
@@ -214,7 +210,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
               <button
                 type="submit"
                 disabled={composeSending}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition-colors disabled:opacity-50"
               >
                 {composeSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Envoyer
@@ -234,14 +230,14 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                     onClick={() => selectMessage(msg)}
                     className={`w-full text-left p-4 hover:bg-slate-700/30 transition-colors ${
                       selectedMessage?.id === msg.id ? 'bg-slate-700/40' : ''
-                    } ${!msg.lu && activeTab !== 'sent' ? 'bg-violet-500/5' : ''}`}
+                    } ${!msg.lu && activeTab !== 'sent' ? 'bg-emerald-500/5' : ''}`}
                   >
                     <div className="flex items-start gap-3">
                       <div className="shrink-0 mt-0.5">
                         {msg.lu || activeTab === 'sent' ? (
                           <MailOpen className="h-5 w-5 text-slate-500" />
                         ) : (
-                          <Mail className="h-5 w-5 text-violet-400" />
+                          <Mail className="h-5 w-5 text-emerald-400" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -259,18 +255,18 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                         <p className={`text-sm truncate ${!msg.lu && activeTab !== 'sent' ? 'text-slate-100' : 'text-slate-300'}`}>
                           {msg.titre}
                         </p>
-                        {msg.type_message === 'cheque_salaire' && (
+                        {msg.type_message === 'cheque_taxes_atc' && (
                           <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs ${
                             msg.cheque_encaisse ? 'bg-slate-600/50 text-slate-400' : 'bg-emerald-500/20 text-emerald-400'
                           }`}>
-                            {msg.cheque_encaisse ? 'Encaissé' : `${msg.cheque_montant?.toLocaleString('fr-FR')} F$ à encaisser`}
+                            {msg.cheque_encaisse ? 'Encaissé' : `${msg.cheque_montant?.toLocaleString('fr-FR')} F$ taxes`}
                           </span>
                         )}
-                        {msg.type_message === 'cheque_revenu_compagnie' && (
+                        {msg.type_message === 'cheque_salaire' && (
                           <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs ${
-                            msg.cheque_encaisse ? 'bg-slate-600/50 text-slate-400' : 'bg-amber-500/20 text-amber-400'
+                            msg.cheque_encaisse ? 'bg-slate-600/50 text-slate-400' : 'bg-sky-500/20 text-sky-400'
                           }`}>
-                            {msg.cheque_encaisse ? 'Encaissé' : `${msg.cheque_montant?.toLocaleString('fr-FR')} F$ (compagnie)`}
+                            {msg.cheque_encaisse ? 'Encaissé' : `${msg.cheque_montant?.toLocaleString('fr-FR')} F$ salaire`}
                           </span>
                         )}
                       </div>
@@ -284,11 +280,9 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
         </div>
       </div>
 
-      {/* Contenu du message */}
       <div className="lg:col-span-2">
         {selectedMessage ? (
           <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden">
-            {/* Header du message */}
             <div className="p-4 border-b border-slate-700/50 bg-slate-800/50">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -320,9 +314,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
               </div>
             </div>
 
-            {/* Contenu */}
             <div className="p-6">
-              {/* Si c'est un chèque, afficher le chèque visuel */}
               {['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(selectedMessage.type_message) && selectedMessage.cheque_montant ? (
                 <div className="space-y-6">
                   <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>

@@ -68,7 +68,7 @@ export async function PATCH(
 
     if (action === 'encaisser') {
       // Vérifier que c'est un chèque non encaissé
-      if (!['cheque_salaire', 'cheque_revenu_compagnie'].includes(message.type_message)) {
+      if (!['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(message.type_message)) {
         return NextResponse.json({ error: 'Ce message n\'est pas un chèque' }, { status: 400 });
       }
       if (message.cheque_encaisse) {
@@ -151,7 +151,7 @@ export async function DELETE(
     if (!message) return NextResponse.json({ error: 'Message introuvable' }, { status: 404 });
     
     // Ne pas permettre de supprimer les chèques non encaissés
-    if (['cheque_salaire', 'cheque_revenu_compagnie'].includes(message.type_message) && !message.cheque_encaisse) {
+    if (['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(message.type_message) && !message.cheque_encaisse) {
       return NextResponse.json({ error: 'Vous devez d\'abord encaisser ce chèque' }, { status: 400 });
     }
     

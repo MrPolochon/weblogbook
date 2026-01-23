@@ -3,12 +3,16 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { Mail, Send, Inbox, CreditCard, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import MessagerieClient from './MessagerieClient';
+import MessagerieAtcClient from './MessagerieAtcClient';
 
-export default async function MessageriePage() {
+export default async function MessagerieAtcPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
+
+  const { data: profile } = await supabase.from('profiles').select('role, atc, identifiant').eq('id', user.id).single();
+  const canAtc = profile?.role === 'admin' || profile?.role === 'atc' || profile?.atc;
+  if (!canAtc) redirect('/logbook');
 
   const admin = createAdminClient();
 
@@ -30,10 +34,7 @@ export default async function MessageriePage() {
     .neq('id', user.id)
     .order('identifiant');
 
-  // Récupérer le profil pour savoir si c'est un pilote
-  const { data: profile } = await supabase.from('profiles').select('identifiant').eq('id', user.id).single();
-
-  // Compter les chèques non encaissés
+  // Compter les chèques non encaissés (taxes ATC)
   const chequesNonEncaisses = (messagesRecus || []).filter(
     m => ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(m.type_message) && !m.cheque_encaisse
   );
@@ -44,18 +45,18 @@ export default async function MessageriePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 via-violet-700 to-purple-800 p-6 shadow-xl">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 p-6 shadow-xl">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-30"></div>
         <div className="relative flex items-center gap-4">
-          <Link href="/logbook" className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors">
+          <Link href="/atc" className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors">
             <ArrowLeft className="h-5 w-5 text-white" />
           </Link>
           <div className="p-3 rounded-xl bg-white/10 backdrop-blur">
             <Mail className="h-7 w-7 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white">Messagerie</h1>
-            <p className="text-violet-100/80 text-sm">Vos messages et chèques à encaisser</p>
+            <h1 className="text-2xl font-bold text-white">Messagerie ATC</h1>
+            <p className="text-emerald-100/80 text-sm">Vos messages et chèques de taxes</p>
           </div>
         </div>
       </div>
@@ -91,8 +92,8 @@ export default async function MessageriePage() {
         </div>
       </div>
 
-      {/* Client component pour gérer les onglets et interactions */}
-      <MessagerieClient 
+      {/* Client component */}
+      <MessagerieAtcClient 
         messagesRecus={messagesRecus || []}
         messagesEnvoyes={messagesEnvoyes || []}
         utilisateurs={utilisateurs || []}
