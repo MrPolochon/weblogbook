@@ -65,8 +65,12 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Compte personnel déjà existant' }, { status: 400 });
       }
       const { data: vbanData, error: vbanErr } = await admin.rpc('generate_vban', { type_compte: 'personnel' });
-      if (vbanErr || !vbanData) return NextResponse.json({ error: 'Erreur génération VBAN' }, { status: 500 });
-      const vban = vbanData as string;
+      if (vbanErr) {
+        console.error('Erreur RPC generate_vban:', vbanErr);
+        return NextResponse.json({ error: `Erreur génération VBAN: ${vbanErr.message}` }, { status: 500 });
+      }
+      const vban = (vbanData as string) || null;
+      if (!vban) return NextResponse.json({ error: 'Erreur génération VBAN: valeur vide' }, { status: 500 });
       const { data, error } = await admin.from('felitz_comptes').insert({
         user_id: user.id,
         type_compte: 'personnel',
@@ -86,8 +90,12 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: 'Compte entreprise déjà existant pour cette compagnie' }, { status: 400 });
         }
         const { data: vbanData, error: vbanErr } = await admin.rpc('generate_vban', { type_compte: 'entreprise' });
-        if (vbanErr || !vbanData) return NextResponse.json({ error: 'Erreur génération VBAN' }, { status: 500 });
-        const vban = vbanData as string;
+        if (vbanErr) {
+          console.error('Erreur RPC generate_vban:', vbanErr);
+          return NextResponse.json({ error: `Erreur génération VBAN: ${vbanErr.message}` }, { status: 500 });
+        }
+        const vban = (vbanData as string) || null;
+        if (!vban) return NextResponse.json({ error: 'Erreur génération VBAN: valeur vide' }, { status: 500 });
         const { data, error } = await admin.from('felitz_comptes').insert({
           compagnie_id: targetCompagnieId,
           type_compte: 'entreprise',
@@ -98,8 +106,12 @@ export async function POST(request: Request) {
       } else {
         if (!compagnie_id) return NextResponse.json({ error: 'compagnie_id requis pour admin' }, { status: 400 });
         const { data: vbanData, error: vbanErr } = await admin.rpc('generate_vban', { type_compte: 'entreprise' });
-        if (vbanErr || !vbanData) return NextResponse.json({ error: 'Erreur génération VBAN' }, { status: 500 });
-        const vban = vbanData as string;
+        if (vbanErr) {
+          console.error('Erreur RPC generate_vban:', vbanErr);
+          return NextResponse.json({ error: `Erreur génération VBAN: ${vbanErr.message}` }, { status: 500 });
+        }
+        const vban = (vbanData as string) || null;
+        if (!vban) return NextResponse.json({ error: 'Erreur génération VBAN: valeur vide' }, { status: 500 });
         const { data, error } = await admin.from('felitz_comptes').insert({
           compagnie_id,
           type_compte: 'entreprise',
