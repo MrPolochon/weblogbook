@@ -36,10 +36,7 @@ export default function NavBarMenu({
     ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield }] : []),
     ...(isAdmin ? [{ href: '/admin', label: 'Admin', icon: LayoutDashboard, badge: pendingVolsCount > 0 ? pendingVolsCount : undefined }] : []),
     { href: '/documents', label: 'Documents', icon: FileText },
-    { href: '/notams', label: 'NOTAMs', icon: ScrollText },
     ...(hasCompagnie ? [{ href: '/compagnie', label: 'Ma compagnie', icon: LayoutDashboard }] : []),
-    ...(isAdmin ? [{ href: '/atc', label: 'Espace ATC', icon: Radio }] : []),
-    { href: '/compte', label: 'Mon compte', icon: User },
   ];
 
   return (
