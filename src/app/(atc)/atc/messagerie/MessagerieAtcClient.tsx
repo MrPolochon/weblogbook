@@ -153,8 +153,8 @@ export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, ut
               onClick={() => { setActiveTab(tab.id); setSelectedMessage(null); }}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === tab.id
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
               }`}
             >
               <tab.icon className="h-4 w-4" />
@@ -168,16 +168,16 @@ export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, ut
           ))}
         </div>
 
-        <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden max-h-[600px] overflow-y-auto">
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden max-h-[600px] overflow-y-auto">
           {activeTab === 'compose' ? (
             <form onSubmit={handleSendMessage} className="p-4 space-y-4">
-              <h3 className="font-semibold text-slate-200">Nouveau message</h3>
+              <h3 className="font-semibold text-slate-800">Nouveau message</h3>
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Destinataire</label>
+                <label className="block text-sm text-slate-600 mb-1">Destinataire</label>
                 <select
                   value={composeDestinataire}
                   onChange={e => setComposeDestinataire(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-200"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800"
                   required
                 >
                   <option value="">-- Sélectionner --</option>
@@ -187,26 +187,26 @@ export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, ut
                 </select>
               </div>
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Sujet</label>
+                <label className="block text-sm text-slate-600 mb-1">Sujet</label>
                 <input
                   type="text"
                   value={composeTitre}
                   onChange={e => setComposeTitre(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-200"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Message</label>
+                <label className="block text-sm text-slate-600 mb-1">Message</label>
                 <textarea
                   value={composeContenu}
                   onChange={e => setComposeContenu(e.target.value)}
                   rows={5}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-200"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800"
                   required
                 />
               </div>
-              {composeError && <p className="text-red-400 text-sm">{composeError}</p>}
+              {composeError && <p className="text-red-600 text-sm">{composeError}</p>}
               <button
                 type="submit"
                 disabled={composeSending}
@@ -217,9 +217,9 @@ export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, ut
               </button>
             </form>
           ) : (
-            <div className="divide-y divide-slate-700/30">
+            <div className="divide-y divide-slate-100">
               {(activeTab === 'inbox' ? messagesNormaux : activeTab === 'cheques' ? cheques : messagesEnvoyes).length === 0 ? (
-                <div className="p-8 text-center text-slate-500">
+                <div className="p-8 text-center text-slate-400">
                   <Mail className="h-12 w-12 mx-auto mb-2 opacity-50" />
                   <p>Aucun message</p>
                 </div>
@@ -228,49 +228,49 @@ export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, ut
                   <button
                     key={msg.id}
                     onClick={() => selectMessage(msg)}
-                    className={`w-full text-left p-4 hover:bg-slate-700/30 transition-colors ${
-                      selectedMessage?.id === msg.id ? 'bg-slate-700/40' : ''
-                    } ${!msg.lu && activeTab !== 'sent' ? 'bg-emerald-500/5' : ''}`}
+                    className={`w-full text-left p-4 hover:bg-slate-50 transition-colors ${
+                      selectedMessage?.id === msg.id ? 'bg-emerald-50' : ''
+                    } ${!msg.lu && activeTab !== 'sent' ? 'bg-sky-50' : ''}`}
                   >
                     <div className="flex items-start gap-3">
                       <div className="shrink-0 mt-0.5">
                         {msg.lu || activeTab === 'sent' ? (
-                          <MailOpen className="h-5 w-5 text-slate-500" />
+                          <MailOpen className="h-5 w-5 text-slate-400" />
                         ) : (
-                          <Mail className="h-5 w-5 text-emerald-400" />
+                          <Mail className="h-5 w-5 text-emerald-600" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
-                          <p className={`text-sm truncate ${!msg.lu && activeTab !== 'sent' ? 'font-semibold text-slate-200' : 'text-slate-400'}`}>
+                          <p className={`text-sm truncate ${!msg.lu && activeTab !== 'sent' ? 'font-semibold text-slate-800' : 'text-slate-500'}`}>
                             {activeTab === 'sent' 
                               ? `À: ${getIdentifiant(msg.destinataire)}`
                               : `De: ${getIdentifiant(msg.expediteur)}`
                             }
                           </p>
-                          <span className="text-xs text-slate-500 shrink-0">
+                          <span className="text-xs text-slate-400 shrink-0">
                             {format(new Date(msg.created_at), 'dd/MM', { locale: fr })}
                           </span>
                         </div>
-                        <p className={`text-sm truncate ${!msg.lu && activeTab !== 'sent' ? 'text-slate-100' : 'text-slate-300'}`}>
+                        <p className={`text-sm truncate ${!msg.lu && activeTab !== 'sent' ? 'text-slate-700' : 'text-slate-600'}`}>
                           {msg.titre}
                         </p>
                         {msg.type_message === 'cheque_taxes_atc' && (
-                          <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs ${
-                            msg.cheque_encaisse ? 'bg-slate-600/50 text-slate-400' : 'bg-emerald-500/20 text-emerald-400'
+                          <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium ${
+                            msg.cheque_encaisse ? 'bg-slate-200 text-slate-500' : 'bg-emerald-100 text-emerald-700'
                           }`}>
                             {msg.cheque_encaisse ? 'Encaissé' : `${msg.cheque_montant?.toLocaleString('fr-FR')} F$ taxes`}
                           </span>
                         )}
                         {msg.type_message === 'cheque_salaire' && (
-                          <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs ${
-                            msg.cheque_encaisse ? 'bg-slate-600/50 text-slate-400' : 'bg-sky-500/20 text-sky-400'
+                          <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium ${
+                            msg.cheque_encaisse ? 'bg-slate-200 text-slate-500' : 'bg-sky-100 text-sky-700'
                           }`}>
                             {msg.cheque_encaisse ? 'Encaissé' : `${msg.cheque_montant?.toLocaleString('fr-FR')} F$ salaire`}
                           </span>
                         )}
                       </div>
-                      <ChevronRight className="h-4 w-4 text-slate-600 shrink-0" />
+                      <ChevronRight className="h-4 w-4 text-slate-300 shrink-0" />
                     </div>
                   </button>
                 ))
@@ -282,12 +282,12 @@ export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, ut
 
       <div className="lg:col-span-2">
         {selectedMessage ? (
-          <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden">
-            <div className="p-4 border-b border-slate-700/50 bg-slate-800/50">
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-slate-100 bg-slate-50">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-100">{selectedMessage.titre}</h2>
-                  <p className="text-sm text-slate-400 mt-1">
+                  <h2 className="text-lg font-semibold text-slate-800">{selectedMessage.titre}</h2>
+                  <p className="text-sm text-slate-500 mt-1">
                     {activeTab === 'sent' 
                       ? `À: ${getIdentifiant(selectedMessage.destinataire)}`
                       : `De: ${getIdentifiant(selectedMessage.expediteur)}`
@@ -297,7 +297,7 @@ export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, ut
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setSelectedMessage(null)}
-                    className="p-2 rounded-lg hover:bg-slate-700/50 text-slate-400"
+                    className="p-2 rounded-lg hover:bg-slate-200 text-slate-500"
                   >
                     <X className="h-5 w-5" />
                   </button>
@@ -305,7 +305,7 @@ export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, ut
                     <button
                       onClick={() => handleDelete(selectedMessage.id)}
                       disabled={loading}
-                      className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 disabled:opacity-50"
+                      className="p-2 rounded-lg hover:bg-red-100 text-red-500 disabled:opacity-50"
                     >
                       <Trash2 className="h-5 w-5" />
                     </button>
@@ -317,7 +317,7 @@ export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, ut
             <div className="p-6">
               {['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(selectedMessage.type_message) && selectedMessage.cheque_montant ? (
                 <div className="space-y-6">
-                  <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>
+                  <p className="text-slate-700 whitespace-pre-wrap">{selectedMessage.contenu}</p>
                   <ChequeVisuel
                     id={selectedMessage.id}
                     montant={selectedMessage.cheque_montant}
@@ -332,14 +332,14 @@ export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, ut
                   />
                 </div>
               ) : (
-                <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>
+                <p className="text-slate-700 whitespace-pre-wrap">{selectedMessage.contenu}</p>
               )}
             </div>
           </div>
         ) : (
-          <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-12 text-center">
-            <Mail className="h-16 w-16 text-slate-600 mx-auto mb-4" />
-            <p className="text-slate-400">Sélectionnez un message pour le lire</p>
+          <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-12 text-center">
+            <Mail className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+            <p className="text-slate-500">Sélectionnez un message pour le lire</p>
           </div>
         )}
       </div>

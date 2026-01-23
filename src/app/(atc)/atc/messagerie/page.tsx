@@ -63,31 +63,37 @@ export default async function MessagerieAtcPage() {
 
       {/* Statistiques */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 p-4">
+        <div className="rounded-xl bg-white border border-blue-200 shadow-sm p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-blue-400/80 text-sm">Messages non lus</p>
-              <p className="text-2xl font-bold text-blue-400">{messagesNonLus.length}</p>
+              <p className="text-slate-600 text-sm font-medium">Messages non lus</p>
+              <p className="text-2xl font-bold text-blue-600">{messagesNonLus.length}</p>
             </div>
-            <Inbox className="h-8 w-8 text-blue-400/30" />
+            <div className="p-2 rounded-lg bg-blue-100">
+              <Inbox className="h-6 w-6 text-blue-600" />
+            </div>
           </div>
         </div>
-        <div className="rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 p-4">
+        <div className="rounded-xl bg-white border border-emerald-200 shadow-sm p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-emerald-400/80 text-sm">Chèques à encaisser</p>
-              <p className="text-2xl font-bold text-emerald-400">{chequesNonEncaisses.length}</p>
+              <p className="text-slate-600 text-sm font-medium">Chèques à encaisser</p>
+              <p className="text-2xl font-bold text-emerald-600">{chequesNonEncaisses.length}</p>
             </div>
-            <CreditCard className="h-8 w-8 text-emerald-400/30" />
+            <div className="p-2 rounded-lg bg-emerald-100">
+              <CreditCard className="h-6 w-6 text-emerald-600" />
+            </div>
           </div>
         </div>
-        <div className="rounded-xl bg-gradient-to-br from-violet-500/10 to-violet-600/5 border border-violet-500/20 p-4">
+        <div className="rounded-xl bg-white border border-violet-200 shadow-sm p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-violet-400/80 text-sm">Messages envoyés</p>
-              <p className="text-2xl font-bold text-violet-400">{(messagesEnvoyes || []).length}</p>
+              <p className="text-slate-600 text-sm font-medium">Messages envoyés</p>
+              <p className="text-2xl font-bold text-violet-600">{(messagesEnvoyes || []).length}</p>
             </div>
-            <Send className="h-8 w-8 text-violet-400/30" />
+            <div className="p-2 rounded-lg bg-violet-100">
+              <Send className="h-6 w-6 text-violet-600" />
+            </div>
           </div>
         </div>
       </div>
