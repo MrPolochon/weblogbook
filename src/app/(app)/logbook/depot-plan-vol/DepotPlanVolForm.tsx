@@ -1,21 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
 type Avion = { id: string; typeAvionId: string; nom: string };
 type TypeAvion = { id: string; nom: string };
+type Compagnie = { id: string; nom: string };
 
 type Props = {
-  compagnieId: string | null;
-  compagnieNom: string | null;
-  avionsCompagnie: Avion[];
+  compagnies: Compagnie[];
+  compagnieParDefaut: string | null;
+  avionsCompagnieParDefaut: Avion[];
   inventairePersonnel: Avion[];
   typesAvion: TypeAvion[];
 };
 
-export default function DepotPlanVolForm({ compagnieId, compagnieNom, avionsCompagnie, inventairePersonnel, typesAvion }: Props) {
+export default function DepotPlanVolForm({ compagnies, compagnieParDefaut, avionsCompagnieParDefaut, inventairePersonnel, typesAvion }: Props) {
   const router = useRouter();
   const [aeroport_depart, setAeroportDepart] = useState('');
   const [aeroport_arrivee, setAeroportArrivee] = useState('');
@@ -30,12 +32,75 @@ export default function DepotPlanVolForm({ compagnieId, compagnieNom, avionsComp
   const [note_atc, setNoteAtc] = useState('');
   const [vol_commercial, setVolCommercial] = useState(false);
   const [nature_cargo, setNatureCargo] = useState('');
+  const [compagnie_selectionnee, setCompagnieSelectionnee] = useState<string>(compagnieParDefaut || '');
+  const [avionsCompagnie, setAvionsCompagnie] = useState<Avion[]>(avionsCompagnieParDefaut);
+  const [loadingAvions, setLoadingAvions] = useState(false);
   const [source_avion, setSourceAvion] = useState<'compagnie' | 'personnel' | 'autre'>('autre');
   const [avion_compagnie_id, setAvionCompagnieId] = useState('');
   const [avion_inventaire_id, setAvionInventaireId] = useState('');
   const [type_avion_id, setTypeAvionId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Charger les avions de la compagnie sélectionnée
+  async function chargerAvionsCompagnie(compagnieId: string) {
+    if (!compagnieId) {
+      setAvionsCompagnie([]);
+      return;
+    }
+    setLoadingAvions(true);
+    try {
+      const supabase = createClient();
+      // Récupérer tous les avions de la compagnie
+      const { data: avions } = await supabase
+        .from('compagnies_avions')
+        .select('id, type_avion_id, quantite, nom_avion, types_avion(nom, constructeur)')
+        .eq('compagnie_id', compagnieId);
+
+      if (!avions || avions.length === 0) {
+        setAvionsCompagnie([]);
+        return;
+      }
+
+      // Récupérer les avions utilisés
+      const avionIds = avions.map((a) => a.id);
+      const { data: avionsUtilises } = await supabase
+        .from('avions_utilisation')
+        .select('compagnie_avion_id')
+        .in('compagnie_avion_id', avionIds);
+
+      const avionsUtilisesIds = (avionsUtilises || []).map((u: any) => u.compagnie_avion_id);
+      const avionsDisponibles = avions.filter((a: any) => !avionsUtilisesIds.includes(a.id));
+
+      setAvionsCompagnie(
+        avionsDisponibles.map((a: any) => ({
+          id: a.id,
+          typeAvionId: a.type_avion_id,
+          nom: a.nom_avion || `${(a.types_avion as any)?.constructeur || ''} ${(a.types_avion as any)?.nom || ''}`.trim(),
+        }))
+      );
+    } catch (err) {
+      console.error('Erreur chargement avions:', err);
+      setAvionsCompagnie([]);
+    } finally {
+      setLoadingAvions(false);
+    }
+  }
+
+  // Charger les avions au montage si une compagnie par défaut existe
+  useEffect(() => {
+    if (compagnieParDefaut && vol_commercial && compagnie_selectionnee === compagnieParDefaut) {
+      chargerAvionsCompagnie(compagnieParDefaut);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Quand la compagnie change, charger ses avions
+  const handleCompagnieChange = (compagnieId: string) => {
+    setCompagnieSelectionnee(compagnieId);
+    setAvionCompagnieId('');
+    chargerAvionsCompagnie(compagnieId);
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -68,8 +133,8 @@ export default function DepotPlanVolForm({ compagnieId, compagnieNom, avionsComp
       }
     }
 
-    if (vol_commercial && !compagnieId) {
-      setError('Vous devez appartenir à une compagnie pour effectuer un vol commercial.');
+    if (vol_commercial && !compagnie_selectionnee) {
+      setError('Sélectionnez une compagnie pour effectuer un vol commercial.');
       return;
     }
 
@@ -88,6 +153,7 @@ export default function DepotPlanVolForm({ compagnieId, compagnieNom, avionsComp
         route_ifr: type_vol === 'IFR' && route_ifr.trim() ? route_ifr.trim() : undefined,
         note_atc: note_atc.trim() ? note_atc.trim() : undefined,
         vol_commercial,
+        compagnie_id: vol_commercial ? compagnie_selectionnee : undefined,
         nature_cargo: vol_commercial && nature_cargo.trim() ? nature_cargo.trim() : undefined,
       };
 
@@ -202,37 +268,65 @@ export default function DepotPlanVolForm({ compagnieId, compagnieNom, avionsComp
           placeholder="Informations supplémentaires pour l&apos;ATC"
         />
       </div>
-      <div>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={vol_commercial}
-            onChange={(e) => setVolCommercial(e.target.checked)}
-            className="rounded"
-            disabled={!compagnieId}
-          />
-          <span className="text-slate-300">
-            Je vole pour {compagnieNom || 'ma compagnie'}
-          </span>
-        </label>
-        {vol_commercial && (
-          <div className="mt-2 ml-6">
-            <label className="label">Nature du transport (optionnel)</label>
+      {compagnies.length > 0 && (
+        <div>
+          <label className="flex items-center gap-2 cursor-pointer">
             <input
-              type="text"
-              className="input"
-              value={nature_cargo}
-              onChange={(e) => setNatureCargo(e.target.value)}
-              placeholder="Ex: Cargo, Passagers, Mixte"
+              type="checkbox"
+              checked={vol_commercial}
+              onChange={(e) => {
+                setVolCommercial(e.target.checked);
+                if (e.target.checked && compagnieParDefaut && !compagnie_selectionnee) {
+                  setCompagnieSelectionnee(compagnieParDefaut);
+                  chargerAvionsCompagnie(compagnieParDefaut);
+                }
+              }}
+              className="rounded"
             />
-          </div>
-        )}
-      </div>
+            <span className="text-slate-300">Je vole pour ma compagnie</span>
+          </label>
+          {vol_commercial && (
+            <div className="mt-2 ml-6 space-y-2">
+              {compagnies.length > 1 ? (
+                <div>
+                  <label className="label">Compagnie *</label>
+                  <select
+                    className="input"
+                    value={compagnie_selectionnee}
+                    onChange={(e) => handleCompagnieChange(e.target.value)}
+                    required
+                  >
+                    <option value="">— Choisir —</option>
+                    {compagnies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nom}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <p className="text-slate-400 text-sm">{compagnies[0]?.nom}</p>
+              )}
+              {loadingAvions && <p className="text-slate-400 text-sm">Chargement des avions...</p>}
+              <div>
+                <label className="label">Nature du transport (optionnel)</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={nature_cargo}
+                  onChange={(e) => setNatureCargo(e.target.value)}
+                  placeholder="Ex: Cargo, Passagers, Mixte"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       <div>
         <label className="label">Avion *</label>
         <div className="space-y-2">
           <div className="flex gap-4">
-            {compagnieId && avionsCompagnie.length > 0 && (
+            {vol_commercial && compagnie_selectionnee && avionsCompagnie.length > 0 && (
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"

@@ -13,7 +13,7 @@ export default async function AdminMarketplacePage() {
 
   const [{ data: typesAvion }, { data: marketplace }] = await Promise.all([
     supabase.from('types_avion').select('id, nom, constructeur').order('ordre'),
-    supabase.from('marketplace_avions').select('type_avion_id, prix, capacite_cargo_kg'),
+    supabase.from('marketplace_avions').select('type_avion_id, prix, version_cargo, capacite_cargo_kg'),
   ]);
 
   const prixByType = new Map((marketplace || []).map((m: any) => [m.type_avion_id, m]));
@@ -34,6 +34,7 @@ export default async function AdminMarketplacePage() {
           id: t.id,
           nom: `${t.constructeur} ${t.nom}`,
           prix: prixByType.get(t.id)?.prix || null,
+          versionCargo: prixByType.get(t.id)?.version_cargo || false,
           capaciteCargo: prixByType.get(t.id)?.capacite_cargo_kg || null,
         }))}
       />

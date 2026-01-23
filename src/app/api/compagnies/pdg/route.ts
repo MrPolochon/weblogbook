@@ -26,14 +26,23 @@ export async function PATCH(request: Request) {
     const { error } = await admin.from('compagnies').update({ pdg_id }).eq('id', compagnie_id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
+    // S'assurer que le compte Felitz existe pour cette compagnie
     const { data: compte } = await admin.from('felitz_comptes').select('id').eq('compagnie_id', compagnie_id).single();
     if (!compte) {
       const vban = await admin.rpc('generate_vban_entreprise');
-      await admin.from('felitz_comptes').insert({
+      const { error: errInsert } = await admin.from('felitz_comptes').insert({
         compagnie_id,
+        type_compte: 'compagnie',
         vban: vban.data || vban,
         solde: 0,
       });
+      if (errInsert) {
+        console.error('Erreur création compte compagnie:', errInsert);
+        // Ne pas échouer si le compte existe déjà (race condition)
+        if (errInsert.code !== '23505') {
+          return NextResponse.json({ error: 'Erreur lors de la création du compte Felitz' }, { status: 500 });
+        }
+      }
     }
 
     return NextResponse.json({ ok: true });

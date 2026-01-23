@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       route_ifr,
       note_atc,
       vol_commercial,
+      compagnie_id,
       nature_cargo,
       compagnie_avion_id,
       inventaire_avion_id,
@@ -90,9 +91,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Sélectionnez un avion' }, { status: 400 });
     }
 
+    let compagnieIdFinal: string | null = null;
     if (vol_commercial) {
-      const { data: employe } = await supabase.from('compagnies_employes').select('compagnie_id').eq('user_id', user.id).single();
-      if (!employe) return NextResponse.json({ error: 'Vous devez appartenir à une compagnie pour un vol commercial' }, { status: 400 });
+      if (compagnie_id) {
+        // Vérifier que l'utilisateur appartient bien à cette compagnie
+        const { data: employe } = await supabase
+          .from('compagnies_employes')
+          .select('compagnie_id')
+          .eq('user_id', user.id)
+          .eq('compagnie_id', compagnie_id)
+          .single();
+        if (!employe) {
+          return NextResponse.json({ error: 'Vous n\'appartenez pas à cette compagnie' }, { status: 403 });
+        }
+        compagnieIdFinal = compagnie_id;
+      } else {
+        // Si pas de compagnie_id fourni, utiliser la première compagnie de l'utilisateur
+        const { data: employe } = await supabase
+          .from('compagnies_employes')
+          .select('compagnie_id')
+          .eq('user_id', user.id)
+          .single();
+        if (!employe) {
+          return NextResponse.json({ error: 'Vous devez appartenir à une compagnie pour un vol commercial' }, { status: 400 });
+        }
+        compagnieIdFinal = employe.compagnie_id;
+      }
     }
 
     const row: any = {
@@ -109,9 +133,11 @@ export async function POST(request: Request) {
       route_ifr: type_vol === 'IFR' && route_ifr ? String(route_ifr).trim() : null,
       note_atc: note_atc ? String(note_atc).trim() : null,
       vol_commercial: Boolean(vol_commercial),
+      compagnie_id: compagnieIdFinal,
       nature_cargo: vol_commercial && nature_cargo ? String(nature_cargo).trim() : null,
       compagnie_avion_id: compagnieAvionId,
       inventaire_avion_id: inventaireAvionId,
+      type_avion_id: typeAvionIdFinal,
       statut: 'en_attente',
       current_holder_user_id: holder.user_id,
       current_holder_position: holder.position,

@@ -28,27 +28,29 @@ export async function POST(request: Request) {
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { type_avion_id, prix, capacite_cargo_kg } = body;
+    const { type_avion_id, prix, version_cargo, capacite_cargo_kg } = body;
 
     if (!type_avion_id || prix === undefined || prix < 0) {
       return NextResponse.json({ error: 'Paramètres invalides' }, { status: 400 });
     }
 
     const admin = createAdminClient();
-    const { data: existing } = await admin.from('marketplace_avions').select('id').eq('type_avion_id', type_avion_id).single();
+    const { data: existing } = await admin.from('marketplace_avions').select('type_avion_id').eq('type_avion_id', type_avion_id).single();
 
     if (existing) {
       const { error } = await admin.from('marketplace_avions').update({
         prix: Number(prix),
-        capacite_cargo_kg: capacite_cargo_kg ? Number(capacite_cargo_kg) : null,
+        version_cargo: Boolean(version_cargo),
+        capacite_cargo_kg: version_cargo && capacite_cargo_kg ? Number(capacite_cargo_kg) : null,
         updated_at: new Date().toISOString(),
-      }).eq('id', existing.id);
+      }).eq('type_avion_id', type_avion_id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     } else {
       const { error } = await admin.from('marketplace_avions').insert({
         type_avion_id,
         prix: Number(prix),
-        capacite_cargo_kg: capacite_cargo_kg ? Number(capacite_cargo_kg) : null,
+        version_cargo: Boolean(version_cargo),
+        capacite_cargo_kg: version_cargo && capacite_cargo_kg ? Number(capacite_cargo_kg) : null,
       });
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     }

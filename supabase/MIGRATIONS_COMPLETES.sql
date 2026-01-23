@@ -337,12 +337,131 @@ CREATE TABLE IF NOT EXISTS public.felitz_comptes (
   UNIQUE(user_id, compagnie_id)
 );
 
+-- Ajouter la colonne type_compte si elle n'existe pas déjà
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'felitz_comptes' 
+    AND column_name = 'type_compte'
+  ) THEN
+    ALTER TABLE public.felitz_comptes ADD COLUMN type_compte TEXT;
+  END IF;
+END $$;
+
+-- Supprimer TOUTES les contraintes CHECK existantes qui pourraient limiter type_compte
+-- Utiliser pg_constraint pour trouver toutes les contraintes CHECK, y compris celles générées automatiquement
+DO $$
+DECLARE
+  constraint_name_var TEXT;
+  constraint_oid_var OID;
+BEGIN
+  -- Trouver et supprimer toutes les contraintes CHECK sur felitz_comptes qui concernent type_compte
+  -- En utilisant pg_constraint pour accéder directement à la définition
+  FOR constraint_oid_var IN
+    SELECT oid
+    FROM pg_constraint
+    WHERE conrelid = 'public.felitz_comptes'::regclass
+      AND contype = 'c'  -- Type CHECK
+      AND pg_get_constraintdef(oid) LIKE '%type_compte%'
+  LOOP
+    -- Récupérer le nom de la contrainte
+    SELECT conname INTO constraint_name_var
+    FROM pg_constraint
+    WHERE oid = constraint_oid_var;
+    
+    -- Supprimer la contrainte
+    IF constraint_name_var IS NOT NULL THEN
+      EXECUTE format('ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS %I', constraint_name_var);
+    END IF;
+  END LOOP;
+  
+  -- Supprimer aussi explicitement la contrainte avec le nom standard (au cas où)
+  ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS felitz_comptes_type_compte_check;
+  
+  -- Supprimer aussi toutes les contraintes CHECK anonymes qui pourraient exister
+  -- (créées par CREATE TABLE avec CHECK inline)
+  FOR constraint_oid_var IN
+    SELECT oid
+    FROM pg_constraint
+    WHERE conrelid = 'public.felitz_comptes'::regclass
+      AND contype = 'c'
+      AND conname LIKE 'felitz_comptes_%check%'
+  LOOP
+    SELECT conname INTO constraint_name_var
+    FROM pg_constraint
+    WHERE oid = constraint_oid_var;
+    
+    IF constraint_name_var IS NOT NULL AND constraint_name_var != 'felitz_comptes_type_compte_check' THEN
+      -- Vérifier si cette contrainte concerne type_compte
+      IF pg_get_constraintdef(constraint_oid_var) LIKE '%type_compte%' THEN
+        EXECUTE format('ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS %I', constraint_name_var);
+      END IF;
+    END IF;
+  END LOOP;
+END $$;
+
+-- Ajouter/recréer la contrainte CHECK avec toutes les valeurs autorisées
+DO $$
+BEGIN
+  -- Supprimer d'abord au cas où elle existerait encore
+  ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS felitz_comptes_type_compte_check;
+  
+  -- Recréer la contrainte avec les 3 valeurs autorisées
+  ALTER TABLE public.felitz_comptes 
+    ADD CONSTRAINT felitz_comptes_type_compte_check 
+    CHECK (type_compte IN ('systeme', 'personnel', 'compagnie'));
+EXCEPTION
+  WHEN duplicate_object THEN
+    -- Si elle existe encore (peu probable), essayer une dernière fois
+    ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS felitz_comptes_type_compte_check;
+    ALTER TABLE public.felitz_comptes 
+      ADD CONSTRAINT felitz_comptes_type_compte_check 
+      CHECK (type_compte IN ('systeme', 'personnel', 'compagnie'));
+END $$;
+
+-- Mettre à jour les valeurs NULL existantes avec une valeur par défaut intelligente
+DO $$
+BEGIN
+  -- Comptes système (user_id et compagnie_id NULL)
+  UPDATE public.felitz_comptes 
+  SET type_compte = 'systeme' 
+  WHERE type_compte IS NULL AND user_id IS NULL AND compagnie_id IS NULL;
+  
+  -- Comptes compagnie (compagnie_id non NULL)
+  UPDATE public.felitz_comptes 
+  SET type_compte = 'compagnie' 
+  WHERE type_compte IS NULL AND compagnie_id IS NOT NULL;
+  
+  -- Comptes personnels (user_id non NULL, compagnie_id NULL)
+  UPDATE public.felitz_comptes 
+  SET type_compte = 'personnel' 
+  WHERE type_compte IS NULL AND user_id IS NOT NULL AND compagnie_id IS NULL;
+END $$;
+
+-- Rendre la colonne NOT NULL après avoir rempli les valeurs
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'felitz_comptes' 
+    AND column_name = 'type_compte'
+    AND is_nullable = 'YES'
+  ) THEN
+    ALTER TABLE public.felitz_comptes ALTER COLUMN type_compte SET NOT NULL;
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_felitz_comptes_user ON public.felitz_comptes(user_id);
 CREATE INDEX IF NOT EXISTS idx_felitz_comptes_compagnie ON public.felitz_comptes(compagnie_id);
 CREATE INDEX IF NOT EXISTS idx_felitz_comptes_vban ON public.felitz_comptes(vban);
+CREATE INDEX IF NOT EXISTS idx_felitz_comptes_type ON public.felitz_comptes(type_compte);
 
 -- Créer le compte système admin (pour les opérations administratives)
 -- Ce compte a un solde très élevé et est utilisé uniquement par les admins
+-- IMPORTANT: Cette opération doit se faire APRÈS la création/mise à jour de la contrainte type_compte
 DO $$
 DECLARE
   compte_systeme_exists BOOLEAN;
@@ -351,7 +470,7 @@ BEGIN
   -- Vérifier si le compte système existe déjà
   SELECT EXISTS (
     SELECT 1 FROM public.felitz_comptes 
-    WHERE vban LIKE 'SYSTEME%'
+    WHERE vban LIKE 'SYSTEME%' OR type_compte = 'systeme'
   ) INTO compte_systeme_exists;
   
   IF NOT compte_systeme_exists THEN
@@ -362,9 +481,63 @@ BEGIN
     END LOOP;
     
     -- Créer le compte système avec un solde très élevé (999 999 999.99)
-    INSERT INTO public.felitz_comptes (user_id, compagnie_id, vban, solde)
-    VALUES (NULL, NULL, vban_systeme, 999999999.99);
+    -- S'assurer que type_compte = 'systeme' est bien autorisé par la contrainte
+    BEGIN
+      INSERT INTO public.felitz_comptes (user_id, compagnie_id, type_compte, vban, solde)
+      VALUES (NULL, NULL, 'systeme', vban_systeme, 999999999.99);
+    EXCEPTION
+      WHEN check_violation THEN
+        -- Si la contrainte CHECK échoue, c'est qu'elle n'a pas été mise à jour correctement
+        -- Forcer la mise à jour de la contrainte et réessayer
+        ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS felitz_comptes_type_compte_check;
+        ALTER TABLE public.felitz_comptes 
+          ADD CONSTRAINT felitz_comptes_type_compte_check 
+          CHECK (type_compte IN ('systeme', 'personnel', 'compagnie'));
+        
+        -- Réessayer l'insertion
+        INSERT INTO public.felitz_comptes (user_id, compagnie_id, type_compte, vban, solde)
+        VALUES (NULL, NULL, 'systeme', vban_systeme, 999999999.99);
+    END;
   END IF;
+END $$;
+
+-- Créer automatiquement les comptes Felitz pour toutes les compagnies qui n'en ont pas encore
+DO $$
+DECLARE
+  compagnie_rec RECORD;
+  vban_compagnie TEXT;
+BEGIN
+  -- Parcourir toutes les compagnies qui n'ont pas encore de compte
+  FOR compagnie_rec IN 
+    SELECT c.id 
+    FROM public.compagnies c
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.felitz_comptes fc 
+      WHERE fc.compagnie_id = c.id
+    )
+  LOOP
+    -- Générer un VBAN entreprise unique
+    LOOP
+      vban_compagnie := 'ENTERMIXOU' || upper(substring(md5(random()::text || clock_timestamp()::text) from 1 for 19));
+      EXIT WHEN NOT EXISTS (SELECT 1 FROM public.felitz_comptes WHERE vban = vban_compagnie);
+    END LOOP;
+    
+    -- Créer le compte avec solde à 0
+    BEGIN
+      INSERT INTO public.felitz_comptes (compagnie_id, type_compte, vban, solde)
+      VALUES (compagnie_rec.id, 'compagnie', vban_compagnie, 0);
+    EXCEPTION
+      WHEN check_violation THEN
+        -- Si la contrainte CHECK échoue, forcer la mise à jour et réessayer
+        ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS felitz_comptes_type_compte_check;
+        ALTER TABLE public.felitz_comptes 
+          ADD CONSTRAINT felitz_comptes_type_compte_check 
+          CHECK (type_compte IN ('systeme', 'personnel', 'compagnie'));
+        
+        INSERT INTO public.felitz_comptes (compagnie_id, type_compte, vban, solde)
+        VALUES (compagnie_rec.id, 'compagnie', vban_compagnie, 0);
+    END;
+  END LOOP;
 END $$;
 
 -- Felitz Bank - Transactions
@@ -680,10 +853,18 @@ CREATE INDEX IF NOT EXISTS idx_inventaire_pilote_type ON public.inventaire_pilot
 CREATE TABLE IF NOT EXISTS public.marketplace_avions (
   type_avion_id UUID PRIMARY KEY REFERENCES public.types_avion(id) ON DELETE CASCADE,
   prix DECIMAL(15, 2) NOT NULL,
+  version_cargo BOOLEAN NOT NULL DEFAULT false,
   capacite_cargo_kg INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Ajouter la colonne version_cargo si elle n'existe pas déjà
+DO $$
+BEGIN
+  ALTER TABLE public.marketplace_avions ADD COLUMN IF NOT EXISTS version_cargo BOOLEAN NOT NULL DEFAULT false;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
 
 -- Taxes aéroportuaires
 CREATE TABLE IF NOT EXISTS public.taxes_aeroports (
@@ -702,6 +883,7 @@ BEGIN
       ADD COLUMN IF NOT EXISTS route_ifr TEXT,
       ADD COLUMN IF NOT EXISTS note_atc TEXT,
       ADD COLUMN IF NOT EXISTS vol_commercial BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS compagnie_id UUID,
       ADD COLUMN IF NOT EXISTS nature_cargo TEXT,
       ADD COLUMN IF NOT EXISTS nombre_passagers INTEGER,
       ADD COLUMN IF NOT EXISTS cargo_kg INTEGER,
@@ -711,6 +893,7 @@ BEGIN
       ADD COLUMN IF NOT EXISTS salaire_pilote DECIMAL(15, 2),
       ADD COLUMN IF NOT EXISTS compagnie_avion_id UUID,
       ADD COLUMN IF NOT EXISTS inventaire_avion_id UUID,
+      ADD COLUMN IF NOT EXISTS type_avion_id UUID,
       ADD COLUMN IF NOT EXISTS cloture_at TIMESTAMPTZ;
   END IF;
 END $$;
@@ -719,6 +902,19 @@ END $$;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'plans_vol') THEN
+    -- Contrainte pour compagnie_id
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'compagnies') THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'plans_vol_compagnie_id_fkey' 
+        AND table_name = 'plans_vol'
+      ) THEN
+        ALTER TABLE public.plans_vol
+          ADD CONSTRAINT plans_vol_compagnie_id_fkey 
+          FOREIGN KEY (compagnie_id) REFERENCES public.compagnies(id) ON DELETE SET NULL;
+      END IF;
+    END IF;
+    
     -- Contrainte pour compagnie_avion_id
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'compagnies_avions') THEN
       IF NOT EXISTS (
@@ -744,6 +940,32 @@ BEGIN
           FOREIGN KEY (inventaire_avion_id) REFERENCES public.inventaire_pilote(id) ON DELETE SET NULL;
       END IF;
     END IF;
+    
+    -- Contrainte pour type_avion_id
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'types_avion') THEN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'plans_vol_type_avion_id_fkey' 
+        AND table_name = 'plans_vol'
+      ) THEN
+        ALTER TABLE public.plans_vol
+          ADD CONSTRAINT plans_vol_type_avion_id_fkey 
+          FOREIGN KEY (type_avion_id) REFERENCES public.types_avion(id) ON DELETE SET NULL;
+      END IF;
+    END IF;
+  END IF;
+END $$;
+
+-- Créer l'index sur compagnie_id après avoir ajouté la colonne
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'plans_vol' 
+    AND column_name = 'compagnie_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_plans_vol_compagnie ON public.plans_vol(compagnie_id) WHERE compagnie_id IS NOT NULL;
   END IF;
 END $$;
 
@@ -901,13 +1123,13 @@ DECLARE
     'IDCS', 'ITKO', 'ILKL', 'IPPH', 'IGAR', 'IBLT', 'IRFD', 'IMLR', 'ITRC', 'IBTH',
     'IUFO', 'ISAU', 'ISKP'
   ];
-  code_aeroport TEXT;
+  code_aeroport_var TEXT;
 BEGIN
-  FOREACH code_aeroport IN ARRAY codes_aeroports
+  FOREACH code_aeroport_var IN ARRAY codes_aeroports
   LOOP
     -- Insérer uniquement si l'aéroport n'existe pas déjà
     INSERT INTO public.taxes_aeroports (code_aeroport, taxe_base_pourcent, taxe_vfr_pourcent)
-    VALUES (code_aeroport, 2.0, 5.0)
+    VALUES (code_aeroport_var, 2.0, 5.0)
     ON CONFLICT (code_aeroport) DO NOTHING;
   END LOOP;
 END $$;

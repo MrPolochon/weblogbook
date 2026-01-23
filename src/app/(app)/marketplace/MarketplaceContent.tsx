@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plane, ShoppingCart, Building2 } from 'lucide-react';
 
-type Avion = { typeAvionId: string; nom: string; prix: number; capaciteCargo: number | null };
+type Avion = { typeAvionId: string; nom: string; prix: number; versionCargo: boolean; capaciteCargo: number | null };
 type Compagnie = { id: string; nom: string };
 
 type Props = { avions: Avion[]; soldePersonnel: number; compagnies: Compagnie[] };
@@ -183,11 +183,18 @@ export default function MarketplaceContent({ avions, soldePersonnel, compagnies 
               <div key={a.typeAvionId} className="border border-slate-700/50 rounded-lg p-3 bg-slate-800/30">
                 <div className="flex items-center gap-2 mb-2">
                   <Plane className="h-5 w-5 text-sky-400" />
-                  <p className="text-slate-200 font-medium">{a.nom}</p>
+                  <div className="flex-1">
+                    <p className="text-slate-200 font-medium">{a.nom}</p>
+                    {a.versionCargo && (
+                      <span className="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded bg-orange-900/50 text-orange-300 border border-orange-700/50">
+                        Version cargo
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <p className="text-slate-300 text-lg font-semibold">{a.prix.toFixed(2)} €</p>
-                {a.capaciteCargo && (
-                  <p className="text-slate-400 text-sm mt-1">Cargo: {a.capaciteCargo} kg</p>
+                {a.versionCargo && a.capaciteCargo && (
+                  <p className="text-slate-400 text-sm mt-1">Capacité cargo: {a.capaciteCargo} kg</p>
                 )}
               </div>
             ))}

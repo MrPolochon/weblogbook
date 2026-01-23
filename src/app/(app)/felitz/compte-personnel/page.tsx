@@ -24,6 +24,7 @@ export default async function FelitzComptePersonnelPage() {
     const vban = await admin.rpc('generate_vban_personnel');
     await admin.from('felitz_comptes').insert({
       user_id: user.id,
+      type_compte: 'personnel',
       vban: vban.data || vban,
       solde: 0,
     });

@@ -7,7 +7,7 @@ export async function GET() {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('marketplace_avions')
-      .select('type_avion_id, prix, capacite_cargo_kg, types_avion(nom, constructeur)')
+      .select('type_avion_id, prix, version_cargo, capacite_cargo_kg, types_avion(nom, constructeur)')
       .order('types_avion(nom)');
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

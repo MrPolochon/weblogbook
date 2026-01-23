@@ -11,8 +11,8 @@ export default async function DepotPlanVolPage() {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   if (profile?.role === 'atc') redirect('/logbook');
 
-  const [{ data: employe }, { data: inventairePersonnel }, { data: typesAvion }] = await Promise.all([
-    supabase.from('compagnies_employes').select('compagnie_id, compagnies(id, nom)').eq('user_id', user.id).single(),
+  const [{ data: employes }, { data: inventairePersonnel }, { data: typesAvion }] = await Promise.all([
+    supabase.from('compagnies_employes').select('compagnie_id, compagnies(id, nom)').eq('user_id', user.id),
     supabase
       .from('inventaire_pilote')
       .select('id, type_avion_id, nom_avion, types_avion(nom, constructeur)')
@@ -20,30 +20,35 @@ export default async function DepotPlanVolPage() {
     supabase.from('types_avion').select('id, nom, constructeur').order('ordre'),
   ]);
 
-  // Récupérer les avions de la compagnie si l'utilisateur en a une
-  let avionsCompagnie: { data: any[] | null } = { data: null };
-  if (employe?.compagnie_id) {
+  // Normaliser les compagnies
+  const compagnies = (employes || []).map((e: any) => ({
+    id: e.compagnie_id,
+    nom: (e.compagnies as any)?.nom || 'Compagnie',
+  }));
+
+  // Si une seule compagnie, la sélectionner par défaut
+  const compagnieParDefaut = compagnies.length === 1 ? compagnies[0] : null;
+
+  // Récupérer les avions de la compagnie par défaut si elle existe
+  let avionsCompagnieParDefaut: { data: any[] | null } = { data: null };
+  if (compagnieParDefaut) {
     const result = await supabase
       .from('compagnies_avions')
       .select('id, type_avion_id, quantite, nom_avion, types_avion(nom, constructeur)')
-      .eq('compagnie_id', employe.compagnie_id);
-    avionsCompagnie = result;
+      .eq('compagnie_id', compagnieParDefaut.id);
+    avionsCompagnieParDefaut = result;
+
+    const { data: avionsUtilises } = await supabase
+      .from('avions_utilisation')
+      .select('compagnie_avion_id')
+      .in('compagnie_avion_id', (avionsCompagnieParDefaut?.data || []).map((a: any) => a.id));
+
+    const avionsDisponibles = (avionsCompagnieParDefaut.data || []).filter((a: any) => {
+      const utilise = (avionsUtilises || []).some((u: any) => u.compagnie_avion_id === a.id);
+      return !utilise;
+    });
+    avionsCompagnieParDefaut.data = avionsDisponibles;
   }
-
-  const compagnieId = employe?.compagnie_id;
-  const compagnieNom = employe ? (employe.compagnies as any).nom : null;
-
-  const { data: avionsUtilises } = compagnieId
-    ? await supabase
-        .from('avions_utilisation')
-        .select('compagnie_avion_id')
-        .in('compagnie_avion_id', (avionsCompagnie?.data || []).map((a: any) => a.id))
-    : { data: [] };
-
-  const avionsDisponibles = (avionsCompagnie.data || []).filter((a: any) => {
-    const utilise = (avionsUtilises || []).some((u: any) => u.compagnie_avion_id === a.id);
-    return !utilise;
-  });
 
   return (
     <div className="space-y-6">
@@ -54,9 +59,9 @@ export default async function DepotPlanVolPage() {
         <h1 className="text-2xl font-semibold text-slate-100">Déposer un plan de vol</h1>
       </div>
       <DepotPlanVolForm
-        compagnieId={compagnieId}
-        compagnieNom={compagnieNom}
-        avionsCompagnie={avionsDisponibles.map((a: any) => ({
+        compagnies={compagnies}
+        compagnieParDefaut={compagnieParDefaut?.id || null}
+        avionsCompagnieParDefaut={(avionsCompagnieParDefaut.data || []).map((a: any) => ({
           id: a.id,
           typeAvionId: a.type_avion_id,
           nom: a.nom_avion || `${(a.types_avion as any).constructeur} ${(a.types_avion as any).nom}`,

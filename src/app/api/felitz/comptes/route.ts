@@ -85,9 +85,11 @@ export async function POST(request: Request) {
       ? await admin.rpc('generate_vban_entreprise')
       : await admin.rpc('generate_vban_personnel');
 
+    const typeCompte = compagnie_id ? 'compagnie' : 'personnel';
     const { data, error } = await admin.from('felitz_comptes').insert({
       user_id: user_id || null,
       compagnie_id: compagnie_id || null,
+      type_compte: typeCompte,
       vban: vban.data || vban,
       solde: 0,
     }).select('id').single();
