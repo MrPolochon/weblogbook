@@ -14,8 +14,16 @@ type C = {
   prix_kg_cargo: number;
   pourcentage_salaire: number;
   vban: string | null;
-  profiles: { identifiant: string } | null;
+  profiles: { identifiant: string }[] | { identifiant: string } | null;
 };
+
+function getPdgIdentifiant(profiles: C['profiles']): string | null {
+  if (!profiles) return null;
+  if (Array.isArray(profiles)) {
+    return profiles[0]?.identifiant || null;
+  }
+  return profiles.identifiant || null;
+}
 
 export default function CompagniesList({ compagnies, pilotes }: { compagnies: C[]; pilotes: Pilote[] }) {
   const router = useRouter();
@@ -45,10 +53,10 @@ export default function CompagniesList({ compagnies, pilotes }: { compagnies: C[
             <div className="flex items-center justify-between mb-2">
               <div>
                 <span className="text-slate-200 font-medium">{c.nom}</span>
-                {c.profiles?.identifiant && (
+                {getPdgIdentifiant(c.profiles) && (
                   <span className="ml-2 text-sm text-amber-400 flex items-center gap-1 inline-flex">
                     <Crown className="h-3 w-3" />
-                    {c.profiles.identifiant}
+                    {getPdgIdentifiant(c.profiles)}
                   </span>
                 )}
               </div>

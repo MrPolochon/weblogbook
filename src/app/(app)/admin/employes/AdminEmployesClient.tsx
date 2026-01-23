@@ -8,7 +8,7 @@ interface Compagnie {
   id: string;
   nom: string;
   pdg_id: string | null;
-  profiles: { identifiant: string } | null;
+  profiles: { identifiant: string }[] | { identifiant: string } | null;
 }
 
 interface Pilote {
@@ -29,6 +29,12 @@ interface Props {
   compagnies: Compagnie[];
   pilotes: Pilote[];
   employes: Employe[];
+}
+
+function getProfileIdentifiant(profiles: Compagnie['profiles']): string | null {
+  if (!profiles) return null;
+  if (Array.isArray(profiles)) return profiles[0]?.identifiant || null;
+  return profiles.identifiant || null;
 }
 
 export default function AdminEmployesClient({ compagnies, pilotes, employes }: Props) {
@@ -176,9 +182,9 @@ export default function AdminEmployesClient({ compagnies, pilotes, employes }: P
                 </span>
               </h3>
               
-              {compagnie.profiles?.identifiant && (
+              {getProfileIdentifiant(compagnie.profiles) && (
                 <p className="text-sm text-slate-400 mb-3">
-                  PDG : <span className="text-amber-300">{compagnie.profiles.identifiant}</span>
+                  PDG : <span className="text-amber-300">{getProfileIdentifiant(compagnie.profiles)}</span>
                 </p>
               )}
 
