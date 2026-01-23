@@ -82,7 +82,7 @@ export async function DELETE() {
         if (compteAtc) {
           // Construire le détail des vols
           const nbVols = taxesPending.length;
-          const aeroportsConcernes = [...new Set(taxesPending.map(t => t.aeroport))].join(', ');
+          const aeroportsConcernes = Array.from(new Set(taxesPending.map(t => t.aeroport))).join(', ');
           
           // Envoyer un seul chèque avec le total
           await admin.from('messages').insert({
