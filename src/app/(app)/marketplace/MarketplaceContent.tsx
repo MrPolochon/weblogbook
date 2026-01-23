@@ -58,6 +58,10 @@ export default function MarketplaceContent({ avions, soldePersonnel, compagnies 
     }
   }
 
+  // Extraire l'avion sélectionné et son prix pour éviter les erreurs TypeScript
+  const avionSelectionne = selectedAvion ? avions.find((a) => a.typeAvionId === selectedAvion) : null;
+  const prixAvion = avionSelectionne?.prix ?? 0;
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold text-slate-100 flex items-center gap-2">
@@ -146,14 +150,16 @@ export default function MarketplaceContent({ avions, soldePersonnel, compagnies 
                         Solde disponible: {soldePersonnel.toFixed(2)} €
                       </p>
                       <p className={`text-sm font-medium mt-1 ${
-                        soldePersonnel >= avions.find((a) => a.typeAvionId === selectedAvion)?.prix || 0
+                        soldePersonnel >= prixAvion
                           ? 'text-emerald-400'
                           : 'text-red-400'
                       }`}>
-                        Coût: {avions.find((a) => a.typeAvionId === selectedAvion)?.prix.toFixed(2)} €
+                        Coût: {prixAvion.toFixed(2)} €
                       </p>
                     </div>
                   )}
+                </>
+              )}
                   <button
                     type="button"
                     onClick={handleAchat}
