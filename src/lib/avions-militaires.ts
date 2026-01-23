@@ -36,7 +36,8 @@ export const AVIONS_MILITAIRES = [
   'B-29 Superfortress',
   'SR-71 Blackbird',
   
-  // Transport militaire
+  // Transport militaire / VIP
+  'Air Force One',
   'Boeing C-17 Globemaster III',
   'C-130 Hercules',
   
