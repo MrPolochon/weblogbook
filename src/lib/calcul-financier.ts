@@ -42,7 +42,7 @@ export async function calculerFinances(plan: PlanVol, vol: Vol | null) {
   if (plan.compagnie_avion_id) {
     const { data: avionComp } = await admin
       .from('compagnies_avions')
-      .select('prix_billet_base, prix_cargo_kg, compagnie_id, compagnies(pourcentage_paie)')
+      .select('prix_billet_base, prix_cargo_kg, capacite_passagers, compagnie_id, compagnies(pourcentage_paie)')
       .eq('id', plan.compagnie_avion_id)
       .single();
 
