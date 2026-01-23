@@ -11,28 +11,24 @@ export default async function DepotPlanVolPage() {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   if (profile?.role === 'atc') redirect('/logbook');
 
-  const [{ data: employe }, { data: avionsCompagnie }, { data: inventairePersonnel }, { data: typesAvion }] = await Promise.all([
+  const [{ data: employe }, { data: inventairePersonnel }, { data: typesAvion }] = await Promise.all([
     supabase.from('compagnies_employes').select('compagnie_id, compagnies(id, nom)').eq('user_id', user.id).single(),
-    supabase
-      .from('compagnies_employes')
-      .select('compagnie_id')
-      .eq('user_id', user.id)
-      .single()
-      .then((r) => {
-        if (r.data) {
-          return supabase
-            .from('compagnies_avions')
-            .select('id, type_avion_id, quantite, nom_avion, types_avion(nom, constructeur)')
-            .eq('compagnie_id', r.data.compagnie_id);
-        }
-        return { data: [] };
-      }),
     supabase
       .from('inventaire_pilote')
       .select('id, type_avion_id, nom_avion, types_avion(nom, constructeur)')
       .eq('user_id', user.id),
     supabase.from('types_avion').select('id, nom, constructeur').order('ordre'),
   ]);
+
+  // Récupérer les avions de la compagnie si l'utilisateur en a une
+  let avionsCompagnie: { data: any[] | null } = { data: null };
+  if (employe?.compagnie_id) {
+    const result = await supabase
+      .from('compagnies_avions')
+      .select('id, type_avion_id, quantite, nom_avion, types_avion(nom, constructeur)')
+      .eq('compagnie_id', employe.compagnie_id);
+    avionsCompagnie = result;
+  }
 
   const compagnieId = employe?.compagnie_id;
   const compagnieNom = employe ? (employe.compagnies as any).nom : null;
@@ -44,7 +40,7 @@ export default async function DepotPlanVolPage() {
         .in('compagnie_avion_id', (avionsCompagnie?.data || []).map((a: any) => a.id))
     : { data: [] };
 
-  const avionsDisponibles = (avionsCompagnie?.data || []).filter((a: any) => {
+  const avionsDisponibles = (avionsCompagnie.data || []).filter((a: any) => {
     const utilise = (avionsUtilises || []).some((u: any) => u.compagnie_avion_id === a.id);
     return !utilise;
   });
