@@ -33,10 +33,21 @@ export async function GET(request: Request) {
       }
     }
 
-    const query = supabase.from('felitz_comptes').select('id, user_id, compagnie_id, vban, solde, created_at, compagnies(nom), profiles(identifiant)');
-    if (targetUserId) query.eq('user_id', targetUserId);
-    if (targetCompagnieId) query.eq('compagnie_id', targetCompagnieId);
-    else query.is('compagnie_id', null);
+    // Utiliser admin client pour les admins, supabase pour les autres
+    const client = isAdmin ? createAdminClient() : supabase;
+    let query = client.from('felitz_comptes').select('id, user_id, compagnie_id, vban, solde, created_at, compagnies(nom), profiles(identifiant)');
+    
+    // Si admin, peut voir tous les comptes ou filtrer
+    if (isAdmin) {
+      if (targetUserId) query = query.eq('user_id', targetUserId);
+      if (targetCompagnieId) query = query.eq('compagnie_id', targetCompagnieId);
+      // Si aucun filtre, retourner tous les comptes pour les admins
+    } else {
+      // Pour les non-admins, appliquer les restrictions
+      if (targetUserId) query = query.eq('user_id', targetUserId);
+      if (targetCompagnieId) query = query.eq('compagnie_id', targetCompagnieId);
+      else query = query.is('compagnie_id', null);
+    }
 
     const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

@@ -43,11 +43,14 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (errUpdate) return NextResponse.json({ error: errUpdate.message }, { status: 400 });
 
     if (montantTransaction > 0) {
+      // Créer une transaction pour le compte modifié
+      // Note: L'argent provient du compte système (solde infini), donc on ne le débite pas
       await admin.from('felitz_transactions').insert({
         compte_id: params.id,
         type: typeTransaction,
         montant: typeTransaction === 'admin_ajout' ? montantTransaction : -montantTransaction,
         titre: typeTransaction === 'admin_ajout' ? 'Ajout administrateur' : 'Retrait administrateur',
+        libelle: `Opération administrative - ${typeTransaction === 'admin_ajout' ? 'Ajout' : 'Retrait'} de ${montantTransaction.toFixed(2)} €`,
       });
     }
 

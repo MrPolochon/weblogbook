@@ -341,6 +341,32 @@ CREATE INDEX IF NOT EXISTS idx_felitz_comptes_user ON public.felitz_comptes(user
 CREATE INDEX IF NOT EXISTS idx_felitz_comptes_compagnie ON public.felitz_comptes(compagnie_id);
 CREATE INDEX IF NOT EXISTS idx_felitz_comptes_vban ON public.felitz_comptes(vban);
 
+-- Créer le compte système admin (pour les opérations administratives)
+-- Ce compte a un solde très élevé et est utilisé uniquement par les admins
+DO $$
+DECLARE
+  compte_systeme_exists BOOLEAN;
+  vban_systeme TEXT;
+BEGIN
+  -- Vérifier si le compte système existe déjà
+  SELECT EXISTS (
+    SELECT 1 FROM public.felitz_comptes 
+    WHERE vban LIKE 'SYSTEME%'
+  ) INTO compte_systeme_exists;
+  
+  IF NOT compte_systeme_exists THEN
+    -- Générer un VBAN système unique
+    LOOP
+      vban_systeme := 'SYSTEME' || upper(substring(md5(random()::text || clock_timestamp()::text) from 1 for 20));
+      EXIT WHEN NOT EXISTS (SELECT 1 FROM public.felitz_comptes WHERE vban = vban_systeme);
+    END LOOP;
+    
+    -- Créer le compte système avec un solde très élevé (999 999 999.99)
+    INSERT INTO public.felitz_comptes (user_id, compagnie_id, vban, solde)
+    VALUES (NULL, NULL, vban_systeme, 999999999.99);
+  END IF;
+END $$;
+
 -- Felitz Bank - Transactions
 CREATE TABLE IF NOT EXISTS public.felitz_transactions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

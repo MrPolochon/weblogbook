@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Users, Clock, Building2, Plane, FileText, Shield, Award, ShoppingCart, MapPin } from 'lucide-react';
+import { Users, Clock, Building2, Plane, FileText, Shield, Award, ShoppingCart, MapPin, Wallet } from 'lucide-react';
 
 const links = [
   { href: '/admin/vols', label: 'Vols en attente', icon: Clock },
@@ -11,6 +11,7 @@ const links = [
   { href: '/admin/licences', label: 'Licences et qualifications', icon: Award },
   { href: '/admin/marketplace', label: 'Marketplace', icon: ShoppingCart },
   { href: '/admin/taxes-aeroports', label: 'Taxes aéroports', icon: MapPin },
+  { href: '/admin/felitz-comptes', label: 'Comptes Felitz Bank', icon: Wallet },
 ];
 
 export default function AdminPage() {
