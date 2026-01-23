@@ -17,8 +17,25 @@ CREATE TABLE IF NOT EXISTS public.atc_plans_controles (
 CREATE INDEX IF NOT EXISTS idx_atc_plans_controles_plan ON public.atc_plans_controles(plan_vol_id);
 CREATE INDEX IF NOT EXISTS idx_atc_plans_controles_user ON public.atc_plans_controles(user_id);
 
+-- Table pour accumuler les taxes pendant qu'un ATC est en service
+-- Les taxes sont envoyées en un seul chèque quand l'ATC se met hors service
+CREATE TABLE IF NOT EXISTS public.atc_taxes_pending (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  session_id UUID NOT NULL REFERENCES public.atc_sessions(id) ON DELETE CASCADE,
+  plan_vol_id UUID REFERENCES public.plans_vol(id) ON DELETE SET NULL,
+  montant INTEGER NOT NULL DEFAULT 0,
+  aeroport TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_atc_taxes_pending_user ON public.atc_taxes_pending(user_id);
+CREATE INDEX IF NOT EXISTS idx_atc_taxes_pending_session ON public.atc_taxes_pending(session_id);
+
 -- RLS
 ALTER TABLE public.atc_plans_controles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.atc_taxes_pending ENABLE ROW LEVEL SECURITY;
 
 -- Politiques atc_plans_controles
 DROP POLICY IF EXISTS "apc_select" ON public.atc_plans_controles;
@@ -30,6 +47,15 @@ CREATE POLICY "apc_insert" ON public.atc_plans_controles FOR INSERT TO authentic
 
 DROP POLICY IF EXISTS "apc_admin" ON public.atc_plans_controles;
 CREATE POLICY "apc_admin" ON public.atc_plans_controles FOR ALL TO authenticated
+  USING ((SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin');
+
+-- Politiques atc_taxes_pending
+DROP POLICY IF EXISTS "atp_select_self" ON public.atc_taxes_pending;
+CREATE POLICY "atp_select_self" ON public.atc_taxes_pending FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "atp_admin" ON public.atc_taxes_pending;
+CREATE POLICY "atp_admin" ON public.atc_taxes_pending FOR ALL TO authenticated
   USING ((SELECT role FROM public.profiles WHERE id = auth.uid()) = 'admin');
 
 -- Ajouter type de message pour les taxes ATC

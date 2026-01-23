@@ -41,6 +41,8 @@ async function enregistrerControleATC(
 
 /**
  * Distribue les taxes aéroportuaires aux ATC qui ont contrôlé le vol.
+ * - Si l'ATC est en service : accumule dans atc_taxes_pending (chèque à la fin du service)
+ * - Si l'ATC est hors service : envoie le chèque immédiatement
  */
 async function distribuerTaxesATC(
   admin: ReturnType<typeof createAdminClient>,
@@ -90,31 +92,48 @@ async function distribuerTaxesATC(
     if (taxesParPosition <= 0) continue;
 
     for (const { user_id } of positions) {
-      // Récupérer le compte personnel de l'ATC
-      const { data: compteAtc } = await admin.from('felitz_comptes')
+      // Vérifier si l'ATC est actuellement en service
+      const { data: sessionAtc } = await admin.from('atc_sessions')
         .select('id')
-        .eq('proprietaire_id', user_id)
-        .eq('type', 'personnel')
+        .eq('user_id', user_id)
         .single();
 
-      if (!compteAtc) continue;
+      if (sessionAtc) {
+        // ATC en service → accumuler les taxes (chèque envoyé à la fin du service)
+        await admin.from('atc_taxes_pending').insert({
+          user_id,
+          session_id: sessionAtc.id,
+          plan_vol_id: planVolId,
+          montant: taxesParPosition,
+          aeroport,
+          description: `Taxes vol ${numeroVol} - ${tauxTaxe}%`
+        });
+        atcPayes++;
+      } else {
+        // ATC hors service → envoyer le chèque immédiatement
+        const { data: compteAtc } = await admin.from('felitz_comptes')
+          .select('id')
+          .eq('proprietaire_id', user_id)
+          .eq('type', 'personnel')
+          .single();
 
-      // Envoyer un chèque de taxes à l'ATC
-      await admin.from('messages').insert({
-        destinataire_id: user_id,
-        expediteur_id: null,
-        titre: `Taxes aéroportuaires - Vol ${numeroVol}`,
-        contenu: `Vous avez contrôlé le vol ${numeroVol} sur l'aéroport ${aeroport}.\n\nTaxe de ${tauxTaxe}% sur le revenu du vol.\nMontant de votre part: ${taxesParPosition.toLocaleString('fr-FR')} F$\n\nMerci pour votre service !`,
-        type_message: 'cheque_taxes_atc',
-        cheque_montant: taxesParPosition,
-        cheque_encaisse: false,
-        cheque_destinataire_compte_id: compteAtc.id,
-        cheque_libelle: `Taxes vol ${numeroVol} (${aeroport})`,
-        cheque_numero_vol: numeroVol,
-        cheque_pour_compagnie: false
-      });
+        if (!compteAtc) continue;
 
-      atcPayes++;
+        await admin.from('messages').insert({
+          destinataire_id: user_id,
+          expediteur_id: null,
+          titre: `Taxes aéroportuaires - Vol ${numeroVol}`,
+          contenu: `Vous avez contrôlé le vol ${numeroVol} sur l'aéroport ${aeroport}.\n\nTaxe de ${tauxTaxe}% sur le revenu du vol.\nMontant de votre part: ${taxesParPosition.toLocaleString('fr-FR')} F$\n\nMerci pour votre service !`,
+          type_message: 'cheque_taxes_atc',
+          cheque_montant: taxesParPosition,
+          cheque_encaisse: false,
+          cheque_destinataire_compte_id: compteAtc.id,
+          cheque_libelle: `Taxes vol ${numeroVol} (${aeroport})`,
+          cheque_numero_vol: numeroVol,
+          cheque_pour_compagnie: false
+        });
+        atcPayes++;
+      }
     }
   }
 
