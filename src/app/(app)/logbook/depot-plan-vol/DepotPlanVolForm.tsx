@@ -328,15 +328,18 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
           )}
         </div>
       ) : (
-        avionsPersonnelsDispo.length > 0 && (
-          <div>
-            <label className="label">Mon appareil (optionnel)</label>
+        <div className="p-4 rounded-lg border border-slate-600 bg-slate-800/50">
+          <label className="label flex items-center gap-2">
+            <Plane className="h-4 w-4 text-slate-400" />
+            Mon appareil personnel
+          </label>
+          {avionsPersonnelsDispo.length > 0 ? (
             <select 
               className="input w-full" 
               value={inventaire_avion_id} 
               onChange={(e) => setInventaireAvionId(e.target.value)}
             >
-              <option value="">— Aucun (vol sans appareil personnel) —</option>
+              <option value="">— Sélectionner un appareil —</option>
               {avionsPersonnelsDispo.map((inv) => (
                 <option key={inv.id} value={inv.id}>
                   {inv.nom_personnalise || inv.types_avion?.nom || 'Avion'}
@@ -344,8 +347,20 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
                 </option>
               ))}
             </select>
-          </div>
-        )
+          ) : (
+            <div className="text-sm text-slate-400 mt-2">
+              <p>Vous n&apos;avez aucun appareil dans votre inventaire.</p>
+              <p className="text-amber-400 mt-1">
+                Achetez un avion sur le <a href="/marketplace" className="underline hover:text-amber-300">Marketplace</a> pour effectuer des vols personnels.
+              </p>
+            </div>
+          )}
+          {inventairePersonnel.length > 0 && avionsPersonnelsDispo.length === 0 && (
+            <p className="text-amber-400 text-sm mt-2">
+              Tous vos appareils sont actuellement en vol.
+            </p>
+          )}
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-4">

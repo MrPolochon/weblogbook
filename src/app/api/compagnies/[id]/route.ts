@@ -33,19 +33,32 @@ export async function PATCH(
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
+    const isAdmin = profile?.role === 'admin';
+    
+    // Vérifier si l'utilisateur est PDG de cette compagnie
+    const admin = createAdminClient();
+    const { data: compagnie } = await admin.from('compagnies').select('pdg_id').eq('id', id).single();
+    const isPdg = compagnie?.pdg_id === user.id;
+    
+    if (!isAdmin && !isPdg) {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+    }
 
     const body = await request.json();
     const { pdg_id, prix_billet_pax, prix_kg_cargo, pourcentage_salaire } = body;
 
     const updates: Record<string, unknown> = {};
-    if (pdg_id !== undefined) updates.pdg_id = pdg_id;
+    
+    // Seuls les admins peuvent changer le PDG
+    if (pdg_id !== undefined && isAdmin) updates.pdg_id = pdg_id;
+    
+    // Le PDG et les admins peuvent modifier ces paramètres
     if (prix_billet_pax !== undefined) updates.prix_billet_pax = prix_billet_pax;
     if (prix_kg_cargo !== undefined) updates.prix_kg_cargo = prix_kg_cargo;
     if (pourcentage_salaire !== undefined) updates.pourcentage_salaire = pourcentage_salaire;
 
-    const admin = createAdminClient();
     const { data, error } = await admin.from('compagnies')
       .update(updates)
       .eq('id', id)

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Power, Loader2 } from 'lucide-react';
 
 export default function HorsServiceButton() {
   const router = useRouter();
@@ -24,11 +25,21 @@ export default function HorsServiceButton() {
   }
 
   return (
-    <div>
-      <button type="button" onClick={handleClick} className="btn-secondary" disabled={loading}>
-        {loading ? '…' : 'Se mettre hors service'}
+    <div className="flex items-center gap-2">
+      <button 
+        type="button" 
+        onClick={handleClick} 
+        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 transition-colors font-medium text-sm" 
+        disabled={loading}
+      >
+        {loading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Power className="h-4 w-4" />
+        )}
+        {loading ? 'Déconnexion...' : 'Hors service'}
       </button>
-      {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
+      {error && <p className="text-red-400 text-sm">{error}</p>}
     </div>
   );
 }
