@@ -69,7 +69,10 @@ export default async function DepotPlanVolPage() {
   }));
 
   // Compagnie info
-  const compagnie = emploi?.compagnies as { id: string; nom: string; prix_billet_pax: number; prix_kg_cargo: number; pourcentage_salaire: number } | null;
+  const compagniesData = emploi?.compagnies;
+  const compagnie = compagniesData 
+    ? (Array.isArray(compagniesData) ? compagniesData[0] : compagniesData) as { id: string; nom: string; prix_billet_pax: number; prix_kg_cargo: number; pourcentage_salaire: number } | null
+    : null;
 
   return (
     <div className="space-y-6">
