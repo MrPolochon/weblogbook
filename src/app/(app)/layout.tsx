@@ -45,6 +45,7 @@ export default async function AppLayout({
   let pendingVolsCount = 0;
   let volsAConfirmerCount = 0;
   let plansNonCloturesCount = 0;
+  let messagesNonLusCount = 0;
   if (isAdmin) {
     try {
       const admin = createAdminClient();
@@ -64,24 +65,28 @@ export default async function AppLayout({
       { count: c2 },
       { count: c3 },
       { count: pnc },
+      { count: msgCount },
     ] = await Promise.all([
       supabase.from('vols').select('*', { count: 'exact', head: true }).eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_pilote'),
       supabase.from('vols').select('*', { count: 'exact', head: true }).eq('copilote_id', user.id).eq('statut', 'en_attente_confirmation_copilote'),
       admin.from('vols').select('*', { count: 'exact', head: true }).eq('instructeur_id', user.id).eq('statut', 'en_attente_confirmation_instructeur'),
       supabase.from('plans_vol').select('*', { count: 'exact', head: true }).eq('pilote_id', user.id).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']),
+      admin.from('messages').select('*', { count: 'exact', head: true }).eq('destinataire_id', user.id).eq('lu', false),
     ]);
     volsAConfirmerCount = (c1 ?? 0) + (c2 ?? 0) + (c3 ?? 0);
     plansNonCloturesCount = pnc ?? 0;
+    messagesNonLusCount = msgCount ?? 0;
   } catch {
     volsAConfirmerCount = 0;
     plansNonCloturesCount = 0;
+    messagesNonLusCount = 0;
   }
 
   return (
     <div className="min-h-screen flex flex-col">
       <AutoRefresh intervalSeconds={12} />
       <AdminModeBg />
-      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} />
+      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} />
       {plansNonCloturesCount > 0 && (
         <div className="border-b border-amber-500/40 bg-amber-500/15">
           <div className="mx-auto max-w-6xl px-4 py-2 flex items-center justify-center gap-2 flex-wrap">

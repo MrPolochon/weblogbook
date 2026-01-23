@@ -1,0 +1,356 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight } from 'lucide-react';
+import ChequeVisuel from '@/components/ChequeVisuel';
+
+interface Message {
+  id: string;
+  expediteur_id: string | null;
+  destinataire_id: string;
+  titre: string;
+  contenu: string;
+  lu: boolean;
+  created_at: string;
+  type_message: string;
+  cheque_montant: number | null;
+  cheque_encaisse: boolean;
+  cheque_libelle: string | null;
+  cheque_numero_vol: string | null;
+  cheque_compagnie_nom: string | null;
+  cheque_pour_compagnie: boolean;
+  expediteur?: { identifiant: string } | { identifiant: string }[] | null;
+  destinataire?: { identifiant: string } | { identifiant: string }[] | null;
+}
+
+interface Utilisateur {
+  id: string;
+  identifiant: string;
+}
+
+interface Props {
+  messagesRecus: Message[];
+  messagesEnvoyes: Message[];
+  utilisateurs: Utilisateur[];
+  currentUserIdentifiant: string;
+}
+
+function getIdentifiant(obj: { identifiant: string } | { identifiant: string }[] | null | undefined): string {
+  if (!obj) return 'Système';
+  if (Array.isArray(obj)) return obj[0]?.identifiant || 'Système';
+  return obj.identifiant || 'Système';
+}
+
+export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant }: Props) {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<'inbox' | 'cheques' | 'sent' | 'compose'>('inbox');
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Compose form
+  const [composeDestinataire, setComposeDestinataire] = useState('');
+  const [composeTitre, setComposeTitre] = useState('');
+  const [composeContenu, setComposeContenu] = useState('');
+  const [composeSending, setComposeSending] = useState(false);
+  const [composeError, setComposeError] = useState<string | null>(null);
+
+  const cheques = messagesRecus.filter(m => ['cheque_salaire', 'cheque_revenu_compagnie'].includes(m.type_message));
+  const messagesNormaux = messagesRecus.filter(m => !['cheque_salaire', 'cheque_revenu_compagnie'].includes(m.type_message));
+
+  async function handleMarkAsRead(id: string) {
+    await fetch(`/api/messages/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'marquer_lu' })
+    });
+    router.refresh();
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('Supprimer ce message ?')) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/messages/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSelectedMessage(null);
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleEncaisser(id: string) {
+    const res = await fetch(`/api/messages/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'encaisser' })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    router.refresh();
+  }
+
+  async function handleSendMessage(e: React.FormEvent) {
+    e.preventDefault();
+    setComposeError(null);
+    if (!composeDestinataire || !composeTitre.trim() || !composeContenu.trim()) {
+      setComposeError('Tous les champs sont requis');
+      return;
+    }
+
+    setComposeSending(true);
+    try {
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          destinataire_id: composeDestinataire,
+          titre: composeTitre.trim(),
+          contenu: composeContenu.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      
+      setComposeDestinataire('');
+      setComposeTitre('');
+      setComposeContenu('');
+      setActiveTab('sent');
+      router.refresh();
+    } catch (e) {
+      setComposeError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setComposeSending(false);
+    }
+  }
+
+  function selectMessage(msg: Message) {
+    setSelectedMessage(msg);
+    if (!msg.lu && msg.destinataire_id) {
+      handleMarkAsRead(msg.id);
+    }
+  }
+
+  const tabs = [
+    { id: 'inbox', label: 'Boîte de réception', icon: Inbox, count: messagesNormaux.filter(m => !m.lu).length },
+    { id: 'cheques', label: 'Chèques', icon: CreditCard, count: cheques.filter(m => !m.cheque_encaisse).length },
+    { id: 'sent', label: 'Envoyés', icon: Send, count: 0 },
+    { id: 'compose', label: 'Nouveau', icon: Plus, count: 0 },
+  ] as const;
+
+  return (
+    <div className="grid lg:grid-cols-3 gap-6">
+      {/* Sidebar - Liste des messages */}
+      <div className="lg:col-span-1 space-y-4">
+        {/* Onglets */}
+        <div className="flex flex-wrap gap-2">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => { setActiveTab(tab.id); setSelectedMessage(null); }}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === tab.id
+                  ? 'bg-violet-600 text-white'
+                  : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+              }`}
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+              {tab.count > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-red-500 text-white text-xs">
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Liste des messages */}
+        <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden max-h-[600px] overflow-y-auto">
+          {activeTab === 'compose' ? (
+            <form onSubmit={handleSendMessage} className="p-4 space-y-4">
+              <h3 className="font-semibold text-slate-200">Nouveau message</h3>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Destinataire</label>
+                <select
+                  value={composeDestinataire}
+                  onChange={e => setComposeDestinataire(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-200"
+                  required
+                >
+                  <option value="">-- Sélectionner --</option>
+                  {utilisateurs.map(u => (
+                    <option key={u.id} value={u.id}>{u.identifiant}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Sujet</label>
+                <input
+                  type="text"
+                  value={composeTitre}
+                  onChange={e => setComposeTitre(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-200"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Message</label>
+                <textarea
+                  value={composeContenu}
+                  onChange={e => setComposeContenu(e.target.value)}
+                  rows={5}
+                  className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-200"
+                  required
+                />
+              </div>
+              {composeError && <p className="text-red-400 text-sm">{composeError}</p>}
+              <button
+                type="submit"
+                disabled={composeSending}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-50"
+              >
+                {composeSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Envoyer
+              </button>
+            </form>
+          ) : (
+            <div className="divide-y divide-slate-700/30">
+              {(activeTab === 'inbox' ? messagesNormaux : activeTab === 'cheques' ? cheques : messagesEnvoyes).length === 0 ? (
+                <div className="p-8 text-center text-slate-500">
+                  <Mail className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Aucun message</p>
+                </div>
+              ) : (
+                (activeTab === 'inbox' ? messagesNormaux : activeTab === 'cheques' ? cheques : messagesEnvoyes).map(msg => (
+                  <button
+                    key={msg.id}
+                    onClick={() => selectMessage(msg)}
+                    className={`w-full text-left p-4 hover:bg-slate-700/30 transition-colors ${
+                      selectedMessage?.id === msg.id ? 'bg-slate-700/40' : ''
+                    } ${!msg.lu && activeTab !== 'sent' ? 'bg-violet-500/5' : ''}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="shrink-0 mt-0.5">
+                        {msg.lu || activeTab === 'sent' ? (
+                          <MailOpen className="h-5 w-5 text-slate-500" />
+                        ) : (
+                          <Mail className="h-5 w-5 text-violet-400" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className={`text-sm truncate ${!msg.lu && activeTab !== 'sent' ? 'font-semibold text-slate-200' : 'text-slate-400'}`}>
+                            {activeTab === 'sent' 
+                              ? `À: ${getIdentifiant(msg.destinataire)}`
+                              : `De: ${getIdentifiant(msg.expediteur)}`
+                            }
+                          </p>
+                          <span className="text-xs text-slate-500 shrink-0">
+                            {format(new Date(msg.created_at), 'dd/MM', { locale: fr })}
+                          </span>
+                        </div>
+                        <p className={`text-sm truncate ${!msg.lu && activeTab !== 'sent' ? 'text-slate-100' : 'text-slate-300'}`}>
+                          {msg.titre}
+                        </p>
+                        {msg.type_message === 'cheque_salaire' && (
+                          <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs ${
+                            msg.cheque_encaisse ? 'bg-slate-600/50 text-slate-400' : 'bg-emerald-500/20 text-emerald-400'
+                          }`}>
+                            {msg.cheque_encaisse ? 'Encaissé' : `${msg.cheque_montant?.toLocaleString('fr-FR')} F$ à encaisser`}
+                          </span>
+                        )}
+                        {msg.type_message === 'cheque_revenu_compagnie' && (
+                          <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs ${
+                            msg.cheque_encaisse ? 'bg-slate-600/50 text-slate-400' : 'bg-amber-500/20 text-amber-400'
+                          }`}>
+                            {msg.cheque_encaisse ? 'Encaissé' : `${msg.cheque_montant?.toLocaleString('fr-FR')} F$ (compagnie)`}
+                          </span>
+                        )}
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-slate-600 shrink-0" />
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Contenu du message */}
+      <div className="lg:col-span-2">
+        {selectedMessage ? (
+          <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden">
+            {/* Header du message */}
+            <div className="p-4 border-b border-slate-700/50 bg-slate-800/50">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-100">{selectedMessage.titre}</h2>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {activeTab === 'sent' 
+                      ? `À: ${getIdentifiant(selectedMessage.destinataire)}`
+                      : `De: ${getIdentifiant(selectedMessage.expediteur)}`
+                    } • {format(new Date(selectedMessage.created_at), 'dd MMMM yyyy à HH:mm', { locale: fr })}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setSelectedMessage(null)}
+                    className="p-2 rounded-lg hover:bg-slate-700/50 text-slate-400"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                  {activeTab !== 'sent' && (
+                    <button
+                      onClick={() => handleDelete(selectedMessage.id)}
+                      disabled={loading}
+                      className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Contenu */}
+            <div className="p-6">
+              {/* Si c'est un chèque, afficher le chèque visuel */}
+              {['cheque_salaire', 'cheque_revenu_compagnie'].includes(selectedMessage.type_message) && selectedMessage.cheque_montant ? (
+                <div className="space-y-6">
+                  <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>
+                  <ChequeVisuel
+                    id={selectedMessage.id}
+                    montant={selectedMessage.cheque_montant}
+                    destinataire={currentUserIdentifiant}
+                    compagnieNom={selectedMessage.cheque_compagnie_nom || undefined}
+                    numeroVol={selectedMessage.cheque_numero_vol || undefined}
+                    libelle={selectedMessage.cheque_libelle || undefined}
+                    date={selectedMessage.created_at}
+                    encaisse={selectedMessage.cheque_encaisse}
+                    pourCompagnie={selectedMessage.cheque_pour_compagnie}
+                    onEncaisser={selectedMessage.cheque_encaisse ? undefined : () => handleEncaisser(selectedMessage.id)}
+                  />
+                </div>
+              ) : (
+                <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-12 text-center">
+            <Mail className="h-16 w-16 text-slate-600 mx-auto mb-4" />
+            <p className="text-slate-400">Sélectionnez un message pour le lire</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package } from 'lucide-react';
+import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -14,9 +14,10 @@ interface NavBarProps {
   hasCompagnie?: boolean;
   pendingVolsCount?: number;
   volsAConfirmerCount?: number;
+  messagesNonLusCount?: number;
 }
 
-export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, pendingVolsCount = 0, volsAConfirmerCount = 0 }: NavBarProps) {
+export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, pendingVolsCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0 }: NavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [piloteMenuOpen, setPiloteMenuOpen] = useState(false);
@@ -40,19 +41,21 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
   }
 
   const piloteMenuItems = [
-    { href: '/logbook', label: 'Mon logbook', icon: BookOpen },
-    { href: '/logbook/depot-plan-vol', label: 'Déposer un plan de vol', icon: Plane },
-    { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText },
-    ...(hasCompagnie ? [{ href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2 }] : []),
-    ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield }] : []),
-    { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark },
-    { href: '/marketplace', label: 'Marketplace', icon: Package },
-    { href: '/inventaire', label: 'Mon inventaire', icon: Plane },
+    { href: '/logbook', label: 'Mon logbook', icon: BookOpen, badge: 0 },
+    { href: '/logbook/depot-plan-vol', label: 'Déposer un plan de vol', icon: Plane, badge: 0 },
+    { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText, badge: 0 },
+    { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount },
+    ...(hasCompagnie ? [{ href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 }] : []),
+    ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield, badge: 0 }] : []),
+    { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0 },
+    { href: '/marketplace', label: 'Marketplace', icon: Package, badge: 0 },
+    { href: '/inventaire', label: 'Mon inventaire', icon: Plane, badge: 0 },
   ];
 
   const isPiloteActive = pathname.startsWith('/logbook') || pathname.startsWith('/militaire') || 
     pathname.startsWith('/felitz-bank') || pathname.startsWith('/ma-compagnie') ||
-    pathname.startsWith('/marketplace') || pathname.startsWith('/inventaire');
+    pathname.startsWith('/marketplace') || pathname.startsWith('/inventaire') ||
+    pathname.startsWith('/messagerie');
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-700/50 bg-slate-900/95 backdrop-blur">
@@ -100,6 +103,11 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
                     >
                       <Icon className="h-4 w-4" />
                       {item.label}
+                      {item.badge > 0 && (
+                        <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
+                          {item.badge > 99 ? '99+' : item.badge}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}

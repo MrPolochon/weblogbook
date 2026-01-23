@@ -7,6 +7,144 @@ import { ATC_POSITIONS } from '@/lib/atc-positions';
 const STATUTS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring'];
 const ORDRE_ACCEPTATION_PLANS = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
 
+/**
+ * Calcule le coefficient de ponctualité basé sur l'écart entre temps prévu et temps réel.
+ * Plus l'écart est grand (retard ou avance), plus la pénalité est forte.
+ * Retourne un coefficient entre 0.5 (50%) et 1.0 (100%)
+ */
+function calculerCoefficientPonctualite(tempsPrevuMin: number, tempsReelMin: number): number {
+  const ecart = Math.abs(tempsReelMin - tempsPrevuMin);
+  // Tolérance de 5 minutes sans pénalité
+  if (ecart <= 5) return 1.0;
+  
+  // Pénalité de 3% par minute d'écart au-delà de la tolérance, max 50%
+  const penalitePct = Math.min((ecart - 5) * 3, 50);
+  return 1.0 - (penalitePct / 100);
+}
+
+/**
+ * Envoie des chèques lors de la clôture d'un vol commercial.
+ * Le pilote reçoit un chèque pour son salaire.
+ * Le PDG de la compagnie reçoit un chèque pour les revenus de la compagnie.
+ */
+async function envoyerChequesVol(
+  admin: ReturnType<typeof createAdminClient>,
+  plan: {
+    pilote_id: string;
+    vol_commercial: boolean;
+    compagnie_id: string | null;
+    revenue_brut: number | null;
+    salaire_pilote: number | null;
+    temps_prev_min: number;
+    accepted_at: string | null;
+    numero_vol?: string;
+  },
+  clotureAt: Date
+): Promise<{ success: boolean; message?: string; revenus?: { brut: number; net: number; salaire: number; coefficient: number; tempsReel: number } }> {
+  // Vérifier que c'est un vol commercial avec des revenus
+  if (!plan.vol_commercial || !plan.compagnie_id || !plan.revenue_brut || plan.revenue_brut <= 0) {
+    return { success: true, message: 'Vol non commercial ou sans revenus' };
+  }
+
+  // Calculer le temps réel de vol
+  let tempsReelMin = plan.temps_prev_min; // Par défaut si pas d'accepted_at
+  if (plan.accepted_at) {
+    const acceptedAt = new Date(plan.accepted_at);
+    const diffMs = clotureAt.getTime() - acceptedAt.getTime();
+    tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
+  }
+
+  // Calculer le coefficient de ponctualité
+  const coefficient = calculerCoefficientPonctualite(plan.temps_prev_min, tempsReelMin);
+  
+  // Calculer les revenus effectifs
+  const revenuEffectif = Math.round(plan.revenue_brut * coefficient);
+  const salaireEffectif = Math.round((plan.salaire_pilote || 0) * coefficient);
+  const revenuCompagnie = revenuEffectif - salaireEffectif;
+
+  // Récupérer les infos de la compagnie
+  const { data: compagnie } = await admin.from('compagnies')
+    .select('nom, pdg_id')
+    .eq('id', plan.compagnie_id)
+    .single();
+
+  if (!compagnie) {
+    return { success: false, message: 'Compagnie introuvable' };
+  }
+
+  // Récupérer le compte personnel du pilote
+  const { data: comptePilote } = await admin.from('felitz_comptes')
+    .select('id')
+    .eq('proprietaire_id', plan.pilote_id)
+    .eq('type', 'personnel')
+    .single();
+
+  if (!comptePilote) {
+    return { success: false, message: 'Compte Felitz du pilote introuvable' };
+  }
+
+  // Récupérer le compte de la compagnie
+  const { data: compteCompagnie } = await admin.from('felitz_comptes')
+    .select('id')
+    .eq('compagnie_id', plan.compagnie_id)
+    .eq('type', 'entreprise')
+    .single();
+
+  if (!compteCompagnie) {
+    return { success: false, message: 'Compte Felitz de la compagnie introuvable' };
+  }
+
+  const coeffPct = Math.round(coefficient * 100);
+  const numeroVol = plan.numero_vol || 'N/A';
+
+  // Envoyer un chèque au pilote pour son salaire
+  if (salaireEffectif > 0) {
+    await admin.from('messages').insert({
+      destinataire_id: plan.pilote_id,
+      expediteur_id: null, // Système
+      titre: `Salaire vol ${numeroVol}`,
+      contenu: `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min\nCoefficient de ponctualité: ${coeffPct}%\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`,
+      type_message: 'cheque_salaire',
+      cheque_montant: salaireEffectif,
+      cheque_encaisse: false,
+      cheque_destinataire_compte_id: comptePilote.id,
+      cheque_libelle: `Salaire vol ${numeroVol} (coef. ${coeffPct}%)`,
+      cheque_numero_vol: numeroVol,
+      cheque_compagnie_nom: compagnie.nom,
+      cheque_pour_compagnie: false
+    });
+  }
+
+  // Envoyer un chèque au PDG pour les revenus de la compagnie
+  if (revenuCompagnie > 0 && compagnie.pdg_id) {
+    await admin.from('messages').insert({
+      destinataire_id: compagnie.pdg_id,
+      expediteur_id: null, // Système
+      titre: `Revenu vol ${numeroVol} - ${compagnie.nom}`,
+      contenu: `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$\nRevenu net après salaire pilote: ${revenuCompagnie.toLocaleString('fr-FR')} F$\nCoefficient de ponctualité: ${coeffPct}%\n\nVeuillez encaisser le chèque ci-dessous au nom de ${compagnie.nom}.`,
+      type_message: 'cheque_revenu_compagnie',
+      cheque_montant: revenuCompagnie,
+      cheque_encaisse: false,
+      cheque_destinataire_compte_id: compteCompagnie.id,
+      cheque_libelle: `Revenu vol ${numeroVol} (coef. ${coeffPct}%)`,
+      cheque_numero_vol: numeroVol,
+      cheque_compagnie_nom: compagnie.nom,
+      cheque_pour_compagnie: true
+    });
+  }
+
+  return { 
+    success: true, 
+    revenus: { 
+      brut: plan.revenue_brut, 
+      net: revenuEffectif, 
+      salaire: salaireEffectif, 
+      coefficient,
+      tempsReel: tempsReelMin
+    } 
+  };
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -15,31 +153,42 @@ export async function PATCH(
     const { id } = await params;
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    if (!user) return NextResponse.json({ error: 'Non autorise' }, { status: 401 });
 
     const body = await request.json();
     const { action } = body;
 
     const admin = createAdminClient();
-    const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut, current_holder_user_id, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at').eq('id', id).single();
+    const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut, current_holder_user_id, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol').eq('id', id).single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
 
     if (action === 'cloture') {
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-      if (profile?.role === 'atc') return NextResponse.json({ error: 'Clôture réservée au pilote.' }, { status: 403 });
+      if (profile?.role === 'atc') return NextResponse.json({ error: 'Cloture reservee au pilote.' }, { status: 403 });
       if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
-      if (plan.statut === 'refuse' || plan.statut === 'cloture') return NextResponse.json({ error: 'Ce plan ne peut pas être clôturé.' }, { status: 400 });
-      if (!STATUTS_OUVERTS.includes(plan.statut)) return NextResponse.json({ error: 'Statut invalide pour clôture.' }, { status: 400 });
+      if (plan.statut === 'refuse' || plan.statut === 'cloture') return NextResponse.json({ error: 'Ce plan ne peut pas etre cloture.' }, { status: 400 });
+      if (!STATUTS_OUVERTS.includes(plan.statut)) return NextResponse.json({ error: 'Statut invalide pour cloture.' }, { status: 400 });
 
-      // Clôture directe si : pas de détenteur, autosurveillance, ou aucun ATC n’a encore accepté (statut ≠ accepte/en_cours)
+      // Cloture directe si : pas de detenteur, autosurveillance, ou aucun ATC n'a encore accepte (statut != accepte/en_cours)
       const closDirect = !plan.current_holder_user_id || plan.automonitoring === true || (plan.statut !== 'accepte' && plan.statut !== 'en_cours');
       const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
+      const clotureAt = new Date();
       const payload: { statut: string; cloture_at?: string } = { statut: newStatut };
-      if (newStatut === 'cloture') payload.cloture_at = new Date().toISOString();
+      
+      let paiementResult = null;
+      if (newStatut === 'cloture') {
+        payload.cloture_at = clotureAt.toISOString();
+        
+        // Envoyer les chèques pour les vols commerciaux
+        paiementResult = await envoyerChequesVol(admin, plan, clotureAt);
+        if (!paiementResult.success) {
+          console.error('Erreur paiement vol:', paiementResult.message);
+        }
+      }
 
       const { error } = await admin.from('plans_vol').update(payload).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      return NextResponse.json({ ok: true, statut: newStatut, direct: closDirect });
+      return NextResponse.json({ ok: true, statut: newStatut, direct: closDirect, paiement: paiementResult });
     }
 
     if (action === 'confirmer_cloture') {
@@ -47,12 +196,20 @@ export async function PATCH(
       const isAdmin = profile?.role === 'admin';
       const isHolder = plan.current_holder_user_id === user.id;
       const canAtc = isAdmin || isHolder;
-      if (!canAtc) return NextResponse.json({ error: 'Seul l’ATC qui détient le plan ou un admin peut confirmer la clôture.' }, { status: 403 });
-      if (plan.statut !== 'en_attente_cloture') return NextResponse.json({ error: 'Aucune demande de clôture en attente.' }, { status: 400 });
+      if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui detient le plan ou un admin peut confirmer la cloture.' }, { status: 403 });
+      if (plan.statut !== 'en_attente_cloture') return NextResponse.json({ error: 'Aucune demande de cloture en attente.' }, { status: 400 });
 
-      const { error } = await admin.from('plans_vol').update({ statut: 'cloture', cloture_at: new Date().toISOString() }).eq('id', id);
+      const clotureAt = new Date();
+      
+      // Envoyer les chèques pour les vols commerciaux
+      const paiementResult = await envoyerChequesVol(admin, plan, clotureAt);
+      if (!paiementResult.success) {
+        console.error('Erreur paiement vol:', paiementResult.message);
+      }
+
+      const { error } = await admin.from('plans_vol').update({ statut: 'cloture', cloture_at: clotureAt.toISOString() }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, paiement: paiementResult });
     }
 
     if (action === 'accepter') {
@@ -60,7 +217,7 @@ export async function PATCH(
       const isAdmin = profile?.role === 'admin';
       const isHolder = plan.current_holder_user_id === user.id;
       const canAtc = isAdmin || isHolder;
-      if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui détient le plan ou un admin peut accepter.' }, { status: 403 });
+      if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui detient le plan ou un admin peut accepter.' }, { status: 403 });
       if (plan.statut !== 'en_attente' && plan.statut !== 'depose') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
 
       const { error } = await admin.from('plans_vol').update({ statut: 'accepte', accepted_at: new Date().toISOString() }).eq('id', id);
@@ -73,7 +230,7 @@ export async function PATCH(
       const isAdmin = profile?.role === 'admin';
       const isHolder = plan.current_holder_user_id === user.id;
       const canAtc = isAdmin || isHolder;
-      if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui détient le plan ou un admin peut refuser.' }, { status: 403 });
+      if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui detient le plan ou un admin peut refuser.' }, { status: 403 });
       if (plan.statut !== 'en_attente' && plan.statut !== 'depose') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
       const reason = body.refusal_reason != null ? String(body.refusal_reason).trim() : '';
       if (!reason) return NextResponse.json({ error: 'La raison du refus est obligatoire.' }, { status: 400 });
@@ -85,22 +242,22 @@ export async function PATCH(
 
     if (action === 'modifier_et_renvoyer') {
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-      if (profile?.role === 'atc') return NextResponse.json({ error: 'Réservé au pilote.' }, { status: 403 });
+      if (profile?.role === 'atc') return NextResponse.json({ error: 'Reserve au pilote.' }, { status: 403 });
       if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
-      if (plan.statut !== 'refuse') return NextResponse.json({ error: 'Seul un plan refusé peut être modifié et renvoyé.' }, { status: 400 });
+      if (plan.statut !== 'refuse') return NextResponse.json({ error: 'Seul un plan refuse peut etre modifie et renvoye.' }, { status: 400 });
 
       const { aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee } = body;
       const ad = String(aeroport_depart || '').toUpperCase();
       const aa = String(aeroport_arrivee || '').toUpperCase();
-      if (!CODES_OACI_VALIDES.has(ad) || !CODES_OACI_VALIDES.has(aa)) return NextResponse.json({ error: 'Aéroports invalides.' }, { status: 400 });
-      if (!numero_vol || typeof numero_vol !== 'string' || !String(numero_vol).trim()) return NextResponse.json({ error: 'Numéro de vol requis.' }, { status: 400 });
+      if (!CODES_OACI_VALIDES.has(ad) || !CODES_OACI_VALIDES.has(aa)) return NextResponse.json({ error: 'Aeroports invalides.' }, { status: 400 });
+      if (!numero_vol || typeof numero_vol !== 'string' || !String(numero_vol).trim()) return NextResponse.json({ error: 'Numero de vol requis.' }, { status: 400 });
       const t = parseInt(String(temps_prev_min), 10);
-      if (isNaN(t) || t < 1) return NextResponse.json({ error: 'Temps prévu invalide (minutes ≥ 1).' }, { status: 400 });
+      if (isNaN(t) || t < 1) return NextResponse.json({ error: 'Temps prevu invalide (minutes >= 1).' }, { status: 400 });
       if (!type_vol || !['VFR', 'IFR'].includes(String(type_vol))) return NextResponse.json({ error: 'Type de vol VFR ou IFR requis.' }, { status: 400 });
       if (String(type_vol) === 'VFR' && (!intentions_vol || !String(intentions_vol).trim())) return NextResponse.json({ error: 'Intentions de vol requises pour VFR.' }, { status: 400 });
       if (String(type_vol) === 'IFR') {
-        if (!sid_depart || !String(sid_depart).trim()) return NextResponse.json({ error: 'SID de départ requise pour IFR.' }, { status: 400 });
-        if (!star_arrivee || !String(star_arrivee).trim()) return NextResponse.json({ error: 'STAR d\'arrivée requise pour IFR.' }, { status: 400 });
+        if (!sid_depart || !String(sid_depart).trim()) return NextResponse.json({ error: 'SID de depart requise pour IFR.' }, { status: 400 });
+        if (!star_arrivee || !String(star_arrivee).trim()) return NextResponse.json({ error: 'STAR d\'arrivee requise pour IFR.' }, { status: 400 });
       }
 
       const airportsToCheck = ad === aa ? [ad] : [ad, aa];
@@ -112,7 +269,7 @@ export async function PATCH(
         }
         if (holder) break;
       }
-      if (!holder) return NextResponse.json({ error: 'Aucune fréquence ATC de votre aéroport de départ ou d\'arrivée est en ligne. Réessayez plus tard.' }, { status: 400 });
+      if (!holder) return NextResponse.json({ error: 'Aucune frequence ATC de votre aeroport de depart ou d\'arrivee est en ligne. Reessayez plus tard.' }, { status: 400 });
 
       const { error: err } = await admin.from('plans_vol').update({
         aeroport_depart: ad,
@@ -142,8 +299,8 @@ export async function PATCH(
       const isHolder = plan.current_holder_user_id === user.id;
       // En autosurveillance : les instructions ne sont pas modifiables
       const canEdit = (isAdmin || isHolder) && !plan.automonitoring;
-      if (!canEdit) return NextResponse.json({ error: 'Seul le détenteur du plan ou un admin peut modifier les instructions (pas en autosurveillance).' }, { status: 403 });
-      if (plan.statut !== 'accepte' && plan.statut !== 'en_cours') return NextResponse.json({ error: 'Plan non accepté ou non en cours.' }, { status: 400 });
+      if (!canEdit) return NextResponse.json({ error: 'Seul le detenteur du plan ou un admin peut modifier les instructions (pas en autosurveillance).' }, { status: 403 });
+      if (plan.statut !== 'accepte' && plan.statut !== 'en_cours') return NextResponse.json({ error: 'Plan non accepte ou non en cours.' }, { status: 400 });
       const instructions = body.instructions != null ? String(body.instructions) : '';
       const { error: err } = await admin.from('plans_vol').update({ instructions: instructions.trim() || null }).eq('id', id);
       if (err) return NextResponse.json({ error: err.message }, { status: 400 });
@@ -156,18 +313,18 @@ export async function PATCH(
       const isHolder = plan.current_holder_user_id === user.id;
       const canAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
       const canTransfer = isAdmin || isHolder || (plan.automonitoring && canAtc);
-      if (!canTransfer) return NextResponse.json({ error: 'Seul le détenteur du plan, un admin, ou un ATC (si autosurveillance) peut transférer.' }, { status: 403 });
+      if (!canTransfer) return NextResponse.json({ error: 'Seul le detenteur du plan, un admin, ou un ATC (si autosurveillance) peut transferer.' }, { status: 403 });
       const canTransferByStatut = ['accepte', 'en_cours'].includes(plan.statut) || plan.automonitoring
         || (['depose', 'en_attente'].includes(plan.statut) && (isHolder || isAdmin));
-      if (!canTransferByStatut) return NextResponse.json({ error: 'Plan non accepté, non en cours ou non en autosurveillance.' }, { status: 400 });
-      // En autosurveillance : seuls les ATC en service (avec une position) peuvent prendre/transférer
+      if (!canTransferByStatut) return NextResponse.json({ error: 'Plan non accepte, non en cours ou non en autosurveillance.' }, { status: 400 });
+      // En autosurveillance : seuls les ATC en service (avec une position) peuvent prendre/transferer
       if (plan.automonitoring && !isAdmin) {
         const { data: atcSess } = await supabase.from('atc_sessions').select('id').eq('user_id', user.id).single();
-        if (!atcSess) return NextResponse.json({ error: 'Mettez-vous en service pour prendre ou transférer un plan en autosurveillance.' }, { status: 403 });
+        if (!atcSess) return NextResponse.json({ error: 'Mettez-vous en service pour prendre ou transferer un plan en autosurveillance.' }, { status: 403 });
       }
 
       if (body.automonitoring === true) {
-        if (['depose', 'en_attente'].includes(plan.statut)) return NextResponse.json({ error: 'Impossible de mettre en autosurveillance un plan non encore accepté.' }, { status: 400 });
+        if (['depose', 'en_attente'].includes(plan.statut)) return NextResponse.json({ error: 'Impossible de mettre en autosurveillance un plan non encore accepte.' }, { status: 400 });
         const { error: err } = await admin.from('plans_vol').update({
           current_holder_user_id: null,
           current_holder_position: null,
@@ -183,15 +340,15 @@ export async function PATCH(
 
       const aeroport = String(body.aeroport || '').toUpperCase();
       const position = body.position;
-      if (!aeroport || !position) return NextResponse.json({ error: 'Aéroport et position requis (ou automonitoring: true).' }, { status: 400 });
-      if (!CODES_OACI_VALIDES.has(aeroport)) return NextResponse.json({ error: 'Aéroport invalide.' }, { status: 400 });
+      if (!aeroport || !position) return NextResponse.json({ error: 'Aeroport et position requis (ou automonitoring: true).' }, { status: 400 });
+      if (!CODES_OACI_VALIDES.has(aeroport)) return NextResponse.json({ error: 'Aeroport invalide.' }, { status: 400 });
       if (!(ATC_POSITIONS as readonly string[]).includes(String(position))) return NextResponse.json({ error: 'Position invalide.' }, { status: 400 });
-      if (plan.pending_transfer_aeroport != null) return NextResponse.json({ error: 'Un transfert est déjà en attente d\'acceptation. Attendez 1 min ou l\'acceptation par la position cible.' }, { status: 400 });
+      if (plan.pending_transfer_aeroport != null) return NextResponse.json({ error: 'Un transfert est deja en attente d\'acceptation. Attendez 1 min ou l\'acceptation par la position cible.' }, { status: 400 });
 
       const { data: sess } = await admin.from('atc_sessions').select('user_id').eq('aeroport', aeroport).eq('position', String(position)).single();
-      if (!sess?.user_id) return NextResponse.json({ error: 'Aucun ATC en ligne à cette position pour cet aéroport.' }, { status: 400 });
+      if (!sess?.user_id) return NextResponse.json({ error: 'Aucun ATC en ligne a cette position pour cet aeroport.' }, { status: 400 });
 
-      // Mise en attente : la position cible doit accepter sous 1 min, sinon renvoi à l'ATC d'avant
+      // Mise en attente : la position cible doit accepter sous 1 min, sinon renvoi a l'ATC d'avant
       const { error: err } = await admin.from('plans_vol').update({
         pending_transfer_aeroport: aeroport,
         pending_transfer_position: String(position),
@@ -205,9 +362,9 @@ export async function PATCH(
       const { data: sess } = await supabase.from('atc_sessions').select('aeroport, position').eq('user_id', user.id).single();
       if (!sess) return NextResponse.json({ error: 'Mettez-vous en service pour accepter un transfert.' }, { status: 403 });
       if (!plan.pending_transfer_aeroport || plan.pending_transfer_position !== sess.position || plan.pending_transfer_aeroport !== sess.aeroport)
-        return NextResponse.json({ error: 'Ce transfert ne vous est pas destiné ou a expiré.' }, { status: 403 });
+        return NextResponse.json({ error: 'Ce transfert ne vous est pas destine ou a expire.' }, { status: 403 });
       const oneMinAgo = new Date(Date.now() - 60000).toISOString();
-      if (plan.pending_transfer_at && plan.pending_transfer_at < oneMinAgo) return NextResponse.json({ error: 'Ce transfert a expiré (1 min).' }, { status: 400 });
+      if (plan.pending_transfer_at && plan.pending_transfer_at < oneMinAgo) return NextResponse.json({ error: 'Ce transfert a expire (1 min).' }, { status: 400 });
 
       const { error: err } = await admin.from('plans_vol').update({
         current_holder_user_id: user.id,
@@ -229,7 +386,7 @@ export async function PATCH(
   }
 }
 
-/** Supprimer définitivement un plan clôturé sans l'enregistrer en vol (pilote uniquement). */
+/** Supprimer definitivement un plan cloture sans l'enregistrer en vol (pilote uniquement). */
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -238,13 +395,13 @@ export async function DELETE(
     const { id } = await params;
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    if (!user) return NextResponse.json({ error: 'Non autorise' }, { status: 401 });
 
     const admin = createAdminClient();
     const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut').eq('id', id).single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
     if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan ne vous appartient pas.' }, { status: 403 });
-    if (plan.statut !== 'cloture') return NextResponse.json({ error: 'Seul un plan clôturé peut être supprimé ainsi (ne pas enregistrer).' }, { status: 400 });
+    if (plan.statut !== 'cloture') return NextResponse.json({ error: 'Seul un plan cloture peut etre supprime ainsi (ne pas enregistrer).' }, { status: 400 });
 
     const { error } = await admin.from('plans_vol').delete().eq('id', id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
