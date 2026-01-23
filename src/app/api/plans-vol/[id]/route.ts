@@ -154,20 +154,23 @@ async function envoyerChequesVol(
     salaire_pilote: number | null;
     temps_prev_min: number;
     accepted_at: string | null;
+    demande_cloture_at?: string | null;
     numero_vol?: string;
     aeroport_arrivee?: string;
     type_vol?: string;
   },
-  clotureAt: Date
+  dateFinVol: Date // Date de fin du vol pour le calcul (demande_cloture_at, pas confirmation ATC)
 ): Promise<{ success: boolean; message?: string; revenus?: { brut: number; net: number; salaire: number; taxes: number; coefficient: number; tempsReel: number } }> {
   if (!plan.vol_commercial || !plan.compagnie_id || !plan.revenue_brut || plan.revenue_brut <= 0) {
     return { success: true, message: 'Vol non commercial ou sans revenus' };
   }
 
+  // Calculer le temps réel depuis l'acceptation jusqu'à la demande de clôture par le pilote
+  // On utilise dateFinVol qui correspond à demande_cloture_at (pas la confirmation ATC)
   let tempsReelMin = plan.temps_prev_min;
   if (plan.accepted_at) {
     const acceptedAt = new Date(plan.accepted_at);
-    const diffMs = clotureAt.getTime() - acceptedAt.getTime();
+    const diffMs = dateFinVol.getTime() - acceptedAt.getTime();
     tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
   }
 
@@ -285,7 +288,7 @@ export async function PATCH(
 
     const admin = createAdminClient();
     const { data: plan } = await admin.from('plans_vol')
-      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol')
+      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at')
       .eq('id', id)
       .single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
@@ -299,13 +302,17 @@ export async function PATCH(
 
       const closDirect = !plan.current_holder_user_id || plan.automonitoring === true || (plan.statut !== 'accepte' && plan.statut !== 'en_cours');
       const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
-      const clotureAt = new Date();
-      const payload: { statut: string; cloture_at?: string } = { statut: newStatut };
+      const demandeClotureAt = new Date();
+      const payload: { statut: string; cloture_at?: string; demande_cloture_at: string } = { 
+        statut: newStatut,
+        demande_cloture_at: demandeClotureAt.toISOString() // Toujours enregistrer quand le pilote demande
+      };
       
       let paiementResult = null;
       if (newStatut === 'cloture') {
-        payload.cloture_at = clotureAt.toISOString();
-        paiementResult = await envoyerChequesVol(admin, plan, clotureAt);
+        payload.cloture_at = demandeClotureAt.toISOString();
+        // Utiliser demande_cloture_at pour le calcul du temps réel
+        paiementResult = await envoyerChequesVol(admin, { ...plan, demande_cloture_at: demandeClotureAt.toISOString() }, demandeClotureAt);
         if (!paiementResult.success) {
           console.error('Erreur paiement vol:', paiementResult.message);
         }
@@ -324,13 +331,17 @@ export async function PATCH(
       if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui detient le plan ou un admin peut confirmer la cloture.' }, { status: 403 });
       if (plan.statut !== 'en_attente_cloture') return NextResponse.json({ error: 'Aucune demande de cloture en attente.' }, { status: 400 });
 
-      const clotureAt = new Date();
-      const paiementResult = await envoyerChequesVol(admin, plan, clotureAt);
+      const confirmationAt = new Date();
+      // IMPORTANT: Utiliser demande_cloture_at pour le calcul du temps réel, pas la date de confirmation
+      // Cela évite que le retard de l'ATC à confirmer pénalise le pilote
+      const dateCalculTemps = plan.demande_cloture_at ? new Date(plan.demande_cloture_at) : confirmationAt;
+      
+      const paiementResult = await envoyerChequesVol(admin, plan, dateCalculTemps);
       if (!paiementResult.success) {
         console.error('Erreur paiement vol:', paiementResult.message);
       }
 
-      const { error } = await admin.from('plans_vol').update({ statut: 'cloture', cloture_at: clotureAt.toISOString() }).eq('id', id);
+      const { error } = await admin.from('plans_vol').update({ statut: 'cloture', cloture_at: confirmationAt.toISOString() }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ ok: true, paiement: paiementResult });
     }

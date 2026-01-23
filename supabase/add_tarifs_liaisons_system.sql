@@ -141,6 +141,7 @@ CREATE TRIGGER trigger_tarifs_liaisons_updated_at
 -- Ajouter les colonnes manquantes à plans_vol
 ALTER TABLE public.plans_vol ADD COLUMN IF NOT EXISTS prix_billet_utilise INTEGER;
 ALTER TABLE public.plans_vol ADD COLUMN IF NOT EXISTS vol_sans_atc BOOLEAN DEFAULT false;
+ALTER TABLE public.plans_vol ADD COLUMN IF NOT EXISTS demande_cloture_at TIMESTAMPTZ;
 
 -- Fonction pour consommer les passagers d'un aéroport
 CREATE OR REPLACE FUNCTION consommer_passagers_aeroport(p_code_oaci TEXT, p_passagers INTEGER)

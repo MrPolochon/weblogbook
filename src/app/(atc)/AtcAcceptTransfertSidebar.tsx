@@ -202,12 +202,12 @@ export default function AtcAcceptTransfertSidebar({
       ...plansCloture.map(p => p.id),
     ]);
     
-    for (const id of firstSeenRef.current.keys()) {
+    Array.from(firstSeenRef.current.keys()).forEach(id => {
       if (!currentIds.has(id)) {
         firstSeenRef.current.delete(id);
         lastReminderRef.current.delete(id);
       }
-    }
+    });
   }, [plansTransfert, plansAccepter, plansCloture]);
 
   async function handleAcceptTransfert(planId: string) {

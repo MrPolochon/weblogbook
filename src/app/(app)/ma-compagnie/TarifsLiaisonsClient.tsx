@@ -32,10 +32,24 @@ export default function TarifsLiaisonsClient({ compagnieId, prixBilletDefaut }: 
   const [newBidirectionnel, setNewBidirectionnel] = useState(true);
 
   useEffect(() => {
+    async function fetchTarifs() {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/tarifs-liaisons?compagnie_id=${compagnieId}`);
+        const data = await res.json();
+        if (res.ok) {
+          setTarifs(data);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    }
     fetchTarifs();
   }, [compagnieId]);
 
-  async function fetchTarifs() {
+  async function refreshTarifs() {
     setLoading(true);
     try {
       const res = await fetch(`/api/tarifs-liaisons?compagnie_id=${compagnieId}`);
@@ -80,7 +94,7 @@ export default function TarifsLiaisonsClient({ compagnieId, prixBilletDefaut }: 
       setNewDepart('');
       setNewArrivee('');
       setNewPrix(prixBilletDefaut.toString());
-      fetchTarifs();
+      refreshTarifs();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -97,7 +111,7 @@ export default function TarifsLiaisonsClient({ compagnieId, prixBilletDefaut }: 
         method: 'DELETE',
       });
       if (!res.ok) throw new Error('Erreur');
-      fetchTarifs();
+      refreshTarifs();
     } catch (e) {
       console.error(e);
     }
