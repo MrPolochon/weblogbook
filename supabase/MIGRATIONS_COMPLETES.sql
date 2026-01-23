@@ -338,65 +338,91 @@ CREATE TABLE IF NOT EXISTS public.felitz_transactions (
 );
 
 -- Ajouter les colonnes manquantes si elles n'existent pas
--- Utiliser une approche directe avec gestion d'erreur
+-- Approche robuste : vérifier l'existence avant d'ajouter
 DO $$
 BEGIN
-  -- Ajouter compte_destinataire_id
-  BEGIN
-    ALTER TABLE public.felitz_transactions ADD COLUMN compte_destinataire_id UUID;
-  EXCEPTION 
-    WHEN duplicate_column THEN
-      -- La colonne existe déjà, c'est OK
-      NULL;
-    WHEN undefined_table THEN
-      -- La table n'existe pas encore, sera créée plus tard
-      NULL;
-  END;
-  
-  -- Ajouter plan_vol_id
-  BEGIN
-    ALTER TABLE public.felitz_transactions ADD COLUMN plan_vol_id UUID;
-  EXCEPTION 
-    WHEN duplicate_column THEN
-      -- La colonne existe déjà, c'est OK
-      NULL;
-    WHEN undefined_table THEN
-      -- La table n'existe pas encore, sera créée plus tard
-      NULL;
-  END;
-END $$;
-
--- Ajouter les contraintes de clés étrangères après avoir ajouté les colonnes
-DO $$
-BEGIN
-  -- S'assurer que la table existe
+  -- Vérifier que la table existe
   IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'felitz_transactions') THEN
     RETURN;
   END IF;
   
-  -- S'assurer que la colonne compte_destinataire_id existe avant d'ajouter la contrainte
+  -- Ajouter compte_destinataire_id si elle n'existe pas
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_schema = 'public' 
     AND table_name = 'felitz_transactions' 
     AND column_name = 'compte_destinataire_id'
   ) THEN
-    -- La colonne n'existe pas, l'ajouter maintenant
     BEGIN
       ALTER TABLE public.felitz_transactions ADD COLUMN compte_destinataire_id UUID;
-    EXCEPTION WHEN OTHERS THEN
-      -- Ignorer les erreurs
-      NULL;
+      RAISE NOTICE 'Colonne compte_destinataire_id ajoutée à felitz_transactions';
+    EXCEPTION WHEN duplicate_column THEN
+      RAISE NOTICE 'Colonne compte_destinataire_id existe déjà';
+    WHEN OTHERS THEN
+      RAISE NOTICE 'Erreur lors de l''ajout de compte_destinataire_id: %', SQLERRM;
     END;
   END IF;
   
-  -- Maintenant ajouter la contrainte si la colonne existe et si felitz_comptes existe
-  IF EXISTS (
+  -- Ajouter plan_vol_id si elle n'existe pas
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'felitz_transactions' 
+    AND column_name = 'plan_vol_id'
+  ) THEN
+    BEGIN
+      ALTER TABLE public.felitz_transactions ADD COLUMN plan_vol_id UUID;
+      RAISE NOTICE 'Colonne plan_vol_id ajoutée à felitz_transactions';
+    EXCEPTION WHEN duplicate_column THEN
+      RAISE NOTICE 'Colonne plan_vol_id existe déjà';
+    WHEN OTHERS THEN
+      RAISE NOTICE 'Erreur lors de l''ajout de plan_vol_id: %', SQLERRM;
+    END;
+  END IF;
+END $$;
+
+-- Ajouter les contraintes de clés étrangères après avoir ajouté les colonnes
+-- IMPORTANT: Ce bloc doit être exécuté APRÈS que les colonnes soient créées
+DO $$
+DECLARE
+  colonne_compte_destinataire_exists BOOLEAN;
+  colonne_plan_vol_exists BOOLEAN;
+BEGIN
+  -- Vérifier que la table existe
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'felitz_transactions') THEN
+    RETURN;
+  END IF;
+  
+  -- Vérifier l'existence des colonnes
+  SELECT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_schema = 'public' 
     AND table_name = 'felitz_transactions' 
     AND column_name = 'compte_destinataire_id'
-  ) AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'felitz_comptes') THEN
+  ) INTO colonne_compte_destinataire_exists;
+  
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'felitz_transactions' 
+    AND column_name = 'plan_vol_id'
+  ) INTO colonne_plan_vol_exists;
+  
+  -- Si compte_destinataire_id n'existe pas, l'ajouter maintenant
+  IF NOT colonne_compte_destinataire_exists THEN
+    BEGIN
+      ALTER TABLE public.felitz_transactions ADD COLUMN compte_destinataire_id UUID;
+      colonne_compte_destinataire_exists := TRUE;
+      RAISE NOTICE 'Colonne compte_destinataire_id ajoutée dans le bloc de contraintes';
+    EXCEPTION WHEN duplicate_column THEN
+      colonne_compte_destinataire_exists := TRUE;
+    WHEN OTHERS THEN
+      RAISE NOTICE 'Impossible d''ajouter compte_destinataire_id: %', SQLERRM;
+    END;
+  END IF;
+  
+  -- Ajouter la contrainte pour compte_destinataire_id si la colonne existe
+  IF colonne_compte_destinataire_exists AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'felitz_comptes') THEN
     IF NOT EXISTS (
       SELECT 1 FROM information_schema.table_constraints 
       WHERE constraint_name = 'felitz_transactions_compte_destinataire_id_fkey' 
@@ -406,36 +432,28 @@ BEGIN
         ALTER TABLE public.felitz_transactions
           ADD CONSTRAINT felitz_transactions_compte_destinataire_id_fkey 
           FOREIGN KEY (compte_destinataire_id) REFERENCES public.felitz_comptes(id) ON DELETE SET NULL;
+        RAISE NOTICE 'Contrainte felitz_transactions_compte_destinataire_id_fkey ajoutée';
       EXCEPTION WHEN OTHERS THEN
-        -- Ignorer les erreurs de contrainte
-        NULL;
+        RAISE NOTICE 'Erreur lors de l''ajout de la contrainte compte_destinataire_id: %', SQLERRM;
       END;
     END IF;
   END IF;
-    
-  -- S'assurer que la colonne plan_vol_id existe avant d'ajouter la contrainte
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-    AND table_name = 'felitz_transactions' 
-    AND column_name = 'plan_vol_id'
-  ) THEN
-    -- La colonne n'existe pas, l'ajouter maintenant
+  
+  -- Si plan_vol_id n'existe pas, l'ajouter maintenant
+  IF NOT colonne_plan_vol_exists THEN
     BEGIN
       ALTER TABLE public.felitz_transactions ADD COLUMN plan_vol_id UUID;
-    EXCEPTION WHEN OTHERS THEN
-      -- Ignorer les erreurs
-      NULL;
+      colonne_plan_vol_exists := TRUE;
+      RAISE NOTICE 'Colonne plan_vol_id ajoutée dans le bloc de contraintes';
+    EXCEPTION WHEN duplicate_column THEN
+      colonne_plan_vol_exists := TRUE;
+    WHEN OTHERS THEN
+      RAISE NOTICE 'Impossible d''ajouter plan_vol_id: %', SQLERRM;
     END;
   END IF;
   
-  -- Maintenant ajouter la contrainte si la colonne existe et si plans_vol existe
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-    AND table_name = 'felitz_transactions' 
-    AND column_name = 'plan_vol_id'
-  ) AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'plans_vol') THEN
+  -- Ajouter la contrainte pour plan_vol_id si la colonne existe
+  IF colonne_plan_vol_exists AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'plans_vol') THEN
     IF NOT EXISTS (
       SELECT 1 FROM information_schema.table_constraints 
       WHERE constraint_name = 'felitz_transactions_plan_vol_id_fkey' 
@@ -445,16 +463,28 @@ BEGIN
         ALTER TABLE public.felitz_transactions
           ADD CONSTRAINT felitz_transactions_plan_vol_id_fkey 
           FOREIGN KEY (plan_vol_id) REFERENCES public.plans_vol(id) ON DELETE SET NULL;
+        RAISE NOTICE 'Contrainte felitz_transactions_plan_vol_id_fkey ajoutée';
       EXCEPTION WHEN OTHERS THEN
-        -- Ignorer les erreurs de contrainte
-        NULL;
+        RAISE NOTICE 'Erreur lors de l''ajout de la contrainte plan_vol_id: %', SQLERRM;
       END;
     END IF;
   END IF;
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_felitz_transactions_compte ON public.felitz_transactions(compte_id);
-CREATE INDEX IF NOT EXISTS idx_felitz_transactions_plan_vol ON public.felitz_transactions(plan_vol_id);
+
+-- Créer l'index sur plan_vol_id seulement si la colonne existe
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'felitz_transactions' 
+    AND column_name = 'plan_vol_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_felitz_transactions_plan_vol ON public.felitz_transactions(plan_vol_id);
+  END IF;
+END $$;
 
 -- Felitz Bank - Virements
 CREATE TABLE IF NOT EXISTS public.felitz_virements (
