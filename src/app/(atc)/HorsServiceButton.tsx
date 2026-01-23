@@ -29,7 +29,7 @@ export default function HorsServiceButton() {
       <button 
         type="button" 
         onClick={handleClick} 
-        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30 transition-colors font-medium text-sm" 
+        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 border border-red-300 transition-colors font-medium text-sm" 
         disabled={loading}
       >
         {loading ? (
@@ -39,7 +39,7 @@ export default function HorsServiceButton() {
         )}
         {loading ? 'Déconnexion...' : 'Hors service'}
       </button>
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {error && <p className="text-red-600 text-sm">{error}</p>}
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { Package, Plane, Users, Weight } from 'lucide-react';
-import MarketplaceClient from './MarketplaceClient';
+import { Package } from 'lucide-react';
+import MarketplaceList from './MarketplaceList';
 
 export default async function MarketplacePage() {
   const supabase = await createClient();
@@ -69,64 +69,12 @@ export default async function MarketplacePage() {
         ))}
       </div>
 
-      {/* Liste des avions */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-          <Plane className="h-5 w-5 text-purple-400" />
-          Avions disponibles
-        </h2>
-        
-        {avions && avions.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {avions.map((avion) => (
-              <div 
-                key={avion.id} 
-                className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-purple-500/50 transition-colors"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold text-slate-200">{avion.nom}</h3>
-                    {avion.code_oaci && (
-                      <p className="text-xs text-slate-500 font-mono">{avion.code_oaci}</p>
-                    )}
-                  </div>
-                  <Plane className="h-8 w-8 text-slate-600" />
-                </div>
-                
-                <div className="space-y-1.5 mb-4">
-                  {avion.capacite_pax > 0 && (
-                    <div className="flex items-center gap-2 text-sm text-slate-400">
-                      <Users className="h-4 w-4" />
-                      <span>{avion.capacite_pax} passagers</span>
-                    </div>
-                  )}
-                  {avion.capacite_cargo_kg > 0 && (
-                    <div className="flex items-center gap-2 text-sm text-slate-400">
-                      <Weight className="h-4 w-4" />
-                      <span>{avion.capacite_cargo_kg.toLocaleString('fr-FR')} kg cargo</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <p className="text-xl font-bold text-purple-300">
-                    {avion.prix.toLocaleString('fr-FR')} F$
-                  </p>
-                  <MarketplaceClient 
-                    avionId={avion.id}
-                    avionNom={avion.nom}
-                    prix={avion.prix}
-                    soldePerso={comptePerso?.solde || 0}
-                    compagnies={compagniesWithSolde}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-slate-400">Aucun avion disponible à la vente pour le moment.</p>
-        )}
-      </div>
+      {/* Liste des avions avec recherche */}
+      <MarketplaceList 
+        avions={avions || []} 
+        soldePerso={comptePerso?.solde || 0} 
+        compagnies={compagniesWithSolde} 
+      />
     </div>
   );
 }

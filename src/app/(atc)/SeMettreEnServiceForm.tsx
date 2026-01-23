@@ -35,7 +35,7 @@ export default function SeMettreEnServiceForm() {
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="label flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-sky-400" />
+            <MapPin className="h-4 w-4 text-sky-600" />
             Aéroport
           </label>
           <select 
@@ -52,7 +52,7 @@ export default function SeMettreEnServiceForm() {
         </div>
         <div>
           <label className="label flex items-center gap-2">
-            <Radio className="h-4 w-4 text-emerald-400" />
+            <Radio className="h-4 w-4 text-emerald-600" />
             Position
           </label>
           <select 
@@ -70,8 +70,8 @@ export default function SeMettreEnServiceForm() {
       </div>
       
       {error && (
-        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-          <p className="text-red-400 text-sm">{error}</p>
+        <div className="p-3 rounded-lg bg-red-100 border border-red-300">
+          <p className="text-red-700 text-sm">{error}</p>
         </div>
       )}
       
