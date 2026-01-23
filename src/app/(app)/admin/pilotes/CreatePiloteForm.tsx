@@ -7,7 +7,7 @@ export default function CreatePiloteForm() {
   const router = useRouter();
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'pilote' | 'admin'>('pilote');
+  const [role, setRole] = useState<'pilote' | 'admin' | 'ifsa'>('pilote');
   const [armee, setArmee] = useState(false);
   const [atc, setAtc] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -76,10 +76,11 @@ export default function CreatePiloteForm() {
           <select
             className="input"
             value={role}
-            onChange={(e) => setRole(e.target.value as 'pilote' | 'admin')}
+            onChange={(e) => setRole(e.target.value as 'pilote' | 'admin' | 'ifsa')}
           >
             <option value="pilote">Pilote</option>
             <option value="admin">Admin</option>
+            <option value="ifsa">IFSA</option>
           </select>
         </div>
         <div className="flex flex-wrap items-center gap-4">
