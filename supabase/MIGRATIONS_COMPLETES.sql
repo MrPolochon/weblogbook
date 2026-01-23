@@ -892,6 +892,26 @@ CREATE POLICY "taxes_aeroports_all_admin" ON public.taxes_aeroports FOR ALL TO a
   USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'))
   WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
 
+-- Initialiser les taxes par défaut pour tous les aéroports PTFS
+-- Valeurs par défaut: taxe_base_pourcent = 2.0%, taxe_vfr_pourcent = 5.0%
+DO $$
+DECLARE
+  codes_aeroports TEXT[] := ARRAY[
+    'IBAR', 'IHEN', 'ILAR', 'IIAB', 'IPAP', 'IGRV', 'IJAF', 'IZOL', 'ISCM', 'IBRD',
+    'IDCS', 'ITKO', 'ILKL', 'IPPH', 'IGAR', 'IBLT', 'IRFD', 'IMLR', 'ITRC', 'IBTH',
+    'IUFO', 'ISAU', 'ISKP'
+  ];
+  code_aeroport TEXT;
+BEGIN
+  FOREACH code_aeroport IN ARRAY codes_aeroports
+  LOOP
+    -- Insérer uniquement si l'aéroport n'existe pas déjà
+    INSERT INTO public.taxes_aeroports (code_aeroport, taxe_base_pourcent, taxe_vfr_pourcent)
+    VALUES (code_aeroport, 2.0, 5.0)
+    ON CONFLICT (code_aeroport) DO NOTHING;
+  END LOOP;
+END $$;
+
 -- Policies messages
 DROP POLICY IF EXISTS "messages_select_self" ON public.messages;
 CREATE POLICY "messages_select_self" ON public.messages FOR SELECT TO authenticated

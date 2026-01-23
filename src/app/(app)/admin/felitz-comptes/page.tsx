@@ -15,10 +15,17 @@ export default async function AdminFelitzComptesPage() {
 
   // Récupérer tous les comptes (admin uniquement)
   const admin = createAdminClient();
-  const { data: comptes } = await admin
+  const { data: comptesRaw } = await admin
     .from('felitz_comptes')
     .select('id, user_id, compagnie_id, vban, solde, created_at, compagnies(nom), profiles(identifiant)')
     .order('created_at', { ascending: false });
+
+  // Normaliser les données pour gérer les cas où Supabase retourne des tableaux
+  const comptes = (comptesRaw || []).map((c: any) => ({
+    ...c,
+    compagnies: Array.isArray(c.compagnies) ? (c.compagnies[0] || null) : c.compagnies,
+    profiles: Array.isArray(c.profiles) ? (c.profiles[0] || null) : c.profiles,
+  }));
 
   // Récupérer tous les utilisateurs et compagnies pour les sélecteurs
   const [{ data: users }, { data: compagnies }] = await Promise.all([

@@ -24,6 +24,18 @@ type Props = {
   compagnies: Compagnie[];
 };
 
+// Helper pour extraire le nom de compagnie
+function getCompagnieNom(compagnies: { nom: string } | null | undefined): string | null {
+  if (!compagnies) return null;
+  return compagnies.nom || null;
+}
+
+// Helper pour extraire l'identifiant du profil
+function getProfileIdentifiant(profiles: { identifiant: string } | null | undefined): string | null {
+  if (!profiles) return null;
+  return profiles.identifiant || null;
+}
+
 export default function AdminFelitzComptesContent({ comptes, users, compagnies }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -266,9 +278,9 @@ export default function AdminFelitzComptesContent({ comptes, users, compagnies }
                     )}
                     <p className="text-slate-200 font-medium">
                       {compte.compagnie_id
-                        ? (compte.compagnies as any)?.nom || 'Compagnie'
+                        ? getCompagnieNom(compte.compagnies) || 'Compagnie'
                         : compte.user_id
-                        ? (compte.profiles as any)?.identifiant || 'Utilisateur'
+                        ? getProfileIdentifiant(compte.profiles) || 'Utilisateur'
                         : 'Compte système'}
                     </p>
                   </div>
