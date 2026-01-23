@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { ArrowLeft, Landmark, User, Building2 } from 'lucide-react';
+import { ArrowLeft, Landmark, User, Building2, Shield } from 'lucide-react';
 import Link from 'next/link';
 import AdminFelitzClient from './AdminFelitzClient';
 
@@ -27,6 +27,17 @@ export default async function AdminFelitzBankPage() {
     .eq('type', 'entreprise')
     .order('solde', { ascending: false });
 
+  // Compte militaire
+  const { data: compteMilitaire } = await admin.from('felitz_comptes')
+    .select('*, profiles:proprietaire_id(identifiant)')
+    .eq('type', 'militaire')
+    .single();
+
+  // Extraire le PDG militaire
+  const pdgMilitaire = compteMilitaire?.profiles 
+    ? (Array.isArray(compteMilitaire.profiles) ? compteMilitaire.profiles[0] : compteMilitaire.profiles) 
+    : null;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -38,6 +49,26 @@ export default async function AdminFelitzBankPage() {
           Felitz Bank Admin
         </h1>
       </div>
+
+      {/* Compte Militaire (si existant) */}
+      {compteMilitaire && (
+        <div className="card border-red-500/30 bg-red-500/5">
+          <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+            <Shield className="h-5 w-5 text-red-400" />
+            Compte Armée
+            {pdgMilitaire && (
+              <span className="text-sm font-normal text-slate-400">
+                (PDG: {(pdgMilitaire as { identifiant: string }).identifiant})
+              </span>
+            )}
+          </h2>
+          <AdminFelitzClient 
+            compte={compteMilitaire}
+            label="Armée"
+            type="militaire"
+          />
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Comptes personnels */}

@@ -44,9 +44,26 @@ export default function AdminEmployesClient({ compagnies, pilotes, employes }: P
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Pilotes déjà employés
-  const pilotesEmployes = new Set(employes.map(e => e.pilote_id));
-  const pilotesDisponibles = pilotes.filter(p => !pilotesEmployes.has(p.id));
+  // Pilotes déjà employés dans la compagnie sélectionnée (pour éviter les doublons)
+  const pilotesDejaEmployesDansCompagnie = new Set(
+    employes.filter(e => e.compagnie_id === selectedCompagnie).map(e => e.pilote_id)
+  );
+  
+  // Tous les pilotes sont disponibles, sauf ceux déjà dans la compagnie sélectionnée
+  const pilotesDisponibles = selectedCompagnie 
+    ? pilotes.filter(p => !pilotesDejaEmployesDansCompagnie.has(p.id))
+    : pilotes;
+  
+  // Compter les compagnies de chaque pilote
+  const compagniesParPilote: Record<string, string[]> = {};
+  employes.forEach(emp => {
+    if (!compagniesParPilote[emp.pilote_id]) {
+      compagniesParPilote[emp.pilote_id] = [];
+    }
+    if (emp.compagnies?.nom) {
+      compagniesParPilote[emp.pilote_id].push(emp.compagnies.nom);
+    }
+  });
 
   async function handleAdd() {
     if (!selectedCompagnie || !selectedPilote) return;
@@ -142,14 +159,24 @@ export default function AdminEmployesClient({ compagnies, pilotes, employes }: P
               value={selectedPilote}
               onChange={(e) => setSelectedPilote(e.target.value)}
               className="input w-full"
+              disabled={!selectedCompagnie}
             >
               <option value="">Sélectionner...</option>
-              {pilotesDisponibles.map((p) => (
-                <option key={p.id} value={p.id}>{p.identifiant}</option>
-              ))}
+              {pilotesDisponibles.map((p) => {
+                const dejaEmployeDans = compagniesParPilote[p.id] || [];
+                return (
+                  <option key={p.id} value={p.id}>
+                    {p.identifiant}
+                    {dejaEmployeDans.length > 0 && ` (déjà dans: ${dejaEmployeDans.join(', ')})`}
+                  </option>
+                );
+              })}
             </select>
-            {pilotesDisponibles.length === 0 && (
-              <p className="text-xs text-amber-400 mt-1">Tous les pilotes sont déjà employés</p>
+            {!selectedCompagnie && (
+              <p className="text-xs text-slate-500 mt-1">Sélectionnez d&apos;abord une compagnie</p>
+            )}
+            {selectedCompagnie && pilotesDisponibles.length === 0 && (
+              <p className="text-xs text-amber-400 mt-1">Tous les pilotes sont déjà dans cette compagnie</p>
             )}
           </div>
           
@@ -194,34 +221,53 @@ export default function AdminEmployesClient({ compagnies, pilotes, employes }: P
                     <thead>
                       <tr className="border-b border-slate-700 text-left text-slate-400">
                         <th className="pb-2 pr-4">Pilote</th>
+                        <th className="pb-2 pr-4">Autres compagnies</th>
                         <th className="pb-2 pr-4">Date d&apos;embauche</th>
                         <th className="pb-2 w-16">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {compagnieEmployes.map((emp) => (
-                        <tr key={emp.id} className="border-b border-slate-700/50 last:border-0">
-                          <td className="py-2.5 pr-4">
-                            <span className="flex items-center gap-2 text-slate-200">
-                              <User className="h-4 w-4 text-slate-500" />
-                              {emp.profiles?.identifiant || '—'}
-                            </span>
-                          </td>
-                          <td className="py-2.5 pr-4 text-slate-400">
-                            {formatDate(emp.date_embauche)}
-                          </td>
-                          <td className="py-2.5">
-                            <button
-                              onClick={() => handleDelete(emp.id)}
-                              disabled={loading}
-                              className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                              title="Retirer de la compagnie"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {compagnieEmployes.map((emp) => {
+                        // Autres compagnies où ce pilote travaille
+                        const autresCompagnies = (compagniesParPilote[emp.pilote_id] || [])
+                          .filter(nom => nom !== compagnie.nom);
+                        return (
+                          <tr key={emp.id} className="border-b border-slate-700/50 last:border-0">
+                            <td className="py-2.5 pr-4">
+                              <span className="flex items-center gap-2 text-slate-200">
+                                <User className="h-4 w-4 text-slate-500" />
+                                {emp.profiles?.identifiant || '—'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 pr-4">
+                              {autresCompagnies.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {autresCompagnies.map((nom, idx) => (
+                                    <span key={idx} className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded">
+                                      {nom}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-slate-500 text-xs">—</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 pr-4 text-slate-400">
+                              {formatDate(emp.date_embauche)}
+                            </td>
+                            <td className="py-2.5">
+                              <button
+                                onClick={() => handleDelete(emp.id)}
+                                disabled={loading}
+                                className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                                title="Retirer de la compagnie"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

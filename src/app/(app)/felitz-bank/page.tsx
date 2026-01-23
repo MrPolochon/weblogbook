@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { Landmark, Building2 } from 'lucide-react';
+import { Landmark, Building2, Shield } from 'lucide-react';
 import FelitzBankClient from './FelitzBankClient';
 
 export default async function FelitzBankPage() {
@@ -38,6 +38,13 @@ export default async function FelitzBankPage() {
     comptesEntreprise = data || [];
   }
 
+  // Compte militaire (si l'utilisateur est PDG militaire)
+  const { data: compteMilitaire } = await admin.from('felitz_comptes')
+    .select('*')
+    .eq('type', 'militaire')
+    .eq('proprietaire_id', user.id)
+    .single();
+
   // Transactions récentes pour le compte personnel
   let transactionsPerso: Array<{ id: string; type: string; montant: number; libelle: string; created_at: string }> = [];
   if (comptePerso) {
@@ -47,6 +54,17 @@ export default async function FelitzBankPage() {
       .order('created_at', { ascending: false })
       .limit(20);
     transactionsPerso = data || [];
+  }
+
+  // Transactions pour le compte militaire
+  let transactionsMilitaire: Array<{ id: string; type: string; montant: number; libelle: string; created_at: string }> = [];
+  if (compteMilitaire) {
+    const { data } = await admin.from('felitz_transactions')
+      .select('*')
+      .eq('compte_id', compteMilitaire.id)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    transactionsMilitaire = data || [];
   }
 
   return (
@@ -116,6 +134,59 @@ export default async function FelitzBankPage() {
                   />
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Compte Militaire (PDG Armée uniquement) */}
+        {compteMilitaire && (
+          <div className="card lg:col-span-2">
+            <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+              <Shield className="h-5 w-5 text-red-400" />
+              Compte de l&apos;Armée (PDG Militaire)
+            </h2>
+            
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-4">
+                <div className="bg-slate-800/50 rounded-lg p-4 border border-red-500/30">
+                  <p className="text-sm text-slate-400">VBAN Armée</p>
+                  <p className="font-mono text-slate-200 text-sm break-all">{compteMilitaire.vban}</p>
+                </div>
+                
+                <div className="bg-red-500/10 rounded-lg p-4 border border-red-500/30">
+                  <p className="text-sm text-red-400">Solde disponible</p>
+                  <p className="text-3xl font-bold text-red-300">
+                    {compteMilitaire.solde.toLocaleString('fr-FR')} F$
+                  </p>
+                </div>
+
+                <FelitzBankClient 
+                  compteId={compteMilitaire.id}
+                  solde={compteMilitaire.solde}
+                  transactions={transactionsMilitaire}
+                  isAdmin={isAdmin}
+                  isMilitaire
+                />
+              </div>
+
+              {/* Transactions militaires */}
+              <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700/50">
+                <h3 className="font-medium text-slate-200 mb-3">Transactions récentes</h3>
+                {transactionsMilitaire.length > 0 ? (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {transactionsMilitaire.map((t) => (
+                      <div key={t.id} className="flex items-center justify-between text-sm py-1 border-b border-slate-700/30 last:border-0">
+                        <span className="text-slate-400 truncate flex-1">{t.libelle}</span>
+                        <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>
+                          {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-slate-500 text-sm">Aucune transaction</p>
+                )}
+              </div>
             </div>
           </div>
         )}

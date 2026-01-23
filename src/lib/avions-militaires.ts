@@ -1,38 +1,64 @@
 /**
  * Liste fixe des avions utilisables pour les vols militaires (Espace militaire).
  * Tri alphabétique pour l'affichage.
+ * Basé sur les avions PTFS
  */
 export const AVIONS_MILITAIRES = [
-  'A1-0 WARTHOG',
-  'A6-M',
-  'AVRO VULCAN',
-  'AWK T-1',
-  'B-2',
-  'B-29',
-  'blackbird',
-  'BOEING P8',
-  'C-130',
-  'E-3 SENTRY',
-  'EC18B',
-  'ENGLISH ELECTRIC LIGHTNING',
-  'EUROFIGHTER TYPHOON',
-  'F-14',
-  'F-15',
-  'F-16',
-  'F-18',
-  'F-22',
-  'F-35',
-  'F-4',
-  'F-4U',
-  'FOKKER DR-1',
-  'FU-27',
-  'hurrican',
-  'JAS-39',
-  'mig-15',
-  'P-38',
-  'P-51 mustang',
-  'SU-57',
-  'VTOL',
+  // Chasseurs modernes
+  'A-10 Warthog',
+  'Eurofighter Typhoon',
+  'F-14 Tomcat',
+  'F-15E Strike Eagle',
+  'F-16 Fighting Falcon',
+  'F/A-18 Super Hornet',
+  'F-22 Raptor',
+  'F-35B',
+  'Hawk T1',
+  'JAS 39 Gripen',
+  'Sukhoi Su-27',
+  'Sukhoi Su-57',
+  
+  // Chasseurs historiques
+  'A6M Zero',
+  'English Electric Lightning',
+  'F-4 Phantom',
+  'F4U Corsair',
+  'Fokker Dr1',
+  'Hawker Hurricane',
+  'MiG-15',
+  'P-38 Lightning',
+  'P-51 Mustang',
+  
+  // Bombardiers
+  'Avro Vulcan',
+  'B-1 Lancer',
+  'B-2 Spirit',
+  'B-29 Superfortress',
+  'SR-71 Blackbird',
+  
+  // Transport militaire
+  'Boeing C-17 Globemaster III',
+  'C-130 Hercules',
+  
+  // Surveillance / AWACS
+  'Boeing P-8 Poseidon',
+  'E-3 Sentry',
+  'EC-18B',
+  
+  // VTOL
+  'Hawker Harrier (VTOL)',
+  
+  // Ravitailleurs
+  'A330 MRTT',
+  'KC-1',
+  'KC-10 Extender',
+  'KC-130',
+  'KC-707',
+  'KC-767',
+  
+  // Hélicoptères militaires
+  'Chinook',
+  'UH-60 Black Hawk',
 ] as const;
 
 export type NomAvionMilitaire = (typeof AVIONS_MILITAIRES)[number];

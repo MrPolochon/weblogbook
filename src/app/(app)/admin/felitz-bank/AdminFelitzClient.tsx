@@ -13,7 +13,7 @@ interface Compte {
 interface Props {
   compte: Compte;
   label: string;
-  type: 'personnel' | 'entreprise';
+  type: 'personnel' | 'entreprise' | 'militaire';
 }
 
 export default function AdminFelitzClient({ compte, label, type }: Props) {
@@ -56,8 +56,10 @@ export default function AdminFelitzClient({ compte, label, type }: Props) {
     }
   }
 
+  const borderColor = type === 'militaire' ? 'border-red-500/30' : type === 'entreprise' ? 'border-sky-500/30' : 'border-emerald-500/30';
+
   return (
-    <div className={`bg-slate-800/50 rounded-lg border ${type === 'entreprise' ? 'border-sky-500/30' : 'border-emerald-500/30'}`}>
+    <div className={`bg-slate-800/50 rounded-lg border ${borderColor}`}>
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full p-3 flex items-center justify-between text-left"

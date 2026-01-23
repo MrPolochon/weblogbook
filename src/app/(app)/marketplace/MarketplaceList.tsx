@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Plane, Users, Weight, Filter, X, Package } from 'lucide-react';
+import { Search, Plane, Users, Weight, Filter, X, Package, Shield } from 'lucide-react';
 import MarketplaceClient from './MarketplaceClient';
 
 interface Avion {
@@ -236,6 +236,12 @@ export default function MarketplaceList({ avions, soldePerso, compagnies }: Prop
                     <div className="flex items-center gap-2 text-sm text-slate-400">
                       <Weight className="h-4 w-4" />
                       <span>{avion.capacite_cargo_kg.toLocaleString('fr-FR')} kg cargo</span>
+                    </div>
+                  )}
+                  {avion.est_militaire && (
+                    <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 rounded px-2 py-1 mt-2">
+                      <Shield className="h-3 w-3" />
+                      <span>Utilisable dans l&apos;espace militaire ou vols personnels</span>
                     </div>
                   )}
                 </div>

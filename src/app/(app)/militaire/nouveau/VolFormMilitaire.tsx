@@ -7,6 +7,12 @@ import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { AVIONS_MILITAIRES, NATURES_VOL_MILITAIRE } from '@/lib/avions-militaires';
 
 type Profil = { id: string; identifiant: string };
+type InventaireItem = { 
+  id: string; 
+  type_avion_id: string; 
+  nom_personnalise: string | null; 
+  types_avion: { id: string; nom: string; code_oaci: string | null } | null;
+};
 
 function parseUtcLocal(s: string): Date | null {
   if (!s) return null;
@@ -18,9 +24,11 @@ function parseUtcLocal(s: string): Date | null {
 const LIB_ESC = { escadrille: 'Vol en escadrille', escadron: 'Vol en escadron (vous = chef d\'escadron)', autre: 'Ni l\'un ni l\'autre (précisez la nature)' } as const;
 const LIB_NATURE: Record<string, string> = { entrainement: 'Entraînement', escorte: 'Escorte', sauvetage: 'Sauvetage', reconnaissance: 'Reconnaissance', autre: 'Autre' };
 
-export default function VolFormMilitaire({ pilotesArmee }: { pilotesArmee: Profil[] }) {
+export default function VolFormMilitaire({ pilotesArmee, inventaireMilitaire = [] }: { pilotesArmee: Profil[]; inventaireMilitaire?: InventaireItem[] }) {
   const router = useRouter();
   const [type_avion_militaire, setTypeAvionMilitaire] = useState('');
+  const [useInventaire, setUseInventaire] = useState(false);
+  const [inventaire_avion_id, setInventaireAvionId] = useState('');
   const [escadrille_ou_escadron, setEscadrilleOuEscadron] = useState<'escadrille' | 'escadron' | 'autre'>('escadrille');
   const [nature_vol_militaire, setNatureVolMilitaire] = useState<string>('');
   const [nature_vol_militaire_autre, setNatureVolMilitaireAutre] = useState('');
@@ -67,7 +75,11 @@ export default function VolFormMilitaire({ pilotesArmee }: { pilotesArmee: Profi
     e.preventDefault();
     setError(null);
     const d = parseInt(duree_minutes, 10);
-    if (!type_avion_militaire || !aeroport_depart || !aeroport_arrivee || isNaN(d) || d < 1 || !heure_utc || !commandant_bord.trim()) {
+    
+    // Validation de l'avion selon le mode
+    const avionValide = useInventaire ? !!inventaire_avion_id : !!type_avion_militaire;
+    
+    if (!avionValide || !aeroport_depart || !aeroport_arrivee || isNaN(d) || d < 1 || !heure_utc || !commandant_bord.trim()) {
       setError('Veuillez remplir tous les champs requis.');
       return;
     }
@@ -97,7 +109,8 @@ export default function VolFormMilitaire({ pilotesArmee }: { pilotesArmee: Profi
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type_vol: 'Vol militaire',
-          type_avion_militaire: type_avion_militaire.trim(),
+          type_avion_militaire: avionNomFinal.trim(),
+          inventaire_avion_id: useInventaire ? inventaire_avion_id : undefined,
           escadrille_ou_escadron,
           nature_vol_militaire: escadrille_ou_escadron === 'autre' ? nature_vol_militaire : null,
           nature_vol_militaire_autre: escadrille_ou_escadron === 'autre' && nature_vol_militaire === 'autre' ? nature_vol_militaire_autre.trim() : null,
@@ -124,16 +137,64 @@ export default function VolFormMilitaire({ pilotesArmee }: { pilotesArmee: Profi
     }
   }
 
+  // Obtenir le nom de l'avion sélectionné (inventaire ou standard)
+  const selectedInventaireItem = inventaireMilitaire.find(i => i.id === inventaire_avion_id);
+  const avionNomFinal = useInventaire && selectedInventaireItem 
+    ? (selectedInventaireItem.nom_personnalise || selectedInventaireItem.types_avion?.nom || 'Avion militaire')
+    : type_avion_militaire;
+
   return (
     <form onSubmit={handleSubmit} className="card space-y-4 max-w-xl">
+      {/* Option pour utiliser l'inventaire personnel */}
+      {inventaireMilitaire.length > 0 && (
+        <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/10">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input 
+              type="checkbox" 
+              checked={useInventaire} 
+              onChange={(e) => {
+                setUseInventaire(e.target.checked);
+                if (!e.target.checked) {
+                  setInventaireAvionId('');
+                } else {
+                  setTypeAvionMilitaire('');
+                }
+              }}
+              className="w-5 h-5 rounded"
+            />
+            <span className="font-medium text-red-300">Utiliser un avion de mon inventaire</span>
+          </label>
+          <p className="text-xs text-slate-400 mt-1 ml-8">
+            Vous avez {inventaireMilitaire.length} avion(s) militaire(s) dans votre inventaire personnel.
+          </p>
+        </div>
+      )}
+
       <div>
         <label className="label">Type d&apos;avion *</label>
-        <select className="input" value={type_avion_militaire} onChange={(e) => setTypeAvionMilitaire(e.target.value)} required>
-          <option value="">— Choisir —</option>
-          {AVIONS_MILITAIRES.map((nom) => (
-            <option key={nom} value={nom}>{nom}</option>
-          ))}
-        </select>
+        {useInventaire ? (
+          <select 
+            className="input" 
+            value={inventaire_avion_id} 
+            onChange={(e) => setInventaireAvionId(e.target.value)} 
+            required
+          >
+            <option value="">— Choisir un avion de mon inventaire —</option>
+            {inventaireMilitaire.map((inv) => (
+              <option key={inv.id} value={inv.id}>
+                {inv.nom_personnalise || inv.types_avion?.nom || 'Avion'}
+                {inv.types_avion?.code_oaci && ` (${inv.types_avion.code_oaci})`}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <select className="input" value={type_avion_militaire} onChange={(e) => setTypeAvionMilitaire(e.target.value)} required>
+            <option value="">— Choisir —</option>
+            {AVIONS_MILITAIRES.map((nom) => (
+              <option key={nom} value={nom}>{nom}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div>

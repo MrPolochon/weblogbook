@@ -18,10 +18,11 @@ interface Props {
   transactions: Transaction[];
   isAdmin: boolean;
   isEntreprise?: boolean;
+  isMilitaire?: boolean;
   compagnieNom?: string;
 }
 
-export default function FelitzBankClient({ compteId, transactions, isAdmin, isEntreprise }: Props) {
+export default function FelitzBankClient({ compteId, transactions, isAdmin, isEntreprise, isMilitaire }: Props) {
   const router = useRouter();
   const [showVirement, setShowVirement] = useState(false);
   const [vbanDest, setVbanDest] = useState('');
@@ -95,7 +96,7 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
               type="text"
               value={vbanDest}
               onChange={(e) => setVbanDest(e.target.value)}
-              placeholder="MIXOU... ou ENTERMIXOU..."
+              placeholder="MIXOU... ou ENTERMIXOU... ou ARMYMIXOU..."
               className="input w-full font-mono text-sm"
               required
             />
@@ -144,7 +145,7 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
       )}
 
       {/* Historique des transactions */}
-      {!isEntreprise && transactions.length > 0 && (
+      {!isEntreprise && !isMilitaire && transactions.length > 0 && (
         <div className="mt-6">
           <h3 className="text-sm font-semibold text-slate-300 mb-3">Dernières transactions</h3>
           <div className="space-y-2 max-h-64 overflow-y-auto">

@@ -53,15 +53,16 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient();
 
-    // Vérifier si le pilote n'est pas déjà employé dans une autre compagnie
+    // Vérifier si le pilote n'est pas déjà employé dans CETTE compagnie (mais peut être dans d'autres)
     const { data: existingEmploye } = await admin.from('compagnie_employes')
       .select('id, compagnies(nom)')
       .eq('pilote_id', pilote_id)
+      .eq('compagnie_id', compagnie_id)
       .single();
 
     if (existingEmploye) {
       return NextResponse.json({ 
-        error: `Ce pilote est déjà employé dans une compagnie` 
+        error: `Ce pilote est déjà employé dans cette compagnie` 
       }, { status: 400 });
     }
 

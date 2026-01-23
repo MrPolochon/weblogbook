@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
-import { Building2, Plane, Users, Weight, DollarSign } from 'lucide-react';
+import { Building2, Plane, Users, Weight, DollarSign, Shield } from 'lucide-react';
 
 interface TypeAvion {
   id: string;
@@ -11,6 +11,7 @@ interface TypeAvion {
   code_oaci: string | null;
   capacite_pax: number;
   capacite_cargo_kg: number;
+  est_militaire?: boolean;
 }
 
 interface FlotteItem {
@@ -72,11 +73,10 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   const [flotte_avion_id, setFlotteAvionId] = useState('');
   const [inventaire_avion_id, setInventaireAvionId] = useState('');
   
-  // Calculated values
-  const [nbPax, setNbPax] = useState(0);
-  const [cargoKg, setCargoKg] = useState(0);
-  const [revenuBrut, setRevenuBrut] = useState(0);
-  const [salairePilote, setSalairePilote] = useState(0);
+  // Calculated values - stockés séparément pour éviter la triche
+  const [generatedPax, setGeneratedPax] = useState(0);
+  const [generatedCargo, setGeneratedCargo] = useState(0);
+  const [lastGeneratedAvionId, setLastGeneratedAvionId] = useState('');
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,13 +101,17 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     setFlotteAvionId('');
   }, [selectedCompagnieId]);
 
-  // Calculate revenue when commercial flight settings change
+  // Generate PAX and CARGO values ONLY when aircraft changes (not when switching transport type)
   useEffect(() => {
-    if (!vol_commercial || !selectedCompagnie) {
-      setNbPax(0);
-      setCargoKg(0);
-      setRevenuBrut(0);
-      setSalairePilote(0);
+    if (!vol_commercial || !selectedCompagnie || !flotte_avion_id) {
+      setGeneratedPax(0);
+      setGeneratedCargo(0);
+      setLastGeneratedAvionId('');
+      return;
+    }
+
+    // Ne régénère que si l'avion change
+    if (flotte_avion_id === lastGeneratedAvionId) {
       return;
     }
 
@@ -117,32 +121,34 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     const capacitePax = selectedFlotte?.capacite_pax_custom ?? avion.capacite_pax ?? 0;
     const capaciteCargo = selectedFlotte?.capacite_cargo_custom ?? avion.capacite_cargo_kg ?? 0;
 
-    if (nature_transport === 'passagers' && capacitePax > 0) {
-      // Generate random passenger count (60-95% of capacity)
+    // Générer les deux valeurs en une seule fois
+    let pax = 0;
+    let cargo = 0;
+
+    if (capacitePax > 0) {
       const minPax = Math.floor(capacitePax * 0.6);
       const maxPax = Math.floor(capacitePax * 0.95);
-      const pax = Math.floor(Math.random() * (maxPax - minPax + 1)) + minPax;
-      const revenue = pax * selectedCompagnie.prix_billet_pax;
-      const salaire = Math.floor(revenue * selectedCompagnie.pourcentage_salaire / 100);
-      
-      setNbPax(pax);
-      setCargoKg(0);
-      setRevenuBrut(revenue);
-      setSalairePilote(salaire);
-    } else if (nature_transport === 'cargo' && capaciteCargo > 0) {
-      // Generate random cargo load (50-90% of capacity)
+      pax = Math.floor(Math.random() * (maxPax - minPax + 1)) + minPax;
+    }
+
+    if (capaciteCargo > 0) {
       const minCargo = Math.floor(capaciteCargo * 0.5);
       const maxCargo = Math.floor(capaciteCargo * 0.9);
-      const cargo = Math.floor(Math.random() * (maxCargo - minCargo + 1)) + minCargo;
-      const revenue = cargo * selectedCompagnie.prix_kg_cargo;
-      const salaire = Math.floor(revenue * selectedCompagnie.pourcentage_salaire / 100);
-      
-      setNbPax(0);
-      setCargoKg(cargo);
-      setRevenuBrut(revenue);
-      setSalairePilote(salaire);
+      cargo = Math.floor(Math.random() * (maxCargo - minCargo + 1)) + minCargo;
     }
-  }, [vol_commercial, flotte_avion_id, nature_transport, selectedCompagnie, selectedFlotte]);
+
+    setGeneratedPax(pax);
+    setGeneratedCargo(cargo);
+    setLastGeneratedAvionId(flotte_avion_id);
+  }, [vol_commercial, flotte_avion_id, selectedCompagnie, selectedFlotte, lastGeneratedAvionId]);
+
+  // Calculer les revenus basés sur les valeurs générées et le type de transport sélectionné
+  const nbPax = nature_transport === 'passagers' ? generatedPax : 0;
+  const cargoKg = nature_transport === 'cargo' ? generatedCargo : 0;
+  const revenuBrut = nature_transport === 'passagers' 
+    ? generatedPax * (selectedCompagnie?.prix_billet_pax || 0)
+    : generatedCargo * (selectedCompagnie?.prix_kg_cargo || 0);
+  const salairePilote = Math.floor(revenuBrut * (selectedCompagnie?.pourcentage_salaire || 0) / 100);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -334,19 +340,34 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
             Mon appareil personnel
           </label>
           {avionsPersonnelsDispo.length > 0 ? (
-            <select 
-              className="input w-full" 
-              value={inventaire_avion_id} 
-              onChange={(e) => setInventaireAvionId(e.target.value)}
-            >
-              <option value="">— Sélectionner un appareil —</option>
-              {avionsPersonnelsDispo.map((inv) => (
-                <option key={inv.id} value={inv.id}>
-                  {inv.nom_personnalise || inv.types_avion?.nom || 'Avion'}
-                  {inv.types_avion?.code_oaci && ` (${inv.types_avion.code_oaci})`}
-                </option>
-              ))}
-            </select>
+            <>
+              <select 
+                className="input w-full" 
+                value={inventaire_avion_id} 
+                onChange={(e) => setInventaireAvionId(e.target.value)}
+              >
+                <option value="">— Sélectionner un appareil —</option>
+                {avionsPersonnelsDispo.map((inv) => {
+                  const estMilitaire = inv.types_avion?.est_militaire || false;
+                  return (
+                    <option key={inv.id} value={inv.id}>
+                      {estMilitaire ? '🛡️ ' : ''}
+                      {inv.nom_personnalise || inv.types_avion?.nom || 'Avion'}
+                      {inv.types_avion?.code_oaci && ` (${inv.types_avion.code_oaci})`}
+                      {estMilitaire && ' [MILITAIRE]'}
+                    </option>
+                  );
+                })}
+              </select>
+              {selectedInventaire?.types_avion?.est_militaire && (
+                <div className="mt-2 p-2 rounded bg-red-500/10 border border-red-500/30">
+                  <p className="text-xs text-red-300 flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    Cet avion militaire est utilisable car il est dans votre inventaire personnel.
+                  </p>
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-sm text-slate-400 mt-2">
               <p>Vous n&apos;avez aucun appareil dans votre inventaire.</p>

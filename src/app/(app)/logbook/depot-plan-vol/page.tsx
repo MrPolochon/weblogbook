@@ -88,7 +88,7 @@ export default async function DepotPlanVolPage() {
 
   // Récupérer l'inventaire personnel
   const { data: inventaireData } = await admin.from('inventaire_avions')
-    .select('*, types_avion(id, nom, code_oaci, capacite_pax, capacite_cargo_kg)')
+    .select('*, types_avion(id, nom, code_oaci, capacite_pax, capacite_cargo_kg, est_militaire)')
     .eq('proprietaire_id', user.id);
 
   // Vérifier disponibilité

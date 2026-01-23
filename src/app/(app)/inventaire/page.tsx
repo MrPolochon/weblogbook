@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { Plane, Package, Users, Weight, CheckCircle, Clock } from 'lucide-react';
+import { Plane, Package, Users, Weight, CheckCircle, Clock, Shield } from 'lucide-react';
 import Link from 'next/link';
 
 export default async function InventairePage() {
@@ -13,7 +13,7 @@ export default async function InventairePage() {
 
   // Mon inventaire
   const { data: inventaire } = await admin.from('inventaire_avions')
-    .select('*, types_avion(id, nom, code_oaci, capacite_pax, capacite_cargo_kg)')
+    .select('*, types_avion(id, nom, code_oaci, capacite_pax, capacite_cargo_kg, est_militaire, categorie)')
     .eq('proprietaire_id', user.id)
     .order('created_at', { ascending: false });
 
@@ -81,14 +81,17 @@ export default async function InventairePage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {inventaireWithStatus.map((item) => {
               const taData = item.types_avion;
-              const avion = taData ? (Array.isArray(taData) ? taData[0] : taData) as { id: string; nom: string; code_oaci: string; capacite_pax: number; capacite_cargo_kg: number } | null : null;
+              const avion = taData ? (Array.isArray(taData) ? taData[0] : taData) as { id: string; nom: string; code_oaci: string; capacite_pax: number; capacite_cargo_kg: number; est_militaire: boolean; categorie: string | null } | null : null;
+              const estMilitaire = avion?.est_militaire || false;
               return (
                 <div 
                   key={item.id} 
                   className={`bg-slate-800/50 rounded-lg p-4 border ${
-                    item.en_vol 
-                      ? 'border-amber-500/50' 
-                      : 'border-slate-700/50 hover:border-emerald-500/50'
+                    estMilitaire
+                      ? 'border-red-500/50'
+                      : item.en_vol 
+                        ? 'border-amber-500/50' 
+                        : 'border-slate-700/50 hover:border-emerald-500/50'
                   } transition-colors`}
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -96,11 +99,19 @@ export default async function InventairePage() {
                       <h3 className="font-semibold text-slate-200">
                         {item.nom_personnalise || avion?.nom || 'Avion'}
                       </h3>
-                      {avion?.code_oaci && (
-                        <p className="text-xs text-slate-500 font-mono">{avion.code_oaci}</p>
-                      )}
+                      <div className="flex items-center gap-2 mt-1">
+                        {avion?.code_oaci && (
+                          <span className="text-xs text-slate-500 font-mono">{avion.code_oaci}</span>
+                        )}
+                        {estMilitaire && (
+                          <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">
+                            <Shield className="h-3 w-3" />
+                            Militaire
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <Plane className={`h-8 w-8 ${item.en_vol ? 'text-amber-400' : 'text-slate-600'}`} />
+                    <Plane className={`h-8 w-8 ${estMilitaire ? 'text-red-400' : item.en_vol ? 'text-amber-400' : 'text-slate-600'}`} />
                   </div>
                   
                   <div className="space-y-1.5 mb-3">

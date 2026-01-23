@@ -4,6 +4,7 @@ import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Rece
 const links = [
   { href: '/admin/vols', label: 'Vols en attente', icon: Clock },
   { href: '/admin/militaire', label: 'Vols militaires', icon: Shield },
+  { href: '/admin/armee', label: 'Gestion Armée', icon: Shield },
   { href: '/admin/pilotes', label: 'Pilotes', icon: Users },
   { href: '/admin/compagnies', label: 'Compagnies', icon: Building2 },
   { href: '/admin/employes', label: 'Employés compagnies', icon: UserPlus },
