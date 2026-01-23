@@ -27,6 +27,21 @@ export default async function AppLayout({
   const isAdmin = profile?.role === 'admin';
   const isArmee = Boolean(profile?.armee);
 
+  // Vérifier si PDG ou employé d'une compagnie
+  let isPdg = false;
+  let hasCompagnie = false;
+  try {
+    const admin = createAdminClient();
+    const [{ data: pdgData }, { data: employeData }] = await Promise.all([
+      admin.from('compagnies').select('id').eq('pdg_id', user.id).limit(1),
+      admin.from('compagnie_employes').select('id').eq('pilote_id', user.id).limit(1),
+    ]);
+    isPdg = (pdgData?.length ?? 0) > 0;
+    hasCompagnie = isPdg || (employeData?.length ?? 0) > 0;
+  } catch {
+    // Tables may not exist yet
+  }
+
   let pendingVolsCount = 0;
   let volsAConfirmerCount = 0;
   let plansNonCloturesCount = 0;
@@ -66,7 +81,7 @@ export default async function AppLayout({
     <div className="min-h-screen flex flex-col">
       <AutoRefresh intervalSeconds={12} />
       <AdminModeBg />
-      <NavBar isAdmin={isAdmin} isArmee={isArmee} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} />
+      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} />
       {plansNonCloturesCount > 0 && (
         <div className="border-b border-amber-500/40 bg-amber-500/15">
           <div className="mx-auto max-w-6xl px-4 py-2 flex items-center justify-center gap-2 flex-wrap">

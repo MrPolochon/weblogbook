@@ -7,13 +7,13 @@ export default function CreatePiloteForm() {
   const router = useRouter();
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'pilote' | 'admin' | 'atc' | 'ifsa'>('pilote');
+  const [role, setRole] = useState<'pilote' | 'admin'>('pilote');
   const [armee, setArmee] = useState(false);
   const [atc, setAtc] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [lastCreatedRole, setLastCreatedRole] = useState<'pilote' | 'admin' | 'atc' | 'ifsa'>('pilote');
+  const [lastCreatedRole, setLastCreatedRole] = useState<'pilote' | 'admin'>('pilote');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -76,12 +76,10 @@ export default function CreatePiloteForm() {
           <select
             className="input"
             value={role}
-            onChange={(e) => setRole(e.target.value as 'pilote' | 'admin' | 'atc' | 'ifsa')}
+            onChange={(e) => setRole(e.target.value as 'pilote' | 'admin')}
           >
             <option value="pilote">Pilote</option>
             <option value="admin">Admin</option>
-            <option value="atc">ATC</option>
-            <option value="ifsa">IFSA</option>
           </select>
         </div>
         <div className="flex flex-wrap items-center gap-4">

@@ -3,13 +3,24 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Trash2, BookOpen } from 'lucide-react';
+import { Trash2, BookOpen, Crown, Settings, Save, RefreshCw } from 'lucide-react';
 
-type C = { id: string; nom: string };
+type Pilote = { id: string; identifiant: string };
+type C = { 
+  id: string; 
+  nom: string; 
+  pdg_id: string | null;
+  prix_billet_pax: number;
+  prix_kg_cargo: number;
+  pourcentage_salaire: number;
+  vban: string | null;
+  profiles: { identifiant: string } | null;
+};
 
-export default function CompagniesList({ compagnies }: { compagnies: C[] }) {
+export default function CompagniesList({ compagnies, pilotes }: { compagnies: C[]; pilotes: Pilote[] }) {
   const router = useRouter();
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
 
   async function handleDelete(id: string, nom: string) {
     if (!confirm(`Supprimer « ${nom} » ? Le nom restera affiché sur les vols déjà enregistrés.`)) return;
@@ -27,37 +38,163 @@ export default function CompagniesList({ compagnies }: { compagnies: C[] }) {
 
   return (
     <div className="card">
-      <h2 className="text-lg font-medium text-slate-200 mb-4">Liste</h2>
-      <ul className="space-y-2">
+      <h2 className="text-lg font-medium text-slate-200 mb-4">Liste des compagnies</h2>
+      <div className="space-y-4">
         {compagnies.map((c) => (
-          <li key={c.id} className="flex items-center justify-between py-1">
-            <span className="text-slate-200">{c.nom}</span>
-            <div className="flex items-center gap-2">
-              <Link
-                href={`/admin/compagnies/${c.id}`}
-                className="text-slate-300 hover:text-sky-400 hover:underline text-sm"
-                title="Gérer la compagnie"
-              >
-                Gérer
-              </Link>
-              <Link
-                href={`/admin/compagnies/${c.id}/logbook`}
-                className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-sky-400"
-                title="Voir le logbook"
-              >
-                <BookOpen className="h-4 w-4" />
-              </Link>
-              <button
-                onClick={() => handleDelete(c.id, c.nom)}
-                disabled={deleting === c.id}
-                className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-red-400 disabled:opacity-50"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+          <div key={c.id} className="border-b border-slate-700/50 pb-4 last:border-0 last:pb-0">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <span className="text-slate-200 font-medium">{c.nom}</span>
+                {c.profiles?.identifiant && (
+                  <span className="ml-2 text-sm text-amber-400 flex items-center gap-1 inline-flex">
+                    <Crown className="h-3 w-3" />
+                    {c.profiles.identifiant}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setEditing(editing === c.id ? null : c.id)}
+                  className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-sky-400"
+                  title="Paramètres"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+                <Link
+                  href={`/admin/compagnies/${c.id}/logbook`}
+                  className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-sky-400"
+                  title="Voir le logbook"
+                >
+                  <BookOpen className="h-4 w-4" />
+                </Link>
+                <button
+                  onClick={() => handleDelete(c.id, c.nom)}
+                  disabled={deleting === c.id}
+                  className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-red-400 disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-          </li>
+            
+            {c.vban && (
+              <p className="text-xs text-slate-500 font-mono mb-2">{c.vban}</p>
+            )}
+            
+            {editing === c.id && (
+              <CompagnieSettings compagnie={c} pilotes={pilotes} onClose={() => setEditing(null)} />
+            )}
+          </div>
         ))}
-      </ul>
+      </div>
+    </div>
+  );
+}
+
+function CompagnieSettings({ compagnie, pilotes, onClose }: { compagnie: C; pilotes: Pilote[]; onClose: () => void }) {
+  const router = useRouter();
+  const [pdgId, setPdgId] = useState(compagnie.pdg_id || '');
+  const [prixBillet, setPrixBillet] = useState(compagnie.prix_billet_pax.toString());
+  const [prixCargo, setPrixCargo] = useState(compagnie.prix_kg_cargo.toString());
+  const [salaire, setSalaire] = useState(compagnie.pourcentage_salaire.toString());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSave() {
+    setError('');
+    setLoading(true);
+
+    try {
+      const res = await fetch(`/api/compagnies/${compagnie.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pdg_id: pdgId || null,
+          prix_billet_pax: parseInt(prixBillet) || 100,
+          prix_kg_cargo: parseInt(prixCargo) || 5,
+          pourcentage_salaire: parseInt(salaire) || 20
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+
+      router.refresh();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="block text-xs font-medium text-slate-400 mb-1">PDG</label>
+          <select
+            value={pdgId}
+            onChange={(e) => setPdgId(e.target.value)}
+            className="input w-full text-sm"
+          >
+            <option value="">Aucun PDG</option>
+            {pilotes.map((p) => (
+              <option key={p.id} value={p.id}>{p.identifiant}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-400 mb-1">% salaire pilote</label>
+          <input
+            type="number"
+            value={salaire}
+            onChange={(e) => setSalaire(e.target.value)}
+            min="0"
+            max="100"
+            className="input w-full text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-400 mb-1">Prix billet passager (F$)</label>
+          <input
+            type="number"
+            value={prixBillet}
+            onChange={(e) => setPrixBillet(e.target.value)}
+            min="0"
+            className="input w-full text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-400 mb-1">Prix kg cargo (F$)</label>
+          <input
+            type="number"
+            value={prixCargo}
+            onChange={(e) => setPrixCargo(e.target.value)}
+            min="0"
+            className="input w-full text-sm"
+          />
+        </div>
+      </div>
+      
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      
+      <div className="flex gap-2">
+        <button
+          onClick={handleSave}
+          disabled={loading}
+          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-1"
+        >
+          {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+          Enregistrer
+        </button>
+        <button
+          onClick={onClose}
+          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm font-medium transition-colors"
+        >
+          Annuler
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,60 +1,107 @@
+import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { NextResponse } from 'next/server';
 
-export async function POST(request: Request) {
+// GET - Liste des employés d'une compagnie
+export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
-
-    const body = await request.json();
-    const { compagnie_id, user_id } = body;
-
-    if (!compagnie_id || !user_id) return NextResponse.json({ error: 'compagnie_id et user_id requis' }, { status: 400 });
+    const { searchParams } = new URL(req.url);
+    const compagnieId = searchParams.get('compagnie_id');
+    const piloteId = searchParams.get('pilote_id');
 
     const admin = createAdminClient();
-    const { data, error } = await admin.from('compagnies_employes').insert({
-      compagnie_id,
-      user_id,
-      heures_vol_compagnie_minutes: 0,
-    }).select('compagnie_id, user_id').single();
+    let query = admin.from('compagnie_employes')
+      .select('*, profiles(id, identifiant), compagnies(id, nom, pdg_id)');
 
-    if (error) {
-      if (error.code === '23505') return NextResponse.json({ error: 'Cet employé est déjà dans cette compagnie' }, { status: 400 });
-      return NextResponse.json({ error: error.message }, { status: 400 });
+    if (compagnieId) {
+      query = query.eq('compagnie_id', compagnieId);
     }
-    return NextResponse.json({ ok: true, user_id: data?.user_id });
+    if (piloteId) {
+      query = query.eq('pilote_id', piloteId);
+    }
+
+    const { data, error } = await query.order('date_embauche', { ascending: false });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    return NextResponse.json(data);
   } catch (e) {
-    console.error('Compagnies employés POST:', e);
+    console.error('Compagnie employes GET:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
 
-export async function DELETE(request: Request) {
+// POST - Ajouter un employé à une compagnie (admin uniquement)
+export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
+    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
 
-    const { searchParams } = new URL(request.url);
-    const compagnieId = searchParams.get('compagnie_id');
-    const userId = searchParams.get('user_id');
+    const body = await req.json();
+    const { compagnie_id, pilote_id } = body;
 
-    if (!compagnieId || !userId) return NextResponse.json({ error: 'compagnie_id et user_id requis' }, { status: 400 });
+    if (!compagnie_id || !pilote_id) {
+      return NextResponse.json({ error: 'compagnie_id et pilote_id requis' }, { status: 400 });
+    }
 
     const admin = createAdminClient();
-    const { error } = await admin.from('compagnies_employes').delete().eq('compagnie_id', compagnieId).eq('user_id', userId);
+
+    // Vérifier si le pilote n'est pas déjà employé dans une autre compagnie
+    const { data: existingEmploye } = await admin.from('compagnie_employes')
+      .select('id, compagnies(nom)')
+      .eq('pilote_id', pilote_id)
+      .single();
+
+    if (existingEmploye) {
+      return NextResponse.json({ 
+        error: `Ce pilote est déjà employé dans une compagnie` 
+      }, { status: 400 });
+    }
+
+    const { data, error } = await admin.from('compagnie_employes').insert({
+      compagnie_id,
+      pilote_id
+    }).select('*, profiles(identifiant), compagnies(nom)').single();
+
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    return NextResponse.json(data);
+  } catch (e) {
+    console.error('Compagnie employes POST:', e);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  }
+}
+
+// DELETE - Retirer un employé d'une compagnie (admin uniquement)
+export async function DELETE(req: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+
+    if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 });
+
+    const admin = createAdminClient();
+    const { error } = await admin.from('compagnie_employes').delete().eq('id', id);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error('Compagnies employés DELETE:', e);
+    console.error('Compagnie employes DELETE:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }

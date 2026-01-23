@@ -1,11 +1,11 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
+import { ArrowLeft, Receipt } from 'lucide-react';
 import Link from 'next/link';
-import { ArrowLeft, Plane } from 'lucide-react';
-import TypesAvionClient from './TypesAvionClient';
+import AdminTaxesClient from './AdminTaxesClient';
 
-export default async function AdminTypesAvionPage() {
+export default async function AdminTaxesPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
@@ -14,26 +14,31 @@ export default async function AdminTypesAvionPage() {
   if (profile?.role !== 'admin') redirect('/logbook');
 
   const admin = createAdminClient();
-  const { data: types } = await admin.from('types_avion')
-    .select('id, nom, constructeur, code_oaci, prix, capacite_pax, capacite_cargo_kg, ordre')
-    .order('ordre');
+
+  // Liste des taxes
+  const { data: taxes } = await admin.from('taxes_aeroport')
+    .select('*')
+    .order('code_oaci');
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href="/admin" className="text-slate-400 hover:text-slate-200">
-          <ArrowLeft className="h-5 w-5" />
+        <Link href="/admin" className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
+          <ArrowLeft className="h-5 w-5 text-slate-400" />
         </Link>
         <h1 className="text-2xl font-semibold text-slate-100 flex items-center gap-3">
-          <Plane className="h-7 w-7 text-sky-400" />
-          Types d&apos;avion &amp; Prix
+          <Receipt className="h-7 w-7 text-sky-400" />
+          Taxes aéroportuaires
         </h1>
       </div>
+
       <div className="card">
-        <p className="text-slate-400 text-sm mb-4">
-          Définissez les prix de vente et capacités pour le marketplace et les vols commerciaux.
+        <p className="text-sm text-slate-400 mb-4">
+          Définissez les taxes pour chaque aéroport. Par défaut : IFR 2%, VFR 5%.
+          Les taxes s&apos;appliquent sur le revenu brut des vols commerciaux.
         </p>
-        <TypesAvionClient types={types || []} />
+
+        <AdminTaxesClient taxes={taxes || []} />
       </div>
     </div>
   );

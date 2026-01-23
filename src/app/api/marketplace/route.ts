@@ -1,97 +1,171 @@
+import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { NextResponse } from 'next/server';
 
+// GET - Liste des avions disponibles à l'achat
 export async function GET() {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from('marketplace_avions')
-      .select('type_avion_id, prix, version_cargo, capacite_cargo_kg, types_avion(nom, constructeur)')
-      .order('types_avion(nom)');
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+    const admin = createAdminClient();
+    const { data, error } = await admin.from('types_avion')
+      .select('*')
+      .gt('prix', 0)
+      .order('prix', { ascending: true });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ data: data || [] });
+
+    return NextResponse.json(data);
   } catch (e) {
     console.error('Marketplace GET:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
 
-export async function POST(request: Request) {
+// POST - Acheter un avion
+export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const body = await request.json();
-    const { type_avion_id, compagnie_id, nom_avion } = body;
+    const body = await req.json();
+    const { type_avion_id, pour_compagnie_id, nom_personnalise } = body;
 
-    if (!type_avion_id) return NextResponse.json({ error: 'type_avion_id requis' }, { status: 400 });
+    if (!type_avion_id) {
+      return NextResponse.json({ error: 'type_avion_id requis' }, { status: 400 });
+    }
 
-    const { data: prixData } = await supabase.from('marketplace_avions').select('prix').eq('type_avion_id', type_avion_id).single();
-    if (!prixData) return NextResponse.json({ error: 'Avion non disponible à la vente' }, { status: 400 });
+    const admin = createAdminClient();
 
-    const prix = Number(prixData.prix);
+    // Récupérer le prix de l'avion
+    const { data: avion } = await admin.from('types_avion')
+      .select('id, nom, prix')
+      .eq('id', type_avion_id)
+      .single();
+
+    if (!avion || avion.prix <= 0) {
+      return NextResponse.json({ error: 'Avion non disponible à la vente' }, { status: 400 });
+    }
 
     let compteId: string;
-    if (compagnie_id) {
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-      const { data: compagnie } = await supabase.from('compagnies').select('pdg_id').eq('id', compagnie_id).single();
-      if (compagnie?.pdg_id !== user.id && profile?.role !== 'admin') {
-        return NextResponse.json({ error: 'Réservé au PDG de la compagnie' }, { status: 403 });
+    let compagnieNom: string | null = null;
+
+    if (pour_compagnie_id) {
+      // Achat pour une compagnie - vérifier que l'utilisateur est PDG
+      const { data: compagnie } = await admin.from('compagnies')
+        .select('id, nom, pdg_id')
+        .eq('id', pour_compagnie_id)
+        .single();
+
+      if (!compagnie) {
+        return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
       }
 
-      const { data: compte } = await supabase.from('felitz_comptes').select('id, solde').eq('compagnie_id', compagnie_id).single();
-      if (!compte) return NextResponse.json({ error: 'Compte entreprise introuvable' }, { status: 404 });
-      if (Number(compte.solde) < prix) return NextResponse.json({ error: 'Solde insuffisant' }, { status: 400 });
+      if (compagnie.pdg_id !== user.id) {
+        return NextResponse.json({ error: 'Seul le PDG peut acheter pour la compagnie' }, { status: 403 });
+      }
 
-      compteId = compte.id;
+      // Récupérer le compte entreprise
+      const { data: compteEntreprise } = await admin.from('felitz_comptes')
+        .select('id, solde')
+        .eq('compagnie_id', pour_compagnie_id)
+        .eq('type', 'entreprise')
+        .single();
 
-      const admin = createAdminClient();
-      await admin.from('felitz_comptes').update({ solde: Number(compte.solde) - prix }).eq('id', compteId);
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteId,
-        type: 'achat_avion',
-        montant: -prix,
-        titre: `Achat avion ${nom_avion || 'compagnie'}`,
-      });
+      if (!compteEntreprise) {
+        return NextResponse.json({ error: 'Compte entreprise introuvable' }, { status: 404 });
+      }
 
-      const { data: avionComp } = await admin.from('compagnies_avions').select('id, quantite').eq('compagnie_id', compagnie_id).eq('type_avion_id', type_avion_id).single();
-      if (avionComp) {
-        await admin.from('compagnies_avions').update({ quantite: avionComp.quantite + 1 }).eq('id', avionComp.id);
+      if (compteEntreprise.solde < avion.prix) {
+        return NextResponse.json({ error: 'Solde entreprise insuffisant' }, { status: 400 });
+      }
+
+      compteId = compteEntreprise.id;
+      compagnieNom = compagnie.nom;
+
+      // Débiter et ajouter à la flotte
+      await admin.from('felitz_comptes')
+        .update({ solde: compteEntreprise.solde - avion.prix })
+        .eq('id', compteId);
+
+      // Vérifier si l'avion existe déjà dans la flotte
+      const { data: existingFlotte } = await admin.from('compagnie_flotte')
+        .select('id, quantite')
+        .eq('compagnie_id', pour_compagnie_id)
+        .eq('type_avion_id', type_avion_id)
+        .single();
+
+      if (existingFlotte) {
+        // Incrémenter la quantité
+        await admin.from('compagnie_flotte')
+          .update({ quantite: existingFlotte.quantite + 1 })
+          .eq('id', existingFlotte.id);
       } else {
-        await admin.from('compagnies_avions').insert({
-          compagnie_id,
+        // Créer nouvelle entrée
+        await admin.from('compagnie_flotte').insert({
+          compagnie_id: pour_compagnie_id,
           type_avion_id,
           quantite: 1,
-          nom_avion: nom_avion || null,
+          nom_personnalise
         });
       }
-    } else {
-      const { data: compte } = await supabase.from('felitz_comptes').select('id, solde').eq('user_id', user.id).is('compagnie_id', null).single();
-      if (!compte) return NextResponse.json({ error: 'Compte personnel introuvable' }, { status: 404 });
-      if (Number(compte.solde) < prix) return NextResponse.json({ error: 'Solde insuffisant' }, { status: 400 });
 
-      compteId = compte.id;
-
-      const admin = createAdminClient();
-      await admin.from('felitz_comptes').update({ solde: Number(compte.solde) - prix }).eq('id', compteId);
+      // Transaction
       await admin.from('felitz_transactions').insert({
         compte_id: compteId,
-        type: 'achat_avion',
-        montant: -prix,
-        titre: `Achat avion ${nom_avion || 'personnel'}`,
+        type: 'debit',
+        montant: avion.prix,
+        libelle: `Achat ${avion.nom}`
       });
 
-      await admin.from('inventaire_pilote').insert({
-        user_id: user.id,
+    } else {
+      // Achat personnel
+      const { data: comptePerso } = await admin.from('felitz_comptes')
+        .select('id, solde')
+        .eq('proprietaire_id', user.id)
+        .eq('type', 'personnel')
+        .single();
+
+      if (!comptePerso) {
+        return NextResponse.json({ error: 'Compte personnel introuvable' }, { status: 404 });
+      }
+
+      if (comptePerso.solde < avion.prix) {
+        return NextResponse.json({ error: 'Solde insuffisant' }, { status: 400 });
+      }
+
+      compteId = comptePerso.id;
+
+      // Débiter
+      await admin.from('felitz_comptes')
+        .update({ solde: comptePerso.solde - avion.prix })
+        .eq('id', compteId);
+
+      // Ajouter à l'inventaire personnel
+      await admin.from('inventaire_avions').insert({
+        proprietaire_id: user.id,
         type_avion_id,
-        nom_avion: nom_avion || null,
+        nom_personnalise
+      });
+
+      // Transaction
+      await admin.from('felitz_transactions').insert({
+        compte_id: compteId,
+        type: 'debit',
+        montant: avion.prix,
+        libelle: `Achat ${avion.nom}`
       });
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ 
+      ok: true, 
+      message: pour_compagnie_id 
+        ? `${avion.nom} ajouté à la flotte de ${compagnieNom}` 
+        : `${avion.nom} ajouté à votre inventaire`
+    });
   } catch (e) {
     console.error('Marketplace POST:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

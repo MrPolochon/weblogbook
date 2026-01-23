@@ -1,11 +1,8 @@
 -- ============================================================
 -- MIGRATIONS WEBLOGBOOK — à coller dans l'éditeur SQL Supabase
 -- Si une erreur "already exists" apparaît, c'est que c'est déjà fait : passe au bloc suivant ou ignore.
+-- La fonction set_updated_at() doit exister (créée par schema.sql). Si erreur sur le trigger plans_vol, exécute d'abord schema.sql ou crée la fonction.
 -- ============================================================
-
--- Créer la fonction set_updated_at() si elle n'existe pas
-CREATE OR REPLACE FUNCTION public.set_updated_at()
-RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
 
 -- ----- 1) Aéroports départ/arrivée -----
 ALTER TABLE public.vols
@@ -19,13 +16,16 @@ ALTER TABLE public.vols
 
 DROP POLICY IF EXISTS "vols_select_copilote" ON public.vols;
 CREATE POLICY "vols_select_copilote" ON public.vols FOR SELECT TO authenticated
-  USING (copilote_id = (SELECT auth.uid()));
+  USING (copilote_id = auth.uid());
 
 CREATE INDEX IF NOT EXISTS idx_vols_copilote ON public.vols(copilote_id);
 
 -- ----- 3) Instruction (instructeur, type) -----
--- Note: La contrainte vols_type_vol_check inclut 'Vol militaire' dès ici
--- Le bloc 7 ne fait que ré-appliquer la même contrainte (supprimée pour éviter duplication)
+-- On inclut 'Vol militaire' dès ici pour éviter une erreur 23514 si des vols militaires
+-- existent déjà quand on ré-applique les migrations (le bloc 7 ne fait que ré-ajouter la même liste).
+ALTER TABLE public.vols DROP CONSTRAINT IF EXISTS vols_type_vol_check;
+ALTER TABLE public.vols ADD CONSTRAINT vols_type_vol_check
+  CHECK (type_vol IN ('IFR', 'VFR', 'Instruction', 'Vol militaire'));
 
 ALTER TABLE public.vols
   ADD COLUMN IF NOT EXISTS instructeur_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
@@ -45,19 +45,9 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS armee BOOLEAN NOT NULL DEFAULT false;
 
 -- ----- 7) Vol militaire -----
--- La contrainte vols_type_vol_check a déjà été définie dans le bloc 3 avec 'Vol militaire'
--- Vérifier et mettre à jour si nécessaire (idempotent)
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.table_constraints 
-    WHERE constraint_name = 'vols_type_vol_check' 
-    AND table_name = 'vols'
-  ) THEN
-    ALTER TABLE public.vols ADD CONSTRAINT vols_type_vol_check
-      CHECK (type_vol IN ('IFR', 'VFR', 'Instruction', 'Vol militaire'));
-  END IF;
-END $$;
+ALTER TABLE public.vols DROP CONSTRAINT IF EXISTS vols_type_vol_check;
+ALTER TABLE public.vols ADD CONSTRAINT vols_type_vol_check
+  CHECK (type_vol IN ('IFR', 'VFR', 'Instruction', 'Vol militaire'));
 
 ALTER TABLE public.vols ALTER COLUMN type_avion_id DROP NOT NULL;
 
@@ -149,36 +139,36 @@ DROP POLICY IF EXISTS "atc_sessions_select" ON public.atc_sessions;
 CREATE POLICY "atc_sessions_select" ON public.atc_sessions FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "atc_sessions_insert" ON public.atc_sessions;
 CREATE POLICY "atc_sessions_insert" ON public.atc_sessions FOR INSERT TO authenticated
-  WITH CHECK ((SELECT auth.uid()) = user_id);
+  WITH CHECK (auth.uid() = user_id);
 DROP POLICY IF EXISTS "atc_sessions_update" ON public.atc_sessions;
 CREATE POLICY "atc_sessions_update" ON public.atc_sessions FOR UPDATE TO authenticated
-  USING ((SELECT auth.uid()) = user_id);
+  USING (auth.uid() = user_id);
 DROP POLICY IF EXISTS "atc_sessions_delete" ON public.atc_sessions;
 CREATE POLICY "atc_sessions_delete" ON public.atc_sessions FOR DELETE TO authenticated
-  USING ((SELECT auth.uid()) = user_id);
+  USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "plans_vol_select_pilote" ON public.plans_vol;
 CREATE POLICY "plans_vol_select_pilote" ON public.plans_vol FOR SELECT TO authenticated
-  USING (pilote_id = (SELECT auth.uid()));
+  USING (pilote_id = auth.uid());
 DROP POLICY IF EXISTS "plans_vol_select_holder" ON public.plans_vol;
 CREATE POLICY "plans_vol_select_holder" ON public.plans_vol FOR SELECT TO authenticated
-  USING (current_holder_user_id = (SELECT auth.uid()));
+  USING (current_holder_user_id = auth.uid());
 DROP POLICY IF EXISTS "plans_vol_select_admin" ON public.plans_vol;
 CREATE POLICY "plans_vol_select_admin" ON public.plans_vol FOR SELECT TO authenticated
   USING (public.is_admin());
 DROP POLICY IF EXISTS "plans_vol_select_atc" ON public.plans_vol;
 CREATE POLICY "plans_vol_select_atc" ON public.plans_vol FOR SELECT TO authenticated
   USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND (atc = true OR role = 'admin'))
+    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND (atc = true OR role = 'admin'))
   );
 DROP POLICY IF EXISTS "plans_vol_insert" ON public.plans_vol;
 CREATE POLICY "plans_vol_insert" ON public.plans_vol FOR INSERT TO authenticated
-  WITH CHECK (pilote_id = (SELECT auth.uid()));
+  WITH CHECK (pilote_id = auth.uid());
 DROP POLICY IF EXISTS "plans_vol_update" ON public.plans_vol;
 CREATE POLICY "plans_vol_update" ON public.plans_vol FOR UPDATE TO authenticated
   USING (
-    pilote_id = (SELECT auth.uid())
-    OR current_holder_user_id = (SELECT auth.uid())
+    pilote_id = auth.uid()
+    OR current_holder_user_id = auth.uid()
     OR public.is_admin()
   );
 
@@ -216,13 +206,13 @@ DROP POLICY IF EXISTS "notams_select_authenticated" ON public.notams;
 CREATE POLICY "notams_select_authenticated" ON public.notams FOR SELECT TO authenticated USING (true);
 DROP POLICY IF EXISTS "notams_insert_admin" ON public.notams;
 CREATE POLICY "notams_insert_admin" ON public.notams FOR INSERT TO authenticated
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
+  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
 DROP POLICY IF EXISTS "notams_update_admin" ON public.notams;
 CREATE POLICY "notams_update_admin" ON public.notams FOR UPDATE TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
+  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
 DROP POLICY IF EXISTS "notams_delete_admin" ON public.notams;
 CREATE POLICY "notams_delete_admin" ON public.notams FOR DELETE TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
+  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
 
 -- ----- 11) Temps total en service ATC -----
 ALTER TABLE public.profiles
@@ -259,891 +249,57 @@ CREATE INDEX IF NOT EXISTS idx_licences_type_avion ON public.licences_qualificat
 ALTER TABLE public.licences_qualifications ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "licences_select_self" ON public.licences_qualifications;
 CREATE POLICY "licences_select_self" ON public.licences_qualifications FOR SELECT TO authenticated
-  USING (user_id = (SELECT auth.uid()));
+  USING (user_id = auth.uid());
 DROP POLICY IF EXISTS "licences_select_admin" ON public.licences_qualifications;
 CREATE POLICY "licences_select_admin" ON public.licences_qualifications FOR SELECT TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
+  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
 DROP POLICY IF EXISTS "licences_insert_admin" ON public.licences_qualifications;
 CREATE POLICY "licences_insert_admin" ON public.licences_qualifications FOR INSERT TO authenticated
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
+  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
 DROP POLICY IF EXISTS "licences_update_admin" ON public.licences_qualifications;
 CREATE POLICY "licences_update_admin" ON public.licences_qualifications FOR UPDATE TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'))
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
+  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'))
+  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
 DROP POLICY IF EXISTS "licences_delete_admin" ON public.licences_qualifications;
 CREATE POLICY "licences_delete_admin" ON public.licences_qualifications FOR DELETE TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
+  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
 
--- ----- 13) Rôle IFSA, système Felitz Bank, et gestion compagnies -----
--- IMPORTANT: Ce bloc nécessite que les blocs précédents (notamment le bloc 9 pour plans_vol) soient exécutés.
--- Vérification que plans_vol existe
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'plans_vol') THEN
-    RAISE EXCEPTION 'La table plans_vol n''existe pas. Veuillez exécuter les blocs précédents (notamment le bloc 9) avant ce bloc.';
-  END IF;
-END $$;
-
--- Fonction pour générer VBAN unique
-CREATE OR REPLACE FUNCTION generate_vban_personnel() RETURNS TEXT AS $$
-DECLARE
-  vban TEXT;
-  exists_check BOOLEAN;
-BEGIN
-  LOOP
-    vban := 'MIXOU' || upper(substring(md5(random()::text || clock_timestamp()::text) from 1 for 20));
-    SELECT EXISTS(SELECT 1 FROM public.felitz_comptes WHERE felitz_comptes.vban = vban) INTO exists_check;
-    EXIT WHEN NOT exists_check;
-  END LOOP;
-  RETURN vban;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION generate_vban_entreprise() RETURNS TEXT AS $$
-DECLARE
-  vban TEXT;
-  exists_check BOOLEAN;
-BEGIN
-  LOOP
-    vban := 'ENTERMIXOU' || upper(substring(md5(random()::text || clock_timestamp()::text) from 1 for 19));
-    SELECT EXISTS(SELECT 1 FROM public.felitz_comptes WHERE felitz_comptes.vban = vban) INTO exists_check;
-    EXIT WHEN NOT exists_check;
-  END LOOP;
-  RETURN vban;
-END;
-$$ LANGUAGE plpgsql;
+-- ----- 13) Système Felitz Bank & Compagnies -----
+-- Note: Le script complet est dans add_felitz_bank_system.sql
+-- Exécuter ce fichier séparément pour le système complet de banque
 
 -- Ajouter rôle IFSA
--- Note: La contrainte profiles_role_check a été définie dans le bloc 9
--- On la met à jour ici pour inclure 'ifsa' (idempotent)
-DO $$
-BEGIN
-  ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
-  ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check
-    CHECK (role IN ('admin', 'pilote', 'atc', 'ifsa'));
-EXCEPTION WHEN OTHERS THEN
-  -- Si la contrainte existe déjà avec les bonnes valeurs, ignorer
-  NULL;
-END $$;
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check
+  CHECK (role IN ('admin', 'pilote', 'atc', 'ifsa'));
 
--- Felitz Bank - Comptes bancaires
-CREATE TABLE IF NOT EXISTS public.felitz_comptes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
-  compagnie_id UUID REFERENCES public.compagnies(id) ON DELETE CASCADE,
-  vban TEXT NOT NULL UNIQUE,
-  solde DECIMAL(15, 2) NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(user_id, compagnie_id)
-);
-
--- Ajouter la colonne type_compte si elle n'existe pas déjà
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-    AND table_name = 'felitz_comptes' 
-    AND column_name = 'type_compte'
-  ) THEN
-    ALTER TABLE public.felitz_comptes ADD COLUMN type_compte TEXT;
-  END IF;
-END $$;
-
--- Supprimer TOUTES les contraintes CHECK existantes qui pourraient limiter type_compte
--- Utiliser pg_constraint pour trouver toutes les contraintes CHECK, y compris celles générées automatiquement
-DO $$
-DECLARE
-  constraint_name_var TEXT;
-  constraint_oid_var OID;
-BEGIN
-  -- Trouver et supprimer toutes les contraintes CHECK sur felitz_comptes qui concernent type_compte
-  -- En utilisant pg_constraint pour accéder directement à la définition
-  FOR constraint_oid_var IN
-    SELECT oid
-    FROM pg_constraint
-    WHERE conrelid = 'public.felitz_comptes'::regclass
-      AND contype = 'c'  -- Type CHECK
-      AND pg_get_constraintdef(oid) LIKE '%type_compte%'
-  LOOP
-    -- Récupérer le nom de la contrainte
-    SELECT conname INTO constraint_name_var
-    FROM pg_constraint
-    WHERE oid = constraint_oid_var;
-    
-    -- Supprimer la contrainte
-    IF constraint_name_var IS NOT NULL THEN
-      EXECUTE format('ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS %I', constraint_name_var);
-    END IF;
-  END LOOP;
-  
-  -- Supprimer aussi explicitement la contrainte avec le nom standard (au cas où)
-  ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS felitz_comptes_type_compte_check;
-  
-  -- Supprimer aussi toutes les contraintes CHECK anonymes qui pourraient exister
-  -- (créées par CREATE TABLE avec CHECK inline)
-  FOR constraint_oid_var IN
-    SELECT oid
-    FROM pg_constraint
-    WHERE conrelid = 'public.felitz_comptes'::regclass
-      AND contype = 'c'
-      AND conname LIKE 'felitz_comptes_%check%'
-  LOOP
-    SELECT conname INTO constraint_name_var
-    FROM pg_constraint
-    WHERE oid = constraint_oid_var;
-    
-    IF constraint_name_var IS NOT NULL AND constraint_name_var != 'felitz_comptes_type_compte_check' THEN
-      -- Vérifier si cette contrainte concerne type_compte
-      IF pg_get_constraintdef(constraint_oid_var) LIKE '%type_compte%' THEN
-        EXECUTE format('ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS %I', constraint_name_var);
-      END IF;
-    END IF;
-  END LOOP;
-END $$;
-
--- Ajouter/recréer la contrainte CHECK avec toutes les valeurs autorisées
-DO $$
-BEGIN
-  -- Supprimer d'abord au cas où elle existerait encore
-  ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS felitz_comptes_type_compte_check;
-  
-  -- Recréer la contrainte avec les 3 valeurs autorisées
-  ALTER TABLE public.felitz_comptes 
-    ADD CONSTRAINT felitz_comptes_type_compte_check 
-    CHECK (type_compte IN ('systeme', 'personnel', 'compagnie'));
-EXCEPTION
-  WHEN duplicate_object THEN
-    -- Si elle existe encore (peu probable), essayer une dernière fois
-    ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS felitz_comptes_type_compte_check;
-    ALTER TABLE public.felitz_comptes 
-      ADD CONSTRAINT felitz_comptes_type_compte_check 
-      CHECK (type_compte IN ('systeme', 'personnel', 'compagnie'));
-END $$;
-
--- Mettre à jour les valeurs NULL existantes avec une valeur par défaut intelligente
-DO $$
-BEGIN
-  -- Comptes système (user_id et compagnie_id NULL)
-  UPDATE public.felitz_comptes 
-  SET type_compte = 'systeme' 
-  WHERE type_compte IS NULL AND user_id IS NULL AND compagnie_id IS NULL;
-  
-  -- Comptes compagnie (compagnie_id non NULL)
-  UPDATE public.felitz_comptes 
-  SET type_compte = 'compagnie' 
-  WHERE type_compte IS NULL AND compagnie_id IS NOT NULL;
-  
-  -- Comptes personnels (user_id non NULL, compagnie_id NULL)
-  UPDATE public.felitz_comptes 
-  SET type_compte = 'personnel' 
-  WHERE type_compte IS NULL AND user_id IS NOT NULL AND compagnie_id IS NULL;
-END $$;
-
--- Rendre la colonne NOT NULL après avoir rempli les valeurs
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-    AND table_name = 'felitz_comptes' 
-    AND column_name = 'type_compte'
-    AND is_nullable = 'YES'
-  ) THEN
-    ALTER TABLE public.felitz_comptes ALTER COLUMN type_compte SET NOT NULL;
-  END IF;
-END $$;
-
-CREATE INDEX IF NOT EXISTS idx_felitz_comptes_user ON public.felitz_comptes(user_id);
-CREATE INDEX IF NOT EXISTS idx_felitz_comptes_compagnie ON public.felitz_comptes(compagnie_id);
-CREATE INDEX IF NOT EXISTS idx_felitz_comptes_vban ON public.felitz_comptes(vban);
-CREATE INDEX IF NOT EXISTS idx_felitz_comptes_type ON public.felitz_comptes(type_compte);
-
--- Créer le compte système admin (pour les opérations administratives)
--- Ce compte a un solde très élevé et est utilisé uniquement par les admins
--- IMPORTANT: Cette opération doit se faire APRÈS la création/mise à jour de la contrainte type_compte
-DO $$
-DECLARE
-  compte_systeme_exists BOOLEAN;
-  vban_systeme TEXT;
-BEGIN
-  -- Vérifier si le compte système existe déjà
-  SELECT EXISTS (
-    SELECT 1 FROM public.felitz_comptes 
-    WHERE vban LIKE 'SYSTEME%' OR type_compte = 'systeme'
-  ) INTO compte_systeme_exists;
-  
-  IF NOT compte_systeme_exists THEN
-    -- Générer un VBAN système unique
-    LOOP
-      vban_systeme := 'SYSTEME' || upper(substring(md5(random()::text || clock_timestamp()::text) from 1 for 20));
-      EXIT WHEN NOT EXISTS (SELECT 1 FROM public.felitz_comptes WHERE vban = vban_systeme);
-    END LOOP;
-    
-    -- Créer le compte système avec un solde très élevé (999 999 999.99)
-    -- S'assurer que type_compte = 'systeme' est bien autorisé par la contrainte
-    BEGIN
-      INSERT INTO public.felitz_comptes (user_id, compagnie_id, type_compte, vban, solde)
-      VALUES (NULL, NULL, 'systeme', vban_systeme, 999999999.99);
-    EXCEPTION
-      WHEN check_violation THEN
-        -- Si la contrainte CHECK échoue, c'est qu'elle n'a pas été mise à jour correctement
-        -- Forcer la mise à jour de la contrainte et réessayer
-        ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS felitz_comptes_type_compte_check;
-        ALTER TABLE public.felitz_comptes 
-          ADD CONSTRAINT felitz_comptes_type_compte_check 
-          CHECK (type_compte IN ('systeme', 'personnel', 'compagnie'));
-        
-        -- Réessayer l'insertion
-        INSERT INTO public.felitz_comptes (user_id, compagnie_id, type_compte, vban, solde)
-        VALUES (NULL, NULL, 'systeme', vban_systeme, 999999999.99);
-    END;
-  END IF;
-END $$;
-
--- Créer automatiquement les comptes Felitz pour toutes les compagnies qui n'en ont pas encore
-DO $$
-DECLARE
-  compagnie_rec RECORD;
-  vban_compagnie TEXT;
-BEGIN
-  -- Parcourir toutes les compagnies qui n'ont pas encore de compte
-  FOR compagnie_rec IN 
-    SELECT c.id 
-    FROM public.compagnies c
-    WHERE NOT EXISTS (
-      SELECT 1 FROM public.felitz_comptes fc 
-      WHERE fc.compagnie_id = c.id
-    )
-  LOOP
-    -- Générer un VBAN entreprise unique
-    LOOP
-      vban_compagnie := 'ENTERMIXOU' || upper(substring(md5(random()::text || clock_timestamp()::text) from 1 for 19));
-      EXIT WHEN NOT EXISTS (SELECT 1 FROM public.felitz_comptes WHERE vban = vban_compagnie);
-    END LOOP;
-    
-    -- Créer le compte avec solde à 0
-    BEGIN
-      INSERT INTO public.felitz_comptes (compagnie_id, type_compte, vban, solde)
-      VALUES (compagnie_rec.id, 'compagnie', vban_compagnie, 0);
-    EXCEPTION
-      WHEN check_violation THEN
-        -- Si la contrainte CHECK échoue, forcer la mise à jour et réessayer
-        ALTER TABLE public.felitz_comptes DROP CONSTRAINT IF EXISTS felitz_comptes_type_compte_check;
-        ALTER TABLE public.felitz_comptes 
-          ADD CONSTRAINT felitz_comptes_type_compte_check 
-          CHECK (type_compte IN ('systeme', 'personnel', 'compagnie'));
-        
-        INSERT INTO public.felitz_comptes (compagnie_id, type_compte, vban, solde)
-        VALUES (compagnie_rec.id, 'compagnie', vban_compagnie, 0);
-    END;
-  END LOOP;
-END $$;
-
--- Felitz Bank - Transactions
-CREATE TABLE IF NOT EXISTS public.felitz_transactions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  compte_id UUID NOT NULL REFERENCES public.felitz_comptes(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('virement', 'salaire', 'revenue_vol', 'achat_avion', 'vente_avion', 'taxe', 'admin_ajout', 'admin_retrait')),
-  montant DECIMAL(15, 2) NOT NULL,
-  titre TEXT,
-  libelle TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Créer les colonnes manquantes - Approche simple et directe
--- Essayer de créer, ignorer si existe déjà
-DO $$ BEGIN
-  ALTER TABLE public.felitz_transactions ADD COLUMN compte_destinataire_id UUID;
-EXCEPTION WHEN duplicate_column THEN NULL; END $$;
-
-DO $$ BEGIN
-  ALTER TABLE public.felitz_transactions ADD COLUMN plan_vol_id UUID;
-EXCEPTION WHEN duplicate_column THEN NULL; END $$;
-
--- Ajouter les contraintes de clés étrangères
--- S'assurer que les colonnes existent vraiment avant d'ajouter les contraintes
-DO $$
-DECLARE
-  col_exists BOOLEAN;
-BEGIN
-  -- Vérifier et créer compte_destinataire_id si nécessaire
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-    AND table_name = 'felitz_transactions' 
-    AND column_name = 'compte_destinataire_id'
-  ) INTO col_exists;
-  
-  IF NOT col_exists THEN
-    BEGIN
-      ALTER TABLE public.felitz_transactions ADD COLUMN compte_destinataire_id UUID;
-    EXCEPTION WHEN duplicate_column THEN NULL; END;
-  END IF;
-  
-  -- Maintenant ajouter la contrainte FK pour compte_destinataire_id
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'felitz_comptes') THEN
-    BEGIN
-      ALTER TABLE public.felitz_transactions
-        ADD CONSTRAINT felitz_transactions_compte_destinataire_id_fkey 
-        FOREIGN KEY (compte_destinataire_id) REFERENCES public.felitz_comptes(id) ON DELETE SET NULL;
-    EXCEPTION 
-      WHEN duplicate_object THEN NULL; -- Contrainte existe déjà
-      WHEN undefined_column THEN
-        -- Colonne n'existe pas, la créer et réessayer
-        BEGIN
-          ALTER TABLE public.felitz_transactions ADD COLUMN compte_destinataire_id UUID;
-          ALTER TABLE public.felitz_transactions
-            ADD CONSTRAINT felitz_transactions_compte_destinataire_id_fkey 
-            FOREIGN KEY (compte_destinataire_id) REFERENCES public.felitz_comptes(id) ON DELETE SET NULL;
-        EXCEPTION WHEN duplicate_column OR duplicate_object THEN NULL; END;
-    END;
-  END IF;
-  
-  -- Vérifier et créer plan_vol_id si nécessaire
-  SELECT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-    AND table_name = 'felitz_transactions' 
-    AND column_name = 'plan_vol_id'
-  ) INTO col_exists;
-  
-  IF NOT col_exists THEN
-    BEGIN
-      ALTER TABLE public.felitz_transactions ADD COLUMN plan_vol_id UUID;
-    EXCEPTION WHEN duplicate_column THEN NULL; END;
-  END IF;
-  
-  -- Maintenant ajouter la contrainte FK pour plan_vol_id
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'plans_vol') THEN
-    BEGIN
-      ALTER TABLE public.felitz_transactions
-        ADD CONSTRAINT felitz_transactions_plan_vol_id_fkey 
-        FOREIGN KEY (plan_vol_id) REFERENCES public.plans_vol(id) ON DELETE SET NULL;
-    EXCEPTION 
-      WHEN duplicate_object THEN NULL; -- Contrainte existe déjà
-      WHEN undefined_column THEN
-        -- Colonne n'existe pas, la créer et réessayer
-        BEGIN
-          ALTER TABLE public.felitz_transactions ADD COLUMN plan_vol_id UUID;
-          ALTER TABLE public.felitz_transactions
-            ADD CONSTRAINT felitz_transactions_plan_vol_id_fkey 
-            FOREIGN KEY (plan_vol_id) REFERENCES public.plans_vol(id) ON DELETE SET NULL;
-        EXCEPTION WHEN duplicate_column OR duplicate_object THEN NULL; END;
-    END;
-  END IF;
-END $$;
-
-CREATE INDEX IF NOT EXISTS idx_felitz_transactions_compte ON public.felitz_transactions(compte_id);
-
--- Créer l'index sur plan_vol_id seulement si la colonne existe
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-    AND table_name = 'felitz_transactions' 
-    AND column_name = 'plan_vol_id'
-  ) THEN
-    CREATE INDEX IF NOT EXISTS idx_felitz_transactions_plan_vol ON public.felitz_transactions(plan_vol_id);
-  END IF;
-END $$;
-
--- Felitz Bank - Virements
-CREATE TABLE IF NOT EXISTS public.felitz_virements (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  compte_emetteur_id UUID NOT NULL REFERENCES public.felitz_comptes(id) ON DELETE CASCADE,
-  compte_destinataire_id UUID NOT NULL REFERENCES public.felitz_comptes(id) ON DELETE CASCADE,
-  montant DECIMAL(15, 2) NOT NULL,
-  libelle TEXT,
-  statut TEXT NOT NULL DEFAULT 'en_attente' CHECK (statut IN ('en_attente', 'effectue', 'refuse')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- IMPORTANT: Si la table existait déjà, elle pourrait ne pas avoir ces colonnes
--- Les ajouter explicitement AVANT les policies RLS
-DO $$
-BEGIN
-  -- Ajouter compte_emetteur_id si elle n'existe pas
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-    AND table_name = 'felitz_virements' 
-    AND column_name = 'compte_emetteur_id'
-  ) THEN
-    BEGIN
-      -- Ajouter d'abord comme nullable pour éviter erreur si table a des lignes
-      ALTER TABLE public.felitz_virements ADD COLUMN compte_emetteur_id UUID;
-      -- Ajouter la contrainte FK pour compte_emetteur_id
-      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'felitz_comptes') THEN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.table_constraints 
-          WHERE constraint_name = 'felitz_virements_compte_emetteur_id_fkey' 
-          AND table_name = 'felitz_virements'
-        ) THEN
-          ALTER TABLE public.felitz_virements
-            ADD CONSTRAINT felitz_virements_compte_emetteur_id_fkey 
-            FOREIGN KEY (compte_emetteur_id) REFERENCES public.felitz_comptes(id) ON DELETE CASCADE;
-        END IF;
-      END IF;
-      -- Si la table est vide, on peut rendre NOT NULL (sinon il faudrait backfill)
-      -- Pour l'instant, on laisse nullable pour éviter les erreurs
-    EXCEPTION WHEN duplicate_column THEN NULL; END;
-  END IF;
-  
-  -- Ajouter compte_destinataire_id si elle n'existe pas
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-    AND table_name = 'felitz_virements' 
-    AND column_name = 'compte_destinataire_id'
-  ) THEN
-    BEGIN
-      -- Ajouter d'abord comme nullable pour éviter erreur si table a des lignes
-      ALTER TABLE public.felitz_virements ADD COLUMN compte_destinataire_id UUID;
-      -- Ajouter la contrainte FK pour compte_destinataire_id
-      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'felitz_comptes') THEN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.table_constraints 
-          WHERE constraint_name = 'felitz_virements_compte_destinataire_id_fkey' 
-          AND table_name = 'felitz_virements'
-        ) THEN
-          ALTER TABLE public.felitz_virements
-            ADD CONSTRAINT felitz_virements_compte_destinataire_id_fkey 
-            FOREIGN KEY (compte_destinataire_id) REFERENCES public.felitz_comptes(id) ON DELETE CASCADE;
-        END IF;
-      END IF;
-      -- Si la table est vide, on peut rendre NOT NULL (sinon il faudrait backfill)
-      -- Pour l'instant, on laisse nullable pour éviter les erreurs
-    EXCEPTION WHEN duplicate_column THEN NULL; END;
-  END IF;
-END $$;
-
-CREATE INDEX IF NOT EXISTS idx_felitz_virements_emetteur ON public.felitz_virements(compte_emetteur_id);
-CREATE INDEX IF NOT EXISTS idx_felitz_virements_destinataire ON public.felitz_virements(compte_destinataire_id);
-
--- Compagnies - PDG et employés
+-- Modifier compagnies pour PDG et paramètres
 ALTER TABLE public.compagnies
   ADD COLUMN IF NOT EXISTS pdg_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-  ADD COLUMN IF NOT EXISTS pourcentage_paie DECIMAL(5, 2) NOT NULL DEFAULT 50.0;
+  ADD COLUMN IF NOT EXISTS prix_billet_pax INTEGER NOT NULL DEFAULT 100,
+  ADD COLUMN IF NOT EXISTS prix_kg_cargo INTEGER NOT NULL DEFAULT 5,
+  ADD COLUMN IF NOT EXISTS pourcentage_salaire INTEGER NOT NULL DEFAULT 20,
+  ADD COLUMN IF NOT EXISTS vban TEXT UNIQUE;
 
-CREATE TABLE IF NOT EXISTS public.compagnies_employes (
-  compagnie_id UUID NOT NULL REFERENCES public.compagnies(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  heures_vol_compagnie_minutes INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (compagnie_id, user_id)
-);
+-- Prix et capacités avions
+ALTER TABLE public.types_avion
+  ADD COLUMN IF NOT EXISTS prix INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS capacite_pax INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS capacite_cargo_kg INTEGER NOT NULL DEFAULT 0;
 
--- IMPORTANT: Si la table existait déjà, elle pourrait ne pas avoir la colonne heures_vol_compagnie_minutes
--- L'ajouter explicitement si elle n'existe pas
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-    AND table_name = 'compagnies_employes' 
-    AND column_name = 'heures_vol_compagnie_minutes'
-  ) THEN
-    BEGIN
-      ALTER TABLE public.compagnies_employes 
-        ADD COLUMN heures_vol_compagnie_minutes INTEGER NOT NULL DEFAULT 0;
-    EXCEPTION WHEN duplicate_column THEN NULL; END;
-  END IF;
-END $$;
+-- Plans de vol commerciaux
+ALTER TABLE public.plans_vol
+  ADD COLUMN IF NOT EXISTS vol_commercial BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS compagnie_id UUID REFERENCES public.compagnies(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS route_ifr TEXT,
+  ADD COLUMN IF NOT EXISTS note_atc TEXT,
+  ADD COLUMN IF NOT EXISTS nature_transport TEXT CHECK (nature_transport IN ('passagers', 'cargo')),
+  ADD COLUMN IF NOT EXISTS nb_pax_genere INTEGER,
+  ADD COLUMN IF NOT EXISTS cargo_kg_genere INTEGER,
+  ADD COLUMN IF NOT EXISTS revenue_brut INTEGER,
+  ADD COLUMN IF NOT EXISTS taxes_montant INTEGER,
+  ADD COLUMN IF NOT EXISTS revenue_net INTEGER,
+  ADD COLUMN IF NOT EXISTS salaire_pilote INTEGER;
 
-CREATE INDEX IF NOT EXISTS idx_compagnies_employes_user ON public.compagnies_employes(user_id);
-CREATE INDEX IF NOT EXISTS idx_compagnies_employes_compagnie ON public.compagnies_employes(compagnie_id);
-
--- Compagnies - Avions assignés
-CREATE TABLE IF NOT EXISTS public.compagnies_avions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  compagnie_id UUID NOT NULL REFERENCES public.compagnies(id) ON DELETE CASCADE,
-  type_avion_id UUID NOT NULL REFERENCES public.types_avion(id) ON DELETE CASCADE,
-  quantite INTEGER NOT NULL DEFAULT 1,
-  capacite_passagers INTEGER,
-  capacite_cargo_kg INTEGER,
-  nom_avion TEXT,
-  prix_billet_base DECIMAL(10, 2),
-  prix_cargo_kg DECIMAL(10, 2),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_compagnies_avions_compagnie ON public.compagnies_avions(compagnie_id);
-CREATE INDEX IF NOT EXISTS idx_compagnies_avions_type ON public.compagnies_avions(type_avion_id);
-
--- Avions en utilisation (plans de vol)
-CREATE TABLE IF NOT EXISTS public.avions_utilisation (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  compagnie_avion_id UUID NOT NULL REFERENCES public.compagnies_avions(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Ajouter la colonne plan_vol_id si elle n'existe pas, puis la contrainte de clé étrangère si plans_vol existe
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'avions_utilisation') THEN
-    -- Ajouter la colonne si elle n'existe pas (nullable d'abord pour éviter erreur si table a des lignes)
-    IF NOT EXISTS (
-      SELECT 1 FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-      AND table_name = 'avions_utilisation' 
-      AND column_name = 'plan_vol_id'
-    ) THEN
-      -- Ajouter d'abord comme nullable pour éviter erreur si table a des lignes
-      ALTER TABLE public.avions_utilisation ADD COLUMN plan_vol_id UUID;
-      -- Note: Si vous voulez NOT NULL, vous devrez d'abord backfill les données existantes
-      -- puis faire: ALTER TABLE public.avions_utilisation ALTER COLUMN plan_vol_id SET NOT NULL;
-    END IF;
-    
-    -- Ajouter la contrainte si plans_vol existe
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'plans_vol') THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints 
-        WHERE constraint_name = 'avions_utilisation_plan_vol_id_fkey' 
-        AND table_name = 'avions_utilisation'
-      ) THEN
-        ALTER TABLE public.avions_utilisation
-          ADD CONSTRAINT avions_utilisation_plan_vol_id_fkey 
-          FOREIGN KEY (plan_vol_id) REFERENCES public.plans_vol(id) ON DELETE CASCADE;
-      END IF;
-    END IF;
-    
-    -- Ajouter la contrainte UNIQUE si elle n'existe pas et si les colonnes existent
-    IF EXISTS (
-      SELECT 1 FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-      AND table_name = 'avions_utilisation' 
-      AND column_name = 'compagnie_avion_id'
-    ) AND EXISTS (
-      SELECT 1 FROM information_schema.columns 
-      WHERE table_schema = 'public' 
-      AND table_name = 'avions_utilisation' 
-      AND column_name = 'plan_vol_id'
-    ) THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints 
-        WHERE constraint_name = 'avions_utilisation_compagnie_avion_id_plan_vol_id_key' 
-        AND table_name = 'avions_utilisation'
-      ) THEN
-        ALTER TABLE public.avions_utilisation
-          ADD CONSTRAINT avions_utilisation_compagnie_avion_id_plan_vol_id_key 
-          UNIQUE (compagnie_avion_id, plan_vol_id);
-      END IF;
-    END IF;
-  END IF;
-END $$;
-
-CREATE INDEX IF NOT EXISTS idx_avions_utilisation_compagnie_avion ON public.avions_utilisation(compagnie_avion_id);
-CREATE INDEX IF NOT EXISTS idx_avions_utilisation_plan_vol ON public.avions_utilisation(plan_vol_id);
-
--- Inventaire personnel (avions achetés par les pilotes)
-CREATE TABLE IF NOT EXISTS public.inventaire_pilote (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  type_avion_id UUID NOT NULL REFERENCES public.types_avion(id) ON DELETE CASCADE,
-  nom_avion TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_inventaire_pilote_user ON public.inventaire_pilote(user_id);
-CREATE INDEX IF NOT EXISTS idx_inventaire_pilote_type ON public.inventaire_pilote(type_avion_id);
-
--- Marketplace - Prix des avions
-CREATE TABLE IF NOT EXISTS public.marketplace_avions (
-  type_avion_id UUID PRIMARY KEY REFERENCES public.types_avion(id) ON DELETE CASCADE,
-  prix DECIMAL(15, 2) NOT NULL,
-  version_cargo BOOLEAN NOT NULL DEFAULT false,
-  capacite_cargo_kg INTEGER,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Ajouter la colonne version_cargo si elle n'existe pas déjà
-DO $$
-BEGIN
-  ALTER TABLE public.marketplace_avions ADD COLUMN IF NOT EXISTS version_cargo BOOLEAN NOT NULL DEFAULT false;
-EXCEPTION WHEN duplicate_column THEN NULL;
-END $$;
-
--- Taxes aéroportuaires
-CREATE TABLE IF NOT EXISTS public.taxes_aeroports (
-  code_aeroport TEXT PRIMARY KEY,
-  taxe_base_pourcent DECIMAL(5, 2) NOT NULL DEFAULT 2.0,
-  taxe_vfr_pourcent DECIMAL(5, 2) NOT NULL DEFAULT 5.0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Plans de vol - Route IFR et note ATC
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'plans_vol') THEN
-    ALTER TABLE public.plans_vol
-      ADD COLUMN IF NOT EXISTS route_ifr TEXT,
-      ADD COLUMN IF NOT EXISTS note_atc TEXT,
-      ADD COLUMN IF NOT EXISTS vol_commercial BOOLEAN NOT NULL DEFAULT false,
-      ADD COLUMN IF NOT EXISTS compagnie_id UUID,
-      ADD COLUMN IF NOT EXISTS nature_cargo TEXT,
-      ADD COLUMN IF NOT EXISTS nombre_passagers INTEGER,
-      ADD COLUMN IF NOT EXISTS cargo_kg INTEGER,
-      ADD COLUMN IF NOT EXISTS revenue_total DECIMAL(15, 2),
-      ADD COLUMN IF NOT EXISTS taxes_aeroportuaires DECIMAL(15, 2),
-      ADD COLUMN IF NOT EXISTS revenue_effectif DECIMAL(15, 2),
-      ADD COLUMN IF NOT EXISTS salaire_pilote DECIMAL(15, 2),
-      ADD COLUMN IF NOT EXISTS compagnie_avion_id UUID,
-      ADD COLUMN IF NOT EXISTS inventaire_avion_id UUID,
-      ADD COLUMN IF NOT EXISTS type_avion_id UUID,
-      ADD COLUMN IF NOT EXISTS cloture_at TIMESTAMPTZ;
-  END IF;
-END $$;
-
--- Ajouter les contraintes de clés étrangères pour plans_vol si les tables référencées existent
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'plans_vol') THEN
-    -- Contrainte pour compagnie_id
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'compagnies') THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints 
-        WHERE constraint_name = 'plans_vol_compagnie_id_fkey' 
-        AND table_name = 'plans_vol'
-      ) THEN
-        ALTER TABLE public.plans_vol
-          ADD CONSTRAINT plans_vol_compagnie_id_fkey 
-          FOREIGN KEY (compagnie_id) REFERENCES public.compagnies(id) ON DELETE SET NULL;
-      END IF;
-    END IF;
-    
-    -- Contrainte pour compagnie_avion_id
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'compagnies_avions') THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints 
-        WHERE constraint_name = 'plans_vol_compagnie_avion_id_fkey' 
-        AND table_name = 'plans_vol'
-      ) THEN
-        ALTER TABLE public.plans_vol
-          ADD CONSTRAINT plans_vol_compagnie_avion_id_fkey 
-          FOREIGN KEY (compagnie_avion_id) REFERENCES public.compagnies_avions(id) ON DELETE SET NULL;
-      END IF;
-    END IF;
-    
-    -- Contrainte pour inventaire_avion_id
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'inventaire_pilote') THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints 
-        WHERE constraint_name = 'plans_vol_inventaire_avion_id_fkey' 
-        AND table_name = 'plans_vol'
-      ) THEN
-        ALTER TABLE public.plans_vol
-          ADD CONSTRAINT plans_vol_inventaire_avion_id_fkey 
-          FOREIGN KEY (inventaire_avion_id) REFERENCES public.inventaire_pilote(id) ON DELETE SET NULL;
-      END IF;
-    END IF;
-    
-    -- Contrainte pour type_avion_id
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'types_avion') THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints 
-        WHERE constraint_name = 'plans_vol_type_avion_id_fkey' 
-        AND table_name = 'plans_vol'
-      ) THEN
-        ALTER TABLE public.plans_vol
-          ADD CONSTRAINT plans_vol_type_avion_id_fkey 
-          FOREIGN KEY (type_avion_id) REFERENCES public.types_avion(id) ON DELETE SET NULL;
-      END IF;
-    END IF;
-  END IF;
-END $$;
-
--- Créer l'index sur compagnie_id après avoir ajouté la colonne
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-    AND table_name = 'plans_vol' 
-    AND column_name = 'compagnie_id'
-  ) THEN
-    CREATE INDEX IF NOT EXISTS idx_plans_vol_compagnie ON public.plans_vol(compagnie_id) WHERE compagnie_id IS NOT NULL;
-  END IF;
-END $$;
-
--- Messagerie
-CREATE TABLE IF NOT EXISTS public.messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  titre TEXT NOT NULL,
-  contenu TEXT NOT NULL,
-  lu BOOLEAN NOT NULL DEFAULT false,
-  type TEXT NOT NULL DEFAULT 'info' CHECK (type IN ('info', 'cloture_vol', 'virement', 'achat', 'autre')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Ajouter la colonne plan_vol_id si elle n'existe pas, puis la contrainte de clé étrangère si plans_vol existe
-DO $$
-BEGIN
-  -- Ajouter la colonne si elle n'existe pas
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' 
-    AND table_name = 'messages' 
-    AND column_name = 'plan_vol_id'
-  ) THEN
-    ALTER TABLE public.messages ADD COLUMN plan_vol_id UUID;
-  END IF;
-  
-  -- Ajouter la contrainte si plans_vol existe
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'plans_vol') THEN
-    IF NOT EXISTS (
-      SELECT 1 FROM information_schema.table_constraints 
-      WHERE constraint_name = 'messages_plan_vol_id_fkey' 
-      AND table_name = 'messages'
-    ) THEN
-      ALTER TABLE public.messages
-        ADD CONSTRAINT messages_plan_vol_id_fkey 
-        FOREIGN KEY (plan_vol_id) REFERENCES public.plans_vol(id) ON DELETE SET NULL;
-    END IF;
-  END IF;
-END $$;
-
-CREATE INDEX IF NOT EXISTS idx_messages_user ON public.messages(user_id);
-CREATE INDEX IF NOT EXISTS idx_messages_lu ON public.messages(lu) WHERE lu = false;
-
--- RLS
-ALTER TABLE public.felitz_comptes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.felitz_transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.felitz_virements ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.compagnies_employes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.compagnies_avions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.avions_utilisation ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.inventaire_pilote ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.marketplace_avions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.taxes_aeroports ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-
--- Policies Felitz comptes
-DROP POLICY IF EXISTS "felitz_comptes_select_self" ON public.felitz_comptes;
-CREATE POLICY "felitz_comptes_select_self" ON public.felitz_comptes FOR SELECT TO authenticated
-  USING (user_id = (SELECT auth.uid()) OR EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
-DROP POLICY IF EXISTS "felitz_comptes_select_pdg" ON public.felitz_comptes;
-CREATE POLICY "felitz_comptes_select_pdg" ON public.felitz_comptes FOR SELECT TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.compagnies c
-      WHERE c.id = felitz_comptes.compagnie_id AND c.pdg_id = (SELECT auth.uid())
-    )
-  );
-
--- Policies Felitz transactions
-DROP POLICY IF EXISTS "felitz_transactions_select_self" ON public.felitz_transactions;
-CREATE POLICY "felitz_transactions_select_self" ON public.felitz_transactions FOR SELECT TO authenticated
-  USING (
-    EXISTS (SELECT 1 FROM public.felitz_comptes WHERE id = felitz_transactions.compte_id AND user_id = (SELECT auth.uid()))
-    OR EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin')
-  );
-
--- Policies Felitz virements
-DROP POLICY IF EXISTS "felitz_virements_select_self" ON public.felitz_virements;
-CREATE POLICY "felitz_virements_select_self" ON public.felitz_virements FOR SELECT TO authenticated
-  USING (
-    EXISTS (SELECT 1 FROM public.felitz_comptes WHERE id = felitz_virements.compte_emetteur_id AND user_id = (SELECT auth.uid()))
-    OR EXISTS (SELECT 1 FROM public.felitz_comptes WHERE id = felitz_virements.compte_destinataire_id AND user_id = (SELECT auth.uid()))
-    OR EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin')
-  );
-DROP POLICY IF EXISTS "felitz_virements_insert_self" ON public.felitz_virements;
-CREATE POLICY "felitz_virements_insert_self" ON public.felitz_virements FOR INSERT TO authenticated
-  WITH CHECK (
-    EXISTS (SELECT 1 FROM public.felitz_comptes WHERE id = felitz_virements.compte_emetteur_id AND user_id = (SELECT auth.uid()))
-  );
-
--- Policies compagnies employés
-DROP POLICY IF EXISTS "compagnies_employes_select" ON public.compagnies_employes;
-CREATE POLICY "compagnies_employes_select" ON public.compagnies_employes FOR SELECT TO authenticated USING (true);
-DROP POLICY IF EXISTS "compagnies_employes_all_admin" ON public.compagnies_employes;
-CREATE POLICY "compagnies_employes_all_admin" ON public.compagnies_employes FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'))
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
-
--- Policies compagnies avions
-DROP POLICY IF EXISTS "compagnies_avions_select" ON public.compagnies_avions;
-CREATE POLICY "compagnies_avions_select" ON public.compagnies_avions FOR SELECT TO authenticated USING (true);
-DROP POLICY IF EXISTS "compagnies_avions_all_admin" ON public.compagnies_avions;
-CREATE POLICY "compagnies_avions_all_admin" ON public.compagnies_avions FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'))
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
-DROP POLICY IF EXISTS "compagnies_avions_update_pdg" ON public.compagnies_avions;
-CREATE POLICY "compagnies_avions_update_pdg" ON public.compagnies_avions FOR UPDATE TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.compagnies c
-      WHERE c.id = compagnies_avions.compagnie_id AND c.pdg_id = (SELECT auth.uid())
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.compagnies c
-      WHERE c.id = compagnies_avions.compagnie_id AND c.pdg_id = (SELECT auth.uid())
-    )
-  );
-
--- Policies inventaire pilote
-DROP POLICY IF EXISTS "inventaire_pilote_select_self" ON public.inventaire_pilote;
-CREATE POLICY "inventaire_pilote_select_self" ON public.inventaire_pilote FOR SELECT TO authenticated
-  USING (user_id = (SELECT auth.uid()) OR EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
-DROP POLICY IF EXISTS "inventaire_pilote_insert_self" ON public.inventaire_pilote;
-CREATE POLICY "inventaire_pilote_insert_self" ON public.inventaire_pilote FOR INSERT TO authenticated
-  WITH CHECK (user_id = (SELECT auth.uid()));
-DROP POLICY IF EXISTS "inventaire_pilote_delete_self" ON public.inventaire_pilote;
-CREATE POLICY "inventaire_pilote_delete_self" ON public.inventaire_pilote FOR DELETE TO authenticated
-  USING (user_id = (SELECT auth.uid()));
-
--- Policies marketplace
-DROP POLICY IF EXISTS "marketplace_avions_select" ON public.marketplace_avions;
-CREATE POLICY "marketplace_avions_select" ON public.marketplace_avions FOR SELECT TO authenticated USING (true);
-DROP POLICY IF EXISTS "marketplace_avions_all_admin" ON public.marketplace_avions;
-CREATE POLICY "marketplace_avions_all_admin" ON public.marketplace_avions FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'))
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
-
--- Policies taxes aéroports
-DROP POLICY IF EXISTS "taxes_aeroports_select" ON public.taxes_aeroports;
-CREATE POLICY "taxes_aeroports_select" ON public.taxes_aeroports FOR SELECT TO authenticated USING (true);
-DROP POLICY IF EXISTS "taxes_aeroports_all_admin" ON public.taxes_aeroports;
-CREATE POLICY "taxes_aeroports_all_admin" ON public.taxes_aeroports FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'))
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
-
--- Initialiser les taxes par défaut pour tous les aéroports PTFS
--- Valeurs par défaut: taxe_base_pourcent = 2.0%, taxe_vfr_pourcent = 5.0%
-DO $$
-DECLARE
-  codes_aeroports TEXT[] := ARRAY[
-    'IBAR', 'IHEN', 'ILAR', 'IIAB', 'IPAP', 'IGRV', 'IJAF', 'IZOL', 'ISCM', 'IBRD',
-    'IDCS', 'ITKO', 'ILKL', 'IPPH', 'IGAR', 'IBLT', 'IRFD', 'IMLR', 'ITRC', 'IBTH',
-    'IUFO', 'ISAU', 'ISKP'
-  ];
-  code_aeroport_var TEXT;
-BEGIN
-  FOREACH code_aeroport_var IN ARRAY codes_aeroports
-  LOOP
-    -- Insérer uniquement si l'aéroport n'existe pas déjà
-    INSERT INTO public.taxes_aeroports (code_aeroport, taxe_base_pourcent, taxe_vfr_pourcent)
-    VALUES (code_aeroport_var, 2.0, 5.0)
-    ON CONFLICT (code_aeroport) DO NOTHING;
-  END LOOP;
-END $$;
-
--- Policies messages
-DROP POLICY IF EXISTS "messages_select_self" ON public.messages;
-CREATE POLICY "messages_select_self" ON public.messages FOR SELECT TO authenticated
-  USING (user_id = (SELECT auth.uid()));
--- Policy pour insertion système: seulement les admins peuvent insérer des messages
--- Note: Pour les insertions système (service_role), utilisez le service_role key qui bypass RLS
-DROP POLICY IF EXISTS "messages_insert_system" ON public.messages;
-CREATE POLICY "messages_insert_system" ON public.messages FOR INSERT TO authenticated
-  WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = (SELECT auth.uid()) AND role = 'admin'));
-DROP POLICY IF EXISTS "messages_update_self" ON public.messages;
-CREATE POLICY "messages_update_self" ON public.messages FOR UPDATE TO authenticated
-  USING (user_id = (SELECT auth.uid()))
-  WITH CHECK (user_id = (SELECT auth.uid()));
+-- Pour les tables complètes (felitz_comptes, felitz_transactions, etc.)
+-- exécuter supabase/add_felitz_bank_system.sql

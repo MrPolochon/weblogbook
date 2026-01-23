@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Plane } from 'lucide-react';
 import DepotPlanVolForm from './DepotPlanVolForm';
 
 export default async function DepotPlanVolPage() {
@@ -11,44 +12,64 @@ export default async function DepotPlanVolPage() {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   if (profile?.role === 'atc') redirect('/logbook');
 
-  const [{ data: employes }, { data: inventairePersonnel }, { data: typesAvion }] = await Promise.all([
-    supabase.from('compagnies_employes').select('compagnie_id, compagnies(id, nom)').eq('user_id', user.id),
-    supabase
-      .from('inventaire_pilote')
-      .select('id, type_avion_id, nom_avion, types_avion(nom, constructeur)')
-      .eq('user_id', user.id),
-    supabase.from('types_avion').select('id, nom, constructeur').order('ordre'),
-  ]);
+  const admin = createAdminClient();
 
-  // Normaliser les compagnies
-  const compagnies = (employes || []).map((e: any) => ({
-    id: e.compagnie_id,
-    nom: (e.compagnies as any)?.nom || 'Compagnie',
+  // Récupérer l'emploi du pilote (s'il est employé dans une compagnie)
+  const { data: emploi } = await admin.from('compagnie_employes')
+    .select('compagnie_id, compagnies(id, nom, prix_billet_pax, prix_kg_cargo, pourcentage_salaire)')
+    .eq('pilote_id', user.id)
+    .single();
+
+  // Récupérer la flotte de la compagnie si employé
+  let flotteCompagnie: Array<{
+    id: string;
+    type_avion_id: string;
+    quantite: number;
+    disponibles: number;
+    nom_personnalise: string | null;
+    capacite_pax_custom: number | null;
+    capacite_cargo_custom: number | null;
+    types_avion: { id: string; nom: string; code_oaci: string | null; capacite_pax: number; capacite_cargo_kg: number } | null;
+  }> = [];
+  if (emploi?.compagnie_id) {
+    const { data: flotte } = await admin.from('compagnie_flotte')
+      .select('*, types_avion(id, nom, code_oaci, capacite_pax, capacite_cargo_kg)')
+      .eq('compagnie_id', emploi.compagnie_id);
+    
+    // Calculer la disponibilité
+    flotteCompagnie = await Promise.all((flotte || []).map(async (item) => {
+      const { count } = await admin.from('plans_vol')
+        .select('*', { count: 'exact', head: true })
+        .eq('flotte_avion_id', item.id)
+        .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
+      
+      return {
+        ...item,
+        disponibles: item.quantite - (count || 0)
+      };
+    }));
+  }
+
+  // Récupérer l'inventaire personnel
+  const { data: inventaireData } = await admin.from('inventaire_avions')
+    .select('*, types_avion(id, nom, code_oaci, capacite_pax, capacite_cargo_kg)')
+    .eq('proprietaire_id', user.id);
+
+  // Vérifier disponibilité
+  const inventairePersonnel = await Promise.all((inventaireData || []).map(async (item) => {
+    const { count } = await admin.from('plans_vol')
+      .select('*', { count: 'exact', head: true })
+      .eq('inventaire_avion_id', item.id)
+      .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
+    
+    return {
+      ...item,
+      disponible: (count || 0) === 0
+    };
   }));
 
-  // Si une seule compagnie, la sélectionner par défaut
-  const compagnieParDefaut = compagnies.length === 1 ? compagnies[0] : null;
-
-  // Récupérer les avions de la compagnie par défaut si elle existe
-  let avionsCompagnieParDefaut: { data: any[] | null } = { data: null };
-  if (compagnieParDefaut) {
-    const result = await supabase
-      .from('compagnies_avions')
-      .select('id, type_avion_id, quantite, nom_avion, types_avion(nom, constructeur)')
-      .eq('compagnie_id', compagnieParDefaut.id);
-    avionsCompagnieParDefaut = result;
-
-    const { data: avionsUtilises } = await supabase
-      .from('avions_utilisation')
-      .select('compagnie_avion_id')
-      .in('compagnie_avion_id', (avionsCompagnieParDefaut?.data || []).map((a: any) => a.id));
-
-    const avionsDisponibles = (avionsCompagnieParDefaut.data || []).filter((a: any) => {
-      const utilise = (avionsUtilises || []).some((u: any) => u.compagnie_avion_id === a.id);
-      return !utilise;
-    });
-    avionsCompagnieParDefaut.data = avionsDisponibles;
-  }
+  // Compagnie info
+  const compagnie = emploi?.compagnies as { id: string; nom: string; prix_billet_pax: number; prix_kg_cargo: number; pourcentage_salaire: number } | null;
 
   return (
     <div className="space-y-6">
@@ -56,22 +77,15 @@ export default async function DepotPlanVolPage() {
         <Link href="/logbook" className="text-slate-400 hover:text-slate-200">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="text-2xl font-semibold text-slate-100">Déposer un plan de vol</h1>
+        <h1 className="text-2xl font-semibold text-slate-100 flex items-center gap-3">
+          <Plane className="h-7 w-7 text-sky-400" />
+          Déposer un plan de vol
+        </h1>
       </div>
-      <DepotPlanVolForm
-        compagnies={compagnies}
-        compagnieParDefaut={compagnieParDefaut?.id || null}
-        avionsCompagnieParDefaut={(avionsCompagnieParDefaut.data || []).map((a: any) => ({
-          id: a.id,
-          typeAvionId: a.type_avion_id,
-          nom: a.nom_avion || `${(a.types_avion as any).constructeur} ${(a.types_avion as any).nom}`,
-        }))}
-        inventairePersonnel={(inventairePersonnel || []).map((a: any) => ({
-          id: a.id,
-          typeAvionId: a.type_avion_id,
-          nom: a.nom_avion || `${(a.types_avion as any).constructeur} ${(a.types_avion as any).nom}`,
-        }))}
-        typesAvion={(typesAvion || []).map((t) => ({ id: t.id, nom: `${t.constructeur} ${t.nom}` }))}
+      <DepotPlanVolForm 
+        compagnie={compagnie}
+        flotteCompagnie={flotteCompagnie}
+        inventairePersonnel={inventairePersonnel}
       />
     </div>
   );

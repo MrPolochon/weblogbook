@@ -1,0 +1,125 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Plus, Minus, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+
+interface Compte {
+  id: string;
+  vban: string;
+  solde: number;
+}
+
+interface Props {
+  compte: Compte;
+  label: string;
+  type: 'personnel' | 'entreprise';
+}
+
+export default function AdminFelitzClient({ compte, label, type }: Props) {
+  const router = useRouter();
+  const [expanded, setExpanded] = useState(false);
+  const [montant, setMontant] = useState('');
+  const [libelle, setLibelle] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleTransaction(transactionType: 'credit' | 'debit') {
+    if (!montant || parseInt(montant) <= 0) return;
+    
+    setError('');
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/felitz/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          compte_id: compte.id,
+          type: transactionType,
+          montant: parseInt(montant),
+          libelle: libelle.trim() || (transactionType === 'credit' ? 'Crédit admin' : 'Débit admin')
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+
+      setMontant('');
+      setLibelle('');
+      setExpanded(false);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className={`bg-slate-800/50 rounded-lg border ${type === 'entreprise' ? 'border-sky-500/30' : 'border-emerald-500/30'}`}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full p-3 flex items-center justify-between text-left"
+      >
+        <div>
+          <p className="font-medium text-slate-200">{label}</p>
+          <p className="text-xs text-slate-500 font-mono truncate max-w-[200px]">{compte.vban}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`font-bold ${compte.solde >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+            {compte.solde.toLocaleString('fr-FR')} F$
+          </span>
+          {expanded ? (
+            <ChevronUp className="h-4 w-4 text-slate-400" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-slate-400" />
+          )}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="px-3 pb-3 border-t border-slate-700/50 pt-3 space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input
+              type="number"
+              value={montant}
+              onChange={(e) => setMontant(e.target.value)}
+              placeholder="Montant"
+              min="1"
+              className="input text-sm"
+            />
+            <input
+              type="text"
+              value={libelle}
+              onChange={(e) => setLibelle(e.target.value)}
+              placeholder="Libellé (optionnel)"
+              className="input text-sm"
+            />
+          </div>
+          
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleTransaction('credit')}
+              disabled={loading || !montant || parseInt(montant) <= 0}
+              className="flex-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1"
+            >
+              {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+              Créditer
+            </button>
+            <button
+              onClick={() => handleTransaction('debit')}
+              disabled={loading || !montant || parseInt(montant) <= 0}
+              className="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1"
+            >
+              {loading ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Minus className="h-3 w-3" />}
+              Débiter
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     if (!identifiant || typeof identifiant !== 'string' || !password || typeof password !== 'string') {
       return NextResponse.json({ error: 'Identifiant et mot de passe requis' }, { status: 400 });
     }
-    const role = roleParam === 'admin' ? 'admin' : roleParam === 'atc' ? 'atc' : roleParam === 'ifsa' ? 'ifsa' : 'pilote';
+    const role = roleParam === 'admin' ? 'admin' : 'pilote';
     const armee = Boolean(armeeParam);
     const atc = Boolean(atcParam);
     const id = String(identifiant).trim().toLowerCase();

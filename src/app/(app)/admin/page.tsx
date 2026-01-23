@@ -1,17 +1,17 @@
 import Link from 'next/link';
-import { Users, Clock, Building2, Plane, FileText, Shield, Award, ShoppingCart, MapPin, Wallet } from 'lucide-react';
+import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus } from 'lucide-react';
 
 const links = [
   { href: '/admin/vols', label: 'Vols en attente', icon: Clock },
   { href: '/admin/militaire', label: 'Vols militaires', icon: Shield },
   { href: '/admin/pilotes', label: 'Pilotes', icon: Users },
   { href: '/admin/compagnies', label: 'Compagnies', icon: Building2 },
-  { href: '/admin/types-avion', label: 'Types d\'avion', icon: Plane },
+  { href: '/admin/employes', label: 'Employés compagnies', icon: UserPlus },
+  { href: '/admin/types-avion', label: 'Types d\'avion & Prix', icon: Plane },
+  { href: '/admin/taxes', label: 'Taxes aéroportuaires', icon: Receipt },
+  { href: '/admin/felitz-bank', label: 'Felitz Bank Admin', icon: Landmark },
   { href: '/admin/documents', label: 'Documents', icon: FileText },
   { href: '/admin/licences', label: 'Licences et qualifications', icon: Award },
-  { href: '/admin/marketplace', label: 'Marketplace', icon: ShoppingCart },
-  { href: '/admin/taxes-aeroports', label: 'Taxes aéroports', icon: MapPin },
-  { href: '/admin/felitz-comptes', label: 'Comptes Felitz Bank', icon: Wallet },
 ];
 
 export default function AdminPage() {

@@ -1,15 +1,36 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText } from 'lucide-react';
+import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
-import FelitzBankMenu from './FelitzBankMenu';
 
-export default function NavBar({ isAdmin, isArmee = false, pendingVolsCount = 0, volsAConfirmerCount = 0 }: { isAdmin: boolean; isArmee?: boolean; pendingVolsCount?: number; volsAConfirmerCount?: number }) {
+interface NavBarProps {
+  isAdmin: boolean;
+  isArmee?: boolean;
+  isPdg?: boolean;
+  hasCompagnie?: boolean;
+  pendingVolsCount?: number;
+  volsAConfirmerCount?: number;
+}
+
+export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, pendingVolsCount = 0, volsAConfirmerCount = 0 }: NavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [piloteMenuOpen, setPiloteMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setPiloteMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -18,30 +39,74 @@ export default function NavBar({ isAdmin, isArmee = false, pendingVolsCount = 0,
     router.refresh();
   }
 
+  const piloteMenuItems = [
+    { href: '/logbook', label: 'Mon logbook', icon: BookOpen },
+    { href: '/logbook/depot-plan-vol', label: 'Déposer un plan de vol', icon: Plane },
+    { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText },
+    ...(hasCompagnie ? [{ href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2 }] : []),
+    ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield }] : []),
+    { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark },
+    { href: '/marketplace', label: 'Marketplace', icon: Package },
+    { href: '/inventaire', label: 'Mon inventaire', icon: Plane },
+  ];
+
+  const isPiloteActive = pathname.startsWith('/logbook') || pathname.startsWith('/militaire') || 
+    pathname.startsWith('/felitz-bank') || pathname.startsWith('/ma-compagnie') ||
+    pathname.startsWith('/marketplace') || pathname.startsWith('/inventaire');
+
   return (
     <header className="sticky top-0 z-50 border-b border-slate-700/50 bg-slate-900/95 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
         <nav className="flex items-center gap-1">
-          <Link
-            href="/logbook"
-            className={cn(
-              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
-              pathname.startsWith('/logbook')
-                ? 'bg-slate-700/50 text-sky-300'
-                : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+          {/* Menu déroulant Espace Pilote */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setPiloteMenuOpen(!piloteMenuOpen)}
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
+                isPiloteActive
+                  ? 'bg-slate-700/50 text-sky-300'
+                  : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+              )}
+            >
+              <Plane className="h-4 w-4" />
+              Espace Pilote
+              <ChevronDown className={cn('h-4 w-4 transition-transform', piloteMenuOpen && 'rotate-180')} />
+              {volsAConfirmerCount > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white ring-2 ring-slate-900"
+                  title={`${volsAConfirmerCount} vol(s) à confirmer`}
+                >
+                  {volsAConfirmerCount > 99 ? '99+' : volsAConfirmerCount}
+                </span>
+              )}
+            </button>
+            
+            {piloteMenuOpen && (
+              <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl z-50">
+                {piloteMenuItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setPiloteMenuOpen(false)}
+                      className={cn(
+                        'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
+                        pathname === item.href || (item.href !== '/logbook' && pathname.startsWith(item.href))
+                          ? 'bg-slate-700/50 text-sky-300'
+                          : 'text-slate-300 hover:bg-slate-700/30 hover:text-slate-100'
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
             )}
-          >
-            <BookOpen className="h-4 w-4" />
-            Mon logbook
-            {volsAConfirmerCount > 0 && (
-              <span
-                className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white ring-2 ring-slate-900"
-                title={`${volsAConfirmerCount} vol(s) à confirmer (vous avez été indiqué comme pilote ou co-pilote)`}
-              >
-                {volsAConfirmerCount > 99 ? '99+' : volsAConfirmerCount}
-              </span>
-            )}
-          </Link>
+          </div>
+
           {volsAConfirmerCount > 0 && (
             <Link
               href="/logbook/a-confirmer"
@@ -56,20 +121,7 @@ export default function NavBar({ isAdmin, isArmee = false, pendingVolsCount = 0,
               </span>
             </Link>
           )}
-          {(isArmee || isAdmin) && (
-            <Link
-              href="/militaire"
-              className={cn(
-                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                pathname.startsWith('/militaire')
-                  ? 'bg-slate-700/50 text-sky-300'
-                  : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
-              )}
-            >
-              <Shield className="h-4 w-4" />
-              Espace militaire
-            </Link>
-          )}
+
           {isAdmin && (
             <Link
               href="/admin"
@@ -116,7 +168,6 @@ export default function NavBar({ isAdmin, isArmee = false, pendingVolsCount = 0,
             <ScrollText className="h-4 w-4" />
             NOTAMs
           </Link>
-          <FelitzBankMenu />
         </nav>
         <div className="flex items-center gap-2">
           {isAdmin && (

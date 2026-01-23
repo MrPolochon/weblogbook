@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol (par aéroport) :
-// Delivery et Clairance d’abord ; si les deux sont hors ligne, Ground peut accepter ;
+// Delivery et Clairance d'abord ; si les deux sont hors ligne, Ground peut accepter ;
 // si Ground est hors ligne, Tower ; puis DEP, APP, Center.
 const ORDRE_ACCEPTATION_PLANS = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
 
@@ -17,25 +17,13 @@ export async function POST(request: Request) {
     if (profile?.role === 'atc') return NextResponse.json({ error: 'Compte ATC uniquement : dépôt de plan depuis l\'espace pilote impossible.' }, { status: 403 });
 
     const body = await request.json();
-    const {
-      aeroport_depart,
-      aeroport_arrivee,
-      numero_vol,
-      porte,
-      temps_prev_min,
-      type_vol,
-      intentions_vol,
-      sid_depart,
-      star_arrivee,
-      route_ifr,
-      note_atc,
-      vol_commercial,
-      compagnie_id,
-      nature_cargo,
-      compagnie_avion_id,
-      inventaire_avion_id,
-      type_avion_id,
+    const { 
+      aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, 
+      intentions_vol, sid_depart, star_arrivee, route_ifr, note_atc,
+      vol_commercial, compagnie_id, nature_transport, flotte_avion_id, inventaire_avion_id,
+      nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote
     } = body;
+    
     const ad = String(aeroport_depart || '').toUpperCase();
     const aa = String(aeroport_arrivee || '').toUpperCase();
     if (!CODES_OACI_VALIDES.has(ad) || !CODES_OACI_VALIDES.has(aa)) return NextResponse.json({ error: 'Aéroports invalides.' }, { status: 400 });
@@ -64,62 +52,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Aucune fréquence ATC de votre aéroport de départ ou d\'arrivée est en ligne, votre vol doit être effectué sans plan de vol.' }, { status: 400 });
     }
 
-    let compagnieAvionId: string | null = null;
-    let inventaireAvionId: string | null = null;
-    let typeAvionIdFinal: string | null = null;
-
-    if (compagnie_avion_id) {
-      const { data: avionComp } = await admin.from('compagnies_avions').select('id, quantite').eq('id', compagnie_avion_id).single();
-      if (!avionComp) return NextResponse.json({ error: 'Avion compagnie introuvable' }, { status: 400 });
-
-      const { count } = await admin
-        .from('avions_utilisation')
-        .select('*', { count: 'exact', head: true })
-        .eq('compagnie_avion_id', compagnie_avion_id);
-      if ((count || 0) >= avionComp.quantite) {
-        return NextResponse.json({ error: 'Tous les avions de ce type sont déjà en utilisation' }, { status: 400 });
-      }
-
-      compagnieAvionId = compagnie_avion_id;
-    } else if (inventaire_avion_id) {
-      const { data: avionInv } = await supabase.from('inventaire_pilote').select('id').eq('id', inventaire_avion_id).eq('user_id', user.id).single();
-      if (!avionInv) return NextResponse.json({ error: 'Avion inventaire introuvable' }, { status: 400 });
-      inventaireAvionId = inventaire_avion_id;
-    } else if (type_avion_id) {
-      typeAvionIdFinal = type_avion_id;
-    } else {
-      return NextResponse.json({ error: 'Sélectionnez un avion' }, { status: 400 });
-    }
-
-    let compagnieIdFinal: string | null = null;
-    if (vol_commercial) {
-      if (compagnie_id) {
-        // Vérifier que l'utilisateur appartient bien à cette compagnie
-        const { data: employe } = await supabase
-          .from('compagnies_employes')
-          .select('compagnie_id')
-          .eq('user_id', user.id)
-          .eq('compagnie_id', compagnie_id)
-          .single();
-        if (!employe) {
-          return NextResponse.json({ error: 'Vous n\'appartenez pas à cette compagnie' }, { status: 403 });
-        }
-        compagnieIdFinal = compagnie_id;
-      } else {
-        // Si pas de compagnie_id fourni, utiliser la première compagnie de l'utilisateur
-        const { data: employe } = await supabase
-          .from('compagnies_employes')
-          .select('compagnie_id')
-          .eq('user_id', user.id)
-          .single();
-        if (!employe) {
-          return NextResponse.json({ error: 'Vous devez appartenir à une compagnie pour un vol commercial' }, { status: 400 });
-        }
-        compagnieIdFinal = employe.compagnie_id;
-      }
-    }
-
-    const row: any = {
+    const { data, error } = await admin.from('plans_vol').insert({
       pilote_id: user.id,
       aeroport_depart: ad,
       aeroport_arrivee: aa,
@@ -130,31 +63,24 @@ export async function POST(request: Request) {
       intentions_vol: type_vol === 'VFR' ? String(intentions_vol).trim() : null,
       sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,
       star_arrivee: type_vol === 'IFR' ? String(star_arrivee).trim() : null,
-      route_ifr: type_vol === 'IFR' && route_ifr ? String(route_ifr).trim() : null,
+      route_ifr: (type_vol === 'IFR' && route_ifr) ? String(route_ifr).trim() : null,
       note_atc: note_atc ? String(note_atc).trim() : null,
       vol_commercial: Boolean(vol_commercial),
-      compagnie_id: compagnieIdFinal,
-      nature_cargo: vol_commercial && nature_cargo ? String(nature_cargo).trim() : null,
-      compagnie_avion_id: compagnieAvionId,
-      inventaire_avion_id: inventaireAvionId,
-      type_avion_id: typeAvionIdFinal,
+      compagnie_id: vol_commercial && compagnie_id ? compagnie_id : null,
+      nature_transport: vol_commercial && nature_transport ? nature_transport : null,
+      flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : null,
+      inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
+      nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
+      cargo_kg_genere: vol_commercial ? (cargo_kg_genere || 0) : null,
+      revenue_brut: vol_commercial ? (revenue_brut || 0) : null,
+      salaire_pilote: vol_commercial ? (salaire_pilote || 0) : null,
       statut: 'en_attente',
       current_holder_user_id: holder.user_id,
       current_holder_position: holder.position,
       current_holder_aeroport: holder.aeroport,
-    };
-
-    const { data, error } = await supabase.from('plans_vol').insert(row).select('id').single();
+    }).select('id').single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-
-    if (compagnieAvionId) {
-      await admin.from('avions_utilisation').insert({
-        compagnie_avion_id: compagnieAvionId,
-        plan_vol_id: data.id,
-      });
-    }
-
     return NextResponse.json({ ok: true, id: data.id });
   } catch (e) {
     console.error('plans-vol POST:', e);
