@@ -21,7 +21,8 @@ export async function POST(request: Request) {
       aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, 
       intentions_vol, sid_depart, star_arrivee, route_ifr, note_atc,
       vol_commercial, compagnie_id, nature_transport, flotte_avion_id, inventaire_avion_id,
-      nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote
+      nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote, prix_billet_utilise,
+      vol_sans_atc
     } = body;
     
     const ad = String(aeroport_depart || '').toUpperCase();
@@ -38,6 +39,60 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
+    
+    // Si vol sans ATC, accepter automatiquement et mettre en autosurveillance
+    if (vol_sans_atc) {
+      const { data, error } = await admin.from('plans_vol').insert({
+        pilote_id: user.id,
+        aeroport_depart: ad,
+        aeroport_arrivee: aa,
+        numero_vol: String(numero_vol).trim(),
+        porte: (porte != null && String(porte).trim() !== '') ? String(porte).trim() : null,
+        temps_prev_min: t,
+        type_vol: String(type_vol),
+        intentions_vol: type_vol === 'VFR' ? String(intentions_vol).trim() : null,
+        sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,
+        star_arrivee: type_vol === 'IFR' ? String(star_arrivee).trim() : null,
+        route_ifr: (type_vol === 'IFR' && route_ifr) ? String(route_ifr).trim() : null,
+        note_atc: null, // Pas de note ATC pour les vols sans ATC
+        vol_commercial: Boolean(vol_commercial),
+        compagnie_id: vol_commercial && compagnie_id ? compagnie_id : null,
+        nature_transport: vol_commercial && nature_transport ? nature_transport : null,
+        flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : null,
+        inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
+        nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
+        cargo_kg_genere: vol_commercial ? (cargo_kg_genere || 0) : null,
+        revenue_brut: vol_commercial ? (revenue_brut || 0) : null,
+        salaire_pilote: vol_commercial ? (salaire_pilote || 0) : null,
+        prix_billet_utilise: vol_commercial ? (prix_billet_utilise || 0) : null,
+        statut: 'accepte', // Directement accepté
+        automonitoring: true, // Directement en autosurveillance
+        current_holder_user_id: null,
+        current_holder_position: null,
+        current_holder_aeroport: null,
+        vol_sans_atc: true,
+      }).select('id').single();
+
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+      // Consommer les passagers de l'aéroport de départ si vol commercial avec passagers
+      if (vol_commercial && nb_pax_genere && nb_pax_genere > 0) {
+        try {
+          await admin.rpc('consommer_passagers_aeroport', { p_code_oaci: ad, p_passagers: nb_pax_genere });
+        } catch (e) {
+          // Si la fonction n'existe pas, faire manuellement
+          const { data: current } = await admin.from('aeroport_passagers').select('passagers_disponibles').eq('code_oaci', ad).single();
+          if (current) {
+            const newValue = Math.max(0, current.passagers_disponibles - nb_pax_genere);
+            await admin.from('aeroport_passagers').update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() }).eq('code_oaci', ad);
+          }
+        }
+      }
+
+      return NextResponse.json({ ok: true, id: data.id, vol_sans_atc: true });
+    }
+    
+    // Sinon, chercher un ATC pour recevoir le plan
     const airportsToCheck = ad === aa ? [ad] : [ad, aa];
     let holder: { user_id: string; position: string; aeroport: string } | null = null;
     for (const apt of airportsToCheck) {
@@ -49,7 +104,7 @@ export async function POST(request: Request) {
     }
 
     if (!holder) {
-      return NextResponse.json({ error: 'Aucune fréquence ATC de votre aéroport de départ ou d\'arrivée est en ligne, votre vol doit être effectué sans plan de vol.' }, { status: 400 });
+      return NextResponse.json({ error: 'Aucune fréquence ATC de votre aéroport de départ ou d\'arrivée est en ligne. Cochez "Voler sans ATC" pour effectuer ce vol en autosurveillance.' }, { status: 400 });
     }
 
     const { data, error } = await admin.from('plans_vol').insert({
@@ -74,10 +129,12 @@ export async function POST(request: Request) {
       cargo_kg_genere: vol_commercial ? (cargo_kg_genere || 0) : null,
       revenue_brut: vol_commercial ? (revenue_brut || 0) : null,
       salaire_pilote: vol_commercial ? (salaire_pilote || 0) : null,
+      prix_billet_utilise: vol_commercial ? (prix_billet_utilise || 0) : null,
       statut: 'en_attente',
       current_holder_user_id: holder.user_id,
       current_holder_position: holder.position,
       current_holder_aeroport: holder.aeroport,
+      vol_sans_atc: false,
     }).select('id').single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -92,6 +149,20 @@ export async function POST(request: Request) {
       }, { onConflict: 'plan_vol_id,user_id,aeroport,position' });
     } catch (e) {
       console.error('Erreur enregistrement controle ATC initial:', e);
+    }
+
+    // Consommer les passagers de l'aéroport de départ si vol commercial avec passagers
+    if (vol_commercial && nb_pax_genere && nb_pax_genere > 0) {
+      try {
+        await admin.rpc('consommer_passagers_aeroport', { p_code_oaci: ad, p_passagers: nb_pax_genere });
+      } catch (e) {
+        // Si la fonction n'existe pas, faire manuellement
+        const { data: current } = await admin.from('aeroport_passagers').select('passagers_disponibles').eq('code_oaci', ad).single();
+        if (current) {
+          const newValue = Math.max(0, current.passagers_disponibles - nb_pax_genere);
+          await admin.from('aeroport_passagers').update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() }).eq('code_oaci', ad);
+        }
+      }
     }
 
     return NextResponse.json({ ok: true, id: data.id });

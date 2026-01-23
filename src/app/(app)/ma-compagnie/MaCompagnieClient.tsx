@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown } from 'lucide-react';
+import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route } from 'lucide-react';
 import Link from 'next/link';
+import TarifsLiaisonsClient from './TarifsLiaisonsClient';
 
 interface CompagnieOption {
   id: string;
@@ -343,6 +344,20 @@ export default function MaCompagnieClient({
           <p className="text-slate-400 text-sm">Aucun appareil dans la flotte.</p>
         )}
       </div>
+
+      {/* Tarifs par liaison (PDG uniquement) */}
+      {isPdg && (
+        <div className="card">
+          <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+            <Route className="h-5 w-5 text-amber-400" />
+            Tarifs par liaison
+          </h2>
+          <TarifsLiaisonsClient 
+            compagnieId={compagnie.id} 
+            prixBilletDefaut={compagnie.prix_billet_pax} 
+          />
+        </div>
+      )}
 
       {/* Lien vers Felitz Bank si PDG */}
       {isPdg && (

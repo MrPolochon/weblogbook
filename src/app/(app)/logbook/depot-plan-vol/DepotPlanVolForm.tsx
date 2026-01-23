@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
-import { Building2, Plane, Users, Weight, DollarSign, Shield } from 'lucide-react';
+import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage } from '@/lib/aeroports-ptfs';
+import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio } from 'lucide-react';
 
 interface TypeAvion {
   id: string;
@@ -42,6 +42,20 @@ interface Compagnie {
   role: 'employe' | 'pdg';
 }
 
+interface TarifLiaison {
+  id: string;
+  aeroport_depart: string;
+  aeroport_arrivee: string;
+  prix_billet: number;
+  bidirectionnel: boolean;
+}
+
+interface AeroportPassagers {
+  code_oaci: string;
+  passagers_disponibles: number;
+  passagers_max: number;
+}
+
 interface FlotteItemWithCompagnie extends FlotteItem {
   compagnie_id: string;
 }
@@ -76,7 +90,14 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   // Calculated values - stockés séparément pour éviter la triche
   const [generatedPax, setGeneratedPax] = useState(0);
   const [generatedCargo, setGeneratedCargo] = useState(0);
-  const [lastGeneratedAvionId, setLastGeneratedAvionId] = useState('');
+  const [lastGeneratedKey, setLastGeneratedKey] = useState('');
+  
+  // Vol sans ATC
+  const [volSansAtc, setVolSansAtc] = useState(false);
+  
+  // Tarifs par liaison et saturation
+  const [tarifsLiaisons, setTarifsLiaisons] = useState<TarifLiaison[]>([]);
+  const [passagersAeroport, setPassagersAeroport] = useState<AeroportPassagers | null>(null);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,17 +122,63 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     setFlotteAvionId('');
   }, [selectedCompagnieId]);
 
-  // Generate PAX and CARGO values ONLY when aircraft changes (not when switching transport type)
+  // Charger les tarifs par liaison quand la compagnie change
   useEffect(() => {
-    if (!vol_commercial || !selectedCompagnie || !flotte_avion_id) {
+    if (!selectedCompagnieId) {
+      setTarifsLiaisons([]);
+      return;
+    }
+    
+    fetch(`/api/tarifs-liaisons?compagnie_id=${selectedCompagnieId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setTarifsLiaisons(data);
+      })
+      .catch(() => {});
+  }, [selectedCompagnieId]);
+
+  // Charger les passagers disponibles quand l'aéroport de départ change
+  useEffect(() => {
+    if (!aeroport_depart) {
+      setPassagersAeroport(null);
+      return;
+    }
+    
+    fetch(`/api/aeroport-passagers?code_oaci=${aeroport_depart}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.code_oaci) setPassagersAeroport(data);
+      })
+      .catch(() => {});
+  }, [aeroport_depart]);
+
+  // Trouver le prix du billet pour cette liaison
+  const prixBilletLiaison = (() => {
+    if (!selectedCompagnie) return 0;
+    
+    // Chercher un tarif spécifique pour cette liaison
+    const tarifSpecifique = tarifsLiaisons.find(
+      t => t.aeroport_depart === aeroport_depart && t.aeroport_arrivee === aeroport_arrivee
+    );
+    
+    if (tarifSpecifique) return tarifSpecifique.prix_billet;
+    
+    // Sinon utiliser le prix par défaut de la compagnie
+    return selectedCompagnie.prix_billet_pax;
+  })();
+
+  // Generate PAX and CARGO values based on all factors
+  useEffect(() => {
+    if (!vol_commercial || !selectedCompagnie || !flotte_avion_id || !aeroport_depart || !aeroport_arrivee) {
       setGeneratedPax(0);
       setGeneratedCargo(0);
-      setLastGeneratedAvionId('');
+      setLastGeneratedKey('');
       return;
     }
 
-    // Ne régénère que si l'avion change
-    if (flotte_avion_id === lastGeneratedAvionId) {
+    // Clé unique pour régénérer seulement quand les paramètres importants changent
+    const generationKey = `${flotte_avion_id}-${aeroport_depart}-${aeroport_arrivee}-${prixBilletLiaison}`;
+    if (generationKey === lastGeneratedKey) {
       return;
     }
 
@@ -121,32 +188,59 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     const capacitePax = selectedFlotte?.capacite_pax_custom ?? avion.capacite_pax ?? 0;
     const capaciteCargo = selectedFlotte?.capacite_cargo_custom ?? avion.capacite_cargo_kg ?? 0;
 
-    // Générer les deux valeurs en une seule fois
+    // Calculer le coefficient de remplissage basé sur prix, taille aéroport et tourisme
+    const coefRemplissage = calculerCoefficientRemplissage(aeroport_depart, aeroport_arrivee, prixBilletLiaison);
+    
+    // Facteur de saturation (si beaucoup de vols ont déjà pris des passagers)
+    let coefSaturation = 1.0;
+    if (passagersAeroport && passagersAeroport.passagers_max > 0) {
+      const ratioDisponibles = passagersAeroport.passagers_disponibles / passagersAeroport.passagers_max;
+      // Si moins de 50% de passagers disponibles, le remplissage diminue
+      if (ratioDisponibles < 0.5) {
+        coefSaturation = 0.5 + ratioDisponibles; // Entre 0.5 et 1.0
+      }
+    }
+    
+    // Coefficient final
+    const coefFinal = coefRemplissage * coefSaturation;
+
+    // Générer les valeurs avec les coefficients
     let pax = 0;
     let cargo = 0;
 
     if (capacitePax > 0) {
-      const minPax = Math.floor(capacitePax * 0.6);
-      const maxPax = Math.floor(capacitePax * 0.95);
-      pax = Math.floor(Math.random() * (maxPax - minPax + 1)) + minPax;
+      // Base: 40% à 80% de remplissage, ajusté par les coefficients
+      const baseMin = 0.4;
+      const baseMax = 0.8;
+      const adjustedMin = Math.max(0.1, baseMin * coefFinal);
+      const adjustedMax = Math.min(0.98, baseMax * coefFinal);
+      
+      const minPax = Math.floor(capacitePax * adjustedMin);
+      const maxPax = Math.floor(capacitePax * adjustedMax);
+      pax = Math.floor(Math.random() * (Math.max(1, maxPax - minPax) + 1)) + minPax;
+      
+      // Limiter aux passagers disponibles dans l'aéroport
+      if (passagersAeroport) {
+        pax = Math.min(pax, passagersAeroport.passagers_disponibles);
+      }
     }
 
     if (capaciteCargo > 0) {
-      const minCargo = Math.floor(capaciteCargo * 0.5);
-      const maxCargo = Math.floor(capaciteCargo * 0.9);
-      cargo = Math.floor(Math.random() * (maxCargo - minCargo + 1)) + minCargo;
+      const minCargo = Math.floor(capaciteCargo * 0.4 * coefFinal);
+      const maxCargo = Math.floor(capaciteCargo * 0.85 * coefFinal);
+      cargo = Math.floor(Math.random() * (Math.max(1, maxCargo - minCargo) + 1)) + minCargo;
     }
 
     setGeneratedPax(pax);
     setGeneratedCargo(cargo);
-    setLastGeneratedAvionId(flotte_avion_id);
-  }, [vol_commercial, flotte_avion_id, selectedCompagnie, selectedFlotte, lastGeneratedAvionId]);
+    setLastGeneratedKey(generationKey);
+  }, [vol_commercial, flotte_avion_id, selectedCompagnie, selectedFlotte, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport]);
 
   // Calculer les revenus basés sur les valeurs générées et le type de transport sélectionné
   const nbPax = nature_transport === 'passagers' ? generatedPax : 0;
   const cargoKg = nature_transport === 'cargo' ? generatedCargo : 0;
   const revenuBrut = nature_transport === 'passagers' 
-    ? generatedPax * (selectedCompagnie?.prix_billet_pax || 0)
+    ? generatedPax * prixBilletLiaison
     : generatedCargo * (selectedCompagnie?.prix_kg_cargo || 0);
   const salairePilote = Math.floor(revenuBrut * (selectedCompagnie?.pourcentage_salaire || 0) / 100);
 
@@ -197,6 +291,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
           cargo_kg_genere: vol_commercial ? cargoKg : undefined,
           revenue_brut: vol_commercial ? revenuBrut : undefined,
           salaire_pilote: vol_commercial ? salairePilote : undefined,
+          prix_billet_utilise: vol_commercial ? prixBilletLiaison : undefined,
+          vol_sans_atc: volSansAtc,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -315,7 +411,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
           </div>
 
           {/* Aperçu revenus */}
-          {flotte_avion_id && revenuBrut > 0 && (
+          {flotte_avion_id && aeroport_depart && aeroport_arrivee && (
             <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
               <div className="flex items-center gap-2 mb-2">
                 <DollarSign className="h-4 w-4 text-emerald-400" />
@@ -323,12 +419,28 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 {nature_transport === 'passagers' ? (
-                  <p className="text-slate-300">{nbPax} passagers</p>
+                  <p className="text-slate-300">{nbPax} passagers @ {prixBilletLiaison} F$</p>
                 ) : (
                   <p className="text-slate-300">{cargoKg.toLocaleString('fr-FR')} kg cargo</p>
                 )}
                 <p className="text-slate-300">Revenu brut : {revenuBrut.toLocaleString('fr-FR')} F$</p>
-                <p className="text-emerald-300">Votre salaire ({selectedCompagnie.pourcentage_salaire}%) : {salairePilote.toLocaleString('fr-FR')} F$</p>
+                <p className="text-emerald-300 col-span-2">Votre salaire ({selectedCompagnie.pourcentage_salaire}%) : {salairePilote.toLocaleString('fr-FR')} F$</p>
+              </div>
+              {/* Indicateurs de facteurs */}
+              <div className="mt-2 pt-2 border-t border-emerald-500/20 text-xs text-slate-400 space-y-1">
+                {(() => {
+                  const aeroportArr = getAeroportInfo(aeroport_arrivee);
+                  const aeroportDep = getAeroportInfo(aeroport_depart);
+                  return (
+                    <>
+                      {aeroportArr?.tourisme && <span className="text-amber-400">🏖️ Destination touristique (+15% demande)</span>}
+                      {aeroportDep?.taille === 'international' && <span className="ml-2 text-sky-400">✈️ Aéroport international (prix moins impactant)</span>}
+                      {passagersAeroport && passagersAeroport.passagers_disponibles < passagersAeroport.passagers_max * 0.5 && (
+                        <span className="block text-orange-400">⚠️ Saturation: {Math.round(passagersAeroport.passagers_disponibles / passagersAeroport.passagers_max * 100)}% de passagers disponibles</span>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}
@@ -462,14 +574,38 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       )}
       
       {/* Note pour l'ATC */}
-      <div>
-        <label className="label">Note d&apos;attention pour l&apos;ATC (optionnel)</label>
-        <textarea 
-          className="input min-h-[60px]" 
-          value={note_atc} 
-          onChange={(e) => setNoteAtc(e.target.value)} 
-          placeholder="Ex: Premier vol, demande assistance..."
-        />
+      {!volSansAtc && (
+        <div>
+          <label className="label">Note d&apos;attention pour l&apos;ATC (optionnel)</label>
+          <textarea 
+            className="input min-h-[60px]" 
+            value={note_atc} 
+            onChange={(e) => setNoteAtc(e.target.value)} 
+            placeholder="Ex: Premier vol, demande assistance..."
+          />
+        </div>
+      )}
+
+      {/* Option vol sans ATC */}
+      <div className="p-4 rounded-lg border border-amber-500/30 bg-amber-500/10">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input 
+            type="checkbox" 
+            checked={volSansAtc} 
+            onChange={(e) => setVolSansAtc(e.target.checked)}
+            className="w-5 h-5 rounded"
+          />
+          <div className="flex items-center gap-2">
+            <Radio className="h-5 w-5 text-amber-400" />
+            <span className="font-medium text-slate-200">Voler sans ATC</span>
+          </div>
+        </label>
+        {volSansAtc && (
+          <div className="mt-2 text-sm text-amber-300/80">
+            <p>⚠️ Votre plan de vol sera automatiquement accepté et mis en autosurveillance.</p>
+            <p>Vous serez payé normalement à la clôture du vol.</p>
+          </div>
+        )}
       </div>
       
       {error && <p className="text-red-400 text-sm">{error}</p>}
