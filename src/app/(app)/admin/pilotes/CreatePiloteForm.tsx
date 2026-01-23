@@ -13,7 +13,7 @@ export default function CreatePiloteForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [lastCreatedRole, setLastCreatedRole] = useState<'pilote' | 'admin'>('pilote');
+  const [lastCreatedRole, setLastCreatedRole] = useState<'pilote' | 'admin' | 'ifsa'>('pilote');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -98,7 +98,11 @@ export default function CreatePiloteForm() {
         </button>
       </form>
       {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
-      {success && <p className="text-emerald-400 text-sm mt-2">{lastCreatedRole === 'admin' ? 'Admin créé.' : 'Pilote créé.'}</p>}
+      {success && (
+        <p className="text-emerald-400 text-sm mt-2">
+          {lastCreatedRole === 'admin' ? 'Admin créé.' : lastCreatedRole === 'ifsa' ? 'IFSA créé.' : 'Pilote créé.'}
+        </p>
+      )}
     </div>
   );
 }
