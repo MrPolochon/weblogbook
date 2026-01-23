@@ -48,14 +48,18 @@ export default async function AdminFelitzBankPage() {
           </h2>
           
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {comptesPerso?.map((compte) => (
-              <AdminFelitzClient 
-                key={compte.id}
-                compte={compte}
-                label={(compte.profiles as { identifiant: string } | null)?.identifiant || 'Inconnu'}
-                type="personnel"
-              />
-            ))}
+            {comptesPerso?.map((compte) => {
+              const profilesData = compte.profiles;
+              const profileObj = profilesData ? (Array.isArray(profilesData) ? profilesData[0] : profilesData) : null;
+              return (
+                <AdminFelitzClient 
+                  key={compte.id}
+                  compte={compte}
+                  label={(profileObj as { identifiant: string } | null)?.identifiant || 'Inconnu'}
+                  type="personnel"
+                />
+              );
+            })}
           </div>
         </div>
 
@@ -67,14 +71,18 @@ export default async function AdminFelitzBankPage() {
           </h2>
           
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {comptesEntreprise?.map((compte) => (
-              <AdminFelitzClient 
-                key={compte.id}
-                compte={compte}
-                label={(compte.compagnies as { nom: string } | null)?.nom || 'Compagnie'}
-                type="entreprise"
-              />
-            ))}
+            {comptesEntreprise?.map((compte) => {
+              const compagniesData = compte.compagnies;
+              const compagnieObj = compagniesData ? (Array.isArray(compagniesData) ? compagniesData[0] : compagniesData) : null;
+              return (
+                <AdminFelitzClient 
+                  key={compte.id}
+                  compte={compte}
+                  label={(compagnieObj as { nom: string } | null)?.nom || 'Compagnie'}
+                  type="entreprise"
+                />
+              );
+            })}
           </div>
         </div>
       </div>

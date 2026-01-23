@@ -112,7 +112,9 @@ export async function PATCH(req: NextRequest) {
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     const isAdmin = profile?.role === 'admin';
-    const isPdg = (flotte.compagnies as { pdg_id: string | null })?.pdg_id === user.id;
+    const compagniesData = flotte.compagnies;
+    const compagnieObj = compagniesData ? (Array.isArray(compagniesData) ? compagniesData[0] : compagniesData) : null;
+    const isPdg = (compagnieObj as { pdg_id: string | null } | null)?.pdg_id === user.id;
 
     if (!isAdmin && !isPdg) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });

@@ -80,7 +80,8 @@ export default async function InventairePage() {
         {inventaireWithStatus.length > 0 ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {inventaireWithStatus.map((item) => {
-              const avion = item.types_avion as { id: string; nom: string; code_oaci: string; capacite_pax: number; capacite_cargo_kg: number } | null;
+              const taData = item.types_avion;
+              const avion = taData ? (Array.isArray(taData) ? taData[0] : taData) as { id: string; nom: string; code_oaci: string; capacite_pax: number; capacite_cargo_kg: number } | null : null;
               return (
                 <div 
                   key={item.id} 

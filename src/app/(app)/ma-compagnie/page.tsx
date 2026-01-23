@@ -58,7 +58,11 @@ export default async function MaCompagniePage() {
     .eq('compagnie_id', compagnieId);
 
   // Calculer les heures de vol par pilote pour cette compagnie
-  const employeIds = (employes || []).map(e => (e.profiles as { id: string })?.id).filter(Boolean);
+  const employeIds = (employes || []).map(e => {
+    const p = e.profiles;
+    const pObj = p ? (Array.isArray(p) ? p[0] : p) : null;
+    return (pObj as { id: string } | null)?.id;
+  }).filter(Boolean);
   
   const heuresParPilote: Record<string, number> = {};
   if (employeIds.length > 0) {
@@ -133,7 +137,11 @@ export default async function MaCompagniePage() {
               <p className="text-sm text-slate-400">PDG</p>
               <p className="text-slate-200 flex items-center gap-2">
                 <Crown className="h-4 w-4 text-amber-400" />
-                {(compagnie?.profiles as { identifiant: string } | null)?.identifiant || 'Non défini'}
+                {(() => {
+                  const p = compagnie?.profiles;
+                  const pObj = p ? (Array.isArray(p) ? p[0] : p) : null;
+                  return (pObj as { identifiant: string } | null)?.identifiant || 'Non défini';
+                })()}
               </p>
             </div>
             {compagnie?.vban && (
@@ -154,7 +162,8 @@ export default async function MaCompagniePage() {
           {employes && employes.length > 0 ? (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {employes.map((emp) => {
-                const pilote = emp.profiles as { id: string; identifiant: string } | null;
+                const pData = emp.profiles;
+                const pilote = pData ? (Array.isArray(pData) ? pData[0] : pData) as { id: string; identifiant: string } | null : null;
                 const heures = pilote ? heuresParPilote[pilote.id] || 0 : 0;
                 return (
                   <div 
@@ -194,15 +203,18 @@ export default async function MaCompagniePage() {
                 </tr>
               </thead>
               <tbody>
-                {flotteWithStatus.map((item) => (
+                {flotteWithStatus.map((item) => {
+                  const taData = item.types_avion;
+                  const taObj = taData ? (Array.isArray(taData) ? taData[0] : taData) as { nom: string; code_oaci: string | null } | null : null;
+                  return (
                   <tr key={item.id} className="border-b border-slate-700/50 last:border-0">
                     <td className="py-2.5 pr-4">
                       <span className="text-slate-200 font-medium">
-                        {item.nom_personnalise || (item.types_avion as { nom: string } | null)?.nom || '—'}
+                        {item.nom_personnalise || taObj?.nom || '—'}
                       </span>
-                      {(item.types_avion as { code_oaci: string } | null)?.code_oaci && (
+                      {taObj?.code_oaci && (
                         <span className="ml-2 text-xs text-slate-500 font-mono">
-                          ({(item.types_avion as { code_oaci: string }).code_oaci})
+                          ({taObj.code_oaci})
                         </span>
                       )}
                     </td>
@@ -220,7 +232,8 @@ export default async function MaCompagniePage() {
                       </span>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
