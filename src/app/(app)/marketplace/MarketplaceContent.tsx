@@ -158,8 +158,6 @@ export default function MarketplaceContent({ avions, soldePersonnel, compagnies 
                       </p>
                     </div>
                   )}
-                </>
-              )}
                   <button
                     type="button"
                     onClick={handleAchat}
