@@ -214,16 +214,17 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     const prixCargo = selectedCompagnie.prix_kg_cargo || 0;
 
     // Clé unique pour régénérer seulement quand les paramètres importants changent
-    const generationKey = `${flotte_avion_id}-${aeroport_depart}-${aeroport_arrivee}-${prixBilletLiaison}-${prixCargo}-${nature_transport}`;
+    // NE PAS inclure nature_transport pour éviter la régénération en basculant entre passagers/cargo
+    const generationKey = `${flotte_avion_id}-${aeroport_depart}-${aeroport_arrivee}-${prixBilletLiaison}-${prixCargo}`;
     if (generationKey === lastGeneratedKey) {
       return;
     }
 
-    // Générer les valeurs avec les coefficients
+    // Générer les valeurs UNE FOIS pour passagers ET cargo (pas de régénération en changeant le type)
     let pax = 0;
     let cargo = 0;
 
-    // Calcul pour les PASSAGERS
+    // Calcul pour les PASSAGERS (toujours calculé, même si cargo sélectionné)
     if (capacitePax > 0) {
       // Calculer le coefficient de remplissage basé sur prix, taille aéroport et tourisme
       const coefRemplissage = calculerCoefficientRemplissage(aeroport_depart, aeroport_arrivee, prixBilletLiaison);
@@ -257,7 +258,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       }
     }
 
-    // Calcul pour le CARGO (utiliser la logique cargo)
+    // Calcul pour le CARGO (toujours calculé, même si passagers sélectionné)
     if (capaciteCargo > 0 && prixCargo > 0) {
       const cargoDisponible = cargoAeroport?.cargo_disponible ?? getAeroportInfo(aeroport_depart)?.cargoMax ?? 0;
       
@@ -282,7 +283,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     setGeneratedPax(pax);
     setGeneratedCargo(cargo);
     setLastGeneratedKey(generationKey);
-  }, [vol_commercial, flotte_avion_id, selectedCompagnie, selectedFlotte, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport, nature_transport]);
+  }, [vol_commercial, flotte_avion_id, selectedCompagnie, selectedFlotte, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport]);
 
   // Calculer les revenus basés sur les valeurs générées et le type de transport sélectionné
   const nbPax = nature_transport === 'passagers' ? generatedPax : 0;
