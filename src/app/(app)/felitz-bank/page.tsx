@@ -38,6 +38,32 @@ export default async function FelitzBankPage() {
     comptesEntreprise = data || [];
   }
 
+  // Transactions récentes pour les comptes entreprise
+  let transactionsEntrepriseByCompte: Record<string, Array<{ id: string; type: string; montant: number; libelle: string; created_at: string }>> = {};
+  if (comptesEntreprise.length > 0) {
+    const compteIds = comptesEntreprise.map(c => c.id);
+    const { data } = await admin.from('felitz_transactions')
+      .select('id, compte_id, type, montant, libelle, created_at')
+      .in('compte_id', compteIds)
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    (data || []).forEach((t) => {
+      if (!transactionsEntrepriseByCompte[t.compte_id]) {
+        transactionsEntrepriseByCompte[t.compte_id] = [];
+      }
+      if (transactionsEntrepriseByCompte[t.compte_id].length < 20) {
+        transactionsEntrepriseByCompte[t.compte_id].push({
+          id: t.id,
+          type: t.type,
+          montant: t.montant,
+          libelle: t.libelle,
+          created_at: t.created_at,
+        });
+      }
+    });
+  }
+
   // Compte militaire (si l'utilisateur est PDG militaire)
   const { data: compteMilitaire } = await admin.from('felitz_comptes')
     .select('*')
@@ -127,7 +153,7 @@ export default async function FelitzBankPage() {
                   <FelitzBankClient 
                     compteId={compte.id}
                     solde={compte.solde}
-                    transactions={[]}
+                    transactions={transactionsEntrepriseByCompte[compte.id] || []}
                     isAdmin={isAdmin}
                     isEntreprise
                     compagnieNom={compte.compagnies?.nom}

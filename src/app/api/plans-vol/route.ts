@@ -58,10 +58,14 @@ export async function POST(request: Request) {
         .eq('id', flotte_avion_id)
         .single();
 
-      const capaciteCargoBase = Array.isArray(flotte?.types_avion)
-        ? flotte?.types_avion?.[0]?.capacite_cargo_kg
-        : flotte?.types_avion?.capacite_cargo_kg;
-      const capaciteCargo = flotte?.capacite_cargo_custom ?? capaciteCargoBase ?? 0;
+      const flotteData = flotte as {
+        capacite_cargo_custom?: number | null;
+        types_avion?: { capacite_cargo_kg?: number | null } | { capacite_cargo_kg?: number | null }[] | null;
+      } | null;
+      const capaciteCargoBase = Array.isArray(flotteData?.types_avion)
+        ? flotteData?.types_avion?.[0]?.capacite_cargo_kg
+        : flotteData?.types_avion?.capacite_cargo_kg;
+      const capaciteCargo = flotteData?.capacite_cargo_custom ?? capaciteCargoBase ?? 0;
       const prixKg = compagnie?.prix_kg_cargo ?? 0;
       const pourcentageSalaire = compagnie?.pourcentage_salaire ?? 0;
 
