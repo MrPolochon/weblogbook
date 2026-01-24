@@ -10,41 +10,43 @@ export interface AeroportPTFS {
   taille: TailleAeroport;
   tourisme: boolean;
   passagersMax: number;
+  cargoMax: number; // Capacité cargo en kg
+  industriel: boolean; // Aéroport avec zone industrielle (plus de cargo)
   vor?: string;
   freq?: string;
 }
 
 export const AEROPORTS_PTFS: readonly AeroportPTFS[] = [
   // Aéroports internationaux
-  { code: 'ITKO', nom: 'Tokyo Intl.', taille: 'international', tourisme: true, passagersMax: 25000, vor: 'HME', freq: '112.20' },
-  { code: 'IPPH', nom: 'Perth Intl.', taille: 'international', tourisme: true, passagersMax: 18000, vor: 'PER', freq: '115.430' },
-  { code: 'ILAR', nom: 'Larnaca Intl.', taille: 'international', tourisme: true, passagersMax: 15000, vor: 'LCK', freq: '112.90' },
-  { code: 'IPAP', nom: 'Paphos Intl.', taille: 'international', tourisme: true, passagersMax: 12000, vor: 'PFO', freq: '117.95' },
-  { code: 'IRFD', nom: 'Greater Rockford', taille: 'international', tourisme: false, passagersMax: 12000, vor: 'RFD', freq: '113.55' },
-  { code: 'IMLR', nom: 'Mellor Intl.', taille: 'international', tourisme: false, passagersMax: 15000, vor: 'MLR', freq: '114.75' },
-  { code: 'IZOL', nom: 'Izolirani Intl.', taille: 'international', tourisme: false, passagersMax: 10000, vor: 'IZO', freq: '117.530' },
+  { code: 'ITKO', nom: 'Tokyo Intl.', taille: 'international', tourisme: true, passagersMax: 25000, cargoMax: 150000, industriel: true, vor: 'HME', freq: '112.20' },
+  { code: 'IPPH', nom: 'Perth Intl.', taille: 'international', tourisme: true, passagersMax: 18000, cargoMax: 120000, industriel: true, vor: 'PER', freq: '115.430' },
+  { code: 'ILAR', nom: 'Larnaca Intl.', taille: 'international', tourisme: true, passagersMax: 15000, cargoMax: 80000, industriel: false, vor: 'LCK', freq: '112.90' },
+  { code: 'IPAP', nom: 'Paphos Intl.', taille: 'international', tourisme: true, passagersMax: 12000, cargoMax: 50000, industriel: false, vor: 'PFO', freq: '117.95' },
+  { code: 'IRFD', nom: 'Greater Rockford', taille: 'international', tourisme: false, passagersMax: 12000, cargoMax: 200000, industriel: true, vor: 'RFD', freq: '113.55' },
+  { code: 'IMLR', nom: 'Mellor Intl.', taille: 'international', tourisme: false, passagersMax: 15000, cargoMax: 180000, industriel: true, vor: 'MLR', freq: '114.75' },
+  { code: 'IZOL', nom: 'Izolirani Intl.', taille: 'international', tourisme: false, passagersMax: 10000, cargoMax: 100000, industriel: true, vor: 'IZO', freq: '117.530' },
   
   // Aéroports régionaux
-  { code: 'ISAU', nom: 'Sauthamptona Airport', taille: 'regional', tourisme: false, passagersMax: 8000, vor: 'SAU', freq: '115.35' },
-  { code: 'IJAF', nom: 'Al Najaf', taille: 'regional', tourisme: false, passagersMax: 5000, vor: 'NJF', freq: '112.45' },
-  { code: 'IBLT', nom: 'Boltic Airfield', taille: 'regional', tourisme: false, passagersMax: 3000 },
+  { code: 'ISAU', nom: 'Sauthamptona Airport', taille: 'regional', tourisme: false, passagersMax: 8000, cargoMax: 60000, industriel: true, vor: 'SAU', freq: '115.35' },
+  { code: 'IJAF', nom: 'Al Najaf', taille: 'regional', tourisme: false, passagersMax: 5000, cargoMax: 40000, industriel: false, vor: 'NJF', freq: '112.45' },
+  { code: 'IBLT', nom: 'Boltic Airfield', taille: 'regional', tourisme: false, passagersMax: 3000, cargoMax: 30000, industriel: false },
   
   // Petits aéroports
-  { code: 'IDCS', nom: 'Saba Airport', taille: 'small', tourisme: true, passagersMax: 800 },
-  { code: 'IGRV', nom: 'Grindavik Airport', taille: 'small', tourisme: true, passagersMax: 2000, vor: 'GVK', freq: '112.320' },
-  { code: 'IBTH', nom: 'Saint Barthelemy', taille: 'small', tourisme: true, passagersMax: 4000 },
-  { code: 'ISKP', nom: 'Skopelos Airfield', taille: 'small', tourisme: true, passagersMax: 3000 },
-  { code: 'ILKL', nom: 'Lukla Airport', taille: 'small', tourisme: true, passagersMax: 500 },
-  { code: 'IBAR', nom: 'Barra Airport', taille: 'small', tourisme: true, passagersMax: 2000 },
-  { code: 'IHEN', nom: 'Henstridge Airfield', taille: 'small', tourisme: false, passagersMax: 1500 },
-  { code: 'ITRC', nom: 'Training Centre', taille: 'small', tourisme: false, passagersMax: 1000, vor: 'TRN', freq: '113.10' },
-  { code: 'IBRD', nom: 'Bird Island Airfield', taille: 'small', tourisme: true, passagersMax: 1000 },
-  { code: 'IUFO', nom: 'UFO Base', taille: 'small', tourisme: false, passagersMax: 500 },
+  { code: 'IDCS', nom: 'Saba Airport', taille: 'small', tourisme: true, passagersMax: 800, cargoMax: 2000, industriel: false },
+  { code: 'IGRV', nom: 'Grindavik Airport', taille: 'small', tourisme: true, passagersMax: 2000, cargoMax: 15000, industriel: false, vor: 'GVK', freq: '112.320' },
+  { code: 'IBTH', nom: 'Saint Barthelemy', taille: 'small', tourisme: true, passagersMax: 4000, cargoMax: 8000, industriel: false },
+  { code: 'ISKP', nom: 'Skopelos Airfield', taille: 'small', tourisme: true, passagersMax: 3000, cargoMax: 10000, industriel: false },
+  { code: 'ILKL', nom: 'Lukla Airport', taille: 'small', tourisme: true, passagersMax: 500, cargoMax: 3000, industriel: false },
+  { code: 'IBAR', nom: 'Barra Airport', taille: 'small', tourisme: true, passagersMax: 2000, cargoMax: 5000, industriel: false },
+  { code: 'IHEN', nom: 'Henstridge Airfield', taille: 'small', tourisme: false, passagersMax: 1500, cargoMax: 12000, industriel: false },
+  { code: 'ITRC', nom: 'Training Centre', taille: 'small', tourisme: false, passagersMax: 1000, cargoMax: 5000, industriel: false, vor: 'TRN', freq: '113.10' },
+  { code: 'IBRD', nom: 'Bird Island Airfield', taille: 'small', tourisme: true, passagersMax: 1000, cargoMax: 2000, industriel: false },
+  { code: 'IUFO', nom: 'UFO Base', taille: 'small', tourisme: false, passagersMax: 500, cargoMax: 8000, industriel: false },
   
-  // Bases militaires
-  { code: 'IIAB', nom: 'McConnell AFB', taille: 'military', tourisme: false, passagersMax: 3000 },
-  { code: 'IGAR', nom: 'Air Base Garry', taille: 'military', tourisme: false, passagersMax: 2000, vor: 'GRY', freq: '111.90' },
-  { code: 'ISCM', nom: 'RAF Scampton', taille: 'military', tourisme: false, passagersMax: 2000 },
+  // Bases militaires (cargo militaire uniquement)
+  { code: 'IIAB', nom: 'McConnell AFB', taille: 'military', tourisme: false, passagersMax: 3000, cargoMax: 50000, industriel: false },
+  { code: 'IGAR', nom: 'Air Base Garry', taille: 'military', tourisme: false, passagersMax: 2000, cargoMax: 40000, industriel: false, vor: 'GRY', freq: '111.90' },
+  { code: 'ISCM', nom: 'RAF Scampton', taille: 'military', tourisme: false, passagersMax: 2000, cargoMax: 35000, industriel: false },
 ] as const;
 
 // Waypoints/VOR/DME du réseau PTFS
@@ -221,24 +223,45 @@ export function getAeroportInfo(code: string | null | undefined): AeroportPTFS |
   return AEROPORTS_PTFS.find((x) => x.code === code) || null;
 }
 
-// Coefficients d'impact du prix selon la taille de l'aéroport
-// Plus le coefficient est élevé, moins le prix affecte le remplissage
-export const COEFFICIENTS_PRIX: Record<TailleAeroport, number> = {
-  international: 0.6,  // Prix a moins d'impact (beaucoup de monde)
-  regional: 0.8,       // Impact moyen
-  small: 1.0,          // Impact normal
-  military: 0.3,       // Peu de passagers civils
+// =====================================================
+// SYSTÈME DE PRIX DES BILLETS - VERSION STRICTE
+// =====================================================
+
+// Prix de référence selon le type de liaison
+export const PRIX_REFERENCE: Record<TailleAeroport, number> = {
+  international: 120,  // Liaisons internationales : billets plus chers acceptés
+  regional: 80,        // Liaisons régionales : prix moyen
+  small: 50,           // Petits aéroports : billets pas chers
+  military: 30,        // Bases militaires : très peu de civils, prix bas
+};
+
+// Prix MAXIMUM absolu - au-delà, PERSONNE n'achète
+export const PRIX_MAXIMUM_ABSOLU = 500; // F$ - prix "luxe" maximum
+
+// Prix au-delà duquel le remplissage chute drastiquement
+export const PRIX_CRITIQUE: Record<TailleAeroport, number> = {
+  international: 300,  // Les riches peuvent payer jusqu'à 300 F$
+  regional: 200,       // Maximum 200 F$ pour du régional
+  small: 120,          // Maximum 120 F$ pour les petites lignes
+  military: 80,        // Très peu de tolérance
 };
 
 // Bonus de remplissage pour les destinations touristiques
-export const BONUS_TOURISME = 1.15; // +15% de remplissage potentiel
+export const BONUS_TOURISME = 1.10; // +10% de remplissage potentiel
 
-// Prix optimal de référence (au-dessus = moins de passagers, en-dessous = plus)
-export const PRIX_OPTIMAL_PAX = 100; // F$ par passager
+// Malus pour les bases militaires (peu de civils)
+export const MALUS_MILITAIRE = 0.3; // Seulement 30% de remplissage max
 
 /**
  * Calcule le coefficient de remplissage basé sur le prix et les caractéristiques des aéroports
- * @returns Un nombre entre 0.2 et 1.3 représentant le multiplicateur de remplissage
+ * 
+ * RÈGLES STRICTES :
+ * - Prix <= référence : 90-100% remplissage
+ * - Prix entre référence et critique : décroissance linéaire (100% -> 30%)
+ * - Prix entre critique et maximum : décroissance rapide (30% -> 5%)
+ * - Prix > maximum absolu : 0% remplissage (personne n'achète)
+ * 
+ * @returns Un nombre entre 0 et 1.1 représentant le multiplicateur de remplissage
  */
 export function calculerCoefficientRemplissage(
   codeDepart: string,
@@ -252,30 +275,121 @@ export function calculerCoefficientRemplissage(
     return 1.0; // Par défaut
   }
 
-  // Moyenne des coefficients de prix des deux aéroports
-  const coefPrixDepart = COEFFICIENTS_PRIX[aeroportDepart.taille];
-  const coefPrixArrivee = COEFFICIENTS_PRIX[aeroportArrivee.taille];
-  const coefPrixMoyen = (coefPrixDepart + coefPrixArrivee) / 2;
+  // Utiliser le type d'aéroport le plus restrictif pour le calcul
+  const tailleRestrictive = getTailleLaPlusRestrictive(aeroportDepart.taille, aeroportArrivee.taille);
+  
+  const prixRef = PRIX_REFERENCE[tailleRestrictive];
+  const prixCritique = PRIX_CRITIQUE[tailleRestrictive];
 
-  // Impact du prix : plus le prix est élevé par rapport à l'optimal, moins de passagers
-  // Formula: 1 - (coefPrix * (prixBillet - PRIX_OPTIMAL) / PRIX_OPTIMAL * 0.5)
-  let impactPrix = 1.0;
-  if (prixBillet > PRIX_OPTIMAL_PAX) {
-    // Prix au-dessus de l'optimal : pénalité
-    const ratio = (prixBillet - PRIX_OPTIMAL_PAX) / PRIX_OPTIMAL_PAX;
-    impactPrix = Math.max(0.3, 1 - (ratio * coefPrixMoyen * 0.5));
-  } else if (prixBillet < PRIX_OPTIMAL_PAX) {
-    // Prix en-dessous de l'optimal : petit bonus
-    const ratio = (PRIX_OPTIMAL_PAX - prixBillet) / PRIX_OPTIMAL_PAX;
-    impactPrix = Math.min(1.2, 1 + (ratio * 0.2));
+  let coefficient = 1.0;
+
+  // RÈGLE 1: Prix au-dessus du MAXIMUM ABSOLU = 0 passagers
+  if (prixBillet >= PRIX_MAXIMUM_ABSOLU) {
+    return 0;
   }
 
-  // Bonus tourisme sur la destination
-  let coefficient = impactPrix;
-  if (aeroportArrivee.tourisme) {
+  // RÈGLE 2: Prix au-dessus du CRITIQUE = très peu de passagers (décroissance rapide)
+  if (prixBillet > prixCritique) {
+    // De 30% à 5% entre prix critique et maximum absolu
+    const ratio = (prixBillet - prixCritique) / (PRIX_MAXIMUM_ABSOLU - prixCritique);
+    coefficient = 0.30 - (ratio * 0.25); // De 0.30 à 0.05
+    coefficient = Math.max(0.05, coefficient);
+  }
+  // RÈGLE 3: Prix entre RÉFÉRENCE et CRITIQUE = décroissance linéaire
+  else if (prixBillet > prixRef) {
+    // De 100% à 30% entre prix référence et critique
+    const ratio = (prixBillet - prixRef) / (prixCritique - prixRef);
+    coefficient = 1.0 - (ratio * 0.70); // De 1.0 à 0.30
+  }
+  // RÈGLE 4: Prix en-dessous de la RÉFÉRENCE = bonus léger
+  else if (prixBillet < prixRef) {
+    // Bonus jusqu'à +10% pour prix très bas
+    const ratio = (prixRef - prixBillet) / prixRef;
+    coefficient = Math.min(1.10, 1.0 + (ratio * 0.10));
+  }
+
+  // BONUS TOURISME : +10% si destination touristique
+  if (aeroportArrivee.tourisme && coefficient > 0) {
     coefficient *= BONUS_TOURISME;
   }
 
-  // Limiter entre 0.2 et 1.3
-  return Math.max(0.2, Math.min(1.3, coefficient));
+  // MALUS MILITAIRE : très peu de civils sur les bases
+  if (aeroportDepart.taille === 'military' || aeroportArrivee.taille === 'military') {
+    coefficient *= MALUS_MILITAIRE;
+  }
+
+  // Limiter entre 0 et 1.15 (max avec tous les bonus)
+  return Math.max(0, Math.min(1.15, coefficient));
+}
+
+/**
+ * Retourne la taille d'aéroport la plus restrictive (la plus petite)
+ */
+function getTailleLaPlusRestrictive(taille1: TailleAeroport, taille2: TailleAeroport): TailleAeroport {
+  const ordre: Record<TailleAeroport, number> = {
+    military: 0,
+    small: 1,
+    regional: 2,
+    international: 3,
+  };
+  return ordre[taille1] <= ordre[taille2] ? taille1 : taille2;
+}
+
+/**
+ * Calcule le prix optimal recommandé pour une liaison
+ */
+export function getPrixOptimal(codeDepart: string, codeArrivee: string): { min: number; optimal: number; max: number; critique: number } {
+  const aeroportDepart = getAeroportInfo(codeDepart);
+  const aeroportArrivee = getAeroportInfo(codeArrivee);
+
+  if (!aeroportDepart || !aeroportArrivee) {
+    return { min: 30, optimal: 80, max: 200, critique: 300 };
+  }
+
+  const tailleRestrictive = getTailleLaPlusRestrictive(aeroportDepart.taille, aeroportArrivee.taille);
+  const prixRef = PRIX_REFERENCE[tailleRestrictive];
+  const prixCritique = PRIX_CRITIQUE[tailleRestrictive];
+
+  return {
+    min: Math.round(prixRef * 0.5),
+    optimal: prixRef,
+    max: Math.round((prixRef + prixCritique) / 2),
+    critique: prixCritique,
+  };
+}
+
+/**
+ * Estime le nombre de passagers pour un vol
+ */
+export function estimerPassagers(
+  codeDepart: string,
+  codeArrivee: string,
+  prixBillet: number,
+  capaciteAvion: number,
+  passagersDisponibles: number
+): { passagers: number; remplissage: number; revenus: number; avertissement: string | null } {
+  const coefficient = calculerCoefficientRemplissage(codeDepart, codeArrivee, prixBillet);
+  
+  // Passagers potentiels = capacité * coefficient
+  const passagersPotentiels = Math.floor(capaciteAvion * coefficient);
+  
+  // Limité par les passagers disponibles à l'aéroport
+  const passagers = Math.min(passagersPotentiels, passagersDisponibles);
+  
+  const remplissage = capaciteAvion > 0 ? passagers / capaciteAvion : 0;
+  const revenus = passagers * prixBillet;
+
+  // Avertissements
+  let avertissement: string | null = null;
+  if (prixBillet >= PRIX_MAXIMUM_ABSOLU) {
+    avertissement = '⛔ Prix trop élevé ! Aucun passager ne peut payer ce prix.';
+  } else if (coefficient < 0.1) {
+    avertissement = '🔴 Prix abusif ! Très peu de passagers accepteront.';
+  } else if (coefficient < 0.3) {
+    avertissement = '🟠 Prix élevé. Le remplissage sera faible.';
+  } else if (coefficient < 0.7) {
+    avertissement = '🟡 Prix au-dessus de la moyenne. Remplissage réduit.';
+  }
+
+  return { passagers, remplissage, revenus, avertissement };
 }

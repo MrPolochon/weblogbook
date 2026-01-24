@@ -45,6 +45,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     { href: '/logbook/depot-plan-vol', label: 'Déposer un plan de vol', icon: Plane, badge: 0 },
     { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText, badge: 0 },
     { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0 },
+    { href: '/marche-cargo', label: 'Marché cargo', icon: Package, badge: 0 },
     { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount },
     ...(hasCompagnie ? [{ href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 }] : []),
     ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield, badge: 0 }] : []),
@@ -56,7 +57,8 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
   const isPiloteActive = pathname.startsWith('/logbook') || pathname.startsWith('/militaire') || 
     pathname.startsWith('/felitz-bank') || pathname.startsWith('/ma-compagnie') ||
     pathname.startsWith('/marketplace') || pathname.startsWith('/inventaire') ||
-    pathname.startsWith('/messagerie') || pathname.startsWith('/marche-passagers');
+    pathname.startsWith('/messagerie') || pathname.startsWith('/marche-passagers') ||
+    pathname.startsWith('/marche-cargo');
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-700/50 bg-slate-900/95 backdrop-blur">

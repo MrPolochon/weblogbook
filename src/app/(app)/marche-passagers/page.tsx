@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { Map } from 'lucide-react';
+import { Map, Package, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 import MarchePassagersClient from './MarchePassagersClient';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
@@ -82,6 +83,18 @@ export default async function MarchePassagersPage() {
       </div>
 
       <MarchePassagersClient aeroports={aeroportsData} />
+
+      {/* Lien vers marché cargo */}
+      <div className="flex justify-center pt-4">
+        <Link
+          href="/marche-cargo"
+          className="flex items-center gap-2 px-4 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 rounded-lg text-sm transition-colors border border-amber-500/30"
+        >
+          <Package className="h-4 w-4" />
+          Voir le marché du fret
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
     </div>
   );
 }
