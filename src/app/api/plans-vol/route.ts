@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         .eq('id', flotte_avion_id)
         .single();
 
-      const flotteData = flotte as {
+      const flotteData = (flotte ?? null) as unknown as {
         capacite_cargo_custom?: number | null;
         types_avion?: { capacite_cargo_kg?: number | null } | { capacite_cargo_kg?: number | null }[] | null;
       } | null;

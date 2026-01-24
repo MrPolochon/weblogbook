@@ -10,13 +10,22 @@ interface Compte {
   solde: number;
 }
 
+interface Transaction {
+  id: string;
+  type: string;
+  montant: number;
+  libelle: string;
+  created_at: string;
+}
+
 interface Props {
   compte: Compte;
   label: string;
   type: 'personnel' | 'entreprise' | 'militaire';
+  transactions?: Transaction[];
 }
 
-export default function AdminFelitzClient({ compte, label, type }: Props) {
+export default function AdminFelitzClient({ compte, label, type, transactions = [] }: Props) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const [montant, setMontant] = useState('');
@@ -57,6 +66,17 @@ export default function AdminFelitzClient({ compte, label, type }: Props) {
   }
 
   const borderColor = type === 'militaire' ? 'border-red-500/30' : type === 'entreprise' ? 'border-sky-500/30' : 'border-emerald-500/30';
+  const accentClass = type === 'militaire' ? 'text-red-300' : type === 'entreprise' ? 'text-sky-300' : 'text-emerald-300';
+
+  function formatDate(dateStr: string) {
+    return new Date(dateStr).toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
 
   return (
     <div className={`bg-slate-800/50 rounded-lg border ${borderColor}`}>
@@ -120,6 +140,30 @@ export default function AdminFelitzClient({ compte, label, type }: Props) {
               Débiter
             </button>
           </div>
+
+          {transactions.length > 0 ? (
+            <div className="pt-2 border-t border-slate-700/50">
+              <p className={`text-xs font-semibold ${accentClass} mb-2`}>Transactions récentes</p>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {transactions.map((t) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between text-xs bg-slate-900/40 rounded-md px-2 py-1.5 border border-slate-700/50"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-slate-200 truncate">{t.libelle}</p>
+                      <p className="text-slate-500">{formatDate(t.created_at)}</p>
+                    </div>
+                    <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>
+                      {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">Aucune transaction</p>
+          )}
         </div>
       )}
     </div>
