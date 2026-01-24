@@ -58,7 +58,10 @@ export async function POST(request: Request) {
         .eq('id', flotte_avion_id)
         .single();
 
-      const capaciteCargo = flotte?.capacite_cargo_custom ?? flotte?.types_avion?.capacite_cargo_kg ?? 0;
+      const capaciteCargoBase = Array.isArray(flotte?.types_avion)
+        ? flotte?.types_avion?.[0]?.capacite_cargo_kg
+        : flotte?.types_avion?.capacite_cargo_kg;
+      const capaciteCargo = flotte?.capacite_cargo_custom ?? capaciteCargoBase ?? 0;
       const prixKg = compagnie?.prix_kg_cargo ?? 0;
       const pourcentageSalaire = compagnie?.pourcentage_salaire ?? 0;
 
