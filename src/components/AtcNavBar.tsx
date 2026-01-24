@@ -3,9 +3,9 @@
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText, Mail, Moon, Sun } from 'lucide-react';
+import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText, Mail, Moon, Sun, ChevronDown, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
 function AtcSessionCompte({ aeroport, position, startedAt, isDark }: { aeroport: string; position: string; startedAt: string; isDark: boolean }) {
@@ -54,6 +54,18 @@ export default function AtcNavBar({
   const router = useRouter();
   const { theme, toggleTheme } = useAtcTheme();
   const isDark = theme === 'dark';
+  const [atcMenuOpen, setAtcMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setAtcMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -61,6 +73,14 @@ export default function AtcNavBar({
     router.push('/login');
     router.refresh();
   }
+
+  const atcMenuItems = [
+    { href: '/atc', label: 'Tableau de bord', icon: Radio, badge: 0 },
+    { href: '/atc/documents', label: 'Documents', icon: FileText, badge: 0 },
+    { href: '/atc/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount },
+  ];
+
+  const isAtcMenuActive = pathname === '/atc' || pathname.startsWith('/atc/documents') || pathname.startsWith('/atc/messagerie');
 
   const linkBase = 'flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0';
   const linkActive = isDark ? 'atc-link-active bg-sky-900 text-sky-300' : 'atc-link-active bg-sky-100 text-sky-800';
@@ -72,32 +92,78 @@ export default function AtcNavBar({
     ? 'bg-slate-900/95 border-slate-700' 
     : 'bg-white/90 border-slate-300';
 
+  const dropdownBg = isDark
+    ? 'bg-slate-800 border-slate-700'
+    : 'bg-white border-slate-300';
+
+  const dropdownItemActive = isDark
+    ? 'bg-slate-700/50 text-sky-300'
+    : 'bg-sky-100 text-sky-800';
+
+  const dropdownItemInactive = isDark
+    ? 'text-slate-300 hover:bg-slate-700/30 hover:text-slate-100'
+    : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900';
+
   return (
     <header className={cn("atc-header sticky top-0 z-50 border-b backdrop-blur", headerBg)}>
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-5 sm:gap-5">
         <nav className="flex flex-nowrap items-center gap-3">
-          <Link href="/atc" className={cn(linkBase, pathname === '/atc' ? linkActive : linkInactive)}>
-            <Radio className="h-4 w-4 flex-shrink-0" />
-            <span className="hidden md:inline">Tableau de bord ATC</span>
-            <span className="md:hidden">Tableau</span>
-          </Link>
-          <Link href="/atc/documents" className={cn(linkBase, pathname.startsWith('/atc/documents') ? linkActive : linkInactive)}>
-            <FileText className="h-4 w-4 flex-shrink-0" />
-            Documents
-          </Link>
+          {/* Menu déroulant ATC */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setAtcMenuOpen(!atcMenuOpen)}
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-colors relative flex-shrink-0',
+                isAtcMenuActive ? linkActive : linkInactive
+              )}
+            >
+              <Menu className="h-4 w-4 flex-shrink-0" />
+              <span className="hidden md:inline">Menu ATC</span>
+              <span className="md:hidden">Menu</span>
+              <ChevronDown className={cn('h-4 w-4 transition-transform flex-shrink-0', atcMenuOpen && 'rotate-180')} />
+              {messagesNonLusCount > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white ring-2 ring-current"
+                  title={`${messagesNonLusCount} message(s) non lu(s)`}
+                >
+                  {messagesNonLusCount > 99 ? '99+' : messagesNonLusCount}
+                </span>
+              )}
+            </button>
+            
+            {atcMenuOpen && (
+              <div className={cn("absolute left-0 top-full mt-1 w-56 rounded-lg border py-1 shadow-xl z-50", dropdownBg)}>
+                {atcMenuItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setAtcMenuOpen(false)}
+                      className={cn(
+                        'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
+                        pathname === item.href || (item.href !== '/atc' && pathname.startsWith(item.href))
+                          ? dropdownItemActive
+                          : dropdownItemInactive
+                      )}
+                    >
+                      <Icon className="h-4 w-4 flex-shrink-0" />
+                      {item.label}
+                      {item.badge > 0 && (
+                        <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
+                          {item.badge > 99 ? '99+' : item.badge}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <Link href="/atc/notams" className={cn(linkBase, pathname.startsWith('/atc/notams') ? linkActive : linkInactive)}>
             <ScrollText className="h-4 w-4 flex-shrink-0" />
             NOTAMs
-          </Link>
-          <Link href="/atc/messagerie" className={cn(linkBase, 'relative', pathname.startsWith('/atc/messagerie') ? linkActive : linkInactive)}>
-            <Mail className="h-4 w-4 flex-shrink-0" />
-            <span className="hidden md:inline">Messagerie</span>
-            <span className="md:hidden">Msgs</span>
-            {messagesNonLusCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center px-1 rounded-full bg-red-500 text-white text-xs font-bold">
-                {messagesNonLusCount > 99 ? '99+' : messagesNonLusCount}
-              </span>
-            )}
           </Link>
           {isAdmin && (
             <Link href="/atc/admin" className={cn(linkBase, pathname.startsWith('/atc/admin') ? linkActive : linkInactive)}>
