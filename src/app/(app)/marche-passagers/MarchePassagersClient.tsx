@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Users, Plane, TrendingUp, MapPin, RefreshCw, Radio, ZoomIn, ZoomOut, Move, Settings, Copy, Check, X, Layers, Navigation, Eye, EyeOff } from 'lucide-react';
+import { Users, Plane, TrendingUp, MapPin, RefreshCw, Radio, ZoomIn, ZoomOut, Move, Settings, Copy, Check, X, Eye, EyeOff, Plus, Trash2, Pencil } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface AeroportData {
@@ -19,6 +19,23 @@ interface AeroportData {
 
 interface Props {
   aeroports: AeroportData[];
+}
+
+interface Island {
+  id: string;
+  name: string;
+  points: { x: number; y: number }[];
+  fill: string;
+  stroke: string;
+}
+
+interface FIRZone {
+  id: string;
+  code: string;
+  name: string;
+  points: { x: number; y: number }[];
+  color: string;
+  borderColor: string;
 }
 
 // Positions des aéroports (en pourcentage)
@@ -48,117 +65,32 @@ const DEFAULT_POSITIONS: Record<string, { x: number; y: number }> = {
   'IUFO': { x: 17, y: 46 },
 };
 
-// Îles de la carte PTFS (paths SVG précis)
-const ISLANDS = [
-  // ORENJI - Nord (allongée en diagonale)
-  {
-    name: 'Orenji',
-    path: 'M 360,50 Q 380,45 420,55 Q 480,70 520,100 Q 540,120 530,140 Q 510,150 470,145 Q 420,135 380,115 Q 350,95 345,70 Q 350,55 360,50 Z',
-    fill: '#2d5a3d',
-    stroke: '#1a3d2a'
-  },
-  // PERTH - Nord-Est (grande île)
-  {
-    name: 'Perth',
-    path: 'M 680,120 Q 720,110 780,125 Q 830,140 860,175 Q 875,210 860,250 Q 830,280 780,285 Q 720,280 680,250 Q 650,210 660,170 Q 670,130 680,120 Z',
-    fill: '#3d6b4d',
-    stroke: '#1a3d2a'
-  },
-  // Petite île près de Perth
-  {
-    name: 'Bird Island',
-    path: 'M 650,180 Q 670,175 690,185 Q 700,200 690,215 Q 670,220 655,210 Q 645,195 650,180 Z',
-    fill: '#4a7a5a',
-    stroke: '#1a3d2a'
-  },
-  // GRINDAVIK - Ouest
-  {
-    name: 'Grindavik',
-    path: 'M 100,300 Q 140,290 170,310 Q 190,340 180,380 Q 160,410 120,415 Q 80,400 70,360 Q 75,320 100,300 Z',
-    fill: '#3d6b4d',
-    stroke: '#1a3d2a'
-  },
-  // SAINT BARTHELEMY - Centre (petite île)
-  {
-    name: 'Saint Barthelemy',
-    path: 'M 520,280 Q 560,270 600,285 Q 630,310 620,350 Q 590,380 550,375 Q 510,360 505,320 Q 510,290 520,280 Z',
-    fill: '#3d6b4d',
-    stroke: '#1a3d2a'
-  },
-  // IZOLIRANI - Est (grande île multicolore)
-  {
-    name: 'Izolirani',
-    path: 'M 820,280 Q 880,270 930,300 Q 970,340 960,400 Q 930,460 870,470 Q 810,460 780,410 Q 770,350 790,300 Q 805,280 820,280 Z',
-    fill: '#4a7a5a',
-    stroke: '#1a3d2a'
-  },
-  // Zone désertique Izolirani
-  {
-    name: 'Izolirani Desert',
-    path: 'M 860,310 Q 910,320 930,360 Q 920,410 880,420 Q 840,400 850,350 Q 855,320 860,310 Z',
-    fill: '#c9a227',
-    stroke: '#a08020'
-  },
-  // SAUTHEMPTONA - Sud-Ouest
-  {
-    name: 'Sauthemptona',
-    path: 'M 80,500 Q 130,490 160,520 Q 175,560 155,600 Q 120,630 80,620 Q 50,590 55,550 Q 65,510 80,500 Z',
-    fill: '#3d6b4d',
-    stroke: '#1a3d2a'
-  },
-  // GREATER ROCKFORD - Centre-Sud (île complexe)
-  // Partie nord
-  {
-    name: 'Rockford North',
-    path: 'M 340,380 Q 400,370 460,390 Q 500,420 490,470 Q 460,500 400,505 Q 340,495 320,450 Q 320,410 340,380 Z',
-    fill: '#3d6b4d',
-    stroke: '#1a3d2a'
-  },
-  // Partie principale sud
-  {
-    name: 'Rockford Main',
-    path: 'M 300,480 Q 380,460 460,485 Q 530,520 540,590 Q 520,660 460,700 Q 380,720 300,690 Q 250,640 260,570 Q 270,510 300,480 Z',
-    fill: '#2d5a3d',
-    stroke: '#1a3d2a'
-  },
-  // Petite île à côté (Queen/HMS area)
-  {
-    name: 'Queen Islet',
-    path: 'M 510,420 Q 540,415 560,435 Q 570,460 555,480 Q 525,490 505,470 Q 495,445 510,420 Z',
-    fill: '#4a7a5a',
-    stroke: '#1a3d2a'
-  },
-  // SKOPELOS - Centre-Est
-  {
-    name: 'Skopelos',
-    path: 'M 700,420 Q 750,410 790,435 Q 815,470 800,510 Q 760,540 710,530 Q 670,500 680,455 Q 690,425 700,420 Z',
-    fill: '#4a9f6a',
-    stroke: '#2d6b4d'
-  },
-  // CYPRUS/LARNACA - Sud-Est (grande île beige)
-  {
-    name: 'Cyprus',
-    path: 'M 650,620 Q 750,600 850,630 Q 920,680 910,760 Q 860,830 770,850 Q 680,840 620,790 Q 590,720 610,660 Q 630,630 650,620 Z',
-    fill: '#c9a960',
-    stroke: '#a08040'
-  },
-  // Zone verte sur Cyprus
-  {
-    name: 'Cyprus Green',
-    path: 'M 700,660 Q 760,650 800,690 Q 820,740 790,780 Q 740,800 690,780 Q 660,740 680,690 Q 690,665 700,660 Z',
-    fill: '#5a8a5a',
-    stroke: '#3d6b4d'
-  },
+// Îles initiales (en coordonnées SVG 1024x787)
+const DEFAULT_ISLANDS: Island[] = [
+  { id: 'orenji', name: 'Orenji', points: [{ x: 360, y: 50 }, { x: 420, y: 55 }, { x: 520, y: 100 }, { x: 530, y: 140 }, { x: 470, y: 145 }, { x: 380, y: 115 }, { x: 345, y: 70 }], fill: '#2d5a3d', stroke: '#1a3d2a' },
+  { id: 'perth', name: 'Perth', points: [{ x: 680, y: 120 }, { x: 780, y: 125 }, { x: 860, y: 175 }, { x: 860, y: 250 }, { x: 780, y: 285 }, { x: 680, y: 250 }, { x: 660, y: 170 }], fill: '#3d6b4d', stroke: '#1a3d2a' },
+  { id: 'bird', name: 'Bird Island', points: [{ x: 650, y: 180 }, { x: 690, y: 185 }, { x: 690, y: 215 }, { x: 655, y: 210 }], fill: '#4a7a5a', stroke: '#1a3d2a' },
+  { id: 'grindavik', name: 'Grindavik', points: [{ x: 100, y: 300 }, { x: 170, y: 310 }, { x: 180, y: 380 }, { x: 120, y: 415 }, { x: 70, y: 360 }], fill: '#3d6b4d', stroke: '#1a3d2a' },
+  { id: 'barthelemy', name: 'Saint Barthelemy', points: [{ x: 520, y: 280 }, { x: 600, y: 285 }, { x: 620, y: 350 }, { x: 550, y: 375 }, { x: 505, y: 320 }], fill: '#3d6b4d', stroke: '#1a3d2a' },
+  { id: 'izolirani', name: 'Izolirani', points: [{ x: 820, y: 280 }, { x: 930, y: 300 }, { x: 960, y: 400 }, { x: 870, y: 470 }, { x: 780, y: 410 }, { x: 790, y: 300 }], fill: '#4a7a5a', stroke: '#1a3d2a' },
+  { id: 'izol_desert', name: 'Izolirani Desert', points: [{ x: 860, y: 310 }, { x: 930, y: 360 }, { x: 880, y: 420 }, { x: 850, y: 350 }], fill: '#c9a227', stroke: '#a08020' },
+  { id: 'sauthemptona', name: 'Sauthemptona', points: [{ x: 80, y: 500 }, { x: 160, y: 520 }, { x: 155, y: 600 }, { x: 80, y: 620 }, { x: 55, y: 550 }], fill: '#3d6b4d', stroke: '#1a3d2a' },
+  { id: 'rockford_n', name: 'Rockford North', points: [{ x: 340, y: 380 }, { x: 460, y: 390 }, { x: 490, y: 470 }, { x: 400, y: 505 }, { x: 320, y: 450 }], fill: '#3d6b4d', stroke: '#1a3d2a' },
+  { id: 'rockford_main', name: 'Rockford Main', points: [{ x: 300, y: 480 }, { x: 460, y: 485 }, { x: 540, y: 590 }, { x: 460, y: 700 }, { x: 300, y: 690 }, { x: 260, y: 570 }], fill: '#2d5a3d', stroke: '#1a3d2a' },
+  { id: 'queen', name: 'Queen Islet', points: [{ x: 510, y: 420 }, { x: 560, y: 435 }, { x: 555, y: 480 }, { x: 505, y: 470 }], fill: '#4a7a5a', stroke: '#1a3d2a' },
+  { id: 'skopelos', name: 'Skopelos', points: [{ x: 700, y: 420 }, { x: 790, y: 435 }, { x: 800, y: 510 }, { x: 710, y: 530 }, { x: 680, y: 455 }], fill: '#4a9f6a', stroke: '#2d6b4d' },
+  { id: 'cyprus', name: 'Cyprus', points: [{ x: 650, y: 620 }, { x: 850, y: 630 }, { x: 910, y: 760 }, { x: 770, y: 850 }, { x: 620, y: 790 }, { x: 610, y: 660 }], fill: '#c9a960', stroke: '#a08040' },
+  { id: 'cyprus_green', name: 'Cyprus Green', points: [{ x: 700, y: 660 }, { x: 800, y: 690 }, { x: 790, y: 780 }, { x: 690, y: 780 }, { x: 680, y: 690 }], fill: '#5a8a5a', stroke: '#3d6b4d' },
 ];
 
-// Zones FIR
-const FIR_ZONES = [
-  { code: 'GRINDAVIK', name: 'Grindavik FIR', points: '0,250 280,250 280,780 0,780', color: 'rgba(255,200,0,0.1)', borderColor: '#ffc800' },
-  { code: 'BARTHELEMY', name: 'Barthelemy FIR', points: '280,0 700,0 700,400 280,400', color: 'rgba(0,200,255,0.1)', borderColor: '#00c8ff' },
-  { code: 'ROCKFORD', name: 'Rockford FIR', points: '280,400 650,400 650,787 280,787', color: 'rgba(255,100,100,0.1)', borderColor: '#ff6464' },
-  { code: 'PERTH', name: 'Perth FIR', points: '600,0 1024,0 1024,300 600,300', color: 'rgba(200,100,255,0.1)', borderColor: '#c864ff' },
-  { code: 'IZOLIRANI', name: 'Izolirani FIR', points: '700,300 1024,300 1024,550 700,550', color: 'rgba(255,150,50,0.1)', borderColor: '#ff9632' },
-  { code: 'LARNACA', name: 'Larnaca FIR', points: '600,550 1024,550 1024,787 600,787', color: 'rgba(100,255,100,0.1)', borderColor: '#64ff64' },
+// Zones FIR initiales (en coordonnées SVG)
+const DEFAULT_FIR_ZONES: FIRZone[] = [
+  { id: 'grindavik_fir', code: 'GRINDAVIK', name: 'Grindavik FIR', points: [{ x: 0, y: 250 }, { x: 280, y: 250 }, { x: 280, y: 787 }, { x: 0, y: 787 }], color: 'rgba(255,200,0,0.1)', borderColor: '#ffc800' },
+  { id: 'barthelemy_fir', code: 'BARTHELEMY', name: 'Barthelemy FIR', points: [{ x: 280, y: 0 }, { x: 700, y: 0 }, { x: 700, y: 400 }, { x: 280, y: 400 }], color: 'rgba(0,200,255,0.1)', borderColor: '#00c8ff' },
+  { id: 'rockford_fir', code: 'ROCKFORD', name: 'Rockford FIR', points: [{ x: 280, y: 400 }, { x: 650, y: 400 }, { x: 650, y: 787 }, { x: 280, y: 787 }], color: 'rgba(255,100,100,0.1)', borderColor: '#ff6464' },
+  { id: 'perth_fir', code: 'PERTH', name: 'Perth FIR', points: [{ x: 600, y: 0 }, { x: 1024, y: 0 }, { x: 1024, y: 300 }, { x: 600, y: 300 }], color: 'rgba(200,100,255,0.1)', borderColor: '#c864ff' },
+  { id: 'izolirani_fir', code: 'IZOLIRANI', name: 'Izolirani FIR', points: [{ x: 700, y: 300 }, { x: 1024, y: 300 }, { x: 1024, y: 550 }, { x: 700, y: 550 }], color: 'rgba(255,150,50,0.1)', borderColor: '#ff9632' },
+  { id: 'larnaca_fir', code: 'LARNACA', name: 'Larnaca FIR', points: [{ x: 600, y: 550 }, { x: 1024, y: 550 }, { x: 1024, y: 787 }, { x: 600, y: 787 }], color: 'rgba(100,255,100,0.1)', borderColor: '#64ff64' },
 ];
 
 // Waypoints
@@ -206,6 +138,27 @@ const VORS = [
   { code: 'IZO', freq: '117.53', x: 88, y: 46, name: 'Izolirani' },
 ];
 
+const ISLAND_COLORS = [
+  { fill: '#2d5a3d', stroke: '#1a3d2a', name: 'Vert foncé' },
+  { fill: '#3d6b4d', stroke: '#1a3d2a', name: 'Vert' },
+  { fill: '#4a7a5a', stroke: '#1a3d2a', name: 'Vert clair' },
+  { fill: '#4a9f6a', stroke: '#2d6b4d', name: 'Vert vif' },
+  { fill: '#5a8a5a', stroke: '#3d6b4d', name: 'Vert prairie' },
+  { fill: '#c9a960', stroke: '#a08040', name: 'Sable' },
+  { fill: '#c9a227', stroke: '#a08020', name: 'Désert' },
+  { fill: '#8b7355', stroke: '#6b5344', name: 'Terre' },
+];
+
+const FIR_COLORS = [
+  { color: 'rgba(255,200,0,0.15)', borderColor: '#ffc800', name: 'Jaune' },
+  { color: 'rgba(0,200,255,0.15)', borderColor: '#00c8ff', name: 'Cyan' },
+  { color: 'rgba(255,100,100,0.15)', borderColor: '#ff6464', name: 'Rouge' },
+  { color: 'rgba(200,100,255,0.15)', borderColor: '#c864ff', name: 'Violet' },
+  { color: 'rgba(255,150,50,0.15)', borderColor: '#ff9632', name: 'Orange' },
+  { color: 'rgba(100,255,100,0.15)', borderColor: '#64ff64', name: 'Vert' },
+  { color: 'rgba(100,150,255,0.15)', borderColor: '#6496ff', name: 'Bleu' },
+];
+
 const TAILLE_COLORS: Record<string, string> = {
   international: 'bg-purple-500 border-purple-400',
   regional: 'bg-sky-500 border-sky-400',
@@ -227,6 +180,8 @@ const TAILLE_LABELS: Record<string, string> = {
   military: 'Militaire',
 };
 
+type AdminEditMode = 'airports' | 'islands' | 'fir';
+
 export default function MarchePassagersClient({ aeroports }: Props) {
   const router = useRouter();
   const [selectedAeroport, setSelectedAeroport] = useState<AeroportData | null>(null);
@@ -245,15 +200,23 @@ export default function MarchePassagersClient({ aeroports }: Props) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const zoomableRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   
   // Mode admin
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
   const [isAdminMode, setIsAdminMode] = useState(false);
+  const [adminEditMode, setAdminEditMode] = useState<AdminEditMode>('airports');
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>(DEFAULT_POSITIONS);
+  const [islands, setIslands] = useState<Island[]>(DEFAULT_ISLANDS);
+  const [firZones, setFirZones] = useState<FIRZone[]>(DEFAULT_FIR_ZONES);
   const [draggingAeroport, setDraggingAeroport] = useState<string | null>(null);
+  const [draggingPoint, setDraggingPoint] = useState<{ type: 'island' | 'fir'; id: string; pointIndex: number } | null>(null);
+  const [selectedIsland, setSelectedIsland] = useState<string | null>(null);
+  const [selectedFir, setSelectedFir] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [showNewItemModal, setShowNewItemModal] = useState(false);
 
   const handleZoomIn = useCallback(() => {
     setZoom(z => Math.min(z + 0.25, 4));
@@ -277,6 +240,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
     if (!container) return;
 
     const handleWheel = (e: WheelEvent) => {
+      if (isAdminMode) return;
       e.preventDefault();
       e.stopPropagation();
       if (e.deltaY < 0) {
@@ -292,6 +256,14 @@ export default function MarchePassagersClient({ aeroports }: Props) {
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
+  }, [isAdminMode]);
+
+  const getSvgCoordinates = useCallback((e: React.MouseEvent): { x: number; y: number } => {
+    if (!svgRef.current) return { x: 0, y: 0 };
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 1024;
+    const y = ((e.clientY - rect.top) / rect.height) * 787;
+    return { x: Math.round(x), y: Math.round(y) };
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -303,8 +275,34 @@ export default function MarchePassagersClient({ aeroports }: Props) {
   }, [zoom, pan, isAdminMode]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isAdminMode && draggingAeroport && zoomableRef.current) {
-      const rect = zoomableRef.current.getBoundingClientRect();
+    // Déplacement d'un point d'île ou FIR
+    if (isAdminMode && draggingPoint && svgRef.current) {
+      const coords = getSvgCoordinates(e);
+      if (draggingPoint.type === 'island') {
+        setIslands(prev => prev.map(island => {
+          if (island.id === draggingPoint.id) {
+            const newPoints = [...island.points];
+            newPoints[draggingPoint.pointIndex] = coords;
+            return { ...island, points: newPoints };
+          }
+          return island;
+        }));
+      } else {
+        setFirZones(prev => prev.map(fir => {
+          if (fir.id === draggingPoint.id) {
+            const newPoints = [...fir.points];
+            newPoints[draggingPoint.pointIndex] = coords;
+            return { ...fir, points: newPoints };
+          }
+          return fir;
+        }));
+      }
+      return;
+    }
+
+    // Déplacement d'un aéroport
+    if (isAdminMode && draggingAeroport && svgRef.current) {
+      const rect = svgRef.current.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * 100;
       const y = ((e.clientY - rect.top) / rect.height) * 100;
       setPositions(prev => ({
@@ -323,12 +321,36 @@ export default function MarchePassagersClient({ aeroports }: Props) {
         y: Math.max(-maxPan, Math.min(maxPan, newY))
       });
     }
-  }, [isDragging, zoom, dragStart, isAdminMode, draggingAeroport]);
+  }, [isDragging, zoom, dragStart, isAdminMode, draggingAeroport, draggingPoint, getSvgCoordinates]);
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
     setDraggingAeroport(null);
+    setDraggingPoint(null);
   }, []);
+
+  const handleSvgClick = useCallback((e: React.MouseEvent) => {
+    if (!isAdminMode) return;
+    
+    // Ajouter un point à l'île ou FIR sélectionnée
+    if (adminEditMode === 'islands' && selectedIsland) {
+      const coords = getSvgCoordinates(e);
+      setIslands(prev => prev.map(island => {
+        if (island.id === selectedIsland) {
+          return { ...island, points: [...island.points, coords] };
+        }
+        return island;
+      }));
+    } else if (adminEditMode === 'fir' && selectedFir) {
+      const coords = getSvgCoordinates(e);
+      setFirZones(prev => prev.map(fir => {
+        if (fir.id === selectedFir) {
+          return { ...fir, points: [...fir.points, coords] };
+        }
+        return fir;
+      }));
+    }
+  }, [isAdminMode, adminEditMode, selectedIsland, selectedFir, getSvgCoordinates]);
 
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
@@ -368,17 +390,105 @@ export default function MarchePassagersClient({ aeroports }: Props) {
     }
   };
 
-  const generatePositionsCode = () => {
-    const lines = Object.entries(positions)
-      .map(([code, pos]) => `  '${code}': { x: ${pos.x.toFixed(1)}, y: ${pos.y.toFixed(1)} },`)
-      .join('\n');
-    return `const POSITIONS = {\n${lines}\n};`;
-  };
+  const generateCode = useCallback(() => {
+    if (adminEditMode === 'airports') {
+      const lines = Object.entries(positions)
+        .map(([code, pos]) => `  '${code}': { x: ${pos.x.toFixed(1)}, y: ${pos.y.toFixed(1)} },`)
+        .join('\n');
+      return `const DEFAULT_POSITIONS = {\n${lines}\n};`;
+    } else if (adminEditMode === 'islands') {
+      const lines = islands.map(island => {
+        const pointsStr = island.points.map(p => `{ x: ${p.x}, y: ${p.y} }`).join(', ');
+        return `  { id: '${island.id}', name: '${island.name}', points: [${pointsStr}], fill: '${island.fill}', stroke: '${island.stroke}' },`;
+      }).join('\n');
+      return `const DEFAULT_ISLANDS = [\n${lines}\n];`;
+    } else {
+      const lines = firZones.map(fir => {
+        const pointsStr = fir.points.map(p => `{ x: ${p.x}, y: ${p.y} }`).join(', ');
+        return `  { id: '${fir.id}', code: '${fir.code}', name: '${fir.name}', points: [${pointsStr}], color: '${fir.color}', borderColor: '${fir.borderColor}' },`;
+      }).join('\n');
+      return `const DEFAULT_FIR_ZONES = [\n${lines}\n];`;
+    }
+  }, [adminEditMode, positions, islands, firZones]);
 
-  const copyPositions = () => {
-    navigator.clipboard.writeText(generatePositionsCode());
+  const copyCode = () => {
+    navigator.clipboard.writeText(generateCode());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const addNewIsland = () => {
+    if (!newItemName.trim()) return;
+    const id = newItemName.toLowerCase().replace(/\s+/g, '_');
+    setIslands(prev => [...prev, {
+      id,
+      name: newItemName,
+      points: [{ x: 500, y: 400 }, { x: 550, y: 400 }, { x: 550, y: 450 }, { x: 500, y: 450 }],
+      fill: ISLAND_COLORS[0].fill,
+      stroke: ISLAND_COLORS[0].stroke
+    }]);
+    setSelectedIsland(id);
+    setNewItemName('');
+    setShowNewItemModal(false);
+  };
+
+  const addNewFir = () => {
+    if (!newItemName.trim()) return;
+    const id = newItemName.toLowerCase().replace(/\s+/g, '_') + '_fir';
+    const code = newItemName.toUpperCase().replace(/\s+/g, '_');
+    setFirZones(prev => [...prev, {
+      id,
+      code,
+      name: `${newItemName} FIR`,
+      points: [{ x: 400, y: 300 }, { x: 600, y: 300 }, { x: 600, y: 500 }, { x: 400, y: 500 }],
+      color: FIR_COLORS[0].color,
+      borderColor: FIR_COLORS[0].borderColor
+    }]);
+    setSelectedFir(id);
+    setNewItemName('');
+    setShowNewItemModal(false);
+  };
+
+  const deletePoint = (type: 'island' | 'fir', id: string, pointIndex: number) => {
+    if (type === 'island') {
+      setIslands(prev => prev.map(island => {
+        if (island.id === id && island.points.length > 3) {
+          const newPoints = island.points.filter((_, i) => i !== pointIndex);
+          return { ...island, points: newPoints };
+        }
+        return island;
+      }));
+    } else {
+      setFirZones(prev => prev.map(fir => {
+        if (fir.id === id && fir.points.length > 3) {
+          const newPoints = fir.points.filter((_, i) => i !== pointIndex);
+          return { ...fir, points: newPoints };
+        }
+        return fir;
+      }));
+    }
+  };
+
+  const deleteItem = (type: 'island' | 'fir', id: string) => {
+    if (type === 'island') {
+      setIslands(prev => prev.filter(i => i.id !== id));
+      setSelectedIsland(null);
+    } else {
+      setFirZones(prev => prev.filter(f => f.id !== id));
+      setSelectedFir(null);
+    }
+  };
+
+  const updateIslandColor = (id: string, fill: string, stroke: string) => {
+    setIslands(prev => prev.map(island => 
+      island.id === id ? { ...island, fill, stroke } : island
+    ));
+  };
+
+  const updateFirColor = (id: string, color: string, borderColor: string) => {
+    setFirZones(prev => prev.map(fir => 
+      fir.id === id ? { ...fir, color, borderColor } : fir
+    ));
   };
 
   async function handleRefresh() {
@@ -404,6 +514,9 @@ export default function MarchePassagersClient({ aeroports }: Props) {
   }
 
   const aeroportsTries = [...aeroports].sort((a, b) => b.passagers_disponibles - a.passagers_disponibles);
+  
+  const currentSelectedIsland = islands.find(i => i.id === selectedIsland);
+  const currentSelectedFir = firZones.find(f => f.id === selectedFir);
 
   return (
     <div className="space-y-4">
@@ -412,13 +525,13 @@ export default function MarchePassagersClient({ aeroports }: Props) {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-slate-800 rounded-xl p-6 max-w-sm w-full mx-4 border border-slate-700">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-slate-100">Mode Admin</h3>
+              <h3 className="text-lg font-bold text-slate-100">Mode Éditeur</h3>
               <button onClick={() => { setShowAdminModal(false); setAdminError(null); }} className="text-slate-400 hover:text-slate-200" disabled={adminLoading}>
                 <X className="h-5 w-5" />
               </button>
             </div>
             <p className="text-slate-400 text-sm mb-4">
-              Entrez le mot de passe superadmin pour repositionner les aéroports.
+              Entrez le mot de passe superadmin pour éditer la carte.
             </p>
             <input
               type="password"
@@ -430,16 +543,45 @@ export default function MarchePassagersClient({ aeroports }: Props) {
               autoFocus
               disabled={adminLoading}
             />
-            {adminError && (
-              <p className="text-red-400 text-sm mb-2">{adminError}</p>
-            )}
+            {adminError && <p className="text-red-400 text-sm mb-2">{adminError}</p>}
             <button
               onClick={handleAdminLogin}
               disabled={adminLoading}
               className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 mt-2"
             >
-              {adminLoading ? 'Vérification...' : 'Activer le mode admin'}
+              {adminLoading ? 'Vérification...' : 'Activer le mode éditeur'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Nouvel élément */}
+      {showNewItemModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-sm w-full mx-4 border border-slate-700">
+            <h3 className="text-lg font-bold text-slate-100 mb-4">
+              {adminEditMode === 'islands' ? 'Nouvelle île' : 'Nouvelle zone FIR'}
+            </h3>
+            <input
+              type="text"
+              value={newItemName}
+              onChange={(e) => setNewItemName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (adminEditMode === 'islands' ? addNewIsland() : addNewFir())}
+              placeholder="Nom..."
+              className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 mb-4"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowNewItemModal(false)} className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg">
+                Annuler
+              </button>
+              <button
+                onClick={adminEditMode === 'islands' ? addNewIsland : addNewFir}
+                className="flex-1 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg"
+              >
+                Créer
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -470,8 +612,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
         {/* Boutons couches */}
         {viewMode === 'carte' && !isAdminMode && (
           <div className="flex gap-1 flex-wrap">
-            <button
-              onClick={() => setShowIslands(!showIslands)}
+            <button onClick={() => setShowIslands(!showIslands)}
               className={`px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
                 showIslands ? 'bg-green-600/30 text-green-300 border border-green-500/50' : 'bg-slate-700 text-slate-500'
               }`}
@@ -479,8 +620,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
               {showIslands ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
               Îles
             </button>
-            <button
-              onClick={() => setShowFIR(!showFIR)}
+            <button onClick={() => setShowFIR(!showFIR)}
               className={`px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
                 showFIR ? 'bg-amber-600/30 text-amber-300 border border-amber-500/50' : 'bg-slate-700 text-slate-500'
               }`}
@@ -488,8 +628,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
               {showFIR ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
               FIR
             </button>
-            <button
-              onClick={() => setShowVOR(!showVOR)}
+            <button onClick={() => setShowVOR(!showVOR)}
               className={`px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
                 showVOR ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/50' : 'bg-slate-700 text-slate-500'
               }`}
@@ -497,8 +636,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
               {showVOR ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
               VOR
             </button>
-            <button
-              onClick={() => setShowWaypoints(!showWaypoints)}
+            <button onClick={() => setShowWaypoints(!showWaypoints)}
               className={`px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
                 showWaypoints ? 'bg-lime-600/30 text-lime-300 border border-lime-500/50' : 'bg-slate-700 text-slate-500'
               }`}
@@ -511,26 +649,19 @@ export default function MarchePassagersClient({ aeroports }: Props) {
         
         <div className="flex gap-2">
           {!isAdminMode ? (
-            <button
-              onClick={() => setShowAdminModal(true)}
-              className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-400 rounded-lg transition-colors"
-              title="Mode admin"
-            >
+            <button onClick={() => setShowAdminModal(true)} className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-400 rounded-lg transition-colors" title="Mode éditeur">
               <Settings className="h-4 w-4" />
             </button>
           ) : (
-            <button
-              onClick={() => setIsAdminMode(false)}
+            <button onClick={() => { setIsAdminMode(false); setSelectedIsland(null); setSelectedFir(null); }}
               className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
             >
               <X className="h-4 w-4" />
-              Quitter Admin
+              Quitter Éditeur
             </button>
           )}
           
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
+          <button onClick={handleRefresh} disabled={refreshing}
             className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -539,30 +670,129 @@ export default function MarchePassagersClient({ aeroports }: Props) {
         </div>
       </div>
 
-      {/* Bandeau Admin */}
+      {/* Bandeau Admin avec onglets */}
       {isAdminMode && (
-        <div className="bg-purple-900/50 border border-purple-500/50 rounded-lg p-4">
+        <div className="bg-purple-900/50 border border-purple-500/50 rounded-lg p-4 space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <h3 className="text-purple-300 font-bold flex items-center gap-2">
-                <Settings className="h-5 w-5" />
-                Mode Admin - Repositionnement
-              </h3>
-              <p className="text-purple-400/70 text-sm mt-1">
-                Glissez les points pour les repositionner sur les aéroports de la carte.
-              </p>
+            <div className="flex gap-2">
+              <button onClick={() => { setAdminEditMode('airports'); setSelectedIsland(null); setSelectedFir(null); }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  adminEditMode === 'airports' ? 'bg-purple-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+              >
+                <Plane className="h-4 w-4 inline mr-1" />
+                Aéroports
+              </button>
+              <button onClick={() => { setAdminEditMode('islands'); setSelectedFir(null); }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  adminEditMode === 'islands' ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+              >
+                <MapPin className="h-4 w-4 inline mr-1" />
+                Îles
+              </button>
+              <button onClick={() => { setAdminEditMode('fir'); setSelectedIsland(null); }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  adminEditMode === 'fir' ? 'bg-amber-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+              >
+                <Pencil className="h-4 w-4 inline mr-1" />
+                FIR
+              </button>
             </div>
-            <button
-              onClick={copyPositions}
+            <button onClick={copyCode}
               className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium"
             >
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? 'Copié !' : 'Copier positions'}
+              {copied ? 'Copié !' : 'Copier le code'}
             </button>
           </div>
-          {draggingAeroport && positions[draggingAeroport] && (
-            <div className="mt-3 p-2 bg-slate-900/50 rounded-lg font-mono text-sm text-purple-300">
-              {draggingAeroport}: x: {positions[draggingAeroport].x.toFixed(1)}, y: {positions[draggingAeroport].y.toFixed(1)}
+          
+          {adminEditMode === 'airports' && (
+            <p className="text-purple-400/70 text-sm">
+              Glissez les points colorés pour repositionner les aéroports.
+            </p>
+          )}
+          
+          {adminEditMode === 'islands' && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-green-400 text-sm font-medium">Île :</span>
+                <select value={selectedIsland || ''} onChange={(e) => setSelectedIsland(e.target.value || null)}
+                  className="px-3 py-1 bg-slate-800 border border-slate-600 rounded text-slate-200 text-sm"
+                >
+                  <option value="">-- Sélectionner --</option>
+                  {islands.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                </select>
+                <button onClick={() => setShowNewItemModal(true)}
+                  className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-sm flex items-center gap-1"
+                >
+                  <Plus className="h-3 w-3" /> Nouvelle
+                </button>
+                {selectedIsland && (
+                  <button onClick={() => deleteItem('island', selectedIsland)}
+                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm flex items-center gap-1"
+                  >
+                    <Trash2 className="h-3 w-3" /> Supprimer
+                  </button>
+                )}
+              </div>
+              {currentSelectedIsland && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-slate-400 text-sm">Couleur :</span>
+                  {ISLAND_COLORS.map((c, i) => (
+                    <button key={i} onClick={() => updateIslandColor(currentSelectedIsland.id, c.fill, c.stroke)}
+                      className={`w-6 h-6 rounded border-2 ${currentSelectedIsland.fill === c.fill ? 'border-white' : 'border-transparent'}`}
+                      style={{ backgroundColor: c.fill }}
+                      title={c.name}
+                    />
+                  ))}
+                </div>
+              )}
+              <p className="text-green-400/70 text-sm">
+                {selectedIsland ? 'Cliquez sur la carte pour ajouter des points. Glissez les points pour les déplacer. Clic droit pour supprimer un point.' : 'Sélectionnez ou créez une île pour la modifier.'}
+              </p>
+            </div>
+          )}
+          
+          {adminEditMode === 'fir' && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-amber-400 text-sm font-medium">FIR :</span>
+                <select value={selectedFir || ''} onChange={(e) => setSelectedFir(e.target.value || null)}
+                  className="px-3 py-1 bg-slate-800 border border-slate-600 rounded text-slate-200 text-sm"
+                >
+                  <option value="">-- Sélectionner --</option>
+                  {firZones.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </select>
+                <button onClick={() => setShowNewItemModal(true)}
+                  className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-sm flex items-center gap-1"
+                >
+                  <Plus className="h-3 w-3" /> Nouvelle
+                </button>
+                {selectedFir && (
+                  <button onClick={() => deleteItem('fir', selectedFir)}
+                    className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm flex items-center gap-1"
+                  >
+                    <Trash2 className="h-3 w-3" /> Supprimer
+                  </button>
+                )}
+              </div>
+              {currentSelectedFir && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-slate-400 text-sm">Couleur :</span>
+                  {FIR_COLORS.map((c, i) => (
+                    <button key={i} onClick={() => updateFirColor(currentSelectedFir.id, c.color, c.borderColor)}
+                      className={`w-6 h-6 rounded border-2 ${currentSelectedFir.borderColor === c.borderColor ? 'border-white' : 'border-transparent'}`}
+                      style={{ backgroundColor: c.borderColor }}
+                      title={c.name}
+                    />
+                  ))}
+                </div>
+              )}
+              <p className="text-amber-400/70 text-sm">
+                {selectedFir ? 'Cliquez sur la carte pour ajouter des points. Glissez les points pour les déplacer.' : 'Sélectionnez ou créez une zone FIR pour la modifier.'}
+              </p>
             </div>
           )}
         </div>
@@ -597,7 +827,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
               className="relative w-full overflow-hidden"
               style={{ 
                 aspectRatio: '1024/787',
-                cursor: isAdminMode ? (draggingAeroport ? 'grabbing' : 'default') : (zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default')
+                cursor: isAdminMode ? (draggingAeroport || draggingPoint ? 'grabbing' : 'crosshair') : (zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default')
               }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
@@ -605,7 +835,6 @@ export default function MarchePassagersClient({ aeroports }: Props) {
               onMouseLeave={handleMouseUp}
             >
               <div
-                ref={zoomableRef}
                 className="absolute inset-0 transition-transform duration-100"
                 style={{
                   transform: isAdminMode ? 'none' : `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
@@ -614,9 +843,11 @@ export default function MarchePassagersClient({ aeroports }: Props) {
               >
                 {/* SVG Carte */}
                 <svg 
+                  ref={svgRef}
                   viewBox="0 0 1024 787" 
                   className="absolute inset-0 w-full h-full"
                   style={{ background: 'linear-gradient(180deg, #1a3a5f 0%, #1a2e4a 50%, #162540 100%)' }}
+                  onClick={handleSvgClick}
                 >
                   {/* Grille */}
                   <defs>
@@ -631,70 +862,98 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                   <rect width="100%" height="100%" fill="url(#largeGrid)" />
 
                   {/* FIR Zones */}
-                  {showFIR && FIR_ZONES.map((fir, idx) => (
-                    <g key={idx}>
-                      <polygon
-                        points={fir.points}
-                        fill={fir.color}
-                        stroke={fir.borderColor}
-                        strokeWidth="2"
-                        strokeDasharray="10,5"
-                      />
-                      <text
-                        x={fir.points.split(' ').reduce((acc, p, i, arr) => {
-                          const [px] = p.split(',').map(Number);
-                          return acc + px / arr.length;
-                        }, 0)}
-                        y={fir.points.split(' ').reduce((acc, p, i, arr) => {
-                          const [, py] = p.split(',').map(Number);
-                          return acc + py / arr.length;
-                        }, 0)}
-                        fill={fir.borderColor}
-                        fontSize="14"
-                        fontFamily="monospace"
-                        fontWeight="bold"
-                        textAnchor="middle"
-                        opacity="0.7"
-                      >
-                        {fir.name}
-                      </text>
-                    </g>
-                  ))}
+                  {(showFIR || isAdminMode) && firZones.map((fir) => {
+                    const pointsStr = fir.points.map(p => `${p.x},${p.y}`).join(' ');
+                    const isSelected = selectedFir === fir.id;
+                    const centerX = fir.points.reduce((s, p) => s + p.x, 0) / fir.points.length;
+                    const centerY = fir.points.reduce((s, p) => s + p.y, 0) / fir.points.length;
+                    
+                    return (
+                      <g key={fir.id}>
+                        <polygon
+                          points={pointsStr}
+                          fill={fir.color}
+                          stroke={isSelected ? '#fff' : fir.borderColor}
+                          strokeWidth={isSelected ? 3 : 2}
+                          strokeDasharray={isSelected ? 'none' : '10,5'}
+                          onClick={(e) => { if (isAdminMode && adminEditMode === 'fir') { e.stopPropagation(); setSelectedFir(fir.id); }}}
+                          style={{ cursor: isAdminMode && adminEditMode === 'fir' ? 'pointer' : 'default' }}
+                        />
+                        {!isAdminMode && (
+                          <text x={centerX} y={centerY} fill={fir.borderColor} fontSize="14" fontFamily="monospace" fontWeight="bold" textAnchor="middle" opacity="0.7">
+                            {fir.name}
+                          </text>
+                        )}
+                        {/* Points de contrôle en mode édition */}
+                        {isAdminMode && adminEditMode === 'fir' && isSelected && fir.points.map((point, idx) => (
+                          <circle
+                            key={idx}
+                            cx={point.x}
+                            cy={point.y}
+                            r="8"
+                            fill={fir.borderColor}
+                            stroke="white"
+                            strokeWidth="2"
+                            style={{ cursor: 'grab' }}
+                            onMouseDown={(e) => { e.stopPropagation(); setDraggingPoint({ type: 'fir', id: fir.id, pointIndex: idx }); }}
+                            onContextMenu={(e) => { e.preventDefault(); deletePoint('fir', fir.id, idx); }}
+                          />
+                        ))}
+                      </g>
+                    );
+                  })}
 
                   {/* Îles */}
-                  {showIslands && ISLANDS.map((island, idx) => (
-                    <path
-                      key={idx}
-                      d={island.path}
-                      fill={island.fill}
-                      stroke={island.stroke}
-                      strokeWidth="2"
-                    />
-                  ))}
+                  {(showIslands || isAdminMode) && islands.map((island) => {
+                    const pointsStr = island.points.map(p => `${p.x},${p.y}`).join(' ');
+                    const isSelected = selectedIsland === island.id;
+                    
+                    return (
+                      <g key={island.id}>
+                        <polygon
+                          points={pointsStr}
+                          fill={island.fill}
+                          stroke={isSelected ? '#fff' : island.stroke}
+                          strokeWidth={isSelected ? 3 : 2}
+                          onClick={(e) => { if (isAdminMode && adminEditMode === 'islands') { e.stopPropagation(); setSelectedIsland(island.id); }}}
+                          style={{ cursor: isAdminMode && adminEditMode === 'islands' ? 'pointer' : 'default' }}
+                        />
+                        {/* Points de contrôle en mode édition */}
+                        {isAdminMode && adminEditMode === 'islands' && isSelected && island.points.map((point, idx) => (
+                          <circle
+                            key={idx}
+                            cx={point.x}
+                            cy={point.y}
+                            r="6"
+                            fill="#fff"
+                            stroke={island.fill}
+                            strokeWidth="2"
+                            style={{ cursor: 'grab' }}
+                            onMouseDown={(e) => { e.stopPropagation(); setDraggingPoint({ type: 'island', id: island.id, pointIndex: idx }); }}
+                            onContextMenu={(e) => { e.preventDefault(); deletePoint('island', island.id, idx); }}
+                          />
+                        ))}
+                      </g>
+                    );
+                  })}
 
                   {/* Waypoints */}
-                  {showWaypoints && WAYPOINTS.map((wp, idx) => (
+                  {showWaypoints && !isAdminMode && WAYPOINTS.map((wp, idx) => (
                     <g key={idx} transform={`translate(${wp.x * 10.24}, ${wp.y * 7.87})`}>
                       <polygon points="0,-6 5,4 -5,4" fill="#84cc16" stroke="#65a30d" strokeWidth="1" opacity="0.8"/>
-                      <text x="8" y="3" fill="#a3e635" fontSize="8" fontFamily="monospace" opacity="0.7">
-                        {wp.code}
-                      </text>
+                      <text x="8" y="3" fill="#a3e635" fontSize="8" fontFamily="monospace" opacity="0.7">{wp.code}</text>
                     </g>
                   ))}
 
                   {/* VOR/DME */}
-                  {showVOR && VORS.map((vor, idx) => (
+                  {showVOR && !isAdminMode && VORS.map((vor, idx) => (
                     <g key={idx} transform={`translate(${vor.x * 10.24}, ${vor.y * 7.87})`}>
                       <circle r="12" fill="none" stroke="#22d3ee" strokeWidth="2" opacity="0.6"/>
                       <circle r="4" fill="#22d3ee" opacity="0.8"/>
                       <line x1="-12" y1="0" x2="12" y2="0" stroke="#22d3ee" strokeWidth="1" opacity="0.4"/>
                       <line x1="0" y1="-12" x2="0" y2="12" stroke="#22d3ee" strokeWidth="1" opacity="0.4"/>
-                      <text x="0" y="-18" fill="#22d3ee" fontSize="9" fontFamily="monospace" fontWeight="bold" textAnchor="middle">
-                        {vor.code}
-                      </text>
-                      <text x="0" y="28" fill="#67e8f9" fontSize="7" fontFamily="monospace" textAnchor="middle" opacity="0.8">
-                        {vor.freq}
-                      </text>
+                      <text x="0" y="-18" fill="#22d3ee" fontSize="9" fontFamily="monospace" fontWeight="bold" textAnchor="middle">{vor.code}</text>
+                      <text x="0" y="28" fill="#67e8f9" fontSize="7" fontFamily="monospace" textAnchor="middle" opacity="0.8">{vor.freq}</text>
                     </g>
                   ))}
 
@@ -707,60 +966,32 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                     const color = TAILLE_SVG_COLORS[aeroport.taille];
                     const x = pos.x * 10.24;
                     const y = pos.y * 7.87;
+                    const showAirportAdmin = isAdminMode && adminEditMode === 'airports';
                     
                     return (
                       <g 
                         key={aeroport.code} 
                         transform={`translate(${x}, ${y})`}
-                        style={{ cursor: isAdminMode ? 'grab' : 'pointer' }}
+                        style={{ cursor: showAirportAdmin ? 'grab' : 'pointer' }}
                         onMouseDown={(e) => {
-                          if (isAdminMode) {
+                          if (showAirportAdmin) {
                             e.stopPropagation();
                             setDraggingAeroport(aeroport.code);
                           }
                         }}
                         onClick={() => !isAdminMode && setSelectedAeroport(aeroport)}
                       >
-                        {/* Cercle extérieur (sélection) */}
-                        {isSelected && !isAdminMode && (
-                          <circle r="16" fill="none" stroke="white" strokeWidth="2" opacity="0.8"/>
-                        )}
-                        {/* Cercle principal */}
-                        <circle 
-                          r="8" 
-                          fill={color} 
-                          stroke="white" 
-                          strokeWidth="2"
-                          style={{ filter: isSelected ? 'drop-shadow(0 0 6px white)' : 'none' }}
-                        />
-                        {/* Indicateur passagers */}
+                        {isSelected && !isAdminMode && <circle r="16" fill="none" stroke="white" strokeWidth="2" opacity="0.8"/>}
+                        <circle r="8" fill={color} stroke="white" strokeWidth="2" style={{ filter: isSelected ? 'drop-shadow(0 0 6px white)' : 'none' }}/>
                         {!isAdminMode && (
-                          <circle 
-                            cx="6" cy="6" r="4" 
-                            fill={ratio >= 0.7 ? '#10b981' : ratio >= 0.4 ? '#f59e0b' : '#ef4444'}
-                            stroke="white" strokeWidth="1"
-                          />
+                          <circle cx="6" cy="6" r="4" fill={ratio >= 0.7 ? '#10b981' : ratio >= 0.4 ? '#f59e0b' : '#ef4444'} stroke="white" strokeWidth="1"/>
                         )}
-                        {/* Code OACI */}
-                        <text 
-                          y="22" 
-                          fill={isAdminMode ? '#fbbf24' : '#4ade80'} 
-                          fontSize="10" 
-                          fontFamily="monospace" 
-                          fontWeight="bold" 
-                          textAnchor="middle"
-                          style={{ 
-                            paintOrder: 'stroke',
-                            stroke: '#000',
-                            strokeWidth: '3px'
-                          }}
+                        <text y="22" fill={showAirportAdmin ? '#fbbf24' : '#4ade80'} fontSize="10" fontFamily="monospace" fontWeight="bold" textAnchor="middle"
+                          style={{ paintOrder: 'stroke', stroke: '#000', strokeWidth: '3px' }}
                         >
                           {aeroport.code}
                         </text>
-                        {/* Icône tourisme */}
-                        {aeroport.tourisme && !isAdminMode && (
-                          <text x="10" y="-8" fontSize="12">🏝️</text>
-                        )}
+                        {aeroport.tourisme && !isAdminMode && <text x="10" y="-8" fontSize="12">🏝️</text>}
                       </g>
                     );
                   })}
@@ -768,7 +999,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                   {/* Titre */}
                   <rect x="10" y="10" width="150" height="50" rx="8" fill="rgba(15,23,42,0.9)" stroke="#334155" strokeWidth="1"/>
                   <text x="20" y="32" fill="#4ade80" fontSize="14" fontFamily="monospace" fontWeight="bold">
-                    {isAdminMode ? 'Mode Édition' : 'Carte PTFS'}
+                    {isAdminMode ? 'Mode Éditeur' : 'Carte PTFS'}
                   </text>
                   <text x="20" y="48" fill="#64748b" fontSize="10" fontFamily="sans-serif">
                     {aeroports.length} aéroports
@@ -789,14 +1020,36 @@ export default function MarchePassagersClient({ aeroports }: Props) {
             {isAdminMode ? (
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-purple-300">Instructions</h3>
-                <div className="space-y-3 text-sm text-slate-400">
-                  <p>1. Glissez-déposez les points colorés</p>
-                  <p>2. Alignez-les sur les positions correctes</p>
-                  <p>3. Cliquez sur &quot;Copier positions&quot;</p>
-                  <p>4. Envoyez-moi le code copié</p>
-                </div>
+                {adminEditMode === 'airports' && (
+                  <div className="space-y-3 text-sm text-slate-400">
+                    <p>1. Glissez-déposez les points colorés</p>
+                    <p>2. Alignez-les sur les positions correctes</p>
+                    <p>3. Cliquez sur &quot;Copier le code&quot;</p>
+                    <p>4. Envoyez-moi le code copié</p>
+                  </div>
+                )}
+                {adminEditMode === 'islands' && (
+                  <div className="space-y-3 text-sm text-slate-400">
+                    <p>1. Sélectionnez une île ou créez-en une</p>
+                    <p>2. Cliquez sur la carte pour ajouter des points</p>
+                    <p>3. Glissez les points blancs pour les déplacer</p>
+                    <p>4. Clic droit sur un point pour le supprimer</p>
+                    <p>5. Choisissez une couleur</p>
+                    <p>6. Cliquez sur &quot;Copier le code&quot;</p>
+                  </div>
+                )}
+                {adminEditMode === 'fir' && (
+                  <div className="space-y-3 text-sm text-slate-400">
+                    <p>1. Sélectionnez une FIR ou créez-en une</p>
+                    <p>2. Cliquez sur la carte pour ajouter des points</p>
+                    <p>3. Glissez les points pour les déplacer</p>
+                    <p>4. Clic droit sur un point pour le supprimer</p>
+                    <p>5. Choisissez une couleur</p>
+                    <p>6. Cliquez sur &quot;Copier le code&quot;</p>
+                  </div>
+                )}
                 <div className="border-t border-slate-700 pt-4">
-                  <h4 className="text-sm font-medium text-slate-300 mb-2">Légende</h4>
+                  <h4 className="text-sm font-medium text-slate-300 mb-2">Légende aéroports</h4>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 rounded-full bg-purple-500"></div>
@@ -851,13 +1104,10 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                     <span className="text-slate-500">/ {selectedAeroport.passagers_max.toLocaleString('fr-FR')}</span>
                   </div>
                   <div className="mt-3 h-2 bg-slate-700 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all ${
-                        getPassagerRatio(selectedAeroport) >= 0.7 ? 'bg-emerald-500' :
-                        getPassagerRatio(selectedAeroport) >= 0.4 ? 'bg-amber-500' : 'bg-red-500'
-                      }`}
-                      style={{ width: `${getPassagerRatio(selectedAeroport) * 100}%` }}
-                    ></div>
+                    <div className={`h-full transition-all ${
+                      getPassagerRatio(selectedAeroport) >= 0.7 ? 'bg-emerald-500' :
+                      getPassagerRatio(selectedAeroport) >= 0.4 ? 'bg-amber-500' : 'bg-red-500'
+                    }`} style={{ width: `${getPassagerRatio(selectedAeroport) * 100}%` }}></div>
                   </div>
                 </div>
                 <div className="space-y-2">
