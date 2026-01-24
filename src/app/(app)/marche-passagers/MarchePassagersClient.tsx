@@ -84,14 +84,15 @@ const DEFAULT_ISLANDS: Island[] = [
   { id: 'st_barthelemy', name: 'St Barthelemy', points: [{ x: 424, y: 316 }, { x: 452, y: 354 }, { x: 460, y: 366 }, { x: 471, y: 357 }, { x: 484, y: 357 }, { x: 493, y: 353 }, { x: 504, y: 348 }, { x: 504, y: 339 }, { x: 504, y: 328 }, { x: 498, y: 294 }, { x: 485, y: 330 }, { x: 461, y: 343 }, { x: 434, y: 315 }], fill: '#c9a960', stroke: '#a08040' },
 ];
 
-// Zones FIR initiales (en coordonnées SVG)
+// Zones FIR initiales (en coordonnées SVG) - 7 zones FIR
 const DEFAULT_FIR_ZONES: FIRZone[] = [
-  { id: 'grindavik_fir', code: 'GRINDAVIK', name: 'Grindavik FIR', points: [{ x: 0, y: 250 }, { x: 280, y: 250 }, { x: 280, y: 787 }, { x: 0, y: 787 }], color: 'rgba(255,200,0,0.1)', borderColor: '#ffc800' },
-  { id: 'barthelemy_fir', code: 'BARTHELEMY', name: 'Barthelemy FIR', points: [{ x: 280, y: 0 }, { x: 700, y: 0 }, { x: 700, y: 400 }, { x: 280, y: 400 }], color: 'rgba(0,200,255,0.1)', borderColor: '#00c8ff' },
-  { id: 'rockford_fir', code: 'ROCKFORD', name: 'Rockford FIR', points: [{ x: 280, y: 400 }, { x: 650, y: 400 }, { x: 650, y: 787 }, { x: 280, y: 787 }], color: 'rgba(255,100,100,0.1)', borderColor: '#ff6464' },
-  { id: 'perth_fir', code: 'PERTH', name: 'Perth FIR', points: [{ x: 600, y: 0 }, { x: 1024, y: 0 }, { x: 1024, y: 300 }, { x: 600, y: 300 }], color: 'rgba(200,100,255,0.1)', borderColor: '#c864ff' },
-  { id: 'izolirani_fir', code: 'IZOLIRANI', name: 'Izolirani FIR', points: [{ x: 700, y: 300 }, { x: 1024, y: 300 }, { x: 1024, y: 550 }, { x: 700, y: 550 }], color: 'rgba(255,150,50,0.1)', borderColor: '#ff9632' },
-  { id: 'larnaca_fir', code: 'LARNACA', name: 'Larnaca FIR', points: [{ x: 600, y: 550 }, { x: 1024, y: 550 }, { x: 1024, y: 787 }, { x: 600, y: 787 }], color: 'rgba(100,255,100,0.1)', borderColor: '#64ff64' },
+  { id: 'itko_fir', code: 'ITKO', name: 'ITKO FIR', points: [{ x: 178, y: -1 }, { x: 616, y: 0 }, { x: 523, y: 214 }, { x: 327, y: 321 }, { x: 193, y: 325 }, { x: 168, y: 197 }, { x: 0, y: 197 }, { x: 14, y: 7 }], color: 'rgba(255,100,100,0.15)', borderColor: '#ff6464' },
+  { id: 'irfd_fir', code: 'IRFD', name: 'IRFD FIR', points: [{ x: 536, y: 211 }, { x: 606, y: 292 }, { x: 648, y: 525 }, { x: 600, y: 786 }, { x: 217, y: 786 }, { x: 200, y: 599 }, { x: 192, y: 326 }, { x: 324, y: 326 }], color: 'rgba(255,150,50,0.15)', borderColor: '#ff9632' },
+  { id: 'ipph_fir', code: 'IPPH', name: 'IPPH FIR', points: [{ x: 618, y: 9 }, { x: 1005, y: 10 }, { x: 920, y: 241 }, { x: 814, y: 304 }, { x: 607, y: 291 }, { x: 534, y: 198 }], color: 'rgba(255,200,0,0.15)', borderColor: '#ffc800' },
+  { id: 'izol_fir', code: 'IZOL', name: 'IZOL FIR', points: [{ x: 613, y: 298 }, { x: 819, y: 313 }, { x: 919, y: 249 }, { x: 1001, y: 239 }, { x: 1001, y: 558 }, { x: 648, y: 524 }], color: 'rgba(200,100,255,0.15)', borderColor: '#c864ff' },
+  { id: 'ilar_fir', code: 'ILAR', name: 'ILAR FIR', points: [{ x: 652, y: 532 }, { x: 1002, y: 564 }, { x: 999, y: 786 }, { x: 605, y: 786 }], color: 'rgba(100,255,100,0.15)', borderColor: '#64ff64' },
+  { id: 'grindavik_fir', code: 'IGRV', name: 'Grindavik FIR', points: [{ x: -1, y: 202 }, { x: 171, y: 205 }, { x: 190, y: 329 }, { x: 196, y: 568 }, { x: -1, y: 561 }], color: 'rgba(100,150,255,0.15)', borderColor: '#6496ff' },
+  { id: 'sauthemptona_fir', code: 'ISAU', name: 'Sauthemptona FIR', points: [{ x: -1, y: 566 }, { x: 190, y: 573 }, { x: 211, y: 780 }, { x: 1, y: 783 }], color: 'rgba(200,100,255,0.15)', borderColor: '#c864ff' },
 ];
 
 // Waypoints
