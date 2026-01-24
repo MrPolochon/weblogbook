@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route } from 'lucide-react';
+import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart } from 'lucide-react';
 import Link from 'next/link';
 import TarifsLiaisonsClient from './TarifsLiaisonsClient';
 
@@ -46,6 +46,7 @@ interface Props {
   employes: Employe[];
   flotte: FlotteItem[];
   isPdg: boolean;
+  soldeCompagnie: number;
 }
 
 function formatHeures(minutes: number): string {
@@ -61,7 +62,8 @@ export default function MaCompagnieClient({
   compagnie, 
   employes, 
   flotte,
-  isPdg 
+  isPdg,
+  soldeCompagnie 
 }: Props) {
   const router = useRouter();
   const [showSettings, setShowSettings] = useState(false);
@@ -296,10 +298,30 @@ export default function MaCompagnieClient({
 
       {/* Flotte */}
       <div className="card">
-        <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-          <Plane className="h-5 w-5 text-sky-400" />
-          Flotte ({flotte.length} types d&apos;appareil)
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+            <Plane className="h-5 w-5 text-sky-400" />
+            Flotte ({flotte.length} types d&apos;appareil)
+          </h2>
+          {isPdg && (
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-xs text-slate-500">Solde compagnie</p>
+                <p className={`font-bold ${soldeCompagnie > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {soldeCompagnie.toLocaleString('fr-FR')} F$
+                </p>
+              </div>
+              <Link
+                href="/marketplace"
+                className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                <ShoppingCart className="h-4 w-4" />
+                Acheter un avion
+              </Link>
+            </div>
+          )}
+        </div>
+        
         {flotte.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -341,7 +363,15 @@ export default function MaCompagnieClient({
             </table>
           </div>
         ) : (
-          <p className="text-slate-400 text-sm">Aucun appareil dans la flotte.</p>
+          <div className="text-center py-6">
+            <Plane className="h-12 w-12 text-slate-600 mx-auto mb-3" />
+            <p className="text-slate-400">Aucun appareil dans la flotte.</p>
+            {isPdg && (
+              <p className="text-sm text-slate-500 mt-2">
+                Achetez des avions sur le <Link href="/marketplace" className="text-purple-400 hover:text-purple-300 underline">Marketplace</Link> pour commencer.
+              </p>
+            )}
+          </div>
         )}
       </div>
 

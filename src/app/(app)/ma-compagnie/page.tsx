@@ -119,6 +119,17 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
 
   const isPdg = compagnie?.pdg_id === user.id;
 
+  // Récupérer le solde de la compagnie (compte entreprise)
+  let soldeCompagnie = 0;
+  if (isPdg && compagnie) {
+    const { data: compteEntreprise } = await admin.from('felitz_comptes')
+      .select('solde')
+      .eq('compagnie_id', compagnie.id)
+      .eq('type', 'entreprise')
+      .single();
+    soldeCompagnie = compteEntreprise?.solde || 0;
+  }
+
   // Préparer les données pour le client
   const employesData = (employes || []).map(emp => {
     const pData = emp.profiles;
@@ -167,6 +178,7 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
       employes={employesData}
       flotte={flotteData}
       isPdg={isPdg}
+      soldeCompagnie={soldeCompagnie}
     />
   );
 }
