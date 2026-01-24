@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo } from '@/lib/aeroports-ptfs';
 import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio } from 'lucide-react';
 
 interface TypeAvion {
@@ -98,6 +98,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   // Tarifs par liaison et saturation
   const [tarifsLiaisons, setTarifsLiaisons] = useState<TarifLiaison[]>([]);
   const [passagersAeroport, setPassagersAeroport] = useState<AeroportPassagers | null>(null);
+  const [cargoAeroport, setCargoAeroport] = useState<{ cargo_disponible: number; cargo_max: number } | null>(null);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -152,6 +153,35 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       .catch(() => {});
   }, [aeroport_depart]);
 
+  // Charger le cargo disponible quand l'aéroport de départ change
+  useEffect(() => {
+    if (!aeroport_depart) {
+      setCargoAeroport(null);
+      return;
+    }
+    
+    fetch(`/api/aeroport-cargo?code_oaci=${aeroport_depart}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.cargo_disponible !== undefined) {
+          setCargoAeroport({ cargo_disponible: data.cargo_disponible, cargo_max: data.cargo_max || 0 });
+        } else {
+          // Fallback : utiliser les données statiques
+          const aeroportInfo = getAeroportInfo(aeroport_depart);
+          if (aeroportInfo) {
+            setCargoAeroport({ cargo_disponible: aeroportInfo.cargoMax, cargo_max: aeroportInfo.cargoMax });
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback en cas d'erreur
+        const aeroportInfo = getAeroportInfo(aeroport_depart);
+        if (aeroportInfo) {
+          setCargoAeroport({ cargo_disponible: aeroportInfo.cargoMax, cargo_max: aeroportInfo.cargoMax });
+        }
+      });
+  }, [aeroport_depart]);
+
   // Trouver le prix du billet pour cette liaison
   const prixBilletLiaison = (() => {
     if (!selectedCompagnie) return 0;
@@ -176,39 +206,41 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       return;
     }
 
-    // Clé unique pour régénérer seulement quand les paramètres importants changent
-    const generationKey = `${flotte_avion_id}-${aeroport_depart}-${aeroport_arrivee}-${prixBilletLiaison}`;
-    if (generationKey === lastGeneratedKey) {
-      return;
-    }
-
     const avion = selectedFlotte?.types_avion;
     if (!avion) return;
 
     const capacitePax = selectedFlotte?.capacite_pax_custom ?? avion.capacite_pax ?? 0;
     const capaciteCargo = selectedFlotte?.capacite_cargo_custom ?? avion.capacite_cargo_kg ?? 0;
+    const prixCargo = selectedCompagnie.prix_kg_cargo || 0;
 
-    // Calculer le coefficient de remplissage basé sur prix, taille aéroport et tourisme
-    const coefRemplissage = calculerCoefficientRemplissage(aeroport_depart, aeroport_arrivee, prixBilletLiaison);
-    
-    // Facteur de saturation (si beaucoup de vols ont déjà pris des passagers)
-    let coefSaturation = 1.0;
-    if (passagersAeroport && passagersAeroport.passagers_max > 0) {
-      const ratioDisponibles = passagersAeroport.passagers_disponibles / passagersAeroport.passagers_max;
-      // Si moins de 50% de passagers disponibles, le remplissage diminue
-      if (ratioDisponibles < 0.5) {
-        coefSaturation = 0.5 + ratioDisponibles; // Entre 0.5 et 1.0
-      }
+    // Clé unique pour régénérer seulement quand les paramètres importants changent
+    const generationKey = `${flotte_avion_id}-${aeroport_depart}-${aeroport_arrivee}-${prixBilletLiaison}-${prixCargo}-${nature_transport}`;
+    if (generationKey === lastGeneratedKey) {
+      return;
     }
-    
-    // Coefficient final
-    const coefFinal = coefRemplissage * coefSaturation;
 
     // Générer les valeurs avec les coefficients
     let pax = 0;
     let cargo = 0;
 
+    // Calcul pour les PASSAGERS
     if (capacitePax > 0) {
+      // Calculer le coefficient de remplissage basé sur prix, taille aéroport et tourisme
+      const coefRemplissage = calculerCoefficientRemplissage(aeroport_depart, aeroport_arrivee, prixBilletLiaison);
+      
+      // Facteur de saturation (si beaucoup de vols ont déjà pris des passagers)
+      let coefSaturation = 1.0;
+      if (passagersAeroport && passagersAeroport.passagers_max > 0) {
+        const ratioDisponibles = passagersAeroport.passagers_disponibles / passagersAeroport.passagers_max;
+        // Si moins de 50% de passagers disponibles, le remplissage diminue
+        if (ratioDisponibles < 0.5) {
+          coefSaturation = 0.5 + ratioDisponibles; // Entre 0.5 et 1.0
+        }
+      }
+      
+      // Coefficient final
+      const coefFinal = coefRemplissage * coefSaturation;
+
       // Base: 40% à 80% de remplissage, ajusté par les coefficients
       const baseMin = 0.4;
       const baseMax = 0.8;
@@ -225,16 +257,32 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       }
     }
 
-    if (capaciteCargo > 0) {
-      const minCargo = Math.floor(capaciteCargo * 0.4 * coefFinal);
-      const maxCargo = Math.floor(capaciteCargo * 0.85 * coefFinal);
+    // Calcul pour le CARGO (utiliser la logique cargo)
+    if (capaciteCargo > 0 && prixCargo > 0) {
+      const cargoDisponible = cargoAeroport?.cargo_disponible ?? getAeroportInfo(aeroport_depart)?.cargoMax ?? 0;
+      
+      // Utiliser estimerCargo pour avoir une estimation réaliste basée sur le prix cargo
+      const estimation = estimerCargo(
+        aeroport_depart,
+        aeroport_arrivee,
+        prixCargo,
+        capaciteCargo,
+        cargoDisponible
+      );
+      
+      // Utiliser directement l'estimation (qui est déjà une moyenne réaliste)
+      // On peut ajouter une petite variation aléatoire pour plus de réalisme (±15%)
+      const variation = estimation.cargo * 0.15;
+      const minCargo = Math.max(0, Math.floor(estimation.cargo - variation));
+      const maxCargo = Math.min(cargoDisponible, Math.floor(estimation.cargo + variation));
+      
       cargo = Math.floor(Math.random() * (Math.max(1, maxCargo - minCargo) + 1)) + minCargo;
     }
 
     setGeneratedPax(pax);
     setGeneratedCargo(cargo);
     setLastGeneratedKey(generationKey);
-  }, [vol_commercial, flotte_avion_id, selectedCompagnie, selectedFlotte, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport]);
+  }, [vol_commercial, flotte_avion_id, selectedCompagnie, selectedFlotte, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport, nature_transport]);
 
   // Calculer les revenus basés sur les valeurs générées et le type de transport sélectionné
   const nbPax = nature_transport === 'passagers' ? generatedPax : 0;
@@ -460,7 +508,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
                 {nature_transport === 'passagers' ? (
                   <p className="text-slate-300">{nbPax} passagers @ {prixBilletLiaison} F$</p>
                 ) : (
-                  <p className="text-slate-300">{cargoKg.toLocaleString('fr-FR')} kg cargo</p>
+                  <p className="text-slate-300">{cargoKg.toLocaleString('fr-FR')} kg cargo @ {selectedCompagnie?.prix_kg_cargo || 0} F$/kg</p>
                 )}
                 <p className="text-slate-300">Revenu brut : {revenuBrut.toLocaleString('fr-FR')} F$</p>
                 <p className="text-emerald-300 col-span-2">Votre salaire ({selectedCompagnie.pourcentage_salaire}%) : {salairePilote.toLocaleString('fr-FR')} F$</p>
