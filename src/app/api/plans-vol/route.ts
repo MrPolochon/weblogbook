@@ -103,6 +103,52 @@ export async function POST(request: Request) {
     const revenuBrutFinal = revenuBrutCalc ?? revenue_brut ?? 0;
     const salaireFinal = salaireCalc ?? salaire_pilote ?? 0;
     
+    // Validation taux de remplissage minimum (25%) pour les vols commerciaux
+    if (vol_commercial && flotte_avion_id) {
+      const { data: flotte } = await admin
+        .from('compagnie_flotte')
+        .select('capacite_pax_custom, capacite_cargo_custom, types_avion(capacite_pax, capacite_cargo_kg)')
+        .eq('id', flotte_avion_id)
+        .single();
+      
+      if (flotte) {
+        const flotteData = flotte as unknown as {
+          capacite_pax_custom?: number | null;
+          capacite_cargo_custom?: number | null;
+          types_avion?: { capacite_pax?: number | null; capacite_cargo_kg?: number | null } | { capacite_pax?: number | null; capacite_cargo_kg?: number | null }[] | null;
+        };
+        
+        const capacitePaxBase = Array.isArray(flotteData?.types_avion)
+          ? flotteData?.types_avion?.[0]?.capacite_pax
+          : flotteData?.types_avion?.capacite_pax;
+        const capacitePaxMax = flotteData?.capacite_pax_custom ?? capacitePaxBase ?? 0;
+        
+        const capaciteCargoBase = Array.isArray(flotteData?.types_avion)
+          ? flotteData?.types_avion?.[0]?.capacite_cargo_kg
+          : flotteData?.types_avion?.capacite_cargo_kg;
+        const capaciteCargoMax = flotteData?.capacite_cargo_custom ?? capaciteCargoBase ?? 0;
+        
+        const remplissageMinRequis = 0.25; // 25% minimum
+        
+        if (nature_transport === 'passagers') {
+          const nbPaxFinal = nb_pax_genere || 0;
+          const tauxRemplissage = capacitePaxMax > 0 ? (nbPaxFinal / capacitePaxMax) : 0;
+          if (tauxRemplissage < remplissageMinRequis) {
+            return NextResponse.json({ 
+              error: `Le vol ne peut pas être effectué : l'avion doit être rempli à au moins 25% de sa capacité. Actuellement : ${nbPaxFinal}/${capacitePaxMax} passagers (${Math.round(tauxRemplissage * 100)}%)` 
+            }, { status: 400 });
+          }
+        } else if (nature_transport === 'cargo') {
+          const tauxRemplissage = capaciteCargoMax > 0 ? (cargoGenereFinal / capaciteCargoMax) : 0;
+          if (tauxRemplissage < remplissageMinRequis) {
+            return NextResponse.json({ 
+              error: `Le vol ne peut pas être effectué : l'avion doit être rempli à au moins 25% de sa capacité cargo. Actuellement : ${cargoGenereFinal.toLocaleString('fr-FR')}/${capaciteCargoMax.toLocaleString('fr-FR')} kg (${Math.round(tauxRemplissage * 100)}%)` 
+            }, { status: 400 });
+          }
+        }
+      }
+    }
+    
     // Si vol sans ATC, accepter automatiquement et mettre en autosurveillance
     if (vol_sans_atc) {
       const { data, error } = await admin.from('plans_vol').insert({

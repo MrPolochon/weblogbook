@@ -292,6 +292,18 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     : generatedCargo * (selectedCompagnie?.prix_kg_cargo || 0);
   const salairePilote = Math.floor(revenuBrut * (selectedCompagnie?.pourcentage_salaire || 0) / 100);
 
+  // Calculer les capacités et taux de remplissage
+  const avion = selectedFlotte?.types_avion;
+  const capacitePaxMax = selectedFlotte?.capacite_pax_custom ?? avion?.capacite_pax ?? 0;
+  const capaciteCargoMax = selectedFlotte?.capacite_cargo_custom ?? avion?.capacite_cargo_kg ?? 0;
+  
+  const tauxRemplissagePax = capacitePaxMax > 0 ? (nbPax / capacitePaxMax) : 0;
+  const tauxRemplissageCargo = capaciteCargoMax > 0 ? (cargoKg / capaciteCargoMax) : 0;
+  
+  const remplissageMinRequis = 0.25; // 25% minimum
+  const remplissageValidePax = tauxRemplissagePax >= remplissageMinRequis;
+  const remplissageValideCargo = tauxRemplissageCargo >= remplissageMinRequis;
+
   // Préparer les données du formulaire
   function getFormData(volSansAtc: boolean = false) {
     const t = parseInt(temps_prev_min, 10);
@@ -341,6 +353,16 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     }
     if (vol_commercial && !flotte_avion_id) {
       setError('Sélectionnez un appareil de la flotte pour un vol commercial.');
+      return;
+    }
+    
+    // Validation taux de remplissage minimum (25%)
+    if (vol_commercial && nature_transport === 'passagers' && !remplissageValidePax) {
+      setError(`Le vol ne peut pas être effectué : l'avion doit être rempli à au moins 25% de sa capacité. Actuellement : ${nbPax}/${capacitePaxMax} (${Math.round(tauxRemplissagePax * 100)}%)`);
+      return;
+    }
+    if (vol_commercial && nature_transport === 'cargo' && !remplissageValideCargo) {
+      setError(`Le vol ne peut pas être effectué : l'avion doit être rempli à au moins 25% de sa capacité cargo. Actuellement : ${cargoKg.toLocaleString('fr-FR')}/${capaciteCargoMax.toLocaleString('fr-FR')} kg (${Math.round(tauxRemplissageCargo * 100)}%)`);
       return;
     }
     
@@ -506,13 +528,34 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 {nature_transport === 'passagers' ? (
-                  <p className="text-slate-300">{nbPax} passagers @ {prixBilletLiaison} F$</p>
+                  <>
+                    <p className="text-slate-300">{nbPax} passagers @ {prixBilletLiaison} F$</p>
+                    <p className={`text-sm ${remplissageValidePax ? 'text-emerald-400' : 'text-red-400'}`}>
+                      Remplissage : {nbPax}/{capacitePaxMax} ({Math.round(tauxRemplissagePax * 100)}%)
+                    </p>
+                  </>
                 ) : (
-                  <p className="text-slate-300">{cargoKg.toLocaleString('fr-FR')} kg cargo @ {selectedCompagnie?.prix_kg_cargo || 0} F$/kg</p>
+                  <>
+                    <p className="text-slate-300">{cargoKg.toLocaleString('fr-FR')} kg cargo @ {selectedCompagnie?.prix_kg_cargo || 0} F$/kg</p>
+                    <p className={`text-sm ${remplissageValideCargo ? 'text-emerald-400' : 'text-red-400'}`}>
+                      Remplissage : {cargoKg.toLocaleString('fr-FR')}/{capaciteCargoMax.toLocaleString('fr-FR')} kg ({Math.round(tauxRemplissageCargo * 100)}%)
+                    </p>
+                  </>
                 )}
                 <p className="text-slate-300">Revenu brut : {revenuBrut.toLocaleString('fr-FR')} F$</p>
                 <p className="text-emerald-300 col-span-2">Votre salaire ({selectedCompagnie.pourcentage_salaire}%) : {salairePilote.toLocaleString('fr-FR')} F$</p>
               </div>
+              {/* Avertissement remplissage insuffisant */}
+              {vol_commercial && (
+                (nature_transport === 'passagers' && !remplissageValidePax) ||
+                (nature_transport === 'cargo' && !remplissageValideCargo)
+              ) && (
+                <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/30">
+                  <p className="text-red-400 text-xs">
+                    ⚠️ Remplissage insuffisant : minimum 25% requis pour déposer un plan de vol
+                  </p>
+                </div>
+              )}
               {/* Indicateurs de facteurs */}
               <div className="mt-2 pt-2 border-t border-emerald-500/20 text-xs text-slate-400 space-y-1">
                 {(() => {
@@ -708,7 +751,20 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       )}
       
       {error && <p className="text-red-400 text-sm">{error}</p>}
-      <button type="submit" className="btn-primary" disabled={loading || showNoAtcConfirm}>{loading ? 'Envoi…' : 'Déposer le plan de vol'}</button>
+      <button 
+        type="submit" 
+        className="btn-primary" 
+        disabled={
+          loading || 
+          showNoAtcConfirm || 
+          (vol_commercial && (
+            (nature_transport === 'passagers' && !remplissageValidePax) ||
+            (nature_transport === 'cargo' && !remplissageValideCargo)
+          ))
+        }
+      >
+        {loading ? 'Envoi…' : 'Déposer le plan de vol'}
+      </button>
     </form>
   );
 }
