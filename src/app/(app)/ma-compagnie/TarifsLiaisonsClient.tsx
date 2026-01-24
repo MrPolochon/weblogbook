@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AEROPORTS_PTFS, getAeroportInfo, PRIX_OPTIMAL_PAX } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_PTFS, getAeroportInfo, getPrixOptimal, PRIX_MAXIMUM_ABSOLU } from '@/lib/aeroports-ptfs';
 import { DollarSign, Plus, Trash2, RefreshCw, Route, ArrowLeftRight, Info } from 'lucide-react';
 
 interface TarifLiaison {
@@ -118,28 +118,36 @@ export default function TarifsLiaisonsClient({ compagnieId, prixBilletDefaut }: 
   }
 
   function getImpactIndicator(prix: number, codeDepart: string, codeArrivee: string): { color: string; text: string } {
-    const aeroportDepart = getAeroportInfo(codeDepart);
-    const aeroportArrivee = getAeroportInfo(codeArrivee);
+    // Utiliser le nouveau système de prix
+    const prixInfo = getPrixOptimal(codeDepart, codeArrivee);
     
-    const isInternational = aeroportDepart?.taille === 'international' || aeroportArrivee?.taille === 'international';
-    const isTouristique = aeroportArrivee?.tourisme;
-    
-    // Calculer l'impact estimé
-    let seuil = PRIX_OPTIMAL_PAX;
-    if (isInternational) seuil *= 1.5; // Les internationaux tolèrent des prix plus élevés
-    if (isTouristique) seuil *= 1.3; // Les destinations touristiques aussi
-    
-    if (prix <= seuil * 0.8) {
-      return { color: 'text-emerald-400', text: 'Excellent remplissage' };
-    } else if (prix <= seuil) {
-      return { color: 'text-green-400', text: 'Bon remplissage' };
-    } else if (prix <= seuil * 1.5) {
-      return { color: 'text-yellow-400', text: 'Remplissage moyen' };
-    } else if (prix <= seuil * 2) {
-      return { color: 'text-orange-400', text: 'Remplissage faible' };
-    } else {
-      return { color: 'text-red-400', text: 'Remplissage très faible' };
+    // Prix au-dessus du maximum absolu = personne n'achète
+    if (prix >= PRIX_MAXIMUM_ABSOLU) {
+      return { color: 'text-red-600', text: '⛔ Prix abusif - Aucun passager' };
     }
+    
+    // Prix au-dessus du critique = très peu de passagers
+    if (prix > prixInfo.critique) {
+      return { color: 'text-red-400', text: '🔴 Prix trop élevé - Très faible remplissage' };
+    }
+    
+    // Prix au-dessus du max recommandé = faible remplissage
+    if (prix > prixInfo.max) {
+      return { color: 'text-orange-400', text: '🟠 Prix élevé - Remplissage réduit' };
+    }
+    
+    // Prix au-dessus de l'optimal = remplissage moyen
+    if (prix > prixInfo.optimal) {
+      return { color: 'text-yellow-400', text: '🟡 Prix correct - Remplissage moyen' };
+    }
+    
+    // Prix en dessous de l'optimal = bon remplissage
+    if (prix >= prixInfo.min) {
+      return { color: 'text-green-400', text: '🟢 Bon prix - Bon remplissage' };
+    }
+    
+    // Prix très bas = excellent remplissage
+    return { color: 'text-emerald-400', text: '✨ Prix attractif - Excellent remplissage' };
   }
 
   if (loading) {
