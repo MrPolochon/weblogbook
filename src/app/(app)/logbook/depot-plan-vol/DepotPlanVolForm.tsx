@@ -239,18 +239,20 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
         }
       }
       
-      // Coefficient final
+      // Coefficient final (inclut les bonus/malus)
       const coefFinal = coefRemplissage * coefSaturation;
-
-      // Base: 40% à 80% de remplissage, ajusté par les coefficients
-      const baseMin = 0.4;
-      const baseMax = 0.8;
-      const adjustedMin = Math.max(0.1, baseMin * coefFinal);
-      const adjustedMax = Math.min(0.98, baseMax * coefFinal);
       
-      const minPax = Math.floor(capacitePax * adjustedMin);
-      const maxPax = Math.floor(capacitePax * adjustedMax);
-      pax = Math.floor(Math.random() * (Math.max(1, maxPax - minPax) + 1)) + minPax;
+      // Le coefficient de remplissage représente directement le taux de remplissage (0 à 1.15)
+      // On applique une variation aléatoire de ±10% pour plus de réalisme
+      const variation = 0.10;
+      const coefMin = Math.max(0, coefFinal - variation);
+      const coefMax = Math.min(1.15, coefFinal + variation);
+      
+      // Générer un coefficient aléatoire dans cette plage
+      const coefAleatoire = coefMin + Math.random() * (coefMax - coefMin);
+      
+      // Calculer les passagers directement avec ce coefficient
+      pax = Math.floor(capacitePax * coefAleatoire);
       
       // Limiter aux passagers disponibles dans l'aéroport
       if (passagersAeroport) {
