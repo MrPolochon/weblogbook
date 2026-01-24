@@ -21,42 +21,50 @@ interface Props {
   aeroports: AeroportData[];
 }
 
-// Positions des aéroports sur la carte (en pourcentage)
+// Positions des aéroports sur la carte (en pourcentage) - basé sur carte PTFS
 const POSITIONS: Record<string, { x: number; y: number }> = {
-  // Nord - Îles du nord
-  'IDCS': { x: 50, y: 5 },     // Saba
-  'ITKO': { x: 45, y: 12 },    // Tokyo
-  'IPPH': { x: 65, y: 22 },    // Perth
-  'ILKL': { x: 72, y: 26 },    // Lukla
+  // ORENJI - Nord
+  'ITKO': { x: 46, y: 9 },     // Tokyo/Orenji
+  'IDCS': { x: 50, y: 7 },     // Saba (sur Orenji)
   
-  // Ouest - Île Grindavik
+  // PERTH - Nord-Est  
+  'IPPH': { x: 80, y: 24 },    // Perth
+  'ILKL': { x: 85, y: 22 },    // Lukla
+  'IBRD': { x: 76, y: 28 },    // Bird Island
+  
+  // GRINDAVIK - Ouest
   'IGRV': { x: 15, y: 42 },    // Grindavik
-  'ISAU': { x: 15, y: 70 },    // Sauthemptona
   
-  // Centre - Grande île
-  'IBTH': { x: 52, y: 42 },    // Saint Barthelemy
-  'IBLT': { x: 48, y: 55 },    // Boltic
-  'IMLR': { x: 50, y: 65 },    // Mellor
-  'IRFD': { x: 52, y: 68 },    // Rockford
-  'IGAR': { x: 38, y: 68 },    // Garry AFB
-  'ITRC': { x: 55, y: 78 },    // Training Centre
+  // SAUTHEMPTONA - Sud-Ouest
+  'ISAU': { x: 14, y: 66 },    // Sauthemptona
   
-  // Est - Îles de l'est
-  'ISCM': { x: 85, y: 40 },    // RAF Scampton
-  'IJAF': { x: 92, y: 48 },    // Al Najaf
-  'IZOL': { x: 85, y: 52 },    // Izolirani
-  'ISKP': { x: 82, y: 58 },    // Skopelos
+  // SAINT BARTHELEMY - Centre
+  'IBTH': { x: 58, y: 40 },    // Saint Barthelemy
   
-  // Sud - Île Larnaca/Chypre
-  'ILAR': { x: 68, y: 80 },    // Larnaca
-  'IPAP': { x: 78, y: 82 },    // Paphos
-  'IBAR': { x: 82, y: 88 },    // Barra
-  'IHEN': { x: 58, y: 92 },    // Henstridge
-  'IIAB': { x: 75, y: 95 },    // McConnell AFB
+  // IZOLIRANI - Est
+  'IZOL': { x: 88, y: 40 },    // Izolirani
+  'ISCM': { x: 92, y: 36 },    // RAF Scampton
+  'IJAF': { x: 94, y: 44 },    // Al Najaf
+  
+  // GREATER ROCKFORD - Centre-Sud
+  'IBLT': { x: 46, y: 52 },    // Boltic
+  'IMLR': { x: 48, y: 62 },    // Mellor
+  'IRFD': { x: 46, y: 70 },    // Rockford
+  'IGAR': { x: 38, y: 66 },    // Garry AFB
+  'ITRC': { x: 52, y: 76 },    // Training Centre
+  
+  // SKOPELOS - Est du centre
+  'ISKP': { x: 78, y: 58 },    // Skopelos
+  
+  // CYPRUS - Sud-Est
+  'ILAR': { x: 82, y: 82 },    // Larnaca
+  'IPAP': { x: 90, y: 86 },    // Paphos
+  'IBAR': { x: 78, y: 90 },    // Barra
+  'IHEN': { x: 74, y: 88 },    // Henstridge
+  'IIAB': { x: 86, y: 92 },    // McConnell AFB
   
   // Autres
-  'IBRD': { x: 65, y: 25 },    // Bird Island
-  'IUFO': { x: 8, y: 58 },     // UFO Base
+  'IUFO': { x: 15, y: 55 },    // Oil Rig / UFO
 };
 
 // Positions des waypoints
@@ -170,84 +178,92 @@ const FIR_ZONES = [
   },
 ];
 
-// Îles stylisées (polygones SVG en pourcentage)
+// Îles stylisées basées sur la carte PTFS officielle
 const ISLANDS = [
-  // Île Saba (petite île nord)
+  // ORENJI - Nord, île allongée horizontale
   { 
-    name: 'Saba',
-    path: 'M 48,2 L 53,3 L 54,6 L 52,8 L 47,7 L 46,4 Z',
-    color: '#2d5a3d'
-  },
-  // Archipel Tokyo-Perth (nord-est) 
-  { 
-    name: 'Tokyo Island',
-    path: 'M 42,9 L 48,10 L 49,15 L 45,16 L 41,14 L 40,11 Z',
+    name: 'Orenji',
+    path: 'M 38,8 L 42,6 L 48,5 L 52,6 L 54,8 L 52,11 L 48,13 L 44,14 L 40,13 L 37,11 Z',
     color: '#3d6b4d'
   },
+  // PERTH - Nord-Est, grande île
   { 
-    name: 'Perth Island',
-    path: 'M 62,18 L 70,19 L 73,24 L 75,29 L 71,31 L 64,28 L 61,23 Z',
-    color: '#2d5a3d'
+    name: 'Perth',
+    path: 'M 72,18 L 78,16 L 84,17 L 88,20 L 89,25 L 87,30 L 82,32 L 76,31 L 72,28 L 70,23 Z',
+    color: '#3d6b4d'
   },
+  // GRINDAVIK - Ouest
   { 
-    name: 'Lukla Peak',
-    path: 'M 70,23 L 75,24 L 76,28 L 73,30 L 69,28 Z',
+    name: 'Grindavik',
+    path: 'M 12,38 L 17,36 L 20,38 L 21,43 L 19,47 L 14,48 L 10,45 L 10,40 Z',
+    color: '#3d6b4d'
+  },
+  // SAINT BARTHELEMY - Centre
+  { 
+    name: 'Saint Barthelemy',
+    path: 'M 54,35 L 60,34 L 64,36 L 66,40 L 64,44 L 58,46 L 53,44 L 51,40 L 52,37 Z',
+    color: '#3d6b4d'
+  },
+  // IZOLIRANI - Est, grande île multicolore
+  { 
+    name: 'Izolirani',
+    path: 'M 82,32 L 90,30 L 96,33 L 98,40 L 96,48 L 90,52 L 84,50 L 80,44 L 80,38 Z',
     color: '#4a7a5a'
   },
+  // Zone désertique d'Izolirani
   { 
-    name: 'Bird Island',
-    path: 'M 63,23 L 67,24 L 68,27 L 65,28 L 62,26 Z',
-    color: '#3d6b4d'
+    name: 'Izolirani Desert',
+    path: 'M 88,35 L 94,36 L 96,42 L 92,46 L 86,44 L 86,38 Z',
+    color: '#c9a227'
   },
-  // Grande île centrale (Barthelemy, Boltic, Mellor, Rockford)
+  // OIL RIG area (petite plateforme ouest)
   { 
-    name: 'Central Island',
-    path: 'M 35,35 L 45,34 L 55,36 L 62,40 L 65,48 L 63,58 L 60,68 L 58,78 L 52,82 L 45,80 L 38,75 L 32,68 L 30,58 L 32,48 L 33,40 Z',
-    color: '#2d5a3d'
-  },
-  // Île Grindavik (ouest)
-  { 
-    name: 'Grindavik Island',
-    path: 'M 8,38 L 18,36 L 22,42 L 20,55 L 22,65 L 18,75 L 12,78 L 6,72 L 4,58 L 5,45 Z',
-    color: '#3d6b4d'
-  },
-  // Petite île UFO
-  { 
-    name: 'UFO Island',
-    path: 'M 5,55 L 10,54 L 12,58 L 10,62 L 5,61 Z',
+    name: 'Oil Rig Platform',
+    path: 'M 14,54 L 17,53 L 18,56 L 16,58 L 13,57 Z',
     color: '#4a5568'
   },
-  // Archipel Est (Scampton, Najaf, Izolirani, Skopelos)
+  // SAUTHEMPTONA - Sud-Ouest
   { 
-    name: 'Scampton Island',
-    path: 'M 82,36 L 90,37 L 92,42 L 88,46 L 82,44 L 80,40 Z',
+    name: 'Sauthemptona',
+    path: 'M 10,62 L 16,60 L 20,62 L 21,67 L 18,71 L 12,72 L 8,68 L 8,64 Z',
     color: '#3d6b4d'
   },
+  // GREATER ROCKFORD - Grande île centrale complexe
+  // Partie Nord
   { 
-    name: 'Najaf Island',
-    path: 'M 88,45 L 96,44 L 98,50 L 95,54 L 88,52 Z',
-    color: '#c9a227'
+    name: 'Rockford North',
+    path: 'M 40,48 L 48,46 L 54,48 L 56,54 L 52,58 L 44,58 L 38,54 L 38,50 Z',
+    color: '#3d6b4d'
   },
+  // Partie principale Sud
   { 
-    name: 'Izolirani Island',
-    path: 'M 80,48 L 90,49 L 92,55 L 88,60 L 82,62 L 78,58 L 77,52 Z',
+    name: 'Rockford Main',
+    path: 'M 36,56 L 44,54 L 52,56 L 58,60 L 60,68 L 58,76 L 52,80 L 44,82 L 36,78 L 32,70 L 32,62 Z',
     color: '#2d5a3d'
   },
+  // Petite île à côté de Rockford (HMS Carrier area)
   { 
-    name: 'Skopelos Island',
-    path: 'M 78,55 L 85,56 L 87,62 L 84,66 L 78,64 L 76,60 Z',
+    name: 'Rockford Islet',
+    path: 'M 56,52 L 60,51 L 62,54 L 60,57 L 56,56 Z',
+    color: '#4a7a5a'
+  },
+  // SKOPELOS - Est du centre
+  { 
+    name: 'Skopelos',
+    path: 'M 74,54 L 80,52 L 84,54 L 85,59 L 82,63 L 76,64 L 72,60 L 72,56 Z',
     color: '#4a9f6a'
   },
-  // Île Sud (Larnaca, Paphos, Barra, Henstridge, McConnell)
+  // CYPRUS - Sud-Est, grande île beige/désertique
   { 
-    name: 'Larnaca Island',
-    path: 'M 55,76 L 72,74 L 82,78 L 88,85 L 86,92 L 78,98 L 65,98 L 55,94 L 52,86 Z',
-    color: '#c9a227'
+    name: 'Cyprus',
+    path: 'M 72,76 L 82,72 L 92,74 L 98,80 L 96,90 L 88,96 L 76,96 L 68,90 L 68,82 Z',
+    color: '#c9a960'
   },
+  // Détails verts sur Cyprus
   { 
-    name: 'Barra Island',
-    path: 'M 80,84 L 86,83 L 88,88 L 85,92 L 80,90 Z',
-    color: '#3d6b4d'
+    name: 'Cyprus Green',
+    path: 'M 74,80 L 80,78 L 84,82 L 82,88 L 76,90 L 72,86 Z',
+    color: '#5a7a5a'
   },
 ];
 
