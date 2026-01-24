@@ -165,6 +165,13 @@ async function envoyerChequesVol(
     return { success: true, message: 'Vol non commercial ou sans revenus' };
   }
 
+  // Sécurité : vérifier que le plan a été accepté avant de payer
+  // Note: Les vols en autosurveillance (vol_sans_atc) sont créés avec statut 'accepte' et accepted_at défini
+  // Cette vérification est une sécurité supplémentaire
+  if (!plan.accepted_at) {
+    return { success: false, message: 'Le plan de vol doit être accepté avant le paiement.' };
+  }
+
   // Calculer le temps réel depuis l'acceptation jusqu'à la demande de clôture par le pilote
   // On utilise dateFinVol qui correspond à demande_cloture_at (pas la confirmation ATC)
   let tempsReelMin = plan.temps_prev_min;
@@ -288,7 +295,7 @@ export async function PATCH(
 
     const admin = createAdminClient();
     const { data: plan } = await admin.from('plans_vol')
-      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at')
+      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc')
       .eq('id', id)
       .single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
@@ -300,7 +307,25 @@ export async function PATCH(
       if (plan.statut === 'refuse' || plan.statut === 'cloture') return NextResponse.json({ error: 'Ce plan ne peut pas etre cloture.' }, { status: 400 });
       if (!STATUTS_OUVERTS.includes(plan.statut)) return NextResponse.json({ error: 'Statut invalide pour cloture.' }, { status: 400 });
 
-      const closDirect = !plan.current_holder_user_id || plan.automonitoring === true || (plan.statut !== 'accepte' && plan.statut !== 'en_cours');
+      // Vérifier que le plan a été accepté avant de permettre la clôture avec paiement
+      // Exception : autosurveillance (vol sans ATC) peut être clôturé directement
+      const planAccepte = plan.accepted_at !== null || plan.automonitoring === true || plan.vol_sans_atc === true;
+      
+      // Si le plan n'a jamais été accepté et n'est pas en autosurveillance, on ne peut pas le clôturer
+      if (!planAccepte && plan.statut !== 'automonitoring') {
+        return NextResponse.json({ 
+          error: 'Ce plan de vol n\'a jamais été accepté par un ATC. Vous ne pouvez pas le clôturer. Contactez un administrateur si nécessaire.' 
+        }, { status: 400 });
+      }
+
+      // Clôture directe uniquement si :
+      // - Autosurveillance (vol sans ATC)
+      // - Pas d'ATC assigné ET plan accepté (ATC déconnecté)
+      // - Statut accepte ou en_cours
+      const closDirect = plan.automonitoring === true || plan.vol_sans_atc === true || 
+                        (!plan.current_holder_user_id && planAccepte) || 
+                        (plan.statut === 'accepte' || plan.statut === 'en_cours');
+      
       const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
       const demandeClotureAt = new Date();
       const payload: { statut: string; cloture_at?: string; demande_cloture_at: string } = { 

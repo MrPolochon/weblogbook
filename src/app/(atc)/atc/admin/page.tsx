@@ -24,6 +24,7 @@ export default async function AtcAdminPage() {
   const { data: profs } = userIds.length > 0 ? await supabase.from('profiles').select('id, identifiant').in('id', userIds) : { data: [] };
   const identifiantByUserId = new Map((profs || []).map((p) => [p.id, p.identifiant]));
   const sessionsEnLigne = (sessions || []).map((s) => ({
+    user_id: s.user_id,
     aeroport: s.aeroport,
     position: s.position,
     started_at: s.started_at,

@@ -175,6 +175,7 @@ export async function POST(request: Request) {
         salaire_pilote: vol_commercial ? salaireFinal : null,
         prix_billet_utilise: vol_commercial ? (prix_billet_utilise || 0) : null,
         statut: 'accepte', // Directement accepté
+        accepted_at: new Date().toISOString(), // Accepter automatiquement
         automonitoring: true, // Directement en autosurveillance
         current_holder_user_id: null,
         current_holder_position: null,

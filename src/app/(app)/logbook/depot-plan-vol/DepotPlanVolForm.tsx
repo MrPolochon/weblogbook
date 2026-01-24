@@ -386,6 +386,28 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       }
       
       if (!res.ok) throw new Error(data.error || 'Erreur');
+      
+      // Rafraîchir les disponibilités passagers et cargo après la création du plan
+      if (aeroport_depart) {
+        // Rafraîchir les passagers
+        fetch(`/api/aeroport-passagers?code_oaci=${aeroport_depart}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.code_oaci) setPassagersAeroport(data);
+          })
+          .catch(() => {});
+        
+        // Rafraîchir le cargo
+        fetch(`/api/aeroport-cargo?code_oaci=${aeroport_depart}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.cargo_disponible !== undefined) {
+              setCargoAeroport({ cargo_disponible: data.cargo_disponible, cargo_max: data.cargo_max || 0 });
+            }
+          })
+          .catch(() => {});
+      }
+      
       router.push('/logbook/plans-vol');
       router.refresh();
     } catch (err: unknown) {
@@ -409,6 +431,28 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
+      
+      // Rafraîchir les disponibilités passagers et cargo après la création du plan
+      if (aeroport_depart) {
+        // Rafraîchir les passagers
+        fetch(`/api/aeroport-passagers?code_oaci=${aeroport_depart}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.code_oaci) setPassagersAeroport(data);
+          })
+          .catch(() => {});
+        
+        // Rafraîchir le cargo
+        fetch(`/api/aeroport-cargo?code_oaci=${aeroport_depart}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data && data.cargo_disponible !== undefined) {
+              setCargoAeroport({ cargo_disponible: data.cargo_disponible, cargo_max: data.cargo_max || 0 });
+            }
+          })
+          .catch(() => {});
+      }
+      
       router.push('/logbook/plans-vol');
       router.refresh();
     } catch (err: unknown) {
