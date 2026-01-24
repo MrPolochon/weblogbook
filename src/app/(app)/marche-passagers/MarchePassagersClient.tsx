@@ -3,7 +3,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Users, Plane, TrendingUp, MapPin, RefreshCw, Radio, Navigation, Layers, ZoomIn, ZoomOut, Move } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { WAYPOINTS_PTFS, ESPACES_AERIENS } from '@/lib/aeroports-ptfs';
 
 interface AeroportData {
   code: string;
@@ -171,6 +170,87 @@ const FIR_ZONES = [
   },
 ];
 
+// Îles stylisées (polygones SVG en pourcentage)
+const ISLANDS = [
+  // Île Saba (petite île nord)
+  { 
+    name: 'Saba',
+    path: 'M 48,2 L 53,3 L 54,6 L 52,8 L 47,7 L 46,4 Z',
+    color: '#2d5a3d'
+  },
+  // Archipel Tokyo-Perth (nord-est) 
+  { 
+    name: 'Tokyo Island',
+    path: 'M 42,9 L 48,10 L 49,15 L 45,16 L 41,14 L 40,11 Z',
+    color: '#3d6b4d'
+  },
+  { 
+    name: 'Perth Island',
+    path: 'M 62,18 L 70,19 L 73,24 L 75,29 L 71,31 L 64,28 L 61,23 Z',
+    color: '#2d5a3d'
+  },
+  { 
+    name: 'Lukla Peak',
+    path: 'M 70,23 L 75,24 L 76,28 L 73,30 L 69,28 Z',
+    color: '#4a7a5a'
+  },
+  { 
+    name: 'Bird Island',
+    path: 'M 63,23 L 67,24 L 68,27 L 65,28 L 62,26 Z',
+    color: '#3d6b4d'
+  },
+  // Grande île centrale (Barthelemy, Boltic, Mellor, Rockford)
+  { 
+    name: 'Central Island',
+    path: 'M 35,35 L 45,34 L 55,36 L 62,40 L 65,48 L 63,58 L 60,68 L 58,78 L 52,82 L 45,80 L 38,75 L 32,68 L 30,58 L 32,48 L 33,40 Z',
+    color: '#2d5a3d'
+  },
+  // Île Grindavik (ouest)
+  { 
+    name: 'Grindavik Island',
+    path: 'M 8,38 L 18,36 L 22,42 L 20,55 L 22,65 L 18,75 L 12,78 L 6,72 L 4,58 L 5,45 Z',
+    color: '#3d6b4d'
+  },
+  // Petite île UFO
+  { 
+    name: 'UFO Island',
+    path: 'M 5,55 L 10,54 L 12,58 L 10,62 L 5,61 Z',
+    color: '#4a5568'
+  },
+  // Archipel Est (Scampton, Najaf, Izolirani, Skopelos)
+  { 
+    name: 'Scampton Island',
+    path: 'M 82,36 L 90,37 L 92,42 L 88,46 L 82,44 L 80,40 Z',
+    color: '#3d6b4d'
+  },
+  { 
+    name: 'Najaf Island',
+    path: 'M 88,45 L 96,44 L 98,50 L 95,54 L 88,52 Z',
+    color: '#c9a227'
+  },
+  { 
+    name: 'Izolirani Island',
+    path: 'M 80,48 L 90,49 L 92,55 L 88,60 L 82,62 L 78,58 L 77,52 Z',
+    color: '#2d5a3d'
+  },
+  { 
+    name: 'Skopelos Island',
+    path: 'M 78,55 L 85,56 L 87,62 L 84,66 L 78,64 L 76,60 Z',
+    color: '#4a9f6a'
+  },
+  // Île Sud (Larnaca, Paphos, Barra, Henstridge, McConnell)
+  { 
+    name: 'Larnaca Island',
+    path: 'M 55,76 L 72,74 L 82,78 L 88,85 L 86,92 L 78,98 L 65,98 L 55,94 L 52,86 Z',
+    color: '#c9a227'
+  },
+  { 
+    name: 'Barra Island',
+    path: 'M 80,84 L 86,83 L 88,88 L 85,92 L 80,90 Z',
+    color: '#3d6b4d'
+  },
+];
+
 const TAILLE_COLORS: Record<string, string> = {
   international: 'bg-purple-500 border-purple-400',
   regional: 'bg-sky-500 border-sky-400',
@@ -184,9 +264,6 @@ const TAILLE_LABELS: Record<string, string> = {
   small: 'Petit',
   military: 'Militaire',
 };
-
-// URL de l'image de fond de la carte PTFS
-const MAP_BACKGROUND_URL = 'https://static.wikia.nocookie.net/ptfs/images/5/5c/PTFS_Map.png';
 
 export default function MarchePassagersClient({ aeroports }: Props) {
   const router = useRouter();
@@ -419,26 +496,60 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                   transformOrigin: 'center center'
                 }}
               >
-                {/* Image de fond de la carte */}
-                <div 
-                  className="absolute inset-0 bg-cover bg-center opacity-60"
-                  style={{
-                    backgroundImage: `url(${MAP_BACKGROUND_URL})`,
-                    backgroundColor: '#0a1628'
-                  }}
-                ></div>
+                {/* Fond océan */}
+                <div className="absolute inset-0 bg-gradient-to-b from-[#0a1a2e] via-[#0d2240] to-[#0a1628]"></div>
 
-                {/* Overlay sombre pour meilleure lisibilité */}
-                <div className="absolute inset-0 bg-slate-900/40"></div>
+                {/* Grille de navigation style carte aéronautique */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-20">
+                  <defs>
+                    <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+                      <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#3b82f6" strokeWidth="0.5"/>
+                    </pattern>
+                    <pattern id="gridLarge" width="100" height="100" patternUnits="userSpaceOnUse">
+                      <path d="M 100 0 L 0 0 0 100" fill="none" stroke="#3b82f6" strokeWidth="1"/>
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#grid)" />
+                  <rect width="100%" height="100%" fill="url(#gridLarge)" />
+                </svg>
 
-                {/* Grille de fond style carte */}
-                <div className="absolute inset-0 opacity-10" style={{
-                  backgroundImage: `
-                    linear-gradient(to right, #3b82f6 1px, transparent 1px),
-                    linear-gradient(to bottom, #3b82f6 1px, transparent 1px)
-                  `,
-                  backgroundSize: '50px 50px'
-                }}></div>
+                {/* Îles - Carte vectorielle */}
+                <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <defs>
+                    {/* Dégradé pour l'eau */}
+                    <linearGradient id="waterGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#1e3a5f" stopOpacity="0.3"/>
+                      <stop offset="100%" stopColor="#0d2240" stopOpacity="0.3"/>
+                    </linearGradient>
+                    {/* Effet de relief pour les îles */}
+                    <filter id="islandShadow" x="-20%" y="-20%" width="140%" height="140%">
+                      <feDropShadow dx="0.3" dy="0.3" stdDeviation="0.5" floodColor="#000" floodOpacity="0.5"/>
+                    </filter>
+                  </defs>
+                  
+                  {/* Vagues d'eau subtiles */}
+                  <rect width="100" height="100" fill="url(#waterGradient)" />
+                  
+                  {/* Rendu des îles */}
+                  {ISLANDS.map((island, idx) => (
+                    <g key={idx} filter="url(#islandShadow)">
+                      <path
+                        d={island.path}
+                        fill={island.color}
+                        stroke="#1a3d2a"
+                        strokeWidth="0.3"
+                        opacity="0.9"
+                      />
+                      {/* Effet côte claire */}
+                      <path
+                        d={island.path}
+                        fill="none"
+                        stroke="rgba(255,255,255,0.15)"
+                        strokeWidth="0.2"
+                      />
+                    </g>
+                  ))}
+                </svg>
 
                 {/* Espaces aériens (FIR) */}
                 {showFIR && (
