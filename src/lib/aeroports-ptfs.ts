@@ -1,6 +1,5 @@
 /**
  * Aéroports PTFS (Pilot Training Flight Simulator) avec codes OACI.
- * Source: ATC24 Interactive Chart - mise à jour 2024
  */
 
 export type TailleAeroport = 'international' | 'regional' | 'small' | 'military';
@@ -11,26 +10,24 @@ export interface AeroportPTFS {
   taille: TailleAeroport;
   tourisme: boolean;
   passagersMax: number;
-  vor?: string; // Code VOR si disponible
-  freq?: string; // Fréquence VOR
+  vor?: string;
+  freq?: string;
 }
 
 export const AEROPORTS_PTFS: readonly AeroportPTFS[] = [
   // Aéroports internationaux
-  { code: 'ITKO', nom: 'Tokyo Haneda Intl.', taille: 'international', tourisme: true, passagersMax: 25000, vor: 'HME', freq: '112.20' },
+  { code: 'ITKO', nom: 'Tokyo Intl.', taille: 'international', tourisme: true, passagersMax: 25000, vor: 'HME', freq: '112.20' },
   { code: 'IPPH', nom: 'Perth Intl.', taille: 'international', tourisme: true, passagersMax: 18000, vor: 'PER', freq: '115.430' },
   { code: 'ILAR', nom: 'Larnaca Intl.', taille: 'international', tourisme: true, passagersMax: 15000, vor: 'LCK', freq: '112.90' },
   { code: 'IPAP', nom: 'Paphos Intl.', taille: 'international', tourisme: true, passagersMax: 12000, vor: 'PFO', freq: '117.95' },
-  { code: 'IRFD', nom: 'Greater Rockford Intl.', taille: 'international', tourisme: false, passagersMax: 12000, vor: 'RFD', freq: '113.55' },
+  { code: 'IRFD', nom: 'Greater Rockford', taille: 'international', tourisme: false, passagersMax: 12000, vor: 'RFD', freq: '113.55' },
   { code: 'IMLR', nom: 'Mellor Intl.', taille: 'international', tourisme: false, passagersMax: 15000, vor: 'MLR', freq: '114.75' },
   { code: 'IZOL', nom: 'Izolirani Intl.', taille: 'international', tourisme: false, passagersMax: 10000, vor: 'IZO', freq: '117.530' },
   
   // Aéroports régionaux
-  { code: 'ISAU', nom: 'Sauthemptona Airport', taille: 'regional', tourisme: false, passagersMax: 8000, vor: 'SAU', freq: '115.35' },
-  { code: 'IJAF', nom: 'Al Najaf Intl.', taille: 'regional', tourisme: false, passagersMax: 5000, vor: 'NJF', freq: '112.45' },
+  { code: 'ISAU', nom: 'Sauthamptona Airport', taille: 'regional', tourisme: false, passagersMax: 8000, vor: 'SAU', freq: '115.35' },
+  { code: 'IJAF', nom: 'Al Najaf', taille: 'regional', tourisme: false, passagersMax: 5000, vor: 'NJF', freq: '112.45' },
   { code: 'IBLT', nom: 'Boltic Airfield', taille: 'regional', tourisme: false, passagersMax: 3000 },
-  { code: 'OOWO', nom: 'Queen Blades Airport', taille: 'regional', tourisme: false, passagersMax: 4000, vor: 'BLA', freq: '117.45' },
-  { code: 'ICTAM', nom: 'ICTAM Airport', taille: 'regional', tourisme: false, passagersMax: 3500 },
   
   // Petits aéroports
   { code: 'IDCS', nom: 'Saba Airport', taille: 'small', tourisme: true, passagersMax: 800 },
@@ -40,21 +37,14 @@ export const AEROPORTS_PTFS: readonly AeroportPTFS[] = [
   { code: 'ILKL', nom: 'Lukla Airport', taille: 'small', tourisme: true, passagersMax: 500 },
   { code: 'IBAR', nom: 'Barra Airport', taille: 'small', tourisme: true, passagersMax: 2000 },
   { code: 'IHEN', nom: 'Henstridge Airfield', taille: 'small', tourisme: false, passagersMax: 1500 },
-  { code: 'ITRN', nom: 'Training Centre', taille: 'small', tourisme: false, passagersMax: 1000, vor: 'TRN', freq: '113.10' },
-  { code: 'KROTEN', nom: 'Kroten Airport', taille: 'small', tourisme: false, passagersMax: 1500, vor: 'KRT' },
-  { code: 'BARNIE', nom: 'Barnie Airfield', taille: 'small', tourisme: false, passagersMax: 800, vor: 'BAR' },
-  { code: 'GOLDEN', nom: 'Golden Airport', taille: 'small', tourisme: false, passagersMax: 1000, vor: 'GOL' },
-  { code: 'OTVO', nom: 'Otvo Airfield', taille: 'small', tourisme: false, passagersMax: 600 },
-  { code: 'DETOX', nom: 'Detox Airport', taille: 'small', tourisme: false, passagersMax: 1200, vor: 'DET' },
-  { code: 'HOTDOG', nom: 'Hotdog Airfield', taille: 'small', tourisme: false, passagersMax: 800, vor: 'HOT' },
-  { code: 'ORANGE', nom: 'Orange Airport', taille: 'small', tourisme: true, passagersMax: 2500, vor: 'ORG' },
-  { code: 'SHV', nom: 'Sea Haven', taille: 'small', tourisme: true, passagersMax: 1500 },
+  { code: 'ITRC', nom: 'Training Centre', taille: 'small', tourisme: false, passagersMax: 1000, vor: 'TRN', freq: '113.10' },
+  { code: 'IBRD', nom: 'Bird Island Airfield', taille: 'small', tourisme: true, passagersMax: 1000 },
+  { code: 'IUFO', nom: 'UFO Base', taille: 'small', tourisme: false, passagersMax: 500 },
   
   // Bases militaires
   { code: 'IIAB', nom: 'McConnell AFB', taille: 'military', tourisme: false, passagersMax: 3000 },
   { code: 'IGAR', nom: 'Air Base Garry', taille: 'military', tourisme: false, passagersMax: 2000, vor: 'GRY', freq: '111.90' },
   { code: 'ISCM', nom: 'RAF Scampton', taille: 'military', tourisme: false, passagersMax: 2000 },
-  { code: 'HUNTER', nom: 'Hunter AFB', taille: 'military', tourisme: false, passagersMax: 1500, vor: 'HUT' },
 ] as const;
 
 // Waypoints/VOR/DME du réseau PTFS
