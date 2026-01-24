@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
+import { CODES_OACI_VALIDES, calculerCargoReel, getAeroportInfo } from '@/lib/aeroports-ptfs';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol (par aéroport) :
 // Delivery et Clairance d'abord ; si les deux sont hors ligne, Ground peut accepter ;
@@ -39,6 +39,62 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
+
+    // Pré-calcul serveur pour les vols cargo (évite revenus à 0)
+    let cargoGenereCalc: number | null = null;
+    let revenuBrutCalc: number | null = null;
+    let salaireCalc: number | null = null;
+
+    if (vol_commercial && nature_transport === 'cargo' && compagnie_id && flotte_avion_id) {
+      const { data: compagnie } = await admin
+        .from('compagnies')
+        .select('prix_kg_cargo, pourcentage_salaire')
+        .eq('id', compagnie_id)
+        .single();
+
+      const { data: flotte } = await admin
+        .from('compagnie_flotte')
+        .select('capacite_cargo_custom, types_avion(capacite_cargo_kg)')
+        .eq('id', flotte_avion_id)
+        .single();
+
+      const capaciteCargo = flotte?.capacite_cargo_custom ?? flotte?.types_avion?.capacite_cargo_kg ?? 0;
+      const prixKg = compagnie?.prix_kg_cargo ?? 0;
+      const pourcentageSalaire = compagnie?.pourcentage_salaire ?? 0;
+
+      let cargoDisponible = 0;
+      const aeroportInfo = getAeroportInfo(ad);
+      const fallbackCargoMax = aeroportInfo?.cargoMax ?? 0;
+      try {
+        const { data: cargoRow, error: cargoError } = await admin
+          .from('aeroport_cargo')
+          .select('cargo_disponible, cargo_max')
+          .eq('code_oaci', ad)
+          .single();
+        if (cargoError) {
+          cargoDisponible = fallbackCargoMax;
+        } else {
+          cargoDisponible = cargoRow?.cargo_disponible ?? fallbackCargoMax;
+        }
+      } catch {
+        cargoDisponible = fallbackCargoMax;
+      }
+
+      if (capaciteCargo > 0 && prixKg > 0) {
+        const calc = calculerCargoReel(ad, aa, prixKg, capaciteCargo, cargoDisponible);
+        cargoGenereCalc = calc.cargo;
+        revenuBrutCalc = calc.revenus;
+        salaireCalc = Math.floor(calc.revenus * pourcentageSalaire / 100);
+      } else {
+        cargoGenereCalc = 0;
+        revenuBrutCalc = 0;
+        salaireCalc = 0;
+      }
+    }
+
+    const cargoGenereFinal = cargoGenereCalc ?? cargo_kg_genere ?? 0;
+    const revenuBrutFinal = revenuBrutCalc ?? revenue_brut ?? 0;
+    const salaireFinal = salaireCalc ?? salaire_pilote ?? 0;
     
     // Si vol sans ATC, accepter automatiquement et mettre en autosurveillance
     if (vol_sans_atc) {
@@ -61,9 +117,9 @@ export async function POST(request: Request) {
         flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : null,
         inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
         nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
-        cargo_kg_genere: vol_commercial ? (cargo_kg_genere || 0) : null,
-        revenue_brut: vol_commercial ? (revenue_brut || 0) : null,
-        salaire_pilote: vol_commercial ? (salaire_pilote || 0) : null,
+        cargo_kg_genere: vol_commercial ? cargoGenereFinal : null,
+        revenue_brut: vol_commercial ? revenuBrutFinal : null,
+        salaire_pilote: vol_commercial ? salaireFinal : null,
         prix_billet_utilise: vol_commercial ? (prix_billet_utilise || 0) : null,
         statut: 'accepte', // Directement accepté
         automonitoring: true, // Directement en autosurveillance
@@ -85,6 +141,25 @@ export async function POST(request: Request) {
           if (current) {
             const newValue = Math.max(0, current.passagers_disponibles - nb_pax_genere);
             await admin.from('aeroport_passagers').update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() }).eq('code_oaci', ad);
+          }
+        }
+      }
+
+      // Consommer le cargo de l'aéroport de départ si vol commercial cargo
+      if (vol_commercial && nature_transport === 'cargo' && cargoGenereFinal > 0) {
+        try {
+          await admin.rpc('consommer_cargo', { p_code_oaci: ad, p_quantite: cargoGenereFinal });
+        } catch (e) {
+          const { data: currentCargo } = await admin
+            .from('aeroport_cargo')
+            .select('cargo_disponible')
+            .eq('code_oaci', ad)
+            .single();
+          if (currentCargo) {
+            const newValue = Math.max(0, currentCargo.cargo_disponible - cargoGenereFinal);
+            await admin.from('aeroport_cargo')
+              .update({ cargo_disponible: newValue, updated_at: new Date().toISOString() })
+              .eq('code_oaci', ad);
           }
         }
       }
@@ -126,9 +201,9 @@ export async function POST(request: Request) {
       flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : null,
       inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
       nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
-      cargo_kg_genere: vol_commercial ? (cargo_kg_genere || 0) : null,
-      revenue_brut: vol_commercial ? (revenue_brut || 0) : null,
-      salaire_pilote: vol_commercial ? (salaire_pilote || 0) : null,
+      cargo_kg_genere: vol_commercial ? cargoGenereFinal : null,
+      revenue_brut: vol_commercial ? revenuBrutFinal : null,
+      salaire_pilote: vol_commercial ? salaireFinal : null,
       prix_billet_utilise: vol_commercial ? (prix_billet_utilise || 0) : null,
       statut: 'en_attente',
       current_holder_user_id: holder.user_id,
@@ -161,6 +236,25 @@ export async function POST(request: Request) {
         if (current) {
           const newValue = Math.max(0, current.passagers_disponibles - nb_pax_genere);
           await admin.from('aeroport_passagers').update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() }).eq('code_oaci', ad);
+        }
+      }
+    }
+
+    // Consommer le cargo de l'aéroport de départ si vol commercial cargo
+    if (vol_commercial && nature_transport === 'cargo' && cargoGenereFinal > 0) {
+      try {
+        await admin.rpc('consommer_cargo', { p_code_oaci: ad, p_quantite: cargoGenereFinal });
+      } catch (e) {
+        const { data: currentCargo } = await admin
+          .from('aeroport_cargo')
+          .select('cargo_disponible')
+          .eq('code_oaci', ad)
+          .single();
+        if (currentCargo) {
+          const newValue = Math.max(0, currentCargo.cargo_disponible - cargoGenereFinal);
+          await admin.from('aeroport_cargo')
+            .update({ cargo_disponible: newValue, updated_at: new Date().toISOString() })
+            .eq('code_oaci', ad);
         }
       }
     }

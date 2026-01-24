@@ -102,13 +102,13 @@ export default function CompagniesList({ compagnies, pilotes, typesAvion }: { co
                 >
                   <BookOpen className="h-4 w-4" />
                 </Link>
-                <button
-                  onClick={() => handleDelete(c.id, c.nom)}
-                  disabled={deleting === c.id}
-                  className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-red-400 disabled:opacity-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+            <button
+              onClick={() => handleDelete(c.id, c.nom)}
+              disabled={deleting === c.id}
+              className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-red-400 disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
               </div>
             </div>
             
