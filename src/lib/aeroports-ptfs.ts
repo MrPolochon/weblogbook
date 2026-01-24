@@ -224,44 +224,48 @@ export function getAeroportInfo(code: string | null | undefined): AeroportPTFS |
 }
 
 // =====================================================
-// SYSTÈME DE PRIX DES BILLETS - VERSION STRICTE
+// SYSTÈME DE PRIX DES BILLETS - VERSION STRICTE V2
 // =====================================================
+// Les bonus (tourisme, international) ne peuvent PAS contourner les limites de prix !
+// Un billet trop cher = avion vide, même sur une ligne touristique internationale.
 
-// Prix de référence selon le type de liaison
+// Prix de référence selon le type de liaison (prix "normal" attendu)
 export const PRIX_REFERENCE: Record<TailleAeroport, number> = {
-  international: 120,  // Liaisons internationales : billets plus chers acceptés
-  regional: 80,        // Liaisons régionales : prix moyen
-  small: 50,           // Petits aéroports : billets pas chers
-  military: 30,        // Bases militaires : très peu de civils, prix bas
+  international: 150,  // Hub international : clients plus riches
+  regional: 100,       // Aéroport régional : classe moyenne
+  small: 60,           // Petit aéroport : clients locaux
+  military: 40,        // Base militaire : très peu de civils
 };
 
-// Prix MAXIMUM absolu - au-delà, PERSONNE n'achète
-export const PRIX_MAXIMUM_ABSOLU = 500; // F$ - prix "luxe" maximum
+// Prix MAXIMUM absolu - au-delà, PERSONNE n'achète (pas de contournement possible)
+export const PRIX_MAXIMUM_ABSOLU = 500; // F$ - même les riches ne paient pas plus
 
-// Prix au-delà duquel le remplissage chute drastiquement
+// Prix "critique" - au-delà, le remplissage chute drastiquement
 export const PRIX_CRITIQUE: Record<TailleAeroport, number> = {
-  international: 300,  // Les riches peuvent payer jusqu'à 300 F$
-  regional: 200,       // Maximum 200 F$ pour du régional
-  small: 120,          // Maximum 120 F$ pour les petites lignes
-  military: 80,        // Très peu de tolérance
+  international: 350,  // Les VIP peuvent payer jusqu'à 350 F$
+  regional: 250,       // Maximum 250 F$ pour du régional
+  small: 150,          // Maximum 150 F$ pour les petites lignes
+  military: 100,       // Base militaire : très peu de tolérance
 };
 
-// Bonus de remplissage pour les destinations touristiques
-export const BONUS_TOURISME = 1.10; // +10% de remplissage potentiel
+// Bonus tourisme : SEULEMENT si le prix est raisonnable
+export const BONUS_TOURISME_MAX = 1.15; // +15% max de remplissage
 
-// Malus pour les bases militaires (peu de civils)
-export const MALUS_MILITAIRE = 0.3; // Seulement 30% de remplissage max
+// Malus pour les bases militaires (peu de civils, même à bas prix)
+export const MALUS_MILITAIRE = 0.25; // Maximum 25% de remplissage civil
 
 /**
- * Calcule le coefficient de remplissage basé sur le prix et les caractéristiques des aéroports
+ * Calcule le coefficient de remplissage basé sur le prix et les caractéristiques
  * 
- * RÈGLES STRICTES :
- * - Prix <= référence : 90-100% remplissage
- * - Prix entre référence et critique : décroissance linéaire (100% -> 30%)
- * - Prix entre critique et maximum : décroissance rapide (30% -> 5%)
- * - Prix > maximum absolu : 0% remplissage (personne n'achète)
+ * RÈGLES STRICTES (pas de contournement par les bonus) :
  * 
- * @returns Un nombre entre 0 et 1.1 représentant le multiplicateur de remplissage
+ * 1. Prix >= 500 F$ → 0% (AUCUN bonus ne peut changer ça)
+ * 2. Prix > critique → 5-25% (bonus très réduits)
+ * 3. Prix > référence → 25-100% (bonus partiels)
+ * 4. Prix <= référence → 100-115% (bonus plein effet)
+ * 
+ * Les bonus tourisme/international sont PROPORTIONNELS au coefficient de base.
+ * Plus le prix est élevé, moins les bonus ont d'effet.
  */
 export function calculerCoefficientRemplissage(
   codeDepart: string,
@@ -272,94 +276,100 @@ export function calculerCoefficientRemplissage(
   const aeroportArrivee = getAeroportInfo(codeArrivee);
 
   if (!aeroportDepart || !aeroportArrivee) {
-    return 1.0; // Par défaut
+    return 1.0;
   }
 
-  // Utiliser le type d'aéroport le plus restrictif pour le calcul
-  const tailleRestrictive = getTailleLaPlusRestrictive(aeroportDepart.taille, aeroportArrivee.taille);
-  
-  const prixRef = PRIX_REFERENCE[tailleRestrictive];
-  const prixCritique = PRIX_CRITIQUE[tailleRestrictive];
-
-  let coefficient = 1.0;
-
-  // RÈGLE 1: Prix au-dessus du MAXIMUM ABSOLU = 0 passagers
+  // ============ RÈGLE ABSOLUE : PRIX MAXIMUM ============
+  // Aucun bonus ne peut contourner cette limite !
   if (prixBillet >= PRIX_MAXIMUM_ABSOLU) {
-    return 0;
+    return 0; // 0 passagers, point final
   }
 
-  // RÈGLE 2: Prix au-dessus du CRITIQUE = très peu de passagers (décroissance rapide)
+  // Déterminer les seuils selon le type de liaison
+  // On utilise la MOYENNE des deux aéroports (plus juste)
+  const prixRefDepart = PRIX_REFERENCE[aeroportDepart.taille];
+  const prixRefArrivee = PRIX_REFERENCE[aeroportArrivee.taille];
+  const prixRef = (prixRefDepart + prixRefArrivee) / 2;
+
+  const prixCritDepart = PRIX_CRITIQUE[aeroportDepart.taille];
+  const prixCritArrivee = PRIX_CRITIQUE[aeroportArrivee.taille];
+  const prixCritique = (prixCritDepart + prixCritArrivee) / 2;
+
+  let coefficientBase = 1.0;
+  let efficaciteBonus = 1.0; // Les bonus sont réduits si le prix est élevé
+
+  // ============ CALCUL DU COEFFICIENT DE BASE ============
+  
   if (prixBillet > prixCritique) {
-    // De 30% à 5% entre prix critique et maximum absolu
+    // ZONE CRITIQUE : très peu de passagers (5% à 25%)
     const ratio = (prixBillet - prixCritique) / (PRIX_MAXIMUM_ABSOLU - prixCritique);
-    coefficient = 0.30 - (ratio * 0.25); // De 0.30 à 0.05
-    coefficient = Math.max(0.05, coefficient);
+    coefficientBase = 0.25 - (ratio * 0.20); // De 0.25 à 0.05
+    coefficientBase = Math.max(0.05, coefficientBase);
+    efficaciteBonus = 0.2; // Bonus réduits à 20% de leur valeur
   }
-  // RÈGLE 3: Prix entre RÉFÉRENCE et CRITIQUE = décroissance linéaire
   else if (prixBillet > prixRef) {
-    // De 100% à 30% entre prix référence et critique
+    // ZONE ÉLEVÉE : remplissage moyen (25% à 100%)
     const ratio = (prixBillet - prixRef) / (prixCritique - prixRef);
-    coefficient = 1.0 - (ratio * 0.70); // De 1.0 à 0.30
+    coefficientBase = 1.0 - (ratio * 0.75); // De 1.0 à 0.25
+    efficaciteBonus = 1.0 - (ratio * 0.5); // Bonus réduits progressivement (100% -> 50%)
   }
-  // RÈGLE 4: Prix en-dessous de la RÉFÉRENCE = bonus léger
   else if (prixBillet < prixRef) {
-    // Bonus jusqu'à +10% pour prix très bas
+    // ZONE ATTRACTIVE : bon remplissage (100% à 110%)
     const ratio = (prixRef - prixBillet) / prixRef;
-    coefficient = Math.min(1.10, 1.0 + (ratio * 0.10));
+    coefficientBase = Math.min(1.10, 1.0 + (ratio * 0.10));
+    efficaciteBonus = 1.0; // Bonus plein effet
   }
+  // else : prix = référence → coefficient = 1.0, bonus plein effet
 
-  // BONUS TOURISME : +10% si destination touristique
+  // ============ APPLICATION DES BONUS/MALUS ============
+  
+  let coefficient = coefficientBase;
+
+  // BONUS TOURISME (proportionnel à l'efficacité)
   if (aeroportArrivee.tourisme && coefficient > 0) {
-    coefficient *= BONUS_TOURISME;
+    const bonusTourisme = (BONUS_TOURISME_MAX - 1.0) * efficaciteBonus;
+    coefficient *= (1.0 + bonusTourisme);
   }
 
-  // MALUS MILITAIRE : très peu de civils sur les bases
+  // MALUS MILITAIRE (toujours appliqué intégralement)
   if (aeroportDepart.taille === 'military' || aeroportArrivee.taille === 'military') {
     coefficient *= MALUS_MILITAIRE;
   }
 
-  // Limiter entre 0 et 1.15 (max avec tous les bonus)
+  // ============ PLAFONNEMENT FINAL ============
+  // Maximum 115% même avec tous les bonus
   return Math.max(0, Math.min(1.15, coefficient));
 }
 
-/**
- * Retourne la taille d'aéroport la plus restrictive (la plus petite)
- */
-function getTailleLaPlusRestrictive(taille1: TailleAeroport, taille2: TailleAeroport): TailleAeroport {
-  const ordre: Record<TailleAeroport, number> = {
-    military: 0,
-    small: 1,
-    regional: 2,
-    international: 3,
-  };
-  return ordre[taille1] <= ordre[taille2] ? taille1 : taille2;
-}
 
 /**
  * Calcule le prix optimal recommandé pour une liaison
+ * Utilise la MOYENNE des deux aéroports pour être plus juste
  */
-export function getPrixOptimal(codeDepart: string, codeArrivee: string): { min: number; optimal: number; max: number; critique: number } {
+export function getPrixOptimal(codeDepart: string, codeArrivee: string): { min: number; optimal: number; max: number; critique: number; maxAbsolu: number } {
   const aeroportDepart = getAeroportInfo(codeDepart);
   const aeroportArrivee = getAeroportInfo(codeArrivee);
 
   if (!aeroportDepart || !aeroportArrivee) {
-    return { min: 30, optimal: 80, max: 200, critique: 300 };
+    return { min: 40, optimal: 100, max: 200, critique: 300, maxAbsolu: PRIX_MAXIMUM_ABSOLU };
   }
 
-  const tailleRestrictive = getTailleLaPlusRestrictive(aeroportDepart.taille, aeroportArrivee.taille);
-  const prixRef = PRIX_REFERENCE[tailleRestrictive];
-  const prixCritique = PRIX_CRITIQUE[tailleRestrictive];
+  // Moyenne des deux aéroports
+  const prixRef = Math.round((PRIX_REFERENCE[aeroportDepart.taille] + PRIX_REFERENCE[aeroportArrivee.taille]) / 2);
+  const prixCritique = Math.round((PRIX_CRITIQUE[aeroportDepart.taille] + PRIX_CRITIQUE[aeroportArrivee.taille]) / 2);
 
   return {
-    min: Math.round(prixRef * 0.5),
-    optimal: prixRef,
-    max: Math.round((prixRef + prixCritique) / 2),
-    critique: prixCritique,
+    min: Math.round(prixRef * 0.5),      // Prix très attractif
+    optimal: prixRef,                     // Prix recommandé
+    max: Math.round((prixRef + prixCritique) / 2), // Prix acceptable
+    critique: prixCritique,               // Prix élevé (remplissage faible)
+    maxAbsolu: PRIX_MAXIMUM_ABSOLU,       // Au-delà = 0 passagers
   };
 }
 
 /**
- * Estime le nombre de passagers pour un vol
+ * Estime le nombre de passagers pour un vol (pour l'affichage prévisionnel)
+ * Retourne une estimation MOYENNE sans aléatoire
  */
 export function estimerPassagers(
   codeDepart: string,
@@ -370,7 +380,7 @@ export function estimerPassagers(
 ): { passagers: number; remplissage: number; revenus: number; avertissement: string | null } {
   const coefficient = calculerCoefficientRemplissage(codeDepart, codeArrivee, prixBillet);
   
-  // Passagers potentiels = capacité * coefficient
+  // Passagers potentiels = capacité * coefficient (estimation moyenne)
   const passagersPotentiels = Math.floor(capaciteAvion * coefficient);
   
   // Limité par les passagers disponibles à l'aéroport
@@ -392,4 +402,56 @@ export function estimerPassagers(
   }
 
   return { passagers, remplissage, revenus, avertissement };
+}
+
+/**
+ * Calcule le nombre RÉEL de passagers pour un vol (avec aléatoire)
+ * À utiliser côté serveur lors de la validation du vol
+ * 
+ * Le coefficient de remplissage est une PROBABILITÉ MOYENNE.
+ * Le résultat réel varie autour de cette moyenne avec ±30% de variation.
+ * 
+ * Exemples :
+ * - Coefficient 80% → résultat entre 56% et 100%
+ * - Coefficient 20% → résultat entre 5% et 35% (chance de faire mieux !)
+ * - Coefficient 0% (prix >= 500 F$) → toujours 0 (pas de miracle)
+ */
+export function calculerPassagersReels(
+  codeDepart: string,
+  codeArrivee: string,
+  prixBillet: number,
+  capaciteAvion: number,
+  passagersDisponibles: number
+): { passagers: number; remplissage: number; revenus: number; chanceux: boolean } {
+  const coefficientMoyen = calculerCoefficientRemplissage(codeDepart, codeArrivee, prixBillet);
+  
+  // EXCEPTION : Prix >= maximum absolu = TOUJOURS 0 (pas de miracle)
+  if (prixBillet >= PRIX_MAXIMUM_ABSOLU) {
+    return { passagers: 0, remplissage: 0, revenus: 0, chanceux: false };
+  }
+  
+  // Variation aléatoire : ±30% autour de la moyenne
+  // Plus le coefficient est bas, plus la variation peut aider (chance de sauver le vol)
+  const variationMax = 0.30;
+  const aleatoire = (Math.random() * 2 - 1) * variationMax; // Entre -0.30 et +0.30
+  
+  // Coefficient final avec variation
+  let coefficientReel = coefficientMoyen + aleatoire;
+  
+  // Bornes : minimum 0, maximum 115%
+  coefficientReel = Math.max(0, Math.min(1.15, coefficientReel));
+  
+  // Si coefficient moyen était très bas mais on a eu de la chance
+  const chanceux = aleatoire > 0.15 && coefficientMoyen < 0.5;
+  
+  // Passagers potentiels avec le coefficient réel
+  const passagersPotentiels = Math.floor(capaciteAvion * coefficientReel);
+  
+  // Limité par les passagers disponibles à l'aéroport
+  const passagers = Math.min(passagersPotentiels, passagersDisponibles);
+  
+  const remplissage = capaciteAvion > 0 ? passagers / capaciteAvion : 0;
+  const revenus = passagers * prixBillet;
+
+  return { passagers, remplissage, revenus, chanceux };
 }
