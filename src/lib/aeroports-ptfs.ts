@@ -224,6 +224,47 @@ export function getAeroportInfo(code: string | null | undefined): AeroportPTFS |
 }
 
 // =====================================================
+// FONCTION DE NETTOYAGE DES PRIX (anti-contournement)
+// =====================================================
+// Empêche les astuces comme "+100000" ou "-50" ou "1e10"
+
+/**
+ * Nettoie et valide un prix entré par l'utilisateur
+ * Bloque les contournements comme "+100000", "-50", "1e10", etc.
+ * 
+ * @returns Un nombre positif valide, ou 0 si invalide
+ */
+export function sanitizePrix(input: string | number): number {
+  // Si c'est déjà un nombre, vérifier qu'il est valide
+  if (typeof input === 'number') {
+    if (!isFinite(input) || isNaN(input) || input < 0) {
+      return 0;
+    }
+    return Math.floor(Math.abs(input));
+  }
+
+  // Nettoyer la chaîne : garder seulement les chiffres
+  const cleaned = String(input).replace(/[^0-9]/g, '');
+  
+  // Si vide après nettoyage, retourner 0
+  if (!cleaned) {
+    return 0;
+  }
+
+  // Parser et valider
+  const prix = parseInt(cleaned, 10);
+  
+  // Vérifications de sécurité
+  if (!isFinite(prix) || isNaN(prix) || prix < 0) {
+    return 0;
+  }
+
+  // Limite maximale raisonnable (éviter les overflow)
+  const LIMITE_MAX = 1000000; // 1 million F$ max
+  return Math.min(prix, LIMITE_MAX);
+}
+
+// =====================================================
 // SYSTÈME DE PRIX DES BILLETS - VERSION STRICTE V2
 // =====================================================
 // Les bonus (tourisme, international) ne peuvent PAS contourner les limites de prix !
@@ -279,9 +320,13 @@ export function calculerCoefficientRemplissage(
     return 1.0;
   }
 
+  // ============ SANITIZATION DU PRIX ============
+  // Bloque les contournements comme "+100000", "-50", "1e10"
+  const prixNettoye = sanitizePrix(prixBillet);
+
   // ============ RÈGLE ABSOLUE : PRIX MAXIMUM ============
   // Aucun bonus ne peut contourner cette limite !
-  if (prixBillet >= PRIX_MAXIMUM_ABSOLU) {
+  if (prixNettoye >= PRIX_MAXIMUM_ABSOLU) {
     return 0; // 0 passagers, point final
   }
 
@@ -300,22 +345,22 @@ export function calculerCoefficientRemplissage(
 
   // ============ CALCUL DU COEFFICIENT DE BASE ============
   
-  if (prixBillet > prixCritique) {
+  if (prixNettoye > prixCritique) {
     // ZONE CRITIQUE : très peu de passagers (5% à 25%)
-    const ratio = (prixBillet - prixCritique) / (PRIX_MAXIMUM_ABSOLU - prixCritique);
+    const ratio = (prixNettoye - prixCritique) / (PRIX_MAXIMUM_ABSOLU - prixCritique);
     coefficientBase = 0.25 - (ratio * 0.20); // De 0.25 à 0.05
     coefficientBase = Math.max(0.05, coefficientBase);
     efficaciteBonus = 0.2; // Bonus réduits à 20% de leur valeur
   }
-  else if (prixBillet > prixRef) {
+  else if (prixNettoye > prixRef) {
     // ZONE ÉLEVÉE : remplissage moyen (25% à 100%)
-    const ratio = (prixBillet - prixRef) / (prixCritique - prixRef);
+    const ratio = (prixNettoye - prixRef) / (prixCritique - prixRef);
     coefficientBase = 1.0 - (ratio * 0.75); // De 1.0 à 0.25
     efficaciteBonus = 1.0 - (ratio * 0.5); // Bonus réduits progressivement (100% -> 50%)
   }
-  else if (prixBillet < prixRef) {
+  else if (prixNettoye < prixRef) {
     // ZONE ATTRACTIVE : bon remplissage (100% à 110%)
-    const ratio = (prixRef - prixBillet) / prixRef;
+    const ratio = (prixRef - prixNettoye) / prixRef;
     coefficientBase = Math.min(1.10, 1.0 + (ratio * 0.10));
     efficaciteBonus = 1.0; // Bonus plein effet
   }
@@ -378,7 +423,9 @@ export function estimerPassagers(
   capaciteAvion: number,
   passagersDisponibles: number
 ): { passagers: number; remplissage: number; revenus: number; avertissement: string | null } {
-  const coefficient = calculerCoefficientRemplissage(codeDepart, codeArrivee, prixBillet);
+  // Nettoyer le prix (bloque "+100000", "-50", etc.)
+  const prixNettoye = sanitizePrix(prixBillet);
+  const coefficient = calculerCoefficientRemplissage(codeDepart, codeArrivee, prixNettoye);
   
   // Passagers potentiels = capacité * coefficient (estimation moyenne)
   const passagersPotentiels = Math.floor(capaciteAvion * coefficient);
@@ -387,11 +434,11 @@ export function estimerPassagers(
   const passagers = Math.min(passagersPotentiels, passagersDisponibles);
   
   const remplissage = capaciteAvion > 0 ? passagers / capaciteAvion : 0;
-  const revenus = passagers * prixBillet;
+  const revenus = passagers * prixNettoye;
 
   // Avertissements
   let avertissement: string | null = null;
-  if (prixBillet >= PRIX_MAXIMUM_ABSOLU) {
+  if (prixNettoye >= PRIX_MAXIMUM_ABSOLU) {
     avertissement = '⛔ Prix trop élevé ! Aucun passager ne peut payer ce prix.';
   } else if (coefficient < 0.1) {
     avertissement = '🔴 Prix abusif ! Très peu de passagers accepteront.';
@@ -423,10 +470,12 @@ export function calculerPassagersReels(
   capaciteAvion: number,
   passagersDisponibles: number
 ): { passagers: number; remplissage: number; revenus: number; chanceux: boolean } {
-  const coefficientMoyen = calculerCoefficientRemplissage(codeDepart, codeArrivee, prixBillet);
+  // Nettoyer le prix (bloque "+100000", "-50", etc.)
+  const prixNettoye = sanitizePrix(prixBillet);
+  const coefficientMoyen = calculerCoefficientRemplissage(codeDepart, codeArrivee, prixNettoye);
   
   // EXCEPTION : Prix >= maximum absolu = TOUJOURS 0 (pas de miracle)
-  if (prixBillet >= PRIX_MAXIMUM_ABSOLU) {
+  if (prixNettoye >= PRIX_MAXIMUM_ABSOLU) {
     return { passagers: 0, remplissage: 0, revenus: 0, chanceux: false };
   }
   
@@ -451,7 +500,208 @@ export function calculerPassagersReels(
   const passagers = Math.min(passagersPotentiels, passagersDisponibles);
   
   const remplissage = capaciteAvion > 0 ? passagers / capaciteAvion : 0;
-  const revenus = passagers * prixBillet;
+  const revenus = passagers * prixNettoye;
 
   return { passagers, remplissage, revenus, chanceux };
+}
+
+// =====================================================
+// SYSTÈME DE PRIX DU CARGO - VERSION STRICTE
+// =====================================================
+// Similaire aux passagers mais avec des bonus différents :
+// - BONUS militaire +20% (bases = gros fret militaire)
+// - BONUS industriel +25% (zones industrielles = plus de cargo)
+// - Pas de bonus tourisme
+
+// Prix de référence CARGO selon le type d'aéroport (F$ par kg)
+export const PRIX_REFERENCE_CARGO: Record<TailleAeroport, number> = {
+  international: 8,    // Hub cargo : prix compétitifs
+  regional: 6,         // Aéroport régional : prix moyen
+  small: 4,            // Petit aéroport : peu de cargo
+  military: 5,         // Base militaire : fret militaire
+};
+
+// Prix MAXIMUM absolu CARGO - au-delà, personne n'expédie
+export const PRIX_MAXIMUM_ABSOLU_CARGO = 30; // F$/kg max
+
+// Prix critique CARGO
+export const PRIX_CRITIQUE_CARGO: Record<TailleAeroport, number> = {
+  international: 20,   // Les entreprises peuvent payer jusqu'à 20 F$/kg
+  regional: 15,        // Maximum 15 F$/kg pour du régional
+  small: 10,           // Maximum 10 F$/kg pour les petites lignes
+  military: 18,        // Fret militaire peut être cher
+};
+
+// Bonus pour les aéroports militaires (fret militaire, équipement)
+export const BONUS_MILITAIRE_CARGO = 1.20; // +20% de chargement
+
+// Bonus pour les zones industrielles
+export const BONUS_INDUSTRIEL_CARGO = 1.25; // +25% de chargement
+
+/**
+ * Calcule le coefficient de chargement cargo basé sur le prix
+ * 
+ * DIFFÉRENCES avec les passagers :
+ * - BONUS +20% pour les vols militaires (au lieu de malus)
+ * - BONUS +25% pour les zones industrielles
+ * - Pas de bonus tourisme
+ */
+export function calculerCoefficientChargementCargo(
+  codeDepart: string,
+  codeArrivee: string,
+  prixCargo: number
+): number {
+  const aeroportDepart = getAeroportInfo(codeDepart);
+  const aeroportArrivee = getAeroportInfo(codeArrivee);
+
+  if (!aeroportDepart || !aeroportArrivee) {
+    return 1.0;
+  }
+
+  // ============ SANITIZATION DU PRIX ============
+  const prixNettoye = sanitizePrix(prixCargo);
+
+  // ============ RÈGLE ABSOLUE : PRIX MAXIMUM ============
+  if (prixNettoye >= PRIX_MAXIMUM_ABSOLU_CARGO) {
+    return 0; // 0 cargo, point final
+  }
+
+  // Moyenne des deux aéroports
+  const prixRef = (PRIX_REFERENCE_CARGO[aeroportDepart.taille] + PRIX_REFERENCE_CARGO[aeroportArrivee.taille]) / 2;
+  const prixCritique = (PRIX_CRITIQUE_CARGO[aeroportDepart.taille] + PRIX_CRITIQUE_CARGO[aeroportArrivee.taille]) / 2;
+
+  let coefficientBase = 1.0;
+  let efficaciteBonus = 1.0;
+
+  // ============ CALCUL DU COEFFICIENT DE BASE ============
+  
+  if (prixNettoye > prixCritique) {
+    // ZONE CRITIQUE : très peu de cargo (5% à 25%)
+    const ratio = (prixNettoye - prixCritique) / (PRIX_MAXIMUM_ABSOLU_CARGO - prixCritique);
+    coefficientBase = 0.25 - (ratio * 0.20);
+    coefficientBase = Math.max(0.05, coefficientBase);
+    efficaciteBonus = 0.2;
+  }
+  else if (prixNettoye > prixRef) {
+    // ZONE ÉLEVÉE : chargement moyen (25% à 100%)
+    const ratio = (prixNettoye - prixRef) / (prixCritique - prixRef);
+    coefficientBase = 1.0 - (ratio * 0.75);
+    efficaciteBonus = 1.0 - (ratio * 0.5);
+  }
+  else if (prixNettoye < prixRef) {
+    // ZONE ATTRACTIVE : bon chargement (100% à 110%)
+    const ratio = (prixRef - prixNettoye) / prixRef;
+    coefficientBase = Math.min(1.10, 1.0 + (ratio * 0.10));
+    efficaciteBonus = 1.0;
+  }
+
+  let coefficient = coefficientBase;
+
+  // ============ BONUS CARGO ============
+
+  // BONUS MILITAIRE : +20% pour les vols vers/depuis bases militaires
+  if (aeroportDepart.taille === 'military' || aeroportArrivee.taille === 'military') {
+    const bonusMilitaire = (BONUS_MILITAIRE_CARGO - 1.0) * efficaciteBonus;
+    coefficient *= (1.0 + bonusMilitaire);
+  }
+
+  // BONUS INDUSTRIEL : +25% pour les zones industrielles
+  if ((aeroportDepart.industriel || aeroportArrivee.industriel) && coefficient > 0) {
+    const bonusIndustriel = (BONUS_INDUSTRIEL_CARGO - 1.0) * efficaciteBonus;
+    coefficient *= (1.0 + bonusIndustriel);
+  }
+
+  // ============ PLAFONNEMENT FINAL ============
+  return Math.max(0, Math.min(1.50, coefficient)); // Max 150% avec tous les bonus
+}
+
+/**
+ * Calcule le prix optimal recommandé pour le cargo
+ */
+export function getPrixOptimalCargo(codeDepart: string, codeArrivee: string): { min: number; optimal: number; max: number; critique: number; maxAbsolu: number } {
+  const aeroportDepart = getAeroportInfo(codeDepart);
+  const aeroportArrivee = getAeroportInfo(codeArrivee);
+
+  if (!aeroportDepart || !aeroportArrivee) {
+    return { min: 2, optimal: 6, max: 12, critique: 18, maxAbsolu: PRIX_MAXIMUM_ABSOLU_CARGO };
+  }
+
+  const prixRef = Math.round((PRIX_REFERENCE_CARGO[aeroportDepart.taille] + PRIX_REFERENCE_CARGO[aeroportArrivee.taille]) / 2);
+  const prixCritique = Math.round((PRIX_CRITIQUE_CARGO[aeroportDepart.taille] + PRIX_CRITIQUE_CARGO[aeroportArrivee.taille]) / 2);
+
+  return {
+    min: Math.max(1, Math.round(prixRef * 0.5)),
+    optimal: prixRef,
+    max: Math.round((prixRef + prixCritique) / 2),
+    critique: prixCritique,
+    maxAbsolu: PRIX_MAXIMUM_ABSOLU_CARGO,
+  };
+}
+
+/**
+ * Estime le cargo pour un vol (affichage prévisionnel)
+ */
+export function estimerCargo(
+  codeDepart: string,
+  codeArrivee: string,
+  prixCargo: number,
+  capaciteCargo: number,
+  cargoDisponible: number
+): { cargo: number; chargement: number; revenus: number; avertissement: string | null } {
+  const prixNettoye = sanitizePrix(prixCargo);
+  const coefficient = calculerCoefficientChargementCargo(codeDepart, codeArrivee, prixNettoye);
+  
+  const cargoPotentiel = Math.floor(capaciteCargo * coefficient);
+  const cargo = Math.min(cargoPotentiel, cargoDisponible);
+  
+  const chargement = capaciteCargo > 0 ? cargo / capaciteCargo : 0;
+  const revenus = cargo * prixNettoye;
+
+  let avertissement: string | null = null;
+  if (prixNettoye >= PRIX_MAXIMUM_ABSOLU_CARGO) {
+    avertissement = '⛔ Prix trop élevé ! Personne n\'expédie à ce tarif.';
+  } else if (coefficient < 0.1) {
+    avertissement = '🔴 Prix abusif ! Très peu de cargo.';
+  } else if (coefficient < 0.3) {
+    avertissement = '🟠 Prix élevé. Chargement faible.';
+  } else if (coefficient < 0.7) {
+    avertissement = '🟡 Prix au-dessus de la moyenne.';
+  }
+
+  return { cargo, chargement, revenus, avertissement };
+}
+
+/**
+ * Calcule le cargo RÉEL avec aléatoire (côté serveur)
+ */
+export function calculerCargoReel(
+  codeDepart: string,
+  codeArrivee: string,
+  prixCargo: number,
+  capaciteCargo: number,
+  cargoDisponible: number
+): { cargo: number; chargement: number; revenus: number; chanceux: boolean } {
+  const prixNettoye = sanitizePrix(prixCargo);
+  const coefficientMoyen = calculerCoefficientChargementCargo(codeDepart, codeArrivee, prixNettoye);
+  
+  if (prixNettoye >= PRIX_MAXIMUM_ABSOLU_CARGO) {
+    return { cargo: 0, chargement: 0, revenus: 0, chanceux: false };
+  }
+  
+  // Variation aléatoire ±30%
+  const variationMax = 0.30;
+  const aleatoire = (Math.random() * 2 - 1) * variationMax;
+  
+  let coefficientReel = coefficientMoyen + aleatoire;
+  coefficientReel = Math.max(0, Math.min(1.50, coefficientReel));
+  
+  const chanceux = aleatoire > 0.15 && coefficientMoyen < 0.5;
+  
+  const cargoPotentiel = Math.floor(capaciteCargo * coefficientReel);
+  const cargo = Math.min(cargoPotentiel, cargoDisponible);
+  
+  const chargement = capaciteCargo > 0 ? cargo / capaciteCargo : 0;
+  const revenus = cargo * prixNettoye;
+
+  return { cargo, chargement, revenus, chanceux };
 }
