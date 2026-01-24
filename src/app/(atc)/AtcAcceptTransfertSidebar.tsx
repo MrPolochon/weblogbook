@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
 type PlanTransfert = { id: string; numero_vol: string };
 type PlanAccepter = { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string };
@@ -103,6 +104,8 @@ export default function AtcAcceptTransfertSidebar({
   plansCloture: PlanCloture[];
 }) {
   const router = useRouter();
+  const { theme } = useAtcTheme();
+  const isDark = theme === 'dark';
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(Date.now());
   
@@ -273,22 +276,25 @@ export default function AtcAcceptTransfertSidebar({
   const sidebarBorderWidth = 2 + maxUrgency;
   const sidebarShadow = 12 + (maxUrgency * 8);
   
+  const sidebarBg = isDark ? 'bg-orange-950' : 'bg-orange-100';
+  const sidebarTitleColor = isDark ? 'text-orange-300' : 'text-orange-900';
+  
   return (
     <aside 
-      className="w-52 flex-shrink-0 bg-orange-100 py-3 px-2 flex flex-col transition-all duration-300"
+      className={`atc-sidebar w-52 flex-shrink-0 ${sidebarBg} py-3 px-2 flex flex-col transition-all duration-300`}
       style={{
         borderLeft: `${sidebarBorderWidth}px solid rgb(249, 115, 22)`,
         boxShadow: `0 0 ${sidebarShadow}px rgba(249, 115, 22, ${0.3 + (maxUrgency * 0.1)})`,
       }}
     >
-      <p className="text-xs font-bold uppercase tracking-wider text-orange-900 px-2 mb-1.5">
+      <p className={`text-xs font-bold uppercase tracking-wider ${sidebarTitleColor} px-2 mb-1.5`}>
         À traiter {maxUrgency >= 3 && '⚠️'}
       </p>
 
       {/* Demandes de clôture - PRIORITÉ HAUTE */}
       {plansCloture.length > 0 && (
         <div className="mb-3">
-          <p className="text-[10px] font-semibold text-red-800 px-2 mb-1">⚠️ Clôtures à confirmer</p>
+          <p className={`text-[10px] font-semibold ${isDark ? 'text-red-400' : 'text-red-800'} px-2 mb-1`}>⚠️ Clôtures à confirmer</p>
           <ul className="space-y-1">
             {plansCloture.map((p) => {
               const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
@@ -319,7 +325,7 @@ export default function AtcAcceptTransfertSidebar({
       {/* Plans à accepter */}
       {plansAccepter.length > 0 && (
         <div className="mb-3">
-          <p className="text-[10px] font-semibold text-orange-800 px-2 mb-1">Plans à traiter</p>
+          <p className={`text-[10px] font-semibold ${isDark ? 'text-orange-400' : 'text-orange-800'} px-2 mb-1`}>Plans à traiter</p>
           <ul className="space-y-1">
             {plansAccepter.map((p) => {
               const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);

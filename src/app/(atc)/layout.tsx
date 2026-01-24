@@ -6,6 +6,7 @@ import AtcNavBar from '@/components/AtcNavBar';
 import AtcModeBg from '@/components/AtcModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import AtcAcceptTransfertSidebar from './AtcAcceptTransfertSidebar';
+import { AtcThemeProvider } from '@/contexts/AtcThemeContext';
 
 export default async function AtcLayout({
   children,
@@ -64,36 +65,38 @@ export default async function AtcLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <AutoRefresh intervalSeconds={8} />
-      <AtcModeBg isAdmin={isAdmin} />
-      <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
-      <div className="flex flex-1 w-full min-h-0">
-        {enService && (
-          <aside className="w-44 flex-shrink-0 border-r border-slate-300 bg-slate-100 py-3 px-2 flex flex-col">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-700 px-2 mb-1.5">Non contrôlés</p>
-            {plansAuto.length === 0 ? (
-              <span className="text-slate-600 text-sm px-2">Aucun</span>
-            ) : (
-              <ul className="space-y-0.5">
-                {plansAuto.map((p) => (
-                  <li key={p.id}>
-                    <Link
-                      href={`/atc/plan/${p.id}`}
-                      className="block truncate text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-200 rounded px-2 py-1"
-                      title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
-                    >
-                      {p.numero_vol} {p.aeroport_depart}→{p.aeroport_arrivee}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </aside>
-        )}
-        <main className="flex-1 min-w-0 mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
-        {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} />}
+    <AtcThemeProvider>
+      <div className="min-h-screen flex flex-col">
+        <AutoRefresh intervalSeconds={8} />
+        <AtcModeBg isAdmin={isAdmin} />
+        <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
+        <div className="flex flex-1 w-full min-h-0">
+          {enService && (
+            <aside className="atc-sidebar w-44 flex-shrink-0 border-r border-slate-300 bg-slate-100 py-3 px-2 flex flex-col">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-700 px-2 mb-1.5">Non contrôlés</p>
+              {plansAuto.length === 0 ? (
+                <span className="text-slate-600 text-sm px-2">Aucun</span>
+              ) : (
+                <ul className="space-y-0.5">
+                  {plansAuto.map((p) => (
+                    <li key={p.id}>
+                      <Link
+                        href={`/atc/plan/${p.id}`}
+                        className="block truncate text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-200 rounded px-2 py-1"
+                        title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
+                      >
+                        {p.numero_vol} {p.aeroport_depart}→{p.aeroport_arrivee}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </aside>
+          )}
+          <main className="flex-1 min-w-0 mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
+          {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} />}
+        </div>
       </div>
-    </div>
+    </AtcThemeProvider>
   );
 }

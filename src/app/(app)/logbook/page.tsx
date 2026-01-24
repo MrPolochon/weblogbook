@@ -206,7 +206,7 @@ export default async function LogbookPage() {
                 {plansVolClotures.length} plan{plansVolClotures.length > 1 ? 's' : ''} clôturé{plansVolClotures.length > 1 ? 's' : ''}. Cliquez sur « Nouveau vol » pour remplir le formulaire automatiquement.
               </p>
               <div className="flex flex-wrap gap-2">
-                <Link href="/logbook/nouveau" className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white transition-colors shadow-lg shadow-emerald-500/20">
+                <Link href={`/logbook/nouveau?plan=${plansVolClotures[0].id}`} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white transition-colors shadow-lg shadow-emerald-500/20">
                   <Plus className="h-4 w-4" />
                   Nouveau vol (remplissage automatique)
                 </Link>

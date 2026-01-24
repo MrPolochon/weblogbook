@@ -18,35 +18,152 @@ body.admin-mode {
   background: #1a2744;
 }
 
-/* Espace ATC : admin = blanc, ATC = gris */
-body.atc-admin-bg {
+/* ========== MODE CLAIR ATC (par défaut) ========== */
+body.atc-admin-bg,
+body.atc-normal-bg,
+body.atc-light.atc-admin-bg,
+body.atc-light.atc-normal-bg {
   background: #f8fafc;
   color: #0f172a;
 }
-body.atc-normal-bg {
+body.atc-normal-bg:not(.atc-dark),
+body.atc-light.atc-normal-bg {
   background: #94a3b8;
-  color: #0f172a;
 }
 
-/* Cartes et formulaires ATC : fond clair, textes bien visibles */
+/* Cartes et formulaires ATC mode clair */
 body.atc-admin-bg .card,
-body.atc-normal-bg .card {
+body.atc-normal-bg .card,
+body.atc-light .card {
   background-color: #ffffff;
   border-color: #e2e8f0;
 }
 body.atc-admin-bg .label,
-body.atc-normal-bg .label {
+body.atc-normal-bg .label,
+body.atc-light .label {
   color: #1e293b;
 }
 body.atc-admin-bg .input,
-body.atc-normal-bg .input {
+body.atc-normal-bg .input,
+body.atc-light .input {
   background-color: #f1f5f9;
   border-color: #cbd5e1;
   color: #0f172a;
 }
 body.atc-admin-bg .input::placeholder,
-body.atc-normal-bg .input::placeholder {
+body.atc-normal-bg .input::placeholder,
+body.atc-light .input::placeholder {
   color: #64748b;
+}
+
+/* ========== MODE SOMBRE ATC ========== */
+body.atc-dark.atc-admin-bg,
+body.atc-dark.atc-normal-bg {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+/* Header ATC mode sombre */
+body.atc-dark .atc-header {
+  background: rgba(15, 23, 42, 0.95) !important;
+  border-color: #334155 !important;
+}
+body.atc-dark .atc-header * {
+  color: #e2e8f0;
+}
+body.atc-dark .atc-header a:hover,
+body.atc-dark .atc-header button:hover {
+  background-color: #1e293b !important;
+}
+body.atc-dark .atc-header .atc-link-active {
+  background-color: #0c4a6e !important;
+  color: #7dd3fc !important;
+}
+
+/* Sidebar ATC mode sombre */
+body.atc-dark .atc-sidebar {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+body.atc-dark .atc-sidebar * {
+  color: #cbd5e1;
+}
+body.atc-dark .atc-sidebar a:hover {
+  background-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Cartes ATC mode sombre */
+body.atc-dark .card {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+body.atc-dark .card-light {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
+/* Labels et inputs mode sombre */
+body.atc-dark .label {
+  color: #cbd5e1 !important;
+}
+body.atc-dark .input {
+  background-color: #0f172a !important;
+  border-color: #475569 !important;
+  color: #f1f5f9 !important;
+}
+body.atc-dark .input::placeholder {
+  color: #64748b !important;
+}
+
+/* Textes divers mode sombre */
+body.atc-dark .text-slate-600,
+body.atc-dark .text-slate-700,
+body.atc-dark .text-slate-800,
+body.atc-dark .text-slate-900 {
+  color: #cbd5e1 !important;
+}
+body.atc-dark .bg-white,
+body.atc-dark .bg-slate-50,
+body.atc-dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+body.atc-dark .bg-slate-200 {
+  background-color: #334155 !important;
+}
+body.atc-dark .border-slate-200,
+body.atc-dark .border-slate-300 {
+  border-color: #475569 !important;
+}
+
+/* Badges et tags mode sombre */
+body.atc-dark .bg-sky-100 {
+  background-color: #0c4a6e !important;
+}
+body.atc-dark .text-sky-800 {
+  color: #7dd3fc !important;
+}
+body.atc-dark .bg-emerald-100 {
+  background-color: #064e3b !important;
+}
+body.atc-dark .text-emerald-800 {
+  color: #6ee7b7 !important;
+}
+body.atc-dark .bg-amber-100,
+body.atc-dark .bg-orange-100 {
+  background-color: #78350f !important;
+}
+body.atc-dark .text-amber-800,
+body.atc-dark .text-orange-800,
+body.atc-dark .text-orange-700 {
+  color: #fcd34d !important;
+}
+body.atc-dark .bg-red-100 {
+  background-color: #7f1d1d !important;
+}
+body.atc-dark .text-red-800,
+body.atc-dark .text-red-700 {
+  color: #fca5a5 !important;
 }
 
 /* Clignotement rapide pour la sidebar ATC « À traiter » */
