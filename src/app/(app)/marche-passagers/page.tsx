@@ -27,7 +27,13 @@ export default async function MarchePassagersPage() {
   const aeroportsData = AEROPORTS_PTFS.map(aeroport => {
     const passagers = passagersData?.find(p => p.code_oaci === aeroport.code);
     return {
-      ...aeroport,
+      code: aeroport.code,
+      nom: aeroport.nom,
+      taille: aeroport.taille,
+      tourisme: aeroport.tourisme,
+      passagersMax: aeroport.passagersMax,
+      vor: aeroport.vor,
+      freq: aeroport.freq,
       passagers_disponibles: passagers?.passagers_disponibles ?? aeroport.passagersMax,
       passagers_max: passagers?.passagers_max ?? aeroport.passagersMax,
       derniere_regeneration: passagers?.derniere_regeneration ?? null,
