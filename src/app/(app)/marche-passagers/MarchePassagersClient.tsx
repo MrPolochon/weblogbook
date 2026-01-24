@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Users, Plane, TrendingUp, MapPin, RefreshCw, Radio, ZoomIn, ZoomOut, Move } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Users, Plane, TrendingUp, MapPin, RefreshCw, Radio, ZoomIn, ZoomOut, Move, Settings, Copy, Check, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface AeroportData {
@@ -21,53 +21,54 @@ interface Props {
   aeroports: AeroportData[];
 }
 
-// Positions des aéroports sur la carte ATC24 (en pourcentage) - calibré sur l'image
-const POSITIONS: Record<string, { x: number; y: number }> = {
+// Positions des aéroports sur la carte (en pourcentage) - calibré sur l'image
+const DEFAULT_POSITIONS: Record<string, { x: number; y: number }> = {
   // Nord - ORENJI
-  'IDCS': { x: 55, y: 3 },      // Saba (petite île tout en haut)
-  'ITKO': { x: 40, y: 12 },     // Tokyo/Haneda (Orenji)
+  'IDCS': { x: 55, y: 3 },
+  'ITKO': { x: 40, y: 12 },
   
   // Nord-Est - PERTH
-  'IPPH': { x: 70, y: 17 },     // Perth
-  'ILKL': { x: 76, y: 21 },     // Lukla
+  'IPPH': { x: 70, y: 17 },
+  'ILKL': { x: 76, y: 21 },
   
   // Ouest - GRINDAVIK
-  'IGRV': { x: 14, y: 40 },     // Grindavik
+  'IGRV': { x: 14, y: 40 },
   
   // Sud-Ouest - SAUTHEMPTONA
-  'ISAU': { x: 12, y: 66 },     // Sauthemptona
+  'ISAU': { x: 12, y: 66 },
   
   // Centre - BARTHELEMY
-  'IBTH': { x: 56, y: 38 },     // Saint Barthelemy
+  'IBTH': { x: 56, y: 38 },
   
   // Centre-Sud - ROCKFORD
-  'IMLR': { x: 36, y: 53 },     // Mellor
-  'IBLT': { x: 38, y: 56 },     // Boltic
-  'IRFD': { x: 44, y: 63 },     // Greater Rockford
-  'IGAR': { x: 36, y: 65 },     // Garry AFB
-  'ITRC': { x: 52, y: 76 },     // Training Centre
+  'IMLR': { x: 36, y: 53 },
+  'IBLT': { x: 38, y: 56 },
+  'IRFD': { x: 44, y: 63 },
+  'IGAR': { x: 36, y: 65 },
+  'ITRC': { x: 52, y: 76 },
   
   // Est - IZOLIRANI
-  'ISCM': { x: 83, y: 38 },     // RAF Scampton
-  'IZOL': { x: 88, y: 46 },     // Izolirani
-  'IJAF': { x: 92, y: 44 },     // Al Najaf
+  'ISCM': { x: 83, y: 38 },
+  'IZOL': { x: 88, y: 46 },
+  'IJAF': { x: 92, y: 44 },
   
   // Centre-Est - SKOPELOS
-  'ISKP': { x: 74, y: 54 },     // Skopelos
+  'ISKP': { x: 74, y: 54 },
   
   // Sud-Est - LARNACA/CYPRUS
-  'ILAR': { x: 74, y: 80 },     // Larnaca
-  'IPAP': { x: 84, y: 85 },     // Paphos
-  'IBAR': { x: 80, y: 88 },     // Barra
-  'IHEN': { x: 70, y: 90 },     // Henstridge
-  'IIAB': { x: 76, y: 92 },     // McConnell AFB
+  'ILAR': { x: 74, y: 80 },
+  'IPAP': { x: 84, y: 85 },
+  'IBAR': { x: 80, y: 88 },
+  'IHEN': { x: 70, y: 90 },
+  'IIAB': { x: 76, y: 92 },
   
   // Autres
-  'IBRD': { x: 68, y: 24 },     // Bird Island (près de Perth)
-  'IUFO': { x: 17, y: 46 },     // Oil Rig area
+  'IBRD': { x: 68, y: 24 },
+  'IUFO': { x: 17, y: 46 },
 };
 
-// L'image de fond contient déjà les FIR, waypoints, îles, etc.
+// Mot de passe super admin pour le mode édition
+const SUPER_ADMIN_PASSWORD = 'PTFS2024ADMIN';
 
 const TAILLE_COLORS: Record<string, string> = {
   international: 'bg-purple-500 border-purple-400',
@@ -94,6 +95,16 @@ export default function MarchePassagersClient({ aeroports }: Props) {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const zoomableRef = useRef<HTMLDivElement>(null);
+  
+  // Mode admin
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>(DEFAULT_POSITIONS);
+  const [draggingAeroport, setDraggingAeroport] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleZoomIn = useCallback(() => {
     setZoom(z => Math.min(z + 0.25, 3));
@@ -114,23 +125,60 @@ export default function MarchePassagersClient({ aeroports }: Props) {
     setPan({ x: 0, y: 0 });
   }, []);
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    if (e.deltaY < 0) {
-      handleZoomIn();
-    } else {
-      handleZoomOut();
-    }
-  }, [handleZoomIn, handleZoomOut]);
+  // Utiliser useEffect pour attacher l'event listener wheel de manière non-passive
+  useEffect(() => {
+    const container = mapContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.deltaY < 0) {
+        setZoom(z => Math.min(z + 0.25, 3));
+      } else {
+        setZoom(z => {
+          const newZoom = Math.max(z - 0.25, 0.5);
+          if (newZoom <= 1) {
+            setPan({ x: 0, y: 0 });
+          }
+          return newZoom;
+        });
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (isAdminMode) return; // Pas de pan en mode admin
     if (zoom > 1) {
       setIsDragging(true);
       setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     }
-  }, [zoom, pan]);
+  }, [zoom, pan, isAdminMode]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    // Mode admin : déplacer l'aéroport
+    if (isAdminMode && draggingAeroport && zoomableRef.current) {
+      const rect = zoomableRef.current.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      
+      setPositions(prev => ({
+        ...prev,
+        [draggingAeroport]: { 
+          x: Math.max(0, Math.min(100, x)), 
+          y: Math.max(0, Math.min(100, y)) 
+        }
+      }));
+      return;
+    }
+
+    // Mode normal : pan
     if (isDragging && zoom > 1) {
       const newX = e.clientX - dragStart.x;
       const newY = e.clientY - dragStart.y;
@@ -140,11 +188,39 @@ export default function MarchePassagersClient({ aeroports }: Props) {
         y: Math.max(-maxPan, Math.min(maxPan, newY))
       });
     }
-  }, [isDragging, zoom, dragStart]);
+  }, [isDragging, zoom, dragStart, isAdminMode, draggingAeroport]);
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false);
+    setDraggingAeroport(null);
   }, []);
+
+  // Fonction pour vérifier le mot de passe admin
+  const handleAdminLogin = () => {
+    if (adminPassword === SUPER_ADMIN_PASSWORD) {
+      setIsAdminMode(true);
+      setShowAdminModal(false);
+      setAdminPassword('');
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    } else {
+      alert('Mot de passe incorrect');
+    }
+  };
+
+  // Générer le code des positions pour copier
+  const generatePositionsCode = () => {
+    const lines = Object.entries(positions)
+      .map(([code, pos]) => `  '${code}': { x: ${pos.x.toFixed(1)}, y: ${pos.y.toFixed(1)} },`)
+      .join('\n');
+    return `const POSITIONS = {\n${lines}\n};`;
+  };
+
+  const copyPositions = () => {
+    navigator.clipboard.writeText(generatePositionsCode());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -172,6 +248,38 @@ export default function MarchePassagersClient({ aeroports }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Modal Admin */}
+      {showAdminModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-sm w-full mx-4 border border-slate-700">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-slate-100">Mode Admin</h3>
+              <button onClick={() => setShowAdminModal(false)} className="text-slate-400 hover:text-slate-200">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-slate-400 text-sm mb-4">
+              Entrez le mot de passe super admin pour repositionner les aéroports.
+            </p>
+            <input
+              type="password"
+              value={adminPassword}
+              onChange={(e) => setAdminPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
+              placeholder="Mot de passe..."
+              className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 mb-4"
+              autoFocus
+            />
+            <button
+              onClick={handleAdminLogin}
+              className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
+            >
+              Activer le mode admin
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Contrôles */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex gap-2">
@@ -199,57 +307,113 @@ export default function MarchePassagersClient({ aeroports }: Props) {
           </button>
         </div>
         
-        <button
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          Actualiser
-        </button>
+        <div className="flex gap-2">
+          {/* Bouton Admin */}
+          {!isAdminMode ? (
+            <button
+              onClick={() => setShowAdminModal(true)}
+              className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-400 rounded-lg transition-colors"
+              title="Mode admin"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsAdminMode(false)}
+              className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+            >
+              <X className="h-4 w-4" />
+              Quitter Admin
+            </button>
+          )}
+          
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-sm transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Actualiser
+          </button>
+        </div>
       </div>
+
+      {/* Bandeau Admin */}
+      {isAdminMode && (
+        <div className="bg-purple-900/50 border border-purple-500/50 rounded-lg p-4">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h3 className="text-purple-300 font-bold flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                Mode Admin - Repositionnement des aéroports
+              </h3>
+              <p className="text-purple-400/70 text-sm mt-1">
+                Glissez-déposez les points pour les repositionner. Les codes OACI en jaune sur la carte servent de repère.
+              </p>
+            </div>
+            <button
+              onClick={copyPositions}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? 'Copié !' : 'Copier les positions'}
+            </button>
+          </div>
+          
+          {/* Coordonnées de l'aéroport en cours de déplacement */}
+          {draggingAeroport && positions[draggingAeroport] && (
+            <div className="mt-3 p-2 bg-slate-900/50 rounded-lg font-mono text-sm text-purple-300">
+              {draggingAeroport}: x: {positions[draggingAeroport].x.toFixed(1)}, y: {positions[draggingAeroport].y.toFixed(1)}
+            </div>
+          )}
+        </div>
+      )}
 
       {viewMode === 'carte' ? (
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Carte */}
           <div className="lg:col-span-2 card p-0 overflow-hidden relative">
             {/* Contrôles de zoom */}
-            <div className="absolute top-3 right-3 z-30 flex flex-col gap-1">
-              <button
-                onClick={handleZoomIn}
-                className="p-2 bg-slate-800/90 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
-                title="Zoomer"
-              >
-                <ZoomIn className="h-4 w-4" />
-              </button>
-              <button
-                onClick={handleZoomOut}
-                className="p-2 bg-slate-800/90 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
-                title="Dézoomer"
-              >
-                <ZoomOut className="h-4 w-4" />
-              </button>
-              {zoom !== 1 && (
+            {!isAdminMode && (
+              <div className="absolute top-3 right-3 z-30 flex flex-col gap-1">
                 <button
-                  onClick={handleResetView}
+                  onClick={handleZoomIn}
                   className="p-2 bg-slate-800/90 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
-                  title="Réinitialiser la vue"
+                  title="Zoomer"
                 >
-                  <Move className="h-4 w-4" />
+                  <ZoomIn className="h-4 w-4" />
                 </button>
-              )}
-              <div className="text-center text-xs text-slate-400 bg-slate-800/90 rounded px-2 py-1">
-                {Math.round(zoom * 100)}%
+                <button
+                  onClick={handleZoomOut}
+                  className="p-2 bg-slate-800/90 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+                  title="Dézoomer"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </button>
+                {zoom !== 1 && (
+                  <button
+                    onClick={handleResetView}
+                    className="p-2 bg-slate-800/90 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+                    title="Réinitialiser la vue"
+                  >
+                    <Move className="h-4 w-4" />
+                  </button>
+                )}
+                <div className="text-center text-xs text-slate-400 bg-slate-800/90 rounded px-2 py-1">
+                  {Math.round(zoom * 100)}%
+                </div>
               </div>
-            </div>
+            )}
 
             <div 
+              ref={mapContainerRef}
               className="relative w-full overflow-hidden"
               style={{ 
                 aspectRatio: '1024/787',
-                cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default'
+                cursor: isAdminMode 
+                  ? (draggingAeroport ? 'grabbing' : 'default')
+                  : (zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default')
               }}
-              onWheel={handleWheel}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
@@ -257,13 +421,16 @@ export default function MarchePassagersClient({ aeroports }: Props) {
             >
               {/* Conteneur zoomable */}
               <div
+                ref={zoomableRef}
                 className="absolute inset-0 transition-transform duration-100"
                 style={{
-                  transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+                  transform: isAdminMode 
+                    ? 'none' 
+                    : `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
                   transformOrigin: 'center center'
                 }}
               >
-                {/* Image de fond - Carte PTFS avec FIR, waypoints, VOR */}
+                {/* Image de fond - Carte PTFS */}
                 <img 
                   src="/ptfs-map.png" 
                   alt="Carte PTFS" 
@@ -273,56 +440,76 @@ export default function MarchePassagersClient({ aeroports }: Props) {
 
                 {/* Aéroports - Marqueurs par-dessus l'image */}
                 {aeroports.map((aeroport) => {
-                  const pos = POSITIONS[aeroport.code];
+                  const pos = positions[aeroport.code];
                   if (!pos) return null;
                   
                   const ratio = getPassagerRatio(aeroport);
                   const isSelected = selectedAeroport?.code === aeroport.code;
+                  const isBeingDragged = draggingAeroport === aeroport.code;
                   
                   return (
-                    <button
+                    <div
                       key={aeroport.code}
-                      onClick={() => setSelectedAeroport(aeroport)}
-                      className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-200 group z-20 ${
-                        isSelected ? 'scale-150 z-30' : 'hover:scale-125'
-                      }`}
+                      className={`absolute transform -translate-x-1/2 -translate-y-1/2 z-20 ${
+                        isAdminMode ? 'cursor-grab active:cursor-grabbing' : ''
+                      } ${isBeingDragged ? 'z-50' : ''}`}
                       style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+                      onMouseDown={(e) => {
+                        if (isAdminMode) {
+                          e.stopPropagation();
+                          setDraggingAeroport(aeroport.code);
+                        }
+                      }}
+                      onClick={() => {
+                        if (!isAdminMode) {
+                          setSelectedAeroport(aeroport);
+                        }
+                      }}
                       title={`${aeroport.code} - ${aeroport.nom}`}
                     >
-                      <div className={`w-4 h-4 rounded-full border-2 ${TAILLE_COLORS[aeroport.taille]} ${
-                        isSelected ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''
-                      }`}>
-                        <div 
-                          className="absolute -bottom-1 -right-1 w-2 h-2 rounded-full"
-                          style={{
-                            backgroundColor: ratio >= 0.7 ? '#10b981' : ratio >= 0.4 ? '#f59e0b' : '#ef4444'
-                          }}
-                        ></div>
+                      <div 
+                        className={`w-5 h-5 rounded-full border-2 ${TAILLE_COLORS[aeroport.taille]} transition-all duration-200 ${
+                          isSelected && !isAdminMode ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900 scale-150' : ''
+                        } ${isAdminMode ? 'hover:scale-125' : 'hover:scale-125'} ${isBeingDragged ? 'scale-150 ring-2 ring-yellow-400' : ''}`}
+                      >
+                        {!isAdminMode && (
+                          <div 
+                            className="absolute -bottom-1 -right-1 w-2 h-2 rounded-full"
+                            style={{
+                              backgroundColor: ratio >= 0.7 ? '#10b981' : ratio >= 0.4 ? '#f59e0b' : '#ef4444'
+                            }}
+                          ></div>
+                        )}
                       </div>
                       
-                      {aeroport.tourisme && (
+                      {aeroport.tourisme && !isAdminMode && (
                         <span className="absolute -top-3 -right-3 text-xs">🏝️</span>
                       )}
                       
-                      <div className={`absolute left-1/2 -translate-x-1/2 -bottom-6 whitespace-nowrap bg-slate-900/95 px-1.5 py-0.5 rounded text-[10px] text-green-400 font-mono opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${
-                        isSelected ? 'opacity-100' : ''
-                      }`}>
+                      {/* Code OACI */}
+                      <div className={`absolute left-1/2 -translate-x-1/2 -bottom-5 whitespace-nowrap px-1 py-0.5 rounded text-[9px] font-mono font-bold pointer-events-none ${
+                        isAdminMode 
+                          ? 'bg-yellow-500 text-black opacity-100' 
+                          : 'bg-slate-900/95 text-green-400 opacity-0 group-hover:opacity-100'
+                      } ${isSelected && !isAdminMode ? 'opacity-100' : ''}`}>
                         {aeroport.code}
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
 
                 {/* Titre */}
                 <div className="absolute top-3 left-3 bg-slate-900/90 px-3 py-2 rounded-lg border border-slate-700">
-                  <h3 className="text-sm font-bold text-green-400 font-mono">Carte PTFS</h3>
+                  <h3 className="text-sm font-bold text-green-400 font-mono">
+                    {isAdminMode ? 'Mode Édition' : 'Carte PTFS'}
+                  </h3>
                   <p className="text-xs text-slate-500">{aeroports.length} aéroports</p>
                 </div>
               </div>
             </div>
 
             {/* Légende zoom */}
-            {zoom > 1 && (
+            {zoom > 1 && !isAdminMode && (
               <div className="absolute bottom-3 left-3 text-xs text-slate-400 bg-slate-900/80 px-2 py-1 rounded">
                 Cliquez et glissez pour naviguer
               </div>
@@ -331,7 +518,40 @@ export default function MarchePassagersClient({ aeroports }: Props) {
 
           {/* Panel détails */}
           <div className="card">
-            {selectedAeroport ? (
+            {isAdminMode ? (
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-purple-300">Instructions</h3>
+                <div className="space-y-3 text-sm text-slate-400">
+                  <p>1. Les codes OACI en jaune sur la carte indiquent les aéroports existants</p>
+                  <p>2. <strong className="text-purple-300">Glissez-déposez</strong> les points colorés pour les aligner avec les codes jaunes</p>
+                  <p>3. Les coordonnées s&apos;affichent en temps réel pendant le déplacement</p>
+                  <p>4. Cliquez sur <strong className="text-purple-300">&quot;Copier les positions&quot;</strong> pour obtenir le code</p>
+                  <p>5. Envoyez-moi le code copié pour mettre à jour les positions</p>
+                </div>
+                
+                <div className="border-t border-slate-700 pt-4">
+                  <h4 className="text-sm font-medium text-slate-300 mb-2">Légende des couleurs</h4>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-purple-500"></div>
+                      <span className="text-slate-400">International</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-sky-500"></div>
+                      <span className="text-slate-400">Régional</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-emerald-500"></div>
+                      <span className="text-slate-400">Petit</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 rounded-full bg-red-500"></div>
+                      <span className="text-slate-400">Militaire</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : selectedAeroport ? (
               <div className="space-y-4">
                 <div className="flex items-start justify-between">
                   <div>
