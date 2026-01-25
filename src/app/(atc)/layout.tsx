@@ -7,6 +7,7 @@ import AtcModeBg from '@/components/AtcModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import AtcAcceptTransfertSidebar from './AtcAcceptTransfertSidebar';
 import { AtcThemeProvider } from '@/contexts/AtcThemeContext';
+import AtcTelephone from '@/components/AtcTelephone';
 
 export default async function AtcLayout({
   children,
@@ -152,6 +153,13 @@ export default async function AtcLayout({
           <main className="flex-1 min-w-0 mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
           {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} />}
         </div>
+        {enService && session && (
+          <AtcTelephone 
+            aeroport={session.aeroport} 
+            position={session.position} 
+            userId={user.id} 
+          />
+        )}
       </div>
     </AtcThemeProvider>
   );
