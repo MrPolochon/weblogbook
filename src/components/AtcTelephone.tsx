@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import { Phone, PhoneOff, PhoneCall, X, Mic, MicOff } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { createClient } from '@/lib/supabase/client';
-import { ATC_POSITIONS } from '@/lib/atc-positions';
 
 type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connected' | 'ended';
 
@@ -83,6 +82,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const ringtoneIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const ringtoneAudioContextRef = useRef<AudioContext | null>(null);
   const shouldRingRef = useRef(false);
+  const callStatusIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Créer une vraie sonnerie de téléphone qui sonne en continu
   const playRingtone = () => {
@@ -254,6 +254,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
 
   // Nettoyer les ressources WebRTC
   const cleanupWebRTC = () => {
+    console.log('Nettoyage WebRTC...');
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
@@ -272,14 +273,45 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       signalingChannelRef.current.unsubscribe();
       signalingChannelRef.current = null;
     }
+    if (callStatusIntervalRef.current) {
+      clearInterval(callStatusIntervalRef.current);
+      callStatusIntervalRef.current = null;
+    }
+  };
+
+  // Surveiller l'état de l'appel (pour détecter quand l'autre raccroche)
+  const startCallStatusMonitoring = (callId: string) => {
+    console.log('Démarrage surveillance appel:', callId);
+    callStatusIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/atc/telephone/status?callId=${callId}`);
+        const data = await res.json();
+        
+        if (data.status === 'ended' || data.status === 'rejected' || !data.call) {
+          console.log('Appel terminé par l\'autre partie');
+          cleanupWebRTC();
+          setCallState('idle');
+          setNumber('');
+          setIncomingCall(null);
+          setCurrentCall(null);
+          setIsMuted(false);
+          playMessage('Appel terminé');
+        }
+      } catch (err) {
+        console.error('Erreur vérification statut:', err);
+      }
+    }, 2000);
   };
 
   // Créer la connexion peer et gérer la signalisation
   const setupWebRTC = async (callId: string, isInitiator: boolean) => {
     try {
+      console.log('Setup WebRTC - isInitiator:', isInitiator, 'callId:', callId);
+      
       // Obtenir le stream local
       const stream = await getLocalStream();
       localStreamRef.current = stream;
+      console.log('Stream local obtenu:', stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
       
       if (localAudioRef.current) {
         localAudioRef.current.srcObject = stream;
@@ -298,15 +330,20 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
 
       // Gérer les streams distants
       pc.ontrack = (event) => {
-        console.log('Track reçu:', event.track.kind, event.streams);
+        console.log('Track distant reçu:', event.track.kind, 'streams:', event.streams.length);
         if (event.streams && event.streams.length > 0) {
           const remoteStream = event.streams[0];
+          console.log('Remote stream tracks:', remoteStream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled })));
+          
           if (remoteAudioRef.current) {
             remoteAudioRef.current.srcObject = remoteStream;
             remoteAudioRef.current.volume = 1.0;
-            console.log('Audio distant configuré, volume:', remoteAudioRef.current.volume);
+            console.log('Audio distant configuré');
+            
             // Forcer la lecture
-            remoteAudioRef.current.play().catch(err => console.error('Erreur lecture audio:', err));
+            remoteAudioRef.current.play()
+              .then(() => console.log('Lecture audio démarrée'))
+              .catch(err => console.error('Erreur lecture audio:', err));
           }
         }
       };
@@ -316,9 +353,10 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         const connectionState = pc.connectionState;
         console.log('État connexion WebRTC:', connectionState);
         if (connectionState === 'connected') {
+          console.log('WebRTC connecté avec succès!');
           setCallState('connected');
-        } else if (connectionState === 'disconnected' || connectionState === 'failed') {
-          // Nettoyer WebRTC sans appeler handleHangup pour éviter la récursion
+        } else if (connectionState === 'disconnected' || connectionState === 'failed' || connectionState === 'closed') {
+          console.log('WebRTC déconnecté');
           cleanupWebRTC();
           setCallState('idle');
           setNumber('');
@@ -331,6 +369,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       // Gérer les changements ICE
       pc.oniceconnectionstatechange = () => {
         console.log('État ICE:', pc.iceConnectionState);
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          console.log('ICE connecté!');
+        }
       };
 
       pc.onicegatheringstatechange = () => {
@@ -339,100 +380,125 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
 
       // Configurer Supabase Realtime pour la signalisation
       const supabase = createClient();
-      const channel = supabase.channel(`atc-call-${callId}`)
+      const channelName = `atc-call-${callId}`;
+      console.log('Création canal:', channelName);
+      
+      const channel = supabase.channel(channelName)
         .on('broadcast', { event: 'webrtc-signal' }, async (payload) => {
-          const { type, data, fromUserId } = payload.payload;
+          const message = payload.payload;
+          const { type, fromUserId } = message;
           
           // Ignorer nos propres messages
-          if (fromUserId === userId) return;
+          if (fromUserId === userId) {
+            console.log('Message ignoré (notre propre message)');
+            return;
+          }
 
-          console.log('Signal reçu:', type, 'de', fromUserId);
+          console.log('Signal WebRTC reçu:', type, 'de', fromUserId);
 
-          if (type === 'offer' && !isInitiator) {
-            console.log('Traitement offre...');
-            await pc.setRemoteDescription(new RTCSessionDescription(data));
-            const answer = await pc.createAnswer({
-              offerToReceiveAudio: true,
-              offerToReceiveVideo: false,
-            });
-            await pc.setLocalDescription(answer);
-            
-            // Envoyer la réponse
-            await channel.send({
-              type: 'broadcast',
-              event: 'webrtc-signal',
-              payload: {
-                type: 'answer',
-                data: answer,
-                callId,
-                userId,
-              },
-            });
-            console.log('Réponse envoyée');
-          } else if (type === 'answer' && isInitiator) {
-            console.log('Traitement réponse...');
-            await pc.setRemoteDescription(new RTCSessionDescription(data));
-          } else if (type === 'ice-candidate') {
-            console.log('Traitement ICE candidate...');
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(data));
-            } catch (err) {
-              console.error('Erreur ajout ICE candidate:', err);
+          try {
+            if (type === 'offer' && !isInitiator) {
+              console.log('Traitement offre...');
+              const offer = message.data;
+              await pc.setRemoteDescription(new RTCSessionDescription(offer));
+              console.log('Remote description définie');
+              
+              const answer = await pc.createAnswer();
+              await pc.setLocalDescription(answer);
+              console.log('Answer créée et définie localement');
+              
+              // Envoyer la réponse
+              await channel.send({
+                type: 'broadcast',
+                event: 'webrtc-signal',
+                payload: {
+                  type: 'answer',
+                  data: answer,
+                  fromUserId: userId,
+                },
+              });
+              console.log('Réponse envoyée');
+              
+            } else if (type === 'answer' && isInitiator) {
+              console.log('Traitement réponse...');
+              const answer = message.data;
+              await pc.setRemoteDescription(new RTCSessionDescription(answer));
+              console.log('Remote description (answer) définie');
+              
+            } else if (type === 'ice-candidate') {
+              console.log('Traitement ICE candidate...');
+              const candidate = message.data;
+              if (candidate) {
+                await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                console.log('ICE candidate ajouté');
+              }
             }
+          } catch (err) {
+            console.error('Erreur traitement signal:', err);
           }
         })
-        .subscribe((status) => {
-          console.log('Canal Supabase:', status);
+        .subscribe(async (status) => {
+          console.log('Statut canal Supabase:', status);
+          
+          // Si initiateur et canal prêt, envoyer l'offre
+          if (status === 'SUBSCRIBED' && isInitiator) {
+            console.log('Canal prêt, création de l\'offre...');
+            
+            // Attendre un peu pour que l'autre partie se connecte
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            try {
+              const offer = await pc.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: false,
+              });
+              await pc.setLocalDescription(offer);
+              console.log('Offre créée et définie localement');
+              
+              // Envoyer l'offre
+              await channel.send({
+                type: 'broadcast',
+                event: 'webrtc-signal',
+                payload: {
+                  type: 'offer',
+                  data: offer,
+                  fromUserId: userId,
+                },
+              });
+              console.log('Offre envoyée via le canal');
+            } catch (err) {
+              console.error('Erreur création/envoi offre:', err);
+            }
+          }
         });
 
       signalingChannelRef.current = channel;
 
       // Gérer les candidats ICE
       pc.onicecandidate = async (event) => {
-        if (event.candidate && channel) {
-          // Envoyer le candidat ICE via le canal existant
-          await channel.send({
-            type: 'broadcast',
-            event: 'webrtc-signal',
-            payload: {
-              type: 'ice-candidate',
-              candidate: event.candidate,
-              callId,
-              userId,
-            },
-          });
+        if (event.candidate) {
+          console.log('Nouveau ICE candidate local');
+          try {
+            await channel.send({
+              type: 'broadcast',
+              event: 'webrtc-signal',
+              payload: {
+                type: 'ice-candidate',
+                data: event.candidate,
+                fromUserId: userId,
+              },
+            });
+            console.log('ICE candidate envoyé');
+          } catch (err) {
+            console.error('Erreur envoi ICE candidate:', err);
+          }
+        } else {
+          console.log('Fin des ICE candidates');
         }
       };
 
-      // Si initiateur, créer l'offre après avoir configuré le canal
-      if (isInitiator) {
-        // Attendre un peu pour que le canal soit prêt
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        const offer = await pc.createOffer({
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: false,
-        });
-        await pc.setLocalDescription(offer);
-        
-        console.log('Offre créée, envoi...');
-        
-        // Envoyer l'offre
-        await channel.send({
-          type: 'broadcast',
-          event: 'webrtc-signal',
-          payload: {
-            type: 'offer',
-            data: offer,
-            callId,
-            userId,
-          },
-        });
-        console.log('Offre envoyée');
-      } else {
-        // Si récepteur, attendre l'offre
-        console.log('En attente de l\'offre...');
-      }
+      // Démarrer la surveillance de l'état de l'appel
+      startCallStatusMonitoring(callId);
 
       return pc;
     } catch (error) {
@@ -516,15 +582,43 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       }
 
       if (data.call) {
-        // Configurer WebRTC
-        await setupWebRTC(data.call.id, true);
+        const callId = data.call.id;
         
         setCurrentCall({
           to: parsed.aeroport || aeroport,
           toPosition: parsed.position,
-          callId: data.call.id,
+          callId,
         });
-        setCallState('connected');
+        
+        // Attendre que l'autre réponde (polling)
+        const waitForAnswer = async (): Promise<boolean> => {
+          for (let i = 0; i < 30; i++) { // 30 secondes max
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const statusRes = await fetch(`/api/atc/telephone/status?callId=${callId}`);
+            const statusData = await statusRes.json();
+            
+            if (statusData.status === 'connected') {
+              return true;
+            } else if (statusData.status === 'rejected' || statusData.status === 'ended') {
+              return false;
+            }
+          }
+          return false;
+        };
+        
+        const answered = await waitForAnswer();
+        
+        if (answered) {
+          // L'autre a répondu, configurer WebRTC
+          await setupWebRTC(callId, true);
+          setCallState('connected');
+        } else {
+          playMessage('Votre correspondant ne répond pas');
+          setCallState('idle');
+          setNumber('');
+          setCurrentCall(null);
+        }
       }
     } catch (err) {
       console.error('Erreur appel:', err);
