@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Phone, PhoneOff, PhoneCall, X } from 'lucide-react';
+import { Phone, PhoneOff, PhoneCall, X, Mic, MicOff } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
+import { createClient } from '@/lib/supabase/client';
 
 type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connected' | 'ended';
 
@@ -64,8 +65,14 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const [callState, setCallState] = useState<CallState>('idle');
   const [incomingCall, setIncomingCall] = useState<{ from: string; fromPosition: string; callId: string } | null>(null);
   const [currentCall, setCurrentCall] = useState<{ to: string; toPosition: string; callId: string } | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const localAudioRef = useRef<HTMLAudioElement | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const signalingChannelRef = useRef<any>(null);
 
   // Vérifier les appels entrants
   useEffect(() => {
@@ -149,6 +156,175 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     }
   };
 
+  // Configuration WebRTC
+  const getRTCConfiguration = (): RTCConfiguration => {
+    return {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ],
+    };
+  };
+
+  // Obtenir le stream audio local
+  const getLocalStream = async (): Promise<MediaStream> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+      return stream;
+    } catch (error) {
+      console.error('Erreur accès microphone:', error);
+      playMessage('Impossible d\'accéder au microphone. Vérifiez les permissions.');
+      throw error;
+    }
+  };
+
+  // Nettoyer les ressources WebRTC
+  const cleanupWebRTC = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    if (localAudioRef.current) {
+      localAudioRef.current.srcObject = null;
+    }
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
+    if (signalingChannelRef.current) {
+      signalingChannelRef.current.unsubscribe();
+      signalingChannelRef.current = null;
+    }
+  };
+
+  // Créer la connexion peer et gérer la signalisation
+  const setupWebRTC = async (callId: string, isInitiator: boolean) => {
+    try {
+      // Obtenir le stream local
+      const stream = await getLocalStream();
+      localStreamRef.current = stream;
+      
+      if (localAudioRef.current) {
+        localAudioRef.current.srcObject = stream;
+        localAudioRef.current.volume = 0; // Pas d'écho local
+      }
+
+      // Créer la connexion peer
+      const pc = new RTCPeerConnection(getRTCConfiguration());
+      peerConnectionRef.current = pc;
+
+      // Ajouter les tracks locaux
+      stream.getTracks().forEach(track => {
+        pc.addTrack(track, stream);
+      });
+
+      // Gérer les candidats ICE
+      pc.onicecandidate = async (event) => {
+        if (event.candidate) {
+          // Envoyer le candidat ICE via Supabase Realtime
+          const supabase = createClient();
+          const channel = supabase.channel(`atc-call-${callId}`);
+          await channel.send({
+            type: 'broadcast',
+            event: 'webrtc-signal',
+            payload: {
+              type: 'ice-candidate',
+              candidate: event.candidate,
+              callId,
+              userId,
+            },
+          });
+        }
+      };
+
+      // Gérer les streams distants
+      pc.ontrack = (event) => {
+        if (remoteAudioRef.current && event.streams[0]) {
+          remoteAudioRef.current.srcObject = event.streams[0];
+        }
+      };
+
+      // Gérer les changements de connexion
+      pc.onconnectionstatechange = () => {
+        const connectionState = pc.connectionState;
+        if (connectionState === 'connected') {
+          setCallState('connected');
+        } else if (connectionState === 'disconnected' || connectionState === 'failed') {
+          handleHangup();
+        }
+      };
+
+      // Configurer Supabase Realtime pour la signalisation
+      const supabase = createClient();
+      const channel = supabase.channel(`atc-call-${callId}`)
+        .on('broadcast', { event: 'webrtc-signal' }, async (payload) => {
+          const { type, data, fromUserId } = payload.payload;
+          
+          // Ignorer nos propres messages
+          if (fromUserId === userId) return;
+
+          if (type === 'offer' && !isInitiator) {
+            await pc.setRemoteDescription(new RTCSessionDescription(data));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            
+            // Envoyer la réponse
+            await channel.send({
+              type: 'broadcast',
+              event: 'webrtc-signal',
+              payload: {
+                type: 'answer',
+                data: answer,
+                callId,
+                userId,
+              },
+            });
+          } else if (type === 'answer' && isInitiator) {
+            await pc.setRemoteDescription(new RTCSessionDescription(data));
+          } else if (type === 'ice-candidate') {
+            await pc.addIceCandidate(new RTCIceCandidate(data));
+          }
+        })
+        .subscribe();
+
+      signalingChannelRef.current = channel;
+
+      // Si initiateur, créer l'offre
+      if (isInitiator) {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        // Envoyer l'offre
+        await channel.send({
+          type: 'broadcast',
+          event: 'webrtc-signal',
+          payload: {
+            type: 'offer',
+            data: offer,
+            callId,
+            userId,
+          },
+        });
+      }
+
+      return pc;
+    } catch (error) {
+      console.error('Erreur setup WebRTC:', error);
+      cleanupWebRTC();
+      throw error;
+    }
+  };
+
   const parseNumber = (num: string): { aeroport: string | null; position: string | null; isLocal: boolean } => {
     // Numéro local (même aéroport) - Format: *15, *16, *17, *18, *191, *192, *20
     if (num.startsWith('*')) {
@@ -223,6 +399,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       }
 
       if (data.call) {
+        // Configurer WebRTC
+        await setupWebRTC(data.call.id, true);
+        
         setCurrentCall({
           to: parsed.aeroport || aeroport,
           toPosition: parsed.position,
@@ -260,6 +439,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const handleHangup = async () => {
     const callId = currentCall?.callId || incomingCall?.callId;
     
+    // Nettoyer WebRTC
+    cleanupWebRTC();
+    
     if (callId) {
       try {
         await fetch('/api/atc/telephone/hangup', {
@@ -276,7 +458,24 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     setNumber('');
     setIncomingCall(null);
     setCurrentCall(null);
+    setIsMuted(false);
   };
+
+  const toggleMute = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = isMuted;
+      });
+      setIsMuted(!isMuted);
+    }
+  };
+
+  // Nettoyer à la déconnexion
+  useEffect(() => {
+    return () => {
+      cleanupWebRTC();
+    };
+  }, []);
 
   const bgColor = isDark ? 'bg-slate-800' : 'bg-slate-100';
   const textColor = isDark ? 'text-slate-200' : 'text-slate-900';
@@ -340,14 +539,27 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
             <p className={`text-sm ${isDark ? 'text-blue-300' : 'text-blue-800'}`}>
               En communication avec {currentCall.to} {currentCall.toPosition}
             </p>
-            <button
-              onClick={handleHangup}
-              className={`mt-2 w-full px-4 py-2 rounded-lg ${isDark ? 'bg-red-700 hover:bg-red-600' : 'bg-red-600 hover:bg-red-700'} text-white font-medium`}
-            >
-              Raccrocher
-            </button>
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={toggleMute}
+                className={`flex-1 px-4 py-2 rounded-lg ${isMuted ? (isDark ? 'bg-red-700 hover:bg-red-600' : 'bg-red-600 hover:bg-red-700') : (isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-600 hover:bg-slate-700')} text-white font-medium flex items-center justify-center gap-2`}
+              >
+                {isMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                {isMuted ? 'Démuter' : 'Muter'}
+              </button>
+              <button
+                onClick={handleHangup}
+                className={`px-4 py-2 rounded-lg ${isDark ? 'bg-red-700 hover:bg-red-600' : 'bg-red-600 hover:bg-red-700'} text-white font-medium`}
+              >
+                <PhoneOff className="h-5 w-5" />
+              </button>
+            </div>
           </div>
         )}
+
+        {/* Éléments audio cachés pour WebRTC */}
+        <audio ref={localAudioRef} autoPlay muted />
+        <audio ref={remoteAudioRef} autoPlay />
 
         {/* Affichage du numéro */}
         <div className={`mb-4 p-4 rounded-lg ${isDark ? 'bg-slate-700' : 'bg-white'} ${borderColor} border text-right`}>
