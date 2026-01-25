@@ -46,6 +46,7 @@ export async function POST(request: Request) {
     let cargoGenereCalc: number | null = null;
     let revenuBrutCalc: number | null = null;
     let salaireCalc: number | null = null;
+    let typeCargaisonCalc: string | null = null;
 
     if (vol_commercial && nature_transport === 'cargo' && compagnie_id && flotte_avion_id) {
       const { data: compagnie } = await admin
@@ -94,16 +95,19 @@ export async function POST(request: Request) {
         cargoGenereCalc = calc.cargo;
         revenuBrutCalc = calc.revenus;
         salaireCalc = Math.floor(calc.revenus * pourcentageSalaire / 100);
+        typeCargaisonCalc = calc.typeCargaison; // Type de cargaison généré aléatoirement
       } else {
         cargoGenereCalc = 0;
         revenuBrutCalc = 0;
         salaireCalc = 0;
+        typeCargaisonCalc = null;
       }
     }
 
     const cargoGenereFinal = cargoGenereCalc ?? cargo_kg_genere ?? 0;
     const revenuBrutFinal = revenuBrutCalc ?? revenue_brut ?? 0;
     const salaireFinal = salaireCalc ?? salaire_pilote ?? 0;
+    const typeCargaisonFinal = typeCargaisonCalc;
     
     // Validation taux de remplissage minimum (25%) pour les vols commerciaux
     if (vol_commercial && flotte_avion_id) {
@@ -173,6 +177,7 @@ export async function POST(request: Request) {
         inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
         nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
         cargo_kg_genere: vol_commercial ? cargoGenereFinal : null,
+        type_cargaison: vol_commercial && nature_transport === 'cargo' ? typeCargaisonFinal : null,
         revenue_brut: vol_commercial ? revenuBrutFinal : null,
         salaire_pilote: vol_commercial ? salaireFinal : null,
         prix_billet_utilise: vol_commercial ? (prix_billet_utilise || 0) : null,
@@ -272,6 +277,7 @@ export async function POST(request: Request) {
       inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
       nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
       cargo_kg_genere: vol_commercial ? cargoGenereFinal : null,
+      type_cargaison: vol_commercial && nature_transport === 'cargo' ? typeCargaisonFinal : null,
       revenue_brut: vol_commercial ? revenuBrutFinal : null,
       salaire_pilote: vol_commercial ? salaireFinal : null,
       prix_billet_utilise: vol_commercial ? (prix_billet_utilise || 0) : null,

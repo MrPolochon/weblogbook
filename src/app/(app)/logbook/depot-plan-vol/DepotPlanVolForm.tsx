@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
 import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio } from 'lucide-react';
 
 interface TypeAvion {
@@ -90,6 +90,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   // Calculated values - stockés séparément pour éviter la triche
   const [generatedPax, setGeneratedPax] = useState(0);
   const [generatedCargo, setGeneratedCargo] = useState(0);
+  const [estimatedTypeCargaison, setEstimatedTypeCargaison] = useState<TypeCargaison>('general');
   const [lastGeneratedKey, setLastGeneratedKey] = useState('');
   
   // Confirmation vol sans ATC (quand aucun ATC n'est disponible)
@@ -284,6 +285,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
 
     setGeneratedPax(pax);
     setGeneratedCargo(cargo);
+    // Générer un type de cargaison estimé (le serveur générera le vrai type)
+    setEstimatedTypeCargaison(genererTypeCargaison());
     setLastGeneratedKey(generationKey);
   }, [vol_commercial, flotte_avion_id, selectedCompagnie, selectedFlotte, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport]);
 
@@ -587,6 +590,21 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
                     <p className={`text-sm ${remplissageValideCargo ? 'text-emerald-400' : 'text-red-400'}`}>
                       Remplissage : {cargoKg.toLocaleString('fr-FR')}/{capaciteCargoMax.toLocaleString('fr-FR')} kg ({Math.round(tauxRemplissageCargo * 100)}%)
                     </p>
+                    {/* Type de cargaison estimé */}
+                    {(() => {
+                      const cargaisonInfo = getCargaisonInfo(estimatedTypeCargaison);
+                      return (
+                        <p className={`text-sm col-span-2 ${cargaisonInfo.color}`}>
+                          {cargaisonInfo.icon} Type : {cargaisonInfo.nom}
+                          {cargaisonInfo.sensibiliteRetard > 1 && (
+                            <span className="text-amber-400 ml-2">⚡ Sensible au retard</span>
+                          )}
+                          {cargaisonInfo.bonusRevenu > 0 && (
+                            <span className="text-emerald-400 ml-2">💰 +{cargaisonInfo.bonusRevenu}% bonus</span>
+                          )}
+                        </p>
+                      );
+                    })()}
                   </>
                 )}
                 <p className="text-slate-300">Revenu brut : {revenuBrut.toLocaleString('fr-FR')} F$</p>

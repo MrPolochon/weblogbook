@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
+import { CODES_OACI_VALIDES, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
 
 const STATUTS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring'];
@@ -9,12 +9,40 @@ const ORDRE_ACCEPTATION_PLANS = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DE
 
 /**
  * Calcule le coefficient de ponctualité basé sur l'écart entre temps prévu et temps réel.
+ * 
+ * Pour les vols cargo, le type de cargaison affecte la sensibilité au retard :
+ * - Colis express (⚡) : double pénalité si retard/avance
+ * - Denrées périssables (🧊) : double pénalité si retard/avance
+ * - Autres types : pénalité normale
+ * 
+ * @param tempsPrevuMin Temps de vol prévu en minutes
+ * @param tempsReelMin Temps de vol réel en minutes
+ * @param typeCargaison Type de cargaison (optionnel, pour vols cargo)
  */
-function calculerCoefficientPonctualite(tempsPrevuMin: number, tempsReelMin: number): number {
+function calculerCoefficientPonctualite(
+  tempsPrevuMin: number, 
+  tempsReelMin: number,
+  typeCargaison?: TypeCargaison | null
+): number {
   const ecart = Math.abs(tempsReelMin - tempsPrevuMin);
   if (ecart <= 5) return 1.0;
-  const penalitePct = Math.min((ecart - 5) * 3, 50);
-  return 1.0 - (penalitePct / 100);
+  
+  // Multiplicateur de sensibilité pour le cargo
+  let sensibilite = 1.0;
+  if (typeCargaison) {
+    const cargaisonInfo = getCargaisonInfo(typeCargaison);
+    sensibilite = cargaisonInfo.sensibiliteRetard;
+  }
+  
+  // Pénalité de base : 3% par minute d'écart au-delà de 5 min
+  // Avec sensibilité : express/périssables = 6% par minute (double)
+  const penaliteParMinute = 3 * sensibilite;
+  const penalitePct = Math.min((ecart - 5) * penaliteParMinute, 50 * sensibilite);
+  
+  // La pénalité maximale peut aller jusqu'à 100% pour les cargos sensibles
+  const penaliteMax = Math.min(penalitePct, 100);
+  
+  return Math.max(0, 1.0 - (penaliteMax / 100));
 }
 
 /**
@@ -158,9 +186,11 @@ async function envoyerChequesVol(
     numero_vol?: string;
     aeroport_arrivee?: string;
     type_vol?: string;
+    nature_transport?: string | null;
+    type_cargaison?: string | null;
   },
   dateFinVol: Date // Date de fin du vol pour le calcul (demande_cloture_at, pas confirmation ATC)
-): Promise<{ success: boolean; message?: string; revenus?: { brut: number; net: number; salaire: number; taxes: number; coefficient: number; tempsReel: number } }> {
+): Promise<{ success: boolean; message?: string; revenus?: { brut: number; net: number; salaire: number; taxes: number; coefficient: number; tempsReel: number; bonusCargaison?: number } }> {
   if (!plan.vol_commercial || !plan.compagnie_id || !plan.revenue_brut || plan.revenue_brut <= 0) {
     return { success: true, message: 'Vol non commercial ou sans revenus' };
   }
@@ -181,8 +211,24 @@ async function envoyerChequesVol(
     tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
   }
 
-  const coefficient = calculerCoefficientPonctualite(plan.temps_prev_min, tempsReelMin);
-  const revenuEffectif = Math.round(plan.revenue_brut * coefficient);
+  // Pour les vols cargo, utiliser le type de cargaison pour le calcul de ponctualité
+  const typeCargaison = plan.nature_transport === 'cargo' && plan.type_cargaison 
+    ? plan.type_cargaison as TypeCargaison 
+    : null;
+  
+  const coefficient = calculerCoefficientPonctualite(plan.temps_prev_min, tempsReelMin, typeCargaison);
+  
+  // Calculer le bonus de cargaison (matières dangereuses, surdimensionné = +1%)
+  let bonusCargaison = 0;
+  if (typeCargaison) {
+    const cargaisonInfo = getCargaisonInfo(typeCargaison);
+    bonusCargaison = cargaisonInfo.bonusRevenu;
+  }
+  
+  // Revenu avec coefficient de ponctualité + bonus cargaison
+  const revenuAvecCoef = Math.round(plan.revenue_brut * coefficient);
+  const montantBonus = Math.round(revenuAvecCoef * bonusCargaison / 100);
+  const revenuEffectif = revenuAvecCoef + montantBonus;
   
   // Distribuer les taxes aux ATC
   const numeroVol = plan.numero_vol || 'N/A';
@@ -275,7 +321,8 @@ async function envoyerChequesVol(
       salaire: salaireEffectif, 
       taxes: taxesTotales,
       coefficient,
-      tempsReel: tempsReelMin
+      tempsReel: tempsReelMin,
+      bonusCargaison: montantBonus > 0 ? montantBonus : undefined
     } 
   };
 }
@@ -295,7 +342,7 @@ export async function PATCH(
 
     const admin = createAdminClient();
     const { data: plan } = await admin.from('plans_vol')
-      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc')
+      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison')
       .eq('id', id)
       .single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });

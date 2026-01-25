@@ -549,6 +549,110 @@ export const BONUS_MILITAIRE_CARGO = 1.20; // +20% de chargement
 // Bonus pour les zones industrielles
 export const BONUS_INDUSTRIEL_CARGO = 1.25; // +25% de chargement
 
+// =====================================================
+// TYPES DE CARGAISON
+// =====================================================
+// Chaque vol cargo a un type de cargaison aléatoire qui affecte :
+// - Le coefficient de ponctualité (express/périssables = plus sensibles au retard)
+// - Le bonus de revenu (dangereux/surdimensionné = +1% revenu)
+
+export type TypeCargaison = 'general' | 'express' | 'perissable' | 'dangereux' | 'surdimensionne';
+
+export interface CargaisonInfo {
+  id: TypeCargaison;
+  nom: string;
+  icon: string;
+  color: string;
+  // Multiplicateur de pénalité de retard (1.0 = normal, 2.0 = double pénalité)
+  sensibiliteRetard: number;
+  // Bonus de revenu en pourcentage (0 = pas de bonus, 1 = +1%)
+  bonusRevenu: number;
+  // Probabilité de base (sera normalisée)
+  probabilite: number;
+}
+
+export const TYPES_CARGAISON: Record<TypeCargaison, CargaisonInfo> = {
+  general: {
+    id: 'general',
+    nom: 'Marchandises générales',
+    icon: '📦',
+    color: 'text-slate-400',
+    sensibiliteRetard: 1.0,  // Normal
+    bonusRevenu: 0,
+    probabilite: 80,         // 80% des vols
+  },
+  express: {
+    id: 'express',
+    nom: 'Colis express',
+    icon: '⚡',
+    color: 'text-amber-400',
+    sensibiliteRetard: 2.0,  // Double pénalité si retard
+    bonusRevenu: 0,
+    probabilite: 8,          // 8% des vols
+  },
+  perissable: {
+    id: 'perissable',
+    nom: 'Denrées périssables',
+    icon: '🧊',
+    color: 'text-cyan-400',
+    sensibiliteRetard: 2.0,  // Double pénalité si retard
+    bonusRevenu: 0,
+    probabilite: 7,          // 7% des vols
+  },
+  dangereux: {
+    id: 'dangereux',
+    nom: 'Matières dangereuses',
+    icon: '☢️',
+    color: 'text-red-400',
+    sensibiliteRetard: 1.0,  // Normal (pas sensible au temps)
+    bonusRevenu: 1,          // +1% bonus revenu
+    probabilite: 3,          // 3% des vols (rare)
+  },
+  surdimensionne: {
+    id: 'surdimensionne',
+    nom: 'Cargo surdimensionné',
+    icon: '🚛',
+    color: 'text-purple-400',
+    sensibiliteRetard: 1.0,  // Normal (pas sensible au temps)
+    bonusRevenu: 1,          // +1% bonus revenu
+    probabilite: 2,          // 2% des vols (très rare)
+  },
+};
+
+/**
+ * Génère aléatoirement un type de cargaison basé sur les probabilités
+ * 
+ * Répartition :
+ * - Marchandises générales : 80%
+ * - Colis express : 8%
+ * - Denrées périssables : 7%
+ * - Matières dangereuses : 3%
+ * - Cargo surdimensionné : 2%
+ */
+export function genererTypeCargaison(): TypeCargaison {
+  const types = Object.values(TYPES_CARGAISON);
+  const totalProba = types.reduce((sum, t) => sum + t.probabilite, 0);
+  
+  let random = Math.random() * totalProba;
+  
+  for (const type of types) {
+    random -= type.probabilite;
+    if (random <= 0) {
+      return type.id;
+    }
+  }
+  
+  // Fallback (ne devrait jamais arriver)
+  return 'general';
+}
+
+/**
+ * Récupère les informations d'un type de cargaison
+ */
+export function getCargaisonInfo(type: TypeCargaison): CargaisonInfo {
+  return TYPES_CARGAISON[type] || TYPES_CARGAISON.general;
+}
+
 /**
  * Calcule le coefficient de chargement cargo basé sur le prix
  * 
@@ -695,6 +799,13 @@ export function estimerCargo(
 /**
  * Calcule le cargo RÉEL avec aléatoire (côté serveur)
  * IMPORTANT: Le cargo ne peut JAMAIS dépasser la capacité de l'avion !
+ * 
+ * Génère également le TYPE DE CARGAISON aléatoirement :
+ * - Marchandises générales : 80% (normal)
+ * - Colis express : 8% (sensible au retard)
+ * - Denrées périssables : 7% (sensible au retard)
+ * - Matières dangereuses : 3% (+1% bonus revenu)
+ * - Cargo surdimensionné : 2% (+1% bonus revenu)
  */
 export function calculerCargoReel(
   codeDepart: string,
@@ -702,12 +813,15 @@ export function calculerCargoReel(
   prixCargo: number,
   capaciteCargo: number,
   cargoDisponible: number
-): { cargo: number; chargement: number; revenus: number; chanceux: boolean } {
+): { cargo: number; chargement: number; revenus: number; chanceux: boolean; typeCargaison: TypeCargaison } {
   const prixNettoye = sanitizePrix(prixCargo);
   const coefficientMoyen = calculerCoefficientChargementCargo(codeDepart, codeArrivee, prixNettoye);
   
+  // Générer le type de cargaison
+  const typeCargaison = genererTypeCargaison();
+  
   if (prixNettoye >= PRIX_MAXIMUM_ABSOLU_CARGO) {
-    return { cargo: 0, chargement: 0, revenus: 0, chanceux: false };
+    return { cargo: 0, chargement: 0, revenus: 0, chanceux: false, typeCargaison };
   }
   
   // Variation aléatoire ±20% (réduit de 30% à 20% pour plus de réalisme)
@@ -731,5 +845,5 @@ export function calculerCargoReel(
   const chargement = capaciteCargo > 0 ? cargo / capaciteCargo : 0;
   const revenus = cargo * prixNettoye;
 
-  return { cargo, chargement, revenus, chanceux };
+  return { cargo, chargement, revenus, chanceux, typeCargaison };
 }
