@@ -37,6 +37,10 @@ export async function POST(request: Request) {
       .eq('position', to_position)
       .single();
 
+    if (!targetSession) {
+      return NextResponse.json({ error: 'offline' }, { status: 404 });
+    }
+
     // Vérifier si l'ATC cible a refusé un appel récent de cet utilisateur
     const { data: recentRejected } = await admin
       .from('atc_calls')

@@ -255,9 +255,8 @@ export function useWebRTC({ callId, userId, onStateChange }: UseWebRTCProps) {
 
   // Nettoyer à la déconnexion
   useEffect(() => {
-    return () => {
-      cleanup();
-    };
+    return cleanup;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {

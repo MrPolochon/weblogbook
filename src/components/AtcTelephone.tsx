@@ -74,6 +74,36 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const signalingChannelRef = useRef<any>(null);
 
+  const playRingtoneRef = useRef<(() => void) | null>(null);
+  
+  // Créer la fonction playRingtone avec une référence stable
+  useEffect(() => {
+    playRingtoneRef.current = () => {
+      // Créer un son de sonnerie simple
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      gainNode.gain.value = 0.3;
+      
+      oscillator.start();
+      
+      setTimeout(() => {
+        oscillator.stop();
+        setTimeout(() => {
+          if (callState === 'incoming' && playRingtoneRef.current) {
+            playRingtoneRef.current();
+          }
+        }, 500);
+      }, 500);
+    };
+  }, [callState]);
+
   // Vérifier les appels entrants
   useEffect(() => {
     if (callState === 'idle' || callState === 'ringing') {
@@ -90,7 +120,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
                 callId: data.call.id,
               });
               setCallState('incoming');
-              playRingtone();
+              if (playRingtoneRef.current) {
+                playRingtoneRef.current();
+              }
             }
           }
         } catch (err) {
@@ -105,31 +137,6 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       }
     };
   }, [callState]);
-
-  const playRingtone = () => {
-    // Créer un son de sonnerie simple
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.frequency.value = 800;
-    oscillator.type = 'sine';
-    gainNode.gain.value = 0.3;
-    
-    oscillator.start();
-    
-    setTimeout(() => {
-      oscillator.stop();
-      setTimeout(() => {
-        if (callState === 'incoming') {
-          playRingtone();
-        }
-      }, 500);
-    }, 500);
-  };
 
   const playMessage = (message: string) => {
     if ('speechSynthesis' in window) {
