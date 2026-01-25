@@ -80,33 +80,55 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const signalingChannelRef = useRef<any>(null);
 
+  const ringtoneAudioRef = useRef<HTMLAudioElement | null>(null);
   const playRingtoneRef = useRef<(() => void) | null>(null);
   
-  // Créer la fonction playRingtone avec une référence stable
+  // Créer une vraie sonnerie de téléphone avec Web Audio API
   useEffect(() => {
     playRingtoneRef.current = () => {
-      // Créer un son de sonnerie simple
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      
-      oscillator.frequency.value = 800;
-      oscillator.type = 'sine';
-      gainNode.gain.value = 0.3;
-      
-      oscillator.start();
-      
-      setTimeout(() => {
-        oscillator.stop();
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        
+        // Créer deux oscillateurs pour une sonnerie téléphone réaliste (fréquences 440Hz et 480Hz)
+        const osc1 = audioContext.createOscillator();
+        const osc2 = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        const gainNode2 = audioContext.createGain();
+        
+        // Fréquences typiques d'une sonnerie téléphone
+        osc1.frequency.value = 440; // La4
+        osc2.frequency.value = 480; // B4
+        
+        osc1.type = 'sine';
+        osc2.type = 'sine';
+        
+        // Modulation d'amplitude pour créer le rythme de sonnerie
+        gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.1);
+        gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.4);
+        
+        osc1.connect(gainNode);
+        osc2.connect(gainNode2);
+        gainNode.connect(audioContext.destination);
+        gainNode2.connect(audioContext.destination);
+        gainNode2.gain.value = 0.3;
+        
+        osc1.start();
+        osc2.start();
+        
+        // Arrêter après 0.4 secondes
+        osc1.stop(audioContext.currentTime + 0.4);
+        osc2.stop(audioContext.currentTime + 0.4);
+        
+        // Répéter après 0.2 secondes si toujours en appel entrant
         setTimeout(() => {
           if (callState === 'incoming' && playRingtoneRef.current) {
             playRingtoneRef.current();
           }
-        }, 500);
-      }, 500);
+        }, 600); // 0.4s son + 0.2s silence = cycle de 0.6s
+      } catch (err) {
+        console.error('Erreur sonnerie:', err);
+      }
     };
   }, [callState]);
 
@@ -238,8 +260,50 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
 
       // Ajouter les tracks locaux
       stream.getTracks().forEach(track => {
+        console.log('Ajout track local:', track.kind, track.enabled);
         pc.addTrack(track, stream);
       });
+
+      // Gérer les streams distants
+      pc.ontrack = (event) => {
+        console.log('Track reçu:', event.track.kind, event.streams);
+        if (event.streams && event.streams.length > 0) {
+          const remoteStream = event.streams[0];
+          if (remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = remoteStream;
+            remoteAudioRef.current.volume = 1.0;
+            console.log('Audio distant configuré, volume:', remoteAudioRef.current.volume);
+            // Forcer la lecture
+            remoteAudioRef.current.play().catch(err => console.error('Erreur lecture audio:', err));
+          }
+        }
+      };
+
+      // Gérer les changements de connexion
+      pc.onconnectionstatechange = () => {
+        const connectionState = pc.connectionState;
+        console.log('État connexion WebRTC:', connectionState);
+        if (connectionState === 'connected') {
+          setCallState('connected');
+        } else if (connectionState === 'disconnected' || connectionState === 'failed') {
+          // Nettoyer WebRTC sans appeler handleHangup pour éviter la récursion
+          cleanupWebRTC();
+          setCallState('idle');
+          setNumber('');
+          setIncomingCall(null);
+          setCurrentCall(null);
+          setIsMuted(false);
+        }
+      };
+
+      // Gérer les changements ICE
+      pc.oniceconnectionstatechange = () => {
+        console.log('État ICE:', pc.iceConnectionState);
+      };
+
+      pc.onicegatheringstatechange = () => {
+        console.log('État gathering ICE:', pc.iceGatheringState);
+      };
 
       // Configurer Supabase Realtime pour la signalisation
       const supabase = createClient();
@@ -250,9 +314,15 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           // Ignorer nos propres messages
           if (fromUserId === userId) return;
 
+          console.log('Signal reçu:', type, 'de', fromUserId);
+
           if (type === 'offer' && !isInitiator) {
+            console.log('Traitement offre...');
             await pc.setRemoteDescription(new RTCSessionDescription(data));
-            const answer = await pc.createAnswer();
+            const answer = await pc.createAnswer({
+              offerToReceiveAudio: true,
+              offerToReceiveVideo: false,
+            });
             await pc.setLocalDescription(answer);
             
             // Envoyer la réponse
@@ -266,13 +336,22 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
                 userId,
               },
             });
+            console.log('Réponse envoyée');
           } else if (type === 'answer' && isInitiator) {
+            console.log('Traitement réponse...');
             await pc.setRemoteDescription(new RTCSessionDescription(data));
           } else if (type === 'ice-candidate') {
-            await pc.addIceCandidate(new RTCIceCandidate(data));
+            console.log('Traitement ICE candidate...');
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(data));
+            } catch (err) {
+              console.error('Erreur ajout ICE candidate:', err);
+            }
           }
         })
-        .subscribe();
+        .subscribe((status) => {
+          console.log('Canal Supabase:', status);
+        });
 
       signalingChannelRef.current = channel;
 
@@ -293,10 +372,18 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         }
       };
 
-      // Si initiateur, créer l'offre
+      // Si initiateur, créer l'offre après avoir configuré le canal
       if (isInitiator) {
-        const offer = await pc.createOffer();
+        // Attendre un peu pour que le canal soit prêt
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const offer = await pc.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: false,
+        });
         await pc.setLocalDescription(offer);
+        
+        console.log('Offre créée, envoi...');
         
         // Envoyer l'offre
         await channel.send({
@@ -309,6 +396,10 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
             userId,
           },
         });
+        console.log('Offre envoyée');
+      } else {
+        // Si récepteur, attendre l'offre
+        console.log('En attente de l\'offre...');
       }
 
       return pc;
@@ -582,8 +673,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         )}
 
         {/* Éléments audio cachés pour WebRTC */}
-        <audio ref={localAudioRef} autoPlay muted />
-        <audio ref={remoteAudioRef} autoPlay />
+        <audio ref={localAudioRef} autoPlay muted playsInline />
+        <audio ref={remoteAudioRef} autoPlay playsInline />
 
         {/* Affichage du numéro */}
         <div className={`mb-4 p-4 rounded-lg ${isDark ? 'bg-slate-700' : 'bg-white'} ${borderColor} border text-right`}>
