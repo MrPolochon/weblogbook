@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Phone, PhoneOff, PhoneCall, X, Mic, MicOff } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { createClient } from '@/lib/supabase/client';
+import { ATC_POSITIONS } from '@/lib/atc-positions';
 
 type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connected' | 'ended';
 
@@ -13,16 +14,22 @@ interface AtcTelephoneProps {
   userId: string;
 }
 
-// Mapping des positions vers les codes
+// Mapping des positions vers les codes (doit correspondre aux valeurs de la base de données)
+// Les positions dans la DB sont : 'Delivery', 'Clairance', 'Ground', 'Tower', 'APP', 'DEP', 'Center'
 const POSITION_CODES: Record<string, string> = {
-  'DELIVERY': '15',
-  'CLEARANCE': '16',
-  'GROUND': '17',
-  'TOWER': '18',
-  'DEPARTURE': '191',
-  'APPROACH': '192',
-  'CENTER': '20',
+  'Delivery': '15',
+  'Clairance': '16',  // Note: "Clairance" avec un seul 'r' dans la DB
+  'Ground': '17',
+  'Tower': '18',
+  'DEP': '191',
+  'APP': '192',
+  'Center': '20',
 };
+
+// Mapping inverse (code vers position)
+const CODE_TO_POSITION: Record<string, string> = Object.fromEntries(
+  Object.entries(POSITION_CODES).map(([pos, code]) => [code, pos])
+);
 
 // Mapping des codes aéroports vers numéros téléphoniques
 // Format: +14[code_aéroport][position]
@@ -316,7 +323,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     // Numéro local (même aéroport) - Format: *15, *16, *17, *18, *191, *192, *20
     if (num.startsWith('*')) {
       const code = num.substring(1);
-      const position = Object.entries(POSITION_CODES).find(([_, c]) => c === code)?.[0];
+      const position = CODE_TO_POSITION[code];
       if (position) {
         return { aeroport: null, position, isLocal: true };
       }
@@ -337,7 +344,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         const aeroport = CODE_TO_AEROPORT[aeroportCode];
         
         // Trouver la position correspondante au code
-        const position = Object.entries(POSITION_CODES).find(([_, c]) => c === positionCode)?.[0];
+        const position = CODE_TO_POSITION[positionCode];
         
         if (aeroport && position) {
           return { aeroport, position, isLocal: false };
