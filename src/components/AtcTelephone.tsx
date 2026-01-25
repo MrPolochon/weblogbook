@@ -80,54 +80,88 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const signalingChannelRef = useRef<any>(null);
 
-  const ringtoneAudioRef = useRef<HTMLAudioElement | null>(null);
-  const playRingtoneRef = useRef<(() => void) | null>(null);
+  const ringtoneIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const ringtoneAudioContextRef = useRef<AudioContext | null>(null);
+  const shouldRingRef = useRef(false);
   
-  // Créer une vraie sonnerie de téléphone avec Web Audio API
+  // Créer une vraie sonnerie de téléphone qui sonne en continu
+  const playRingtone = () => {
+    try {
+      // Créer un nouveau contexte audio si nécessaire
+      if (!ringtoneAudioContextRef.current) {
+        ringtoneAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const audioContext = ringtoneAudioContextRef.current;
+      
+      // Créer deux oscillateurs pour une sonnerie téléphone réaliste (fréquences 440Hz et 480Hz)
+      const osc1 = audioContext.createOscillator();
+      const osc2 = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      const gainNode2 = audioContext.createGain();
+      
+      // Fréquences typiques d'une sonnerie téléphone
+      osc1.frequency.value = 440; // La4
+      osc2.frequency.value = 480; // B4
+      
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+      
+      // Modulation d'amplitude pour créer le rythme de sonnerie
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.1);
+      gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.4);
+      
+      osc1.connect(gainNode);
+      osc2.connect(gainNode2);
+      gainNode.connect(audioContext.destination);
+      gainNode2.connect(audioContext.destination);
+      gainNode2.gain.value = 0.3;
+      
+      osc1.start();
+      osc2.start();
+      
+      // Arrêter après 0.4 secondes
+      osc1.stop(audioContext.currentTime + 0.4);
+      osc2.stop(audioContext.currentTime + 0.4);
+    } catch (err) {
+      console.error('Erreur sonnerie:', err);
+    }
+  };
+
+  // Démarrer/arrêter la sonnerie selon l'état de l'appel
   useEffect(() => {
-    playRingtoneRef.current = () => {
-      try {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        
-        // Créer deux oscillateurs pour une sonnerie téléphone réaliste (fréquences 440Hz et 480Hz)
-        const osc1 = audioContext.createOscillator();
-        const osc2 = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        const gainNode2 = audioContext.createGain();
-        
-        // Fréquences typiques d'une sonnerie téléphone
-        osc1.frequency.value = 440; // La4
-        osc2.frequency.value = 480; // B4
-        
-        osc1.type = 'sine';
-        osc2.type = 'sine';
-        
-        // Modulation d'amplitude pour créer le rythme de sonnerie
-        gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-        gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.1);
-        gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.4);
-        
-        osc1.connect(gainNode);
-        osc2.connect(gainNode2);
-        gainNode.connect(audioContext.destination);
-        gainNode2.connect(audioContext.destination);
-        gainNode2.gain.value = 0.3;
-        
-        osc1.start();
-        osc2.start();
-        
-        // Arrêter après 0.4 secondes
-        osc1.stop(audioContext.currentTime + 0.4);
-        osc2.stop(audioContext.currentTime + 0.4);
-        
-        // Répéter après 0.2 secondes si toujours en appel entrant
-        setTimeout(() => {
-          if (callState === 'incoming' && playRingtoneRef.current) {
-            playRingtoneRef.current();
-          }
-        }, 600); // 0.4s son + 0.2s silence = cycle de 0.6s
-      } catch (err) {
-        console.error('Erreur sonnerie:', err);
+    if (callState === 'incoming') {
+      // Marquer qu'on doit sonner
+      shouldRingRef.current = true;
+      
+      // Démarrer la sonnerie immédiatement
+      playRingtone();
+      
+      // Répéter toutes les 0.6 secondes (0.4s son + 0.2s silence)
+      ringtoneIntervalRef.current = setInterval(() => {
+        if (shouldRingRef.current) {
+          playRingtone();
+        }
+      }, 600);
+    } else {
+      // Arrêter la sonnerie
+      shouldRingRef.current = false;
+      if (ringtoneIntervalRef.current) {
+        clearInterval(ringtoneIntervalRef.current);
+        ringtoneIntervalRef.current = null;
+      }
+      // Fermer le contexte audio si nécessaire
+      if (ringtoneAudioContextRef.current) {
+        ringtoneAudioContextRef.current.close().catch(() => {});
+        ringtoneAudioContextRef.current = null;
+      }
+    }
+
+    return () => {
+      shouldRingRef.current = false;
+      if (ringtoneIntervalRef.current) {
+        clearInterval(ringtoneIntervalRef.current);
+        ringtoneIntervalRef.current = null;
       }
     };
   }, [callState]);
@@ -148,9 +182,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
                 callId: data.call.id,
               });
               setCallState('incoming');
-              if (playRingtoneRef.current) {
-                playRingtoneRef.current();
-              }
+              // La sonnerie sera démarrée automatiquement par le useEffect qui surveille callState
             }
           }
         } catch (err) {
