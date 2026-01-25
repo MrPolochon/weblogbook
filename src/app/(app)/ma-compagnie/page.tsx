@@ -78,6 +78,9 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
     .eq('compagnie_id', selectedCompagnieOption.id);
 
   // Calculer les heures de vol par pilote
+  // On compte les heures de DEUX sources :
+  // 1. Table 'vols' (logbook classique) avec statut 'valide'
+  // 2. Table 'plans_vol' (vols commerciaux) avec statut 'cloture' 
   const employeIds = (employes || []).map(e => {
     const p = e.profiles;
     const pObj = p ? (Array.isArray(p) ? p[0] : p) : null;
@@ -86,6 +89,7 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
   
   const heuresParPilote: Record<string, number> = {};
   if (employeIds.length > 0) {
+    // Source 1: Table vols (logbook classique)
     const { data: vols } = await admin.from('vols')
       .select('pilote_id, duree_minutes')
       .eq('compagnie_id', selectedCompagnieOption.id)
@@ -95,6 +99,28 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
     (vols || []).forEach(v => {
       if (v.pilote_id) {
         heuresParPilote[v.pilote_id] = (heuresParPilote[v.pilote_id] || 0) + (v.duree_minutes || 0);
+      }
+    });
+
+    // Source 2: Table plans_vol (vols commerciaux clôturés)
+    // Le temps réel est calculé à partir de accepted_at et demande_cloture_at (ou cloture_at)
+    const { data: plansVol } = await admin.from('plans_vol')
+      .select('pilote_id, temps_prev_min, accepted_at, demande_cloture_at, cloture_at')
+      .eq('compagnie_id', selectedCompagnieOption.id)
+      .eq('statut', 'cloture')
+      .in('pilote_id', employeIds);
+
+    (plansVol || []).forEach(p => {
+      if (p.pilote_id) {
+        // Calculer le temps réel de vol
+        let tempsMinutes = p.temps_prev_min || 0;
+        if (p.accepted_at && (p.demande_cloture_at || p.cloture_at)) {
+          const debut = new Date(p.accepted_at);
+          const fin = new Date(p.demande_cloture_at || p.cloture_at);
+          const diffMs = fin.getTime() - debut.getTime();
+          tempsMinutes = Math.max(1, Math.round(diffMs / 60000));
+        }
+        heuresParPilote[p.pilote_id] = (heuresParPilote[p.pilote_id] || 0) + tempsMinutes;
       }
     });
   }
