@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map } from 'lucide-react';
+import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, Store } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -51,14 +51,15 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield, badge: 0 }] : []),
     { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0 },
     { href: '/marketplace', label: 'Marketplace', icon: Package, badge: 0 },
+    { href: '/hangar-market', label: 'Hangar Market', icon: Store, badge: 0 },
     { href: '/inventaire', label: 'Mon inventaire', icon: Plane, badge: 0 },
   ];
 
   const isPiloteActive = pathname.startsWith('/logbook') || pathname.startsWith('/militaire') || 
     pathname.startsWith('/felitz-bank') || pathname.startsWith('/ma-compagnie') ||
-    pathname.startsWith('/marketplace') || pathname.startsWith('/inventaire') ||
-    pathname.startsWith('/messagerie') || pathname.startsWith('/marche-passagers') ||
-    pathname.startsWith('/marche-cargo');
+    pathname.startsWith('/marketplace') || pathname.startsWith('/hangar-market') ||
+    pathname.startsWith('/inventaire') || pathname.startsWith('/messagerie') || 
+    pathname.startsWith('/marche-passagers') || pathname.startsWith('/marche-cargo');
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-700/50 bg-slate-900/95 backdrop-blur">
