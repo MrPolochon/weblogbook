@@ -83,6 +83,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const ringtoneAudioContextRef = useRef<AudioContext | null>(null);
   const shouldRingRef = useRef(false);
   const callStatusIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const dialToneIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const dialToneAudioContextRef = useRef<AudioContext | null>(null);
+  const shouldDialToneRef = useRef(false);
   
   // Créer une vraie sonnerie de téléphone qui sonne en continu
   const playRingtone = () => {
@@ -128,7 +131,70 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     }
   };
 
-  // Démarrer/arrêter la sonnerie selon l'état de l'appel
+  // Tonalité d'appel pour l'appelant (bip-bip pendant que ça sonne)
+  const playDialTone = () => {
+    try {
+      if (!dialToneAudioContextRef.current) {
+        dialToneAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const audioContext = dialToneAudioContextRef.current;
+      
+      // Tonalité d'appel : un seul bip court (425Hz, standard téléphonique)
+      const osc = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      osc.frequency.value = 425; // Fréquence standard tonalité d'appel
+      osc.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+      
+      osc.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      osc.start();
+      osc.stop(audioContext.currentTime + 0.4); // Bip de 0.4 secondes
+    } catch (err) {
+      console.error('Erreur tonalité appel:', err);
+    }
+  };
+
+  // Démarrer/arrêter la tonalité d'appel (côté appelant)
+  useEffect(() => {
+    if (callState === 'ringing') {
+      shouldDialToneRef.current = true;
+      
+      // Démarrer la tonalité immédiatement
+      playDialTone();
+      
+      // Répéter toutes les 3 secondes (bip... pause... bip...)
+      dialToneIntervalRef.current = setInterval(() => {
+        if (shouldDialToneRef.current) {
+          playDialTone();
+        }
+      }, 3000);
+    } else {
+      // Arrêter la tonalité
+      shouldDialToneRef.current = false;
+      if (dialToneIntervalRef.current) {
+        clearInterval(dialToneIntervalRef.current);
+        dialToneIntervalRef.current = null;
+      }
+      if (dialToneAudioContextRef.current) {
+        dialToneAudioContextRef.current.close().catch(() => {});
+        dialToneAudioContextRef.current = null;
+      }
+    }
+
+    return () => {
+      shouldDialToneRef.current = false;
+      if (dialToneIntervalRef.current) {
+        clearInterval(dialToneIntervalRef.current);
+        dialToneIntervalRef.current = null;
+      }
+    };
+  }, [callState]);
+
+  // Démarrer/arrêter la sonnerie selon l'état de l'appel (côté appelé)
   useEffect(() => {
     if (callState === 'incoming') {
       // Marquer qu'on doit sonner
@@ -166,27 +232,42 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     };
   }, [callState]);
 
-  // Vérifier les appels entrants
+  // Vérifier les appels entrants et surveiller si l'appel entrant est toujours actif
   useEffect(() => {
-    if (callState === 'idle' || callState === 'ringing') {
+    if (callState === 'idle') {
+      // Chercher de nouveaux appels entrants
       checkIntervalRef.current = setInterval(async () => {
         try {
           const res = await fetch('/api/atc/telephone/incoming');
           const data = await res.json();
           
           if (data.call && data.call.id) {
-            if (callState === 'idle') {
-              setIncomingCall({
-                from: data.call.from_aeroport,
-                fromPosition: data.call.from_position,
-                callId: data.call.id,
-              });
-              setCallState('incoming');
-              // La sonnerie sera démarrée automatiquement par le useEffect qui surveille callState
-            }
+            setIncomingCall({
+              from: data.call.from_aeroport,
+              fromPosition: data.call.from_position,
+              callId: data.call.id,
+            });
+            setCallState('incoming');
           }
         } catch (err) {
           console.error('Erreur vérification appels:', err);
+        }
+      }, 2000);
+    } else if (callState === 'incoming' && incomingCall) {
+      // Surveiller si l'appel entrant est toujours actif (l'appelant peut avoir raccroché)
+      checkIntervalRef.current = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/atc/telephone/status?callId=${incomingCall.callId}`);
+          const data = await res.json();
+          
+          // Si l'appel n'existe plus ou est terminé, revenir à l'état idle
+          if (!data.call || data.status === 'ended' || data.status === 'rejected') {
+            console.log('Appel entrant annulé par l\'appelant');
+            setIncomingCall(null);
+            setCallState('idle');
+          }
+        } catch (err) {
+          console.error('Erreur vérification statut appel entrant:', err);
         }
       }, 2000);
     }
@@ -194,9 +275,10 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     return () => {
       if (checkIntervalRef.current) {
         clearInterval(checkIntervalRef.current);
+        checkIntervalRef.current = null;
       }
     };
-  }, [callState]);
+  }, [callState, incomingCall]);
 
   const playMessage = (message: string) => {
     if ('speechSynthesis' in window) {
@@ -590,8 +672,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           callId,
         });
         
-        // Attendre que l'autre réponde (polling)
-        const waitForAnswer = async (): Promise<boolean> => {
+        // Attendre que l'autre réponde (polling) - 30 secondes max
+        const waitForAnswer = async (): Promise<'answered' | 'rejected' | 'timeout'> => {
           for (let i = 0; i < 30; i++) { // 30 secondes max
             await new Promise(resolve => setTimeout(resolve, 1000));
             
@@ -599,22 +681,39 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
             const statusData = await statusRes.json();
             
             if (statusData.status === 'connected') {
-              return true;
-            } else if (statusData.status === 'rejected' || statusData.status === 'ended') {
-              return false;
+              return 'answered';
+            } else if (statusData.status === 'rejected') {
+              return 'rejected';
+            } else if (statusData.status === 'ended') {
+              return 'timeout';
             }
           }
-          return false;
+          return 'timeout';
         };
         
-        const answered = await waitForAnswer();
+        const result = await waitForAnswer();
         
-        if (answered) {
+        if (result === 'answered') {
           // L'autre a répondu, configurer WebRTC
           await setupWebRTC(callId, true);
           setCallState('connected');
         } else {
-          playMessage('Votre correspondant ne répond pas');
+          // Timeout ou rejeté - raccrocher l'appel côté serveur pour les deux
+          try {
+            await fetch('/api/atc/telephone/hangup', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ callId }),
+            });
+          } catch (e) {
+            console.error('Erreur raccrochage timeout:', e);
+          }
+          
+          if (result === 'rejected') {
+            playMessage('Votre correspondant a refusé l\'appel');
+          } else {
+            playMessage('Votre correspondant ne répond pas');
+          }
           setCallState('idle');
           setNumber('');
           setCurrentCall(null);
