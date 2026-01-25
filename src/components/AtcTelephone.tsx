@@ -599,6 +599,13 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
 
         <div className="grid grid-cols-3 gap-2 mb-2">
           <button
+            onClick={() => handleNumberInput('+')}
+            disabled={callState === 'connected' || callState === 'ringing'}
+            className={`p-4 rounded-lg ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-white hover:bg-slate-50'} ${borderColor} border ${textColor} font-semibold text-xl disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            +
+          </button>
+          <button
             onClick={() => handleNumberInput('*')}
             disabled={callState === 'connected' || callState === 'ringing'}
             className={`p-4 rounded-lg ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-white hover:bg-slate-50'} ${borderColor} border ${textColor} font-semibold text-xl disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -612,6 +619,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           >
             0
           </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 mb-2">
           <button
             onClick={() => handleNumberInput('#')}
             disabled={callState === 'connected' || callState === 'ringing'}
@@ -619,6 +629,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           >
             #
           </button>
+          <div></div>
+          <div></div>
         </div>
 
         {/* Boutons d'action */}
