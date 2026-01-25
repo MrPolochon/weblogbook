@@ -3,10 +3,12 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES, calculerCargoReel, getAeroportInfo } from '@/lib/aeroports-ptfs';
 
-// Ordre de priorité pour recevoir un nouveau plan de vol (par aéroport) :
-// Delivery et Clairance d'abord ; si les deux sont hors ligne, Ground peut accepter ;
-// si Ground est hors ligne, Tower ; puis DEP, APP, Center.
-const ORDRE_ACCEPTATION_PLANS = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
+// Ordre de priorité pour recevoir un nouveau plan de vol
+// AÉROPORT DE DÉPART : Delivery → Clairance → Ground → Tower → DEP → Center
+const ORDRE_DEPART = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'Center'] as const;
+
+// AÉROPORT D'ARRIVÉE (ordre inversé) : Delivery → Center → APP → DEP → Tower → Ground → Clairance
+const ORDRE_ARRIVEE = ['Delivery', 'Center', 'APP', 'DEP', 'Tower', 'Ground', 'Clairance'] as const;
 
 export async function POST(request: Request) {
   try {
@@ -222,14 +224,28 @@ export async function POST(request: Request) {
     }
     
     // Sinon, chercher un ATC pour recevoir le plan
-    const airportsToCheck = ad === aa ? [ad] : [ad, aa];
+    // D'abord vérifier l'aéroport de départ avec l'ordre DEPART
+    // Puis si aucun ATC trouvé, vérifier l'aéroport d'arrivée avec l'ordre ARRIVEE
     let holder: { user_id: string; position: string; aeroport: string } | null = null;
-    for (const apt of airportsToCheck) {
-      for (const pos of ORDRE_ACCEPTATION_PLANS) {
-        const { data: s } = await admin.from('atc_sessions').select('user_id').eq('aeroport', apt).eq('position', pos).single();
-        if (s?.user_id) { holder = { user_id: s.user_id, position: pos, aeroport: apt }; break; }
+    
+    // 1. Chercher à l'aéroport de DÉPART
+    for (const pos of ORDRE_DEPART) {
+      const { data: s } = await admin.from('atc_sessions').select('user_id').eq('aeroport', ad).eq('position', pos).single();
+      if (s?.user_id) { 
+        holder = { user_id: s.user_id, position: pos, aeroport: ad }; 
+        break; 
       }
-      if (holder) break;
+    }
+    
+    // 2. Si aucun ATC au départ et aéroport d'arrivée différent, chercher à l'ARRIVÉE
+    if (!holder && aa !== ad) {
+      for (const pos of ORDRE_ARRIVEE) {
+        const { data: s } = await admin.from('atc_sessions').select('user_id').eq('aeroport', aa).eq('position', pos).single();
+        if (s?.user_id) { 
+          holder = { user_id: s.user_id, position: pos, aeroport: aa }; 
+          break; 
+        }
+      }
     }
 
     if (!holder) {
