@@ -513,23 +513,34 @@ export function calculerPassagersReels(
 // - BONUS industriel +25% (zones industrielles = plus de cargo)
 // - Pas de bonus tourisme
 
+// =====================================================
+// ÉQUILIBRAGE CARGO vs PASSAGERS
+// =====================================================
+// Objectif : un vol cargo PLEIN doit rapporter ~1.5x à 2x un vol passagers PLEIN
+// (le cargo nécessite des avions spécialisés, donc légèrement plus rentable)
+//
+// Exemple Boeing 777 :
+// - Version pax : 350 pax × 150 F$ = 52 500 F$
+// - Version cargo : 51 000 kg × ? F$/kg = devrait être ~80 000-100 000 F$
+// → Prix cargo optimal ≈ 1.5-2 F$/kg (pas 8 F$/kg !)
+
 // Prix de référence CARGO selon le type d'aéroport (F$ par kg)
 export const PRIX_REFERENCE_CARGO: Record<TailleAeroport, number> = {
-  international: 8,    // Hub cargo : prix compétitifs
-  regional: 6,         // Aéroport régional : prix moyen
-  small: 4,            // Petit aéroport : peu de cargo
-  military: 5,         // Base militaire : fret militaire
+  international: 2,    // Hub cargo : gros volumes, prix bas
+  regional: 1.5,       // Aéroport régional : prix moyen
+  small: 1,            // Petit aéroport : peu de cargo
+  military: 1.5,       // Base militaire : fret militaire
 };
 
 // Prix MAXIMUM absolu CARGO - au-delà, personne n'expédie
-export const PRIX_MAXIMUM_ABSOLU_CARGO = 30; // F$/kg max
+export const PRIX_MAXIMUM_ABSOLU_CARGO = 8; // F$/kg max (réduit de 30)
 
 // Prix critique CARGO
 export const PRIX_CRITIQUE_CARGO: Record<TailleAeroport, number> = {
-  international: 20,   // Les entreprises peuvent payer jusqu'à 20 F$/kg
-  regional: 15,        // Maximum 15 F$/kg pour du régional
-  small: 10,           // Maximum 10 F$/kg pour les petites lignes
-  military: 18,        // Fret militaire peut être cher
+  international: 5,    // Les entreprises peuvent payer jusqu'à 5 F$/kg
+  regional: 4,         // Maximum 4 F$/kg pour du régional
+  small: 3,            // Maximum 3 F$/kg pour les petites lignes
+  military: 5,         // Fret militaire peut être cher
 };
 
 // Bonus pour les aéroports militaires (fret militaire, équipement)
@@ -598,21 +609,24 @@ export function calculerCoefficientChargementCargo(
   let coefficient = coefficientBase;
 
   // ============ BONUS CARGO ============
+  // Les bonus servent à FACILITER l'atteinte de 100%, pas à le dépasser !
+  // Un bonus de +20% sur un coefficient de 0.7 donne 0.84, pas 1.4
 
-  // BONUS MILITAIRE : +20% pour les vols vers/depuis bases militaires
+  // BONUS MILITAIRE : +15% pour les vols vers/depuis bases militaires (réduit de 20%)
   if (aeroportDepart.taille === 'military' || aeroportArrivee.taille === 'military') {
-    const bonusMilitaire = (BONUS_MILITAIRE_CARGO - 1.0) * efficaciteBonus;
-    coefficient *= (1.0 + bonusMilitaire);
+    const bonusMilitaire = 0.15 * efficaciteBonus;
+    coefficient = Math.min(1.0, coefficient + bonusMilitaire);
   }
 
-  // BONUS INDUSTRIEL : +25% pour les zones industrielles
+  // BONUS INDUSTRIEL : +15% pour les zones industrielles (réduit de 25%)
   if ((aeroportDepart.industriel || aeroportArrivee.industriel) && coefficient > 0) {
-    const bonusIndustriel = (BONUS_INDUSTRIEL_CARGO - 1.0) * efficaciteBonus;
-    coefficient *= (1.0 + bonusIndustriel);
+    const bonusIndustriel = 0.15 * efficaciteBonus;
+    coefficient = Math.min(1.0, coefficient + bonusIndustriel);
   }
 
   // ============ PLAFONNEMENT FINAL ============
-  return Math.max(0, Math.min(1.50, coefficient)); // Max 150% avec tous les bonus
+  // Maximum 100% : on ne peut pas charger plus que la capacité physique !
+  return Math.max(0, Math.min(1.0, coefficient));
 }
 
 /**
@@ -623,7 +637,7 @@ export function getPrixOptimalCargo(codeDepart: string, codeArrivee: string): { 
   const aeroportArrivee = getAeroportInfo(codeArrivee);
 
   if (!aeroportDepart || !aeroportArrivee) {
-    return { min: 2, optimal: 6, max: 12, critique: 18, maxAbsolu: PRIX_MAXIMUM_ABSOLU_CARGO };
+    return { min: 1, optimal: 2, max: 3, critique: 5, maxAbsolu: PRIX_MAXIMUM_ABSOLU_CARGO };
   }
 
   const prixRef = Math.round((PRIX_REFERENCE_CARGO[aeroportDepart.taille] + PRIX_REFERENCE_CARGO[aeroportArrivee.taille]) / 2);
@@ -640,6 +654,7 @@ export function getPrixOptimalCargo(codeDepart: string, codeArrivee: string): { 
 
 /**
  * Estime le cargo pour un vol (affichage prévisionnel)
+ * IMPORTANT: Le cargo ne peut JAMAIS dépasser la capacité de l'avion !
  */
 export function estimerCargo(
   codeDepart: string,
@@ -651,8 +666,14 @@ export function estimerCargo(
   const prixNettoye = sanitizePrix(prixCargo);
   const coefficient = calculerCoefficientChargementCargo(codeDepart, codeArrivee, prixNettoye);
   
-  const cargoPotentiel = Math.floor(capaciteCargo * coefficient);
-  const cargo = Math.min(cargoPotentiel, cargoDisponible);
+  // Le coefficient est un taux de remplissage (max 100% de la capacité)
+  // Les bonus ne permettent pas de dépasser la capacité physique !
+  const coefficientPlafonne = Math.min(coefficient, 1.0);
+  
+  const cargoPotentiel = Math.floor(capaciteCargo * coefficientPlafonne);
+  
+  // Limité par le cargo disponible à l'aéroport ET la capacité de l'avion
+  const cargo = Math.min(cargoPotentiel, cargoDisponible, capaciteCargo);
   
   const chargement = capaciteCargo > 0 ? cargo / capaciteCargo : 0;
   const revenus = cargo * prixNettoye;
@@ -673,6 +694,7 @@ export function estimerCargo(
 
 /**
  * Calcule le cargo RÉEL avec aléatoire (côté serveur)
+ * IMPORTANT: Le cargo ne peut JAMAIS dépasser la capacité de l'avion !
  */
 export function calculerCargoReel(
   codeDepart: string,
@@ -688,17 +710,23 @@ export function calculerCargoReel(
     return { cargo: 0, chargement: 0, revenus: 0, chanceux: false };
   }
   
-  // Variation aléatoire ±30%
-  const variationMax = 0.30;
+  // Variation aléatoire ±20% (réduit de 30% à 20% pour plus de réalisme)
+  const variationMax = 0.20;
   const aleatoire = (Math.random() * 2 - 1) * variationMax;
   
   let coefficientReel = coefficientMoyen + aleatoire;
-  coefficientReel = Math.max(0, Math.min(1.50, coefficientReel));
   
-  const chanceux = aleatoire > 0.15 && coefficientMoyen < 0.5;
+  // PLAFOND À 100% : on ne peut pas charger plus que la capacité physique !
+  // Les bonus servent à AUGMENTER LES CHANCES d'avoir un bon remplissage,
+  // pas à dépasser la capacité.
+  coefficientReel = Math.max(0, Math.min(1.0, coefficientReel));
+  
+  const chanceux = aleatoire > 0.10 && coefficientMoyen < 0.5;
   
   const cargoPotentiel = Math.floor(capaciteCargo * coefficientReel);
-  const cargo = Math.min(cargoPotentiel, cargoDisponible);
+  
+  // Limité par le cargo disponible ET la capacité
+  const cargo = Math.min(cargoPotentiel, cargoDisponible, capaciteCargo);
   
   const chargement = capaciteCargo > 0 ? cargo / capaciteCargo : 0;
   const revenus = cargo * prixNettoye;
