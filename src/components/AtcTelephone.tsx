@@ -443,6 +443,66 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     }
   };
 
+  const handleAnswer = async () => {
+    if (!incomingCall) return;
+    
+    try {
+      const res = await fetch('/api/atc/telephone/answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callId: incomingCall.callId }),
+      });
+
+      const data = await res.json();
+      
+      if (res.ok && data.call) {
+        // Configurer WebRTC
+        await setupWebRTC(incomingCall.callId, false);
+        
+        setCurrentCall({
+          to: incomingCall.from,
+          toPosition: incomingCall.fromPosition,
+          callId: incomingCall.callId,
+        });
+        setIncomingCall(null);
+        setCallState('connected');
+      }
+    } catch (err) {
+      console.error('Erreur réponse:', err);
+      playMessage('Erreur lors de la connexion audio');
+    }
+  };
+
+  const handleAnswer = async () => {
+    if (!incomingCall) return;
+    
+    try {
+      const res = await fetch('/api/atc/telephone/answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callId: incomingCall.callId }),
+      });
+
+      const data = await res.json();
+      
+      if (res.ok && data.call) {
+        // Configurer WebRTC
+        await setupWebRTC(incomingCall.callId, false);
+        
+        setCurrentCall({
+          to: incomingCall.from,
+          toPosition: incomingCall.fromPosition,
+          callId: incomingCall.callId,
+        });
+        setIncomingCall(null);
+        setCallState('connected');
+      }
+    } catch (err) {
+      console.error('Erreur réponse:', err);
+      playMessage('Erreur lors de la connexion audio');
+    }
+  };
+
   const handleHangup = async () => {
     const callId = currentCall?.callId || incomingCall?.callId;
     
