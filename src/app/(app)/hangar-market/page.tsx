@@ -56,8 +56,15 @@ export default async function HangarMarketPage() {
       .eq('statut', 'en_vente')
       .single();
 
+    // Normaliser types_avion (peut être un tableau ou un objet)
+    const typesAvion = Array.isArray(item.types_avion) 
+      ? item.types_avion[0] 
+      : item.types_avion;
+
     return {
-      ...item,
+      id: item.id,
+      nom_personnalise: item.nom_personnalise,
+      types_avion: typesAvion || null,
       en_vol: (enVol || 0) > 0,
       en_vente: !!enVente,
       disponible: (enVol || 0) === 0 && !enVente
