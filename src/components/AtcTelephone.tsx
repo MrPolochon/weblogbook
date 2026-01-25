@@ -66,7 +66,6 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const [incomingCall, setIncomingCall] = useState<{ from: string; fromPosition: string; callId: string } | null>(null);
   const [currentCall, setCurrentCall] = useState<{ to: string; toPosition: string; callId: string } | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -235,42 +234,6 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         pc.addTrack(track, stream);
       });
 
-      // Gérer les candidats ICE
-      pc.onicecandidate = async (event) => {
-        if (event.candidate) {
-          // Envoyer le candidat ICE via Supabase Realtime
-          const supabase = createClient();
-          const channel = supabase.channel(`atc-call-${callId}`);
-          await channel.send({
-            type: 'broadcast',
-            event: 'webrtc-signal',
-            payload: {
-              type: 'ice-candidate',
-              candidate: event.candidate,
-              callId,
-              userId,
-            },
-          });
-        }
-      };
-
-      // Gérer les streams distants
-      pc.ontrack = (event) => {
-        if (remoteAudioRef.current && event.streams[0]) {
-          remoteAudioRef.current.srcObject = event.streams[0];
-        }
-      };
-
-      // Gérer les changements de connexion
-      pc.onconnectionstatechange = () => {
-        const connectionState = pc.connectionState;
-        if (connectionState === 'connected') {
-          setCallState('connected');
-        } else if (connectionState === 'disconnected' || connectionState === 'failed') {
-          handleHangup();
-        }
-      };
-
       // Configurer Supabase Realtime pour la signalisation
       const supabase = createClient();
       const channel = supabase.channel(`atc-call-${callId}`)
@@ -305,6 +268,23 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         .subscribe();
 
       signalingChannelRef.current = channel;
+
+      // Gérer les candidats ICE
+      pc.onicecandidate = async (event) => {
+        if (event.candidate && channel) {
+          // Envoyer le candidat ICE via le canal existant
+          await channel.send({
+            type: 'broadcast',
+            event: 'webrtc-signal',
+            payload: {
+              type: 'ice-candidate',
+              candidate: event.candidate,
+              callId,
+              userId,
+            },
+          });
+        }
+      };
 
       // Si initiateur, créer l'offre
       if (isInitiator) {
@@ -440,36 +420,6 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       }
     } catch (err) {
       console.error('Erreur refus:', err);
-    }
-  };
-
-  const handleAnswer = async () => {
-    if (!incomingCall) return;
-    
-    try {
-      const res = await fetch('/api/atc/telephone/answer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callId: incomingCall.callId }),
-      });
-
-      const data = await res.json();
-      
-      if (res.ok && data.call) {
-        // Configurer WebRTC
-        await setupWebRTC(incomingCall.callId, false);
-        
-        setCurrentCall({
-          to: incomingCall.from,
-          toPosition: incomingCall.fromPosition,
-          callId: incomingCall.callId,
-        });
-        setIncomingCall(null);
-        setCallState('connected');
-      }
-    } catch (err) {
-      console.error('Erreur réponse:', err);
-      playMessage('Erreur lors de la connexion audio');
     }
   };
 
