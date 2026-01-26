@@ -398,17 +398,28 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       setError('Sélectionnez une compagnie pour un vol commercial.');
       return;
     }
-    if (vol_commercial && !flotte_avion_id) {
-      setError('Sélectionnez un appareil de la flotte pour un vol commercial.');
+    // Accepter soit un avion individuel (nouveau système) soit un avion de flotte (ancien système)
+    if (vol_commercial && !flotte_avion_id && !compagnie_avion_id) {
+      setError('Sélectionnez un avion pour un vol commercial.');
       return;
     }
     
-    // Validation taux de remplissage minimum (25%)
-    if (vol_commercial && nature_transport === 'passagers' && !remplissageValidePax) {
+    // Vol ferry nécessite un avion individuel et une compagnie
+    if (vol_ferry && !compagnie_avion_id) {
+      setError('Sélectionnez un avion à déplacer pour le vol ferry.');
+      return;
+    }
+    if (vol_ferry && !selectedCompagnieId) {
+      setError('Sélectionnez une compagnie pour le vol ferry.');
+      return;
+    }
+    
+    // Validation taux de remplissage minimum (25%) - uniquement pour vols commerciaux
+    if (vol_commercial && !vol_ferry && nature_transport === 'passagers' && !remplissageValidePax) {
       setError(`Le vol ne peut pas être effectué : l'avion doit être rempli à au moins 25% de sa capacité. Actuellement : ${nbPax}/${capacitePaxMax} (${Math.round(tauxRemplissagePax * 100)}%)`);
       return;
     }
-    if (vol_commercial && nature_transport === 'cargo' && !remplissageValideCargo) {
+    if (vol_commercial && !vol_ferry && nature_transport === 'cargo' && !remplissageValideCargo) {
       setError(`Le vol ne peut pas être effectué : l'avion doit être rempli à au moins 25% de sa capacité cargo. Actuellement : ${cargoKg.toLocaleString('fr-FR')}/${capaciteCargoMax.toLocaleString('fr-FR')} kg (${Math.round(tauxRemplissageCargo * 100)}%)`);
       return;
     }
