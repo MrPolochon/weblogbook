@@ -772,7 +772,12 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                     <input
                       type="text"
                       value={sanctionVbanDestination}
-                      onChange={(e) => setSanctionVbanDestination(e.target.value.toUpperCase())}
+                      onChange={(e) => setSanctionVbanDestination(e.target.value.replace(/\s+/g, '').toUpperCase())}
+                      onPaste={(e) => {
+                        e.preventDefault();
+                        const pasted = e.clipboardData.getData('text').trim().replace(/\s+/g, '').toUpperCase();
+                        setSanctionVbanDestination(pasted);
+                      }}
                       placeholder="Ex: VBAN-XXXX-XXXX-XXXX"
                       className="input w-full font-mono"
                     />

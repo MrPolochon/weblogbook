@@ -106,13 +106,28 @@ export async function POST(req: NextRequest) {
     // Si c'est une amende, vérifier que le VBAN existe
     let compteDestinationId: string | null = null;
     if (type_sanction === 'amende' && vban_destination) {
+      // Nettoyer le VBAN (enlever espaces, retours à la ligne, caractères invisibles)
+      const vbanCleaned = vban_destination.trim().replace(/\s+/g, '').toUpperCase();
+      
       const { data: compteDestination, error: compteError } = await admin.from('felitz_comptes')
         .select('id, vban, proprietaire_id, proprietaire_compagnie_id')
-        .eq('vban', vban_destination.toUpperCase())
+        .eq('vban', vbanCleaned)
         .single();
       
       if (compteError || !compteDestination) {
-        return NextResponse.json({ error: `VBAN "${vban_destination}" introuvable` }, { status: 400 });
+        // Essayer une recherche partielle pour aider l'utilisateur
+        const { data: comptesProches } = await admin.from('felitz_comptes')
+          .select('vban')
+          .ilike('vban', `%${vbanCleaned.slice(-8)}%`)
+          .limit(3);
+        
+        const suggestion = comptesProches && comptesProches.length > 0 
+          ? ` VBANs similaires trouvés : ${comptesProches.map(c => c.vban).join(', ')}`
+          : '';
+        
+        return NextResponse.json({ 
+          error: `VBAN "${vbanCleaned}" introuvable.${suggestion}` 
+        }, { status: 400 });
       }
       compteDestinationId = compteDestination.id;
     }
