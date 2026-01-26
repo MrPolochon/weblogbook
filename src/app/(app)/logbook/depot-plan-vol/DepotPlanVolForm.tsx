@@ -229,14 +229,20 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
 
   // Generate PAX and CARGO values based on all factors
   useEffect(() => {
-    if (!vol_commercial || !selectedCompagnie || !flotte_avion_id || !aeroport_depart || !aeroport_arrivee) {
+    // Doit avoir un avion sélectionné (soit flotte par type, soit avion individuel)
+    const hasAircraft = flotte_avion_id || compagnie_avion_id;
+    if (!vol_commercial || !selectedCompagnie || !hasAircraft || !aeroport_depart || !aeroport_arrivee) {
       setGeneratedPax(0);
       setGeneratedCargo(0);
       setLastGeneratedKey('');
       return;
     }
 
-    const avion = selectedFlotte?.types_avion;
+    // Obtenir le type d'avion (priorité avion individuel > flotte par type)
+    const avionIndivType = selectedAvionIndiv?.types_avion 
+      ? (Array.isArray(selectedAvionIndiv.types_avion) ? selectedAvionIndiv.types_avion[0] : selectedAvionIndiv.types_avion)
+      : null;
+    const avion = avionIndivType || selectedFlotte?.types_avion;
     if (!avion) return;
 
     const capacitePax = selectedFlotte?.capacite_pax_custom ?? avion.capacite_pax ?? 0;
@@ -245,7 +251,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
 
     // Clé unique pour régénérer seulement quand les paramètres importants changent
     // NE PAS inclure nature_transport pour éviter la régénération en basculant entre passagers/cargo
-    const generationKey = `${flotte_avion_id}-${aeroport_depart}-${aeroport_arrivee}-${prixBilletLiaison}-${prixCargo}`;
+    const aircraftKey = compagnie_avion_id || flotte_avion_id;
+    const generationKey = `${aircraftKey}-${aeroport_depart}-${aeroport_arrivee}-${prixBilletLiaison}-${prixCargo}`;
     if (generationKey === lastGeneratedKey) {
       return;
     }
@@ -317,7 +324,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     // Générer un type de cargaison estimé (le serveur générera le vrai type)
     setEstimatedTypeCargaison(genererTypeCargaison());
     setLastGeneratedKey(generationKey);
-  }, [vol_commercial, flotte_avion_id, selectedCompagnie, selectedFlotte, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport]);
+  }, [vol_commercial, flotte_avion_id, compagnie_avion_id, selectedCompagnie, selectedFlotte, selectedAvionIndiv, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport]);
 
   // Calculer les revenus basés sur les valeurs générées et le type de transport sélectionné
   const nbPax = nature_transport === 'passagers' ? generatedPax : 0;
