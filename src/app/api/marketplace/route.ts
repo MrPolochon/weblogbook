@@ -86,32 +86,34 @@ export async function POST(req: NextRequest) {
       compteId = compteEntreprise.id;
       compagnieNom = compagnie.nom;
 
-      // Débiter et ajouter à la flotte
+      // Débiter
       await admin.from('felitz_comptes')
         .update({ solde: compteEntreprise.solde - avion.prix })
         .eq('id', compteId);
 
-      // Vérifier si l'avion existe déjà dans la flotte
-      const { data: existingFlotte } = await admin.from('compagnie_flotte')
-        .select('id, quantite')
-        .eq('compagnie_id', pour_compagnie_id)
-        .eq('type_avion_id', type_avion_id)
-        .single();
+      // Générer une immatriculation unique
+      const { data: immatData } = await admin.rpc('generer_immatriculation', { prefixe: 'F-' });
+      const immatriculation = immatData || `F-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
-      if (existingFlotte) {
-        // Incrémenter la quantité
-        await admin.from('compagnie_flotte')
-          .update({ quantite: existingFlotte.quantite + 1 })
-          .eq('id', existingFlotte.id);
-      } else {
-        // Créer nouvelle entrée
-        await admin.from('compagnie_flotte').insert({
-          compagnie_id: pour_compagnie_id,
-          type_avion_id,
-          quantite: 1,
-          nom_personnalise
-        });
-      }
+      // Trouver le hub principal pour l'aéroport initial
+      const { data: hubPrincipal } = await admin
+        .from('compagnie_hubs')
+        .select('aeroport_code')
+        .eq('compagnie_id', pour_compagnie_id)
+        .eq('est_hub_principal', true)
+        .maybeSingle();
+      const aeroportInitial = hubPrincipal?.aeroport_code || 'IRFD';
+
+      // Créer l'avion individuel
+      await admin.from('compagnie_avions').insert({
+        compagnie_id: pour_compagnie_id,
+        type_avion_id,
+        immatriculation,
+        nom_bapteme: nom_personnalise || null,
+        aeroport_actuel: aeroportInitial,
+        usure_percent: 100,
+        statut: 'ground'
+      });
 
       // Transaction
       await admin.from('felitz_transactions').insert({

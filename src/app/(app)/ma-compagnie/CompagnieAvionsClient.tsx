@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plane, Plus, Wrench, AlertTriangle } from 'lucide-react';
+import { Plane, Plus, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart } from 'lucide-react';
 import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY } from '@/lib/compagnie-utils';
+import Link from 'next/link';
 
 type TypeAvion = { id: string; nom: string; constructeur: string };
 type Hub = { aeroport_code: string };
@@ -17,13 +18,24 @@ type Avion = {
   types_avion: TypeAvion | TypeAvion[] | null;
 };
 
-export default function CompagnieAvionsClient({ compagnieId }: { compagnieId: string }) {
+interface Props {
+  compagnieId: string;
+  soldeCompagnie?: number;
+  isPdg?: boolean;
+}
+
+export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0, isPdg = true }: Props) {
   const router = useRouter();
   const [avions, setAvions] = useState<Avion[]>([]);
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
+  
+  // Édition
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editImmat, setEditImmat] = useState('');
+  const [editNom, setEditNom] = useState('');
 
   useEffect(() => {
     loadAvions();
@@ -101,6 +113,36 @@ export default function CompagnieAvionsClient({ compagnieId }: { compagnieId: st
     }
   }
 
+  function startEdit(avion: Avion) {
+    setEditingId(avion.id);
+    setEditImmat(avion.immatriculation);
+    setEditNom(avion.nom_bapteme || '');
+  }
+
+  async function handleSaveEdit() {
+    if (!editingId) return;
+    setActionId(editingId);
+    try {
+      const res = await fetch(`/api/compagnies/avions/${editingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          immatriculation: editImmat.trim().toUpperCase(),
+          nom_bapteme: editNom.trim() || null,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      setEditingId(null);
+      router.refresh();
+      loadAvions();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setActionId(null);
+    }
+  }
+
   function getStatutLabel(statut: string) {
     switch (statut) {
       case 'ground': return { text: 'Au sol', className: 'text-emerald-400' };
@@ -118,14 +160,40 @@ export default function CompagnieAvionsClient({ compagnieId }: { compagnieId: st
   }
 
   const avionsBloques = avions.filter(a => a.statut === 'bloque' && a.usure_percent === 0);
+  const avionsEnVol = avions.filter(a => a.statut === 'in_flight').length;
+  const avionsDisponibles = avions.filter(a => a.statut === 'ground' && a.usure_percent > 0).length;
 
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
           <Plane className="h-5 w-5 text-sky-400" />
-          Flotte individuelle ({avions.length} avions)
+          Flotte ({avions.length} avion{avions.length > 1 ? 's' : ''})
         </h2>
+        <div className="flex items-center gap-4">
+          {isPdg && (
+            <>
+              <div className="text-right text-sm">
+                <span className="text-emerald-400">{avionsDisponibles}</span>
+                <span className="text-slate-500"> dispo</span>
+                {avionsEnVol > 0 && (
+                  <>
+                    <span className="text-slate-600 mx-1">•</span>
+                    <span className="text-sky-400">{avionsEnVol}</span>
+                    <span className="text-slate-500"> en vol</span>
+                  </>
+                )}
+              </div>
+              <Link
+                href="/marketplace"
+                className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                <ShoppingCart className="h-4 w-4" />
+                Acheter
+              </Link>
+            </>
+          )}
+        </div>
       </div>
 
       {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
@@ -137,8 +205,7 @@ export default function CompagnieAvionsClient({ compagnieId }: { compagnieId: st
             {avionsBloques.length} avion(s) bloqué(s) à 0% d&apos;usure
           </div>
           <p className="text-sm text-slate-400">
-            Ces avions doivent être réparés. Vous pouvez affréter des techniciens ({COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$) 
-            ou débloquer l&apos;avion pour un vol ferry vers un hub ({COUT_VOL_FERRY.toLocaleString('fr-FR')} F$).
+            Affrétez des techniciens ({COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$) ou débloquez pour un vol ferry ({COUT_VOL_FERRY.toLocaleString('fr-FR')} F$).
           </p>
         </div>
       )}
@@ -146,7 +213,15 @@ export default function CompagnieAvionsClient({ compagnieId }: { compagnieId: st
       {loading ? (
         <p className="text-slate-400">Chargement...</p>
       ) : avions.length === 0 ? (
-        <p className="text-slate-400">Aucun avion individuel dans la flotte.</p>
+        <div className="text-center py-6">
+          <Plane className="h-12 w-12 text-slate-600 mx-auto mb-3" />
+          <p className="text-slate-400">Aucun avion dans la flotte.</p>
+          {isPdg && (
+            <p className="text-sm text-slate-500 mt-2">
+              Achetez des avions sur le <Link href="/marketplace" className="text-purple-400 hover:text-purple-300 underline">Marketplace</Link>.
+            </p>
+          )}
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -155,21 +230,59 @@ export default function CompagnieAvionsClient({ compagnieId }: { compagnieId: st
                 <th className="pb-2 pr-4">Immatriculation</th>
                 <th className="pb-2 pr-4">Nom</th>
                 <th className="pb-2 pr-4">Type</th>
-                <th className="pb-2 pr-4">Usure</th>
-                <th className="pb-2 pr-4">Localisation</th>
+                <th className="pb-2 pr-4">
+                  <span className="flex items-center gap-1">
+                    <Percent className="h-3 w-3" />
+                    Usure
+                  </span>
+                </th>
+                <th className="pb-2 pr-4">
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3" />
+                    Position
+                  </span>
+                </th>
                 <th className="pb-2 pr-4">Statut</th>
-                <th className="pb-2">Actions</th>
+                {isPdg && <th className="pb-2">Actions</th>}
               </tr>
             </thead>
             <tbody>
               {avions.map((a) => {
                 const statut = getStatutLabel(a.statut);
                 const isAtHub = hubs.some((h) => h.aeroport_code === a.aeroport_actuel);
+                const typeNom = Array.isArray(a.types_avion) ? a.types_avion[0]?.nom : a.types_avion?.nom;
+                const isEditing = editingId === a.id;
+                
                 return (
                   <tr key={a.id} className="border-b border-slate-700/50 last:border-0">
-                    <td className="py-2.5 pr-4 font-mono font-medium text-slate-200">{a.immatriculation}</td>
-                    <td className="py-2.5 pr-4 text-slate-400">{a.nom_bapteme || '—'}</td>
-                    <td className="py-2.5 pr-4 text-slate-300">{(Array.isArray(a.types_avion) ? a.types_avion[0]?.nom : a.types_avion?.nom) || '—'}</td>
+                    <td className="py-2.5 pr-4">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editImmat}
+                          onChange={(e) => setEditImmat(e.target.value.toUpperCase())}
+                          className="input py-1 px-2 w-24 text-sm font-mono"
+                          maxLength={10}
+                        />
+                      ) : (
+                        <span className="font-mono font-medium text-slate-200">{a.immatriculation}</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-4">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editNom}
+                          onChange={(e) => setEditNom(e.target.value)}
+                          className="input py-1 px-2 w-32 text-sm"
+                          placeholder="Nom de baptême"
+                          maxLength={50}
+                        />
+                      ) : (
+                        <span className="text-slate-400 italic">{a.nom_bapteme || '—'}</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-4 text-slate-300">{typeNom || '—'}</td>
                     <td className="py-2.5 pr-4">
                       <span className={getUsureColor(a.usure_percent)}>{a.usure_percent}%</span>
                     </td>
@@ -180,44 +293,78 @@ export default function CompagnieAvionsClient({ compagnieId }: { compagnieId: st
                     <td className="py-2.5 pr-4">
                       <span className={statut.className}>{statut.text}</span>
                     </td>
-                    <td className="py-2.5">
-                      <div className="flex items-center gap-2">
-                        {a.statut === 'bloque' && a.usure_percent === 0 && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleAffreterTechniciens(a.id)}
-                              disabled={actionId === a.id}
-                              className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
-                              title="Réparer sur place"
-                            >
-                              {actionId === a.id ? '…' : 'Affréter'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDebloquer(a.id)}
-                              disabled={actionId === a.id}
-                              className="text-xs text-amber-400 hover:underline disabled:opacity-50"
-                              title="Débloquer pour ferry"
-                            >
-                              {actionId === a.id ? '…' : 'Débloquer'}
-                            </button>
-                          </>
-                        )}
-                        {a.statut === 'ground' && a.usure_percent < 100 && isAtHub && (
-                          <button
-                            type="button"
-                            onClick={() => handleReparer(a.id)}
-                            disabled={actionId === a.id}
-                            className="text-xs text-sky-400 hover:underline disabled:opacity-50 inline-flex items-center gap-1"
-                            title="Réparer au hub (gratuit)"
-                          >
-                            <Wrench className="h-3 w-3" />
-                            {actionId === a.id ? '…' : 'Réparer'}
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                    {isPdg && (
+                      <td className="py-2.5">
+                        <div className="flex items-center gap-2">
+                          {isEditing ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={handleSaveEdit}
+                                disabled={actionId === a.id}
+                                className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
+                              >
+                                Sauver
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingId(null)}
+                                className="text-xs text-slate-400 hover:underline"
+                              >
+                                Annuler
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              {a.statut === 'ground' && (
+                                <button
+                                  type="button"
+                                  onClick={() => startEdit(a)}
+                                  className="text-xs text-slate-400 hover:text-slate-200"
+                                  title="Modifier"
+                                >
+                                  <Edit2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                              {a.statut === 'bloque' && a.usure_percent === 0 && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAffreterTechniciens(a.id)}
+                                    disabled={actionId === a.id}
+                                    className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
+                                    title="Réparer sur place"
+                                  >
+                                    Affréter
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDebloquer(a.id)}
+                                    disabled={actionId === a.id}
+                                    className="text-xs text-amber-400 hover:underline disabled:opacity-50"
+                                    title="Débloquer pour ferry"
+                                  >
+                                    Débloquer
+                                  </button>
+                                </>
+                              )}
+                              {a.statut === 'ground' && a.usure_percent < 100 && isAtHub && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleReparer(a.id)}
+                                  disabled={actionId === a.id}
+                                  className="text-xs text-sky-400 hover:underline disabled:opacity-50 inline-flex items-center gap-1"
+                                  title="Réparer au hub (gratuit)"
+                                >
+                                  <Wrench className="h-3 w-3" />
+                                  Réparer
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

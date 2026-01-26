@@ -568,93 +568,34 @@ export default function MaCompagnieClient({
         </div>
       )}
 
-      {/* Flotte */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-            <Plane className="h-5 w-5 text-sky-400" />
-            Flotte ({flotte.length} types d&apos;appareil)
-          </h2>
-          {isPdg && (
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-xs text-slate-500">Solde compagnie</p>
-                <p className={`font-bold ${soldeCompagnie > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {soldeCompagnie.toLocaleString('fr-FR')} F$
-                </p>
-              </div>
-              <Link
-                href="/marketplace"
-                className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                <ShoppingCart className="h-4 w-4" />
-                Acheter un avion
-              </Link>
-            </div>
-          )}
-        </div>
-        
-        {flotte.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-700 text-left text-slate-400">
-                  <th className="pb-2 pr-4">Appareil</th>
-                  <th className="pb-2 pr-4">Quantité</th>
-                  <th className="pb-2 pr-4">En vol</th>
-                  <th className="pb-2">Disponibles</th>
-                </tr>
-              </thead>
-              <tbody>
-                {flotte.map((item) => (
-                  <tr key={item.id} className="border-b border-slate-700/50 last:border-0">
-                    <td className="py-2.5 pr-4">
-                      <span className="text-slate-200 font-medium">{item.nom}</span>
-                      {item.code_oaci && (
-                        <span className="ml-2 text-xs text-slate-500 font-mono">
-                          ({item.code_oaci})
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 pr-4 text-slate-300">{item.quantite}</td>
-                    <td className="py-2.5 pr-4">
-                      {item.en_vol > 0 ? (
-                        <span className="text-amber-400">{item.en_vol}</span>
-                      ) : (
-                        <span className="text-slate-500">0</span>
-                      )}
-                    </td>
-                    <td className="py-2.5">
-                      <span className={item.disponibles > 0 ? 'text-emerald-400' : 'text-red-400'}>
-                        {item.disponibles}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="text-center py-6">
-            <Plane className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400">Aucun appareil dans la flotte.</p>
-            {isPdg && (
-              <p className="text-sm text-slate-500 mt-2">
-                Achetez des avions sur le <Link href="/marketplace" className="text-purple-400 hover:text-purple-300 underline">Marketplace</Link> pour commencer.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Hubs, Avions individuels et Vols Ferry (PDG uniquement) */}
+      {/* Solde compagnie */}
       {isPdg && (
-        <>
-          <CompagnieHubsClient compagnieId={compagnie.id} />
-          <CompagnieAvionsClient compagnieId={compagnie.id} />
-          <CompagnieVolsFerryClient compagnieId={compagnie.id} />
-        </>
+        <div className="card bg-gradient-to-r from-emerald-500/10 to-sky-500/10 border-emerald-500/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-400">Solde de la compagnie</p>
+              <p className={`text-2xl font-bold ${soldeCompagnie > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {soldeCompagnie.toLocaleString('fr-FR')} F$
+              </p>
+            </div>
+            <Link
+              href="/felitz-bank"
+              className="text-sm text-sky-400 hover:text-sky-300"
+            >
+              Voir les transactions →
+            </Link>
+          </div>
+        </div>
       )}
+
+      {/* Hubs */}
+      {isPdg && <CompagnieHubsClient compagnieId={compagnie.id} />}
+
+      {/* Flotte individuelle */}
+      <CompagnieAvionsClient compagnieId={compagnie.id} soldeCompagnie={soldeCompagnie} isPdg={isPdg} />
+
+      {/* Vols Ferry (PDG uniquement) */}
+      {isPdg && <CompagnieVolsFerryClient compagnieId={compagnie.id} />}
 
       {/* Tarifs par liaison (PDG uniquement) */}
       {isPdg && (
