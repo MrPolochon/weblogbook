@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
       const vbanCleaned = vban_destination.trim().replace(/\s+/g, '').toUpperCase();
       
       const { data: compteDestination, error: compteError } = await admin.from('felitz_comptes')
-        .select('id, vban, proprietaire_id, proprietaire_compagnie_id')
+        .select('id, vban, proprietaire_id, compagnie_id, type')
         .eq('vban', vbanCleaned)
         .single();
       

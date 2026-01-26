@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
         // Compte entreprise de la compagnie
         const { data: compteCompagnie } = await admin.from('felitz_comptes')
           .select('id, solde')
-          .eq('proprietaire_compagnie_id', cibleCompagnie.id)
+          .eq('compagnie_id', cibleCompagnie.id)
           .eq('type', 'entreprise')
           .single();
         
