@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus, Store } from 'lucide-react';
+import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus, Store, MapPin } from 'lucide-react';
 
 const links = [
   { href: '/admin/vols', label: 'Vols en attente', icon: Clock },
@@ -9,6 +9,7 @@ const links = [
   { href: '/admin/compagnies', label: 'Compagnies', icon: Building2 },
   { href: '/admin/employes', label: 'Employés compagnies', icon: UserPlus },
   { href: '/admin/types-avion', label: 'Types d\'avion & Prix', icon: Plane },
+  { href: '/admin/avions', label: 'Gestion des avions', icon: MapPin },
   { href: '/admin/taxes', label: 'Taxes aéroportuaires', icon: Receipt },
   { href: '/admin/hangar-market', label: 'Hangar Market', icon: Store },
   { href: '/admin/felitz-bank', label: 'Felitz Bank Admin', icon: Landmark },
