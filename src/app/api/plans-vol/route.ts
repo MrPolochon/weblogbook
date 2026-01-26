@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       vol_commercial, compagnie_id, nature_transport, flotte_avion_id, inventaire_avion_id,
       compagnie_avion_id, // Avion individuel avec localisation
       nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote, prix_billet_utilise,
-      vol_sans_atc
+      vol_sans_atc, vol_ferry
     } = body;
     
     const ad = String(aeroport_depart || '').toUpperCase();
@@ -178,6 +178,16 @@ export async function POST(request: Request) {
       }
     }
     
+    // Validation vol ferry
+    if (vol_ferry) {
+      if (!compagnie_avion_id) {
+        return NextResponse.json({ error: 'Un vol ferry nécessite de sélectionner un avion spécifique.' }, { status: 400 });
+      }
+      if (!compagnie_id) {
+        return NextResponse.json({ error: 'Un vol ferry doit être effectué pour une compagnie.' }, { status: 400 });
+      }
+    }
+
     // Validation avion individuel (si utilisé)
     if (compagnie_avion_id) {
       const { data: avionIndiv } = await admin
@@ -191,7 +201,7 @@ export async function POST(request: Request) {
       }
       
       // Vérifier que l'avion appartient à la compagnie sélectionnée
-      if (vol_commercial && compagnie_id && avionIndiv.compagnie_id !== compagnie_id) {
+      if ((vol_commercial || vol_ferry) && compagnie_id && avionIndiv.compagnie_id !== compagnie_id) {
         return NextResponse.json({ error: 'Cet avion n\'appartient pas à la compagnie sélectionnée.' }, { status: 400 });
       }
       
@@ -235,10 +245,10 @@ export async function POST(request: Request) {
         star_arrivee: type_vol === 'IFR' ? String(star_arrivee).trim() : null,
         route_ifr: (type_vol === 'IFR' && route_ifr) ? String(route_ifr).trim() : null,
         note_atc: null, // Pas de note ATC pour les vols sans ATC
-        vol_commercial: Boolean(vol_commercial),
-        compagnie_id: vol_commercial && compagnie_id ? compagnie_id : null,
-        nature_transport: vol_commercial && nature_transport ? nature_transport : null,
-        flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : null,
+        vol_commercial: Boolean(vol_commercial) && !vol_ferry,
+        compagnie_id: (vol_commercial || vol_ferry) && compagnie_id ? compagnie_id : null,
+        nature_transport: vol_commercial && !vol_ferry && nature_transport ? nature_transport : null,
+        flotte_avion_id: vol_commercial && !vol_ferry && flotte_avion_id ? flotte_avion_id : null,
         inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
         compagnie_avion_id: compagnie_avion_id || null,
         nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
@@ -254,6 +264,7 @@ export async function POST(request: Request) {
         current_holder_position: null,
         current_holder_aeroport: null,
         vol_sans_atc: true,
+        vol_ferry: Boolean(vol_ferry),
       }).select('id').single();
 
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -336,10 +347,10 @@ export async function POST(request: Request) {
       star_arrivee: type_vol === 'IFR' ? String(star_arrivee).trim() : null,
       route_ifr: (type_vol === 'IFR' && route_ifr) ? String(route_ifr).trim() : null,
       note_atc: note_atc ? String(note_atc).trim() : null,
-      vol_commercial: Boolean(vol_commercial),
-      compagnie_id: vol_commercial && compagnie_id ? compagnie_id : null,
-      nature_transport: vol_commercial && nature_transport ? nature_transport : null,
-      flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : null,
+      vol_commercial: Boolean(vol_commercial) && !vol_ferry,
+      compagnie_id: (vol_commercial || vol_ferry) && compagnie_id ? compagnie_id : null,
+      nature_transport: vol_commercial && !vol_ferry && nature_transport ? nature_transport : null,
+      flotte_avion_id: vol_commercial && !vol_ferry && flotte_avion_id ? flotte_avion_id : null,
       inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
       compagnie_avion_id: compagnie_avion_id || null,
       nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
@@ -353,6 +364,7 @@ export async function POST(request: Request) {
       current_holder_position: holder.position,
       current_holder_aeroport: holder.aeroport,
       vol_sans_atc: false,
+      vol_ferry: Boolean(vol_ferry),
     }).select('id').single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

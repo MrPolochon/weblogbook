@@ -94,6 +94,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   
   // Commercial flight options
   const [vol_commercial, setVolCommercial] = useState(false);
+  const [vol_ferry, setVolFerry] = useState(false);
   const [selectedCompagnieId, setSelectedCompagnieId] = useState('');
   const [nature_transport, setNatureTransport] = useState<'passagers' | 'cargo'>('passagers');
   const [flotte_avion_id, setFlotteAvionId] = useState('');
@@ -358,7 +359,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       nature_transport: vol_commercial ? nature_transport : undefined,
       flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : undefined,
       inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : undefined,
-      compagnie_avion_id: vol_commercial && compagnie_avion_id ? compagnie_avion_id : undefined,
+      compagnie_avion_id: (vol_commercial || vol_ferry) && compagnie_avion_id ? compagnie_avion_id : undefined,
+      vol_ferry,
       nb_pax_genere: vol_commercial ? nbPax : undefined,
       cargo_kg_genere: vol_commercial ? cargoKg : undefined,
       revenue_brut: vol_commercial ? revenuBrut : undefined,
@@ -501,26 +503,51 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       {/* Type de vol (commercial ou personnel) */}
       {compagniesDisponibles.length > 0 && (
         <div className="p-4 rounded-lg border border-sky-500/30 bg-sky-500/10 space-y-3">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input 
-              type="checkbox" 
-              checked={vol_commercial} 
-              onChange={(e) => {
-                setVolCommercial(e.target.checked);
-                if (!e.target.checked) {
-                  setFlotteAvionId('');
-                }
-              }}
-              className="w-5 h-5 rounded"
-            />
-            <div className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-sky-400" />
-              <span className="font-medium text-slate-200">Vol commercial</span>
-            </div>
-          </label>
+          <div className="flex flex-wrap gap-6">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={vol_commercial} 
+                onChange={(e) => {
+                  setVolCommercial(e.target.checked);
+                  if (e.target.checked) setVolFerry(false);
+                  if (!e.target.checked) {
+                    setFlotteAvionId('');
+                  }
+                }}
+                className="w-5 h-5 rounded"
+              />
+              <div className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-sky-400" />
+                <span className="font-medium text-slate-200">Vol commercial</span>
+              </div>
+            </label>
+            
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={vol_ferry} 
+                onChange={(e) => {
+                  setVolFerry(e.target.checked);
+                  if (e.target.checked) setVolCommercial(false);
+                }}
+                className="w-5 h-5 rounded"
+              />
+              <div className="flex items-center gap-2">
+                <Plane className="h-5 w-5 text-amber-400" />
+                <span className="font-medium text-slate-200">Vol ferry (à vide)</span>
+              </div>
+            </label>
+          </div>
+          
+          {vol_ferry && (
+            <p className="text-amber-400 text-sm">
+              Vol à vide pour déplacer un avion. Pas de passagers/cargo. La compagnie paie les taxes aéroportuaires.
+            </p>
+          )}
           
           {/* Sélection de la compagnie si plusieurs disponibles */}
-          {vol_commercial && compagniesDisponibles.length > 1 && (
+          {(vol_commercial || vol_ferry) && compagniesDisponibles.length > 1 && (
             <div>
               <label className="label">Pour quelle compagnie ? *</label>
               <select 
@@ -540,7 +567,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
           )}
           
           {/* Afficher le nom de la compagnie si une seule */}
-          {vol_commercial && compagniesDisponibles.length === 1 && selectedCompagnie && (
+          {(vol_commercial || vol_ferry) && compagniesDisponibles.length === 1 && selectedCompagnie && (
             <p className="text-sm text-slate-300">
               Vol pour <span className="font-semibold text-sky-300">{selectedCompagnie.nom}</span>
               {selectedCompagnie.role === 'pdg' && <span className="text-amber-400 ml-1">(PDG)</span>}
@@ -574,17 +601,18 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
             )}
           </div>
 
-          {/* Sélection d'un avion individuel (optionnel) */}
-          {avionsCompagnie.length > 0 && (
+          {/* Sélection d'un avion individuel */}
+          {avionsCompagnie.length > 0 && (vol_commercial || vol_ferry) && (
             <div>
               <label className="label">
-                Avion spécifique (optionnel)
+                {vol_ferry ? 'Avion à déplacer *' : 'Avion spécifique (optionnel)'}
                 <span className="text-slate-500 font-normal ml-2">— avec localisation</span>
               </label>
               <select 
                 className="input w-full" 
                 value={compagnie_avion_id} 
                 onChange={(e) => setCompagnieAvionId(e.target.value)}
+                required={vol_ferry}
               >
                 <option value="">— Aucun (utiliser la flotte par type) —</option>
                 {avionsDisponibles.map((a) => {

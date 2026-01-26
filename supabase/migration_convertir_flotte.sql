@@ -72,8 +72,8 @@ BEGIN
           ELSE NULL
         END,
         hub_code,
-        'ground',
-        100
+        100,
+        'ground'
       );
       
       RAISE NOTICE 'Créé avion % pour compagnie % (type: %)', new_immat, flotte_record.compagnie_id, flotte_record.type_nom;
