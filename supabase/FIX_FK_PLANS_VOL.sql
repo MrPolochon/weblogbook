@@ -71,10 +71,11 @@ BEGIN
 END $$;
 
 -- ============================================================
--- 4) TRIGGER POUR DÉPLACER L'AVION À LA CLÔTURE
+-- 4) TRIGGERS POUR GÉRER LE STATUT DE L'AVION
 -- ============================================================
 
-CREATE OR REPLACE FUNCTION public.plans_vol_deplacer_avion()
+-- Trigger UPDATE : quand le statut du plan de vol change
+CREATE OR REPLACE FUNCTION public.plans_vol_update_avion()
 RETURNS TRIGGER AS $$
 BEGIN
   -- À la clôture, déplacer l'avion vers l'aéroport d'arrivée
@@ -82,7 +83,6 @@ BEGIN
     UPDATE public.compagnie_avions
     SET aeroport_actuel = NEW.aeroport_arrivee, statut = 'ground'
     WHERE id = NEW.compagnie_avion_id;
-    RAISE NOTICE 'Avion % déplacé vers %', NEW.compagnie_avion_id, NEW.aeroport_arrivee;
   END IF;
   
   -- Au décollage (accepté), mettre l'avion en vol
@@ -90,22 +90,43 @@ BEGIN
      AND OLD.statut NOT IN ('accepte', 'en_cours', 'automonitoring') 
      AND NEW.compagnie_avion_id IS NOT NULL THEN
     UPDATE public.compagnie_avions SET statut = 'in_flight' WHERE id = NEW.compagnie_avion_id;
-    RAISE NOTICE 'Avion % en vol', NEW.compagnie_avion_id;
   END IF;
   
-  -- Si refusé, remettre au sol
-  IF NEW.statut = 'refuse' AND OLD.statut != 'refuse' AND NEW.compagnie_avion_id IS NOT NULL THEN
-    UPDATE public.compagnie_avions SET statut = 'ground' WHERE id = NEW.compagnie_avion_id AND statut = 'in_flight';
+  -- Si refusé ou annulé, remettre au sol
+  IF NEW.statut IN ('refuse', 'annule') AND OLD.statut NOT IN ('refuse', 'annule', 'cloture') AND NEW.compagnie_avion_id IS NOT NULL THEN
+    UPDATE public.compagnie_avions SET statut = 'ground' WHERE id = NEW.compagnie_avion_id;
   END IF;
   
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Trigger INSERT : quand un plan de vol est créé directement avec statut accepte (vol sans ATC)
+CREATE OR REPLACE FUNCTION public.plans_vol_insert_avion()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Si créé directement en statut accepté/en_cours, mettre l'avion en vol
+  IF NEW.statut IN ('accepte', 'en_cours', 'automonitoring') AND NEW.compagnie_avion_id IS NOT NULL THEN
+    UPDATE public.compagnie_avions SET statut = 'in_flight' WHERE id = NEW.compagnie_avion_id;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Supprimer les anciens triggers
 DROP TRIGGER IF EXISTS plans_vol_deplacer_avion ON public.plans_vol;
-CREATE TRIGGER plans_vol_deplacer_avion
+DROP TRIGGER IF EXISTS plans_vol_update_avion ON public.plans_vol;
+DROP TRIGGER IF EXISTS plans_vol_insert_avion ON public.plans_vol;
+
+-- Créer les nouveaux triggers
+CREATE TRIGGER plans_vol_update_avion
   AFTER UPDATE ON public.plans_vol
-  FOR EACH ROW EXECUTE FUNCTION public.plans_vol_deplacer_avion();
+  FOR EACH ROW EXECUTE FUNCTION public.plans_vol_update_avion();
+
+CREATE TRIGGER plans_vol_insert_avion
+  AFTER INSERT ON public.plans_vol
+  FOR EACH ROW EXECUTE FUNCTION public.plans_vol_insert_avion();
 
 -- ============================================================
 -- 5) VÉRIFICATION FINALE

@@ -228,6 +228,19 @@ export async function POST(request: Request) {
           error: `L'avion ${avionIndiv.immatriculation} est en maintenance.` 
         }, { status: 400 });
       }
+      
+      // Vérifier qu'il n'y a pas déjà un plan de vol en cours pour cet avion
+      const { count: plansEnCours } = await admin
+        .from('plans_vol')
+        .select('*', { count: 'exact', head: true })
+        .eq('compagnie_avion_id', compagnie_avion_id)
+        .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
+      
+      if (plansEnCours && plansEnCours > 0) {
+        return NextResponse.json({ 
+          error: `L'avion ${avionIndiv.immatriculation} a déjà un plan de vol en cours.` 
+        }, { status: 400 });
+      }
     }
     
     // Si vol sans ATC, accepter automatiquement et mettre en autosurveillance
@@ -300,6 +313,13 @@ export async function POST(request: Request) {
               .eq('code_oaci', ad);
           }
         }
+      }
+
+      // Mettre l'avion individuel en vol (le trigger ne fonctionne qu'à l'UPDATE, pas INSERT)
+      if (compagnie_avion_id) {
+        await admin.from('compagnie_avions')
+          .update({ statut: 'in_flight' })
+          .eq('id', compagnie_avion_id);
       }
 
       return NextResponse.json({ ok: true, id: data.id, vol_sans_atc: true });
