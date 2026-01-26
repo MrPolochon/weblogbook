@@ -66,6 +66,16 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
+    if (action === 'marquer_invitation_repondue') {
+      // Mettre à jour le metadata du message pour indiquer que l'invitation a été répondue
+      const currentMetadata = message.metadata || {};
+      await admin.from('messages').update({
+        metadata: { ...currentMetadata, invitation_repondue: true },
+        lu: true
+      }).eq('id', id);
+      return NextResponse.json({ ok: true });
+    }
+
     if (action === 'encaisser') {
       // Vérifier que c'est un chèque non encaissé
       if (!['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(message.type_message)) {

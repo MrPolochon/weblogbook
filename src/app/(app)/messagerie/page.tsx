@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { Mail, Send, Inbox, CreditCard, ArrowLeft } from 'lucide-react';
+import { Mail, Send, Inbox, CreditCard, ArrowLeft, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import MessagerieClient from './MessagerieClient';
 
@@ -38,6 +38,11 @@ export default async function MessageriePage() {
     m => ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(m.type_message) && !m.cheque_encaisse
   );
 
+  // Compter les invitations non répondues
+  const invitationsEnAttente = (messagesRecus || []).filter(
+    m => m.type_message === 'recrutement' && !(m.metadata as { invitation_repondue?: boolean } | null)?.invitation_repondue
+  );
+
   // Compter les messages non lus
   const messagesNonLus = (messagesRecus || []).filter(m => !m.lu);
 
@@ -61,7 +66,7 @@ export default async function MessageriePage() {
       </div>
 
       {/* Statistiques */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -71,6 +76,17 @@ export default async function MessageriePage() {
             <Inbox className="h-8 w-8 text-blue-400/30" />
           </div>
         </div>
+        {invitationsEnAttente.length > 0 && (
+          <div className="rounded-xl bg-gradient-to-br from-teal-500/10 to-teal-600/5 border border-teal-500/20 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-teal-400/80 text-sm">Recrutement</p>
+                <p className="text-2xl font-bold text-teal-400">{invitationsEnAttente.length}</p>
+              </div>
+              <UserPlus className="h-8 w-8 text-teal-400/30" />
+            </div>
+          </div>
+        )}
         <div className="rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 p-4">
           <div className="flex items-center justify-between">
             <div>

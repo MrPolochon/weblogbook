@@ -16,7 +16,7 @@ export async function PATCH(
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, armee: armeeBody, atc: atcBody, atc_grade_id: atcGradeIdBody, role: roleBody } = body;
+    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, armee: armeeBody, atc: atcBody, atc_grade_id: atcGradeIdBody, role: roleBody, ifsa: ifsaBody } = body;
 
     const updates: Record<string, unknown> = {};
     if (typeof heures_initiales_minutes === 'number' && heures_initiales_minutes >= 0) {
@@ -28,6 +28,7 @@ export async function PATCH(
     if (armeeBody !== undefined) updates.armee = Boolean(armeeBody);
     if (atcBody !== undefined) updates.atc = Boolean(atcBody);
     if (atcGradeIdBody !== undefined) updates.atc_grade_id = (atcGradeIdBody === null || atcGradeIdBody === '') ? null : atcGradeIdBody;
+    if (ifsaBody !== undefined) updates.ifsa = Boolean(ifsaBody);
 
     const admin = createAdminClient();
 
@@ -37,15 +38,34 @@ export async function PATCH(
       if (t?.role === 'atc') return NextResponse.json({ error: 'Le rôle Armée requiert l\'accès à l\'espace pilote. Accordez d\'abord l\'accès pilote.' }, { status: 400 });
     }
 
-    if (roleBody === 'pilote' || roleBody === 'atc') {
+    // Gestion du changement de rôle (pilote, atc, admin)
+    if (roleBody && ['pilote', 'atc', 'admin'].includes(roleBody)) {
       const { data: target } = await admin.from('profiles').select('role').eq('id', id).single();
       if (!target) return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
-      if (target.role === 'admin') return NextResponse.json({ error: 'Impossible de modifier le rôle d\'un admin.' }, { status: 400 });
-      if (roleBody === 'pilote' && target.role !== 'atc') return NextResponse.json({ error: 'Seul un compte ATC uniquement peut recevoir l\'accès pilote.' }, { status: 400 });
-      if (roleBody === 'atc' && target.role !== 'pilote') return NextResponse.json({ error: 'Seul un pilote avec ATC peut devenir ATC uniquement.' }, { status: 400 });
-      updates.role = roleBody;
-      updates.atc = true;
-      if (roleBody === 'atc') updates.armee = false; // Armée requiert l'accès pilote
+      
+      // Si on veut rétrograder un admin, vérifier qu'il reste au moins un admin
+      if (target.role === 'admin' && roleBody !== 'admin') {
+        const { count } = await admin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
+        if ((count ?? 0) <= 1) {
+          return NextResponse.json({ error: 'Il doit rester au moins un administrateur.' }, { status: 400 });
+        }
+      }
+      
+      // Appliquer le changement de rôle
+      if (roleBody !== target.role) {
+        updates.role = roleBody;
+        
+        // Si on passe en admin, garder les autres accès
+        // Si on passe en atc uniquement, désactiver armee
+        if (roleBody === 'atc') {
+          updates.armee = false;
+          updates.atc = true;
+        }
+        // Si on passe en pilote depuis atc, activer atc aussi
+        if (roleBody === 'pilote' && target.role === 'atc') {
+          updates.atc = true;
+        }
+      }
     }
 
     if (identifiantBody != null && typeof identifiantBody === 'string') {

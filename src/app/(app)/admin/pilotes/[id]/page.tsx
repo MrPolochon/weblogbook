@@ -14,7 +14,7 @@ export default async function AdminPiloteEditPage({
 
   const { data: p } = await supabase
     .from('profiles')
-    .select('id, identifiant, role, armee, atc, heures_initiales_minutes, blocked_until, block_reason')
+    .select('id, identifiant, role, armee, atc, ifsa, heures_initiales_minutes, blocked_until, block_reason')
     .eq('id', id)
     .single();
 
@@ -42,6 +42,7 @@ export default async function AdminPiloteEditPage({
         role={p.role ?? 'pilote'}
         armee={Boolean(p.armee)}
         atc={Boolean(p.atc)}
+        ifsa={Boolean(p.ifsa)}
         heuresInitiales={p.heures_initiales_minutes ?? 0}
         blockedUntil={p.blocked_until}
         blockReason={p.block_reason}

@@ -12,7 +12,7 @@ export default async function AdminPilotesPage() {
 
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc')
+    .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc, ifsa')
     .order('identifiant');
 
   const pilotes = (profiles || []).filter((p) => p.role !== 'admin');
@@ -27,6 +27,7 @@ export default async function AdminPilotesPage() {
         <td className="py-3 pr-4 text-slate-300">{p.role === 'admin' ? 'admin' : p.role === 'atc' ? 'atc' : 'pilote'}</td>
         <td className="py-3 pr-4 text-slate-300">{p.armee ? 'Oui' : '—'}</td>
         <td className="py-3 pr-4 text-slate-300">{p.atc ? 'Oui' : '—'}</td>
+        <td className="py-3 pr-4 text-slate-300">{p.ifsa ? <span className="text-indigo-400">Oui</span> : '—'}</td>
         <td className="py-3 pr-4">
           {sansEspacePilote ? (
             <span className="inline-flex items-center rounded bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-300" title="Pas d'accès à l'espace pilote">ATC uniquement</span>
@@ -78,6 +79,7 @@ export default async function AdminPilotesPage() {
                   <th className="pb-2 pr-4">Pilote / Admin</th>
                   <th className="pb-2 pr-4">Armée</th>
                   <th className="pb-2 pr-4">ATC</th>
+                  <th className="pb-2 pr-4">IFSA</th>
                   <th className="pb-2 pr-4">Espace pilote</th>
                   <th className="pb-2 pr-4">Heures initiales</th>
                   <th className="pb-2 pr-4">Blocage</th>
@@ -104,6 +106,7 @@ export default async function AdminPilotesPage() {
                   <th className="pb-2 pr-4">Pilote / Admin</th>
                   <th className="pb-2 pr-4">Armée</th>
                   <th className="pb-2 pr-4">ATC</th>
+                  <th className="pb-2 pr-4">IFSA</th>
                   <th className="pb-2 pr-4">Espace pilote</th>
                   <th className="pb-2 pr-4">Heures initiales</th>
                   <th className="pb-2 pr-4">Blocage</th>

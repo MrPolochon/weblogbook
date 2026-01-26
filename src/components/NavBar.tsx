@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, Store, UserPlus, AlertTriangle } from 'lucide-react';
+import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, Store, AlertTriangle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -49,8 +49,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText, badge: 0 },
     { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0 },
     { href: '/marche-cargo', label: 'Marché cargo', icon: Package, badge: 0 },
-    { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount },
-    { href: '/invitations', label: 'Mes invitations', icon: UserPlus, badge: invitationsCount },
+    { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount + invitationsCount },
     ...(hasCompagnie ? [{ href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 }] : []),
     ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield, badge: 0 }] : []),
     { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0 },
@@ -65,7 +64,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     pathname.startsWith('/marketplace') || pathname.startsWith('/hangar-market') ||
     pathname.startsWith('/inventaire') || pathname.startsWith('/messagerie') || 
     pathname.startsWith('/marche-passagers') || pathname.startsWith('/marche-cargo') ||
-    pathname.startsWith('/invitations') || pathname.startsWith('/signalement');
+    pathname.startsWith('/signalement');
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-700/50 bg-slate-900/95 backdrop-blur">

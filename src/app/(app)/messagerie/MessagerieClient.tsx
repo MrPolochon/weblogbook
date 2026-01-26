@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight } from 'lucide-react';
+import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight, UserPlus, Check, XCircle } from 'lucide-react';
 import ChequeVisuel from '@/components/ChequeVisuel';
 
 interface Message {
@@ -22,6 +22,7 @@ interface Message {
   cheque_numero_vol: string | null;
   cheque_compagnie_nom: string | null;
   cheque_pour_compagnie: boolean;
+  metadata?: { invitation_id?: string; compagnie_id?: string; compagnie_nom?: string; invitation_repondue?: boolean } | null;
   expediteur?: { identifiant: string } | { identifiant: string }[] | null;
   destinataire?: { identifiant: string } | { identifiant: string }[] | null;
 }
@@ -46,7 +47,7 @@ function getIdentifiant(obj: { identifiant: string } | { identifiant: string }[]
 
 export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant }: Props) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'inbox' | 'cheques' | 'sent' | 'compose'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'recrutement' | 'cheques' | 'sent' | 'compose'>('inbox');
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -58,7 +59,53 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   const [composeError, setComposeError] = useState<string | null>(null);
 
   const cheques = messagesRecus.filter(m => ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(m.type_message));
-  const messagesNormaux = messagesRecus.filter(m => !['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(m.type_message));
+  const invitations = messagesRecus.filter(m => m.type_message === 'recrutement');
+  const messagesNormaux = messagesRecus.filter(m => !['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'recrutement'].includes(m.type_message));
+  
+  // État pour suivre les invitations en cours de traitement
+  const [processingInvitation, setProcessingInvitation] = useState<string | null>(null);
+  const [invitationError, setInvitationError] = useState<string | null>(null);
+
+  async function handleRepondreInvitation(messageId: string, invitationId: string, action: 'accepter' | 'refuser') {
+    if (action === 'refuser' && !confirm('Êtes-vous sûr de vouloir refuser cette offre d\'emploi ?')) {
+      return;
+    }
+    
+    setProcessingInvitation(messageId);
+    setInvitationError(null);
+    
+    try {
+      const res = await fetch('/api/recrutement', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invitation_id: invitationId, action })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      
+      // Marquer le message comme traité
+      await fetch(`/api/messages/${messageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'marquer_invitation_repondue' })
+      });
+      
+      // Mettre à jour le message sélectionné
+      if (selectedMessage?.id === messageId) {
+        setSelectedMessage({
+          ...selectedMessage,
+          metadata: { ...selectedMessage.metadata, invitation_repondue: true }
+        });
+      }
+      
+      router.refresh();
+    } catch (e) {
+      setInvitationError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setProcessingInvitation(null);
+    }
+  }
 
   async function handleMarkAsRead(id: string) {
     await fetch(`/api/messages/${id}`, {
@@ -145,6 +192,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
 
   const tabs = [
     { id: 'inbox', label: 'Boîte de réception', icon: Inbox, count: messagesNormaux.filter(m => !m.lu).length },
+    { id: 'recrutement', label: 'Recrutement', icon: UserPlus, count: invitations.filter(m => !m.metadata?.invitation_repondue).length },
     { id: 'cheques', label: 'Chèques', icon: CreditCard, count: cheques.filter(m => !m.cheque_encaisse).length },
     { id: 'sent', label: 'Envoyés', icon: Send, count: 0 },
     { id: 'compose', label: 'Nouveau', icon: Plus, count: 0 },
@@ -228,13 +276,13 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
             </form>
           ) : (
             <div className="divide-y divide-slate-700/30">
-              {(activeTab === 'inbox' ? messagesNormaux : activeTab === 'cheques' ? cheques : messagesEnvoyes).length === 0 ? (
+              {(activeTab === 'inbox' ? messagesNormaux : activeTab === 'recrutement' ? invitations : activeTab === 'cheques' ? cheques : messagesEnvoyes).length === 0 ? (
                 <div className="p-8 text-center text-slate-500">
                   <Mail className="h-12 w-12 mx-auto mb-2 opacity-50" />
                   <p>Aucun message</p>
                 </div>
               ) : (
-                (activeTab === 'inbox' ? messagesNormaux : activeTab === 'cheques' ? cheques : messagesEnvoyes).map(msg => (
+                (activeTab === 'inbox' ? messagesNormaux : activeTab === 'recrutement' ? invitations : activeTab === 'cheques' ? cheques : messagesEnvoyes).map(msg => (
                   <button
                     key={msg.id}
                     onClick={() => selectMessage(msg)}
@@ -277,6 +325,13 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                             msg.cheque_encaisse ? 'bg-slate-600/50 text-slate-400' : 'bg-amber-500/20 text-amber-400'
                           }`}>
                             {msg.cheque_encaisse ? 'Encaissé' : `${msg.cheque_montant?.toLocaleString('fr-FR')} F$ (compagnie)`}
+                          </span>
+                        )}
+                        {msg.type_message === 'recrutement' && (
+                          <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs ${
+                            msg.metadata?.invitation_repondue ? 'bg-slate-600/50 text-slate-400' : 'bg-emerald-500/20 text-emerald-400'
+                          }`}>
+                            {msg.metadata?.invitation_repondue ? 'Répondu' : '🎉 Offre d\'emploi'}
                           </span>
                         )}
                       </div>
@@ -344,6 +399,67 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                     pourCompagnie={selectedMessage.cheque_pour_compagnie}
                     onEncaisser={selectedMessage.cheque_encaisse ? undefined : () => handleEncaisser(selectedMessage.id)}
                   />
+                </div>
+              ) : selectedMessage.type_message === 'recrutement' ? (
+                <div className="space-y-6">
+                  <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>
+                  
+                  {/* Carte d'invitation */}
+                  <div className="p-6 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 rounded-lg bg-emerald-500/20">
+                        <UserPlus className="h-6 w-6 text-emerald-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-100">Offre d&apos;emploi</h3>
+                        <p className="text-sm text-emerald-400">{selectedMessage.metadata?.compagnie_nom || 'Compagnie'}</p>
+                      </div>
+                    </div>
+                    
+                    {invitationError && (
+                      <p className="text-red-400 text-sm mb-4">{invitationError}</p>
+                    )}
+                    
+                    {selectedMessage.metadata?.invitation_repondue ? (
+                      <div className="flex items-center gap-2 text-slate-400">
+                        <Check className="h-5 w-5" />
+                        <span>Vous avez déjà répondu à cette invitation.</span>
+                      </div>
+                    ) : selectedMessage.metadata?.invitation_id ? (
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <button
+                          onClick={() => handleRepondreInvitation(
+                            selectedMessage.id, 
+                            selectedMessage.metadata!.invitation_id!, 
+                            'accepter'
+                          )}
+                          disabled={processingInvitation === selectedMessage.id}
+                          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                        >
+                          {processingInvitation === selectedMessage.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Check className="h-4 w-4" />
+                          )}
+                          Accepter l&apos;offre
+                        </button>
+                        <button
+                          onClick={() => handleRepondreInvitation(
+                            selectedMessage.id, 
+                            selectedMessage.metadata!.invitation_id!, 
+                            'refuser'
+                          )}
+                          disabled={processingInvitation === selectedMessage.id}
+                          className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium transition-colors disabled:opacity-50"
+                        >
+                          <XCircle className="h-4 w-4" />
+                          Refuser
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-slate-400 text-sm">Cette invitation n&apos;est plus valide.</p>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>

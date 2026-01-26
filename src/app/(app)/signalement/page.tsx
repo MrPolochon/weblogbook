@@ -64,7 +64,7 @@ export default async function SignalementPage() {
           <div>
             <p className="text-amber-200 font-medium">Qu&apos;est-ce que l&apos;IFSA ?</p>
             <p className="text-sm text-amber-300/80 mt-1">
-              L&apos;IFSA (Inspection Fédérale de la Sécurité Aérienne) est l&apos;autorité de régulation 
+              L&apos;IFSA (International Flight Safety Authority) est l&apos;autorité de régulation 
               de l&apos;aviation sur notre serveur. Elle traite les signalements, mène des enquêtes 
               et peut émettre des sanctions en cas d&apos;infraction.
             </p>

@@ -87,7 +87,7 @@ export default async function IfsaPage() {
             <Shield className="h-7 w-7 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white">IFSA - Inspection Fédérale</h1>
+            <h1 className="text-2xl font-bold text-white">IFSA - International Flight Safety Authority</h1>
             <p className="text-indigo-100/80 text-sm">Gestion des signalements, enquêtes et sanctions</p>
           </div>
         </div>

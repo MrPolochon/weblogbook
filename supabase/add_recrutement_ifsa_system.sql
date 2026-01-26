@@ -2,10 +2,14 @@
 -- SYSTÈME DE RECRUTEMENT ET IFSA (Modération)
 -- =====================================================
 
+-- 0. Ajouter le champ metadata à la table messages (pour les invitations de recrutement)
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS metadata JSONB;
+COMMENT ON COLUMN messages.metadata IS 'Métadonnées JSON pour les messages spéciaux (invitations, etc.)';
+
 -- 1. Ajouter le rôle IFSA dans les profils
 -- Le rôle IFSA peut être ajouté en plus du rôle existant
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ifsa BOOLEAN DEFAULT FALSE;
-COMMENT ON COLUMN profiles.ifsa IS 'Membre de l''IFSA (modération aviation)';
+COMMENT ON COLUMN profiles.ifsa IS 'Membre de l''IFSA (International Flight Safety Authority)';
 
 -- 2. Table des invitations de recrutement
 CREATE TABLE IF NOT EXISTS compagnie_invitations (

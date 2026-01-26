@@ -9,6 +9,7 @@ export default function EditPiloteForm({
   role: roleInitial,
   armee: armeeInitial,
   atc: atcInitial,
+  ifsa: ifsaInitial,
   heuresInitiales,
   blockedUntil,
   blockReason,
@@ -18,14 +19,17 @@ export default function EditPiloteForm({
   role: string;
   armee: boolean;
   atc: boolean;
+  ifsa: boolean;
   heuresInitiales: number;
   blockedUntil: string | null;
   blockReason: string | null;
 }) {
   const router = useRouter();
   const [identifiant, setIdentifiant] = useState(identifiantInitial);
+  const [role, setRole] = useState(roleInitial);
   const [armee, setArmee] = useState(armeeInitial);
   const [atc, setAtc] = useState(atcInitial);
+  const [ifsa, setIfsa] = useState(ifsaInitial);
   const isAtcOnly = roleInitial === 'atc';
   const isPiloteEtAtc = roleInitial === 'pilote' && atcInitial;
   const [accesPilote, setAccesPilote] = useState(isAtcOnly ? false : isPiloteEtAtc);
@@ -35,25 +39,58 @@ export default function EditPiloteForm({
   const [loading, setLoading] = useState(false);
   const [loadingReset, setLoadingReset] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  
   useEffect(() => { setAtc(atcInitial); }, [atcInitial]);
   useEffect(() => { setAccesPilote(roleInitial === 'atc' ? false : !!(roleInitial === 'pilote' && atcInitial)); }, [roleInitial, atcInitial]);
+  useEffect(() => { setIfsa(ifsaInitial); }, [ifsaInitial]);
+  useEffect(() => { setRole(roleInitial); }, [roleInitial]);
 
   const isBlocked = blockedUntil ? new Date(blockedUntil) > new Date() : false;
 
-  async function handleSaveIdentifiantArmee(e: React.FormEvent) {
+  async function handleSaveRoles(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     setLoading(true);
     try {
       const id = String(identifiant).trim().toLowerCase();
       if (!id || id.length < 2) throw new Error('Identifiant trop court');
-      const body: { identifiant: string; armee: boolean; atc?: boolean; role?: string } = { identifiant: id, armee: isAtcOnly ? false : armee };
-      if (isAtcOnly) {
-        if (accesPilote) body.role = 'pilote';
-      } else {
+      
+      const body: { 
+        identifiant: string; 
+        armee?: boolean; 
+        atc?: boolean; 
+        ifsa?: boolean;
+        role?: string;
+      } = { 
+        identifiant: id,
+        ifsa: ifsa
+      };
+
+      // Gestion du rôle principal
+      if (role === 'admin') {
+        body.role = 'admin';
+        // Les admins gardent leurs autres accès
+        body.armee = armee;
         body.atc = atc;
-        if (isPiloteEtAtc && !accesPilote) body.role = 'atc';
+      } else if (isAtcOnly) {
+        body.armee = false;
+        if (accesPilote) {
+          body.role = 'pilote';
+          body.atc = true;
+        }
+      } else {
+        body.armee = armee;
+        body.atc = atc;
+        if (role !== roleInitial) {
+          body.role = role;
+        }
+        if (isPiloteEtAtc && !accesPilote) {
+          body.role = 'atc';
+        }
       }
+
       const res = await fetch(`/api/pilotes/${piloteId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -61,6 +98,7 @@ export default function EditPiloteForm({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
+      setSuccess('Rôles mis à jour');
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -165,8 +203,9 @@ export default function EditPiloteForm({
 
   return (
     <div className="card space-y-6">
-      <form onSubmit={handleSaveIdentifiantArmee} className="space-y-4">
+      <form onSubmit={handleSaveRoles} className="space-y-4">
         <h2 className="text-lg font-medium text-slate-200">Identifiant et rôles</h2>
+        
         <div>
           <label className="label">Identifiant de connexion</label>
           <input
@@ -177,31 +216,102 @@ export default function EditPiloteForm({
             placeholder="ex: jdupont"
           />
         </div>
-        <div className="flex flex-wrap items-center gap-4">
-          {!isAtcOnly && (
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={armee} onChange={(e) => setArmee(e.target.checked)} className="rounded" />
-              <span className="text-slate-300">Armée (Espace militaire)</span>
-            </label>
-          )}
-          {isAtcOnly ? (
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={accesPilote} onChange={(e) => setAccesPilote(e.target.checked)} className="rounded" />
-              <span className="text-slate-300">Accès pilote (Espace pilote)</span>
-            </label>
-          ) : (
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" checked={atc} onChange={(e) => setAtc(e.target.checked)} className="rounded" />
-              <span className="text-slate-300">ATC (Espace ATC)</span>
-            </label>
-          )}
-          {isPiloteEtAtc && (
-            <label className="flex items-center gap-2 cursor-pointer" title="Décocher pour révoquer l'accès à l'espace pilote (compte deviendra ATC uniquement)">
-              <input type="checkbox" checked={accesPilote} onChange={(e) => setAccesPilote(e.target.checked)} className="rounded" />
-              <span className="text-slate-300">Accès pilote (Espace pilote)</span>
-            </label>
-          )}
+
+        {/* Rôle principal */}
+        <div>
+          <label className="label">Rôle principal</label>
+          <select
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            className="input max-w-xs"
+          >
+            <option value="pilote">Pilote</option>
+            <option value="atc">ATC uniquement</option>
+            <option value="admin">Administrateur</option>
+          </select>
+          <p className="text-xs text-slate-500 mt-1">
+            {role === 'admin' && '⚠️ Les administrateurs ont accès à toutes les fonctionnalités du site.'}
+            {role === 'atc' && 'Accès uniquement à l\'espace ATC, pas d\'espace pilote.'}
+            {role === 'pilote' && 'Accès à l\'espace pilote. Peut aussi avoir accès à l\'ATC si coché.'}
+          </p>
         </div>
+
+        {/* Accès additionnels */}
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-slate-300">Accès additionnels :</p>
+          
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Armée */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={armee} 
+                onChange={(e) => setArmee(e.target.checked)} 
+                className="rounded"
+                disabled={role === 'atc'}
+              />
+              <span className={`${role === 'atc' ? 'text-slate-500' : 'text-slate-300'}`}>
+                🎖️ Armée (Espace militaire)
+              </span>
+            </label>
+
+            {/* ATC */}
+            {role !== 'atc' && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={atc} 
+                  onChange={(e) => setAtc(e.target.checked)} 
+                  className="rounded" 
+                />
+                <span className="text-slate-300">📡 ATC (Espace ATC)</span>
+              </label>
+            )}
+
+            {/* IFSA */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={ifsa} 
+                onChange={(e) => setIfsa(e.target.checked)} 
+                className="rounded" 
+              />
+              <span className="text-slate-300">🛡️ IFSA (Modération aviation)</span>
+            </label>
+          </div>
+
+          <p className="text-xs text-slate-500">
+            IFSA = International Flight Safety Authority. Permet de gérer les signalements, enquêtes et sanctions.
+          </p>
+        </div>
+
+        {/* Accès pilote pour ATC */}
+        {isAtcOnly && (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input 
+              type="checkbox" 
+              checked={accesPilote} 
+              onChange={(e) => setAccesPilote(e.target.checked)} 
+              className="rounded" 
+            />
+            <span className="text-slate-300">Ajouter accès pilote (Espace pilote)</span>
+          </label>
+        )}
+        
+        {isPiloteEtAtc && (
+          <label className="flex items-center gap-2 cursor-pointer" title="Décocher pour révoquer l'accès à l'espace pilote">
+            <input 
+              type="checkbox" 
+              checked={accesPilote} 
+              onChange={(e) => setAccesPilote(e.target.checked)} 
+              className="rounded" 
+            />
+            <span className="text-slate-300">Accès pilote (Espace pilote)</span>
+          </label>
+        )}
+
+        {success && <p className="text-emerald-400 text-sm">{success}</p>}
+        
         <button type="submit" className="btn-primary" disabled={loading}>
           {loading ? 'Enregistrement…' : 'Enregistrer identifiant / rôles'}
         </button>
