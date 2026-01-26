@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 // GET - Récupérer les invitations (pour un pilote ou pour une compagnie si PDG)
 export async function GET(req: NextRequest) {
   try {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart, UserPlus, Send, X, Check, Loader2, Search } from 'lucide-react';
 import Link from 'next/link';
@@ -85,13 +85,7 @@ export default function MaCompagnieClient({
   const [loadingInvitations, setLoadingInvitations] = useState(false);
 
   // Charger les invitations envoyées
-  useEffect(() => {
-    if (isPdg && compagnie.id) {
-      loadInvitations();
-    }
-  }, [isPdg, compagnie.id]);
-
-  async function loadInvitations() {
+  const loadInvitations = useCallback(async () => {
     setLoadingInvitations(true);
     try {
       const res = await fetch(`/api/recrutement?type=envoyees&compagnie_id=${compagnie.id}`);
@@ -109,7 +103,13 @@ export default function MaCompagnieClient({
     } finally {
       setLoadingInvitations(false);
     }
-  }
+  }, [compagnie.id]);
+
+  useEffect(() => {
+    if (isPdg && compagnie.id) {
+      loadInvitations();
+    }
+  }, [isPdg, compagnie.id, loadInvitations]);
 
   // Recherche de pilotes
   async function handleSearchPilote(query: string) {
