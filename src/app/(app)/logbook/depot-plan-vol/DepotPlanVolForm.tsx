@@ -228,10 +228,12 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   })();
 
   // Generate PAX and CARGO values based on all factors
+  // Les vols ferry sont à vide - pas de génération
   useEffect(() => {
     // Doit avoir un avion sélectionné (soit flotte par type, soit avion individuel)
     const hasAircraft = flotte_avion_id || compagnie_avion_id;
-    if (!vol_commercial || !selectedCompagnie || !hasAircraft || !aeroport_depart || !aeroport_arrivee) {
+    // Vol ferry = vol à vide, pas de passagers/cargo
+    if (vol_ferry || !vol_commercial || !selectedCompagnie || !hasAircraft || !aeroport_depart || !aeroport_arrivee) {
       setGeneratedPax(0);
       setGeneratedCargo(0);
       setLastGeneratedKey('');
@@ -324,7 +326,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     // Générer un type de cargaison estimé (le serveur générera le vrai type)
     setEstimatedTypeCargaison(genererTypeCargaison());
     setLastGeneratedKey(generationKey);
-  }, [vol_commercial, flotte_avion_id, compagnie_avion_id, selectedCompagnie, selectedFlotte, selectedAvionIndiv, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport]);
+  }, [vol_commercial, vol_ferry, flotte_avion_id, compagnie_avion_id, selectedCompagnie, selectedFlotte, selectedAvionIndiv, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport]);
 
   // Calculer les revenus basés sur les valeurs générées et le type de transport sélectionné
   const nbPax = nature_transport === 'passagers' ? generatedPax : 0;

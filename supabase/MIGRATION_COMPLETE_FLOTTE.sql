@@ -106,6 +106,14 @@ ALTER TABLE public.plans_vol
 
 CREATE INDEX IF NOT EXISTS idx_plans_vol_compagnie_avion ON public.plans_vol(compagnie_avion_id);
 
+-- 7b) Ajouter colonne vol_ferry pour les vols à vide (déplacement d'avion)
+ALTER TABLE public.plans_vol 
+  ADD COLUMN IF NOT EXISTS vol_ferry BOOLEAN NOT NULL DEFAULT false;
+
+CREATE INDEX IF NOT EXISTS idx_plans_vol_ferry ON public.plans_vol(vol_ferry) WHERE vol_ferry = true;
+
+COMMENT ON COLUMN public.plans_vol.vol_ferry IS 'Vol à vide pour déplacer un avion - pas de passagers/cargo, compagnie paie les taxes';
+
 -- 8) Trigger pour déplacer l'avion après clôture du vol
 CREATE OR REPLACE FUNCTION public.plans_vol_deplacer_avion()
 RETURNS TRIGGER AS $$
