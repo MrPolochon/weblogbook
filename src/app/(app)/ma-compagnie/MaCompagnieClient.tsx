@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart, UserPlus, Send, X, Check, Loader2, Search } from 'lucide-react';
 import Link from 'next/link';
 import TarifsLiaisonsClient from './TarifsLiaisonsClient';
+import CompagnieHubsClient from './CompagnieHubsClient';
+import CompagnieAvionsClient from './CompagnieAvionsClient';
+import CompagnieVolsFerryClient from './CompagnieVolsFerryClient';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
 interface CompagnieOption {
@@ -643,6 +646,15 @@ export default function MaCompagnieClient({
           </div>
         )}
       </div>
+
+      {/* Hubs, Avions individuels et Vols Ferry (PDG uniquement) */}
+      {isPdg && (
+        <>
+          <CompagnieHubsClient compagnieId={compagnie.id} />
+          <CompagnieAvionsClient compagnieId={compagnie.id} />
+          <CompagnieVolsFerryClient compagnieId={compagnie.id} />
+        </>
+      )}
 
       {/* Tarifs par liaison (PDG uniquement) */}
       {isPdg && (
