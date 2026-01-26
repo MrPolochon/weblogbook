@@ -60,13 +60,25 @@ interface FlotteItemWithCompagnie extends FlotteItem {
   compagnie_id: string;
 }
 
+interface AvionIndividuel {
+  id: string;
+  compagnie_id: string;
+  immatriculation: string;
+  nom_bapteme: string | null;
+  aeroport_actuel: string;
+  statut: string;
+  usure_percent: number;
+  types_avion: { id: string; nom: string; constructeur: string } | { id: string; nom: string; constructeur: string }[] | null;
+}
+
 interface Props {
   compagniesDisponibles: Compagnie[];
   flotteParCompagnie: Record<string, FlotteItemWithCompagnie[]>;
   inventairePersonnel: InventaireItem[];
+  avionsParCompagnie?: Record<string, AvionIndividuel[]>;
 }
 
-export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompagnie, inventairePersonnel }: Props) {
+export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompagnie, inventairePersonnel, avionsParCompagnie = {} }: Props) {
   const router = useRouter();
   const [aeroport_depart, setAeroportDepart] = useState('');
   const [aeroport_arrivee, setAeroportArrivee] = useState('');
@@ -86,6 +98,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   const [nature_transport, setNatureTransport] = useState<'passagers' | 'cargo'>('passagers');
   const [flotte_avion_id, setFlotteAvionId] = useState('');
   const [inventaire_avion_id, setInventaireAvionId] = useState('');
+  const [compagnie_avion_id, setCompagnieAvionId] = useState('');
   
   // Calculated values - stockés séparément pour éviter la triche
   const [generatedPax, setGeneratedPax] = useState(0);
@@ -108,9 +121,18 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   const selectedCompagnie = compagniesDisponibles.find(c => c.id === selectedCompagnieId) || null;
   const flotteCompagnie = selectedCompagnieId ? (flotteParCompagnie[selectedCompagnieId] || []) : [];
   
+  // Get individual aircraft for the selected company, filtered by departure airport
+  const avionsCompagnie = selectedCompagnieId ? (avionsParCompagnie[selectedCompagnieId] || []) : [];
+  const avionsDisponibles = avionsCompagnie.filter(a => 
+    a.statut === 'ground' && 
+    a.usure_percent > 0 &&
+    (!aeroport_depart || a.aeroport_actuel === aeroport_depart.toUpperCase())
+  );
+  
   // Get selected aircraft info
   const selectedFlotte = flotteCompagnie.find(f => f.id === flotte_avion_id);
   const selectedInventaire = inventairePersonnel.find(i => i.id === inventaire_avion_id);
+  const selectedAvionIndiv = avionsCompagnie.find(a => a.id === compagnie_avion_id);
   
   // Auto-select company if only one available
   useEffect(() => {
@@ -122,7 +144,13 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   // Reset flotte selection when company changes
   useEffect(() => {
     setFlotteAvionId('');
+    setCompagnieAvionId('');
   }, [selectedCompagnieId]);
+
+  // Reset individual aircraft selection when departure airport changes
+  useEffect(() => {
+    setCompagnieAvionId('');
+  }, [aeroport_depart]);
 
   // Charger les tarifs par liaison quand la compagnie change
   useEffect(() => {
@@ -330,6 +358,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       nature_transport: vol_commercial ? nature_transport : undefined,
       flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : undefined,
       inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : undefined,
+      compagnie_avion_id: vol_commercial && compagnie_avion_id ? compagnie_avion_id : undefined,
       nb_pax_genere: vol_commercial ? nbPax : undefined,
       cargo_kg_genere: vol_commercial ? cargoKg : undefined,
       revenue_brut: vol_commercial ? revenuBrut : undefined,
@@ -544,6 +573,44 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
               <p className="text-amber-400 text-sm mt-1">Aucun appareil disponible dans la flotte.</p>
             )}
           </div>
+
+          {/* Sélection d'un avion individuel (optionnel) */}
+          {avionsCompagnie.length > 0 && (
+            <div>
+              <label className="label">
+                Avion spécifique (optionnel)
+                <span className="text-slate-500 font-normal ml-2">— avec localisation</span>
+              </label>
+              <select 
+                className="input w-full" 
+                value={compagnie_avion_id} 
+                onChange={(e) => setCompagnieAvionId(e.target.value)}
+              >
+                <option value="">— Aucun (utiliser la flotte par type) —</option>
+                {avionsDisponibles.map((a) => {
+                  const typeNom = Array.isArray(a.types_avion) ? a.types_avion[0]?.nom : a.types_avion?.nom;
+                  return (
+                    <option key={a.id} value={a.id}>
+                      {a.immatriculation} {a.nom_bapteme ? `"${a.nom_bapteme}"` : ''} — {typeNom || 'Avion'} — {a.aeroport_actuel} ({a.usure_percent}%)
+                    </option>
+                  );
+                })}
+              </select>
+              {aeroport_depart && avionsDisponibles.length === 0 && avionsCompagnie.length > 0 && (
+                <p className="text-amber-400 text-sm mt-1">
+                  Aucun avion disponible à {aeroport_depart.toUpperCase()}. 
+                  {avionsCompagnie.filter(a => a.statut === 'ground' && a.usure_percent > 0).length > 0 && (
+                    <span> Avions ailleurs : {avionsCompagnie.filter(a => a.statut === 'ground' && a.usure_percent > 0).map(a => `${a.immatriculation} (${a.aeroport_actuel})`).join(', ')}</span>
+                  )}
+                </p>
+              )}
+              {selectedAvionIndiv && (
+                <p className="text-emerald-400 text-sm mt-1">
+                  ✓ Avion sélectionné : {selectedAvionIndiv.immatriculation} à {selectedAvionIndiv.aeroport_actuel}
+                </p>
+              )}
+            </div>
+          )}
           
           <div>
             <label className="label">Type de transport</label>

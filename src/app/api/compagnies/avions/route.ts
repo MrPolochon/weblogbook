@@ -11,7 +11,7 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { data, error } = await supabase
       .from('compagnie_avions')
-      .select('*, type_avion:types_avion(id, nom, constructeur)')
+      .select('*, types_avion(id, nom, constructeur)')
       .eq('compagnie_id', compagnie_id)
       .order('immatriculation');
 

@@ -45,6 +45,7 @@ export async function POST(request: Request) {
       aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, 
       intentions_vol, sid_depart, star_arrivee, route_ifr, note_atc,
       vol_commercial, compagnie_id, nature_transport, flotte_avion_id, inventaire_avion_id,
+      compagnie_avion_id, // Avion individuel avec localisation
       nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote, prix_billet_utilise,
       vol_sans_atc
     } = body;
@@ -177,6 +178,48 @@ export async function POST(request: Request) {
       }
     }
     
+    // Validation avion individuel (si utilisé)
+    if (compagnie_avion_id) {
+      const { data: avionIndiv } = await admin
+        .from('compagnie_avions')
+        .select('id, compagnie_id, aeroport_actuel, statut, usure_percent, immatriculation')
+        .eq('id', compagnie_avion_id)
+        .single();
+      
+      if (!avionIndiv) {
+        return NextResponse.json({ error: 'Avion individuel introuvable.' }, { status: 400 });
+      }
+      
+      // Vérifier que l'avion appartient à la compagnie sélectionnée
+      if (vol_commercial && compagnie_id && avionIndiv.compagnie_id !== compagnie_id) {
+        return NextResponse.json({ error: 'Cet avion n\'appartient pas à la compagnie sélectionnée.' }, { status: 400 });
+      }
+      
+      // Vérifier que l'avion est à l'aéroport de départ
+      if (avionIndiv.aeroport_actuel !== ad) {
+        return NextResponse.json({ 
+          error: `L'avion ${avionIndiv.immatriculation} se trouve actuellement à ${avionIndiv.aeroport_actuel}, pas à ${ad}. Vous devez effectuer un vol ferry pour le déplacer.` 
+        }, { status: 400 });
+      }
+      
+      // Vérifier que l'avion n'est pas déjà en vol ou bloqué
+      if (avionIndiv.statut === 'in_flight') {
+        return NextResponse.json({ 
+          error: `L'avion ${avionIndiv.immatriculation} est actuellement en vol.` 
+        }, { status: 400 });
+      }
+      if (avionIndiv.statut === 'bloque') {
+        return NextResponse.json({ 
+          error: `L'avion ${avionIndiv.immatriculation} est bloqué (0% d'usure). Faites-le réparer avant de voler.` 
+        }, { status: 400 });
+      }
+      if (avionIndiv.statut === 'maintenance') {
+        return NextResponse.json({ 
+          error: `L'avion ${avionIndiv.immatriculation} est en maintenance.` 
+        }, { status: 400 });
+      }
+    }
+    
     // Si vol sans ATC, accepter automatiquement et mettre en autosurveillance
     if (vol_sans_atc) {
       const { data, error } = await admin.from('plans_vol').insert({
@@ -197,6 +240,7 @@ export async function POST(request: Request) {
         nature_transport: vol_commercial && nature_transport ? nature_transport : null,
         flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : null,
         inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
+        compagnie_avion_id: compagnie_avion_id || null,
         nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
         cargo_kg_genere: vol_commercial ? cargoGenereFinal : null,
         type_cargaison: vol_commercial && nature_transport === 'cargo' ? typeCargaisonFinal : null,
@@ -297,6 +341,7 @@ export async function POST(request: Request) {
       nature_transport: vol_commercial && nature_transport ? nature_transport : null,
       flotte_avion_id: vol_commercial && flotte_avion_id ? flotte_avion_id : null,
       inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
+      compagnie_avion_id: compagnie_avion_id || null,
       nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
       cargo_kg_genere: vol_commercial ? cargoGenereFinal : null,
       type_cargaison: vol_commercial && nature_transport === 'cargo' ? typeCargaisonFinal : null,

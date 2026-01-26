@@ -104,6 +104,35 @@ export default async function DepotPlanVolPage() {
     };
   }));
 
+  // Récupérer les avions individuels de toutes les compagnies
+  type AvionIndividuel = {
+    id: string;
+    compagnie_id: string;
+    immatriculation: string;
+    nom_bapteme: string | null;
+    aeroport_actuel: string;
+    statut: string;
+    usure_percent: number;
+    types_avion: { id: string; nom: string; constructeur: string } | { id: string; nom: string; constructeur: string }[] | null;
+  };
+  let avionsParCompagnie: Record<string, AvionIndividuel[]> = {};
+
+  if (compagniesDisponibles.length > 0) {
+    const compagnieIds = compagniesDisponibles.map(c => c.id);
+    const { data: avionsData } = await admin.from('compagnie_avions')
+      .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion(id, nom, constructeur)')
+      .in('compagnie_id', compagnieIds)
+      .order('immatriculation');
+
+    // Grouper par compagnie
+    (avionsData || []).forEach(item => {
+      if (!avionsParCompagnie[item.compagnie_id]) {
+        avionsParCompagnie[item.compagnie_id] = [];
+      }
+      avionsParCompagnie[item.compagnie_id].push(item as AvionIndividuel);
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -119,6 +148,7 @@ export default async function DepotPlanVolPage() {
         compagniesDisponibles={compagniesDisponibles}
         flotteParCompagnie={flotteParCompagnie}
         inventairePersonnel={inventairePersonnel}
+        avionsParCompagnie={avionsParCompagnie}
       />
     </div>
   );

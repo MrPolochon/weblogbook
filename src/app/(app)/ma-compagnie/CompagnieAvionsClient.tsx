@@ -14,7 +14,7 @@ type Avion = {
   usure_percent: number;
   aeroport_actuel: string;
   statut: string;
-  type_avion: TypeAvion | null;
+  types_avion: TypeAvion | TypeAvion[] | null;
 };
 
 export default function CompagnieAvionsClient({ compagnieId }: { compagnieId: string }) {
@@ -169,7 +169,7 @@ export default function CompagnieAvionsClient({ compagnieId }: { compagnieId: st
                   <tr key={a.id} className="border-b border-slate-700/50 last:border-0">
                     <td className="py-2.5 pr-4 font-mono font-medium text-slate-200">{a.immatriculation}</td>
                     <td className="py-2.5 pr-4 text-slate-400">{a.nom_bapteme || '—'}</td>
-                    <td className="py-2.5 pr-4 text-slate-300">{a.type_avion?.nom || '—'}</td>
+                    <td className="py-2.5 pr-4 text-slate-300">{(Array.isArray(a.types_avion) ? a.types_avion[0]?.nom : a.types_avion?.nom) || '—'}</td>
                     <td className="py-2.5 pr-4">
                       <span className={getUsureColor(a.usure_percent)}>{a.usure_percent}%</span>
                     </td>
