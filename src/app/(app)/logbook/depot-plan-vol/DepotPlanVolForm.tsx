@@ -68,7 +68,7 @@ interface AvionIndividuel {
   aeroport_actuel: string;
   statut: string;
   usure_percent: number;
-  types_avion: { id: string; nom: string; constructeur: string } | { id: string; nom: string; constructeur: string }[] | null;
+  types_avion: { id: string; nom: string; constructeur: string; capacite_pax: number; capacite_cargo_kg: number; code_oaci: string | null } | { id: string; nom: string; constructeur: string; capacite_pax: number; capacite_cargo_kg: number; code_oaci: string | null }[] | null;
 }
 
 interface Props {
@@ -328,9 +328,12 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   const salairePilote = Math.floor(revenuBrut * (selectedCompagnie?.pourcentage_salaire || 0) / 100);
 
   // Calculer les capacités et taux de remplissage
-  const avion = selectedFlotte?.types_avion;
-  const capacitePaxMax = selectedFlotte?.capacite_pax_custom ?? avion?.capacite_pax ?? 0;
-  const capaciteCargoMax = selectedFlotte?.capacite_cargo_custom ?? avion?.capacite_cargo_kg ?? 0;
+  // Priorité : avion individuel > flotte par type
+  const avionType = selectedAvionIndiv?.types_avion 
+    ? (Array.isArray(selectedAvionIndiv.types_avion) ? selectedAvionIndiv.types_avion[0] : selectedAvionIndiv.types_avion)
+    : selectedFlotte?.types_avion;
+  const capacitePaxMax = selectedFlotte?.capacite_pax_custom ?? avionType?.capacite_pax ?? 0;
+  const capaciteCargoMax = selectedFlotte?.capacite_cargo_custom ?? avionType?.capacite_cargo_kg ?? 0;
   
   const tauxRemplissagePax = capacitePaxMax > 0 ? (nbPax / capacitePaxMax) : 0;
   const tauxRemplissageCargo = capaciteCargoMax > 0 ? (cargoKg / capaciteCargoMax) : 0;
@@ -577,44 +580,47 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       )}
 
       {/* Sélection de l'appareil */}
-      {vol_commercial && selectedCompagnie ? (
+      {(vol_commercial || vol_ferry) && selectedCompagnie ? (
         <div className="space-y-3">
-          <div>
-            <label className="label">Appareil de la flotte *</label>
-            <select 
-              className="input w-full" 
-              value={flotte_avion_id} 
-              onChange={(e) => setFlotteAvionId(e.target.value)}
-              required
-            >
-              <option value="">— Choisir un appareil —</option>
-              {flotteCompagnie.filter(f => f.disponibles > 0).map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.nom_personnalise || f.types_avion?.nom || 'Avion'} 
-                  {f.types_avion?.code_oaci && ` (${f.types_avion.code_oaci})`}
-                  {` - ${f.disponibles}/${f.quantite} dispo`}
-                </option>
-              ))}
-            </select>
-            {flotteCompagnie.filter(f => f.disponibles > 0).length === 0 && (
-              <p className="text-amber-400 text-sm mt-1">Aucun appareil disponible dans la flotte.</p>
-            )}
-          </div>
+          {/* Ancien système par type - masqué si avions individuels disponibles */}
+          {avionsCompagnie.length === 0 && vol_commercial && (
+            <div>
+              <label className="label">Appareil de la flotte *</label>
+              <select 
+                className="input w-full" 
+                value={flotte_avion_id} 
+                onChange={(e) => setFlotteAvionId(e.target.value)}
+                required
+              >
+                <option value="">— Choisir un appareil —</option>
+                {flotteCompagnie.filter(f => f.disponibles > 0).map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.nom_personnalise || f.types_avion?.nom || 'Avion'} 
+                    {f.types_avion?.code_oaci && ` (${f.types_avion.code_oaci})`}
+                    {` - ${f.disponibles}/${f.quantite} dispo`}
+                  </option>
+                ))}
+              </select>
+              {flotteCompagnie.filter(f => f.disponibles > 0).length === 0 && (
+                <p className="text-amber-400 text-sm mt-1">Aucun appareil disponible dans la flotte.</p>
+              )}
+            </div>
+          )}
 
-          {/* Sélection d'un avion individuel */}
-          {avionsCompagnie.length > 0 && (vol_commercial || vol_ferry) && (
+          {/* Nouveau système : avions individuels avec immatriculation */}
+          {avionsCompagnie.length > 0 && (
             <div>
               <label className="label">
-                {vol_ferry ? 'Avion à déplacer *' : 'Avion spécifique (optionnel)'}
-                <span className="text-slate-500 font-normal ml-2">— avec localisation</span>
+                {vol_ferry ? 'Avion à déplacer *' : 'Avion *'}
+                <span className="text-slate-500 font-normal ml-2">— sélectionner un appareil à {aeroport_depart?.toUpperCase() || '...'}</span>
               </label>
               <select 
                 className="input w-full" 
                 value={compagnie_avion_id} 
                 onChange={(e) => setCompagnieAvionId(e.target.value)}
-                required={vol_ferry}
+                required
               >
-                <option value="">— Aucun (utiliser la flotte par type) —</option>
+                <option value="">— Choisir un avion —</option>
                 {avionsDisponibles.map((a) => {
                   const typeNom = Array.isArray(a.types_avion) ? a.types_avion[0]?.nom : a.types_avion?.nom;
                   return (
@@ -640,18 +646,20 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
             </div>
           )}
           
-          <div>
-            <label className="label">Type de transport</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="radio" 
-                  checked={nature_transport === 'passagers'} 
-                  onChange={() => setNatureTransport('passagers')} 
-                />
-                <Users className="h-4 w-4 text-slate-400" />
-                <span className="text-slate-300">Passagers</span>
-              </label>
+          {/* Type de transport - masqué pour vols ferry */}
+          {!vol_ferry && (
+            <div>
+              <label className="label">Type de transport</label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="radio" 
+                    checked={nature_transport === 'passagers'} 
+                    onChange={() => setNatureTransport('passagers')} 
+                  />
+                  <Users className="h-4 w-4 text-slate-400" />
+                  <span className="text-slate-300">Passagers</span>
+                </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input 
                   type="radio" 
@@ -663,9 +671,10 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
               </label>
             </div>
           </div>
+          )}
 
-          {/* Aperçu revenus */}
-          {flotte_avion_id && aeroport_depart && aeroport_arrivee && (
+          {/* Aperçu revenus - masqué pour vols ferry */}
+          {!vol_ferry && (flotte_avion_id || compagnie_avion_id) && aeroport_depart && aeroport_arrivee && (
             <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
               <div className="flex items-center gap-2 mb-2">
                 <DollarSign className="h-4 w-4 text-emerald-400" />

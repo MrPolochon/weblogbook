@@ -113,14 +113,14 @@ export default async function DepotPlanVolPage() {
     aeroport_actuel: string;
     statut: string;
     usure_percent: number;
-    types_avion: { id: string; nom: string; constructeur: string } | { id: string; nom: string; constructeur: string }[] | null;
+    types_avion: { id: string; nom: string; constructeur: string; capacite_pax: number; capacite_cargo_kg: number; code_oaci: string | null } | { id: string; nom: string; constructeur: string; capacite_pax: number; capacite_cargo_kg: number; code_oaci: string | null }[] | null;
   };
   let avionsParCompagnie: Record<string, AvionIndividuel[]> = {};
 
   if (compagniesDisponibles.length > 0) {
     const compagnieIds = compagniesDisponibles.map(c => c.id);
     const { data: avionsData } = await admin.from('compagnie_avions')
-      .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion(id, nom, constructeur)')
+      .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion(id, nom, constructeur, capacite_pax, capacite_cargo_kg, code_oaci)')
       .in('compagnie_id', compagnieIds)
       .order('immatriculation');
 
