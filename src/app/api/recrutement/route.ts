@@ -131,14 +131,29 @@ export async function POST(req: NextRequest) {
       .single();
 
     // Envoyer un message au pilote
-    await admin.from('messages').insert({
+    const { error: msgError } = await admin.from('messages').insert({
       expediteur_id: user.id,
       destinataire_id: pilote_id,
       titre: `🎉 Offre d'emploi - ${compagnie.nom}`,
-      contenu: `Bonjour,\n\nLa compagnie **${compagnie.nom}** vous propose de rejoindre son équipe !\n\n${message_invitation ? `Message du PDG:\n"${message_invitation}"\n\n` : ''}Pour répondre à cette invitation, rendez-vous dans la section "Mes invitations" de votre espace pilote.\n\nCordialement,\n${pdgProfile?.identifiant || 'Le PDG'}`,
+      contenu: `Bonjour,\n\nLa compagnie **${compagnie.nom}** vous propose de rejoindre son équipe !\n\n${message_invitation ? `Message du PDG:\n"${message_invitation}"\n\n` : ''}Rendez-vous dans votre messagerie, onglet "Recrutement" pour accepter ou refuser cette offre.\n\nCordialement,\n${pdgProfile?.identifiant || 'Le PDG'}`,
       type_message: 'recrutement',
       metadata: { invitation_id: invitation.id, compagnie_id, compagnie_nom: compagnie.nom }
     });
+
+    if (msgError) {
+      console.error('Erreur envoi message recrutement:', msgError);
+      // Essayer sans metadata si ça échoue (colonne peut ne pas exister)
+      const { error: msgError2 } = await admin.from('messages').insert({
+        expediteur_id: user.id,
+        destinataire_id: pilote_id,
+        titre: `🎉 Offre d'emploi - ${compagnie.nom}`,
+        contenu: `Bonjour,\n\nLa compagnie **${compagnie.nom}** vous propose de rejoindre son équipe !\n\n${message_invitation ? `Message du PDG:\n"${message_invitation}"\n\n` : ''}Rendez-vous dans votre messagerie, onglet "Recrutement" pour accepter ou refuser cette offre.\n\nCordialement,\n${pdgProfile?.identifiant || 'Le PDG'}`,
+        type_message: 'recrutement'
+      });
+      if (msgError2) {
+        console.error('Erreur envoi message recrutement (sans metadata):', msgError2);
+      }
+    }
 
     return NextResponse.json({ 
       ok: true, 
