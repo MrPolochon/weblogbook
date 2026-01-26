@@ -22,10 +22,14 @@ ALTER TABLE ifsa_sanctions ADD COLUMN IF NOT EXISTS amende_payee_at TIMESTAMPTZ;
 ALTER TABLE ifsa_sanctions ADD COLUMN IF NOT EXISTS amende_payee_par_id UUID REFERENCES profiles(id);
 ALTER TABLE ifsa_sanctions ADD COLUMN IF NOT EXISTS derniere_relance_at TIMESTAMPTZ;
 ALTER TABLE ifsa_sanctions ADD COLUMN IF NOT EXISTS nb_relances INTEGER DEFAULT 0;
+ALTER TABLE ifsa_sanctions ADD COLUMN IF NOT EXISTS vban_destination TEXT;
+ALTER TABLE ifsa_sanctions ADD COLUMN IF NOT EXISTS compte_destination_id UUID REFERENCES felitz_comptes(id);
 
 COMMENT ON COLUMN ifsa_sanctions.amende_payee IS 'Indique si l''amende a été payée';
 COMMENT ON COLUMN ifsa_sanctions.derniere_relance_at IS 'Date de la dernière relance envoyée';
 COMMENT ON COLUMN ifsa_sanctions.nb_relances IS 'Nombre de relances envoyées';
+COMMENT ON COLUMN ifsa_sanctions.vban_destination IS 'VBAN du compte où l''amende doit être versée';
+COMMENT ON COLUMN ifsa_sanctions.compte_destination_id IS 'ID du compte Felitz destinataire de l''amende';
 
 -- 3. Ajouter un champ de blocage dans profiles pour les sanctions
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS sanction_blocage_vol BOOLEAN DEFAULT FALSE;
@@ -43,6 +47,7 @@ CREATE TABLE IF NOT EXISTS ifsa_paiements_amendes (
   montant INTEGER NOT NULL,
   paye_par_id UUID NOT NULL REFERENCES profiles(id),
   compte_debit_id UUID REFERENCES felitz_comptes(id),
+  compte_credit_id UUID REFERENCES felitz_comptes(id),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

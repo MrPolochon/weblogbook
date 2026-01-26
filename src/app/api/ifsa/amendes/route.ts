@@ -143,12 +143,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Solde insuffisant. Vous avez ${compte.solde} F$ mais l'amende est de ${montant} F$` }, { status: 400 });
     }
 
-    // Débiter le compte
+    // Débiter le compte du payeur
     await admin.from('felitz_comptes')
       .update({ solde: compte.solde - montant })
       .eq('id', compteADebiter);
 
-    // Créer la transaction
+    // Créer la transaction de débit
     await admin.from('felitz_transactions').insert({
       compte_id: compteADebiter,
       type: 'debit',
@@ -156,12 +156,36 @@ export async function POST(req: NextRequest) {
       libelle: `Paiement amende IFSA - ${sanction.motif}`
     });
 
+    // Créditer le compte destinataire (IFSA/étatique)
+    if (sanction.compte_destination_id) {
+      const { data: compteDestination } = await admin.from('felitz_comptes')
+        .select('id, solde, vban')
+        .eq('id', sanction.compte_destination_id)
+        .single();
+      
+      if (compteDestination) {
+        // Créditer le compte IFSA
+        await admin.from('felitz_comptes')
+          .update({ solde: compteDestination.solde + montant })
+          .eq('id', compteDestination.id);
+
+        // Créer la transaction de crédit
+        await admin.from('felitz_transactions').insert({
+          compte_id: compteDestination.id,
+          type: 'credit',
+          montant: montant,
+          libelle: `Amende IFSA reçue - ${sanction.motif}`
+        });
+      }
+    }
+
     // Enregistrer le paiement
     await admin.from('ifsa_paiements_amendes').insert({
       sanction_id: sanction_id,
       montant: montant,
       paye_par_id: user.id,
-      compte_debit_id: compteADebiter
+      compte_debit_id: compteADebiter,
+      compte_credit_id: sanction.compte_destination_id
     });
 
     // Marquer l'amende comme payée
@@ -265,12 +289,17 @@ export async function PATCH(req: NextRequest) {
       const nbRelances = (amende.nb_relances || 0) + 1;
       const urgence = nbRelances >= 3 ? '🔴 URGENT - ' : nbRelances >= 2 ? '⚠️ ' : '';
 
-      // Envoyer le message de relance
+      // Envoyer le message de relance avec métadonnées pour le paiement direct
       await admin.from('messages').insert({
         destinataire_id: destinataireId,
         titre: `${urgence}Relance amende IFSA - ${amende.montant_amende} F$`,
         contenu: `**Relance n°${nbRelances}**\n\nVous avez une amende IFSA impayée de **${amende.montant_amende} F$**.\n\nMotif : ${amende.motif}\n\n${nbRelances >= 3 ? '⚠️ **Attention** : Le non-paiement prolongé peut entraîner des sanctions supplémentaires (suspension de licence).\n\n' : ''}Veuillez procéder au paiement dans les plus brefs délais.\n\nCordialement,\nIFSA - International Flight Safety Authority`,
-        type_message: 'relance_amende'
+        type_message: 'relance_amende',
+        metadata: {
+          sanction_id: amende.id,
+          montant_amende: amende.montant_amende,
+          amende_payee: false
+        }
       });
 
       // Mettre à jour la sanction

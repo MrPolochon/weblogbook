@@ -76,6 +76,16 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
+    if (action === 'marquer_amende_payee') {
+      // Mettre à jour le metadata du message pour indiquer que l'amende a été payée
+      const currentMetadata = message.metadata || {};
+      await admin.from('messages').update({
+        metadata: { ...currentMetadata, amende_payee: true },
+        lu: true
+      }).eq('id', id);
+      return NextResponse.json({ ok: true });
+    }
+
     if (action === 'encaisser') {
       // Vérifier que c'est un chèque non encaissé
       if (!['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(message.type_message)) {
@@ -163,6 +173,14 @@ export async function DELETE(
     // Ne pas permettre de supprimer les chèques non encaissés
     if (['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(message.type_message) && !message.cheque_encaisse) {
       return NextResponse.json({ error: 'Vous devez d\'abord encaisser ce chèque' }, { status: 400 });
+    }
+    
+    // Ne pas permettre de supprimer les amendes non payées
+    if (['amende_ifsa', 'relance_amende'].includes(message.type_message)) {
+      const metadata = message.metadata as { amende_payee?: boolean } | null;
+      if (!metadata?.amende_payee) {
+        return NextResponse.json({ error: 'Vous devez d\'abord payer cette amende' }, { status: 400 });
+      }
     }
     
     // Vérifier que l'utilisateur est le destinataire

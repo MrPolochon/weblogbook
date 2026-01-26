@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight, UserPlus, Check, XCircle } from 'lucide-react';
+import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight, UserPlus, Check, XCircle, AlertTriangle, Banknote } from 'lucide-react';
 import ChequeVisuel from '@/components/ChequeVisuel';
 
 interface Message {
@@ -22,7 +22,15 @@ interface Message {
   cheque_numero_vol: string | null;
   cheque_compagnie_nom: string | null;
   cheque_pour_compagnie: boolean;
-  metadata?: { invitation_id?: string; compagnie_id?: string; compagnie_nom?: string; invitation_repondue?: boolean } | null;
+  metadata?: { 
+    invitation_id?: string; 
+    compagnie_id?: string; 
+    compagnie_nom?: string; 
+    invitation_repondue?: boolean;
+    sanction_id?: string;
+    montant_amende?: number;
+    amende_payee?: boolean;
+  } | null;
   expediteur?: { identifiant: string } | { identifiant: string }[] | null;
   destinataire?: { identifiant: string } | { identifiant: string }[] | null;
 }
@@ -47,7 +55,7 @@ function getIdentifiant(obj: { identifiant: string } | { identifiant: string }[]
 
 export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant }: Props) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'inbox' | 'recrutement' | 'cheques' | 'sent' | 'compose'>('inbox');
+  const [activeTab, setActiveTab] = useState<'inbox' | 'recrutement' | 'cheques' | 'sanctions' | 'sent' | 'compose'>('inbox');
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -60,11 +68,55 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
 
   const cheques = messagesRecus.filter(m => ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(m.type_message));
   const invitations = messagesRecus.filter(m => m.type_message === 'recrutement');
-  const messagesNormaux = messagesRecus.filter(m => !['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'recrutement'].includes(m.type_message));
+  const sanctions = messagesRecus.filter(m => ['amende_ifsa', 'relance_amende'].includes(m.type_message));
+  const messagesNormaux = messagesRecus.filter(m => !['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'recrutement', 'amende_ifsa', 'relance_amende'].includes(m.type_message));
   
   // État pour suivre les invitations en cours de traitement
   const [processingInvitation, setProcessingInvitation] = useState<string | null>(null);
   const [invitationError, setInvitationError] = useState<string | null>(null);
+  
+  // État pour le paiement des amendes
+  const [processingAmende, setProcessingAmende] = useState<string | null>(null);
+  const [amendeError, setAmendeError] = useState<string | null>(null);
+
+  async function handlePayerAmende(messageId: string, sanctionId: string) {
+    if (!confirm('Confirmer le paiement de cette amende ?')) return;
+    
+    setProcessingAmende(messageId);
+    setAmendeError(null);
+    
+    try {
+      const res = await fetch('/api/ifsa/amendes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sanction_id: sanctionId })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      
+      // Marquer le message comme traité
+      await fetch(`/api/messages/${messageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'marquer_amende_payee' })
+      });
+      
+      // Mettre à jour le message sélectionné
+      if (selectedMessage?.id === messageId) {
+        setSelectedMessage({
+          ...selectedMessage,
+          metadata: { ...selectedMessage.metadata, amende_payee: true }
+        });
+      }
+      
+      router.refresh();
+    } catch (e) {
+      setAmendeError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setProcessingAmende(null);
+    }
+  }
 
   async function handleRepondreInvitation(messageId: string, invitationId: string, action: 'accepter' | 'refuser') {
     if (action === 'refuser' && !confirm('Êtes-vous sûr de vouloir refuser cette offre d\'emploi ?')) {
@@ -194,6 +246,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
     { id: 'inbox', label: 'Boîte de réception', icon: Inbox, count: messagesNormaux.filter(m => !m.lu).length },
     { id: 'recrutement', label: 'Recrutement', icon: UserPlus, count: invitations.filter(m => !m.metadata?.invitation_repondue).length },
     { id: 'cheques', label: 'Chèques', icon: CreditCard, count: cheques.filter(m => !m.cheque_encaisse).length },
+    { id: 'sanctions', label: 'Sanctions', icon: AlertTriangle, count: sanctions.filter(m => !m.metadata?.amende_payee).length },
     { id: 'sent', label: 'Envoyés', icon: Send, count: 0 },
     { id: 'compose', label: 'Nouveau', icon: Plus, count: 0 },
   ] as const;
@@ -276,13 +329,13 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
             </form>
           ) : (
             <div className="divide-y divide-slate-700/30">
-              {(activeTab === 'inbox' ? messagesNormaux : activeTab === 'recrutement' ? invitations : activeTab === 'cheques' ? cheques : messagesEnvoyes).length === 0 ? (
+              {(activeTab === 'inbox' ? messagesNormaux : activeTab === 'recrutement' ? invitations : activeTab === 'cheques' ? cheques : activeTab === 'sanctions' ? sanctions : messagesEnvoyes).length === 0 ? (
                 <div className="p-8 text-center text-slate-500">
                   <Mail className="h-12 w-12 mx-auto mb-2 opacity-50" />
                   <p>Aucun message</p>
                 </div>
               ) : (
-                (activeTab === 'inbox' ? messagesNormaux : activeTab === 'recrutement' ? invitations : activeTab === 'cheques' ? cheques : messagesEnvoyes).map(msg => (
+                (activeTab === 'inbox' ? messagesNormaux : activeTab === 'recrutement' ? invitations : activeTab === 'cheques' ? cheques : activeTab === 'sanctions' ? sanctions : messagesEnvoyes).map(msg => (
                   <button
                     key={msg.id}
                     onClick={() => selectMessage(msg)}
@@ -332,6 +385,13 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                             msg.metadata?.invitation_repondue ? 'bg-slate-600/50 text-slate-400' : 'bg-emerald-500/20 text-emerald-400'
                           }`}>
                             {msg.metadata?.invitation_repondue ? 'Répondu' : '🎉 Offre d\'emploi'}
+                          </span>
+                        )}
+                        {['amende_ifsa', 'relance_amende'].includes(msg.type_message) && (
+                          <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs ${
+                            msg.metadata?.amende_payee ? 'bg-slate-600/50 text-slate-400' : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {msg.metadata?.amende_payee ? '✅ Payée' : `💰 ${msg.metadata?.montant_amende?.toLocaleString('fr-FR') || ''} F$ à payer`}
                           </span>
                         )}
                       </div>
@@ -458,6 +518,59 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                       </div>
                     ) : (
                       <p className="text-slate-400 text-sm">Cette invitation n&apos;est plus valide.</p>
+                    )}
+                  </div>
+                </div>
+              ) : ['amende_ifsa', 'relance_amende'].includes(selectedMessage.type_message) ? (
+                <div className="space-y-6">
+                  <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>
+                  
+                  {/* Carte d'amende */}
+                  <div className="p-6 rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/10 border border-red-500/30">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="p-2 rounded-lg bg-red-500/20">
+                        <Banknote className="h-6 w-6 text-red-400" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-100">Amende IFSA</h3>
+                        <p className="text-2xl font-bold text-red-400">
+                          {selectedMessage.metadata?.montant_amende?.toLocaleString('fr-FR') || '???'} F$
+                        </p>
+                      </div>
+                    </div>
+                    
+                    {amendeError && (
+                      <p className="text-red-400 text-sm mb-4 p-3 bg-red-500/10 rounded-lg">{amendeError}</p>
+                    )}
+                    
+                    {selectedMessage.metadata?.amende_payee ? (
+                      <div className="flex items-center gap-2 text-emerald-400 p-3 bg-emerald-500/10 rounded-lg">
+                        <Check className="h-5 w-5" />
+                        <span>Cette amende a été payée.</span>
+                      </div>
+                    ) : selectedMessage.metadata?.sanction_id ? (
+                      <div className="space-y-3">
+                        <p className="text-sm text-slate-400">
+                          Cliquez sur le bouton ci-dessous pour payer cette amende. Le montant sera débité de votre compte.
+                        </p>
+                        <button
+                          onClick={() => handlePayerAmende(
+                            selectedMessage.id, 
+                            selectedMessage.metadata!.sanction_id!
+                          )}
+                          disabled={processingAmende === selectedMessage.id}
+                          className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                        >
+                          {processingAmende === selectedMessage.id ? (
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                          ) : (
+                            <Banknote className="h-5 w-5" />
+                          )}
+                          Payer {selectedMessage.metadata?.montant_amende?.toLocaleString('fr-FR')} F$
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-slate-400 text-sm">Aucune information de paiement disponible.</p>
                     )}
                   </div>
                 </div>

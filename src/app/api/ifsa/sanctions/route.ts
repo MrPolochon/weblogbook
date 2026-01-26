@@ -80,7 +80,8 @@ export async function POST(req: NextRequest) {
       motif, 
       details,
       duree_jours,
-      montant_amende 
+      montant_amende,
+      vban_destination
     } = body;
 
     if (!type_sanction || !cible_type || !motif) {
@@ -95,7 +96,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Compagnie cible requise' }, { status: 400 });
     }
 
+    // Vérifier le VBAN pour les amendes
+    if (type_sanction === 'amende' && !vban_destination) {
+      return NextResponse.json({ error: 'VBAN du compte destinataire requis pour les amendes' }, { status: 400 });
+    }
+
     const admin = createAdminClient();
+
+    // Si c'est une amende, vérifier que le VBAN existe
+    let compteDestinationId: string | null = null;
+    if (type_sanction === 'amende' && vban_destination) {
+      const { data: compteDestination, error: compteError } = await admin.from('felitz_comptes')
+        .select('id, vban, proprietaire_id, proprietaire_compagnie_id')
+        .eq('vban', vban_destination.toUpperCase())
+        .single();
+      
+      if (compteError || !compteDestination) {
+        return NextResponse.json({ error: `VBAN "${vban_destination}" introuvable` }, { status: 400 });
+      }
+      compteDestinationId = compteDestination.id;
+    }
 
     // Calculer la date d'expiration si c'est une suspension temporaire
     let expireAt = null;
@@ -115,6 +135,8 @@ export async function POST(req: NextRequest) {
         details: details || null,
         duree_jours: duree_jours || null,
         montant_amende: montant_amende || null,
+        vban_destination: vban_destination || null,
+        compte_destination_id: compteDestinationId,
         emis_par_id: user.id,
         actif: true,
         expire_at: expireAt
@@ -167,12 +189,20 @@ export async function POST(req: NextRequest) {
       
       contenuMessage += `Agent IFSA : ${ifsaProfile?.identifiant}\n\nPour toute contestation, veuillez contacter l'IFSA.`;
 
+      // Préparer les métadonnées pour les amendes
+      const messageMetadata = type_sanction === 'amende' ? {
+        sanction_id: data.id,
+        montant_amende: montant_amende,
+        amende_payee: false
+      } : null;
+
       await admin.from('messages').insert({
         expediteur_id: user.id,
         destinataire_id: destinataireId,
         titre: `${typesLabels[type_sanction] || 'Sanction'} - IFSA`,
         contenu: contenuMessage,
-        type_message: typeMsg
+        type_message: typeMsg,
+        metadata: messageMetadata
       });
     }
 

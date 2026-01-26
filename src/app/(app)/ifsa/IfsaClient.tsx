@@ -117,6 +117,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   const [sanctionDetails, setSanctionDetails] = useState('');
   const [sanctionDuree, setSanctionDuree] = useState('');
   const [sanctionMontant, setSanctionMontant] = useState('');
+  const [sanctionVbanDestination, setSanctionVbanDestination] = useState('');
   const [searchCible, setSearchCible] = useState('');
 
   // Formulaire enquête
@@ -137,6 +138,12 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       return;
     }
 
+    // Vérifier que le VBAN est renseigné pour les amendes
+    if (sanctionType === 'amende' && !sanctionVbanDestination.trim()) {
+      setError('Le VBAN du compte destinataire est requis pour les amendes');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -152,7 +159,8 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
           motif: sanctionMotif,
           details: sanctionDetails || null,
           duree_jours: sanctionDuree ? parseInt(sanctionDuree) : null,
-          montant_amende: sanctionMontant ? parseInt(sanctionMontant) : null
+          montant_amende: sanctionMontant ? parseInt(sanctionMontant) : null,
+          vban_destination: sanctionVbanDestination.trim() || null
         })
       });
 
@@ -283,6 +291,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
     setSanctionDetails('');
     setSanctionDuree('');
     setSanctionMontant('');
+    setSanctionVbanDestination('');
     setSearchCible('');
   }
 
@@ -745,17 +754,32 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
 
               {/* Montant pour amende */}
               {sanctionType === 'amende' && (
-                <div>
-                  <label className="label">Montant (F$)</label>
-                  <input
-                    type="number"
-                    value={sanctionMontant}
-                    onChange={(e) => setSanctionMontant(e.target.value)}
-                    min="1"
-                    placeholder="Montant de l'amende"
-                    className="input w-full"
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="label">Montant (F$) *</label>
+                    <input
+                      type="number"
+                      value={sanctionMontant}
+                      onChange={(e) => setSanctionMontant(e.target.value)}
+                      min="1"
+                      placeholder="Montant de l'amende"
+                      className="input w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">VBAN du compte destinataire *</label>
+                    <input
+                      type="text"
+                      value={sanctionVbanDestination}
+                      onChange={(e) => setSanctionVbanDestination(e.target.value.toUpperCase())}
+                      placeholder="Ex: VBAN-XXXX-XXXX-XXXX"
+                      className="input w-full font-mono"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      Le compte où l&apos;amende sera versée (compte IFSA ou étatique)
+                    </p>
+                  </div>
+                </>
               )}
             </div>
 
