@@ -15,8 +15,30 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const { data: profile } = await supabase.from('profiles').select('role, sanction_blocage_vol, sanction_blocage_motif, sanction_blocage_jusqu_au').eq('id', user.id).single();
     if (profile?.role === 'atc') return NextResponse.json({ error: 'Compte ATC uniquement : dépôt de plan depuis l\'espace pilote impossible.' }, { status: 403 });
+    
+    // Vérifier si le pilote est bloqué par une sanction IFSA
+    if (profile?.sanction_blocage_vol) {
+      const blocageJusquAu = profile.sanction_blocage_jusqu_au ? new Date(profile.sanction_blocage_jusqu_au) : null;
+      const maintenant = new Date();
+      
+      // Si le blocage a une date de fin et qu'elle est dépassée, le blocage n'est plus actif
+      if (blocageJusquAu && blocageJusquAu < maintenant) {
+        // Le blocage est expiré, on pourrait le lever ici mais on laisse le système de cron le faire
+      } else {
+        const motifLabels: Record<string, string> = {
+          'suspension_temporaire': 'Suspension temporaire de licence',
+          'suspension_licence': 'Suspension de licence',
+          'retrait_licence': 'Retrait de licence'
+        };
+        const motifLabel = motifLabels[profile.sanction_blocage_motif || ''] || 'Sanction IFSA';
+        const finBloc = blocageJusquAu ? ` jusqu'au ${blocageJusquAu.toLocaleDateString('fr-FR')}` : ' (durée indéterminée)';
+        return NextResponse.json({ 
+          error: `🚫 Vous êtes interdit de vol suite à une sanction IFSA : ${motifLabel}${finBloc}. Contactez l'IFSA pour plus d'informations.` 
+        }, { status: 403 });
+      }
+    }
 
     const body = await request.json();
     const { 

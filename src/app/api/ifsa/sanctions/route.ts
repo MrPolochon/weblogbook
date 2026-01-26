@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 // Vérifier si l'utilisateur est IFSA
 async function checkIfsa(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data: profile } = await supabase.from('profiles')
@@ -128,6 +130,17 @@ export async function POST(req: NextRequest) {
       .eq('id', user.id)
       .single();
 
+    // Appliquer le blocage de vol si nécessaire (en plus du trigger SQL)
+    if (cible_pilote_id && ['suspension_temporaire', 'suspension_licence', 'retrait_licence'].includes(type_sanction)) {
+      await admin.from('profiles')
+        .update({
+          sanction_blocage_vol: true,
+          sanction_blocage_motif: type_sanction,
+          sanction_blocage_jusqu_au: expireAt
+        })
+        .eq('id', cible_pilote_id);
+    }
+
     // Notifier la cible
     const destinataireId = cible_pilote_id || (cible_compagnie_id ? await getCompagniePdg(admin, cible_compagnie_id) : null);
     
@@ -140,12 +153,26 @@ export async function POST(req: NextRequest) {
         'amende': '💰 Amende'
       };
 
+      const typeMsg = type_sanction === 'amende' ? 'amende_ifsa' : 'normal';
+      
+      let contenuMessage = `**Sanction IFSA**\n\nType : ${typesLabels[type_sanction]}\n\nMotif : ${motif}\n\n`;
+      if (details) contenuMessage += `Détails : ${details}\n\n`;
+      if (duree_jours) contenuMessage += `Durée : ${duree_jours} jours\n\n`;
+      if (montant_amende) contenuMessage += `💰 **Montant à payer : ${montant_amende} F$**\n\nVeuillez procéder au paiement de cette amende dans les plus brefs délais. Des relances quotidiennes seront envoyées jusqu'au paiement.\n\n`;
+      
+      // Ajout d'informations sur les conséquences
+      if (['suspension_temporaire', 'suspension_licence', 'retrait_licence'].includes(type_sanction)) {
+        contenuMessage += `🚫 **Vous êtes interdit de vol** jusqu'à la levée de cette sanction.\n\n`;
+      }
+      
+      contenuMessage += `Agent IFSA : ${ifsaProfile?.identifiant}\n\nPour toute contestation, veuillez contacter l'IFSA.`;
+
       await admin.from('messages').insert({
         expediteur_id: user.id,
         destinataire_id: destinataireId,
         titre: `${typesLabels[type_sanction] || 'Sanction'} - IFSA`,
-        contenu: `**Sanction IFSA**\n\nType : ${typesLabels[type_sanction]}\n\nMotif : ${motif}\n\n${details ? `Détails : ${details}\n\n` : ''}${duree_jours ? `Durée : ${duree_jours} jours\n\n` : ''}${montant_amende ? `Montant : ${montant_amende} F$\n\n` : ''}Agent IFSA : ${ifsaProfile?.identifiant}\n\nPour toute contestation, veuillez contacter l'IFSA.`,
-        type_message: 'sanction_ifsa'
+        contenu: contenuMessage,
+        type_message: typeMsg
       });
     }
 
@@ -195,14 +222,39 @@ export async function PATCH(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    // Notifier la cible que la sanction est levée
+    // Si c'était une sanction de blocage, vérifier s'il faut lever le blocage
     const ciblePilote = data.cible_pilote ? (Array.isArray(data.cible_pilote) ? data.cible_pilote[0] : data.cible_pilote) : null;
+    
+    if (ciblePilote?.id && ['suspension_temporaire', 'suspension_licence', 'retrait_licence'].includes(data.type_sanction)) {
+      // Vérifier s'il reste d'autres sanctions actives de blocage
+      const { data: autresSanctions } = await admin.from('ifsa_sanctions')
+        .select('id')
+        .eq('cible_pilote_id', ciblePilote.id)
+        .eq('actif', true)
+        .neq('id', id)
+        .in('type_sanction', ['suspension_temporaire', 'suspension_licence', 'retrait_licence'])
+        .limit(1);
+      
+      if (!autresSanctions || autresSanctions.length === 0) {
+        // Lever le blocage
+        await admin.from('profiles')
+          .update({
+            sanction_blocage_vol: false,
+            sanction_blocage_motif: null,
+            sanction_blocage_jusqu_au: null
+          })
+          .eq('id', ciblePilote.id);
+      }
+    }
+
+    // Notifier la cible que la sanction est levée
     if (ciblePilote?.id) {
+      const estSanctionBlocage = ['suspension_temporaire', 'suspension_licence', 'retrait_licence'].includes(data.type_sanction);
       await admin.from('messages').insert({
         expediteur_id: user.id,
         destinataire_id: ciblePilote.id,
         titre: '✅ Sanction levée - IFSA',
-        contenu: `Bonne nouvelle !\n\nVotre sanction pour "${data.motif}" a été levée par l'IFSA.\n\nVous pouvez reprendre vos activités normalement.`,
+        contenu: `Bonne nouvelle !\n\nVotre sanction pour "${data.motif}" a été levée par l'IFSA.\n\n${estSanctionBlocage ? '✈️ Vous êtes de nouveau autorisé à voler.\n\n' : ''}Vous pouvez reprendre vos activités normalement.`,
         type_message: 'normal'
       });
     }
