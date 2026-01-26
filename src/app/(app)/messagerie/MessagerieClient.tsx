@@ -243,9 +243,9 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
 
   const tabs = [
     { id: 'inbox', label: 'Boîte de réception', icon: Inbox, count: messagesNormaux.filter(m => !m.lu).length },
-    { id: 'recrutement', label: 'Recrutement', icon: UserPlus, count: invitations.filter(m => !m.metadata?.invitation_repondue).length },
-    { id: 'cheques', label: 'Chèques', icon: CreditCard, count: cheques.filter(m => !m.cheque_encaisse).length },
-    { id: 'sanctions', label: 'Sanctions', icon: AlertTriangle, count: sanctions.filter(m => !m.metadata?.amende_payee).length },
+    { id: 'recrutement', label: 'Recrutement', icon: UserPlus, count: invitations.filter(m => !m.lu).length },
+    { id: 'cheques', label: 'Chèques', icon: CreditCard, count: cheques.filter(m => !m.lu).length },
+    { id: 'sanctions', label: 'Sanctions', icon: AlertTriangle, count: sanctions.filter(m => !m.lu).length },
     { id: 'sent', label: 'Envoyés', icon: Send, count: 0 },
     { id: 'compose', label: 'Nouveau', icon: Plus, count: 0 },
   ] as const;
