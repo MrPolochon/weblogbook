@@ -40,7 +40,7 @@ export default async function HangarMarketPage() {
 
   // Inventaire personnel (avions pouvant être vendus)
   const { data: inventaire } = await admin.from('inventaire_avions')
-    .select('id, nom_personnalise, types_avion:type_avion_id(id, nom, code_oaci)')
+    .select('id, nom_personnalise, types_avion:type_avion_id(id, nom, code_oaci, prix)')
     .eq('proprietaire_id', user.id);
 
   // Vérifier quels avions sont en vol ou déjà en vente
@@ -57,17 +57,24 @@ export default async function HangarMarketPage() {
       .single();
 
     // Normaliser types_avion (peut être un tableau ou un objet)
-    const typesAvion = Array.isArray(item.types_avion) 
+    const typesAvionRaw = Array.isArray(item.types_avion) 
       ? item.types_avion[0] 
       : item.types_avion;
+    
+    const typesAvion = typesAvionRaw as { id: string; nom: string; code_oaci: string; prix?: number } | null;
+    const prixAchat = typesAvion?.prix || 0;
+    // Prix de revente suggéré = 50% du prix d'achat initial
+    const prixRevente = Math.floor(prixAchat * 0.5);
 
     return {
       id: item.id,
       nom_personnalise: item.nom_personnalise,
-      types_avion: typesAvion || null,
+      types_avion: typesAvion ? { id: typesAvion.id, nom: typesAvion.nom, code_oaci: typesAvion.code_oaci } : null,
       en_vol: (enVol || 0) > 0,
       en_vente: !!enVente,
-      disponible: (enVol || 0) === 0 && !enVente
+      disponible: (enVol || 0) === 0 && !enVente,
+      prixAchat,
+      prixRevente
     };
   }));
 
@@ -81,13 +88,15 @@ export default async function HangarMarketPage() {
       nom: string;
       quantite: number;
       en_vente: boolean;
+      prixAchat: number;
+      prixRevente: number;
     }>;
   }> = [];
 
   if (compagniesPdg && compagniesPdg.length > 0) {
     flotteCompagnies = await Promise.all(compagniesPdg.map(async (c) => {
       const { data: flotte } = await admin.from('compagnie_flotte')
-        .select('id, type_avion_id, quantite, nom_personnalise, types_avion:type_avion_id(nom)')
+        .select('id, type_avion_id, quantite, nom_personnalise, types_avion:type_avion_id(nom, prix)')
         .eq('compagnie_id', c.id)
         .gt('quantite', 0);
 
@@ -98,12 +107,20 @@ export default async function HangarMarketPage() {
           .eq('statut', 'en_vente')
           .single();
 
+        const typesAvionData = f.types_avion as { nom?: string; prix?: number } | { nom?: string; prix?: number }[] | null;
+        const typesAvion = Array.isArray(typesAvionData) ? typesAvionData[0] : typesAvionData;
+        const prixAchat = typesAvion?.prix || 0;
+        // Prix de revente suggéré = 50% du prix d'achat initial
+        const prixRevente = Math.floor(prixAchat * 0.5);
+
         return {
           id: f.id,
           type_avion_id: f.type_avion_id,
-          nom: f.nom_personnalise || (f.types_avion as any)?.nom || 'Avion',
+          nom: f.nom_personnalise || typesAvion?.nom || 'Avion',
           quantite: f.quantite,
-          en_vente: !!enVente
+          en_vente: !!enVente,
+          prixAchat,
+          prixRevente
         };
       }));
 
