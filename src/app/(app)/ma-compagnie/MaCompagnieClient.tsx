@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart } from 'lucide-react';
+import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart, UserPlus, Send, X, Check, Loader2, Search } from 'lucide-react';
 import Link from 'next/link';
 import TarifsLiaisonsClient from './TarifsLiaisonsClient';
 
@@ -73,6 +73,112 @@ export default function MaCompagnieClient({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Recrutement
+  const [showRecrutement, setShowRecrutement] = useState(false);
+  const [searchPilote, setSearchPilote] = useState('');
+  const [pilotesRecherche, setPilotesRecherche] = useState<Array<{id: string; identifiant: string}>>([]);
+  const [selectedPilote, setSelectedPilote] = useState<{id: string; identifiant: string} | null>(null);
+  const [messageInvitation, setMessageInvitation] = useState('');
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [invitationsEnvoyees, setInvitationsEnvoyees] = useState<Array<{id: string; pilote: {id: string; identifiant: string}; statut: string; created_at: string}>>([]);
+  const [loadingInvitations, setLoadingInvitations] = useState(false);
+
+  // Charger les invitations envoyées
+  useEffect(() => {
+    if (isPdg && compagnie.id) {
+      loadInvitations();
+    }
+  }, [isPdg, compagnie.id]);
+
+  async function loadInvitations() {
+    setLoadingInvitations(true);
+    try {
+      const res = await fetch(`/api/recrutement?type=envoyees&compagnie_id=${compagnie.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setInvitationsEnvoyees(data.map((inv: any) => ({
+          id: inv.id,
+          pilote: Array.isArray(inv.pilote) ? inv.pilote[0] : inv.pilote,
+          statut: inv.statut,
+          created_at: inv.created_at
+        })));
+      }
+    } catch (e) {
+      console.error('Erreur chargement invitations:', e);
+    } finally {
+      setLoadingInvitations(false);
+    }
+  }
+
+  // Recherche de pilotes
+  async function handleSearchPilote(query: string) {
+    setSearchPilote(query);
+    if (query.length < 2) {
+      setPilotesRecherche([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/pilotes/search?q=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const data = await res.json();
+        // Exclure les pilotes déjà employés
+        const employeIds = employes.map(e => e.piloteId);
+        setPilotesRecherche(data.filter((p: any) => !employeIds.includes(p.id)));
+      }
+    } catch (e) {
+      console.error('Erreur recherche pilotes:', e);
+    }
+  }
+
+  async function handleEnvoyerInvitation() {
+    if (!selectedPilote) return;
+    setSendingInvite(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/recrutement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          compagnie_id: compagnie.id,
+          pilote_id: selectedPilote.id,
+          message_invitation: messageInvitation || null
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+
+      setSuccess(data.message || 'Invitation envoyée !');
+      setSelectedPilote(null);
+      setSearchPilote('');
+      setMessageInvitation('');
+      setPilotesRecherche([]);
+      loadInvitations();
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setSendingInvite(false);
+    }
+  }
+
+  async function handleAnnulerInvitation(invitationId: string) {
+    if (!confirm('Annuler cette invitation ?')) return;
+
+    try {
+      const res = await fetch(`/api/recrutement?id=${invitationId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+
+      setSuccess('Invitation annulée');
+      loadInvitations();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    }
+  }
 
   function handleCompagnieChange(e: React.ChangeEvent<HTMLSelectElement>) {
     router.push(`/ma-compagnie?c=${e.target.value}`);
@@ -271,10 +377,25 @@ export default function MaCompagnieClient({
 
         {/* Liste des pilotes */}
         <div className="card">
-          <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-            <Users className="h-5 w-5 text-sky-400" />
-            Pilotes ({employes.length})
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+              <Users className="h-5 w-5 text-sky-400" />
+              Pilotes ({employes.length})
+            </h2>
+            {isPdg && (
+              <button
+                onClick={() => setShowRecrutement(!showRecrutement)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  showRecrutement 
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50' 
+                    : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                }`}
+              >
+                <UserPlus className="h-4 w-4" />
+                Recruter
+              </button>
+            )}
+          </div>
           {employes.length > 0 ? (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {employes.map((emp) => (
@@ -295,6 +416,153 @@ export default function MaCompagnieClient({
           )}
         </div>
       </div>
+
+      {/* Section Recrutement (PDG uniquement) */}
+      {isPdg && showRecrutement && (
+        <div className="card border-emerald-500/30 bg-emerald-500/5">
+          <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+            <UserPlus className="h-5 w-5 text-emerald-400" />
+            Recruter un pilote
+          </h2>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Formulaire d'invitation */}
+            <div className="space-y-4">
+              <div>
+                <label className="label">Rechercher un pilote</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchPilote}
+                    onChange={(e) => handleSearchPilote(e.target.value)}
+                    placeholder="Entrez un identifiant..."
+                    className="input w-full pl-10"
+                  />
+                </div>
+                
+                {/* Résultats de recherche */}
+                {pilotesRecherche.length > 0 && !selectedPilote && (
+                  <div className="mt-2 bg-slate-800 rounded-lg border border-slate-700 max-h-40 overflow-y-auto">
+                    {pilotesRecherche.map((pilote) => (
+                      <button
+                        key={pilote.id}
+                        onClick={() => {
+                          setSelectedPilote(pilote);
+                          setSearchPilote(pilote.identifiant);
+                          setPilotesRecherche([]);
+                        }}
+                        className="w-full px-4 py-2 text-left text-slate-200 hover:bg-slate-700 transition-colors"
+                      >
+                        {pilote.identifiant}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pilote sélectionné */}
+                {selectedPilote && (
+                  <div className="mt-2 flex items-center gap-2 bg-emerald-500/20 rounded-lg px-3 py-2">
+                    <Check className="h-4 w-4 text-emerald-400" />
+                    <span className="text-emerald-300 font-medium">{selectedPilote.identifiant}</span>
+                    <button
+                      onClick={() => {
+                        setSelectedPilote(null);
+                        setSearchPilote('');
+                      }}
+                      className="ml-auto text-slate-400 hover:text-slate-200"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="label">Message personnalisé (optionnel)</label>
+                <textarea
+                  value={messageInvitation}
+                  onChange={(e) => setMessageInvitation(e.target.value)}
+                  placeholder="Bonjour, nous serions ravis de vous accueillir dans notre équipe..."
+                  rows={3}
+                  className="input w-full resize-none"
+                />
+              </div>
+
+              <button
+                onClick={handleEnvoyerInvitation}
+                disabled={!selectedPilote || sendingInvite}
+                className="btn-primary w-full flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {sendingInvite ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                Envoyer l&apos;invitation
+              </button>
+            </div>
+
+            {/* Invitations en attente */}
+            <div>
+              <h3 className="text-sm font-medium text-slate-400 mb-3">Invitations envoyées</h3>
+              {loadingInvitations ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                </div>
+              ) : invitationsEnvoyees.length === 0 ? (
+                <p className="text-slate-500 text-sm">Aucune invitation envoyée.</p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {invitationsEnvoyees.map((inv) => (
+                    <div 
+                      key={inv.id} 
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        inv.statut === 'en_attente' 
+                          ? 'bg-amber-500/10 border-amber-500/30' 
+                          : inv.statut === 'acceptee'
+                          ? 'bg-emerald-500/10 border-emerald-500/30'
+                          : 'bg-red-500/10 border-red-500/30'
+                      }`}
+                    >
+                      <div>
+                        <p className="text-slate-200 font-medium">{inv.pilote?.identifiant || 'Inconnu'}</p>
+                        <p className="text-xs text-slate-500">
+                          {new Date(inv.created_at).toLocaleDateString('fr-FR')}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-medium px-2 py-1 rounded ${
+                          inv.statut === 'en_attente' 
+                            ? 'bg-amber-500/20 text-amber-300' 
+                            : inv.statut === 'acceptee'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : inv.statut === 'refusee'
+                            ? 'bg-red-500/20 text-red-300'
+                            : 'bg-slate-500/20 text-slate-300'
+                        }`}>
+                          {inv.statut === 'en_attente' ? 'En attente' : 
+                           inv.statut === 'acceptee' ? 'Acceptée' :
+                           inv.statut === 'refusee' ? 'Refusée' : 'Annulée'}
+                        </span>
+                        {inv.statut === 'en_attente' && (
+                          <button
+                            onClick={() => handleAnnulerInvitation(inv.id)}
+                            className="text-red-400 hover:text-red-300"
+                            title="Annuler"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Flotte */}
       <div className="card">

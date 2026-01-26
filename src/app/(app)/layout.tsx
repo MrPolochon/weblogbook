@@ -18,7 +18,7 @@ export default async function AppLayout({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, armee')
+    .select('role, armee, ifsa')
     .eq('id', user.id)
     .single();
 
@@ -26,6 +26,7 @@ export default async function AppLayout({
 
   const isAdmin = profile?.role === 'admin';
   const isArmee = Boolean(profile?.armee);
+  const isIfsa = Boolean(profile?.ifsa);
 
   // Vérifier si PDG ou employé d'une compagnie
   let isPdg = false;
@@ -46,6 +47,8 @@ export default async function AppLayout({
   let volsAConfirmerCount = 0;
   let plansNonCloturesCount = 0;
   let messagesNonLusCount = 0;
+  let invitationsCount = 0;
+  let signalementsNouveauxCount = 0;
   if (isAdmin) {
     try {
       const admin = createAdminClient();
@@ -66,27 +69,44 @@ export default async function AppLayout({
       { count: c3 },
       { count: pnc },
       { count: msgCount },
+      { count: invCount },
     ] = await Promise.all([
       supabase.from('vols').select('*', { count: 'exact', head: true }).eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_pilote'),
       supabase.from('vols').select('*', { count: 'exact', head: true }).eq('copilote_id', user.id).eq('statut', 'en_attente_confirmation_copilote'),
       admin.from('vols').select('*', { count: 'exact', head: true }).eq('instructeur_id', user.id).eq('statut', 'en_attente_confirmation_instructeur'),
       supabase.from('plans_vol').select('*', { count: 'exact', head: true }).eq('pilote_id', user.id).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']),
       admin.from('messages').select('*', { count: 'exact', head: true }).eq('destinataire_id', user.id).eq('lu', false),
+      admin.from('compagnie_invitations').select('*', { count: 'exact', head: true }).eq('pilote_id', user.id).eq('statut', 'en_attente'),
     ]);
     volsAConfirmerCount = (c1 ?? 0) + (c2 ?? 0) + (c3 ?? 0);
     plansNonCloturesCount = pnc ?? 0;
     messagesNonLusCount = msgCount ?? 0;
+    invitationsCount = invCount ?? 0;
   } catch {
     volsAConfirmerCount = 0;
     plansNonCloturesCount = 0;
     messagesNonLusCount = 0;
+    invitationsCount = 0;
+  }
+  
+  // Compter les signalements nouveaux pour IFSA
+  if (isIfsa || isAdmin) {
+    try {
+      const admin = createAdminClient();
+      const { count } = await admin.from('ifsa_signalements')
+        .select('*', { count: 'exact', head: true })
+        .eq('statut', 'nouveau');
+      signalementsNouveauxCount = count ?? 0;
+    } catch {
+      signalementsNouveauxCount = 0;
+    }
   }
 
   return (
     <div className="min-h-screen flex flex-col">
       <AutoRefresh intervalSeconds={12} />
       <AdminModeBg />
-      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} />
+      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} />
       {plansNonCloturesCount > 0 && (
         <div className="border-b border-amber-500/40 bg-amber-500/15">
           <div className="mx-auto max-w-6xl px-4 py-2 flex items-center justify-center gap-2 flex-wrap">

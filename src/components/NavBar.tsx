@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, Store } from 'lucide-react';
+import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, Store, UserPlus, AlertTriangle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -12,12 +12,15 @@ interface NavBarProps {
   isArmee?: boolean;
   isPdg?: boolean;
   hasCompagnie?: boolean;
+  isIfsa?: boolean;
   pendingVolsCount?: number;
   volsAConfirmerCount?: number;
   messagesNonLusCount?: number;
+  invitationsCount?: number;
+  signalementsNouveauxCount?: number;
 }
 
-export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, pendingVolsCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0 }: NavBarProps) {
+export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, isIfsa = false, pendingVolsCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0, invitationsCount = 0, signalementsNouveauxCount = 0 }: NavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [piloteMenuOpen, setPiloteMenuOpen] = useState(false);
@@ -47,19 +50,22 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0 },
     { href: '/marche-cargo', label: 'Marché cargo', icon: Package, badge: 0 },
     { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount },
+    { href: '/invitations', label: 'Mes invitations', icon: UserPlus, badge: invitationsCount },
     ...(hasCompagnie ? [{ href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 }] : []),
     ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield, badge: 0 }] : []),
     { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0 },
     { href: '/marketplace', label: 'Marketplace', icon: Package, badge: 0 },
     { href: '/hangar-market', label: 'Hangar Market', icon: Store, badge: 0 },
     { href: '/inventaire', label: 'Mon inventaire', icon: Plane, badge: 0 },
+    { href: '/signalement', label: 'Signalement IFSA', icon: AlertTriangle, badge: 0 },
   ];
 
   const isPiloteActive = pathname.startsWith('/logbook') || pathname.startsWith('/militaire') || 
     pathname.startsWith('/felitz-bank') || pathname.startsWith('/ma-compagnie') ||
     pathname.startsWith('/marketplace') || pathname.startsWith('/hangar-market') ||
     pathname.startsWith('/inventaire') || pathname.startsWith('/messagerie') || 
-    pathname.startsWith('/marche-passagers') || pathname.startsWith('/marche-cargo');
+    pathname.startsWith('/marche-passagers') || pathname.startsWith('/marche-cargo') ||
+    pathname.startsWith('/invitations') || pathname.startsWith('/signalement');
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-700/50 bg-slate-900/95 backdrop-blur">
@@ -152,6 +158,28 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
                   title={`${pendingVolsCount} vol(s) en attente`}
                 >
                   {pendingVolsCount > 99 ? '99+' : pendingVolsCount}
+                </span>
+              )}
+            </Link>
+          )}
+          {(isIfsa || isAdmin) && (
+            <Link
+              href="/ifsa"
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
+                pathname.startsWith('/ifsa')
+                  ? 'bg-indigo-700/50 text-indigo-300'
+                  : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+              )}
+            >
+              <Shield className="h-4 w-4" />
+              IFSA
+              {signalementsNouveauxCount > 0 && (
+                <span
+                  className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-orange-600 px-1.5 text-xs font-bold text-white ring-2 ring-slate-900"
+                  title={`${signalementsNouveauxCount} signalement(s) nouveau(x)`}
+                >
+                  {signalementsNouveauxCount > 99 ? '99+' : signalementsNouveauxCount}
                 </span>
               )}
             </Link>
