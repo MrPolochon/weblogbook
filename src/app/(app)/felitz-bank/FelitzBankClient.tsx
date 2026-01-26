@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ArrowUpRight, ArrowDownLeft, Send, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
 interface Transaction {
   id: string;
@@ -67,13 +68,13 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
   }
 
   function formatDate(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString('fr-FR', {
+    return toLocaleDateStringUTC(dateStr, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
-    });
+    }) + ' UTC';
   }
 
   return (

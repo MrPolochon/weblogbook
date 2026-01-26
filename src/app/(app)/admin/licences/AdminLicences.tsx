@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Award, Plus, Edit2, Trash2, X, Layers } from 'lucide-react';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { formatDateMediumUTC } from '@/lib/date-utils';
 
 const TYPES = [
   'PPL', 'CPL', 'ATPL',
@@ -355,12 +354,12 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
                           <p className="font-semibold text-slate-200">{libelle}</p>
                           <div className="mt-1.5 space-y-1 text-sm text-slate-400">
                             {lic.date_delivrance && (
-                              <p>Délivré le {format(new Date(lic.date_delivrance), 'dd MMM yyyy', { locale: fr })}</p>
+                              <p>Délivré le {formatDateMediumUTC(lic.date_delivrance)}</p>
                             )}
                             {lic.a_vie ? (
                               <p className="text-emerald-400">✓ À vie</p>
                             ) : lic.date_expiration ? (
-                              <p>Expire le {format(new Date(lic.date_expiration), 'dd MMM yyyy', { locale: fr })}</p>
+                              <p>Expire le {formatDateMediumUTC(lic.date_expiration)}</p>
                             ) : null}
                             {lic.note && <p className="text-xs mt-1">{lic.note}</p>}
                           </div>

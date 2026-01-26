@@ -6,6 +6,7 @@ import {
   AlertTriangle, FileSearch, Gavel, Plus, X, Check, Loader2, 
   Clock, User, Building2, ChevronRight, Search, Eye, CheckCircle2
 } from 'lucide-react';
+import { toLocaleDateStringUTC, toLocaleStringUTC } from '@/lib/date-utils';
 
 interface Signalement {
   id: string;
@@ -425,7 +426,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                           )}
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {new Date(sig.created_at).toLocaleDateString('fr-FR')}
+                            {toLocaleDateStringUTC(sig.created_at)} UTC
                           </span>
                         </div>
                       </div>
@@ -937,8 +938,8 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                   <p className="text-slate-200">{selectedSignalement.signale_par?.identifiant || 'Anonyme'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-400">Date</p>
-                  <p className="text-slate-200">{new Date(selectedSignalement.created_at).toLocaleString('fr-FR')}</p>
+                  <p className="text-sm text-slate-400">Date (UTC)</p>
+                  <p className="text-slate-200">{toLocaleStringUTC(selectedSignalement.created_at)} UTC</p>
                 </div>
               </div>
 

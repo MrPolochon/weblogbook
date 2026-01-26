@@ -1,8 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { formatDateHourUTC } from '@/lib/date-utils';
 import { ArrowLeft, FileText, AlertCircle, Bell, Plane, Clock, CheckCircle2, XCircle, Timer, ArrowRight, Plus } from 'lucide-react';
 import PlanVolCloturerButton from './PlanVolCloturerButton';
 
@@ -187,7 +186,7 @@ export default async function MesPlansVolPage() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-slate-500">
-                        {format(new Date(p.created_at), 'dd MMM HH:mm', { locale: fr })}
+                        {formatDateHourUTC(p.created_at)} UTC
                       </span>
                       {p.statut === 'refuse' ? (
                         <Link 

@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { X, RefreshCw } from 'lucide-react';
+import { toLocaleTimeStringUTC } from '@/lib/date-utils';
 
 type Session = { user_id: string; aeroport: string; position: string; started_at: string; identifiant: string };
 
 function formatDepuis(startedAt: string): string {
-  const d = new Date(startedAt);
-  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  return toLocaleTimeStringUTC(startedAt, { hour: '2-digit', minute: '2-digit' }) + ' UTC';
 }
 
 export default function AdminAtcSessionsEnLigne({ sessions }: { sessions: Session[] }) {

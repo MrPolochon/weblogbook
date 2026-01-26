@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart, UserPlus, Send, X, Check, Loader2, Search } from 'lucide-react';
 import Link from 'next/link';
 import TarifsLiaisonsClient from './TarifsLiaisonsClient';
+import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
 interface CompagnieOption {
   id: string;
@@ -528,7 +529,7 @@ export default function MaCompagnieClient({
                       <div>
                         <p className="text-slate-200 font-medium">{inv.pilote?.identifiant || 'Inconnu'}</p>
                         <p className="text-xs text-slate-500">
-                          {new Date(inv.created_at).toLocaleDateString('fr-FR')}
+                          {toLocaleDateStringUTC(inv.created_at)} UTC
                         </p>
                       </div>
                       <div className="flex items-center gap-2">

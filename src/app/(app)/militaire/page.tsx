@@ -3,8 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { formatDuree } from '@/lib/utils';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { formatDateMediumUTC, formatTimeUTC } from '@/lib/date-utils';
 import { Plus } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
 
@@ -90,10 +89,10 @@ export default async function MilitairePage() {
                 {vols.map((v) => (
                   <tr key={v.id} className="border-b border-slate-700/50">
                     <td className="py-3 pr-4 text-slate-300">
-                      {format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })}
+                      {formatDateMediumUTC(v.depart_utc)}
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">{v.aeroport_depart || '—'} {format(new Date(v.depart_utc), 'HH:mm')}</td>
-                    <td className="py-3 pr-4 text-slate-300">{v.aeroport_arrivee || '—'} {v.arrivee_utc ? format(new Date(v.arrivee_utc), 'HH:mm') : '—'}</td>
+                    <td className="py-3 pr-4 text-slate-300">{v.aeroport_depart || '—'} {formatTimeUTC(v.depart_utc)}</td>
+                    <td className="py-3 pr-4 text-slate-300">{v.aeroport_arrivee || '—'} {v.arrivee_utc ? formatTimeUTC(v.arrivee_utc) : '—'}</td>
                     <td className="py-3 pr-4 text-slate-300">{v.type_avion_militaire || '—'}</td>
                     <td className="py-3 pr-4 text-slate-300">{v.escadrille_ou_escadron === 'escadrille' ? 'Escadrille' : v.escadrille_ou_escadron === 'escadron' ? 'Escadron' : v.escadrille_ou_escadron || '—'}</td>
                     <td className="py-3 pr-4 text-slate-300">{libNature(v.nature_vol_militaire, v.nature_vol_militaire_autre)}</td>

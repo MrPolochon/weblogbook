@@ -164,7 +164,7 @@ export async function DELETE(
 
     const admin = createAdminClient();
     const { data: message } = await admin.from('messages')
-      .select('destinataire_id, expediteur_id, type_message, cheque_encaisse')
+      .select('destinataire_id, expediteur_id, type_message, cheque_encaisse, metadata')
       .eq('id', id)
       .single();
 

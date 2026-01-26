@@ -2,8 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
 import { formatDuree } from '@/lib/utils';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { formatDateMediumUTC, formatTimeUTC } from '@/lib/date-utils';
 import { Plus, BookOpen, Plane, FileText, Clock, CheckCircle2, XCircle, Timer, TrendingUp, Calendar, MapPin, ArrowRight } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
 import NePasEnregistrerPlanButton from './NePasEnregistrerPlanButton';
@@ -228,7 +227,7 @@ export default async function LogbookPage() {
             {volsEnAttentePilote.map((v) => (
               <li key={v.id} className="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-0">
                 <span className="text-slate-300">
-                  {format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
+                  {formatDateMediumUTC(v.depart_utc)} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
                   {' · Pilote: '}{(Array.isArray(v.pilote) ? v.pilote[0] : v.pilote)?.identifiant ?? '—'}
                 </span>
                 <span className="flex items-center gap-2">
@@ -249,7 +248,7 @@ export default async function LogbookPage() {
             {volsEnAttenteCopilote.map((v) => (
               <li key={v.id} className="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-0">
                 <span className="text-slate-300">
-                  {format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
+                  {formatDateMediumUTC(v.depart_utc)} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
                   {' · Co-pilote: '}{(Array.isArray(v.copilote) ? v.copilote[0] : v.copilote)?.identifiant ?? '—'}
                 </span>
                 <span className="flex items-center gap-2">
@@ -270,7 +269,7 @@ export default async function LogbookPage() {
             {volsEnAttenteInstructeur.map((v) => (
               <li key={v.id} className="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-0">
                 <span className="text-slate-300">
-                  {format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
+                  {formatDateMediumUTC(v.depart_utc)} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
                   {' · Instructeur: '}{(Array.isArray(v.instructeur) ? v.instructeur[0] : v.instructeur)?.identifiant ?? '—'}
                 </span>
                 <span className="flex items-center gap-2">
@@ -290,7 +289,7 @@ export default async function LogbookPage() {
             {volsRefuseParCopilote.map((v) => (
               <li key={v.id} className="flex items-center justify-between py-2 border-b border-slate-700/30 last:border-0">
                 <span className="text-slate-300">
-                  {format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
+                  {formatDateMediumUTC(v.depart_utc)} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}
                   {' · Co-pilote indiqué: '}{(Array.isArray(v.copilote) ? v.copilote[0] : v.copilote)?.identifiant ?? '—'}
                 </span>
                 <span className="flex items-center gap-2">
@@ -331,17 +330,17 @@ export default async function LogbookPage() {
                     <td className="py-3 pr-4 text-slate-300">
                       {(v.statut === 'refusé' && (v.refusal_count ?? 0) < 3) || v.statut === 'en_attente' ? (
                         <Link href={`/logbook/vol/${v.id}`} className="text-sky-400 hover:underline">
-                          {format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })}
+                          {formatDateMediumUTC(v.depart_utc)}
                         </Link>
                       ) : (
-                        format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })
+                        formatDateMediumUTC(v.depart_utc)
                       )}
                     </td>
                     <td className="py-3 pr-4 text-slate-300">
-                      {v.aeroport_depart || '—'} {format(new Date(v.depart_utc), 'HH:mm')}
+                      {v.aeroport_depart || '—'} {formatTimeUTC(v.depart_utc)}
                     </td>
                     <td className="py-3 pr-4 text-slate-300">
-                      {v.aeroport_arrivee || '—'} {v.arrivee_utc ? format(new Date(v.arrivee_utc), 'HH:mm') : '—'}
+                      {v.aeroport_arrivee || '—'} {v.arrivee_utc ? formatTimeUTC(v.arrivee_utc) : '—'}
                     </td>
                     <td className="py-3 pr-4 text-slate-300">
                       {(v.type_avion as { nom?: string })?.nom || '—'}

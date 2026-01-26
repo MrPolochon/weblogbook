@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Send, Loader2, Check, X, Clock, FileText, CheckCircle2, XCircle, Search } from 'lucide-react';
+import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
 interface Signalement {
   id: string;
@@ -304,11 +305,11 @@ export default function SignalementClient({ mesSignalements, pilotes, compagnies
                         <h3 className="font-medium text-slate-200">{sig.titre}</h3>
                         <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          {new Date(sig.created_at).toLocaleDateString('fr-FR', {
+                          {toLocaleDateStringUTC(sig.created_at, {
                             day: 'numeric',
                             month: 'long',
                             year: 'numeric'
-                          })}
+                          })} UTC
                         </p>
                       </div>
                       <div className="flex items-center gap-1 text-xs text-slate-500">

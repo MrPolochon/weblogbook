@@ -2,10 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
 import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight, UserPlus, Check, XCircle, AlertTriangle, Banknote } from 'lucide-react';
 import ChequeVisuel from '@/components/ChequeVisuel';
+import { formatDateShortUTC, formatDateTimeUTC } from '@/lib/date-utils';
 
 interface Message {
   id: string;
@@ -360,7 +359,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                             }
                           </p>
                           <span className="text-xs text-slate-500 shrink-0">
-                            {format(new Date(msg.created_at), 'dd/MM', { locale: fr })}
+                            {formatDateShortUTC(msg.created_at)}
                           </span>
                         </div>
                         <p className={`text-sm truncate ${!msg.lu && activeTab !== 'sent' ? 'text-slate-100' : 'text-slate-300'}`}>
@@ -418,7 +417,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                     {activeTab === 'sent' 
                       ? `À: ${getIdentifiant(selectedMessage.destinataire)}`
                       : `De: ${getIdentifiant(selectedMessage.expediteur)}`
-                    } • {format(new Date(selectedMessage.created_at), 'dd MMMM yyyy à HH:mm', { locale: fr })}
+                    } • {formatDateTimeUTC(selectedMessage.created_at)}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

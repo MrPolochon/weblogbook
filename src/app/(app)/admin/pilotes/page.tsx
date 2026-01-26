@@ -1,8 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { formatDuree } from '@/lib/utils';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { formatDateUTC, formatDateMediumUTC } from '@/lib/date-utils';
 import { ArrowLeft } from 'lucide-react';
 import CreatePiloteForm from './CreatePiloteForm';
 import PilotesActions from './PilotesActions';
@@ -39,14 +38,14 @@ export default async function AdminPilotesPage() {
         <td className="py-3 pr-4">
           {blocked ? (
             <span className="text-amber-400">
-              Jusqu&apos;au {format(new Date(p.blocked_until!), 'dd/MM/yyyy HH:mm', { locale: fr })}
+              Jusqu&apos;au {formatDateUTC(p.blocked_until!, 'dd/MM/yyyy HH:mm')} UTC
             </span>
           ) : (
             <span className="text-slate-500">—</span>
           )}
         </td>
         <td className="py-3 pr-4 text-slate-400 text-xs">
-          {format(new Date(p.created_at), 'dd MMM yyyy', { locale: fr })}
+          {formatDateMediumUTC(p.created_at)}
         </td>
         <td className="py-3">
           <PilotesActions piloteId={p.id} identifiant={p.identifiant} isAdmin={isAdminRole} role={p.role} />

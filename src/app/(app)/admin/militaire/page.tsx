@@ -3,8 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { formatDuree } from '@/lib/utils';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { formatDateMediumUTC, formatTimeUTC } from '@/lib/date-utils';
 import { ArrowLeft, Eye } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
 

@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
 import { Award, Calendar, FileText, X } from 'lucide-react';
+import { formatDateMediumUTC } from '@/lib/date-utils';
 
 type Licence = {
   id: string;
@@ -40,7 +39,7 @@ export default function LicencesSection({ userId, variant = 'default' }: Props) 
   function formatDate(dateStr: string | null): string {
     if (!dateStr) return '—';
     try {
-      return format(new Date(dateStr), 'dd MMM yyyy', { locale: fr });
+      return formatDateMediumUTC(dateStr);
     } catch {
       return dateStr;
     }

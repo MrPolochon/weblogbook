@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Trash2, RefreshCw, Building2, User } from 'lucide-react';
+import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
 interface Compagnie {
   id: string;
@@ -116,7 +117,7 @@ export default function AdminEmployesClient({ compagnies, pilotes, employes }: P
   }
 
   function formatDate(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString('fr-FR');
+    return toLocaleDateStringUTC(dateStr) + ' UTC';
   }
 
   // Grouper les employés par compagnie

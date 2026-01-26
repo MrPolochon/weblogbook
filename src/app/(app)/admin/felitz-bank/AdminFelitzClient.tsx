@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Minus, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
 interface Compte {
   id: string;
@@ -69,13 +70,13 @@ export default function AdminFelitzClient({ compte, label, type, transactions = 
   const accentClass = type === 'militaire' ? 'text-red-300' : type === 'entreprise' ? 'text-sky-300' : 'text-emerald-300';
 
   function formatDate(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString('fr-FR', {
+    return toLocaleDateStringUTC(dateStr, {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-    });
+    }) + ' UTC';
   }
 
   return (

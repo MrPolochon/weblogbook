@@ -2,8 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { formatDateMediumUTC } from '@/lib/date-utils';
 import { ArrowLeft, ChevronRight } from 'lucide-react';
 
 export default async function LogbookAConfirmerPage() {
@@ -49,7 +48,7 @@ export default async function LogbookAConfirmerPage() {
                 <li key={v.id}>
                   <Link href={`/logbook/vol/${v.id}?from=confirmer`} className="flex items-center justify-between py-4 text-left hover:bg-slate-800/30 -mx-4 px-4 rounded-lg transition-colors">
                     <div>
-                      <p className="font-medium text-slate-200">{format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}</p>
+                      <p className="font-medium text-slate-200">{formatDateMediumUTC(v.depart_utc)} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}</p>
                       <p className="text-sm text-slate-500">{identifiantCopilote} vous a indiqué comme pilote · {v.duree_minutes} min</p>
                     </div>
                     <ChevronRight className="h-5 w-5 text-slate-500 flex-shrink-0" />
@@ -71,7 +70,7 @@ export default async function LogbookAConfirmerPage() {
                 <li key={v.id}>
                   <Link href={`/logbook/vol/${v.id}?from=confirmer`} className="flex items-center justify-between py-4 text-left hover:bg-slate-800/30 -mx-4 px-4 rounded-lg transition-colors">
                     <div>
-                      <p className="font-medium text-slate-200">{format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}</p>
+                      <p className="font-medium text-slate-200">{formatDateMediumUTC(v.depart_utc)} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}</p>
                       <p className="text-sm text-slate-500">{identifiantPilote} vous a indiqué comme co-pilote · {v.duree_minutes} min</p>
                     </div>
                     <ChevronRight className="h-5 w-5 text-slate-500 flex-shrink-0" />
@@ -94,7 +93,7 @@ export default async function LogbookAConfirmerPage() {
                 <li key={v.id}>
                   <Link href={`/logbook/vol/${v.id}?from=confirmer`} className="flex items-center justify-between py-4 text-left hover:bg-slate-800/30 -mx-4 px-4 rounded-lg transition-colors">
                     <div>
-                      <p className="font-medium text-slate-200">{format(new Date(v.depart_utc), 'dd MMM yyyy', { locale: fr })} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}</p>
+                      <p className="font-medium text-slate-200">{formatDateMediumUTC(v.depart_utc)} — {v.aeroport_depart || '—'} → {v.aeroport_arrivee || '—'}</p>
                       <p className="text-sm text-slate-500">{identifiantPilote} · Instruction · {v.duree_minutes} min</p>
                     </div>
                     <ChevronRight className="h-5 w-5 text-slate-500 flex-shrink-0" />

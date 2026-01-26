@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Loader2, Check, Banknote } from 'lucide-react';
+import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
 interface ChequeProps {
   id: string;
@@ -56,8 +57,7 @@ export default function ChequeVisuel({
     setIsEncaisse(encaisse);
   }, [encaisse, id]);
   
-  const dateObj = new Date(date);
-  const dateFormatee = dateObj.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const dateFormatee = toLocaleDateStringUTC(date, { day: '2-digit', month: 'long', year: 'numeric' }) + ' UTC';
   
   const montantEnLettres = nombreEnLettres(montant) + ' felitz dollars';
 

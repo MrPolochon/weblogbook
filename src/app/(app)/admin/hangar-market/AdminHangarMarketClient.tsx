@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, RefreshCw, Percent, User, Building2, ArrowRight } from 'lucide-react';
+import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
 interface Vente {
   id: string;
@@ -171,7 +172,7 @@ export default function AdminHangarMarketClient({ taxeActuelle, dernieresVentes 
                       {vente.prix.toLocaleString('fr-FR')} F$
                     </td>
                     <td className="py-2 text-right text-sm text-slate-500">
-                      {new Date(vente.vendu_at).toLocaleDateString('fr-FR')}
+                      {toLocaleDateStringUTC(vente.vendu_at)} UTC
                     </td>
                   </tr>
                 ))}
