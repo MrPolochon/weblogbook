@@ -138,8 +138,6 @@ export async function POST(req: NextRequest) {
       destinataire_id: pilote_id,
       titre: `🎉 Offre d'emploi - ${compagnie.nom}`,
       contenu: messageContent,
-      topic: 'recrutement',
-      extension: '',
       type_message: 'recrutement',
       metadata: { invitation_id: invitation.id, compagnie_id, compagnie_nom: compagnie.nom }
     });
