@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAeroportInfo } from '@/lib/aeroports-ptfs';
 
+export const dynamic = 'force-dynamic';
+
 // GET - Récupérer le cargo disponible pour un aéroport
 export async function GET(req: NextRequest) {
   try {

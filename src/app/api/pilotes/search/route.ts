@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 // GET - Rechercher des pilotes par identifiant
 export async function GET(req: NextRequest) {
   try {
