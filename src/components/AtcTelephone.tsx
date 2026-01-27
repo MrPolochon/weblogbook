@@ -532,6 +532,33 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     }
   };
 
+  // Reset du téléphone (terminer tous les appels bloqués)
+  const resetPhone = async () => {
+    try {
+      await fetch('/api/atc/telephone/hangup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reset: true }),
+      });
+      cleanupWebRTC();
+      setCallState('idle');
+      setNumber('');
+      setIncomingCall(null);
+      setCurrentCall(null);
+      setIsMuted(false);
+    } catch (err) {
+      console.error('Erreur reset téléphone:', err);
+    }
+  };
+
+  // Reset automatique à l'ouverture du téléphone
+  useEffect(() => {
+    if (isOpen && callState === 'idle') {
+      resetPhone();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
   useEffect(() => () => cleanupWebRTC(), []);
 
   // Couleurs du combiné

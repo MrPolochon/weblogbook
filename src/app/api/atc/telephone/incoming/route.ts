@@ -11,15 +11,24 @@ export async function GET() {
 
     const admin = createAdminClient();
 
-    // Chercher les appels entrants en attente
+    // Nettoyer les appels expirés (ringing depuis plus de 60 secondes)
+    const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
+    await admin
+      .from('atc_calls')
+      .update({ status: 'ended', ended_at: new Date().toISOString() })
+      .eq('status', 'ringing')
+      .lt('started_at', sixtySecondsAgo);
+
+    // Chercher les appels entrants en attente (récents uniquement)
     const { data: incomingCall } = await admin
       .from('atc_calls')
       .select('id, from_user_id, from_aeroport, from_position, number_dialed, started_at')
       .eq('to_user_id', user.id)
       .eq('status', 'ringing')
+      .gte('started_at', sixtySecondsAgo)
       .order('started_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (incomingCall) {
       return NextResponse.json({

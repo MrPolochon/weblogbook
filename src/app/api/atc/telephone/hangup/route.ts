@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
-// POST - Raccrocher
+// POST - Raccrocher ou réinitialiser
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -10,13 +10,24 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const body = await request.json();
-    const { callId } = body;
+    const { callId, reset } = body;
+
+    const admin = createAdminClient();
+
+    // Mode reset : terminer tous les appels de l'utilisateur
+    if (reset === true) {
+      await admin
+        .from('atc_calls')
+        .update({ status: 'ended', ended_at: new Date().toISOString() })
+        .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
+        .in('status', ['ringing', 'connected']);
+      
+      return NextResponse.json({ ok: true, reset: true });
+    }
 
     if (!callId) {
       return NextResponse.json({ error: 'ID d\'appel requis' }, { status: 400 });
     }
-
-    const admin = createAdminClient();
 
     // Vérifier que l'appel existe et appartient à l'utilisateur
     const { data: call } = await admin
