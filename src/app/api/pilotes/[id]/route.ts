@@ -153,7 +153,21 @@ export async function DELETE(
       );
     }
 
+    // Supprimer les dépendances avant de supprimer le compte
     await admin.from('vols').delete().eq('pilote_id', id);
+    await admin.from('plans_vol').delete().eq('pilote_id', id);
+    await admin.from('compagnie_employes').delete().eq('pilote_id', id);
+    await admin.from('invitations_recrutement').delete().eq('pilote_id', id);
+    await admin.from('messages').delete().eq('destinataire_id', id);
+    await admin.from('messages').delete().eq('expediteur_id', id);
+    await admin.from('licences').delete().eq('pilote_id', id);
+    await admin.from('atc_sessions').delete().eq('user_id', id);
+    await admin.from('atc_plans_controles').delete().eq('user_id', id);
+    await admin.from('atc_taxes_pending').delete().eq('user_id', id);
+    await admin.from('felitz_comptes').delete().eq('proprietaire_id', id);
+    await admin.from('inventaire_avions').delete().eq('proprietaire_id', id);
+    
+    // Supprimer le profil et l'utilisateur auth
     await admin.from('profiles').delete().eq('id', id);
     await admin.auth.admin.deleteUser(id);
 

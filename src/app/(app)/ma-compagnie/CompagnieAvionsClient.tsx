@@ -16,6 +16,7 @@ type Avion = {
   aeroport_actuel: string;
   statut: string;
   types_avion: TypeAvion | TypeAvion[] | null;
+  maintenance_fin_at: string | null;
 };
 
 interface Props {
@@ -96,16 +97,48 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
     }
   }
 
-  async function handleAffreterTechniciens(avionId: string) {
-    if (!confirm(`Affréter des techniciens pour réparer cet avion sur place ? Coût : ${COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$.`)) return;
+  async function handleAffreterTechniciens(avionId: string, forceCheck = false) {
+    // Si c'est une vérification forcée (pour compléter maintenance), pas de confirmation
+    if (!forceCheck && !confirm(`Affréter des techniciens pour réparer cet avion sur place ? Coût : ${COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$. Délai : 1 heure.`)) return;
     setActionId(avionId);
     try {
       const res = await fetch(`/api/compagnies/avions/${avionId}/affreter-techniciens`, { method: 'POST' });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(d.error || 'Erreur');
-      alert('Techniciens affrétés. L\'avion a été réparé et est maintenant opérationnel.');
+      if (!res.ok) {
+        if (d.temps_restant_min !== undefined) {
+          alert(`Techniciens en cours de travail. Temps restant : ${d.temps_restant_min} min.`);
+        } else {
+          throw new Error(d.error || 'Erreur');
+        }
+        return;
+      }
+      if (d.repare) {
+        alert('Avion réparé avec succès ! L\'avion est maintenant opérationnel.');
+      } else {
+        alert(d.message || `Techniciens affrétés. L'avion sera réparé dans ${d.temps_attente_min || 60} minutes.`);
+      }
       router.refresh();
       loadAvions();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  // Vérifier la maintenance terminée
+  async function handleVerifierMaintenance(avionId: string) {
+    setActionId(avionId);
+    try {
+      const res = await fetch(`/api/compagnies/avions/${avionId}/affreter-techniciens`, { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      if (d.repare) {
+        alert('Avion réparé avec succès ! L\'avion est maintenant opérationnel.');
+        router.refresh();
+        loadAvions();
+      } else if (d.temps_restant_min !== undefined) {
+        alert(`Maintenance en cours. Temps restant : ${d.temps_restant_min} min.`);
+      }
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -143,7 +176,17 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
     }
   }
 
-  function getStatutLabel(statut: string) {
+  function getStatutLabel(statut: string, maintenanceFinAt?: string | null) {
+    if (statut === 'maintenance' && maintenanceFinAt) {
+      const fin = new Date(maintenanceFinAt);
+      const maintenant = new Date();
+      const tempsRestantMs = fin.getTime() - maintenant.getTime();
+      if (tempsRestantMs > 0) {
+        const tempsRestantMin = Math.ceil(tempsRestantMs / 60000);
+        return { text: `Maintenance (${tempsRestantMin} min)`, className: 'text-amber-400' };
+      }
+      return { text: 'Prêt', className: 'text-emerald-400 animate-pulse' };
+    }
     switch (statut) {
       case 'ground': return { text: 'Au sol', className: 'text-emerald-400' };
       case 'in_flight': return { text: 'En vol', className: 'text-sky-400' };
@@ -248,10 +291,11 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
             </thead>
             <tbody>
               {avions.map((a) => {
-                const statut = getStatutLabel(a.statut);
+                const statut = getStatutLabel(a.statut, a.maintenance_fin_at);
                 const isAtHub = hubs.some((h) => h.aeroport_code === a.aeroport_actuel);
                 const typeNom = Array.isArray(a.types_avion) ? a.types_avion[0]?.nom : a.types_avion?.nom;
                 const isEditing = editingId === a.id;
+                const maintenancePrete = a.statut === 'maintenance' && a.maintenance_fin_at && new Date(a.maintenance_fin_at) <= new Date();
                 
                 return (
                   <tr key={a.id} className="border-b border-slate-700/50 last:border-0">
@@ -333,7 +377,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                     onClick={() => handleAffreterTechniciens(a.id)}
                                     disabled={actionId === a.id}
                                     className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
-                                    title="Réparer sur place"
+                                    title="Réparer sur place (délai: 1h)"
                                   >
                                     Affréter
                                   </button>
@@ -347,6 +391,20 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                     Débloquer
                                   </button>
                                 </>
+                              )}
+                              {maintenancePrete && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerifierMaintenance(a.id)}
+                                  disabled={actionId === a.id}
+                                  className="text-xs text-emerald-400 hover:underline disabled:opacity-50 animate-pulse font-semibold"
+                                  title="Terminer la maintenance"
+                                >
+                                  Récupérer
+                                </button>
+                              )}
+                              {a.statut === 'maintenance' && a.maintenance_fin_at && !maintenancePrete && (
+                                <span className="text-xs text-slate-500">En réparation...</span>
                               )}
                               {a.statut === 'ground' && a.usure_percent < 100 && isAtHub && (
                                 <button

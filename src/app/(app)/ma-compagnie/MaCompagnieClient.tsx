@@ -34,21 +34,11 @@ interface Employe {
   heures: number;
 }
 
-interface FlotteItem {
-  id: string;
-  nom: string;
-  code_oaci: string | null;
-  quantite: number;
-  en_vol: number;
-  disponibles: number;
-}
-
 interface Props {
   compagniesDisponibles: CompagnieOption[];
   selectedCompagnieId: string;
   compagnie: Compagnie;
   employes: Employe[];
-  flotte: FlotteItem[];
   isPdg: boolean;
   soldeCompagnie: number;
 }
@@ -65,7 +55,6 @@ export default function MaCompagnieClient({
   selectedCompagnieId, 
   compagnie, 
   employes, 
-  flotte,
   isPdg,
   soldeCompagnie 
 }: Props) {

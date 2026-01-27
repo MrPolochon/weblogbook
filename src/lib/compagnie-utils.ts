@@ -31,3 +31,21 @@ export const COUT_VOL_FERRY = 10000;
  * Coût pour affréter des techniciens (réparation sur place)
  */
 export const COUT_AFFRETER_TECHNICIENS = 50000;
+
+/**
+ * Temps d'attente en minutes pour l'affrètement des techniciens
+ */
+export const TEMPS_AFFRETER_TECHNICIENS_MIN = 60;
+
+/**
+ * Calcule l'usure d'un vol normal (entre 2% et 6% selon le temps de vol)
+ * @param tempsVolMin Temps de vol en minutes
+ */
+export function calculerUsureVol(tempsVolMin: number): number {
+  // Usure minimale de 2%, maximale de 6%
+  // Un vol de 30 min = 2%, un vol de 180 min = 6%
+  const base = 2;
+  const max = 6;
+  const facteur = Math.min(tempsVolMin / 180, 1);
+  return Math.round(base + facteur * (max - base));
+}

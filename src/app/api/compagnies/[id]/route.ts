@@ -15,6 +15,37 @@ export async function DELETE(
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const admin = createAdminClient();
+    
+    // Vérifier s'il y a des dépendances avant de supprimer
+    const { count: employes } = await admin
+      .from('compagnie_employes')
+      .select('*', { count: 'exact', head: true })
+      .eq('compagnie_id', id);
+    
+    if (employes && employes > 0) {
+      // Supprimer d'abord les employés
+      await admin.from('compagnie_employes').delete().eq('compagnie_id', id);
+    }
+
+    // Supprimer les hubs
+    await admin.from('compagnie_hubs').delete().eq('compagnie_id', id);
+    
+    // Supprimer les tarifs de liaisons
+    await admin.from('tarifs_liaisons').delete().eq('compagnie_id', id);
+    
+    // Supprimer les avions de la compagnie (ils retournent à l'inventaire ou sont supprimés)
+    await admin.from('compagnie_avions').delete().eq('compagnie_id', id);
+    
+    // Supprimer les vols ferry
+    await admin.from('vols_ferry').delete().eq('compagnie_id', id);
+    
+    // Supprimer les invitations de recrutement
+    await admin.from('invitations_recrutement').delete().eq('compagnie_id', id);
+    
+    // Supprimer le compte Felitz de l'entreprise
+    await admin.from('felitz_comptes').delete().eq('compagnie_id', id).eq('type', 'entreprise');
+    
+    // Enfin, supprimer la compagnie
     const { error } = await admin.from('compagnies').delete().eq('id', id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true });

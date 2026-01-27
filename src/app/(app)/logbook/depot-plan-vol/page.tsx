@@ -44,48 +44,6 @@ export default async function DepotPlanVolPage() {
 
   const compagniesDisponibles = Array.from(compagniesMap.values());
 
-  // Récupérer la flotte de TOUTES les compagnies disponibles
-  type FlotteItem = {
-    id: string;
-    compagnie_id: string;
-    type_avion_id: string;
-    quantite: number;
-    disponibles: number;
-    nom_personnalise: string | null;
-    capacite_pax_custom: number | null;
-    capacite_cargo_custom: number | null;
-    types_avion: { id: string; nom: string; code_oaci: string | null; capacite_pax: number; capacite_cargo_kg: number } | null;
-  };
-  let flotteParCompagnie: Record<string, FlotteItem[]> = {};
-  
-  if (compagniesDisponibles.length > 0) {
-    const compagnieIds = compagniesDisponibles.map(c => c.id);
-    const { data: flotte } = await admin.from('compagnie_flotte')
-      .select('*, types_avion(id, nom, code_oaci, capacite_pax, capacite_cargo_kg)')
-      .in('compagnie_id', compagnieIds);
-    
-    // Calculer la disponibilité pour chaque avion
-    const flotteWithDisponibilite = await Promise.all((flotte || []).map(async (item) => {
-      const { count } = await admin.from('plans_vol')
-        .select('*', { count: 'exact', head: true })
-        .eq('flotte_avion_id', item.id)
-        .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
-      
-      return {
-        ...item,
-        disponibles: item.quantite - (count || 0)
-      };
-    }));
-
-    // Grouper par compagnie
-    flotteWithDisponibilite.forEach(item => {
-      if (!flotteParCompagnie[item.compagnie_id]) {
-        flotteParCompagnie[item.compagnie_id] = [];
-      }
-      flotteParCompagnie[item.compagnie_id].push(item);
-    });
-  }
-
   // Récupérer l'inventaire personnel
   const { data: inventaireData } = await admin.from('inventaire_avions')
     .select('*, types_avion(id, nom, code_oaci, capacite_pax, capacite_cargo_kg, est_militaire)')
@@ -146,7 +104,6 @@ export default async function DepotPlanVolPage() {
       </div>
       <DepotPlanVolForm 
         compagniesDisponibles={compagniesDisponibles}
-        flotteParCompagnie={flotteParCompagnie}
         inventairePersonnel={inventairePersonnel}
         avionsParCompagnie={avionsParCompagnie}
       />

@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
-import { Radio, Plane, Clock, MapPin, AlertTriangle, ArrowRight, Activity } from 'lucide-react';
+import { Radio, Plane, Clock, MapPin, AlertTriangle, ArrowRight, Activity, Users, Package, Ship, Building2, User, FilePlus } from 'lucide-react';
 import SeMettreEnServiceForm from '../SeMettreEnServiceForm';
 import HorsServiceButton from '../HorsServiceButton';
 import { formatDistanceToNow } from 'date-fns';
@@ -23,7 +23,13 @@ export default async function AtcPage() {
   const admin = createAdminClient();
   const [{ data: session }, { data: plansChezMoi }, { data: sessionsEnService }, { data: plansEnAttente }] = await Promise.all([
     supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single(),
-    admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee, statut, type_vol, temps_prev_min, created_at').eq('current_holder_user_id', user.id).is('pending_transfer_aeroport', null).in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente']).order('created_at', { ascending: false }),
+    admin.from('plans_vol').select(`
+      id, numero_vol, aeroport_depart, aeroport_arrivee, statut, type_vol, temps_prev_min, created_at,
+      vol_commercial, vol_ferry, nature_transport, type_cargaison, nb_pax_genere, cargo_kg_genere,
+      pilote:profiles!plans_vol_pilote_id_fkey(identifiant),
+      compagnie:compagnies(nom),
+      avion:compagnie_avions(immatriculation, nom_bapteme)
+    `).eq('current_holder_user_id', user.id).is('pending_transfer_aeroport', null).in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente']).order('created_at', { ascending: false }),
     admin.from('atc_sessions').select('aeroport, position, user_id, profiles(identifiant)').order('aeroport').order('position'),
     admin.from('plans_vol').select('id').in('statut', ['depose', 'en_attente']),
   ]);
@@ -118,7 +124,16 @@ export default async function AtcPage() {
               <Activity className="h-5 w-5 text-sky-600" />
               Trafic sous contrôle
             </h2>
-            <span className="text-sm text-slate-600">{plansChezMoi?.length || 0} vol(s)</span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-slate-600">{plansChezMoi?.length || 0} vol(s)</span>
+              <Link
+                href="/atc/creer-plan"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                <FilePlus className="h-4 w-4" />
+                Créer un plan
+              </Link>
+            </div>
           </div>
           
           {!plansChezMoi || plansChezMoi.length === 0 ? (
@@ -131,6 +146,19 @@ export default async function AtcPage() {
             <div className="space-y-2">
               {plansChezMoi.map((p) => {
                 const config = STATUT_CONFIG[p.statut] || { label: p.statut, color: 'text-slate-700', bgColor: 'bg-slate-100' };
+                const piloteData = (p as any).pilote;
+                const pilote = piloteData ? (Array.isArray(piloteData) ? piloteData[0] : piloteData) : null;
+                const compagnieData = (p as any).compagnie;
+                const compagnie = compagnieData ? (Array.isArray(compagnieData) ? compagnieData[0] : compagnieData) : null;
+                const avionData = (p as any).avion;
+                const avion = avionData ? (Array.isArray(avionData) ? avionData[0] : avionData) : null;
+                const isCommercial = (p as any).vol_commercial;
+                const isFerry = (p as any).vol_ferry;
+                const natureTrans = (p as any).nature_transport;
+                const typeCargo = (p as any).type_cargaison;
+                const nbPax = (p as any).nb_pax_genere;
+                const cargoKg = (p as any).cargo_kg_genere;
+                
                 return (
                   <Link 
                     key={p.id} 
@@ -144,16 +172,51 @@ export default async function AtcPage() {
                     
                     {/* Info vol */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 font-mono">{p.numero_vol}</span>
                         <span className="text-xs px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">{p.type_vol}</span>
+                        {isFerry && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 flex items-center gap-1">
+                            <Ship className="h-3 w-3" />
+                            FERRY
+                          </span>
+                        )}
+                        {isCommercial && natureTrans === 'passagers' && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 flex items-center gap-1">
+                            <Users className="h-3 w-3" />
+                            {nbPax || '?'} PAX
+                          </span>
+                        )}
+                        {isCommercial && natureTrans === 'cargo' && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 flex items-center gap-1">
+                            <Package className="h-3 w-3" />
+                            {cargoKg || '?'} kg {typeCargo ? `(${typeCargo})` : ''}
+                          </span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1 text-sm text-slate-600 mt-0.5">
+                      <div className="flex items-center gap-1 text-sm text-slate-600 mt-0.5 flex-wrap">
                         <span className="font-mono text-sky-600">{p.aeroport_depart}</span>
                         <ArrowRight className="h-3 w-3" />
                         <span className="font-mono text-emerald-600">{p.aeroport_arrivee}</span>
                         {p.temps_prev_min && (
-                          <span className="ml-2 text-slate-500">• {p.temps_prev_min} min</span>
+                          <span className="ml-1 text-slate-500">• {p.temps_prev_min} min</span>
+                        )}
+                        {avion?.immatriculation && (
+                          <span className="ml-1 text-slate-500 font-mono">• {avion.immatriculation}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
+                        {pilote?.identifiant && (
+                          <span className="flex items-center gap-1">
+                            <User className="h-3 w-3" />
+                            {pilote.identifiant}
+                          </span>
+                        )}
+                        {compagnie?.nom && (
+                          <span className="flex items-center gap-1">
+                            <Building2 className="h-3 w-3" />
+                            {compagnie.nom}
+                          </span>
                         )}
                       </div>
                     </div>

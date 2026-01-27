@@ -77,11 +77,10 @@ export async function POST(req: NextRequest) {
     const admin = createAdminClient();
 
     if (action === 'creer') {
-      // Créer une annonce
+      // Créer une annonce (uniquement avions personnels - l'ancien système de flotte est obsolète)
       const { 
         inventaire_avion_id, 
-        flotte_avion_id, 
-        compagnie_vendeur_id,
+        flotte_avion_id,
         titre, 
         description, 
         prix, 
@@ -92,98 +91,57 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Titre et prix requis' }, { status: 400 });
       }
 
-      if (!inventaire_avion_id && !flotte_avion_id) {
-        return NextResponse.json({ error: 'Avion requis' }, { status: 400 });
+      // L'ancien système de flotte est obsolète - seuls les avions personnels peuvent être vendus
+      if (flotte_avion_id) {
+        return NextResponse.json({ error: 'La vente d\'avions de compagnie via le Hangar Market n\'est plus disponible. Utilisez le Marketplace pour les avions de compagnie.' }, { status: 400 });
       }
 
-      let type_avion_id: string;
-      let vendeur_id: string | null = null;
-      let compagnie_id: string | null = null;
+      if (!inventaire_avion_id) {
+        return NextResponse.json({ error: 'Avion personnel requis' }, { status: 400 });
+      }
 
-      if (inventaire_avion_id) {
-        // Vente d'un avion personnel
-        const { data: avion } = await admin.from('inventaire_avions')
-          .select('id, type_avion_id, proprietaire_id')
-          .eq('id', inventaire_avion_id)
-          .single();
+      // Vente d'un avion personnel
+      const { data: avion } = await admin.from('inventaire_avions')
+        .select('id, type_avion_id, proprietaire_id')
+        .eq('id', inventaire_avion_id)
+        .single();
 
-        if (!avion) {
-          return NextResponse.json({ error: 'Avion introuvable' }, { status: 404 });
-        }
+      if (!avion) {
+        return NextResponse.json({ error: 'Avion introuvable' }, { status: 404 });
+      }
 
-        if (avion.proprietaire_id !== user.id) {
-          return NextResponse.json({ error: 'Cet avion ne vous appartient pas' }, { status: 403 });
-        }
+      if (avion.proprietaire_id !== user.id) {
+        return NextResponse.json({ error: 'Cet avion ne vous appartient pas' }, { status: 403 });
+      }
 
-        // Vérifier que l'avion n'est pas déjà en vente
-        const { data: existingAnnonce } = await admin.from('hangar_market')
-          .select('id')
-          .eq('inventaire_avion_id', inventaire_avion_id)
-          .eq('statut', 'en_vente')
-          .single();
+      // Vérifier que l'avion n'est pas déjà en vente
+      const { data: existingAnnonce } = await admin.from('hangar_market')
+        .select('id')
+        .eq('inventaire_avion_id', inventaire_avion_id)
+        .eq('statut', 'en_vente')
+        .single();
 
-        if (existingAnnonce) {
-          return NextResponse.json({ error: 'Cet avion est déjà en vente' }, { status: 400 });
-        }
+      if (existingAnnonce) {
+        return NextResponse.json({ error: 'Cet avion est déjà en vente' }, { status: 400 });
+      }
 
-        // Vérifier que l'avion n'est pas en vol
-        const { count: enVol } = await admin.from('plans_vol')
-          .select('*', { count: 'exact', head: true })
-          .eq('inventaire_avion_id', inventaire_avion_id)
-          .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
+      // Vérifier que l'avion n'est pas en vol
+      const { count: enVol } = await admin.from('plans_vol')
+        .select('*', { count: 'exact', head: true })
+        .eq('inventaire_avion_id', inventaire_avion_id)
+        .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
 
-        if ((enVol || 0) > 0) {
-          return NextResponse.json({ error: 'Cet avion est en vol' }, { status: 400 });
-        }
-
-        type_avion_id = avion.type_avion_id;
-        vendeur_id = user.id;
-
-      } else if (flotte_avion_id && compagnie_vendeur_id) {
-        // Vente d'un avion de flotte
-        const { data: compagnie } = await admin.from('compagnies')
-          .select('id, pdg_id')
-          .eq('id', compagnie_vendeur_id)
-          .single();
-
-        if (!compagnie || compagnie.pdg_id !== user.id) {
-          return NextResponse.json({ error: 'Seul le PDG peut vendre les avions de la compagnie' }, { status: 403 });
-        }
-
-        const { data: flotte } = await admin.from('compagnie_flotte')
-          .select('id, type_avion_id, quantite')
-          .eq('id', flotte_avion_id)
-          .eq('compagnie_id', compagnie_vendeur_id)
-          .single();
-
-        if (!flotte || flotte.quantite < 1) {
-          return NextResponse.json({ error: 'Avion introuvable dans la flotte' }, { status: 404 });
-        }
-
-        // Vérifier que l'avion n'est pas déjà en vente
-        const { data: existingAnnonce } = await admin.from('hangar_market')
-          .select('id')
-          .eq('flotte_avion_id', flotte_avion_id)
-          .eq('statut', 'en_vente')
-          .single();
-
-        if (existingAnnonce) {
-          return NextResponse.json({ error: 'Cet avion est déjà en vente' }, { status: 400 });
-        }
-
-        type_avion_id = flotte.type_avion_id;
-        compagnie_id = compagnie_vendeur_id;
-      } else {
-        return NextResponse.json({ error: 'Configuration invalide' }, { status: 400 });
+      if ((enVol || 0) > 0) {
+        return NextResponse.json({ error: 'Cet avion est en vol' }, { status: 400 });
       }
 
       // Créer l'annonce
       const { data: annonce, error } = await admin.from('hangar_market').insert({
-        vendeur_id,
-        compagnie_vendeur_id: compagnie_id,
-        type_avion_id,
-        inventaire_avion_id: inventaire_avion_id || null,
-        flotte_avion_id: flotte_avion_id || null,
+        vendeur_id: user.id,
+        compagnie_vendeur_id: null,
+        type_avion_id: avion.type_avion_id,
+        inventaire_avion_id: inventaire_avion_id,
+        flotte_avion_id: null,
         titre,
         description: description || null,
         prix,
@@ -319,79 +277,15 @@ export async function POST(req: NextRequest) {
         }
       ]);
 
-      // Transférer l'avion
+      // Transférer l'avion (uniquement avions personnels via inventaire)
       if (annonce.inventaire_avion_id) {
-        if (pour_compagnie_id) {
-          // Inventaire -> Flotte : supprimer de l'inventaire, ajouter à la flotte
-          await admin.from('inventaire_avions').delete().eq('id', annonce.inventaire_avion_id);
-          
-          // Vérifier si type existe déjà dans la flotte
-          const { data: existingFlotte } = await admin.from('compagnie_flotte')
-            .select('id, quantite')
-            .eq('compagnie_id', pour_compagnie_id)
-            .eq('type_avion_id', annonce.type_avion_id)
-            .single();
-
-          if (existingFlotte) {
-            await admin.from('compagnie_flotte')
-              .update({ quantite: existingFlotte.quantite + 1 })
-              .eq('id', existingFlotte.id);
-          } else {
-            await admin.from('compagnie_flotte').insert({
-              compagnie_id: pour_compagnie_id,
-              type_avion_id: annonce.type_avion_id,
-              quantite: 1
-            });
-          }
-        } else {
-          // Inventaire -> Inventaire : changer le propriétaire
-          await admin.from('inventaire_avions')
-            .update({ proprietaire_id: user.id })
-            .eq('id', annonce.inventaire_avion_id);
-        }
+        // Inventaire -> Inventaire : changer le propriétaire
+        await admin.from('inventaire_avions')
+          .update({ proprietaire_id: user.id })
+          .eq('id', annonce.inventaire_avion_id);
       } else if (annonce.flotte_avion_id) {
-        // Retirer de la flotte vendeur
-        const { data: flotteVendeur } = await admin.from('compagnie_flotte')
-          .select('id, quantite')
-          .eq('id', annonce.flotte_avion_id)
-          .single();
-
-        if (flotteVendeur) {
-          if (flotteVendeur.quantite <= 1) {
-            await admin.from('compagnie_flotte').delete().eq('id', flotteVendeur.id);
-          } else {
-            await admin.from('compagnie_flotte')
-              .update({ quantite: flotteVendeur.quantite - 1 })
-              .eq('id', flotteVendeur.id);
-          }
-        }
-
-        if (pour_compagnie_id) {
-          // Flotte -> Flotte
-          const { data: existingFlotte } = await admin.from('compagnie_flotte')
-            .select('id, quantite')
-            .eq('compagnie_id', pour_compagnie_id)
-            .eq('type_avion_id', annonce.type_avion_id)
-            .single();
-
-          if (existingFlotte) {
-            await admin.from('compagnie_flotte')
-              .update({ quantite: existingFlotte.quantite + 1 })
-              .eq('id', existingFlotte.id);
-          } else {
-            await admin.from('compagnie_flotte').insert({
-              compagnie_id: pour_compagnie_id,
-              type_avion_id: annonce.type_avion_id,
-              quantite: 1
-            });
-          }
-        } else {
-          // Flotte -> Inventaire
-          await admin.from('inventaire_avions').insert({
-            proprietaire_id: user.id,
-            type_avion_id: annonce.type_avion_id
-          });
-        }
+        // L'ancien système de flotte est obsolète
+        return NextResponse.json({ error: 'Cette annonce utilise l\'ancien système de flotte qui n\'est plus supporté.' }, { status: 400 });
       }
 
       // Marquer comme vendu

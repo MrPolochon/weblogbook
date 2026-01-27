@@ -14,17 +14,6 @@ interface TypeAvion {
   est_militaire?: boolean;
 }
 
-interface FlotteItem {
-  id: string;
-  type_avion_id: string;
-  quantite: number;
-  disponibles: number;
-  nom_personnalise: string | null;
-  capacite_pax_custom: number | null;
-  capacite_cargo_custom: number | null;
-  types_avion: TypeAvion | null;
-}
-
 interface InventaireItem {
   id: string;
   type_avion_id: string;
@@ -56,10 +45,6 @@ interface AeroportPassagers {
   passagers_max: number;
 }
 
-interface FlotteItemWithCompagnie extends FlotteItem {
-  compagnie_id: string;
-}
-
 interface AvionIndividuel {
   id: string;
   compagnie_id: string;
@@ -73,12 +58,11 @@ interface AvionIndividuel {
 
 interface Props {
   compagniesDisponibles: Compagnie[];
-  flotteParCompagnie: Record<string, FlotteItemWithCompagnie[]>;
   inventairePersonnel: InventaireItem[];
   avionsParCompagnie?: Record<string, AvionIndividuel[]>;
 }
 
-export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompagnie, inventairePersonnel, avionsParCompagnie = {} }: Props) {
+export default function DepotPlanVolForm({ compagniesDisponibles, inventairePersonnel, avionsParCompagnie = {} }: Props) {
   const router = useRouter();
   const [aeroport_depart, setAeroportDepart] = useState('');
   const [aeroport_arrivee, setAeroportArrivee] = useState('');
@@ -97,7 +81,6 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   const [vol_ferry, setVolFerry] = useState(false);
   const [selectedCompagnieId, setSelectedCompagnieId] = useState('');
   const [nature_transport, setNatureTransport] = useState<'passagers' | 'cargo'>('passagers');
-  const [flotte_avion_id, setFlotteAvionId] = useState('');
   const [inventaire_avion_id, setInventaireAvionId] = useState('');
   const [compagnie_avion_id, setCompagnieAvionId] = useState('');
   
@@ -118,20 +101,24 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Get selected company and its fleet
+  // Get selected company
   const selectedCompagnie = compagniesDisponibles.find(c => c.id === selectedCompagnieId) || null;
-  const flotteCompagnie = selectedCompagnieId ? (flotteParCompagnie[selectedCompagnieId] || []) : [];
   
   // Get individual aircraft for the selected company, filtered by departure airport
   const avionsCompagnie = selectedCompagnieId ? (avionsParCompagnie[selectedCompagnieId] || []) : [];
-  const avionsDisponibles = avionsCompagnie.filter(a => 
-    a.statut === 'ground' && 
-    a.usure_percent > 0 &&
-    (!aeroport_depart || a.aeroport_actuel === aeroport_depart.toUpperCase())
-  );
+  // Pour les vols ferry, on peut inclure les avions à 0% d'usure et on n'exige pas qu'ils soient à l'aéroport de départ
+  // Car le but du vol ferry est justement de ramener un avion bloqué/à 0% vers un hub
+  const avionsDisponibles = vol_ferry 
+    ? avionsCompagnie.filter(a => 
+        a.statut === 'ground' // Avion au sol (débloqué)
+      )
+    : avionsCompagnie.filter(a => 
+        a.statut === 'ground' && 
+        a.usure_percent > 0 &&
+        (!aeroport_depart || a.aeroport_actuel === aeroport_depart.toUpperCase())
+      );
   
   // Get selected aircraft info
-  const selectedFlotte = flotteCompagnie.find(f => f.id === flotte_avion_id);
   const selectedInventaire = inventairePersonnel.find(i => i.id === inventaire_avion_id);
   const selectedAvionIndiv = avionsCompagnie.find(a => a.id === compagnie_avion_id);
   
@@ -230,30 +217,28 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
   // Generate PAX and CARGO values based on all factors
   // Les vols ferry sont à vide - pas de génération
   useEffect(() => {
-    // Doit avoir un avion sélectionné (soit flotte par type, soit avion individuel)
-    const hasAircraft = flotte_avion_id || compagnie_avion_id;
+    // Doit avoir un avion individuel sélectionné
     // Vol ferry = vol à vide, pas de passagers/cargo
-    if (vol_ferry || !vol_commercial || !selectedCompagnie || !hasAircraft || !aeroport_depart || !aeroport_arrivee) {
+    if (vol_ferry || !vol_commercial || !selectedCompagnie || !compagnie_avion_id || !aeroport_depart || !aeroport_arrivee) {
       setGeneratedPax(0);
       setGeneratedCargo(0);
       setLastGeneratedKey('');
       return;
     }
 
-    // Obtenir le type d'avion (priorité avion individuel > flotte par type)
-    const avionIndivType = selectedAvionIndiv?.types_avion 
+    // Obtenir le type d'avion depuis l'avion individuel sélectionné
+    const avion = selectedAvionIndiv?.types_avion 
       ? (Array.isArray(selectedAvionIndiv.types_avion) ? selectedAvionIndiv.types_avion[0] : selectedAvionIndiv.types_avion)
       : null;
-    const avion = avionIndivType || selectedFlotte?.types_avion;
     if (!avion) return;
 
-    const capacitePax = selectedFlotte?.capacite_pax_custom ?? avion.capacite_pax ?? 0;
-    const capaciteCargo = selectedFlotte?.capacite_cargo_custom ?? avion.capacite_cargo_kg ?? 0;
+    const capacitePax = avion.capacite_pax ?? 0;
+    const capaciteCargo = avion.capacite_cargo_kg ?? 0;
     const prixCargo = selectedCompagnie.prix_kg_cargo || 0;
 
     // Clé unique pour régénérer seulement quand les paramètres importants changent
     // NE PAS inclure nature_transport pour éviter la régénération en basculant entre passagers/cargo
-    const aircraftKey = compagnie_avion_id || flotte_avion_id;
+    const aircraftKey = compagnie_avion_id;
     const generationKey = `${aircraftKey}-${aeroport_depart}-${aeroport_arrivee}-${prixBilletLiaison}-${prixCargo}`;
     if (generationKey === lastGeneratedKey) {
       return;
@@ -326,7 +311,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     // Générer un type de cargaison estimé (le serveur générera le vrai type)
     setEstimatedTypeCargaison(genererTypeCargaison());
     setLastGeneratedKey(generationKey);
-  }, [vol_commercial, vol_ferry, flotte_avion_id, compagnie_avion_id, selectedCompagnie, selectedFlotte, selectedAvionIndiv, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport]);
+  }, [vol_commercial, vol_ferry, compagnie_avion_id, selectedCompagnie, selectedAvionIndiv, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport]);
 
   // Calculer les revenus basés sur les valeurs générées et le type de transport sélectionné
   const nbPax = nature_transport === 'passagers' ? generatedPax : 0;
@@ -336,13 +321,12 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
     : generatedCargo * (selectedCompagnie?.prix_kg_cargo || 0);
   const salairePilote = Math.floor(revenuBrut * (selectedCompagnie?.pourcentage_salaire || 0) / 100);
 
-  // Calculer les capacités et taux de remplissage
-  // Priorité : avion individuel > flotte par type
+  // Calculer les capacités et taux de remplissage (avion individuel seulement)
   const avionType = selectedAvionIndiv?.types_avion 
     ? (Array.isArray(selectedAvionIndiv.types_avion) ? selectedAvionIndiv.types_avion[0] : selectedAvionIndiv.types_avion)
-    : selectedFlotte?.types_avion;
-  const capacitePaxMax = selectedFlotte?.capacite_pax_custom ?? avionType?.capacite_pax ?? 0;
-  const capaciteCargoMax = selectedFlotte?.capacite_cargo_custom ?? avionType?.capacite_cargo_kg ?? 0;
+    : null;
+  const capacitePaxMax = avionType?.capacite_pax ?? 0;
+  const capaciteCargoMax = avionType?.capacite_cargo_kg ?? 0;
   
   const tauxRemplissagePax = capacitePaxMax > 0 ? (nbPax / capacitePaxMax) : 0;
   const tauxRemplissageCargo = capaciteCargoMax > 0 ? (cargoKg / capaciteCargoMax) : 0;
@@ -369,7 +353,6 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       vol_commercial: vol_commercial && !vol_ferry,
       compagnie_id: (vol_commercial || vol_ferry) && selectedCompagnieId ? selectedCompagnieId : undefined,
       nature_transport: vol_commercial && !vol_ferry ? nature_transport : undefined,
-      flotte_avion_id: vol_commercial && !vol_ferry && flotte_avion_id ? flotte_avion_id : undefined,
       inventaire_avion_id: !vol_commercial && !vol_ferry && inventaire_avion_id ? inventaire_avion_id : undefined,
       compagnie_avion_id: (vol_commercial || vol_ferry) && compagnie_avion_id ? compagnie_avion_id : undefined,
       vol_ferry,
@@ -400,8 +383,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       setError('Sélectionnez une compagnie pour un vol commercial.');
       return;
     }
-    // Accepter soit un avion individuel (nouveau système) soit un avion de flotte (ancien système)
-    if (vol_commercial && !flotte_avion_id && !compagnie_avion_id) {
+    // Un avion individuel est requis pour les vols commerciaux
+    if (vol_commercial && !compagnie_avion_id) {
       setError('Sélectionnez un avion pour un vol commercial.');
       return;
     }
@@ -602,42 +585,26 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
       {/* Sélection de l'appareil */}
       {(vol_commercial || vol_ferry) && selectedCompagnie ? (
         <div className="space-y-3">
-          {/* Ancien système par type - masqué si avions individuels disponibles */}
-          {avionsCompagnie.length === 0 && vol_commercial && (
-            <div>
-              <label className="label">Appareil de la flotte *</label>
-              <select 
-                className="input w-full" 
-                value={flotte_avion_id} 
-                onChange={(e) => setFlotteAvionId(e.target.value)}
-                required
-              >
-                <option value="">— Choisir un appareil —</option>
-                {flotteCompagnie.filter(f => f.disponibles > 0).map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.nom_personnalise || f.types_avion?.nom || 'Avion'} 
-                    {f.types_avion?.code_oaci && ` (${f.types_avion.code_oaci})`}
-                    {` - ${f.disponibles}/${f.quantite} dispo`}
-                  </option>
-                ))}
-              </select>
-              {flotteCompagnie.filter(f => f.disponibles > 0).length === 0 && (
-                <p className="text-amber-400 text-sm mt-1">Aucun appareil disponible dans la flotte.</p>
-              )}
-            </div>
-          )}
-
-          {/* Nouveau système : avions individuels avec immatriculation */}
-          {avionsCompagnie.length > 0 && (
-            <div>
+          {/* Avions individuels avec immatriculation */}
+          <div>
               <label className="label">
                 {vol_ferry ? 'Avion à déplacer *' : 'Avion *'}
-                <span className="text-slate-500 font-normal ml-2">— sélectionner un appareil à {aeroport_depart?.toUpperCase() || '...'}</span>
+                {!vol_ferry && <span className="text-slate-500 font-normal ml-2">— sélectionner un appareil à {aeroport_depart?.toUpperCase() || '...'}</span>}
+                {vol_ferry && <span className="text-slate-500 font-normal ml-2">— l&apos;aéroport de départ sera défini par la position de l&apos;avion</span>}
               </label>
               <select 
                 className="input w-full" 
                 value={compagnie_avion_id} 
-                onChange={(e) => setCompagnieAvionId(e.target.value)}
+                onChange={(e) => {
+                  setCompagnieAvionId(e.target.value);
+                  // Pour les vols ferry, définir automatiquement l'aéroport de départ
+                  if (vol_ferry && e.target.value) {
+                    const avionSelect = avionsCompagnie.find(a => a.id === e.target.value);
+                    if (avionSelect) {
+                      setAeroportDepart(avionSelect.aeroport_actuel);
+                    }
+                  }
+                }}
                 required
               >
                 <option value="">— Choisir un avion —</option>
@@ -646,11 +613,12 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
                   return (
                     <option key={a.id} value={a.id}>
                       {a.immatriculation} {a.nom_bapteme ? `"${a.nom_bapteme}"` : ''} — {typeNom || 'Avion'} — {a.aeroport_actuel} ({a.usure_percent}%)
+                      {a.usure_percent === 0 && ' [0% - À RÉPARER]'}
                     </option>
                   );
                 })}
               </select>
-              {aeroport_depart && avionsDisponibles.length === 0 && avionsCompagnie.length > 0 && (
+              {!vol_ferry && aeroport_depart && avionsDisponibles.length === 0 && avionsCompagnie.length > 0 && (
                 <p className="text-amber-400 text-sm mt-1">
                   Aucun avion disponible à {aeroport_depart.toUpperCase()}. 
                   {avionsCompagnie.filter(a => a.statut === 'ground' && a.usure_percent > 0).length > 0 && (
@@ -661,10 +629,15 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
               {selectedAvionIndiv && (
                 <p className="text-emerald-400 text-sm mt-1">
                   ✓ Avion sélectionné : {selectedAvionIndiv.immatriculation} à {selectedAvionIndiv.aeroport_actuel}
+                  {selectedAvionIndiv.usure_percent === 0 && <span className="text-amber-400 ml-1">(À réparer - 0% d&apos;usure)</span>}
+                </p>
+              )}
+              {avionsCompagnie.length === 0 && (
+                <p className="text-amber-400 text-sm mt-1">
+                  Aucun avion dans la flotte de cette compagnie. Le PDG doit acheter des avions sur le Marketplace.
                 </p>
               )}
             </div>
-          )}
           
           {/* Type de transport - masqué pour vols ferry */}
           {!vol_ferry && (
@@ -694,7 +667,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, flotteParCompa
           )}
 
           {/* Aperçu revenus - masqué pour vols ferry */}
-          {!vol_ferry && (flotte_avion_id || compagnie_avion_id) && aeroport_depart && aeroport_arrivee && (
+          {!vol_ferry && compagnie_avion_id && aeroport_depart && aeroport_arrivee && (
             <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
               <div className="flex items-center gap-2 mb-2">
                 <DollarSign className="h-4 w-4 text-emerald-400" />

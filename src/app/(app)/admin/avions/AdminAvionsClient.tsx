@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plane, MapPin, Edit2, Trash2, Save, X, RefreshCw, Building2 } from 'lucide-react';
+import { Plane, MapPin, Edit2, Trash2, Save, X, RefreshCw, Building2, Plus } from 'lucide-react';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
 type Avion = {
@@ -16,6 +16,9 @@ type Avion = {
   types_avion: { id: string; nom: string; constructeur: string } | { id: string; nom: string; constructeur: string }[] | null;
   compagnies: { id: string; nom: string } | { id: string; nom: string }[] | null;
 };
+
+type Compagnie = { id: string; nom: string };
+type TypeAvion = { id: string; nom: string; constructeur: string };
 
 const STATUTS = ['ground', 'in_flight', 'maintenance', 'bloque'] as const;
 
@@ -35,8 +38,23 @@ export default function AdminAvionsClient() {
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('');
 
+  // États pour le formulaire d'ajout
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
+  const [typesAvion, setTypesAvion] = useState<TypeAvion[]>([]);
+  const [newAvion, setNewAvion] = useState({
+    compagnie_id: '',
+    type_avion_id: '',
+    immatriculation: '',
+    nom_bapteme: '',
+    aeroport_actuel: ''
+  });
+  const [adding, setAdding] = useState(false);
+
   useEffect(() => {
     loadAvions();
+    loadCompagnies();
+    loadTypesAvion();
   }, []);
 
   async function loadAvions() {
@@ -53,6 +71,57 @@ export default function AdminAvionsClient() {
       setError('Erreur de chargement');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadCompagnies() {
+    try {
+      const res = await fetch('/api/compagnies');
+      const data = await res.json();
+      if (res.ok) setCompagnies(data || []);
+    } catch {
+      console.error('Erreur chargement compagnies');
+    }
+  }
+
+  async function loadTypesAvion() {
+    try {
+      const res = await fetch('/api/types-avion');
+      const data = await res.json();
+      if (res.ok) setTypesAvion(data || []);
+    } catch {
+      console.error('Erreur chargement types avion');
+    }
+  }
+
+  async function handleAddAvion(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newAvion.compagnie_id || !newAvion.type_avion_id) {
+      setError('Sélectionnez une compagnie et un type d\'avion');
+      return;
+    }
+    
+    setAdding(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/admin/avions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newAvion)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      
+      setNewAvion({ compagnie_id: '', type_avion_id: '', immatriculation: '', nom_bapteme: '', aeroport_actuel: '' });
+      setShowAddForm(false);
+      loadAvions();
+      router.refresh();
+      alert(data.message || 'Avion ajouté avec succès');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setAdding(false);
     }
   }
 
@@ -137,7 +206,7 @@ export default function AdminAvionsClient() {
 
   return (
     <div className="space-y-4">
-      {/* Filtres */}
+      {/* Filtres et bouton d'ajout */}
       <div className="flex items-center gap-4">
         <input
           type="text"
@@ -147,6 +216,15 @@ export default function AdminAvionsClient() {
           className="input flex-1"
         />
         <button
+          onClick={() => setShowAddForm(!showAddForm)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+            showAddForm ? 'bg-emerald-600 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+          }`}
+        >
+          <Plus className="h-4 w-4" />
+          Ajouter un avion
+        </button>
+        <button
           onClick={loadAvions}
           className="btn-secondary flex items-center gap-2"
         >
@@ -154,6 +232,98 @@ export default function AdminAvionsClient() {
           Actualiser
         </button>
       </div>
+
+      {/* Formulaire d'ajout d'avion */}
+      {showAddForm && (
+        <div className="card border-emerald-500/30 bg-emerald-500/5">
+          <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+            <Plus className="h-5 w-5 text-emerald-400" />
+            Ajouter un avion à une compagnie
+          </h3>
+          <form onSubmit={handleAddAvion} className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Compagnie *</label>
+              <select
+                value={newAvion.compagnie_id}
+                onChange={(e) => setNewAvion({ ...newAvion, compagnie_id: e.target.value })}
+                className="input w-full"
+                required
+              >
+                <option value="">— Sélectionner —</option>
+                {compagnies.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nom}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Type d&apos;avion *</label>
+              <select
+                value={newAvion.type_avion_id}
+                onChange={(e) => setNewAvion({ ...newAvion, type_avion_id: e.target.value })}
+                className="input w-full"
+                required
+              >
+                <option value="">— Sélectionner —</option>
+                {typesAvion.map((t) => (
+                  <option key={t.id} value={t.id}>{t.nom} {t.constructeur ? `(${t.constructeur})` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Immatriculation (auto si vide)</label>
+              <input
+                type="text"
+                value={newAvion.immatriculation}
+                onChange={(e) => setNewAvion({ ...newAvion, immatriculation: e.target.value.toUpperCase() })}
+                className="input w-full"
+                placeholder="F-XXXX"
+                maxLength={10}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Nom de baptême</label>
+              <input
+                type="text"
+                value={newAvion.nom_bapteme}
+                onChange={(e) => setNewAvion({ ...newAvion, nom_bapteme: e.target.value })}
+                className="input w-full"
+                placeholder="Optionnel"
+                maxLength={50}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Aéroport initial (hub si vide)</label>
+              <select
+                value={newAvion.aeroport_actuel}
+                onChange={(e) => setNewAvion({ ...newAvion, aeroport_actuel: e.target.value })}
+                className="input w-full"
+              >
+                <option value="">Hub principal</option>
+                {AEROPORTS_PTFS.map((a) => (
+                  <option key={a.code} value={a.code}>{a.code} - {a.nom}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end gap-2">
+              <button
+                type="submit"
+                disabled={adding}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                {adding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                Ajouter
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddForm(false)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition-colors"
+              >
+                Annuler
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {error && <p className="text-red-400 text-sm">{error}</p>}
 

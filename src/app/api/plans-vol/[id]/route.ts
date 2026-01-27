@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
+import { calculerUsureVol } from '@/lib/compagnie-utils';
 
 const STATUTS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring'];
 const ORDRE_ACCEPTATION_PLANS = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
@@ -342,7 +343,7 @@ export async function PATCH(
 
     const admin = createAdminClient();
     const { data: plan } = await admin.from('plans_vol')
-      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison')
+      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, compagnie_avion_id')
       .eq('id', id)
       .single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
@@ -381,6 +382,8 @@ export async function PATCH(
       };
       
       let paiementResult = null;
+      let usureAppliquee = 0;
+      
       if (newStatut === 'cloture') {
         payload.cloture_at = demandeClotureAt.toISOString();
         // Utiliser demande_cloture_at pour le calcul du temps réel
@@ -388,11 +391,44 @@ export async function PATCH(
         if (!paiementResult.success) {
           console.error('Erreur paiement vol:', paiementResult.message);
         }
+        
+        // Appliquer l'usure à l'avion individuel si utilisé
+        if ((plan as any).compagnie_avion_id) {
+          const { data: avion } = await admin
+            .from('compagnie_avions')
+            .select('id, usure_percent')
+            .eq('id', (plan as any).compagnie_avion_id)
+            .single();
+          
+          if (avion) {
+            // Calculer le temps réel de vol
+            let tempsReelMin = plan.temps_prev_min;
+            if (plan.accepted_at) {
+              const acceptedAt = new Date(plan.accepted_at);
+              const diffMs = demandeClotureAt.getTime() - acceptedAt.getTime();
+              tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
+            }
+            
+            // Calculer et appliquer l'usure
+            usureAppliquee = calculerUsureVol(tempsReelMin);
+            const nouvelleUsure = Math.max(0, avion.usure_percent - usureAppliquee);
+            const nouveauStatut = nouvelleUsure === 0 ? 'bloque' : 'ground';
+            
+            await admin
+              .from('compagnie_avions')
+              .update({
+                usure_percent: nouvelleUsure,
+                aeroport_actuel: plan.aeroport_arrivee,
+                statut: nouveauStatut,
+              })
+              .eq('id', avion.id);
+          }
+        }
       }
 
       const { error } = await admin.from('plans_vol').update(payload).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      return NextResponse.json({ ok: true, statut: newStatut, direct: closDirect, paiement: paiementResult });
+      return NextResponse.json({ ok: true, statut: newStatut, direct: closDirect, paiement: paiementResult, usure_appliquee: usureAppliquee });
     }
 
     if (action === 'confirmer_cloture') {
@@ -413,9 +449,44 @@ export async function PATCH(
         console.error('Erreur paiement vol:', paiementResult.message);
       }
 
+      // Appliquer l'usure à l'avion individuel si utilisé
+      let usureAppliquee = 0;
+      if ((plan as any).compagnie_avion_id) {
+        const { data: avion } = await admin
+          .from('compagnie_avions')
+          .select('id, usure_percent')
+          .eq('id', (plan as any).compagnie_avion_id)
+          .single();
+        
+        if (avion) {
+          // Calculer le temps réel de vol (depuis accepted_at jusqu'à demande_cloture_at)
+          let tempsReelMin = plan.temps_prev_min;
+          if (plan.accepted_at && plan.demande_cloture_at) {
+            const acceptedAt = new Date(plan.accepted_at);
+            const demandeCloture = new Date(plan.demande_cloture_at);
+            const diffMs = demandeCloture.getTime() - acceptedAt.getTime();
+            tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
+          }
+          
+          // Calculer et appliquer l'usure
+          usureAppliquee = calculerUsureVol(tempsReelMin);
+          const nouvelleUsure = Math.max(0, avion.usure_percent - usureAppliquee);
+          const nouveauStatut = nouvelleUsure === 0 ? 'bloque' : 'ground';
+          
+          await admin
+            .from('compagnie_avions')
+            .update({
+              usure_percent: nouvelleUsure,
+              aeroport_actuel: plan.aeroport_arrivee,
+              statut: nouveauStatut,
+            })
+            .eq('id', avion.id);
+        }
+      }
+
       const { error } = await admin.from('plans_vol').update({ statut: 'cloture', cloture_at: confirmationAt.toISOString() }).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      return NextResponse.json({ ok: true, paiement: paiementResult });
+      return NextResponse.json({ ok: true, paiement: paiementResult, usure_appliquee: usureAppliquee });
     }
 
     if (action === 'accepter') {

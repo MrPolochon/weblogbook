@@ -309,6 +309,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === 'connected') {
           setCallState('connected');
+          playMessage('Communications établie');
         } else if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
           cleanupWebRTC();
           setCallState('idle');

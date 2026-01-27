@@ -125,24 +125,6 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
     });
   }
 
-  // Flotte avec disponibilité
-  const { data: flotte } = await admin.from('compagnie_flotte')
-    .select('*, types_avion(nom, code_oaci)')
-    .eq('compagnie_id', selectedCompagnieOption.id);
-
-  const flotteWithStatus = await Promise.all((flotte || []).map(async (item) => {
-    const { count } = await admin.from('plans_vol')
-      .select('*', { count: 'exact', head: true })
-      .eq('flotte_avion_id', item.id)
-      .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
-    
-    return {
-      ...item,
-      en_vol: count || 0,
-      disponibles: item.quantite - (count || 0)
-    };
-  }));
-
   const isPdg = compagnie?.pdg_id === user.id;
 
   // Récupérer le solde de la compagnie (compte entreprise)
@@ -168,19 +150,6 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
     };
   });
 
-  const flotteData = flotteWithStatus.map(item => {
-    const taData = item.types_avion;
-    const taObj = taData ? (Array.isArray(taData) ? taData[0] : taData) as { nom: string; code_oaci: string | null } | null : null;
-    return {
-      id: item.id,
-      nom: item.nom_personnalise || taObj?.nom || '—',
-      code_oaci: taObj?.code_oaci || null,
-      quantite: item.quantite,
-      en_vol: item.en_vol,
-      disponibles: item.disponibles
-    };
-  });
-
   const pdgIdentifiant = (() => {
     const p = compagnie?.profiles;
     const pObj = p ? (Array.isArray(p) ? p[0] : p) : null;
@@ -202,7 +171,6 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
         prix_kg_cargo: compagnie?.prix_kg_cargo || 5,
       }}
       employes={employesData}
-      flotte={flotteData}
       isPdg={isPdg}
       soldeCompagnie={soldeCompagnie}
     />

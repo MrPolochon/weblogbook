@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { CODES_OACI_VALIDES, calculerCargoReel, getAeroportInfo } from '@/lib/aeroports-ptfs';
+import { CODES_OACI_VALIDES, genererTypeCargaison } from '@/lib/aeroports-ptfs';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol
 // AÉROPORT DE DÉPART : Delivery → Clairance → Ground → Tower → DEP → Center
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const { 
       aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, 
       intentions_vol, sid_depart, star_arrivee, route_ifr, note_atc,
-      vol_commercial, compagnie_id, nature_transport, flotte_avion_id, inventaire_avion_id,
+      vol_commercial, compagnie_id, nature_transport, inventaire_avion_id,
       compagnie_avion_id, // Avion individuel avec localisation
       nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote, prix_billet_utilise,
       vol_sans_atc, vol_ferry
@@ -65,118 +65,12 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
 
-    // Pré-calcul serveur pour les vols cargo (évite revenus à 0)
-    let cargoGenereCalc: number | null = null;
-    let revenuBrutCalc: number | null = null;
-    let salaireCalc: number | null = null;
-    let typeCargaisonCalc: string | null = null;
-
-    if (vol_commercial && nature_transport === 'cargo' && compagnie_id && flotte_avion_id) {
-      const { data: compagnie } = await admin
-        .from('compagnies')
-        .select('prix_kg_cargo, pourcentage_salaire')
-        .eq('id', compagnie_id)
-        .single();
-
-      const { data: flotte } = await admin
-        .from('compagnie_flotte')
-        .select('capacite_cargo_custom, types_avion(capacite_cargo_kg)')
-        .eq('id', flotte_avion_id)
-        .single();
-
-      const flotteData = (flotte ?? null) as unknown as {
-        capacite_cargo_custom?: number | null;
-        types_avion?: { capacite_cargo_kg?: number | null } | { capacite_cargo_kg?: number | null }[] | null;
-      } | null;
-      const capaciteCargoBase = Array.isArray(flotteData?.types_avion)
-        ? flotteData?.types_avion?.[0]?.capacite_cargo_kg
-        : flotteData?.types_avion?.capacite_cargo_kg;
-      const capaciteCargo = flotteData?.capacite_cargo_custom ?? capaciteCargoBase ?? 0;
-      const prixKg = compagnie?.prix_kg_cargo ?? 0;
-      const pourcentageSalaire = compagnie?.pourcentage_salaire ?? 0;
-
-      let cargoDisponible = 0;
-      const aeroportInfo = getAeroportInfo(ad);
-      const fallbackCargoMax = aeroportInfo?.cargoMax ?? 0;
-      try {
-        const { data: cargoRow, error: cargoError } = await admin
-          .from('aeroport_cargo')
-          .select('cargo_disponible, cargo_max')
-          .eq('code_oaci', ad)
-          .single();
-        if (cargoError) {
-          cargoDisponible = fallbackCargoMax;
-        } else {
-          cargoDisponible = cargoRow?.cargo_disponible ?? fallbackCargoMax;
-        }
-      } catch {
-        cargoDisponible = fallbackCargoMax;
-      }
-
-      if (capaciteCargo > 0 && prixKg > 0) {
-        const calc = calculerCargoReel(ad, aa, prixKg, capaciteCargo, cargoDisponible);
-        cargoGenereCalc = calc.cargo;
-        revenuBrutCalc = calc.revenus;
-        salaireCalc = Math.floor(calc.revenus * pourcentageSalaire / 100);
-        typeCargaisonCalc = calc.typeCargaison; // Type de cargaison généré aléatoirement
-      } else {
-        cargoGenereCalc = 0;
-        revenuBrutCalc = 0;
-        salaireCalc = 0;
-        typeCargaisonCalc = null;
-      }
-    }
-
-    const cargoGenereFinal = cargoGenereCalc ?? cargo_kg_genere ?? 0;
-    const revenuBrutFinal = revenuBrutCalc ?? revenue_brut ?? 0;
-    const salaireFinal = salaireCalc ?? salaire_pilote ?? 0;
-    const typeCargaisonFinal = typeCargaisonCalc;
-    
-    // Validation taux de remplissage minimum (25%) pour les vols commerciaux
-    if (vol_commercial && flotte_avion_id) {
-      const { data: flotte } = await admin
-        .from('compagnie_flotte')
-        .select('capacite_pax_custom, capacite_cargo_custom, types_avion(capacite_pax, capacite_cargo_kg)')
-        .eq('id', flotte_avion_id)
-        .single();
-      
-      if (flotte) {
-        const flotteData = flotte as unknown as {
-          capacite_pax_custom?: number | null;
-          capacite_cargo_custom?: number | null;
-          types_avion?: { capacite_pax?: number | null; capacite_cargo_kg?: number | null } | { capacite_pax?: number | null; capacite_cargo_kg?: number | null }[] | null;
-        };
-        
-        const capacitePaxBase = Array.isArray(flotteData?.types_avion)
-          ? flotteData?.types_avion?.[0]?.capacite_pax
-          : flotteData?.types_avion?.capacite_pax;
-        const capacitePaxMax = flotteData?.capacite_pax_custom ?? capacitePaxBase ?? 0;
-        
-        const capaciteCargoBase = Array.isArray(flotteData?.types_avion)
-          ? flotteData?.types_avion?.[0]?.capacite_cargo_kg
-          : flotteData?.types_avion?.capacite_cargo_kg;
-        const capaciteCargoMax = flotteData?.capacite_cargo_custom ?? capaciteCargoBase ?? 0;
-        
-        const remplissageMinRequis = 0.25; // 25% minimum
-        
-        if (nature_transport === 'passagers') {
-          const nbPaxFinal = nb_pax_genere || 0;
-          const tauxRemplissage = capacitePaxMax > 0 ? (nbPaxFinal / capacitePaxMax) : 0;
-          if (tauxRemplissage < remplissageMinRequis) {
-            return NextResponse.json({ 
-              error: `Le vol ne peut pas être effectué : l'avion doit être rempli à au moins 25% de sa capacité. Actuellement : ${nbPaxFinal}/${capacitePaxMax} passagers (${Math.round(tauxRemplissage * 100)}%)` 
-            }, { status: 400 });
-          }
-        } else if (nature_transport === 'cargo') {
-          const tauxRemplissage = capaciteCargoMax > 0 ? (cargoGenereFinal / capaciteCargoMax) : 0;
-          if (tauxRemplissage < remplissageMinRequis) {
-            return NextResponse.json({ 
-              error: `Le vol ne peut pas être effectué : l'avion doit être rempli à au moins 25% de sa capacité cargo. Actuellement : ${cargoGenereFinal.toLocaleString('fr-FR')}/${capaciteCargoMax.toLocaleString('fr-FR')} kg (${Math.round(tauxRemplissage * 100)}%)` 
-            }, { status: 400 });
-          }
-        }
-      }
-    }
+    // Utiliser les valeurs calculées côté client (le formulaire valide déjà le taux de remplissage)
+    const cargoGenereFinal = cargo_kg_genere ?? 0;
+    const revenuBrutFinal = revenue_brut ?? 0;
+    const salaireFinal = salaire_pilote ?? 0;
+    // Générer un type de cargaison aléatoire pour les vols cargo
+    const typeCargaisonFinal = vol_commercial && nature_transport === 'cargo' ? genererTypeCargaison() : null;
     
     // Validation vol ferry
     if (vol_ferry) {
@@ -241,6 +135,19 @@ export async function POST(request: Request) {
           error: `L'avion ${avionIndiv.immatriculation} a déjà un plan de vol en cours.` 
         }, { status: 400 });
       }
+
+      // Vérifier qu'il n'y a pas de vol ferry en cours pour cet avion
+      const { count: ferrysEnCours } = await admin
+        .from('vols_ferry')
+        .select('*', { count: 'exact', head: true })
+        .eq('avion_id', compagnie_avion_id)
+        .in('statut', ['planned', 'in_progress']);
+      
+      if (ferrysEnCours && ferrysEnCours > 0) {
+        return NextResponse.json({ 
+          error: `L'avion ${avionIndiv.immatriculation} a un vol ferry en cours. Attendez sa clôture.` 
+        }, { status: 400 });
+      }
     }
     
     // Si vol sans ATC, accepter automatiquement et mettre en autosurveillance
@@ -261,7 +168,6 @@ export async function POST(request: Request) {
         vol_commercial: Boolean(vol_commercial) && !vol_ferry,
         compagnie_id: (vol_commercial || vol_ferry) && compagnie_id ? compagnie_id : null,
         nature_transport: vol_commercial && !vol_ferry && nature_transport ? nature_transport : null,
-        flotte_avion_id: vol_commercial && !vol_ferry && flotte_avion_id ? flotte_avion_id : null,
         inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
         compagnie_avion_id: compagnie_avion_id || null,
         nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
@@ -370,7 +276,6 @@ export async function POST(request: Request) {
       vol_commercial: Boolean(vol_commercial) && !vol_ferry,
       compagnie_id: (vol_commercial || vol_ferry) && compagnie_id ? compagnie_id : null,
       nature_transport: vol_commercial && !vol_ferry && nature_transport ? nature_transport : null,
-      flotte_avion_id: vol_commercial && !vol_ferry && flotte_avion_id ? flotte_avion_id : null,
       inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
       compagnie_avion_id: compagnie_avion_id || null,
       nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,

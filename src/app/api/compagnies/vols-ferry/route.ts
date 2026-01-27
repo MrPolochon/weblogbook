@@ -87,11 +87,63 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'L\'avion est déjà à cet aéroport.' }, { status: 400 });
     }
 
-    // Si l'avion est bloqué à 0%, il doit être débloqué pour un vol ferry
-    const debloquePourFerry = avion.statut === 'bloque' && avion.usure_percent === 0;
-    if (avion.statut === 'bloque' && !debloquePourFerry) {
-      return NextResponse.json({ error: 'L\'avion est bloqué. Débloquez-le d\'abord ou affrétez des techniciens.' }, { status: 400 });
+    // Règles de vol ferry :
+    // 1. Un avion au sol (ground) peut faire un vol ferry normalement
+    // 2. Un avion bloqué (bloque) à 0% d'usure peut faire un vol ferry SI le PDG l'a débloqué (statut devient 'ground')
+    // 3. Un avion bloqué (bloque) ne peut PAS faire de vol ferry (il faut d'abord le débloquer)
+    // 4. Un avion en maintenance ne peut pas faire de vol ferry
+    
+    if (avion.statut === 'bloque') {
+      return NextResponse.json({ 
+        error: 'L\'avion est bloqué à 0% d\'usure. Débloquez-le d\'abord (bouton "Débloquer" dans la flotte) ou affrétez des techniciens.' 
+      }, { status: 400 });
     }
+    
+    if (avion.statut === 'maintenance') {
+      return NextResponse.json({ 
+        error: 'L\'avion est en maintenance. Attendez la fin de la réparation.' 
+      }, { status: 400 });
+    }
+
+    // Vérifier qu'il n'y a pas de plan de vol en cours pour cet avion
+    const { count: plansEnCours } = await admin
+      .from('plans_vol')
+      .select('*', { count: 'exact', head: true })
+      .eq('compagnie_avion_id', avion_id)
+      .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
+    
+    if (plansEnCours && plansEnCours > 0) {
+      return NextResponse.json({ 
+        error: 'Cet avion a un plan de vol en cours. Attendez la clôture du vol avant de créer un vol ferry.' 
+      }, { status: 400 });
+    }
+
+    // Vérifier qu'il n'y a pas déjà un vol ferry en cours pour cet avion
+    const { count: ferrysEnCours } = await admin
+      .from('vols_ferry')
+      .select('*', { count: 'exact', head: true })
+      .eq('avion_id', avion_id)
+      .in('statut', ['planned', 'in_progress']);
+    
+    if (ferrysEnCours && ferrysEnCours > 0) {
+      return NextResponse.json({ 
+        error: 'Cet avion a déjà un vol ferry en cours.' 
+      }, { status: 400 });
+    }
+    
+    // Si l'avion est au sol à 0% d'usure, c'est qu'il a été débloqué pour ferry
+    const debloquePourFerry = avion.usure_percent === 0;
+
+    // Récupérer les taxes de l'aéroport d'arrivée
+    const { data: taxesData } = await admin.from('taxes_aeroport')
+      .select('taxe_pourcent')
+      .eq('code_oaci', aa)
+      .single();
+    
+    // Taxe forfaitaire pour vol ferry (pas de revenu, donc calcul sur le coût de base)
+    const tauxTaxe = taxesData?.taxe_pourcent || 2;
+    const taxesAeroportuaires = Math.round(COUT_VOL_FERRY * tauxTaxe / 100);
+    const coutTotal = COUT_VOL_FERRY + taxesAeroportuaires;
 
     // Vérifier le solde
     const { data: compte } = await admin
@@ -104,9 +156,9 @@ export async function POST(request: Request) {
     if (!compte) {
       return NextResponse.json({ error: 'Compte entreprise introuvable.' }, { status: 500 });
     }
-    if (compte.solde < COUT_VOL_FERRY) {
+    if (compte.solde < coutTotal) {
       return NextResponse.json({ 
-        error: `Solde insuffisant. Coût du vol ferry : ${COUT_VOL_FERRY.toLocaleString('fr-FR')} F$.` 
+        error: `Solde insuffisant. Coût du vol ferry : ${COUT_VOL_FERRY.toLocaleString('fr-FR')} F$ + ${taxesAeroportuaires.toLocaleString('fr-FR')} F$ de taxes = ${coutTotal.toLocaleString('fr-FR')} F$.` 
       }, { status: 400 });
     }
 
@@ -120,7 +172,7 @@ export async function POST(request: Request) {
         aeroport_arrivee: aa,
         pilote_id: user.id,
         statut: 'planned',
-        cout_ferry: COUT_VOL_FERRY,
+        cout_ferry: coutTotal, // Coût total avec taxes
         debloque_pour_ferry: debloquePourFerry,
       })
       .select('id')
@@ -129,7 +181,7 @@ export async function POST(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
     // Débiter le compte
-    const nouveauSolde = compte.solde - COUT_VOL_FERRY;
+    const nouveauSolde = compte.solde - coutTotal;
     const { error: debitErr } = await admin
       .from('felitz_comptes')
       .update({ solde: nouveauSolde })
@@ -140,7 +192,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Erreur lors du débit.' }, { status: 500 });
     }
 
-    // Créer une transaction
+    // Créer une transaction pour le vol ferry
     await admin.from('felitz_transactions').insert({
       compte_id: compte.id,
       type: 'debit',
@@ -148,10 +200,20 @@ export async function POST(request: Request) {
       libelle: `Vol ferry ${avion.aeroport_actuel} → ${aa}`,
     });
 
+    // Créer une transaction pour les taxes
+    if (taxesAeroportuaires > 0) {
+      await admin.from('felitz_transactions').insert({
+        compte_id: compte.id,
+        type: 'debit',
+        montant: taxesAeroportuaires,
+        libelle: `Taxes aéroportuaires ${aa} (vol ferry)`,
+      });
+    }
+
     // Mettre l'avion en vol
     await admin.from('compagnie_avions').update({ statut: 'in_flight' }).eq('id', avion_id);
 
-    return NextResponse.json({ ok: true, id: vol.id, cout: COUT_VOL_FERRY });
+    return NextResponse.json({ ok: true, id: vol.id, cout: coutTotal, taxes: taxesAeroportuaires });
   } catch (e) {
     console.error('POST compagnies/vols-ferry:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

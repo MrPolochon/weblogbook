@@ -34,18 +34,25 @@ export default function PilotesActions({
       const res = await fetch(`/api/pilotes/${piloteId}`, opts);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        const errorMsg = data?.error || 'Erreur lors de la suppression';
         if (superadminModal) {
-          setSuperadminError(data?.error || 'Erreur');
-          setDeleting(false);
+          setSuperadminError(errorMsg);
         } else {
-          throw new Error(data?.error || 'Erreur');
+          alert(errorMsg);
         }
+        setDeleting(false);
         return;
       }
       setSuperadminModal(null);
       setSuperadminPwd('');
       router.refresh();
-    } catch {
+    } catch (e) {
+      const errorMsg = e instanceof Error ? e.message : 'Erreur lors de la suppression';
+      if (superadminModal) {
+        setSuperadminError(errorMsg);
+      } else {
+        alert(errorMsg);
+      }
       setDeleting(false);
     } finally {
       setDeleting(false);

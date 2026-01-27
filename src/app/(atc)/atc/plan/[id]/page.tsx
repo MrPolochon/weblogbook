@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plane, Clock, FileText, AlertCircle, CheckCircle2, XCircle, Radio, Navigation } from 'lucide-react';
+import { ArrowLeft, Plane, Clock, FileText, AlertCircle, CheckCircle2, XCircle, Radio, Navigation, Users, Package, Ship, Building2, User, Percent } from 'lucide-react';
 import ConfirmerClotureButton from './ConfirmerClotureButton';
 import AccepterPlanButton from './AccepterPlanButton';
 import RefuserPlanForm from './RefuserPlanForm';
@@ -32,7 +32,15 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
   const admin = createAdminClient();
   const { data: plan } = await admin
     .from('plans_vol')
-    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, instructions, intentions_vol, sid_depart, star_arrivee, route_ifr, note_atc, porte, temps_prev_min, refusal_reason, current_holder_user_id, automonitoring, pending_transfer_aeroport, pending_transfer_position, created_at')
+    .select(`
+      id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, instructions, intentions_vol, 
+      sid_depart, star_arrivee, route_ifr, note_atc, porte, temps_prev_min, refusal_reason, 
+      current_holder_user_id, automonitoring, pending_transfer_aeroport, pending_transfer_position, created_at,
+      vol_commercial, vol_ferry, nature_transport, type_cargaison, nb_pax_genere, cargo_kg_genere,
+      pilote:profiles!plans_vol_pilote_id_fkey(identifiant),
+      compagnie:compagnies(nom, code_oaci),
+      avion:compagnie_avions(immatriculation, nom_bapteme, usure_percent, types_avion(nom))
+    `)
     .eq('id', id)
     .single();
 
@@ -111,6 +119,105 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
                 <p className="text-xs text-slate-500 uppercase tracking-wide">Porte</p>
                 <p className="text-lg font-semibold text-slate-800">{plan.porte}</p>
               </div>
+            )}
+          </div>
+        </div>
+        
+        {/* Informations pilote, compagnie et avion */}
+        <div className="mt-6 pt-6 border-t border-slate-200">
+          <h3 className="text-sm font-medium text-slate-600 uppercase tracking-wide mb-3">Informations complémentaires</h3>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Pilote */}
+            {(() => {
+              const piloteData = (plan as any).pilote;
+              const pilote = piloteData ? (Array.isArray(piloteData) ? piloteData[0] : piloteData) : null;
+              return pilote?.identifiant ? (
+                <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
+                  <User className="h-5 w-5 text-slate-500" />
+                  <div>
+                    <p className="text-xs text-slate-500">Pilote</p>
+                    <p className="font-medium text-slate-800">{pilote.identifiant}</p>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+            
+            {/* Compagnie */}
+            {(() => {
+              const compagnieData = (plan as any).compagnie;
+              const compagnie = compagnieData ? (Array.isArray(compagnieData) ? compagnieData[0] : compagnieData) : null;
+              return compagnie?.nom ? (
+                <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
+                  <Building2 className="h-5 w-5 text-slate-500" />
+                  <div>
+                    <p className="text-xs text-slate-500">Compagnie</p>
+                    <p className="font-medium text-slate-800">{compagnie.nom} {compagnie.code_oaci && <span className="text-slate-500 text-xs">({compagnie.code_oaci})</span>}</p>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+            
+            {/* Avion */}
+            {(() => {
+              const avionData = (plan as any).avion;
+              const avion = avionData ? (Array.isArray(avionData) ? avionData[0] : avionData) : null;
+              const typeAvion = avion?.types_avion ? (Array.isArray(avion.types_avion) ? avion.types_avion[0] : avion.types_avion) : null;
+              return avion?.immatriculation ? (
+                <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
+                  <Plane className="h-5 w-5 text-slate-500" />
+                  <div>
+                    <p className="text-xs text-slate-500">Avion</p>
+                    <p className="font-medium text-slate-800 font-mono">{avion.immatriculation}</p>
+                    {typeAvion?.nom && <p className="text-xs text-slate-500">{typeAvion.nom}</p>}
+                  </div>
+                </div>
+              ) : null;
+            })()}
+            
+            {/* Usure avion */}
+            {(() => {
+              const avionData = (plan as any).avion;
+              const avion = avionData ? (Array.isArray(avionData) ? avionData[0] : avionData) : null;
+              return avion?.usure_percent !== undefined ? (
+                <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
+                  <Percent className="h-5 w-5 text-slate-500" />
+                  <div>
+                    <p className="text-xs text-slate-500">État avion</p>
+                    <p className={`font-medium ${avion.usure_percent >= 70 ? 'text-emerald-600' : avion.usure_percent >= 30 ? 'text-amber-600' : 'text-red-600'}`}>
+                      {avion.usure_percent}%
+                    </p>
+                  </div>
+                </div>
+              ) : null;
+            })()}
+          </div>
+          
+          {/* Type de vol (commercial, ferry, etc.) */}
+          <div className="flex flex-wrap gap-2 mt-4">
+            {(plan as any).vol_ferry && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-sm font-medium">
+                <Ship className="h-4 w-4" />
+                Vol Ferry (repositionnement)
+              </span>
+            )}
+            {(plan as any).vol_commercial && (plan as any).nature_transport === 'passagers' && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-100 text-sky-700 text-sm font-medium">
+                <Users className="h-4 w-4" />
+                {(plan as any).nb_pax_genere || 0} passagers
+              </span>
+            )}
+            {(plan as any).vol_commercial && (plan as any).nature_transport === 'cargo' && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-100 text-purple-700 text-sm font-medium">
+                <Package className="h-4 w-4" />
+                {(plan as any).cargo_kg_genere || 0} kg de cargo
+                {(plan as any).type_cargaison && <span className="text-purple-500 ml-1">({(plan as any).type_cargaison})</span>}
+              </span>
+            )}
+            {!(plan as any).vol_commercial && !(plan as any).vol_ferry && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-sm font-medium">
+                <Plane className="h-4 w-4" />
+                Vol privé / Instruction
+              </span>
             )}
           </div>
         </div>

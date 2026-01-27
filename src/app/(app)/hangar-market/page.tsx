@@ -78,59 +78,9 @@ export default async function HangarMarketPage() {
     };
   }));
 
-  // Flottes des compagnies (PDG uniquement)
-  let flotteCompagnies: Array<{
-    compagnie_id: string;
-    compagnie_nom: string;
-    avions: Array<{
-      id: string;
-      type_avion_id: string;
-      nom: string;
-      quantite: number;
-      en_vente: boolean;
-      prixAchat: number;
-      prixRevente: number;
-    }>;
-  }> = [];
-
-  if (compagniesPdg && compagniesPdg.length > 0) {
-    flotteCompagnies = await Promise.all(compagniesPdg.map(async (c) => {
-      const { data: flotte } = await admin.from('compagnie_flotte')
-        .select('id, type_avion_id, quantite, nom_personnalise, types_avion:type_avion_id(nom, prix)')
-        .eq('compagnie_id', c.id)
-        .gt('quantite', 0);
-
-      const avionsWithStatus = await Promise.all((flotte || []).map(async (f) => {
-        const { data: enVente } = await admin.from('hangar_market')
-          .select('id')
-          .eq('flotte_avion_id', f.id)
-          .eq('statut', 'en_vente')
-          .single();
-
-        const typesAvionData = f.types_avion as { nom?: string; prix?: number } | { nom?: string; prix?: number }[] | null;
-        const typesAvion = Array.isArray(typesAvionData) ? typesAvionData[0] : typesAvionData;
-        const prixAchat = typesAvion?.prix || 0;
-        // Prix de revente suggéré = 50% du prix d'achat initial
-        const prixRevente = Math.floor(prixAchat * 0.5);
-
-        return {
-          id: f.id,
-          type_avion_id: f.type_avion_id,
-          nom: f.nom_personnalise || typesAvion?.nom || 'Avion',
-          quantite: f.quantite,
-          en_vente: !!enVente,
-          prixAchat,
-          prixRevente
-        };
-      }));
-
-      return {
-        compagnie_id: c.id,
-        compagnie_nom: c.nom,
-        avions: avionsWithStatus
-      };
-    }));
-  }
+  // Note: La vente d'avions de compagnie via le Hangar Market est obsolète.
+  // Les avions de compagnie sont maintenant gérés individuellement via le Marketplace.
+  // L'ancien système compagnie_flotte a été supprimé.
 
   // Annonces en vente
   const { data: annonces } = await admin.from('hangar_market')
@@ -188,7 +138,7 @@ export default async function HangarMarketPage() {
         soldePerso={comptePerso?.solde || 0}
         compagnies={compagniesWithSolde}
         inventaire={inventaireDisponible}
-        flotteCompagnies={flotteCompagnies}
+        flotteCompagnies={[]}
         annonces={annonces || []}
         taxePourcent={config?.taxe_vente_pourcent || 5}
       />
