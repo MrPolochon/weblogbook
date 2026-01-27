@@ -10,18 +10,44 @@ export async function GET(request: Request) {
     if (!compagnie_id) return NextResponse.json({ error: 'compagnie_id requis' }, { status: 400 });
 
     const supabase = await createClient();
-    const { data, error } = await supabase
+    const admin = createAdminClient();
+    
+    // Charger les vols ferry
+    const { data: vols, error } = await supabase
       .from('vols_ferry')
-      .select(`
-        *,
-        avion:compagnie_avions(id, immatriculation, nom_bapteme),
-        pilote:profiles(id, identifiant)
-      `)
+      .select('*')
       .eq('compagnie_id', compagnie_id)
       .order('created_at', { ascending: false });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json(data);
+
+    // Enrichir avec les infos avion et pilote
+    const volsEnrichis = await Promise.all((vols || []).map(async (vol) => {
+      let avion = null;
+      let pilote = null;
+      
+      if (vol.avion_id) {
+        const { data: avionData } = await admin
+          .from('compagnie_avions')
+          .select('id, immatriculation, nom_bapteme')
+          .eq('id', vol.avion_id)
+          .single();
+        avion = avionData;
+      }
+      
+      if (vol.pilote_id) {
+        const { data: piloteData } = await admin
+          .from('profiles')
+          .select('id, identifiant')
+          .eq('id', vol.pilote_id)
+          .single();
+        pilote = piloteData;
+      }
+      
+      return { ...vol, avion, pilote };
+    }));
+
+    return NextResponse.json(volsEnrichis);
   } catch (e) {
     console.error('GET compagnies/vols-ferry:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

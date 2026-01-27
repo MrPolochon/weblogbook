@@ -176,7 +176,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
     }
   }
 
-  function getStatutLabel(statut: string, maintenanceFinAt?: string | null) {
+  function getStatutLabel(statut: string, maintenanceFinAt?: string | null, usure?: number) {
     if (statut === 'maintenance' && maintenanceFinAt) {
       const fin = new Date(maintenanceFinAt);
       const maintenant = new Date();
@@ -186,6 +186,10 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
         return { text: `Maintenance (${tempsRestantMin} min)`, className: 'text-amber-400' };
       }
       return { text: 'Prêt', className: 'text-emerald-400 animate-pulse' };
+    }
+    // Avion au sol mais à 0% d'usure = devrait être bloqué
+    if (statut === 'ground' && usure === 0) {
+      return { text: 'À réparer', className: 'text-red-400' };
     }
     switch (statut) {
       case 'ground': return { text: 'Au sol', className: 'text-emerald-400' };
@@ -291,7 +295,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
             </thead>
             <tbody>
               {avions.map((a) => {
-                const statut = getStatutLabel(a.statut, a.maintenance_fin_at);
+                const statut = getStatutLabel(a.statut, a.maintenance_fin_at, a.usure_percent);
                 const isAtHub = hubs.some((h) => h.aeroport_code === a.aeroport_actuel);
                 const typeNom = Array.isArray(a.types_avion) ? a.types_avion[0]?.nom : a.types_avion?.nom;
                 const isEditing = editingId === a.id;
@@ -370,15 +374,17 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   <Edit2 className="h-3.5 w-3.5" />
                                 </button>
                               )}
-                              {a.statut === 'bloque' && a.usure_percent === 0 && (
+                              {/* Avion bloqué ou au sol avec 0% d'usure = nécessite réparation */}
+                              {(a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && (
                                 <>
                                   <button
                                     type="button"
                                     onClick={() => handleAffreterTechniciens(a.id)}
                                     disabled={actionId === a.id}
                                     className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
-                                    title="Réparer sur place (délai: 1h)"
+                                    title={`Réparer sur place - Coût: ${COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$ (délai: 1h)`}
                                   >
+                                    <Wrench className="inline h-3 w-3 mr-0.5" />
                                     Affréter
                                   </button>
                                   <button
@@ -386,7 +392,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                     onClick={() => handleDebloquer(a.id)}
                                     disabled={actionId === a.id}
                                     className="text-xs text-amber-400 hover:underline disabled:opacity-50"
-                                    title="Débloquer pour ferry"
+                                    title={`Débloquer pour vol ferry - Coût: ${COUT_VOL_FERRY.toLocaleString('fr-FR')} F$`}
                                   >
                                     Débloquer
                                   </button>
