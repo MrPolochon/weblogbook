@@ -367,14 +367,17 @@ export async function PATCH(
       }
 
       // Clôture directe uniquement si :
-      // - Autosurveillance (vol sans ATC ou automonitoring)
-      // - Pas d'ATC assigné ET plan accepté (ATC déconnecté)
+      // - Vol en autosurveillance active (automonitoring === true)
+      // - Pas d'ATC assigné (current_holder_user_id est null)
       // 
-      // Si un ATC contrôle le vol (current_holder_user_id défini), 
+      // Note: On ne vérifie PAS vol_sans_atc car un ATC peut avoir pris le vol après.
+      // Ce qui compte c'est l'état ACTUEL : est-ce qu'un ATC contrôle le vol ?
+      // 
+      // Si un ATC contrôle le vol (current_holder_user_id défini et automonitoring === false), 
       // le pilote doit demander la clôture et l'ATC doit confirmer
-      const isAutoSurveillance = plan.automonitoring === true || plan.vol_sans_atc === true;
+      const enAutoSurveillanceActive = plan.automonitoring === true;
       const pasAtcAssigne = !plan.current_holder_user_id;
-      const closDirect = isAutoSurveillance || (pasAtcAssigne && planAccepte);
+      const closDirect = enAutoSurveillanceActive || (pasAtcAssigne && planAccepte);
       
       const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
       const demandeClotureAt = new Date();
@@ -633,6 +636,25 @@ export async function PATCH(
       const { data: sess } = await admin.from('atc_sessions').select('user_id').eq('aeroport', aeroport).eq('position', String(position)).single();
       if (!sess?.user_id) return NextResponse.json({ error: 'Aucun ATC en ligne a cette position pour cet aeroport.' }, { status: 400 });
 
+      // Si l'ATC transfère vers LUI-MÊME (sa propre session), prendre directement le plan
+      if (sess.user_id === user.id) {
+        // Enregistrer que cet ATC a contrôlé ce vol
+        await enregistrerControleATC(admin, id, user.id, aeroport, String(position));
+        
+        const { error: err } = await admin.from('plans_vol').update({
+          current_holder_user_id: user.id,
+          current_holder_position: String(position),
+          current_holder_aeroport: aeroport,
+          automonitoring: false,
+          pending_transfer_aeroport: null,
+          pending_transfer_position: null,
+          pending_transfer_at: null,
+        }).eq('id', id);
+        if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+        return NextResponse.json({ ok: true });
+      }
+
+      // Sinon, envoyer une demande de transfert
       const { error: err } = await admin.from('plans_vol').update({
         pending_transfer_aeroport: aeroport,
         pending_transfer_position: String(position),

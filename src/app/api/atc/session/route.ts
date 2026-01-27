@@ -45,8 +45,8 @@ export async function DELETE() {
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const admin = createAdminClient();
-    const { count } = await admin.from('plans_vol').select('*', { count: 'exact', head: true }).eq('current_holder_user_id', user.id).in('statut', ['en_attente', 'en_cours', 'accepte', 'en_attente_cloture']);
-    if ((count ?? 0) > 0) return NextResponse.json({ error: 'Vous avez des plans de vol. Transférez-les ou clôturez-les avant de vous mettre hors service.' }, { status: 400 });
+    const { count } = await admin.from('plans_vol').select('*', { count: 'exact', head: true }).eq('current_holder_user_id', user.id).in('statut', ['depose', 'en_attente', 'en_cours', 'accepte', 'en_attente_cloture']);
+    if ((count ?? 0) > 0) return NextResponse.json({ error: 'Vous avez encore des plans de vol sous votre contrôle. Mettez-les en autosurveillance, transférez-les ou clôturez-les avant de vous mettre hors service.' }, { status: 400 });
 
     const { data: session } = await supabase.from('atc_sessions').select('id, started_at, aeroport, position').eq('user_id', user.id).single();
     if (!session) return NextResponse.json({ error: 'Aucune session active.' }, { status: 400 });
