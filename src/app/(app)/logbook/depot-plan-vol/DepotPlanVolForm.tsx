@@ -129,9 +129,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     }
   }, [compagniesDisponibles, selectedCompagnieId]);
 
-  // Reset flotte selection when company changes
+  // Reset aircraft selection when company changes
   useEffect(() => {
-    setFlotteAvionId('');
     setCompagnieAvionId('');
   }, [selectedCompagnieId]);
 
@@ -517,9 +516,6 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
                 onChange={(e) => {
                   setVolCommercial(e.target.checked);
                   if (e.target.checked) setVolFerry(false);
-                  if (!e.target.checked) {
-                    setFlotteAvionId('');
-                  }
                 }}
                 className="w-5 h-5 rounded"
               />

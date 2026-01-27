@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Plus, Search, Plane, ShoppingCart, RefreshCw, Building2, User, 
-  Tag, X, AlertCircle, Check, Trash2, Edit3
+  Tag, X, AlertCircle, Check, Trash2
 } from 'lucide-react';
 
 interface Compagnie {
@@ -22,20 +22,6 @@ interface InventaireItem {
   disponible: boolean;
   prixAchat: number;
   prixRevente: number;
-}
-
-interface FlotteCompagnie {
-  compagnie_id: string;
-  compagnie_nom: string;
-  avions: Array<{
-    id: string;
-    type_avion_id: string;
-    nom: string;
-    quantite: number;
-    en_vente: boolean;
-    prixAchat: number;
-    prixRevente: number;
-  }>;
 }
 
 interface Annonce {
@@ -58,7 +44,7 @@ interface Props {
   soldePerso: number;
   compagnies: Compagnie[];
   inventaire: InventaireItem[];
-  flotteCompagnies: FlotteCompagnie[];
+  flotteCompagnies: never[]; // Obsolète, gardé pour compatibilité
   annonces: Annonce[];
   taxePourcent: number;
 }
@@ -76,7 +62,6 @@ export default function HangarMarketClient({
   soldePerso,
   compagnies,
   inventaire,
-  flotteCompagnies,
   annonces,
   taxePourcent
 }: Props) {
@@ -89,9 +74,7 @@ export default function HangarMarketClient({
 
   // Modal vente
   const [showVendreModal, setShowVendreModal] = useState(false);
-  const [vendreType, setVendreType] = useState<'personnel' | 'compagnie'>('personnel');
   const [selectedAvion, setSelectedAvion] = useState<string>('');
-  const [selectedCompagnie, setSelectedCompagnie] = useState<string>('');
   const [titre, setTitre] = useState('');
   const [description, setDescription] = useState('');
   const [prix, setPrix] = useState('');
@@ -121,20 +104,14 @@ export default function HangarMarketClient({
     setLoading(true);
 
     try {
-      const body: Record<string, any> = {
+      const body = {
         action: 'creer',
         titre,
         description: description || null,
         prix: parseInt(prix),
-        etat
+        etat,
+        inventaire_avion_id: selectedAvion
       };
-
-      if (vendreType === 'personnel') {
-        body.inventaire_avion_id = selectedAvion;
-      } else {
-        body.flotte_avion_id = selectedAvion;
-        body.compagnie_vendeur_id = selectedCompagnie;
-      }
 
       const res = await fetch('/api/hangar-market', {
         method: 'POST',
@@ -210,12 +187,10 @@ export default function HangarMarketClient({
 
   function resetVendreForm() {
     setSelectedAvion('');
-    setSelectedCompagnie('');
     setTitre('');
     setDescription('');
     setPrix('');
     setEtat('bon');
-    setVendreType('personnel');
   }
 
   function openAchatModal(annonce: Annonce) {
@@ -412,47 +387,6 @@ export default function HangarMarketClient({
               </div>
             )}
           </div>
-
-          {/* Flottes des compagnies */}
-          {flotteCompagnies.map((fc) => (
-            <div key={fc.compagnie_id} className="card">
-              <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-sky-400" />
-                {fc.compagnie_nom}
-              </h3>
-              {fc.avions.length === 0 ? (
-                <p className="text-slate-400">Aucun avion dans la flotte</p>
-              ) : (
-                <div className="space-y-2">
-                  {fc.avions.map((avion) => (
-                    <div key={avion.id} className="flex items-center justify-between p-3 bg-slate-800 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Plane className="h-5 w-5 text-slate-400" />
-                        <div>
-                          <p className="text-slate-200">{avion.nom}</p>
-                          <p className="text-sm text-slate-500">Quantité : {avion.quantite}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm">
-                          {avion.en_vente ? (
-                            <span className="text-amber-400">En vente</span>
-                          ) : (
-                            <span className="text-green-400">Disponible</span>
-                          )}
-                        </div>
-                        {avion.prixRevente > 0 && (
-                          <p className="text-xs text-slate-500">
-                            Revente : <span className="text-amber-400">{avion.prixRevente.toLocaleString('fr-FR')} F$</span>
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
         </div>
       )}
 
@@ -463,48 +397,6 @@ export default function HangarMarketClient({
             <h3 className="text-lg font-semibold text-slate-100 mb-4">Créer une annonce</h3>
 
             <div className="space-y-4">
-              {/* Type de vente */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => { setVendreType('personnel'); setSelectedAvion(''); setSelectedCompagnie(''); }}
-                  className={`flex-1 p-3 rounded-lg border transition-colors ${
-                    vendreType === 'personnel'
-                      ? 'border-amber-500 bg-amber-500/20'
-                      : 'border-slate-600 hover:border-slate-500'
-                  }`}
-                >
-                  <User className="h-5 w-5 mx-auto mb-1 text-emerald-400" />
-                  <p className="text-sm text-slate-200">Personnel</p>
-                </button>
-                {flotteCompagnies.length > 0 && (
-                  <button
-                    onClick={() => { setVendreType('compagnie'); setSelectedAvion(''); }}
-                    className={`flex-1 p-3 rounded-lg border transition-colors ${
-                      vendreType === 'compagnie'
-                        ? 'border-amber-500 bg-amber-500/20'
-                        : 'border-slate-600 hover:border-slate-500'
-                    }`}
-                  >
-                    <Building2 className="h-5 w-5 mx-auto mb-1 text-sky-400" />
-                    <p className="text-sm text-slate-200">Compagnie</p>
-                  </button>
-                )}
-              </div>
-
-              {/* Sélection compagnie */}
-              {vendreType === 'compagnie' && (
-                <select
-                  value={selectedCompagnie}
-                  onChange={(e) => { setSelectedCompagnie(e.target.value); setSelectedAvion(''); }}
-                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200"
-                >
-                  <option value="">Sélectionner une compagnie</option>
-                  {flotteCompagnies.map((fc) => (
-                    <option key={fc.compagnie_id} value={fc.compagnie_id}>{fc.compagnie_nom}</option>
-                  ))}
-                </select>
-              )}
-
               {/* Sélection avion */}
               <select
                 value={selectedAvion}
@@ -514,22 +406,11 @@ export default function HangarMarketClient({
                   
                   // Pré-remplir le prix avec le prix de revente suggéré (50% du prix d'achat)
                   if (avionId) {
-                    let prixSuggere = 0;
-                    if (vendreType === 'personnel') {
-                      const avion = mesAvionsDisponibles.find(a => a.id === avionId);
-                      prixSuggere = avion?.prixRevente || 0;
-                      // Pré-remplir le titre avec le nom de l'avion
-                      if (avion && !titre) {
-                        setTitre(avion.nom_personnalise || avion.types_avion?.nom || '');
-                      }
-                    } else {
-                      const flotte = flotteCompagnies.find(fc => fc.compagnie_id === selectedCompagnie);
-                      const avion = flotte?.avions.find(a => a.id === avionId);
-                      prixSuggere = avion?.prixRevente || 0;
-                      // Pré-remplir le titre avec le nom de l'avion
-                      if (avion && !titre) {
-                        setTitre(avion.nom);
-                      }
+                    const avion = mesAvionsDisponibles.find(a => a.id === avionId);
+                    const prixSuggere = avion?.prixRevente || 0;
+                    // Pré-remplir le titre avec le nom de l'avion
+                    if (avion && !titre) {
+                      setTitre(avion.nom_personnalise || avion.types_avion?.nom || '');
                     }
                     if (prixSuggere > 0) {
                       setPrix(prixSuggere.toString());
@@ -539,22 +420,11 @@ export default function HangarMarketClient({
                 className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200"
               >
                 <option value="">Sélectionner un avion</option>
-                {vendreType === 'personnel' ? (
-                  mesAvionsDisponibles.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.nom_personnalise || item.types_avion?.nom} ({item.types_avion?.code_oaci}) - Valeur : {item.prixRevente.toLocaleString('fr-FR')} F$
-                    </option>
-                  ))
-                ) : (
-                  flotteCompagnies
-                    .find(fc => fc.compagnie_id === selectedCompagnie)
-                    ?.avions.filter(a => !a.en_vente)
-                    .map((avion) => (
-                      <option key={avion.id} value={avion.id}>
-                        {avion.nom} (x{avion.quantite}) - Valeur : {avion.prixRevente.toLocaleString('fr-FR')} F$
-                      </option>
-                    ))
-                )}
+                {mesAvionsDisponibles.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.nom_personnalise || item.types_avion?.nom} ({item.types_avion?.code_oaci}) - Valeur : {item.prixRevente.toLocaleString('fr-FR')} F$
+                  </option>
+                ))}
               </select>
 
               {/* Titre */}
