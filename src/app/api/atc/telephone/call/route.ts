@@ -18,6 +18,14 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
 
+    // Nettoyer les appels expirés (ringing depuis plus de 60 secondes)
+    const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
+    await admin
+      .from('atc_calls')
+      .update({ status: 'ended', ended_at: new Date().toISOString() })
+      .eq('status', 'ringing')
+      .lt('started_at', sixtySecondsAgo);
+
     // Vérifier que l'utilisateur est en service
     const { data: session } = await admin
       .from('atc_sessions')
@@ -26,7 +34,7 @@ export async function POST(request: Request) {
       .single();
 
     if (!session) {
-      return NextResponse.json({ error: 'Vous devez être en service pour appeler' }, { status: 403 });
+      return NextResponse.json({ error: 'non_en_service' }, { status: 403 });
     }
 
     // Chercher l'ATC cible
@@ -48,24 +56,34 @@ export async function POST(request: Request) {
       .eq('from_user_id', user.id)
       .eq('to_user_id', targetSession.user_id)
       .eq('status', 'rejected')
-      .gte('started_at', new Date(Date.now() - 30000).toISOString()) // Dans les 30 dernières secondes
+      .gte('started_at', new Date(Date.now() - 30000).toISOString())
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (recentRejected) {
       return NextResponse.json({ error: 'rejected' }, { status: 403 });
     }
 
-    // Vérifier qu'il n'y a pas déjà un appel en cours
-    const { data: existingCall } = await admin
+    // Vérifier qu'il n'y a pas déjà un appel en cours pour l'appelant
+    const { data: myExistingCalls } = await admin
       .from('atc_calls')
-      .select('id')
-      .or(`and(from_user_id.eq.${user.id},status.in.(ringing,connected)),and(to_user_id.eq.${user.id},status.in.(ringing,connected))`)
-      .limit(1)
-      .single();
+      .select('id, status')
+      .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
+      .in('status', ['ringing', 'connected']);
 
-    if (existingCall) {
-      return NextResponse.json({ error: 'Vous avez déjà un appel en cours' }, { status: 400 });
+    if (myExistingCalls && myExistingCalls.length > 0) {
+      return NextResponse.json({ error: 'appel_en_cours' }, { status: 400 });
+    }
+
+    // Vérifier que la cible n'a pas déjà un appel en cours
+    const { data: targetExistingCalls } = await admin
+      .from('atc_calls')
+      .select('id, status')
+      .or(`from_user_id.eq.${targetSession.user_id},to_user_id.eq.${targetSession.user_id}`)
+      .in('status', ['ringing', 'connected']);
+
+    if (targetExistingCalls && targetExistingCalls.length > 0) {
+      return NextResponse.json({ error: 'cible_occupee' }, { status: 400 });
     }
 
     // Créer l'appel
@@ -87,7 +105,7 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error('Erreur création appel:', error);
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: 'erreur_creation' }, { status: 400 });
     }
 
     return NextResponse.json({ call: { id: call.id } });

@@ -422,8 +422,15 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       const data = await res.json();
       
       if (!res.ok) {
-        playMessage(data.error === 'offline' ? 'Votre correspondant ne répond pas' : 
-                   data.error === 'rejected' ? 'Appel refusé' : 'Erreur');
+        const messages: Record<string, string> = {
+          'offline': 'Votre correspondant est hors ligne',
+          'rejected': 'Appel refusé',
+          'non_en_service': 'Vous devez être en service pour appeler',
+          'appel_en_cours': 'Vous avez déjà un appel en cours',
+          'cible_occupee': 'Votre correspondant est déjà en ligne',
+          'erreur_creation': 'Impossible de créer l\'appel',
+        };
+        playMessage(messages[data.error] || 'Erreur');
         setCallState('idle');
         setNumber('');
         return;
