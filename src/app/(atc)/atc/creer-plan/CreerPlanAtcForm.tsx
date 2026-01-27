@@ -247,7 +247,7 @@ export default function CreerPlanAtcForm({ sessionAeroport, sessionPosition }: P
             >
               <option value="">— Sélectionner —</option>
               {AEROPORTS_PTFS.map((apt) => (
-                <option key={apt} value={apt}>{apt}</option>
+                <option key={apt.code} value={apt.code}>{apt.code} – {apt.nom}</option>
               ))}
             </select>
           </div>
@@ -261,7 +261,7 @@ export default function CreerPlanAtcForm({ sessionAeroport, sessionPosition }: P
             >
               <option value="">— Sélectionner —</option>
               {AEROPORTS_PTFS.map((apt) => (
-                <option key={apt} value={apt}>{apt}</option>
+                <option key={apt.code} value={apt.code}>{apt.code} – {apt.nom}</option>
               ))}
             </select>
           </div>
