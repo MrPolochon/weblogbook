@@ -8,15 +8,32 @@ export async function GET(request: Request) {
     const compagnie_id = searchParams.get('compagnie_id');
     if (!compagnie_id) return NextResponse.json({ error: 'compagnie_id requis' }, { status: 400 });
 
-    const supabase = await createClient();
-    const { data, error } = await supabase
+    const admin = createAdminClient();
+    
+    // Charger les avions
+    const { data: avions, error } = await admin
       .from('compagnie_avions')
-      .select('*, types_avion(id, nom, constructeur)')
+      .select('*')
       .eq('compagnie_id', compagnie_id)
       .order('immatriculation');
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json(data);
+
+    // Enrichir avec les types d'avion
+    const avionsEnrichis = await Promise.all((avions || []).map(async (avion) => {
+      let types_avion = null;
+      if (avion.type_avion_id) {
+        const { data: typeData } = await admin
+          .from('types_avion')
+          .select('id, nom, constructeur')
+          .eq('id', avion.type_avion_id)
+          .single();
+        types_avion = typeData;
+      }
+      return { ...avion, types_avion };
+    }));
+
+    return NextResponse.json(avionsEnrichis);
   } catch (e) {
     console.error('GET compagnies/avions:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
