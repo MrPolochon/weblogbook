@@ -367,12 +367,14 @@ export async function PATCH(
       }
 
       // Clôture directe uniquement si :
-      // - Autosurveillance (vol sans ATC)
+      // - Autosurveillance (vol sans ATC ou automonitoring)
       // - Pas d'ATC assigné ET plan accepté (ATC déconnecté)
-      // - Statut accepte ou en_cours
-      const closDirect = plan.automonitoring === true || plan.vol_sans_atc === true || 
-                        (!plan.current_holder_user_id && planAccepte) || 
-                        (plan.statut === 'accepte' || plan.statut === 'en_cours');
+      // 
+      // Si un ATC contrôle le vol (current_holder_user_id défini), 
+      // le pilote doit demander la clôture et l'ATC doit confirmer
+      const isAutoSurveillance = plan.automonitoring === true || plan.vol_sans_atc === true;
+      const pasAtcAssigne = !plan.current_holder_user_id;
+      const closDirect = isAutoSurveillance || (pasAtcAssigne && planAccepte);
       
       const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
       const demandeClotureAt = new Date();

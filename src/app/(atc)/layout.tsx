@@ -50,64 +50,13 @@ export default async function AtcLayout({
   let plansAccepter: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansCloture: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   if (enService && session) {
+    // Nettoyer les transferts expirés (plus d'1 minute)
     const oneMinAgo = new Date(Date.now() - 60000).toISOString();
     await admin.from('plans_vol').update({ pending_transfer_aeroport: null, pending_transfer_position: null, pending_transfer_at: null }).lt('pending_transfer_at', oneMinAgo);
 
-    // Récupérer les sessions ATC actives pour vérifier les plans orphelins
-    const { data: sessionsActives } = await admin.from('atc_sessions').select('user_id, aeroport, position');
-    const userIdsActifs = new Set((sessionsActives || []).map(s => s.user_id));
-    
-    // Récupérer les plans en attente de clôture
-    const { data: dataClotureBrute } = await admin
-      .from('plans_vol')
-      .select('id, numero_vol, aeroport_depart, aeroport_arrivee, current_holder_user_id')
-      .eq('statut', 'en_attente_cloture');
-    
-    // Réassigner les plans orphelins (sans ATC ou ATC déconnecté) à un ATC disponible
-    if (dataClotureBrute && dataClotureBrute.length > 0) {
-      for (const plan of dataClotureBrute) {
-        // Si le plan n'a pas d'ATC assigné ou si l'ATC n'est plus en service
-        if (!plan.current_holder_user_id || !userIdsActifs.has(plan.current_holder_user_id)) {
-          const airportsToCheck = plan.aeroport_depart === plan.aeroport_arrivee 
-            ? [plan.aeroport_depart] 
-            : [plan.aeroport_depart, plan.aeroport_arrivee];
-          
-          // Chercher un ATC disponible sur ces aéroports
-          let reassigned = false;
-          for (const apt of airportsToCheck) {
-            if (apt === session.aeroport) {
-              // Réassigner à l'ATC actuel s'il est sur l'aéroport
-              await admin.from('plans_vol')
-                .update({ 
-                  current_holder_user_id: user.id, 
-                  current_holder_position: session.position, 
-                  current_holder_aeroport: session.aeroport 
-                })
-                .eq('id', plan.id);
-              reassigned = true;
-              break;
-            }
-          }
-          
-          // Si pas réassigné, chercher n'importe quel ATC disponible sur ces aéroports
-          if (!reassigned && sessionsActives) {
-            for (const apt of airportsToCheck) {
-              const atcDispo = sessionsActives.find(s => s.aeroport === apt);
-              if (atcDispo) {
-                await admin.from('plans_vol')
-                  .update({ 
-                    current_holder_user_id: atcDispo.user_id, 
-                    current_holder_position: atcDispo.position, 
-                    current_holder_aeroport: atcDispo.aeroport 
-                  })
-                  .eq('id', plan.id);
-                break;
-              }
-            }
-          }
-        }
-      }
-    }
+    // Note: On ne réassigne PAS les plans orphelins aux autres ATC.
+    // Si un plan n'a pas d'ATC assigné, le pilote peut le clôturer seul.
+    // Chaque ATC ne voit que les plans qu'IL contrôle (current_holder_user_id === user.id).
     
     const [{ data: dataAuto }, { data: dataAccept }, { data: dataPlansAccepter }, { data: dataCloture }] = await Promise.all([
       admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('automonitoring', true).in('statut', ['accepte', 'en_cours']),
