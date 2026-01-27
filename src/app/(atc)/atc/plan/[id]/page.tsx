@@ -30,21 +30,61 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
   if (!user) redirect('/login');
 
   const admin = createAdminClient();
-  const { data: plan } = await admin
+  
+  // Charger le plan de vol
+  const { data: planData } = await admin
     .from('plans_vol')
-    .select(`
-      id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, instructions, intentions_vol, 
-      sid_depart, star_arrivee, route_ifr, note_atc, porte, temps_prev_min, refusal_reason, 
-      current_holder_user_id, automonitoring, pending_transfer_aeroport, pending_transfer_position, created_at,
-      vol_commercial, vol_ferry, nature_transport, type_cargaison, nb_pax_genere, cargo_kg_genere,
-      pilote:profiles!plans_vol_pilote_id_fkey(identifiant),
-      compagnie:compagnies(nom, code_oaci),
-      avion:compagnie_avions(immatriculation, nom_bapteme, usure_percent, types_avion(nom))
-    `)
+    .select('*')
     .eq('id', id)
     .single();
 
-  if (!plan) notFound();
+  if (!planData) notFound();
+
+  // Charger les données liées manuellement pour éviter les problèmes de relation
+  let pilote = null;
+  let compagnie = null;
+  let avion = null;
+
+  if (planData.pilote_id) {
+    const { data: piloteData } = await admin
+      .from('profiles')
+      .select('identifiant')
+      .eq('id', planData.pilote_id)
+      .single();
+    pilote = piloteData;
+  }
+
+  if (planData.compagnie_id) {
+    const { data: compagnieData } = await admin
+      .from('compagnies')
+      .select('nom, code_oaci')
+      .eq('id', planData.compagnie_id)
+      .single();
+    compagnie = compagnieData;
+  }
+
+  if (planData.compagnie_avion_id) {
+    const { data: avionData } = await admin
+      .from('compagnie_avions')
+      .select('immatriculation, nom_bapteme, usure_percent, type_avion_id')
+      .eq('id', planData.compagnie_avion_id)
+      .single();
+    
+    if (avionData) {
+      let types_avion = null;
+      if (avionData.type_avion_id) {
+        const { data: typeData } = await admin
+          .from('types_avion')
+          .select('nom')
+          .eq('id', avionData.type_avion_id)
+          .single();
+        types_avion = typeData;
+      }
+      avion = { ...avionData, types_avion };
+    }
+  }
+
+  const plan = { ...planData, pilote, compagnie, avion };
 
   const { data: atcSession } = await supabase.from('atc_sessions').select('aeroport, position').eq('user_id', user.id).single();
   if (plan.automonitoring && !atcSession) redirect('/atc');

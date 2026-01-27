@@ -21,18 +21,44 @@ export default async function AtcPage() {
   if (!user) return null;
 
   const admin = createAdminClient();
-  const [{ data: session }, { data: plansChezMoi }, { data: sessionsEnService }, { data: plansEnAttente }] = await Promise.all([
+  const [{ data: session }, { data: plansChezMoiRaw }, { data: sessionsEnServiceRaw }, { data: plansEnAttente }] = await Promise.all([
     supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single(),
-    admin.from('plans_vol').select(`
-      id, numero_vol, aeroport_depart, aeroport_arrivee, statut, type_vol, temps_prev_min, created_at,
-      vol_commercial, vol_ferry, nature_transport, type_cargaison, nb_pax_genere, cargo_kg_genere,
-      pilote:profiles!plans_vol_pilote_id_fkey(identifiant),
-      compagnie:compagnies(nom),
-      avion:compagnie_avions(immatriculation, nom_bapteme)
-    `).eq('current_holder_user_id', user.id).is('pending_transfer_aeroport', null).in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente']).order('created_at', { ascending: false }),
-    admin.from('atc_sessions').select('aeroport, position, user_id, profiles(identifiant)').order('aeroport').order('position'),
+    admin.from('plans_vol').select('*').eq('current_holder_user_id', user.id).is('pending_transfer_aeroport', null).in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente']).order('created_at', { ascending: false }),
+    admin.from('atc_sessions').select('aeroport, position, user_id').order('aeroport').order('position'),
     admin.from('plans_vol').select('id').in('statut', ['depose', 'en_attente']),
   ]);
+
+  // Enrichir les plans avec les données pilote, compagnie et avion
+  const plansChezMoi = await Promise.all((plansChezMoiRaw || []).map(async (plan) => {
+    let pilote = null;
+    let compagnie = null;
+    let avion = null;
+
+    if (plan.pilote_id) {
+      const { data } = await admin.from('profiles').select('identifiant').eq('id', plan.pilote_id).single();
+      pilote = data;
+    }
+    if (plan.compagnie_id) {
+      const { data } = await admin.from('compagnies').select('nom').eq('id', plan.compagnie_id).single();
+      compagnie = data;
+    }
+    if (plan.compagnie_avion_id) {
+      const { data } = await admin.from('compagnie_avions').select('immatriculation, nom_bapteme').eq('id', plan.compagnie_avion_id).single();
+      avion = data;
+    }
+
+    return { ...plan, pilote, compagnie, avion };
+  }));
+
+  // Enrichir les sessions avec les identifiants
+  const sessionsEnService = await Promise.all((sessionsEnServiceRaw || []).map(async (sess) => {
+    let profiles = null;
+    if (sess.user_id) {
+      const { data } = await admin.from('profiles').select('identifiant').eq('id', sess.user_id).single();
+      profiles = data;
+    }
+    return { ...sess, profiles };
+  }));
 
   // Grouper les sessions par aéroport
   const byAeroport = (sessionsEnService ?? []).reduce<Record<string, Array<{ position: string; identifiant: string }>>>((acc, s) => {
