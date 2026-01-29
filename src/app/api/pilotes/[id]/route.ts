@@ -166,6 +166,44 @@ export async function DELETE(
     await admin.from('atc_plans_controles').delete().eq('user_id', id);
     await admin.from('atc_taxes_pending').delete().eq('user_id', id);
     
+    // Nettoyer les références IFSA
+    await admin.from('ifsa_sanctions').update({ cible_pilote_id: null }).eq('cible_pilote_id', id);
+    await admin.from('ifsa_sanctions').update({ emis_par_id: null }).eq('emis_par_id', id);
+    await admin.from('ifsa_sanctions').update({ cleared_by_id: null }).eq('cleared_by_id', id);
+    await admin.from('ifsa_sanctions').update({ amende_payee_par_id: null }).eq('amende_payee_par_id', id);
+    
+    await admin.from('ifsa_enquetes').update({ pilote_concerne_id: null }).eq('pilote_concerne_id', id);
+    await admin.from('ifsa_enquetes').update({ enqueteur_id: null }).eq('enqueteur_id', id);
+    await admin.from('ifsa_enquetes').update({ ouvert_par_id: null }).eq('ouvert_par_id', id);
+    
+    await admin.from('ifsa_signalements').update({ signale_par_id: null }).eq('signale_par_id', id);
+    await admin.from('ifsa_signalements').update({ pilote_signale_id: null }).eq('pilote_signale_id', id);
+    await admin.from('ifsa_signalements').update({ traite_par_id: null }).eq('traite_par_id', id);
+    
+    await admin.from('ifsa_notes_enquete').delete().eq('auteur_id', id);
+    
+    // Nettoyer les paiements d'amendes
+    await admin.from('paiements_amendes').delete().eq('paye_par_id', id);
+    
+    // Nettoyer les appels ATC
+    await admin.from('atc_calls').delete().eq('from_user_id', id);
+    await admin.from('atc_calls').delete().eq('to_user_id', id);
+    
+    // Nettoyer les invitations compagnie
+    await admin.from('compagnie_invitations').delete().eq('pilote_id', id);
+    
+    // Mettre à null le PDG des compagnies (ne pas supprimer la compagnie)
+    await admin.from('compagnies').update({ pdg_id: null }).eq('pdg_id', id);
+    
+    // Mettre à null detruit_par_id dans compagnie_avions
+    await admin.from('compagnie_avions').update({ detruit_par_id: null }).eq('detruit_par_id', id);
+    
+    // Supprimer les annonces du marché
+    await admin.from('market_annonces').delete().eq('vendeur_id', id);
+    
+    // Mettre à null l'acheteur dans les transactions du marché
+    await admin.from('market_transactions').update({ acheteur_id: null }).eq('acheteur_id', id);
+    
     // Nettoyer les comptes Felitz et dépendances associées
     const { data: comptesPersonne } = await admin
       .from('felitz_comptes')
@@ -199,6 +237,7 @@ export async function DELETE(
     
     // Supprimer les prêts bancaires personnels
     await admin.from('prets_bancaires').delete().eq('pilote_id', id);
+    await admin.from('prets_bancaires').delete().eq('demandeur_id', id);
     
     await admin.from('felitz_comptes').delete().eq('proprietaire_id', id);
     await admin.from('inventaire_avions').delete().eq('proprietaire_id', id);
