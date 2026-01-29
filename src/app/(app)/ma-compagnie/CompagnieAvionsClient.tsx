@@ -350,7 +350,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                 const maintenancePrete = a.statut === 'maintenance' && a.maintenance_fin_at && new Date(a.maintenance_fin_at) <= new Date();
                 
                 return (
-                  <tr key={a.id} className={`border-b border-slate-700/50 last:border-0 ${a.detruit ? 'bg-red-950/20 opacity-70' : ''}`}
+                  <tr key={a.id} className={`border-b border-slate-700/50 last:border-0 ${a.detruit ? 'bg-red-950/20 opacity-70' : ''}`}>
                     <td className="py-2.5 pr-4">
                       {isEditing ? (
                         <input
