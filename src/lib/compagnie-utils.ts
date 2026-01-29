@@ -23,9 +23,38 @@ export function calculerUsureFerry(distance: number): number {
 }
 
 /**
- * Coût fixe d'un vol ferry
+ * Coût fixe d'un vol ferry MANUEL (fait par un pilote)
  */
 export const COUT_VOL_FERRY = 10000;
+
+// ============================================================
+// VOL FERRY AUTOMATIQUE (sans pilote)
+// ============================================================
+
+/**
+ * Coût d'un vol ferry automatique (entre 50K et 300K F$)
+ */
+export const COUT_VOL_FERRY_AUTO_MIN = 50_000;
+export const COUT_VOL_FERRY_AUTO_MAX = 300_000;
+
+/**
+ * Durée d'un vol ferry automatique (entre 30 min et 3h)
+ */
+export const DUREE_VOL_FERRY_AUTO_MIN = 30; // minutes
+export const DUREE_VOL_FERRY_AUTO_MAX = 180; // minutes (3h)
+
+/**
+ * Calcule le coût et la durée d'un vol ferry automatique (aléatoire)
+ */
+export function calculerVolFerryAuto(): { cout: number; dureeMin: number } {
+  const cout = Math.floor(Math.random() * (COUT_VOL_FERRY_AUTO_MAX - COUT_VOL_FERRY_AUTO_MIN + 1)) + COUT_VOL_FERRY_AUTO_MIN;
+  const dureeMin = Math.floor(Math.random() * (DUREE_VOL_FERRY_AUTO_MAX - DUREE_VOL_FERRY_AUTO_MIN + 1)) + DUREE_VOL_FERRY_AUTO_MIN;
+  return { cout, dureeMin };
+}
+
+// ============================================================
+// MAINTENANCE (techniciens)
+// ============================================================
 
 /**
  * Coût pour affréter des techniciens (réparation sur place)
@@ -33,8 +62,19 @@ export const COUT_VOL_FERRY = 10000;
 export const COUT_AFFRETER_TECHNICIENS = 50000;
 
 /**
- * Temps d'attente en minutes pour l'affrètement des techniciens
+ * Durée de la maintenance (entre 30 min et 1h30)
  */
+export const TEMPS_MAINTENANCE_MIN = 30; // minutes
+export const TEMPS_MAINTENANCE_MAX = 90; // minutes (1h30)
+
+/**
+ * Calcule la durée de maintenance (aléatoire entre 30 et 90 min)
+ */
+export function calculerDureeMaintenance(): number {
+  return Math.floor(Math.random() * (TEMPS_MAINTENANCE_MAX - TEMPS_MAINTENANCE_MIN + 1)) + TEMPS_MAINTENANCE_MIN;
+}
+
+// DEPRECATED - gardé pour compatibilité
 export const TEMPS_AFFRETER_TECHNICIENS_MIN = 60;
 
 /**

@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { COUT_AFFRETER_TECHNICIENS, TEMPS_AFFRETER_TECHNICIENS_MIN } from '@/lib/compagnie-utils';
+import { COUT_AFFRETER_TECHNICIENS, calculerDureeMaintenance } from '@/lib/compagnie-utils';
 
 export async function POST(
   _request: Request,
@@ -105,8 +105,11 @@ export async function POST(
       libelle: `Affrètement techniciens pour ${avion.aeroport_actuel}`,
     });
 
+    // Calculer la durée de maintenance (aléatoire entre 30 et 90 min)
+    const dureeMaintenance = calculerDureeMaintenance();
+    
     // Mettre l'avion en maintenance avec un délai
-    const maintenanceFinAt = new Date(Date.now() + TEMPS_AFFRETER_TECHNICIENS_MIN * 60 * 1000);
+    const maintenanceFinAt = new Date(Date.now() + dureeMaintenance * 60 * 1000);
     const { error: avionErr } = await admin
       .from('compagnie_avions')
       .update({
@@ -121,12 +124,19 @@ export async function POST(
       return NextResponse.json({ error: 'Erreur lors de la mise en maintenance.' }, { status: 500 });
     }
 
+    // Formater la durée pour l'affichage
+    const heures = Math.floor(dureeMaintenance / 60);
+    const minutes = dureeMaintenance % 60;
+    const dureeText = heures > 0 
+      ? `${heures}h${minutes > 0 ? minutes.toString().padStart(2, '0') : ''}` 
+      : `${minutes} minutes`;
+
     return NextResponse.json({ 
       ok: true, 
       cout: COUT_AFFRETER_TECHNICIENS,
       maintenance_fin_at: maintenanceFinAt.toISOString(),
-      temps_attente_min: TEMPS_AFFRETER_TECHNICIENS_MIN,
-      message: `Techniciens affrétés. L'avion sera réparé dans ${TEMPS_AFFRETER_TECHNICIENS_MIN} minutes.`
+      temps_attente_min: dureeMaintenance,
+      message: `Techniciens affrétés. L'avion sera réparé dans ${dureeText}.`
     });
   } catch (e) {
     console.error('POST compagnies/avions/affreter-techniciens:', e);

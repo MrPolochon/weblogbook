@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
+import { COUT_VOL_FERRY, calculerVolFerryAuto, calculerUsureFerry } from '@/lib/compagnie-utils';
 
 export async function GET(request: Request) {
   try {
@@ -11,6 +11,46 @@ export async function GET(request: Request) {
 
     const supabase = await createClient();
     const admin = createAdminClient();
+    
+    // Auto-compléter les vols ferry automatiques terminés
+    const maintenant = new Date();
+    const { data: volsACompleter } = await admin
+      .from('vols_ferry')
+      .select('id, avion_id, aeroport_arrivee, automatique')
+      .eq('compagnie_id', compagnie_id)
+      .eq('automatique', true)
+      .in('statut', ['planned', 'in_progress'])
+      .not('fin_prevue_at', 'is', null)
+      .lt('fin_prevue_at', maintenant.toISOString());
+    
+    // Compléter automatiquement les vols ferry terminés
+    for (const vol of volsACompleter || []) {
+      // Mettre à jour le vol ferry
+      await admin.from('vols_ferry')
+        .update({ statut: 'completed', completed_at: maintenant.toISOString() })
+        .eq('id', vol.id);
+      
+      // Mettre à jour l'avion (position + usure + statut)
+      const { data: avion } = await admin
+        .from('compagnie_avions')
+        .select('usure_percent')
+        .eq('id', vol.avion_id)
+        .single();
+      
+      if (avion) {
+        // L'usure pour un vol ferry auto est fixe à 5%
+        const nouvelleUsure = Math.max(0, avion.usure_percent - 5);
+        const nouveauStatut = nouvelleUsure === 0 ? 'bloque' : 'ground';
+        
+        await admin.from('compagnie_avions')
+          .update({ 
+            aeroport_actuel: vol.aeroport_arrivee,
+            usure_percent: nouvelleUsure,
+            statut: nouveauStatut 
+          })
+          .eq('id', vol.avion_id);
+      }
+    }
     
     // Charger les vols ferry
     const { data: vols, error } = await supabase
@@ -61,8 +101,9 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const body = await request.json();
-    const { compagnie_id, avion_id, aeroport_arrivee } = body;
+    const { compagnie_id, avion_id, aeroport_arrivee, automatique } = body;
     const aa = String(aeroport_arrivee || '').trim().toUpperCase();
+    const isAuto = automatique === true;
 
     if (!compagnie_id || !avion_id || !aa) {
       return NextResponse.json({ error: 'compagnie_id, avion_id et aeroport_arrivee requis' }, { status: 400 });
@@ -160,6 +201,22 @@ export async function POST(request: Request) {
     // Si l'avion est au sol à 0% d'usure, c'est qu'il a été débloqué pour ferry
     const debloquePourFerry = avion.usure_percent === 0;
 
+    // Calculer le coût selon le type de vol ferry
+    let coutBase: number;
+    let dureeMin: number | null = null;
+    let finPrevueAt: string | null = null;
+
+    if (isAuto) {
+      // Vol ferry AUTOMATIQUE : coût et durée aléatoires
+      const ferryAuto = calculerVolFerryAuto();
+      coutBase = ferryAuto.cout;
+      dureeMin = ferryAuto.dureeMin;
+      finPrevueAt = new Date(Date.now() + dureeMin * 60 * 1000).toISOString();
+    } else {
+      // Vol ferry MANUEL : coût fixe 10K
+      coutBase = COUT_VOL_FERRY;
+    }
+
     // Récupérer les taxes de l'aéroport d'arrivée
     const { data: taxesData } = await admin.from('taxes_aeroport')
       .select('taxe_pourcent')
@@ -168,8 +225,8 @@ export async function POST(request: Request) {
     
     // Taxe forfaitaire pour vol ferry (pas de revenu, donc calcul sur le coût de base)
     const tauxTaxe = taxesData?.taxe_pourcent || 2;
-    const taxesAeroportuaires = Math.round(COUT_VOL_FERRY * tauxTaxe / 100);
-    const coutTotal = COUT_VOL_FERRY + taxesAeroportuaires;
+    const taxesAeroportuaires = Math.round(coutBase * tauxTaxe / 100);
+    const coutTotal = coutBase + taxesAeroportuaires;
 
     // Vérifier le solde
     const { data: compte } = await admin
@@ -184,7 +241,7 @@ export async function POST(request: Request) {
     }
     if (compte.solde < coutTotal) {
       return NextResponse.json({ 
-        error: `Solde insuffisant. Coût du vol ferry : ${COUT_VOL_FERRY.toLocaleString('fr-FR')} F$ + ${taxesAeroportuaires.toLocaleString('fr-FR')} F$ de taxes = ${coutTotal.toLocaleString('fr-FR')} F$.` 
+        error: `Solde insuffisant. Coût du vol ferry : ${coutBase.toLocaleString('fr-FR')} F$ + ${taxesAeroportuaires.toLocaleString('fr-FR')} F$ de taxes = ${coutTotal.toLocaleString('fr-FR')} F$.` 
       }, { status: 400 });
     }
 
@@ -196,10 +253,13 @@ export async function POST(request: Request) {
         avion_id,
         aeroport_depart: avion.aeroport_actuel,
         aeroport_arrivee: aa,
-        pilote_id: user.id,
-        statut: 'planned',
-        cout_ferry: coutTotal, // Coût total avec taxes
+        pilote_id: isAuto ? null : user.id, // Pas de pilote pour les vols auto
+        statut: isAuto ? 'in_progress' : 'planned', // Auto = directement en cours
+        cout_ferry: coutTotal,
         debloque_pour_ferry: debloquePourFerry,
+        automatique: isAuto,
+        duree_prevue_min: dureeMin,
+        fin_prevue_at: finPrevueAt,
       })
       .select('id')
       .single();
@@ -219,11 +279,12 @@ export async function POST(request: Request) {
     }
 
     // Créer une transaction pour le vol ferry
+    const typeVol = isAuto ? 'Vol ferry automatique' : 'Vol ferry';
     await admin.from('felitz_transactions').insert({
       compte_id: compte.id,
       type: 'debit',
-      montant: COUT_VOL_FERRY,
-      libelle: `Vol ferry ${avion.aeroport_actuel} → ${aa}`,
+      montant: coutBase,
+      libelle: `${typeVol} ${avion.aeroport_actuel} → ${aa}`,
     });
 
     // Créer une transaction pour les taxes
@@ -232,14 +293,36 @@ export async function POST(request: Request) {
         compte_id: compte.id,
         type: 'debit',
         montant: taxesAeroportuaires,
-        libelle: `Taxes aéroportuaires ${aa} (vol ferry)`,
+        libelle: `Taxes aéroportuaires ${aa} (${typeVol.toLowerCase()})`,
       });
     }
 
     // Mettre l'avion en vol
     await admin.from('compagnie_avions').update({ statut: 'in_flight' }).eq('id', avion_id);
 
-    return NextResponse.json({ ok: true, id: vol.id, cout: coutTotal, taxes: taxesAeroportuaires });
+    // Formater la durée pour l'affichage
+    let dureeText = '';
+    if (dureeMin) {
+      const heures = Math.floor(dureeMin / 60);
+      const minutes = dureeMin % 60;
+      dureeText = heures > 0 
+        ? `${heures}h${minutes > 0 ? minutes.toString().padStart(2, '0') : ''}` 
+        : `${minutes} min`;
+    }
+
+    return NextResponse.json({ 
+      ok: true, 
+      id: vol.id, 
+      cout: coutTotal, 
+      taxes: taxesAeroportuaires,
+      automatique: isAuto,
+      duree_min: dureeMin,
+      duree_text: dureeText,
+      fin_prevue_at: finPrevueAt,
+      message: isAuto 
+        ? `Vol ferry automatique lancé ! Coût : ${coutTotal.toLocaleString('fr-FR')} F$. L'avion arrivera à ${aa} dans ${dureeText}.`
+        : `Vol ferry créé. Coût : ${coutTotal.toLocaleString('fr-FR')} F$.`
+    });
   } catch (e) {
     console.error('POST compagnies/vols-ferry:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

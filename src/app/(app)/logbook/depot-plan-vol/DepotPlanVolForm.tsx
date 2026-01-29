@@ -135,9 +135,18 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   }, [selectedCompagnieId]);
 
   // Reset individual aircraft selection when departure airport changes
+  // SAUF si l'avion sélectionné est déjà à cet aéroport
   useEffect(() => {
-    setCompagnieAvionId('');
-  }, [aeroport_depart]);
+    if (!aeroport_depart || !compagnie_avion_id) return;
+    
+    // Trouver l'avion actuellement sélectionné
+    const avionSelectionne = avionsCompagnie.find(a => a.id === compagnie_avion_id);
+    
+    // Ne désélectionner que si l'avion n'est PAS à l'aéroport de départ choisi
+    if (avionSelectionne && avionSelectionne.aeroport_actuel !== aeroport_depart.toUpperCase()) {
+      setCompagnieAvionId('');
+    }
+  }, [aeroport_depart, avionsCompagnie, compagnie_avion_id]);
 
   // Charger les tarifs par liaison quand la compagnie change
   useEffect(() => {
