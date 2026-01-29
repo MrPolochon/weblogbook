@@ -161,9 +161,45 @@ export async function DELETE(
     await admin.from('messages').delete().eq('destinataire_id', id);
     await admin.from('messages').delete().eq('expediteur_id', id);
     await admin.from('licences').delete().eq('pilote_id', id);
+    await admin.from('licences_qualifications').delete().eq('pilote_id', id);
     await admin.from('atc_sessions').delete().eq('user_id', id);
     await admin.from('atc_plans_controles').delete().eq('user_id', id);
     await admin.from('atc_taxes_pending').delete().eq('user_id', id);
+    
+    // Nettoyer les comptes Felitz et dépendances associées
+    const { data: comptesPersonne } = await admin
+      .from('felitz_comptes')
+      .select('id')
+      .eq('proprietaire_id', id);
+    
+    if (comptesPersonne && comptesPersonne.length > 0) {
+      const compteIds = comptesPersonne.map(c => c.id);
+      
+      // Mettre à null les références dans ifsa_sanctions
+      for (const compteId of compteIds) {
+        await admin
+          .from('ifsa_sanctions')
+          .update({ compte_destination_id: null })
+          .eq('compte_destination_id', compteId);
+      }
+      
+      // Supprimer les transactions Felitz
+      for (const compteId of compteIds) {
+        await admin.from('felitz_transactions').delete().eq('compte_id', compteId);
+      }
+      
+      // Mettre à null les chèques destinés à ces comptes
+      for (const compteId of compteIds) {
+        await admin
+          .from('messages')
+          .update({ cheque_destinataire_compte_id: null })
+          .eq('cheque_destinataire_compte_id', compteId);
+      }
+    }
+    
+    // Supprimer les prêts bancaires personnels
+    await admin.from('prets_bancaires').delete().eq('pilote_id', id);
+    
     await admin.from('felitz_comptes').delete().eq('proprietaire_id', id);
     await admin.from('inventaire_avions').delete().eq('proprietaire_id', id);
     
