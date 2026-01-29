@@ -40,7 +40,11 @@ export async function DELETE(
     await admin.from('vols_ferry').delete().eq('compagnie_id', id);
     
     // Supprimer les invitations de recrutement
-    await admin.from('invitations_recrutement').delete().eq('compagnie_id', id);
+    await admin.from('compagnie_invitations').delete().eq('compagnie_id', id);
+    
+    // Supprimer les annonces du marché (hangar_market)
+    await admin.from('hangar_market').delete().eq('compagnie_vendeur_id', id);
+    await admin.from('hangar_market').update({ compagnie_acheteur_id: null }).eq('compagnie_acheteur_id', id);
     
     // Supprimer les prêts bancaires
     await admin.from('prets_bancaires').delete().eq('compagnie_id', id);
