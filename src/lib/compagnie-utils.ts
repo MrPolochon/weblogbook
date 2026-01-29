@@ -49,3 +49,37 @@ export function calculerUsureVol(tempsVolMin: number): number {
   const facteur = Math.min(tempsVolMin / 180, 1);
   return Math.round(base + facteur * (max - base));
 }
+
+// ============================================================
+// SYSTÈME DE PRÊTS BANCAIRES
+// ============================================================
+
+/**
+ * Options de prêts disponibles pour les PDG
+ * Taux d'intérêt croissant avec le montant emprunté
+ */
+export const OPTIONS_PRETS = [
+  { montant: 200_000, tauxInteret: 1.5 },   // 200K à 1.5% = 3K d'intérêts = 203K à rembourser
+  { montant: 500_000, tauxInteret: 5 },     // 500K à 5% = 25K d'intérêts = 525K à rembourser
+  { montant: 1_000_000, tauxInteret: 10 },  // 1M à 10% = 100K d'intérêts = 1.1M à rembourser
+  { montant: 5_000_000, tauxInteret: 20 },  // 5M à 20% = 1M d'intérêts = 6M à rembourser
+] as const;
+
+/**
+ * Pourcentage des revenus de vol prélevé pour rembourser le prêt
+ */
+export const TAUX_PRELEVEMENT_PRET = 30; // 30% des revenus bruts de chaque vol
+
+/**
+ * Calcule le montant total à rembourser pour un prêt
+ */
+export function calculerMontantTotalPret(montant: number, tauxInteret: number): number {
+  return Math.round(montant * (1 + tauxInteret / 100));
+}
+
+/**
+ * Trouve les détails d'un prêt par montant
+ */
+export function getOptionPret(montant: number) {
+  return OPTIONS_PRETS.find(p => p.montant === montant);
+}

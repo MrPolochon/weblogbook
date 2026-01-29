@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plane, Plus, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart } from 'lucide-react';
+import { Plane, Plus, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2 } from 'lucide-react';
 import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY } from '@/lib/compagnie-utils';
 import Link from 'next/link';
 
@@ -17,6 +17,9 @@ type Avion = {
   statut: string;
   types_avion: TypeAvion | TypeAvion[] | null;
   maintenance_fin_at: string | null;
+  detruit?: boolean;
+  detruit_at?: string | null;
+  detruit_raison?: string | null;
 };
 
 interface Props {
@@ -146,6 +149,46 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
     }
   }
 
+  // Tenter de réparer un avion détruit (0.5% de chance, coûte 1M F$)
+  async function handleTenterReparation(avionId: string, immat: string) {
+    if (!confirm(`⚠️ ATTENTION !\n\nTenter de réparer l'avion détruit ${immat} ?\n\n• Coût : 1 000 000 F$\n• Probabilité de succès : 0.5%\n\nC'est un pari très risqué !`)) return;
+    
+    setActionId(avionId);
+    try {
+      const res = await fetch(`/api/compagnies/avions/${avionId}/tenter-reparation`, { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      
+      alert(d.message);
+      router.refresh();
+      loadAvions();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  // Vendre les pièces détachées d'un avion détruit (5K-15K F$)
+  async function handleVendrePieces(avionId: string, immat: string) {
+    if (!confirm(`Vendre les pièces détachées de l'épave ${immat} ?\n\nVous récupérerez entre 5 000 et 15 000 F$.\n\n⚠️ L'avion sera définitivement supprimé !`)) return;
+    
+    setActionId(avionId);
+    try {
+      const res = await fetch(`/api/compagnies/avions/${avionId}/vendre-pieces`, { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      
+      alert(d.message);
+      router.refresh();
+      loadAvions();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setActionId(null);
+    }
+  }
+
   function startEdit(avion: Avion) {
     setEditingId(avion.id);
     setEditImmat(avion.immatriculation);
@@ -176,7 +219,12 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
     }
   }
 
-  function getStatutLabel(statut: string, maintenanceFinAt?: string | null, usure?: number) {
+  function getStatutLabel(statut: string, maintenanceFinAt?: string | null, usure?: number, detruit?: boolean) {
+    // Avion détruit
+    if (detruit) {
+      return { text: '💥 DÉTRUIT', className: 'text-red-500 font-bold' };
+    }
+    
     if (statut === 'maintenance' && maintenanceFinAt) {
       const fin = new Date(maintenanceFinAt);
       const maintenant = new Date();
@@ -295,14 +343,14 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
             </thead>
             <tbody>
               {avions.map((a) => {
-                const statut = getStatutLabel(a.statut, a.maintenance_fin_at, a.usure_percent);
+                const statut = getStatutLabel(a.statut, a.maintenance_fin_at, a.usure_percent, a.detruit);
                 const isAtHub = hubs.some((h) => h.aeroport_code === a.aeroport_actuel);
                 const typeNom = Array.isArray(a.types_avion) ? a.types_avion[0]?.nom : a.types_avion?.nom;
                 const isEditing = editingId === a.id;
                 const maintenancePrete = a.statut === 'maintenance' && a.maintenance_fin_at && new Date(a.maintenance_fin_at) <= new Date();
                 
                 return (
-                  <tr key={a.id} className="border-b border-slate-700/50 last:border-0">
+                  <tr key={a.id} className={`border-b border-slate-700/50 last:border-0 ${a.detruit ? 'bg-red-950/20 opacity-70' : ''}`}
                     <td className="py-2.5 pr-4">
                       {isEditing ? (
                         <input
@@ -313,7 +361,12 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                           maxLength={10}
                         />
                       ) : (
-                        <span className="font-mono font-medium text-slate-200">{a.immatriculation}</span>
+                        <div className="flex items-center gap-1">
+                          {a.detruit && <Skull className="h-3 w-3 text-red-500" />}
+                          <span className={`font-mono font-medium ${a.detruit ? 'text-red-400 line-through' : 'text-slate-200'}`}>
+                            {a.immatriculation}
+                          </span>
+                        </div>
                       )}
                     </td>
                     <td className="py-2.5 pr-4">
@@ -364,6 +417,38 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                             </>
                           ) : (
                             <>
+                              {/* Avion détruit - options limitées */}
+                              {a.detruit ? (
+                                <div className="flex flex-col gap-1.5">
+                                  <span className="text-xs text-red-400 italic" title={a.detruit_raison || 'Crash'}>
+                                    <Skull className="inline h-3 w-3 mr-1" />
+                                    {a.detruit_raison || 'Détruit'}
+                                  </span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTenterReparation(a.id, a.immatriculation)}
+                                      disabled={actionId === a.id}
+                                      className="text-xs text-amber-400 hover:text-amber-300 disabled:opacity-50 flex items-center gap-1"
+                                      title="0.5% de chance - Coût: 1 000 000 F$"
+                                    >
+                                      <Sparkles className="h-3 w-3" />
+                                      Tenter réparation
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVendrePieces(a.id, a.immatriculation)}
+                                      disabled={actionId === a.id}
+                                      className="text-xs text-slate-400 hover:text-slate-300 disabled:opacity-50 flex items-center gap-1"
+                                      title="Récupère 5 000 - 15 000 F$"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                      Vendre pièces
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
                               {a.statut === 'ground' && (
                                 <button
                                   type="button"
@@ -423,6 +508,8 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   <Wrench className="h-3 w-3" />
                                   Réparer
                                 </button>
+                              )}
+                                </>
                               )}
                             </>
                           )}

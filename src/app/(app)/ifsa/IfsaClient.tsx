@@ -40,6 +40,15 @@ interface Enquete {
   ouvert_par: { id: string; identifiant: string } | null;
 }
 
+// État d'édition d'une enquête
+interface EnqueteEditState {
+  titre: string;
+  description: string;
+  conclusion: string;
+  priorite: string;
+  statut: string;
+}
+
 interface Sanction {
   id: string;
   type_sanction: string;
@@ -109,6 +118,8 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   const [showEnqueteModal, setShowEnqueteModal] = useState(false);
   const [selectedSignalement, setSelectedSignalement] = useState<Signalement | null>(null);
   const [selectedEnquete, setSelectedEnquete] = useState<Enquete | null>(null);
+  const [showEnqueteDetailModal, setShowEnqueteDetailModal] = useState(false);
+  const [enqueteEditState, setEnqueteEditState] = useState<EnqueteEditState | null>(null);
 
   // Formulaire sanction
   const [sanctionType, setSanctionType] = useState('avertissement');
@@ -313,6 +324,51 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
     setShowEnqueteModal(true);
   }
 
+  function openEnqueteDetail(enq: Enquete) {
+    setSelectedEnquete(enq);
+    setEnqueteEditState({
+      titre: enq.titre,
+      description: enq.description || '',
+      conclusion: enq.conclusion || '',
+      priorite: enq.priorite,
+      statut: enq.statut,
+    });
+    setShowEnqueteDetailModal(true);
+  }
+
+  async function handleSaveEnqueteEdit() {
+    if (!selectedEnquete || !enqueteEditState) return;
+    
+    setLoading(true);
+    try {
+      const res = await fetch('/api/ifsa/enquetes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedEnquete.id,
+          titre: enqueteEditState.titre,
+          description: enqueteEditState.description || null,
+          conclusion: enqueteEditState.conclusion || null,
+          priorite: enqueteEditState.priorite,
+          statut: enqueteEditState.statut,
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+
+      setSuccess('Enquête mise à jour');
+      setShowEnqueteDetailModal(false);
+      setSelectedEnquete(null);
+      setEnqueteEditState(null);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Messages */}
@@ -491,38 +547,28 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
           {enquetes.length === 0 ? (
             <p className="text-slate-400">Aucune enquête.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {enquetes.map((enq) => {
                 const statutInfo = STATUTS_ENQUETE[enq.statut as keyof typeof STATUTS_ENQUETE] || STATUTS_ENQUETE.ouverte;
                 const prioriteInfo = PRIORITES[enq.priorite as keyof typeof PRIORITES] || PRIORITES.normale;
                 return (
-                  <div key={enq.id} className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                    <div className="flex items-start justify-between gap-4 flex-wrap">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className="text-xs font-mono text-slate-500">{enq.numero_dossier}</span>
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded ${statutInfo.color}`}>
-                            {statutInfo.label}
-                          </span>
-                          <span className={`text-xs font-medium ${prioriteInfo.color}`}>
-                            {prioriteInfo.label}
-                          </span>
-                        </div>
-                        <h3 className="font-medium text-slate-200">{enq.titre}</h3>
-                        {enq.description && (
-                          <p className="text-sm text-slate-400 mt-1 line-clamp-2">{enq.description}</p>
-                        )}
-                        <div className="flex items-center gap-4 mt-2 text-xs text-slate-500 flex-wrap">
-                          <span>Enquêteur: {enq.enqueteur?.identifiant || 'Non assigné'}</span>
-                          {enq.pilote_concerne && (
-                            <span className="text-amber-400">Pilote: {enq.pilote_concerne.identifiant}</span>
-                          )}
-                          {enq.compagnie_concernee && (
-                            <span className="text-amber-400">Compagnie: {enq.compagnie_concernee.nom}</span>
-                          )}
-                        </div>
+                  <div 
+                    key={enq.id} 
+                    className="p-5 bg-slate-800/50 rounded-lg border border-slate-700 hover:border-slate-500 transition-colors cursor-pointer"
+                    onClick={() => openEnqueteDetail(enq)}
+                  >
+                    {/* En-tête */}
+                    <div className="flex items-start justify-between gap-4 flex-wrap mb-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-mono text-amber-400 font-semibold">{enq.numero_dossier}</span>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${statutInfo.color}`}>
+                          {statutInfo.label}
+                        </span>
+                        <span className={`text-xs font-semibold ${prioriteInfo.color}`}>
+                          {prioriteInfo.label}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                         {(enq.statut === 'ouverte' || enq.statut === 'en_cours') && (
                           <>
                             {enq.statut === 'ouverte' && (
@@ -549,6 +595,56 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                         )}
                       </div>
                     </div>
+
+                    {/* Titre */}
+                    <h3 className="text-lg font-semibold text-slate-100 mb-2">{enq.titre}</h3>
+                    
+                    {/* Description */}
+                    {enq.description && (
+                      <div className="mb-3 p-3 bg-slate-900/50 rounded-lg">
+                        <p className="text-sm text-slate-300 whitespace-pre-wrap">{enq.description}</p>
+                      </div>
+                    )}
+                    
+                    {/* Conclusion (si clôturée) */}
+                    {enq.conclusion && (
+                      <div className="mb-3 p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
+                        <p className="text-xs text-emerald-400 mb-1 font-semibold">Conclusion</p>
+                        <p className="text-sm text-emerald-300 whitespace-pre-wrap">{enq.conclusion}</p>
+                      </div>
+                    )}
+
+                    {/* Métadonnées */}
+                    <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap border-t border-slate-700 pt-3 mt-3">
+                      <span className="flex items-center gap-1">
+                        <User className="h-3 w-3" />
+                        Enquêteur: <span className="text-slate-300">{enq.enqueteur?.identifiant || 'Non assigné'}</span>
+                      </span>
+                      {enq.pilote_concerne && (
+                        <span className="flex items-center gap-1 text-amber-400">
+                          <User className="h-3 w-3" />
+                          Pilote: {enq.pilote_concerne.identifiant}
+                        </span>
+                      )}
+                      {enq.compagnie_concernee && (
+                        <span className="flex items-center gap-1 text-amber-400">
+                          <Building2 className="h-3 w-3" />
+                          Compagnie: {enq.compagnie_concernee.nom}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Ouvert: {toLocaleDateStringUTC(enq.created_at)} UTC
+                      </span>
+                      {enq.cloture_at && (
+                        <span className="flex items-center gap-1 text-emerald-400">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Clôturé: {toLocaleDateStringUTC(enq.cloture_at)} UTC
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-slate-600 mt-2 italic">Cliquer pour modifier</p>
                   </div>
                 );
               })}
@@ -962,6 +1058,149 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium"
               >
                 Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Détail/Édition Enquête */}
+      {showEnqueteDetailModal && selectedEnquete && enqueteEditState && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <span className="text-sm font-mono text-amber-400 font-semibold">{selectedEnquete.numero_dossier}</span>
+                <h3 className="text-xl font-semibold text-slate-100 mt-1">Modifier l&apos;enquête</h3>
+              </div>
+              <button 
+                onClick={() => { setShowEnqueteDetailModal(false); setSelectedEnquete(null); setEnqueteEditState(null); }}
+                className="text-slate-400 hover:text-slate-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Titre */}
+              <div>
+                <label className="label">Titre de l&apos;enquête</label>
+                <input
+                  type="text"
+                  value={enqueteEditState.titre}
+                  onChange={(e) => setEnqueteEditState({ ...enqueteEditState, titre: e.target.value })}
+                  className="input w-full text-lg font-semibold"
+                  placeholder="Titre de l'enquête"
+                />
+              </div>
+
+              {/* Statut et Priorité */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="label">Statut</label>
+                  <select
+                    value={enqueteEditState.statut}
+                    onChange={(e) => setEnqueteEditState({ ...enqueteEditState, statut: e.target.value })}
+                    className="input w-full"
+                  >
+                    {Object.entries(STATUTS_ENQUETE).map(([key, val]) => (
+                      <option key={key} value={key}>{val.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Priorité</label>
+                  <select
+                    value={enqueteEditState.priorite}
+                    onChange={(e) => setEnqueteEditState({ ...enqueteEditState, priorite: e.target.value })}
+                    className="input w-full"
+                  >
+                    {Object.entries(PRIORITES).map(([key, val]) => (
+                      <option key={key} value={key}>{val.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="label">Description / Rapport d&apos;enquête</label>
+                <textarea
+                  value={enqueteEditState.description}
+                  onChange={(e) => setEnqueteEditState({ ...enqueteEditState, description: e.target.value })}
+                  placeholder="Détails de l'enquête, faits, observations, témoignages..."
+                  rows={8}
+                  className="input w-full resize-y font-mono text-sm"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Vous pouvez écrire un rapport complet ici. Le texte sera conservé tel quel.
+                </p>
+              </div>
+
+              {/* Conclusion */}
+              <div>
+                <label className="label">Conclusion (optionnel)</label>
+                <textarea
+                  value={enqueteEditState.conclusion}
+                  onChange={(e) => setEnqueteEditState({ ...enqueteEditState, conclusion: e.target.value })}
+                  placeholder="Résumé des conclusions, recommandations, décisions..."
+                  rows={4}
+                  className="input w-full resize-y"
+                />
+              </div>
+
+              {/* Informations contextuelles (lecture seule) */}
+              <div className="p-4 bg-slate-900/50 rounded-lg border border-slate-700">
+                <h4 className="text-sm font-semibold text-slate-300 mb-3">Informations</h4>
+                <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                  <div>
+                    <span className="text-slate-500">Enquêteur:</span>
+                    <span className="ml-2 text-slate-200">{selectedEnquete.enqueteur?.identifiant || 'Non assigné'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Ouvert par:</span>
+                    <span className="ml-2 text-slate-200">{selectedEnquete.ouvert_par?.identifiant || 'Inconnu'}</span>
+                  </div>
+                  {selectedEnquete.pilote_concerne && (
+                    <div>
+                      <span className="text-slate-500">Pilote concerné:</span>
+                      <span className="ml-2 text-amber-400">{selectedEnquete.pilote_concerne.identifiant}</span>
+                    </div>
+                  )}
+                  {selectedEnquete.compagnie_concernee && (
+                    <div>
+                      <span className="text-slate-500">Compagnie concernée:</span>
+                      <span className="ml-2 text-amber-400">{selectedEnquete.compagnie_concernee.nom}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-slate-500">Date d&apos;ouverture:</span>
+                    <span className="ml-2 text-slate-200">{toLocaleStringUTC(selectedEnquete.created_at)} UTC</span>
+                  </div>
+                  {selectedEnquete.cloture_at && (
+                    <div>
+                      <span className="text-slate-500">Date de clôture:</span>
+                      <span className="ml-2 text-emerald-400">{toLocaleStringUTC(selectedEnquete.cloture_at)} UTC</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => { setShowEnqueteDetailModal(false); setSelectedEnquete(null); setEnqueteEditState(null); }}
+                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSaveEnqueteEdit}
+                disabled={loading || !enqueteEditState.titre}
+                className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                Enregistrer
               </button>
             </div>
           </div>

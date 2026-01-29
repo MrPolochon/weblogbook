@@ -130,7 +130,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { id, statut, priorite, enqueteur_id, conclusion } = body;
+    const { id, statut, priorite, enqueteur_id, conclusion, titre, description } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'ID enquête requis' }, { status: 400 });
@@ -148,6 +148,8 @@ export async function PATCH(req: NextRequest) {
     if (priorite) updateData.priorite = priorite;
     if (enqueteur_id) updateData.enqueteur_id = enqueteur_id;
     if (conclusion !== undefined) updateData.conclusion = conclusion;
+    if (titre !== undefined) updateData.titre = titre;
+    if (description !== undefined) updateData.description = description;
 
     const { data, error } = await admin.from('ifsa_enquetes')
       .update(updateData)

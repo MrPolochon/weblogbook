@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
-import { calculerUsureVol } from '@/lib/compagnie-utils';
+import { calculerUsureVol, TAUX_PRELEVEMENT_PRET } from '@/lib/compagnie-utils';
 
 const STATUTS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring'];
 const ORDRE_ACCEPTATION_PLANS = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
@@ -296,21 +296,91 @@ async function envoyerChequesVol(
     });
   }
 
+  // Vérifier si la compagnie a un prêt actif
+  let remboursementPret = 0;
+  let pretInfo: { id: string; montant_total_du: number; montant_rembourse: number } | null = null;
+  
+  const { data: pretActif } = await admin
+    .from('prets_bancaires')
+    .select('id, montant_total_du, montant_rembourse')
+    .eq('compagnie_id', plan.compagnie_id)
+    .eq('statut', 'actif')
+    .maybeSingle();
+
+  if (pretActif && revenuCompagnie > 0) {
+    pretInfo = pretActif;
+    const resteARembourser = pretActif.montant_total_du - pretActif.montant_rembourse;
+    
+    if (resteARembourser > 0) {
+      // Prélever TAUX_PRELEVEMENT_PRET% des revenus pour rembourser le prêt
+      const prelevementMax = Math.round(revenuCompagnie * TAUX_PRELEVEMENT_PRET / 100);
+      remboursementPret = Math.min(prelevementMax, resteARembourser);
+      
+      // Mettre à jour le prêt
+      const nouveauMontantRembourse = pretActif.montant_rembourse + remboursementPret;
+      const pretRembourse = nouveauMontantRembourse >= pretActif.montant_total_du;
+      
+      await admin.from('prets_bancaires')
+        .update({
+          montant_rembourse: nouveauMontantRembourse,
+          statut: pretRembourse ? 'rembourse' : 'actif',
+          rembourse_at: pretRembourse ? new Date().toISOString() : null,
+        })
+        .eq('id', pretActif.id);
+
+      // Enregistrer la transaction de remboursement
+      await admin.from('felitz_transactions').insert({
+        compte_id: compteCompagnie.id,
+        type: 'debit',
+        montant: remboursementPret,
+        description: `Remboursement prêt - Vol ${numeroVol}`,
+        reference: `LOAN-PAY-${pretActif.id.slice(0, 8)}`,
+      });
+    }
+  }
+
+  // Revenu compagnie après remboursement prêt
+  const revenuCompagnieNet = revenuCompagnie - remboursementPret;
+
   // Chèque revenu compagnie
-  if (revenuCompagnie > 0 && compagnie.pdg_id) {
+  if (revenuCompagnieNet > 0 && compagnie.pdg_id) {
+    let contenuMessage = `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$\nCoefficient ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesTotales.toLocaleString('fr-FR')} F$\nSalaire pilote: ${salaireEffectif.toLocaleString('fr-FR')} F$`;
+    
+    if (remboursementPret > 0) {
+      const resteApres = (pretInfo?.montant_total_du || 0) - (pretInfo?.montant_rembourse || 0) - remboursementPret;
+      contenuMessage += `\n\n💳 Remboursement prêt: -${remboursementPret.toLocaleString('fr-FR')} F$ (${TAUX_PRELEVEMENT_PRET}%)`;
+      if (resteApres <= 0) {
+        contenuMessage += `\n✅ PRÊT INTÉGRALEMENT REMBOURSÉ !`;
+      } else {
+        contenuMessage += `\n📊 Reste à rembourser: ${resteApres.toLocaleString('fr-FR')} F$`;
+      }
+    }
+    
+    contenuMessage += `\n\nRevenu net: ${revenuCompagnieNet.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser le chèque ci-dessous.`;
+
     await admin.from('messages').insert({
       destinataire_id: compagnie.pdg_id,
       expediteur_id: null,
       titre: `Revenu vol ${numeroVol} - ${compagnie.nom}`,
-      contenu: `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$\nCoefficient ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesTotales.toLocaleString('fr-FR')} F$\nSalaire pilote: ${salaireEffectif.toLocaleString('fr-FR')} F$\nRevenu net: ${revenuCompagnie.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser le chèque ci-dessous.`,
+      contenu: contenuMessage,
       type_message: 'cheque_revenu_compagnie',
-      cheque_montant: revenuCompagnie,
+      cheque_montant: revenuCompagnieNet,
       cheque_encaisse: false,
       cheque_destinataire_compte_id: compteCompagnie.id,
-      cheque_libelle: `Revenu vol ${numeroVol} (coef. ${coeffPct}%)`,
+      cheque_libelle: `Revenu vol ${numeroVol} (coef. ${coeffPct}%)${remboursementPret > 0 ? ' - après prêt' : ''}`,
       cheque_numero_vol: numeroVol,
       cheque_compagnie_nom: compagnie.nom,
       cheque_pour_compagnie: true
+    });
+  } else if (remboursementPret > 0 && compagnie.pdg_id) {
+    // Si tout le revenu est parti dans le remboursement, informer le PDG
+    const resteApres = (pretInfo?.montant_total_du || 0) - (pretInfo?.montant_rembourse || 0) - remboursementPret;
+    await admin.from('messages').insert({
+      destinataire_id: compagnie.pdg_id,
+      expediteur_id: null,
+      titre: `Remboursement prêt - Vol ${numeroVol}`,
+      contenu: `Le vol ${numeroVol} a été effectué.\n\nRevenu compagnie: ${revenuCompagnie.toLocaleString('fr-FR')} F$\n💳 Prélevé pour le prêt: ${remboursementPret.toLocaleString('fr-FR')} F$ (${TAUX_PRELEVEMENT_PRET}%)\n\n${resteApres <= 0 ? '✅ PRÊT INTÉGRALEMENT REMBOURSÉ !' : `📊 Reste à rembourser: ${resteApres.toLocaleString('fr-FR')} F$`}`,
+      type_message: 'notification',
     });
   }
 
@@ -318,12 +388,13 @@ async function envoyerChequesVol(
     success: true, 
     revenus: { 
       brut: plan.revenue_brut, 
-      net: revenuCompagnie, 
+      net: revenuCompagnieNet, 
       salaire: salaireEffectif, 
       taxes: taxesTotales,
       coefficient,
       tempsReel: tempsReelMin,
-      bonusCargaison: montantBonus > 0 ? montantBonus : undefined
+      bonusCargaison: montantBonus > 0 ? montantBonus : undefined,
+      remboursementPret: remboursementPret > 0 ? remboursementPret : undefined
     } 
   };
 }

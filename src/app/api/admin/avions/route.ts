@@ -106,7 +106,7 @@ export async function GET() {
   }
 }
 
-// PATCH - Modifier un avion (déplacer, changer statut, etc.)
+// PATCH - Modifier un avion (déplacer, changer statut, marquer détruit, etc.)
 export async function PATCH(request: Request) {
   try {
     const supabase = await createClient();
@@ -119,7 +119,7 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { id, aeroport_actuel, statut, usure_percent, immatriculation, nom_bapteme } = body;
+    const { id, aeroport_actuel, statut, usure_percent, immatriculation, nom_bapteme, detruit, detruit_raison } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'id requis' }, { status: 400 });
@@ -133,6 +133,23 @@ export async function PATCH(request: Request) {
     if (usure_percent !== undefined) updates.usure_percent = Math.max(0, Math.min(100, usure_percent));
     if (immatriculation !== undefined) updates.immatriculation = immatriculation.toUpperCase();
     if (nom_bapteme !== undefined) updates.nom_bapteme = nom_bapteme || null;
+    
+    // Marquer comme détruit
+    if (detruit === true) {
+      updates.detruit = true;
+      updates.detruit_at = new Date().toISOString();
+      updates.detruit_par_id = user.id;
+      updates.detruit_raison = detruit_raison || 'Crash';
+      updates.statut = 'bloque'; // L'avion est bloqué définitivement
+      updates.usure_percent = 0;
+    }
+    // Restaurer un avion détruit (rare mais possible)
+    if (detruit === false) {
+      updates.detruit = false;
+      updates.detruit_at = null;
+      updates.detruit_par_id = null;
+      updates.detruit_raison = null;
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'Aucune modification' }, { status: 400 });

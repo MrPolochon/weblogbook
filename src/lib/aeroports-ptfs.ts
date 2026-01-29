@@ -524,30 +524,37 @@ export function calculerPassagersReels(
 // - Version cargo : 51 000 kg × ? F$/kg = devrait être ~80 000-100 000 F$
 // → Prix cargo optimal ≈ 1.5-2 F$/kg (pas 8 F$/kg !)
 
+// =====================================================
+// ÉQUILIBRAGE CARGO RÉVISÉ - Revenus réduits de ~40%
+// =====================================================
+// Les vols cargo doivent être rentables mais pas excessivement.
+// Un 777F plein (~50t) au prix optimal devrait rapporter ~50-60k F$
+// (avant c'était ~100k+ ce qui était trop élevé)
+
 // Prix de référence CARGO selon le type d'aéroport (F$ par kg)
 export const PRIX_REFERENCE_CARGO: Record<TailleAeroport, number> = {
-  international: 2,    // Hub cargo : gros volumes, prix bas
-  regional: 1.5,       // Aéroport régional : prix moyen
-  small: 1,            // Petit aéroport : peu de cargo
-  military: 1.5,       // Base militaire : fret militaire
+  international: 1.2,  // Hub cargo : gros volumes, prix bas
+  regional: 1,         // Aéroport régional : prix moyen
+  small: 0.8,          // Petit aéroport : peu de cargo
+  military: 1,         // Base militaire : fret militaire
 };
 
 // Prix MAXIMUM absolu CARGO - au-delà, personne n'expédie
-export const PRIX_MAXIMUM_ABSOLU_CARGO = 8; // F$/kg max (réduit de 30)
+export const PRIX_MAXIMUM_ABSOLU_CARGO = 5; // F$/kg max (réduit de 8)
 
-// Prix critique CARGO
+// Prix critique CARGO (au-delà, très peu de cargo)
 export const PRIX_CRITIQUE_CARGO: Record<TailleAeroport, number> = {
-  international: 5,    // Les entreprises peuvent payer jusqu'à 5 F$/kg
-  regional: 4,         // Maximum 4 F$/kg pour du régional
-  small: 3,            // Maximum 3 F$/kg pour les petites lignes
-  military: 5,         // Fret militaire peut être cher
+  international: 3,    // Les entreprises peuvent payer jusqu'à 3 F$/kg max
+  regional: 2.5,       // Maximum 2.5 F$/kg pour du régional
+  small: 2,            // Maximum 2 F$/kg pour les petites lignes
+  military: 3,         // Fret militaire peut être cher
 };
 
 // Bonus pour les aéroports militaires (fret militaire, équipement)
-export const BONUS_MILITAIRE_CARGO = 1.20; // +20% de chargement
+export const BONUS_MILITAIRE_CARGO = 1.10; // +10% de chargement (réduit de 20%)
 
 // Bonus pour les zones industrielles
-export const BONUS_INDUSTRIEL_CARGO = 1.25; // +25% de chargement
+export const BONUS_INDUSTRIEL_CARGO = 1.15; // +15% de chargement (réduit de 25%)
 
 // =====================================================
 // TYPES DE CARGAISON
@@ -714,17 +721,17 @@ export function calculerCoefficientChargementCargo(
 
   // ============ BONUS CARGO ============
   // Les bonus servent à FACILITER l'atteinte de 100%, pas à le dépasser !
-  // Un bonus de +20% sur un coefficient de 0.7 donne 0.84, pas 1.4
+  // Un bonus de +10% sur un coefficient de 0.7 donne 0.77, pas 1.4
 
-  // BONUS MILITAIRE : +15% pour les vols vers/depuis bases militaires (réduit de 20%)
+  // BONUS MILITAIRE : +10% pour les vols vers/depuis bases militaires
   if (aeroportDepart.taille === 'military' || aeroportArrivee.taille === 'military') {
-    const bonusMilitaire = 0.15 * efficaciteBonus;
+    const bonusMilitaire = (BONUS_MILITAIRE_CARGO - 1) * efficaciteBonus; // 0.10
     coefficient = Math.min(1.0, coefficient + bonusMilitaire);
   }
 
-  // BONUS INDUSTRIEL : +15% pour les zones industrielles (réduit de 25%)
+  // BONUS INDUSTRIEL : +15% pour les zones industrielles
   if ((aeroportDepart.industriel || aeroportArrivee.industriel) && coefficient > 0) {
-    const bonusIndustriel = 0.15 * efficaciteBonus;
+    const bonusIndustriel = (BONUS_INDUSTRIEL_CARGO - 1) * efficaciteBonus; // 0.15
     coefficient = Math.min(1.0, coefficient + bonusIndustriel);
   }
 

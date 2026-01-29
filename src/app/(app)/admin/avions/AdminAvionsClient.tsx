@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plane, MapPin, Edit2, Trash2, Save, X, RefreshCw, Building2, Plus } from 'lucide-react';
+import { Plane, MapPin, Edit2, Trash2, Save, X, RefreshCw, Building2, Plus, Skull, AlertTriangle } from 'lucide-react';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
 type Avion = {
@@ -13,6 +13,9 @@ type Avion = {
   aeroport_actuel: string;
   statut: string;
   created_at: string;
+  detruit?: boolean;
+  detruit_at?: string | null;
+  detruit_raison?: string | null;
   types_avion: { id: string; nom: string; constructeur: string } | { id: string; nom: string; constructeur: string }[] | null;
   compagnies: { id: string; nom: string } | { id: string; nom: string }[] | null;
 };
@@ -180,7 +183,51 @@ export default function AdminAvionsClient() {
     }
   }
 
-  function getStatutLabel(statut: string) {
+  async function marquerDetruit(id: string, immat: string) {
+    const raison = prompt(`Raison de la destruction de ${immat} (crash, accident, etc.) :`, 'Crash');
+    if (raison === null) return; // Annulé
+    
+    try {
+      const res = await fetch('/api/admin/avions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, detruit: true, detruit_raison: raison || 'Crash' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      
+      alert(`✈️💥 Avion ${immat} marqué comme DÉTRUIT`);
+      loadAvions();
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    }
+  }
+
+  async function restaurerAvion(id: string, immat: string) {
+    if (!confirm(`Restaurer l'avion ${immat} ? (annuler la destruction)`)) return;
+    
+    try {
+      const res = await fetch('/api/admin/avions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, detruit: false }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      
+      alert(`Avion ${immat} restauré`);
+      loadAvions();
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    }
+  }
+
+  function getStatutLabel(statut: string, detruit?: boolean) {
+    if (detruit) {
+      return { text: '💥 DÉTRUIT', className: 'bg-black text-red-500 border border-red-600 font-bold animate-pulse' };
+    }
     switch (statut) {
       case 'ground': return { text: 'Au sol', className: 'bg-emerald-500/20 text-emerald-400' };
       case 'in_flight': return { text: 'En vol', className: 'bg-sky-500/20 text-sky-400' };
@@ -355,10 +402,10 @@ export default function AdminAvionsClient() {
                 const isEditing = editingId === avion.id;
                 const compagnieNom = Array.isArray(avion.compagnies) ? avion.compagnies[0]?.nom : avion.compagnies?.nom;
                 const typeNom = Array.isArray(avion.types_avion) ? avion.types_avion[0]?.nom : avion.types_avion?.nom;
-                const statut = getStatutLabel(avion.statut);
+                const statut = getStatutLabel(avion.statut, avion.detruit);
 
                 return (
-                  <tr key={avion.id} className="border-b border-slate-700/50 last:border-0">
+                  <tr key={avion.id} className={`border-b border-slate-700/50 last:border-0 ${avion.detruit ? 'bg-red-950/30' : ''}`}>
                     <td className="py-2.5 pr-4">
                       {isEditing && editData ? (
                         <input
@@ -368,7 +415,12 @@ export default function AdminAvionsClient() {
                           className="input py-1 px-2 w-24 text-sm font-mono"
                         />
                       ) : (
-                        <span className="font-mono font-medium text-slate-200">{avion.immatriculation}</span>
+                        <div className="flex items-center gap-1">
+                          {avion.detruit && <Skull className="h-3 w-3 text-red-500" />}
+                          <span className={`font-mono font-medium ${avion.detruit ? 'text-red-400 line-through' : 'text-slate-200'}`}>
+                            {avion.immatriculation}
+                          </span>
+                        </div>
                       )}
                     </td>
                     <td className="py-2.5 pr-4">
@@ -472,10 +524,27 @@ export default function AdminAvionsClient() {
                           >
                             <Edit2 className="h-4 w-4" />
                           </button>
+                          {avion.detruit ? (
+                            <button
+                              onClick={() => restaurerAvion(avion.id, avion.immatriculation)}
+                              className="text-emerald-400 hover:text-emerald-300"
+                              title="Restaurer (annuler destruction)"
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => marquerDetruit(avion.id, avion.immatriculation)}
+                              className="text-orange-400 hover:text-orange-300"
+                              title="Marquer comme DÉTRUIT"
+                            >
+                              <Skull className="h-4 w-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => deleteAvion(avion.id, avion.immatriculation)}
                             className="text-red-400 hover:text-red-300"
-                            title="Supprimer"
+                            title="Supprimer de la BDD"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
