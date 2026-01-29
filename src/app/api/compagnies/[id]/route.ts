@@ -42,6 +42,37 @@ export async function DELETE(
     // Supprimer les invitations de recrutement
     await admin.from('invitations_recrutement').delete().eq('compagnie_id', id);
     
+    // Supprimer les prêts bancaires
+    await admin.from('prets_bancaires').delete().eq('compagnie_id', id);
+    
+    // Supprimer les plans de vol de la compagnie
+    await admin.from('plans_vol').delete().eq('compagnie_id', id);
+    
+    // Récupérer le compte Felitz de l'entreprise pour nettoyer les références
+    const { data: compteEntreprise } = await admin
+      .from('felitz_comptes')
+      .select('id')
+      .eq('compagnie_id', id)
+      .eq('type', 'entreprise')
+      .single();
+    
+    if (compteEntreprise) {
+      // Supprimer/Mettre à null les sanctions IFSA qui référencent ce compte
+      await admin
+        .from('ifsa_sanctions')
+        .update({ compte_destination_id: null })
+        .eq('compte_destination_id', compteEntreprise.id);
+      
+      // Supprimer les transactions Felitz liées à ce compte
+      await admin.from('felitz_transactions').delete().eq('compte_id', compteEntreprise.id);
+      
+      // Supprimer les messages/chèques destinés à ce compte
+      await admin
+        .from('messages')
+        .update({ cheque_destinataire_compte_id: null })
+        .eq('cheque_destinataire_compte_id', compteEntreprise.id);
+    }
+    
     // Supprimer le compte Felitz de l'entreprise
     await admin.from('felitz_comptes').delete().eq('compagnie_id', id).eq('type', 'entreprise');
     
