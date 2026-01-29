@@ -150,7 +150,7 @@ export async function POST(
       .from('felitz_comptes')
       .select('id, solde')
       .eq('compagnie_id', id)
-      .eq('type', 'business')
+      .eq('type', 'entreprise')
       .single();
 
     if (!compteCompagnie) {

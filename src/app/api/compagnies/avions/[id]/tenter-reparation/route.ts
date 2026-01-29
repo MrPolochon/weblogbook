@@ -61,7 +61,7 @@ export async function POST(
       .from('felitz_comptes')
       .select('id, solde')
       .eq('compagnie_id', avion.compagnie_id)
-      .eq('type', 'business')
+      .eq('type', 'entreprise')
       .single();
 
     if (!compteCompagnie || compteCompagnie.solde < COUT_TENTATIVE_REPARATION) {
