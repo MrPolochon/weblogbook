@@ -18,7 +18,7 @@ export default function PilotesActions({
 }) {
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
-  const [superadminModal, setSuperadminModal] = useState<{ identifiant: string } | null>(null);
+  const [superadminModal, setSuperadminModal] = useState<{ identifiant: string; reason?: string } | null>(null);
   const [superadminPwd, setSuperadminPwd] = useState('');
   const [superadminError, setSuperadminError] = useState<string | null>(null);
 
@@ -35,6 +35,18 @@ export default function PilotesActions({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const errorMsg = data?.error || 'Erreur lors de la suppression';
+        
+        // Si la protection anti-suppression massive est déclenchée, afficher le modal
+        if (data?.requiresSuperadmin && !superadminModal) {
+          setSuperadminModal({ 
+            identifiant, 
+            reason: `⚠️ Protection anti-suppression massive activée !\n\nVous avez supprimé ${data.deletionCount} comptes en moins de 10 minutes.`
+          });
+          setSuperadminPwd('');
+          setDeleting(false);
+          return;
+        }
+        
         if (superadminModal) {
           setSuperadminError(errorMsg);
         } else {
@@ -113,13 +125,20 @@ export default function PilotesActions({
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={() => !deleting && setSuperadminModal(null)}>
           <div className="card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-100">Supprimer l&apos;admin</h3>
+              <h3 className="text-lg font-semibold text-slate-100">
+                {superadminModal.reason ? 'Confirmation requise' : 'Supprimer l\'admin'}
+              </h3>
               <button type="button" onClick={() => !deleting && setSuperadminModal(null)} className="rounded p-1 text-slate-400 hover:bg-slate-700/50 hover:text-slate-200">
                 <X className="h-5 w-5" />
               </button>
             </div>
+            {superadminModal.reason && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mb-4">
+                <p className="text-amber-300 text-sm whitespace-pre-line">{superadminModal.reason}</p>
+              </div>
+            )}
             <p className="text-slate-300 text-sm mb-4">
-              Supprimer l&apos;admin <strong>{superadminModal.identifiant}</strong> ? Saisissez le mot de passe superadmin pour confirmer.
+              Supprimer le compte de <strong>{superadminModal.identifiant}</strong> ? Saisissez le mot de passe superadmin pour confirmer.
             </p>
             <form onSubmit={handleSuperadminSubmit} className="space-y-4">
               <div>

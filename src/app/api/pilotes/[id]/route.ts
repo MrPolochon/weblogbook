@@ -109,23 +109,51 @@ export async function DELETE(
     }
 
     const admin = createAdminClient();
-    const { data: target } = await admin.from('profiles').select('role').eq('id', id).single();
+    const { data: target } = await admin.from('profiles').select('role, identifiant').eq('id', id).single();
     if (!target) return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
 
-    if (target.role === 'admin') {
-      const { count } = await admin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
-      if ((count ?? 0) <= 1) {
-        return NextResponse.json({ error: 'Il doit rester au moins un administrateur.' }, { status: 400 });
+    // === PROTECTION ANTI-SUPPRESSION MASSIVE ===
+    // Compter les suppressions des 10 dernières minutes par cet admin
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    const { count: recentDeletions } = await admin
+      .from('deletion_logs')
+      .select('*', { count: 'exact', head: true })
+      .eq('deleted_by_id', user.id)
+      .gte('deleted_at', tenMinutesAgo);
+    
+    const deletionCount = recentDeletions ?? 0;
+    const needsSuperadminForMassDelete = deletionCount >= 3 && deletionCount % 3 === 0;
+    
+    // Parser le body une seule fois
+    const body = await request.json().catch(() => ({})) as { superadminPassword?: string };
+    const expected = process.env.SUPERADMIN_PASSWORD;
+    
+    // Si c'est un admin OU si on a atteint le seuil de suppressions massives
+    const requiresSuperadmin = target.role === 'admin' || needsSuperadminForMassDelete;
+    
+    if (requiresSuperadmin) {
+      if (target.role === 'admin') {
+        const { count } = await admin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin');
+        if ((count ?? 0) <= 1) {
+          return NextResponse.json({ error: 'Il doit rester au moins un administrateur.' }, { status: 400 });
+        }
       }
-      const body = await request.json().catch(() => ({})) as { superadminPassword?: string };
-      const expected = process.env.SUPERADMIN_PASSWORD;
+      
       if (!expected || expected.length === 0) {
         return NextResponse.json(
           { error: 'Mot de passe superadmin non configuré. Définissez SUPERADMIN_PASSWORD dans les variables d\'environnement.' },
           { status: 500 }
         );
       }
+      
       if (body?.superadminPassword !== expected) {
+        if (needsSuperadminForMassDelete && target.role !== 'admin') {
+          return NextResponse.json({ 
+            error: `Protection anti-suppression massive activée. Vous avez supprimé ${deletionCount} comptes en 10 minutes. Mot de passe superadmin requis pour continuer.`,
+            requiresSuperadmin: true,
+            deletionCount
+          }, { status: 400 });
+        }
         return NextResponse.json({ error: 'Mot de passe superadmin incorrect.' }, { status: 400 });
       }
     }
@@ -274,6 +302,14 @@ export async function DELETE(
     // Supprimer le profil et l'utilisateur auth
     await admin.from('profiles').delete().eq('id', id);
     await admin.auth.admin.deleteUser(id);
+
+    // Logger la suppression pour la protection anti-suppression massive
+    await admin.from('deletion_logs').insert({
+      deleted_by_id: user.id,
+      deleted_profile_id: id,
+      deleted_identifiant: target.identifiant,
+      required_superadmin: requiresSuperadmin
+    });
 
     return NextResponse.json({ ok: true });
   } catch (e) {
