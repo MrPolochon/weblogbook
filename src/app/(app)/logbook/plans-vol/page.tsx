@@ -2,8 +2,9 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { formatDateHourUTC } from '@/lib/date-utils';
-import { ArrowLeft, FileText, AlertCircle, Bell, Plane, Clock, CheckCircle2, XCircle, Timer, ArrowRight, Plus } from 'lucide-react';
+import { ArrowLeft, FileText, AlertCircle, Bell, Plane, Clock, CheckCircle2, XCircle, Timer, ArrowRight, Plus, Radio } from 'lucide-react';
 import PlanVolCloturerButton from './PlanVolCloturerButton';
+import TranspondeurInterface from './TranspondeurInterface';
 
 const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
   depose: { label: 'Déposé', color: 'text-slate-300', bgColor: 'bg-slate-500/20' },
@@ -25,14 +26,18 @@ export default async function MesPlansVolPage() {
 
   const { data: raw } = await supabase
     .from('plans_vol')
-    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason')
+    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at')
     .eq('pilote_id', user.id)
     .order('created_at', { ascending: false });
   
   const plans = (raw || []).filter((p: { statut: string }) => p.statut !== 'cloture');
   const plansRefuses = plans.filter((p: { statut: string }) => p.statut === 'refuse');
   const plansNonClotures = plans.filter((p: { statut: string }) => p.statut !== 'refuse');
-  const plansEnCours = plans.filter((p: { statut: string }) => ['en_cours', 'accepte'].includes(p.statut));
+  const plansEnCours = plans.filter((p: { statut: string }) => ['en_cours', 'accepte', 'automonitoring', 'en_attente_cloture'].includes(p.statut));
+  
+  // Plan actif avec transpondeur (accepté, en cours, automonitoring ou en attente de clôture)
+  const planActif = plans.find((p: { statut: string }) => ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'].includes(p.statut));
+  const hasActivePlan = !!planActif;
 
   return (
     <div className="space-y-6">
@@ -54,13 +59,20 @@ export default async function MesPlansVolPage() {
               <p className="text-indigo-100/80 text-sm">Gérez et suivez vos plans de vol</p>
             </div>
           </div>
-          <Link 
-            href="/logbook/depot-plan-vol" 
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-indigo-50 text-indigo-700 text-sm font-bold transition-all shadow-lg"
-          >
-            <Plus className="h-4 w-4" />
-            Nouveau plan de vol
-          </Link>
+          {hasActivePlan ? (
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/20 text-white/60 text-sm font-medium cursor-not-allowed">
+              <Radio className="h-4 w-4" />
+              Vol en cours
+            </div>
+          ) : (
+            <Link 
+              href="/logbook/depot-plan-vol" 
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-indigo-50 text-indigo-700 text-sm font-bold transition-all shadow-lg"
+            >
+              <Plus className="h-4 w-4" />
+              Nouveau plan de vol
+            </Link>
+          )}
         </div>
       </div>
 
@@ -95,8 +107,22 @@ export default async function MesPlansVolPage() {
         </div>
       </div>
 
+      {/* Interface Transpondeur - Vol actif */}
+      {planActif && (
+        <TranspondeurInterface
+          planId={planActif.id}
+          numeroVol={planActif.numero_vol}
+          aeroportDepart={planActif.aeroport_depart}
+          aeroportArrivee={planActif.aeroport_arrivee}
+          codeTranspondeur={(planActif as any).code_transpondeur}
+          modeTranspondeur={(planActif as any).mode_transpondeur || 'C'}
+          acceptedAt={(planActif as any).accepted_at}
+          statut={planActif.statut}
+        />
+      )}
+
       {/* Alertes */}
-      {plansNonClotures.length > 0 && (
+      {plansNonClotures.length > 0 && !hasActivePlan && (
         <div className="relative overflow-hidden rounded-xl border-2 border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-amber-600/5 p-5">
           <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
           <div className="relative flex items-start gap-4">

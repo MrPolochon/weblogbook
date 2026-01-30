@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
-import { Radio, Plane, Clock, MapPin, AlertTriangle, ArrowRight, Activity, Users, Package, Ship, Building2, User, FilePlus } from 'lucide-react';
+import { Radio, Plane, Clock, MapPin, AlertTriangle, ArrowRight, Activity, Users, Package, Ship, Building2, User, FilePlus, Radar } from 'lucide-react';
+import TranspondeurBadgeAtc from '@/components/TranspondeurBadgeAtc';
 import SeMettreEnServiceForm from '../SeMettreEnServiceForm';
 import HorsServiceButton from '../HorsServiceButton';
 import { formatDistanceToNow } from 'date-fns';
@@ -201,6 +202,14 @@ export default async function AtcPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 font-mono">{p.numero_vol}</span>
                         <span className="text-xs px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">{p.type_vol}</span>
+                        {/* Transpondeur */}
+                        {(p as any).code_transpondeur && (
+                          <TranspondeurBadgeAtc 
+                            code={(p as any).code_transpondeur} 
+                            mode={(p as any).mode_transpondeur || 'C'} 
+                            size="sm"
+                          />
+                        )}
                         {isFerry && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 flex items-center gap-1">
                             <Ship className="h-3 w-3" />

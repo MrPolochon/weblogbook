@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plane } from 'lucide-react';
+import { ArrowLeft, Plane, AlertCircle, Radio } from 'lucide-react';
 import DepotPlanVolForm from './DepotPlanVolForm';
 
 export default async function DepotPlanVolPage() {
@@ -11,6 +11,20 @@ export default async function DepotPlanVolPage() {
   if (!user) redirect('/login');
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   if (profile?.role === 'atc') redirect('/logbook');
+
+  // Vérifier si le pilote a déjà un plan actif (accepté, en cours, etc.)
+  const { data: planActif } = await supabase
+    .from('plans_vol')
+    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, statut')
+    .eq('pilote_id', user.id)
+    .in('statut', ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'])
+    .limit(1)
+    .single();
+
+  // Si un plan est actif, rediriger vers la page des plans avec message
+  if (planActif) {
+    redirect('/logbook/plans-vol?active=true');
+  }
 
   const admin = createAdminClient();
 

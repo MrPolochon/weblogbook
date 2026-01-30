@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plane, Clock, FileText, AlertCircle, CheckCircle2, XCircle, Radio, Navigation, Users, Package, Ship, Building2, User, Percent } from 'lucide-react';
+import { ArrowLeft, Plane, Clock, FileText, AlertCircle, CheckCircle2, XCircle, Radio, Navigation, Users, Package, Ship, Building2, User, Percent, Radar } from 'lucide-react';
+import TranspondeurBadgeAtc from '@/components/TranspondeurBadgeAtc';
 import ConfirmerClotureButton from './ConfirmerClotureButton';
 import AccepterPlanButton from './AccepterPlanButton';
 import RefuserPlanForm from './RefuserPlanForm';
@@ -106,12 +107,20 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="flex-1">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold text-slate-900 font-mono">{plan.numero_vol}</h1>
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-medium ${statusConfig.bgColor} ${statusConfig.color}`}>
               {statusConfig.icon}
               {statusConfig.label}
             </span>
+            {/* Transpondeur */}
+            {(plan as any).code_transpondeur && (
+              <TranspondeurBadgeAtc 
+                code={(plan as any).code_transpondeur} 
+                mode={(plan as any).mode_transpondeur || 'C'} 
+                size="md"
+              />
+            )}
           </div>
         </div>
       </div>
