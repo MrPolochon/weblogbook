@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { formatDateHourUTC } from '@/lib/date-utils';
@@ -19,6 +20,7 @@ const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: str
 
 export default async function MesPlansVolPage() {
   const supabase = await createClient();
+  const admin = createAdminClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
@@ -26,7 +28,7 @@ export default async function MesPlansVolPage() {
 
   const { data: raw } = await supabase
     .from('plans_vol')
-    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at')
+    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring')
     .eq('pilote_id', user.id)
     .order('created_at', { ascending: false });
   
@@ -36,8 +38,19 @@ export default async function MesPlansVolPage() {
   const plansEnCours = plans.filter((p: { statut: string }) => ['en_cours', 'accepte', 'automonitoring', 'en_attente_cloture'].includes(p.statut));
   
   // Plan actif avec transpondeur (accepté, en cours, automonitoring ou en attente de clôture)
-  const planActif = plans.find((p: { statut: string }) => ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'].includes(p.statut));
+  const planActif = plans.find((p: { statut: string }) => ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'].includes(p.statut)) as any;
   const hasActivePlan = !!planActif;
+
+  // Récupérer l'identifiant du contrôleur en charge si plan actif
+  let controleurIdentifiant: string | null = null;
+  if (planActif?.current_holder_user_id) {
+    const { data: controleurProfile } = await admin
+      .from('profiles')
+      .select('identifiant')
+      .eq('id', planActif.current_holder_user_id)
+      .single();
+    controleurIdentifiant = controleurProfile?.identifiant || null;
+  }
 
   return (
     <div className="space-y-6">
@@ -114,10 +127,14 @@ export default async function MesPlansVolPage() {
           numeroVol={planActif.numero_vol}
           aeroportDepart={planActif.aeroport_depart}
           aeroportArrivee={planActif.aeroport_arrivee}
-          codeTranspondeur={(planActif as any).code_transpondeur}
-          modeTranspondeur={(planActif as any).mode_transpondeur || 'C'}
-          acceptedAt={(planActif as any).accepted_at}
+          codeTranspondeur={planActif.code_transpondeur}
+          modeTranspondeur={planActif.mode_transpondeur || 'C'}
+          acceptedAt={planActif.accepted_at}
           statut={planActif.statut}
+          controleurIdentifiant={controleurIdentifiant}
+          controleurPosition={planActif.current_holder_position}
+          controleurAeroport={planActif.current_holder_aeroport}
+          automonitoring={planActif.automonitoring || false}
         />
       )}
 

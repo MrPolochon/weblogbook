@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Radio, Clock, AlertTriangle, Plane, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Radio, Clock, AlertTriangle, Plane, ArrowRight, CheckCircle2, Headphones, MapPin } from 'lucide-react';
 
 // Codes d'urgence
 const EMERGENCY_CODES: Record<string, { label: string; description: string; color: string }> = {
@@ -19,6 +19,11 @@ interface TranspondeurInterfaceProps {
   modeTranspondeur: string;
   acceptedAt: string | null;
   statut: string;
+  // Contrôleur en charge
+  controleurIdentifiant: string | null;
+  controleurPosition: string | null;
+  controleurAeroport: string | null;
+  automonitoring: boolean;
 }
 
 export default function TranspondeurInterface({
@@ -30,6 +35,10 @@ export default function TranspondeurInterface({
   modeTranspondeur: initialMode,
   acceptedAt,
   statut,
+  controleurIdentifiant,
+  controleurPosition,
+  controleurAeroport,
+  automonitoring,
 }: TranspondeurInterfaceProps) {
   const [code, setCode] = useState(initialCode || '');
   const [mode, setMode] = useState(initialMode || 'C');
@@ -140,21 +149,64 @@ export default function TranspondeurInterface({
 
         {/* Info vol */}
         <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-4">
               <span className="font-mono text-2xl font-bold text-white">{numeroVol}</span>
               <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                 statut === 'en_cours' ? 'bg-sky-500/20 text-sky-400' :
                 statut === 'accepte' ? 'bg-emerald-500/20 text-emerald-400' :
+                statut === 'automonitoring' ? 'bg-purple-500/20 text-purple-400' :
                 'bg-amber-500/20 text-amber-400'
               }`}>
-                {statut === 'en_cours' ? 'EN VOL' : statut === 'accepte' ? 'ACCEPTÉ' : statut.toUpperCase()}
+                {statut === 'en_cours' ? 'EN VOL' : statut === 'accepte' ? 'ACCEPTÉ' : statut === 'automonitoring' ? 'AUTOSURVEILLANCE' : statut.toUpperCase()}
               </span>
             </div>
             <div className="flex items-center gap-3">
               <span className="font-mono text-lg text-sky-400">{aeroportDepart}</span>
               <ArrowRight className="h-4 w-4 text-slate-500" />
               <span className="font-mono text-lg text-emerald-400">{aeroportArrivee}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Contrôleur en charge */}
+        <div className={`rounded-xl p-4 border ${
+          automonitoring 
+            ? 'bg-purple-500/10 border-purple-500/30' 
+            : controleurIdentifiant 
+              ? 'bg-sky-500/10 border-sky-500/30'
+              : 'bg-slate-800/30 border-slate-700/30'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${
+              automonitoring ? 'bg-purple-500/20' : controleurIdentifiant ? 'bg-sky-500/20' : 'bg-slate-700/50'
+            }`}>
+              <Headphones className={`h-5 w-5 ${
+                automonitoring ? 'text-purple-400' : controleurIdentifiant ? 'text-sky-400' : 'text-slate-500'
+              }`} />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs text-slate-500 uppercase tracking-wide">Contrôleur en charge</p>
+              {automonitoring ? (
+                <p className="font-medium text-purple-400">Autosurveillance (pas de contrôle ATC)</p>
+              ) : controleurIdentifiant ? (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="font-semibold text-white">{controleurIdentifiant}</span>
+                  {controleurPosition && (
+                    <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-400 text-sm font-medium">
+                      {controleurPosition}
+                    </span>
+                  )}
+                  {controleurAeroport && (
+                    <span className="flex items-center gap-1 text-slate-400 text-sm">
+                      <MapPin className="h-3 w-3" />
+                      {controleurAeroport}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <p className="text-slate-500">Aucun contrôleur assigné</p>
+              )}
             </div>
           </div>
         </div>
