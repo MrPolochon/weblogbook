@@ -69,7 +69,7 @@ export default function LoginPage() {
   const fond = (
     <div
       className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-      style={{ backgroundImage: 'url(/ptfs-logo.png)' }}
+      style={{ backgroundImage: 'url(/ptfs-logo.jpg)' }}
     />
   );
   const overlay = <div className="absolute inset-0 bg-slate-900/80" />;
