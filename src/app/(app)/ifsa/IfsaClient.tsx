@@ -4,9 +4,10 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   AlertTriangle, FileSearch, Gavel, Plus, X, Check, Loader2, 
-  Clock, User, Building2, ChevronRight, Search, Eye, CheckCircle2
+  Clock, User, Building2, ChevronRight, Search, Eye, CheckCircle2, BookOpen, Landmark
 } from 'lucide-react';
-import { toLocaleDateStringUTC, toLocaleStringUTC } from '@/lib/date-utils';
+import { formatDateMediumUTC, formatTimeUTC, toLocaleDateStringUTC, toLocaleStringUTC } from '@/lib/date-utils';
+import { formatDuree } from '@/lib/utils';
 
 interface Signalement {
   id: string;
@@ -67,12 +68,77 @@ interface Sanction {
   cleared_by: { id: string; identifiant: string } | null;
 }
 
+interface IfsaLicence {
+  id: string;
+  type: string;
+  type_avion_id: string | null;
+  langue: string | null;
+  date_delivrance: string | null;
+  date_expiration: string | null;
+  a_vie: boolean;
+  note: string | null;
+  types_avion: { nom: string; constructeur: string } | null;
+}
+
+interface IfsaTransaction {
+  id: string;
+  type: string;
+  montant: number;
+  libelle: string;
+  created_at: string;
+}
+
+interface IfsaCompte {
+  id: string;
+  vban: string;
+  solde: number;
+  type: string;
+}
+
+interface IfsaVol {
+  id: string;
+  duree_minutes: number | null;
+  depart_utc: string;
+  arrivee_utc: string | null;
+  statut: string;
+  compagnie_libelle?: string | null;
+  type_vol?: string | null;
+  role_pilote?: string | null;
+  callsign?: string | null;
+  type_avion_militaire?: string | null;
+  aeroport_depart?: string | null;
+  aeroport_arrivee?: string | null;
+  instruction_type?: string | null;
+  type_avion?: { nom?: string } | null;
+  pilote?: { identifiant?: string } | null;
+  copilote?: { identifiant?: string } | null;
+  instructeur?: { identifiant?: string } | null;
+}
+
+interface IfsaPiloteData {
+  profile: { id: string; identifiant: string; role: string | null; heures_initiales_minutes: number | null };
+  compte: IfsaCompte | null;
+  transactions: IfsaTransaction[];
+  licences: IfsaLicence[];
+  logbook: { totalMinutes: number; vols: IfsaVol[] };
+}
+
+interface IfsaCompagnieData {
+  compagnie: { id: string; nom: string; vban: string | null; pdg_id: string | null };
+  compte: IfsaCompte | null;
+  transactions: IfsaTransaction[];
+  pilotes: Array<{ id: string; identifiant: string; role: string | null }>;
+  logbook: { totalMinutes: number; vols: IfsaVol[] };
+}
+
 interface Props {
   signalements: Signalement[];
   enquetes: Enquete[];
   sanctions: Sanction[];
-  pilotes: Array<{ id: string; identifiant: string }>;
+  pilotes: Array<{ id: string; identifiant: string; role: string | null }>;
   compagnies: Array<{ id: string; nom: string }>;
+  compagniesAvecPilotes: Array<{ id: string; nom: string; pilotes: Array<{ id: string; identifiant: string; role: string | null }> }>;
+  pilotesChomage: Array<{ id: string; identifiant: string; role: string | null }>;
   agentsIfsa: Array<{ id: string; identifiant: string }>;
 }
 
@@ -106,12 +172,21 @@ const PRIORITES = {
   urgente: { label: 'Urgente', color: 'text-red-400' }
 };
 
-export default function IfsaClient({ signalements, enquetes, sanctions, pilotes, compagnies, agentsIfsa }: Props) {
+export default function IfsaClient({ signalements, enquetes, sanctions, pilotes, compagnies, compagniesAvecPilotes, pilotesChomage, agentsIfsa }: Props) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'signalements' | 'enquetes' | 'sanctions'>('signalements');
+  const [activeTab, setActiveTab] = useState<'signalements' | 'enquetes' | 'sanctions' | 'donnees'>('signalements');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [dataError, setDataError] = useState('');
+
+  const [selectedCompagnieId, setSelectedCompagnieId] = useState('');
+  const [selectedPiloteId, setSelectedPiloteId] = useState('');
+  const [compagnieData, setCompagnieData] = useState<IfsaCompagnieData | null>(null);
+  const [piloteData, setPiloteData] = useState<IfsaPiloteData | null>(null);
+  const [loadingCompagnie, setLoadingCompagnie] = useState(false);
+  const [loadingPilote, setLoadingPilote] = useState(false);
+  const compagniesPilotesCount = new Map(compagniesAvecPilotes.map((c) => [c.id, c.pilotes.length]));
 
   // Modals
   const [showSanctionModal, setShowSanctionModal] = useState(false);
@@ -369,6 +444,70 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
     }
   }
 
+  function formatLicenceLabel(lic: IfsaLicence): string {
+    if (lic.type === 'Qualification Type' && lic.types_avion) {
+      return `Qualification Type ${lic.types_avion.constructeur} ${lic.types_avion.nom}`;
+    }
+    if (lic.type.startsWith('COM') && lic.langue) {
+      return `${lic.type} ${lic.langue}`;
+    }
+    return lic.type;
+  }
+
+  function formatLicenceDate(dateStr: string | null): string {
+    if (!dateStr) return '—';
+    try {
+      return formatDateMediumUTC(dateStr);
+    } catch {
+      return dateStr;
+    }
+  }
+
+  async function loadCompagnieData(compagnieId: string) {
+    if (!compagnieId) {
+      setCompagnieData(null);
+      return;
+    }
+    setLoadingCompagnie(true);
+    setDataError('');
+    try {
+      const res = await fetch(`/api/ifsa/controle?type=compagnie&id=${encodeURIComponent(compagnieId)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setCompagnieData(data);
+    } catch (err) {
+      setDataError(err instanceof Error ? err.message : 'Erreur');
+      setCompagnieData(null);
+    } finally {
+      setLoadingCompagnie(false);
+    }
+  }
+
+  async function loadPiloteData(piloteId: string) {
+    if (!piloteId) {
+      setPiloteData(null);
+      return;
+    }
+    setLoadingPilote(true);
+    setDataError('');
+    try {
+      const res = await fetch(`/api/ifsa/controle?type=pilote&id=${encodeURIComponent(piloteId)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setPiloteData(data);
+    } catch (err) {
+      setDataError(err instanceof Error ? err.message : 'Erreur');
+      setPiloteData(null);
+    } finally {
+      setLoadingPilote(false);
+    }
+  }
+
+  function selectPilote(piloteId: string) {
+    setSelectedPiloteId(piloteId);
+    void loadPiloteData(piloteId);
+  }
+
   return (
     <div className="space-y-6">
       {/* Messages */}
@@ -421,23 +560,34 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
           <Gavel className="h-4 w-4 inline mr-2" />
           Sanctions
         </button>
+        <button
+          onClick={() => setActiveTab('donnees')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            activeTab === 'donnees' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+          }`}
+        >
+          <Landmark className="h-4 w-4 inline mr-2" />
+          Données IFSA
+        </button>
 
-        <div className="ml-auto flex gap-2">
-          <button
-            onClick={() => setShowEnqueteModal(true)}
-            className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Nouvelle enquête
-          </button>
-          <button
-            onClick={() => setShowSanctionModal(true)}
-            className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" />
-            Nouvelle sanction
-          </button>
-        </div>
+        {activeTab !== 'donnees' && (
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={() => setShowEnqueteModal(true)}
+              className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Nouvelle enquête
+            </button>
+            <button
+              onClick={() => setShowSanctionModal(true)}
+              className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Nouvelle sanction
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Contenu des tabs */}
@@ -650,6 +800,298 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'donnees' && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="card">
+            <h2 className="text-lg font-semibold text-slate-100 mb-4">Compagnies</h2>
+            <div className="space-y-3">
+              <select
+                value={selectedCompagnieId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setSelectedCompagnieId(id);
+                  void loadCompagnieData(id);
+                }}
+                className="input w-full"
+              >
+                <option value="">— Sélectionner une compagnie —</option>
+                {compagnies.map((c) => {
+                  const count = compagniesPilotesCount.get(c.id) ?? 0;
+                  const label = count > 0 ? `${c.nom} (${count})` : c.nom;
+                  return (
+                    <option key={c.id} value={c.id}>{label}</option>
+                  );
+                })}
+              </select>
+
+              {loadingCompagnie && <p className="text-sm text-slate-400">Chargement…</p>}
+              {dataError && <p className="text-sm text-red-400">{dataError}</p>}
+
+              {compagnieData && (
+                <div className="space-y-4">
+                  <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-800/40">
+                    <p className="text-xs text-slate-500">Compagnie</p>
+                    <p className="text-slate-200 font-semibold">{compagnieData.compagnie.nom}</p>
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-900/40">
+                    <p className="text-sm font-medium text-slate-200 mb-2 flex items-center gap-2">
+                      <Landmark className="h-4 w-4 text-emerald-400" />
+                      Compte entreprise
+                    </p>
+                    {compagnieData.compte ? (
+                      <div className="space-y-2">
+                        <p className="text-xs text-slate-500 font-mono break-all">{compagnieData.compte.vban}</p>
+                        <p className="text-2xl font-bold text-emerald-300">
+                          {compagnieData.compte.solde.toLocaleString('fr-FR')} F$
+                        </p>
+                        <div className="mt-3">
+                          <p className="text-xs text-slate-400 mb-1">Transactions récentes</p>
+                          {compagnieData.transactions.length > 0 ? (
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {compagnieData.transactions.map((t) => (
+                                <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1">
+                                  <span className="text-slate-400 truncate">{t.libelle}</span>
+                                  <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>
+                                    {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500">Aucune transaction</p>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500">Aucun compte entreprise.</p>
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-800/40">
+                    <p className="text-sm font-medium text-slate-200 mb-2">Pilotes de la compagnie</p>
+                    {compagnieData.pilotes.length === 0 ? (
+                      <p className="text-sm text-slate-500">Aucun pilote rattaché.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {compagnieData.pilotes.map((p) => (
+                          <div key={p.id} className="flex items-center justify-between text-sm">
+                            <span className="text-slate-300">
+                              {p.identifiant}
+                              {p.role === 'atc' && (
+                                <span className="ml-2 text-xs text-amber-400">ATC uniquement</span>
+                              )}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => selectPilote(p.id)}
+                              className="text-xs text-sky-400 hover:text-sky-300"
+                            >
+                              Voir pilote
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-900/40">
+                    <p className="text-sm font-medium text-slate-200 mb-2 flex items-center gap-2">
+                      <BookOpen className="h-4 w-4 text-sky-400" />
+                      Logbook compagnie
+                    </p>
+                    <p className="text-xs text-slate-500 mb-2">
+                      Total validé: {formatDuree(compagnieData.logbook.totalMinutes)}
+                    </p>
+                    {compagnieData.logbook.vols.length === 0 ? (
+                      <p className="text-xs text-slate-500">Aucun vol.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-left text-slate-500 border-b border-slate-700/40">
+                              <th className="py-1 pr-3">Date</th>
+                              <th className="py-1 pr-3">Départ</th>
+                              <th className="py-1 pr-3">Arrivée</th>
+                              <th className="py-1 pr-3">Appareil</th>
+                              <th className="py-1 pr-3">Pilote</th>
+                              <th className="py-1 pr-3">Durée</th>
+                              <th className="py-1">Statut</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {compagnieData.logbook.vols.map((v) => (
+                              <tr key={v.id} className="border-b border-slate-800/40">
+                                <td className="py-1 pr-3 text-slate-300">{formatDateMediumUTC(v.depart_utc)}</td>
+                                <td className="py-1 pr-3 text-slate-300">{v.aeroport_depart || '—'} {formatTimeUTC(v.depart_utc)}</td>
+                                <td className="py-1 pr-3 text-slate-300">{v.aeroport_arrivee || '—'} {v.arrivee_utc ? formatTimeUTC(v.arrivee_utc) : '—'}</td>
+                                <td className="py-1 pr-3 text-slate-300">{(v.type_avion as { nom?: string })?.nom || v.type_avion_militaire || '—'}</td>
+                                <td className="py-1 pr-3 text-slate-300">{(Array.isArray(v.pilote) ? v.pilote[0] : v.pilote)?.identifiant || '—'}</td>
+                                <td className="py-1 pr-3 text-slate-300">{formatDuree(v.duree_minutes || 0)}</td>
+                                <td className="py-1 text-slate-300">{v.statut}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="card">
+            <h2 className="text-lg font-semibold text-slate-100 mb-4">Pilotes</h2>
+            <div className="space-y-3">
+              <select
+                value={selectedPiloteId}
+                onChange={(e) => selectPilote(e.target.value)}
+                className="input w-full"
+              >
+                <option value="">— Sélectionner un pilote —</option>
+                {pilotes.filter((p) => p.role !== 'admin').map((p) => (
+                  <option key={p.id} value={p.id}>{p.identifiant}</option>
+                ))}
+              </select>
+
+              {pilotesChomage.length > 0 && (
+                <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-800/40">
+                  <p className="text-sm font-medium text-slate-200 mb-2">Pilotes au chômage</p>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {pilotesChomage.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between text-sm">
+                        <span className="text-slate-300">{p.identifiant}</span>
+                        <button
+                          type="button"
+                          onClick={() => selectPilote(p.id)}
+                          className="text-xs text-sky-400 hover:text-sky-300"
+                        >
+                          Voir
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {loadingPilote && <p className="text-sm text-slate-400">Chargement…</p>}
+              {dataError && <p className="text-sm text-red-400">{dataError}</p>}
+
+              {piloteData && (
+                <div className="space-y-4">
+                  <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-800/40">
+                    <p className="text-xs text-slate-500">Pilote</p>
+                    <p className="text-slate-200 font-semibold">{piloteData.profile.identifiant}</p>
+                    {piloteData.profile.role === 'atc' && (
+                      <p className="text-xs text-amber-400 mt-1">ATC uniquement</p>
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-900/40">
+                    <p className="text-sm font-medium text-slate-200 mb-2 flex items-center gap-2">
+                      <Landmark className="h-4 w-4 text-emerald-400" />
+                      Compte personnel
+                    </p>
+                    {piloteData.compte ? (
+                      <div className="space-y-2">
+                        <p className="text-xs text-slate-500 font-mono break-all">{piloteData.compte.vban}</p>
+                        <p className="text-2xl font-bold text-emerald-300">
+                          {piloteData.compte.solde.toLocaleString('fr-FR')} F$
+                        </p>
+                        <div className="mt-3">
+                          <p className="text-xs text-slate-400 mb-1">Transactions récentes</p>
+                          {piloteData.transactions.length > 0 ? (
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {piloteData.transactions.map((t) => (
+                                <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1">
+                                  <span className="text-slate-400 truncate">{t.libelle}</span>
+                                  <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>
+                                    {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500">Aucune transaction</p>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500">Aucun compte personnel.</p>
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-800/40">
+                    <p className="text-sm font-medium text-slate-200 mb-2">Licences</p>
+                    {piloteData.licences.length === 0 ? (
+                      <p className="text-xs text-slate-500">Aucune licence.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-56 overflow-y-auto">
+                        {piloteData.licences.map((lic) => (
+                          <div key={lic.id} className="text-xs text-slate-300 border-b border-slate-800/50 pb-2">
+                            <p className="font-semibold">{formatLicenceLabel(lic)}</p>
+                            <p className="text-slate-500">
+                              {lic.a_vie ? 'À vie' : `Expire le ${formatLicenceDate(lic.date_expiration)}`}
+                            </p>
+                            {lic.date_delivrance && (
+                              <p className="text-slate-500">Délivré le {formatLicenceDate(lic.date_delivrance)}</p>
+                            )}
+                            {lic.note && <p className="text-slate-500">{lic.note}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-900/40">
+                    <p className="text-sm font-medium text-slate-200 mb-2 flex items-center gap-2">
+                      <BookOpen className="h-4 w-4 text-sky-400" />
+                      Logbook pilote
+                    </p>
+                    <p className="text-xs text-slate-500 mb-2">
+                      Total validé: {formatDuree(piloteData.logbook.totalMinutes)}
+                    </p>
+                    {piloteData.logbook.vols.length === 0 ? (
+                      <p className="text-xs text-slate-500">Aucun vol.</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-left text-slate-500 border-b border-slate-700/40">
+                              <th className="py-1 pr-3">Date</th>
+                              <th className="py-1 pr-3">Départ</th>
+                              <th className="py-1 pr-3">Arrivée</th>
+                              <th className="py-1 pr-3">Appareil</th>
+                              <th className="py-1 pr-3">Compagnie</th>
+                              <th className="py-1 pr-3">Durée</th>
+                              <th className="py-1">Statut</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {piloteData.logbook.vols.map((v) => (
+                              <tr key={v.id} className="border-b border-slate-800/40">
+                                <td className="py-1 pr-3 text-slate-300">{formatDateMediumUTC(v.depart_utc)}</td>
+                                <td className="py-1 pr-3 text-slate-300">{v.aeroport_depart || '—'} {formatTimeUTC(v.depart_utc)}</td>
+                                <td className="py-1 pr-3 text-slate-300">{v.aeroport_arrivee || '—'} {v.arrivee_utc ? formatTimeUTC(v.arrivee_utc) : '—'}</td>
+                                <td className="py-1 pr-3 text-slate-300">{(v.type_avion as { nom?: string })?.nom || v.type_avion_militaire || '—'}</td>
+                                <td className="py-1 pr-3 text-slate-300">{v.compagnie_libelle || '—'}</td>
+                                <td className="py-1 pr-3 text-slate-300">{formatDuree(v.duree_minutes || 0)}</td>
+                                <td className="py-1 text-slate-300">{v.statut}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

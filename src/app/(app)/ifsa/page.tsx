@@ -59,12 +59,33 @@ export default async function IfsaPage() {
 
   // Récupérer les pilotes et compagnies pour les formulaires
   const { data: pilotes } = await admin.from('profiles')
-    .select('id, identifiant')
+    .select('id, identifiant, role')
     .order('identifiant');
 
   const { data: compagnies } = await admin.from('compagnies')
     .select('id, nom')
     .order('nom');
+
+  // Récupérer les employés pour la vue IFSA (compagnies + pilotes)
+  const { data: employes } = await admin.from('compagnie_employes')
+    .select('pilote_id, compagnie_id, profiles(id, identifiant, role), compagnies(id, nom)')
+    .order('date_embauche', { ascending: false });
+
+  const pilotesEnCompagnie = new Set((employes || []).map((e) => e.pilote_id));
+  const pilotesChomage = (pilotes || [])
+    .filter((p) => p.role !== 'admin')
+    .filter((p) => !pilotesEnCompagnie.has(p.id));
+
+  const compagniesMap = new Map((compagnies || []).map((c) => [c.id, { id: c.id, nom: c.nom, pilotes: [] as Array<{ id: string; identifiant: string; role: string | null }> }]));
+  (employes || []).forEach((e) => {
+    const compagnie = Array.isArray(e.compagnies) ? e.compagnies[0] : e.compagnies;
+    const profile = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles;
+    if (!compagnie || !profile) return;
+    const entry = compagniesMap.get(compagnie.id) || { id: compagnie.id, nom: compagnie.nom, pilotes: [] as Array<{ id: string; identifiant: string; role: string | null }> };
+    entry.pilotes.push({ id: profile.id, identifiant: profile.identifiant, role: profile.role });
+    compagniesMap.set(compagnie.id, entry);
+  });
+  const compagniesAvecPilotes = Array.from(compagniesMap.values());
 
   // Récupérer les agents IFSA
   const { data: agentsIfsa } = await admin.from('profiles')
@@ -157,6 +178,8 @@ export default async function IfsaPage() {
         }))}
         pilotes={pilotes || []}
         compagnies={compagnies || []}
+        compagniesAvecPilotes={compagniesAvecPilotes}
+        pilotesChomage={pilotesChomage}
         agentsIfsa={agentsIfsa || []}
       />
     </div>

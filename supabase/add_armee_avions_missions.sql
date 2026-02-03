@@ -14,6 +14,12 @@ CREATE TABLE IF NOT EXISTS public.armee_avions (
 
 CREATE INDEX IF NOT EXISTS idx_armee_avions_type ON public.armee_avions(type_avion_id);
 
+-- Ajout des colonnes destruction si la table existait déjà
+ALTER TABLE public.armee_avions
+  ADD COLUMN IF NOT EXISTS detruit BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS detruit_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS detruit_raison TEXT;
+
 -- Lien optionnel sur vols militaires
 ALTER TABLE public.vols
   ADD COLUMN IF NOT EXISTS armee_avion_id UUID REFERENCES public.armee_avions(id) ON DELETE SET NULL;

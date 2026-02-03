@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plane, Plus, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2, Handshake } from 'lucide-react';
-import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY } from '@/lib/compagnie-utils';
+import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX } from '@/lib/compagnie-utils';
 import Link from 'next/link';
 
 type TypeAvion = { id: string; nom: string; constructeur: string };
@@ -119,7 +119,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
 
   async function handleAffreterTechniciens(avionId: string, forceCheck = false) {
     // Si c'est une vérification forcée (pour compléter maintenance), pas de confirmation
-    if (!forceCheck && !confirm(`Affréter des techniciens pour réparer cet avion sur place ? Coût : ${COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$. Délai : 1 heure.`)) return;
+    if (!forceCheck && !confirm(`Affréter des techniciens pour réparer cet avion sur place ? Coût : ${COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$. Délai : ${TEMPS_MAINTENANCE_MIN} à ${TEMPS_MAINTENANCE_MAX} min.`)) return;
     setActionId(avionId);
     try {
       const res = await fetch(`/api/compagnies/avions/${avionId}/affreter-techniciens`, { method: 'POST' });
@@ -525,7 +525,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                     onClick={() => handleAffreterTechniciens(a.id)}
                                     disabled={actionId === a.id}
                                     className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
-                                    title={`Réparer sur place - Coût: ${COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$ (délai: 1h)`}
+                                  title={`Réparer sur place - Coût: ${COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$ (délai: ${TEMPS_MAINTENANCE_MIN}-${TEMPS_MAINTENANCE_MAX} min)`}
                                   >
                                     <Wrench className="inline h-3 w-3 mr-0.5" />
                                     Affréter

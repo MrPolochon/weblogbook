@@ -260,6 +260,7 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
                 <ul className="text-slate-400 text-xs mt-2 space-y-1">
                   <li>• Coût : {COUT_VOL_FERRY_AUTO_MIN.toLocaleString('fr-FR')} à {COUT_VOL_FERRY_AUTO_MAX.toLocaleString('fr-FR')} F$</li>
                   <li>• Durée : {DUREE_VOL_FERRY_AUTO_MIN} min à {Math.floor(DUREE_VOL_FERRY_AUTO_MAX / 60)}h</li>
+                  <li>• Taxes aéroportuaires en plus</li>
                   <li>• Se termine automatiquement</li>
                 </ul>
               </>
