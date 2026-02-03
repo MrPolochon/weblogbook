@@ -4,6 +4,7 @@ import { Target, Coins, Timer } from 'lucide-react';
 import Link from 'next/link';
 import { ARME_MISSIONS } from '@/lib/armee-missions';
 
+export default function ArmeeMissionsClient() {
   return (
     <div className="card">
       <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
