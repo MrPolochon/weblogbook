@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { formatDateHourUTC } from '@/lib/date-utils';
 import { ArrowLeft, FileText, AlertCircle, Bell, Plane, Clock, CheckCircle2, XCircle, Timer, ArrowRight, Plus, Radio } from 'lucide-react';
 import PlanVolCloturerButton from './PlanVolCloturerButton';
+import PlanVolAnnulerButton from './PlanVolAnnulerButton';
 import TranspondeurInterface from './TranspondeurInterface';
 
 const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
@@ -32,7 +33,7 @@ export default async function MesPlansVolPage() {
     .eq('pilote_id', user.id)
     .order('created_at', { ascending: false });
   
-  const plans = (raw || []).filter((p: { statut: string }) => p.statut !== 'cloture');
+  const plans = (raw || []).filter((p: { statut: string }) => !['cloture', 'annule'].includes(p.statut));
   const plansRefuses = plans.filter((p: { statut: string }) => p.statut === 'refuse');
   const plansNonClotures = plans.filter((p: { statut: string }) => p.statut !== 'refuse');
   const plansEnCours = plans.filter((p: { statut: string }) => ['en_cours', 'accepte', 'automonitoring', 'en_attente_cloture'].includes(p.statut));
@@ -232,14 +233,20 @@ export default async function MesPlansVolPage() {
                         {formatDateHourUTC(p.created_at)} UTC
                       </span>
                       {p.statut === 'refuse' ? (
-                        <Link 
-                          href={`/logbook/plans-vol/${p.id}/modifier`} 
-                          className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors"
-                        >
-                          Modifier
-                        </Link>
+                        <div className="flex items-center gap-3">
+                          <Link
+                            href={`/logbook/plans-vol/${p.id}/modifier`}
+                            className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors"
+                          >
+                            Modifier
+                          </Link>
+                          <PlanVolAnnulerButton planId={p.id} statut={p.statut} />
+                        </div>
                       ) : (
-                        <PlanVolCloturerButton planId={p.id} statut={p.statut} />
+                        <div className="flex items-center gap-3">
+                          <PlanVolCloturerButton planId={p.id} statut={p.statut} />
+                          <PlanVolAnnulerButton planId={p.id} statut={p.statut} />
+                        </div>
                       )}
                     </div>
                   </div>

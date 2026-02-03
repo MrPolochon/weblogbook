@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle2, X, Plane } from 'lucide-react';
 
-const STATUTS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring'];
+const STATUTS_OUVERTS = ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
 
 type Props = { planId: string; statut: string };
 

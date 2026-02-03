@@ -31,10 +31,34 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
   const [star_arrivee, setStarArrivee] = useState(plan.star_arrivee || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showNoAtcConfirm, setShowNoAtcConfirm] = useState(false);
+
+  async function submitPlan(volSansAtc: boolean) {
+    const t = parseInt(temps_prev_min, 10);
+    const res = await fetch(`/api/plans-vol/${plan.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'modifier_et_renvoyer',
+        aeroport_depart,
+        aeroport_arrivee,
+        numero_vol: numero_vol.trim(),
+        porte: porte.trim() || undefined,
+        temps_prev_min: t,
+        type_vol,
+        intentions_vol: type_vol === 'VFR' ? intentions_vol.trim() : undefined,
+        sid_depart: type_vol === 'IFR' ? sid_depart.trim() : undefined,
+        star_arrivee: type_vol === 'IFR' ? star_arrivee.trim() : undefined,
+        vol_sans_atc: volSansAtc,
+      }),
+    });
+    return res;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setShowNoAtcConfirm(false);
     const t = parseInt(temps_prev_min, 10);
     if (!aeroport_depart || !aeroport_arrivee || !numero_vol.trim() || isNaN(t) || t < 1 || !type_vol) {
       setError('Remplissez tous les champs requis.');
@@ -44,22 +68,29 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
     if (type_vol === 'IFR' && (!sid_depart.trim() || !star_arrivee.trim())) { setError('SID de départ et STAR d\'arrivée requises pour IFR.'); return; }
     setLoading(true);
     try {
-      const res = await fetch(`/api/plans-vol/${plan.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'modifier_et_renvoyer',
-          aeroport_depart,
-          aeroport_arrivee,
-          numero_vol: numero_vol.trim(),
-          porte: porte.trim() || undefined,
-          temps_prev_min: t,
-          type_vol,
-          intentions_vol: type_vol === 'VFR' ? intentions_vol.trim() : undefined,
-          sid_depart: type_vol === 'IFR' ? sid_depart.trim() : undefined,
-          star_arrivee: type_vol === 'IFR' ? star_arrivee.trim() : undefined,
-        }),
-      });
+      const res = await submitPlan(false);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok && data.error && String(data.error).includes('Aucune frequence ATC')) {
+        setShowNoAtcConfirm(true);
+        setLoading(false);
+        return;
+      }
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      router.push('/logbook/plans-vol');
+      router.refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSubmitSansAtc() {
+    setError(null);
+    setShowNoAtcConfirm(false);
+    setLoading(true);
+    try {
+      const res = await submitPlan(true);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       router.push('/logbook/plans-vol');
@@ -141,6 +172,31 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
           <div>
             <label className="label">STAR d&apos;arrivée *</label>
             <input type="text" className="input" value={star_arrivee} onChange={(e) => setStarArrivee(e.target.value)} required />
+          </div>
+        </div>
+      )}
+      {showNoAtcConfirm && (
+        <div className="p-4 rounded-lg border-2 border-amber-500 bg-amber-500/20 space-y-3">
+          <p className="font-semibold text-amber-200">Aucun ATC en ligne</p>
+          <p className="text-sm text-amber-300/80">
+            Aucun contrôleur n&apos;est disponible pour votre départ ou arrivée. Voulez-vous envoyer ce plan en autosurveillance ?
+          </p>
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={handleSubmitSansAtc}
+              disabled={loading}
+              className="btn-primary bg-amber-600 hover:bg-amber-700"
+            >
+              {loading ? 'Envoi...' : 'Oui, voler sans ATC'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowNoAtcConfirm(false)}
+              className="btn-secondary"
+            >
+              Annuler
+            </button>
           </div>
         </div>
       )}

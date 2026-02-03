@@ -405,16 +405,22 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'plans-vol/[id]/route.ts:PATCH:entry',message:'PATCH /api/plans-vol/:id entry',data:{hasId:!!id},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorise' }, { status: 401 });
 
     const body = await request.json();
     const { action } = body;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'plans-vol/[id]/route.ts:PATCH:action',message:'PATCH action received',data:{action},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
 
     const admin = createAdminClient();
     const { data: plan } = await admin.from('plans_vol')
-      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, compagnie_avion_id')
+      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, compagnie_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry')
       .eq('id', id)
       .single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
@@ -604,9 +610,12 @@ export async function PATCH(
       if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
       if (plan.statut !== 'refuse') return NextResponse.json({ error: 'Seul un plan refuse peut etre modifie et renvoye.' }, { status: 400 });
 
-      const { aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee } = body;
+      const { aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee, vol_sans_atc } = body;
       const ad = String(aeroport_depart || '').toUpperCase();
       const aa = String(aeroport_arrivee || '').toUpperCase();
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'plans-vol/[id]/route.ts:PATCH:modifier_inputs',message:'Modifier inputs',data:{ad,aa,vol_sans_atc:Boolean(vol_sans_atc)},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
+      // #endregion
       if (!CODES_OACI_VALIDES.has(ad) || !CODES_OACI_VALIDES.has(aa)) return NextResponse.json({ error: 'Aeroports invalides.' }, { status: 400 });
       if (!numero_vol || typeof numero_vol !== 'string' || !String(numero_vol).trim()) return NextResponse.json({ error: 'Numero de vol requis.' }, { status: 400 });
       const t = parseInt(String(temps_prev_min), 10);
@@ -627,7 +636,43 @@ export async function PATCH(
         }
         if (holder) break;
       }
-      if (!holder) return NextResponse.json({ error: 'Aucune frequence ATC de votre aeroport de depart ou d\'arrivee est en ligne. Reessayez plus tard.' }, { status: 400 });
+
+      if (!holder) {
+        if (vol_sans_atc === true) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'plans-vol/[id]/route.ts:PATCH:modifier_no_holder_aut',message:'No holder, autosurveillance path',data:{ad,aa},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H4'})}).catch(()=>{});
+          // #endregion
+          const { error: err } = await admin.from('plans_vol').update({
+            aeroport_depart: ad,
+            aeroport_arrivee: aa,
+            numero_vol: String(numero_vol).trim(),
+            porte: (porte != null && String(porte).trim() !== '') ? String(porte).trim() : null,
+            temps_prev_min: t,
+            type_vol: String(type_vol),
+            intentions_vol: type_vol === 'VFR' ? String(intentions_vol).trim() : null,
+            sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,
+            star_arrivee: type_vol === 'IFR' ? String(star_arrivee).trim() : null,
+            statut: 'accepte',
+            accepted_at: new Date().toISOString(),
+            refusal_reason: null,
+            instructions: null,
+            current_holder_user_id: null,
+            current_holder_position: null,
+            current_holder_aeroport: null,
+            automonitoring: true,
+            vol_sans_atc: true,
+            pending_transfer_aeroport: null,
+            pending_transfer_position: null,
+            pending_transfer_at: null,
+          }).eq('id', id);
+          if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+          return NextResponse.json({ ok: true, vol_sans_atc: true });
+        }
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'plans-vol/[id]/route.ts:PATCH:modifier_no_holder',message:'No holder, rejected',data:{ad,aa},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H4'})}).catch(()=>{});
+        // #endregion
+        return NextResponse.json({ error: 'Aucune frequence ATC de votre aeroport de depart ou d\'arrivee est en ligne. Reessayez plus tard.' }, { status: 400 });
+      }
 
       // Enregistrer le nouvel ATC qui reçoit le plan
       await enregistrerControleATC(admin, id, holder.user_id, holder.aeroport, holder.position);
@@ -649,6 +694,10 @@ export async function PATCH(
         current_holder_position: holder.position,
         current_holder_aeroport: holder.aeroport,
         automonitoring: false,
+        vol_sans_atc: false,
+        pending_transfer_aeroport: null,
+        pending_transfer_position: null,
+        pending_transfer_at: null,
       }).eq('id', id);
       if (err) return NextResponse.json({ error: err.message }, { status: 400 });
       return NextResponse.json({ ok: true });
@@ -756,6 +805,65 @@ export async function PATCH(
         pending_transfer_at: null,
       }).eq('id', id);
       if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'annuler') {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      if (profile?.role === 'atc') return NextResponse.json({ error: 'Annulation reservee au pilote.' }, { status: 403 });
+      if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
+      if (plan.statut === 'cloture') return NextResponse.json({ error: 'Ce plan est deja cloture.' }, { status: 400 });
+      if (['accepte', 'en_cours', 'en_attente_cloture'].includes(plan.statut) || plan.accepted_at) {
+        return NextResponse.json({ error: 'Vous ne pouvez annuler qu\'un plan non accepte par l\'ATC.' }, { status: 400 });
+      }
+
+      const { error: err } = await admin.from('plans_vol').update({
+        statut: 'annule',
+        current_holder_user_id: null,
+        current_holder_position: null,
+        current_holder_aeroport: null,
+        automonitoring: false,
+        pending_transfer_aeroport: null,
+        pending_transfer_position: null,
+        pending_transfer_at: null,
+      }).eq('id', id);
+      if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+
+      const aeroportDepart = plan.aeroport_depart || '';
+
+      // Rembourser les passagers/cargo si le plan était commercial
+      if (plan.vol_commercial && aeroportDepart) {
+        if (plan.nb_pax_genere && plan.nb_pax_genere > 0) {
+          const { data: currentPax } = await admin
+            .from('aeroport_passagers')
+            .select('passagers_disponibles, passagers_max')
+            .eq('code_oaci', aeroportDepart)
+            .single();
+          if (currentPax) {
+            const maxValue = currentPax.passagers_max ?? currentPax.passagers_disponibles;
+            const newValue = Math.min(maxValue, currentPax.passagers_disponibles + plan.nb_pax_genere);
+            await admin.from('aeroport_passagers')
+              .update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() })
+              .eq('code_oaci', aeroportDepart);
+          }
+        }
+
+        if (plan.nature_transport === 'cargo' && plan.cargo_kg_genere && plan.cargo_kg_genere > 0) {
+          const { data: currentCargo } = await admin
+            .from('aeroport_cargo')
+            .select('cargo_disponible, cargo_max')
+            .eq('code_oaci', aeroportDepart)
+            .single();
+          if (currentCargo) {
+            const maxValue = currentCargo.cargo_max ?? currentCargo.cargo_disponible;
+            const newValue = Math.min(maxValue, currentCargo.cargo_disponible + plan.cargo_kg_genere);
+            await admin.from('aeroport_cargo')
+              .update({ cargo_disponible: newValue, updated_at: new Date().toISOString() })
+              .eq('code_oaci', aeroportDepart);
+          }
+        }
+      }
+
       return NextResponse.json({ ok: true });
     }
 
