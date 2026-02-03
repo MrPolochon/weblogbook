@@ -27,6 +27,7 @@ export default async function AdminMilitaireVolPage({
     .select(`
       id, pilote_id, copilote_id, chef_escadron_id, duree_minutes, depart_utc, arrivee_utc, statut, type_avion_militaire, callsign, commandant_bord,
       escadrille_ou_escadron, nature_vol_militaire, nature_vol_militaire_autre, aeroport_depart, aeroport_arrivee,
+      mission_titre, mission_reward_base, mission_reward_final, mission_delay_minutes,
       pilote:profiles!vols_pilote_id_fkey(identifiant),
       copilote:profiles!vols_copilote_id_fkey(identifiant),
       chef:profiles!vols_chef_escadron_id_fkey(identifiant),
@@ -115,6 +116,17 @@ export default async function AdminMilitaireVolPage({
             <div>
               <span className="text-slate-500 text-sm">Commandant de bord</span>
               <p className="text-slate-200">{vol.commandant_bord}</p>
+            </div>
+          )}
+          {vol.mission_titre && (
+            <div>
+              <span className="text-slate-500 text-sm">Mission</span>
+              <p className="text-slate-200">
+                {vol.mission_titre}
+                {vol.mission_reward_base ? ` — base ${vol.mission_reward_base.toLocaleString('fr-FR')} F$` : ''}
+                {vol.mission_reward_final ? ` — payé ${vol.mission_reward_final.toLocaleString('fr-FR')} F$` : ''}
+                {vol.mission_delay_minutes != null ? ` — retard ${vol.mission_delay_minutes} min` : ''}
+              </p>
             </div>
           )}
         </div>

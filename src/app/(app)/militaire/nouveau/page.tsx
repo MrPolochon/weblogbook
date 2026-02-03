@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import VolFormMilitaire from './VolFormMilitaire';
 
-export default async function NouveauVolMilitairePage() {
+export default async function NouveauVolMilitairePage({ searchParams }: { searchParams?: { mission?: string } }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
@@ -28,6 +28,8 @@ export default async function NouveauVolMilitairePage() {
     .select('id, nom_personnalise, types_avion(id, nom, code_oaci)')
     .order('created_at', { ascending: false });
 
+  const missionId = searchParams?.mission || '';
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -36,7 +38,7 @@ export default async function NouveauVolMilitairePage() {
         </Link>
         <h1 className="text-2xl font-semibold text-slate-100">Nouveau vol militaire</h1>
       </div>
-      <VolFormMilitaire pilotesArmee={list} inventaireMilitaire={inventaireMilitaire || []} />
+      <VolFormMilitaire pilotesArmee={list} inventaireMilitaire={inventaireMilitaire || []} missionId={missionId} />
     </div>
   );
 }

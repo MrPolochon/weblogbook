@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { addMinutes, parseISO } from 'date-fns';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
+import { ARME_MISSIONS } from '@/lib/armee-missions';
 
 export async function PATCH(
   request: Request,
@@ -21,7 +22,10 @@ export async function PATCH(
 
     if (body.statut === 'validé' || body.statut === 'refusé') {
       if (!isAdmin) return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
-      const { data: vol } = await supabase.from('vols').select('id, pilote_id, statut').eq('id', id).single();
+      const { data: vol } = await supabase.from('vols')
+        .select('id, pilote_id, statut, type_vol, mission_id, mission_titre, mission_reward_base, mission_reward_final, depart_utc, arrivee_utc')
+        .eq('id', id)
+        .single();
       if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
       const updates: Record<string, unknown> = {
         statut: body.statut,
@@ -33,6 +37,45 @@ export async function PATCH(
         const { data: v } = await supabase.from('vols').select('refusal_count').eq('id', id).single();
         updates.refusal_count = (v?.refusal_count ?? 0) + 1;
       }
+      if (body.statut === 'validé' && vol.type_vol === 'Vol militaire' && vol.mission_id && !vol.mission_reward_final) {
+        const mission = ARME_MISSIONS.find((m) => m.id === vol.mission_id);
+        const base = vol.mission_reward_base ?? (mission ? Math.round((mission.rewardMin + mission.rewardMax) / 2) : 0);
+        const now = Date.now();
+        const arrivee = vol.arrivee_utc ? new Date(vol.arrivee_utc).getTime() : now;
+        const delayMinutes = Math.max(0, Math.round((now - arrivee) / 60000));
+        const coeff = Math.max(0.2, 1 - delayMinutes * 0.01);
+        const finalReward = Math.max(0, Math.round(base * coeff));
+
+        updates.mission_reward_final = finalReward;
+        updates.mission_delay_minutes = delayMinutes;
+
+        const adminClient = createAdminClient();
+        const { data: compteMilitaire } = await adminClient.from('felitz_comptes')
+          .select('id, solde')
+          .eq('type', 'militaire')
+          .single();
+        if (!compteMilitaire) {
+          return NextResponse.json({ error: 'Compte militaire introuvable (mission non payée).' }, { status: 400 });
+        }
+
+        await adminClient.from('felitz_comptes')
+          .update({ solde: compteMilitaire.solde + finalReward })
+          .eq('id', compteMilitaire.id);
+
+        await adminClient.from('felitz_transactions').insert({
+          compte_id: compteMilitaire.id,
+          type: 'credit',
+          montant: finalReward,
+          libelle: `Mission militaire: ${vol.mission_titre || vol.mission_id}`
+        });
+
+        await adminClient.from('armee_missions_log').insert({
+          mission_id: vol.mission_id,
+          user_id: vol.pilote_id,
+          reward: finalReward
+        });
+      }
+
       const { error } = await supabase.from('vols').update(updates).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ ok: true });

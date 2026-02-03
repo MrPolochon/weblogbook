@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { addMinutes, parseISO } from 'date-fns';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { NATURES_VOL_MILITAIRE } from '@/lib/avions-militaires';
+import { ARME_MISSIONS } from '@/lib/armee-missions';
 
 export async function POST(request: Request) {
   try {
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
       if (!profile.armee && profile.role !== 'admin') return NextResponse.json({ error: 'Réservé aux utilisateurs avec le rôle Armée (ou aux admins).' }, { status: 403 });
       const {
         armee_avion_id: armeeAvionId,
+        mission_id: missionIdBody,
         escadrille_ou_escadron: eoe,
         nature_vol_militaire: nvm,
         nature_vol_militaire_autre: nvma,
@@ -80,6 +82,45 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Type d\'avion militaire invalide.' }, { status: 400 });
       }
 
+      const mission = missionIdBody
+        ? ARME_MISSIONS.find((m) => m.id === String(missionIdBody))
+        : null;
+      if (missionIdBody && !mission) {
+        return NextResponse.json({ error: 'Mission introuvable.' }, { status: 404 });
+      }
+      if (mission) {
+        if (!nvm) {
+          return NextResponse.json({ error: 'Nature de mission requise.' }, { status: 400 });
+        }
+        if (
+          String(ad).toUpperCase() !== mission.aeroport_depart ||
+          String(aa).toUpperCase() !== mission.aeroport_arrivee ||
+          dm !== mission.duree_minutes ||
+          String(eoe) !== mission.escadrille_ou_escadron ||
+          String(nvm) !== mission.nature_vol_militaire
+        ) {
+          return NextResponse.json({ error: 'Le plan de vol ne correspond pas à la mission sélectionnée.' }, { status: 400 });
+        }
+
+        const cooldownMs = mission.cooldownMinutes * 60000;
+        const { data: lastGlobal } = await admin.from('armee_missions_log')
+          .select('created_at')
+          .eq('mission_id', mission.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (lastGlobal?.created_at) {
+          const last = new Date(lastGlobal.created_at).getTime();
+          if (Date.now() - last < cooldownMs) {
+            return NextResponse.json({ error: `Mission indisponible (cooldown global ${mission.cooldownMinutes} min).` }, { status: 400 });
+          }
+        }
+      }
+
+      const missionRewardBase = mission
+        ? Math.floor(Math.random() * (mission.rewardMax - mission.rewardMin + 1)) + mission.rewardMin
+        : null;
+
       const isEscadrilleOuEscadron = eoe === 'escadrille' || eoe === 'escadron';
       let targetPiloteId: string;
       let targetCopiloteId: string | null = null;
@@ -130,10 +171,13 @@ export async function POST(request: Request) {
         compagnie_libelle: 'Vol militaire',
         type_avion_militaire: typeAvionMilitaire,
         armee_avion_id: avionArmee.id,
+        mission_id: mission?.id || null,
+        mission_titre: mission?.titre || null,
+        mission_reward_base: missionRewardBase,
         escadrille_ou_escadron: String(eoe),
         chef_escadron_id: eoe === 'escadron' ? user.id : null,
-        nature_vol_militaire: eoe === 'autre' ? String(nvm) : null,
-        nature_vol_militaire_autre: eoe === 'autre' && nvm === 'autre' && nvma ? String(nvma).trim() : null,
+        nature_vol_militaire: mission ? String(nvm) : (eoe === 'autre' ? String(nvm) : null),
+        nature_vol_militaire_autre: mission ? null : (eoe === 'autre' && nvm === 'autre' && nvma ? String(nvma).trim() : null),
         aeroport_depart: String(ad).toUpperCase(),
         aeroport_arrivee: String(aa).toUpperCase(),
         duree_minutes: dm,

@@ -15,6 +15,14 @@ CREATE INDEX IF NOT EXISTS idx_armee_avions_type ON public.armee_avions(type_avi
 ALTER TABLE public.vols
   ADD COLUMN IF NOT EXISTS armee_avion_id UUID REFERENCES public.armee_avions(id) ON DELETE SET NULL;
 
+-- Champs mission (pour rémunération militaire)
+ALTER TABLE public.vols
+  ADD COLUMN IF NOT EXISTS mission_id TEXT,
+  ADD COLUMN IF NOT EXISTS mission_titre TEXT,
+  ADD COLUMN IF NOT EXISTS mission_reward_base INTEGER,
+  ADD COLUMN IF NOT EXISTS mission_reward_final INTEGER,
+  ADD COLUMN IF NOT EXISTS mission_delay_minutes INTEGER;
+
 -- Historique des missions militaires (pour cooldown et audit)
 CREATE TABLE IF NOT EXISTS public.armee_missions_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -17,6 +17,10 @@ type Vol = {
   refusal_reason: string | null;
   instruction_type?: string | null;
   type_avion_militaire?: string | null;
+  mission_titre?: string | null;
+  mission_reward_base?: number | null;
+  mission_reward_final?: number | null;
+  mission_delay_minutes?: number | null;
   aeroport_depart?: string | null;
   aeroport_arrivee?: string | null;
   commandant_bord?: string | null;
@@ -109,6 +113,12 @@ export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
                 )}
                 {v.type_vol === 'Vol militaire' && (v.escadrille_ou_escadron || v.nature_vol_militaire || v.nature_vol_militaire_autre) && (
                   <p><span className="text-slate-500">Vol militaire:</span> {[v.escadrille_ou_escadron, v.nature_vol_militaire === 'autre' ? v.nature_vol_militaire_autre : v.nature_vol_militaire].filter(Boolean).join(' — ') || '—'}</p>
+                )}
+                {v.type_vol === 'Vol militaire' && v.mission_titre && (
+                  <p>
+                    <span className="text-slate-500">Mission:</span> {v.mission_titre}
+                    {v.mission_reward_base ? ` — base ${v.mission_reward_base.toLocaleString('fr-FR')} F$` : ''}
+                  </p>
                 )}
               </div>
               <div className="flex flex-col gap-2">
