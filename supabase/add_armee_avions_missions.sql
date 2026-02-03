@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS public.armee_avions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type_avion_id UUID NOT NULL REFERENCES public.types_avion(id) ON DELETE RESTRICT,
   nom_personnalise TEXT,
+  detruit BOOLEAN NOT NULL DEFAULT false,
+  detruit_at TIMESTAMPTZ,
+  detruit_raison TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

@@ -102,7 +102,7 @@ export async function GET() {
 
     const { data: armeeAvions, error: armeeError } = await admin
       .from('armee_avions')
-      .select('id, nom_personnalise, created_at, types_avion(id, nom, constructeur)')
+      .select('id, nom_personnalise, created_at, detruit, detruit_at, detruit_raison, types_avion(id, nom, constructeur)')
       .order('created_at', { ascending: false });
     if (armeeError) return NextResponse.json({ error: armeeError.message }, { status: 400 });
 
@@ -112,9 +112,11 @@ export async function GET() {
       nom_bapteme: a.nom_personnalise || null,
       usure_percent: 100,
       aeroport_actuel: '—',
-      statut: 'armee',
+      statut: a.detruit ? 'bloque' : 'armee',
       created_at: a.created_at,
-      detruit: false,
+      detruit: a.detruit || false,
+      detruit_at: a.detruit_at || null,
+      detruit_raison: a.detruit_raison || null,
       types_avion: a.types_avion,
       compagnies: { id: 'armee', nom: 'Armée' },
       source: 'armee'
@@ -141,14 +143,40 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { id, aeroport_actuel, statut, usure_percent, immatriculation, nom_bapteme, detruit, detruit_raison } = body;
+    const { id, aeroport_actuel, statut, usure_percent, immatriculation, nom_bapteme, detruit, detruit_raison, source } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'id requis' }, { status: 400 });
     }
 
     const admin = createAdminClient();
-    
+
+    if (source === 'armee') {
+      const updates: Record<string, unknown> = {};
+      if (nom_bapteme !== undefined) updates.nom_personnalise = nom_bapteme || null;
+      if (detruit === true) {
+        updates.detruit = true;
+        updates.detruit_at = new Date().toISOString();
+        updates.detruit_raison = detruit_raison || 'Crash';
+      }
+      if (detruit === false) {
+        updates.detruit = false;
+        updates.detruit_at = null;
+        updates.detruit_raison = null;
+      }
+      if (Object.keys(updates).length === 0) {
+        return NextResponse.json({ error: 'Aucune modification' }, { status: 400 });
+      }
+      const { data, error } = await admin
+        .from('armee_avions')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json(data);
+    }
+
     const updates: Record<string, unknown> = {};
     if (aeroport_actuel !== undefined) updates.aeroport_actuel = aeroport_actuel.toUpperCase();
     if (statut !== undefined) updates.statut = statut;
@@ -206,13 +234,15 @@ export async function DELETE(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const source = searchParams.get('source');
 
     if (!id) {
       return NextResponse.json({ error: 'id requis' }, { status: 400 });
     }
 
     const admin = createAdminClient();
-    const { error } = await admin.from('compagnie_avions').delete().eq('id', id);
+    const targetTable = source === 'armee' ? 'armee_avions' : 'compagnie_avions';
+    const { error } = await admin.from(targetTable).delete().eq('id', id);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true });
