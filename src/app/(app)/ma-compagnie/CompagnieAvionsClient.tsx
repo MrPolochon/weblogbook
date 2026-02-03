@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plane, Plus, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2 } from 'lucide-react';
+import { Plane, Plus, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2, Handshake } from 'lucide-react';
 import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY } from '@/lib/compagnie-utils';
 import Link from 'next/link';
 
@@ -35,6 +35,13 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [compagnies, setCompagnies] = useState<Array<{ id: string; nom: string }>>([]);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [locationAvionId, setLocationAvionId] = useState<string | null>(null);
+  const [locationCompagnieId, setLocationCompagnieId] = useState('');
+  const [locationPrixJour, setLocationPrixJour] = useState('10000');
+  const [locationPct, setLocationPct] = useState('20');
+  const [locationDuree, setLocationDuree] = useState('3');
   
   // Édition
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -44,6 +51,16 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
   useEffect(() => {
     loadAvions();
     loadHubs();
+    if (isPdg) {
+      fetch('/api/compagnies/list')
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            setCompagnies(data.filter((c) => c.id !== compagnieId));
+          }
+        })
+        .catch(() => {});
+    }
   }, [compagnieId]);
 
   async function loadAvions() {
@@ -212,6 +229,34 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       setEditingId(null);
       router.refresh();
       loadAvions();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function handleCreateLocation() {
+    if (!locationAvionId || !locationCompagnieId) return;
+    setActionId(locationAvionId);
+    try {
+      const res = await fetch('/api/compagnies/locations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          avion_id: locationAvionId,
+          locataire_compagnie_id: locationCompagnieId,
+          prix_journalier: parseInt(locationPrixJour, 10),
+          pourcentage_revenu_loueur: parseInt(locationPct, 10),
+          duree_jours: parseInt(locationDuree, 10)
+        })
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      setShowLocationModal(false);
+      setLocationAvionId(null);
+      setLocationCompagnieId('');
+      router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -459,6 +504,19 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   <Edit2 className="h-3.5 w-3.5" />
                                 </button>
                               )}
+                              {a.statut === 'ground' && !a.detruit && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLocationAvionId(a.id);
+                                    setShowLocationModal(true);
+                                  }}
+                                  className="text-xs text-sky-400 hover:underline"
+                                  title="Mettre en location"
+                                >
+                                  <Handshake className="h-3.5 w-3.5" />
+                                </button>
+                              )}
                               {/* Avion bloqué ou au sol avec 0% d'usure = nécessite réparation */}
                               {(a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && (
                                 <>
@@ -521,6 +579,45 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {showLocationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-slate-700">
+            <h3 className="text-lg font-semibold text-slate-100 mb-4">Mettre en location</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="label">Compagnie locataire</label>
+                <select className="input w-full" value={locationCompagnieId} onChange={(e) => setLocationCompagnieId(e.target.value)}>
+                  <option value="">— Choisir —</option>
+                  {compagnies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nom}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Prix / jour (F$)</label>
+                  <input className="input w-full" type="number" min="0" value={locationPrixJour} onChange={(e) => setLocationPrixJour(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">% revenu loueur</label>
+                  <input className="input w-full" type="number" min="0" max="100" value={locationPct} onChange={(e) => setLocationPct(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className="label">Durée (jours)</label>
+                <input className="input w-full" type="number" min="1" value={locationDuree} onChange={(e) => setLocationDuree(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button className="btn-primary flex-1" onClick={handleCreateLocation} disabled={actionId === locationAvionId}>
+                Envoyer la demande
+              </button>
+              <button className="btn-secondary" onClick={() => setShowLocationModal(false)}>Annuler</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

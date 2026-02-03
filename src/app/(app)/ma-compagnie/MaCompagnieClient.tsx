@@ -9,6 +9,7 @@ import CompagnieHubsClient from './CompagnieHubsClient';
 import CompagnieAvionsClient from './CompagnieAvionsClient';
 import CompagnieVolsFerryClient from './CompagnieVolsFerryClient';
 import CompagniePretClient from './CompagniePretClient';
+import CompagnieLocationsClient from './CompagnieLocationsClient';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
 interface CompagnieOption {
@@ -580,6 +581,9 @@ export default function MaCompagnieClient({
 
       {/* Prêt bancaire */}
       {isPdg && <CompagniePretClient compagnieId={compagnie.id} />}
+
+      {/* Locations d'avions */}
+      {isPdg && <CompagnieLocationsClient compagnieId={compagnie.id} />}
 
       {/* Hubs */}
       {isPdg && <CompagnieHubsClient compagnieId={compagnie.id} />}

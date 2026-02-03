@@ -189,6 +189,8 @@ async function envoyerChequesVol(
     type_vol?: string;
     nature_transport?: string | null;
     type_cargaison?: string | null;
+    location_loueur_compagnie_id?: string | null;
+    location_pourcentage_revenu_loueur?: number | null;
   },
   dateFinVol: Date // Date de fin du vol pour le calcul (demande_cloture_at, pas confirmation ATC)
 ): Promise<{ success: boolean; message?: string; revenus?: { brut: number; net: number; salaire: number; taxes: number; coefficient: number; tempsReel: number; bonusCargaison?: number; remboursementPret?: number } }> {
@@ -244,8 +246,20 @@ async function envoyerChequesVol(
 
   // Revenu après taxes
   const revenuApresTaxes = revenuEffectif - taxesTotales;
-  const salaireEffectif = Math.round((plan.salaire_pilote || 0) * coefficient);
-  const revenuCompagnie = Math.max(0, revenuApresTaxes - salaireEffectif);
+
+  // Part loueur avant salaire (si location)
+  const locationPct = plan.location_pourcentage_revenu_loueur || 0;
+  const revenuLoueurBrut = plan.location_loueur_compagnie_id && locationPct > 0
+    ? Math.max(0, Math.round(revenuApresTaxes * locationPct / 100))
+    : 0;
+  const revenuLocataireAvantSalaire = Math.max(0, revenuApresTaxes - revenuLoueurBrut);
+
+  // Salaire payé par la compagnie locataire
+  let salaireEffectif = Math.round((plan.salaire_pilote || 0) * coefficient);
+  if (salaireEffectif > revenuLocataireAvantSalaire) {
+    salaireEffectif = revenuLocataireAvantSalaire;
+  }
+  const revenuCompagnie = Math.max(0, revenuLocataireAvantSalaire - salaireEffectif);
 
   const { data: compagnie } = await admin.from('compagnies')
     .select('nom, pdg_id')
@@ -342,8 +356,21 @@ async function envoyerChequesVol(
   // Revenu compagnie après remboursement prêt
   const revenuCompagnieNet = revenuCompagnie - remboursementPret;
 
+  // Partage avec le loueur si avion en location
+  let revenuLoueur = revenuLoueurBrut;
+  let revenuLocataire = revenuCompagnieNet;
+  let loueurInfo: { id: string; nom: string; pdg_id: string | null } | null = null;
+  if (plan.location_loueur_compagnie_id && plan.location_pourcentage_revenu_loueur) {
+    revenuLocataire = Math.max(0, revenuCompagnieNet);
+    const { data: loueur } = await admin.from('compagnies')
+      .select('id, nom, pdg_id')
+      .eq('id', plan.location_loueur_compagnie_id)
+      .single();
+    loueurInfo = loueur || null;
+  }
+
   // Chèque revenu compagnie
-  if (revenuCompagnieNet > 0 && compagnie.pdg_id) {
+  if (revenuLocataire > 0 && compagnie.pdg_id) {
     let contenuMessage = `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$\nCoefficient ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesTotales.toLocaleString('fr-FR')} F$\nSalaire pilote: ${salaireEffectif.toLocaleString('fr-FR')} F$`;
     
     if (remboursementPret > 0) {
@@ -356,7 +383,10 @@ async function envoyerChequesVol(
       }
     }
     
-    contenuMessage += `\n\nRevenu net: ${revenuCompagnieNet.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser le chèque ci-dessous.`;
+    if (revenuLoueur > 0 && loueurInfo) {
+      contenuMessage += `\n\nPart loueur (${plan.location_pourcentage_revenu_loueur}%): -${revenuLoueur.toLocaleString('fr-FR')} F$ (${loueurInfo.nom})`;
+    }
+    contenuMessage += `\n\nRevenu net: ${revenuLocataire.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser le chèque ci-dessous.`;
 
     await admin.from('messages').insert({
       destinataire_id: compagnie.pdg_id,
@@ -364,7 +394,7 @@ async function envoyerChequesVol(
       titre: `Revenu vol ${numeroVol} - ${compagnie.nom}`,
       contenu: contenuMessage,
       type_message: 'cheque_revenu_compagnie',
-      cheque_montant: revenuCompagnieNet,
+      cheque_montant: revenuLocataire,
       cheque_encaisse: false,
       cheque_destinataire_compte_id: compteCompagnie.id,
       cheque_libelle: `Revenu vol ${numeroVol} (coef. ${coeffPct}%)${remboursementPret > 0 ? ' - après prêt' : ''}`,
@@ -372,6 +402,30 @@ async function envoyerChequesVol(
       cheque_compagnie_nom: compagnie.nom,
       cheque_pour_compagnie: true
     });
+  }
+
+  if (revenuLoueur > 0 && loueurInfo?.pdg_id) {
+    const { data: compteLoueur } = await admin.from('felitz_comptes')
+      .select('id')
+      .eq('compagnie_id', loueurInfo.id)
+      .eq('type', 'entreprise')
+      .single();
+    if (compteLoueur) {
+      await admin.from('messages').insert({
+        destinataire_id: loueurInfo.pdg_id,
+        expediteur_id: null,
+        titre: `Revenu location - Vol ${numeroVol} (${compagnie.nom})`,
+        contenu: `Part loueur: ${revenuLoueur.toLocaleString('fr-FR')} F$\n\nVol ${numeroVol} effectué par ${compagnie.nom}.`,
+        type_message: 'cheque_revenu_compagnie',
+        cheque_montant: revenuLoueur,
+        cheque_encaisse: false,
+        cheque_destinataire_compte_id: compteLoueur.id,
+        cheque_libelle: `Location vol ${numeroVol}`,
+        cheque_numero_vol: numeroVol,
+        cheque_compagnie_nom: loueurInfo.nom,
+        cheque_pour_compagnie: true
+      });
+    }
   } else if (remboursementPret > 0 && compagnie.pdg_id) {
     // Si tout le revenu est parti dans le remboursement, informer le PDG
     const resteApres = (pretInfo?.montant_total_du || 0) - (pretInfo?.montant_rembourse || 0) - remboursementPret;
@@ -414,7 +468,7 @@ export async function PATCH(
 
     const admin = createAdminClient();
     const { data: plan } = await admin.from('plans_vol')
-      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, compagnie_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry')
+      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, compagnie_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id')
       .eq('id', id)
       .single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });

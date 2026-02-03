@@ -96,13 +96,45 @@ export default async function DepotPlanVolPage() {
       .in('compagnie_id', compagnieIds)
       .order('immatriculation');
 
+    const nowIso = new Date().toISOString();
+    const { data: locationsActives } = await admin.from('compagnie_locations')
+      .select('avion_id, loueur_compagnie_id, locataire_compagnie_id, start_at, end_at, statut')
+      .in('locataire_compagnie_id', compagnieIds)
+      .eq('statut', 'active')
+      .lte('start_at', nowIso)
+      .gte('end_at', nowIso);
+
+    const leasedOutIds = new Set((locationsActives || []).map(l => l.avion_id));
+
     // Grouper par compagnie
     (avionsData || []).forEach(item => {
+      // Si avion loué à une autre compagnie, ne pas l'afficher pour le propriétaire
+      if (leasedOutIds.has(item.id)) {
+        return;
+      }
       if (!avionsParCompagnie[item.compagnie_id]) {
         avionsParCompagnie[item.compagnie_id] = [];
       }
       avionsParCompagnie[item.compagnie_id].push(item as AvionIndividuel);
     });
+
+    // Ajouter les avions loués aux compagnies locataires
+    if (locationsActives && locationsActives.length > 0) {
+      const leasedIds = Array.from(new Set(locationsActives.map(l => l.avion_id)));
+      const { data: leasedAvions } = await admin.from('compagnie_avions')
+        .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion(id, nom, constructeur, capacite_pax, capacite_cargo_kg, code_oaci)')
+        .in('id', leasedIds);
+
+      (leasedAvions || []).forEach(item => {
+        const loc = locationsActives.find(l => l.avion_id === item.id);
+        if (!loc) return;
+        const locataireId = loc.locataire_compagnie_id;
+        if (!avionsParCompagnie[locataireId]) {
+          avionsParCompagnie[locataireId] = [];
+        }
+        avionsParCompagnie[locataireId].push(item as AvionIndividuel);
+      });
+    }
   }
 
   return (

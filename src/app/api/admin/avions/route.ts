@@ -99,7 +99,29 @@ export async function GET() {
       .order('created_at', { ascending: false });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json(data);
+
+    const { data: armeeAvions, error: armeeError } = await admin
+      .from('armee_avions')
+      .select('id, nom_personnalise, created_at, types_avion(id, nom, constructeur)')
+      .order('created_at', { ascending: false });
+    if (armeeError) return NextResponse.json({ error: armeeError.message }, { status: 400 });
+
+    const armeeMapped = (armeeAvions || []).map((a) => ({
+      id: a.id,
+      immatriculation: `ARM-${a.id.slice(0, 6).toUpperCase()}`,
+      nom_bapteme: a.nom_personnalise || null,
+      usure_percent: 100,
+      aeroport_actuel: '—',
+      statut: 'armee',
+      created_at: a.created_at,
+      detruit: false,
+      types_avion: a.types_avion,
+      compagnies: { id: 'armee', nom: 'Armée' },
+      source: 'armee'
+    }));
+
+    const compagnieMapped = (data || []).map((a) => ({ ...a, source: 'compagnie' }));
+    return NextResponse.json([...armeeMapped, ...compagnieMapped]);
   } catch (e) {
     console.error('Admin avions GET:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

@@ -94,9 +94,73 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Avion individuel introuvable.' }, { status: 400 });
       }
       
-      // Vérifier que l'avion appartient à la compagnie sélectionnée
-      if ((vol_commercial || vol_ferry) && compagnie_id && avionIndiv.compagnie_id !== compagnie_id) {
-        return NextResponse.json({ error: 'Cet avion n\'appartient pas à la compagnie sélectionnée.' }, { status: 400 });
+      const nowIso = new Date().toISOString();
+      let locationActive: any = null;
+
+      if (compagnie_id && avionIndiv.compagnie_id !== compagnie_id) {
+        const { data: loc } = await admin
+          .from('compagnie_locations')
+          .select('*')
+          .eq('avion_id', compagnie_avion_id)
+          .eq('locataire_compagnie_id', compagnie_id)
+          .eq('statut', 'active')
+          .lte('start_at', nowIso)
+          .gte('end_at', nowIso)
+          .maybeSingle();
+        locationActive = loc;
+        if (!locationActive) {
+          return NextResponse.json({ error: 'Cet avion n\'appartient pas à la compagnie sélectionnée.' }, { status: 400 });
+        }
+      } else if (compagnie_id && avionIndiv.compagnie_id === compagnie_id) {
+        const { data: leasedOut } = await admin
+          .from('compagnie_locations')
+          .select('id')
+          .eq('avion_id', compagnie_avion_id)
+          .eq('statut', 'active')
+          .lte('start_at', nowIso)
+          .gte('end_at', nowIso)
+          .neq('locataire_compagnie_id', compagnie_id)
+          .maybeSingle();
+        if (leasedOut) {
+          return NextResponse.json({ error: 'Cet avion est actuellement loué à une autre compagnie.' }, { status: 400 });
+        }
+      }
+
+      // Si location active, débiter le loyer journalier dû
+      if (locationActive) {
+        const lastBilledAt = locationActive.last_billed_at || locationActive.start_at;
+        const last = lastBilledAt ? new Date(lastBilledAt).getTime() : new Date().getTime();
+        const now = new Date().getTime();
+        const daysDue = Math.floor((now - last) / (24 * 60 * 60 * 1000));
+        if (daysDue > 0) {
+          const totalDue = daysDue * (locationActive.prix_journalier || 0);
+          if (totalDue > 0) {
+            const { data: compteLocataire } = await admin
+              .from('felitz_comptes')
+              .select('id, solde')
+              .eq('compagnie_id', compagnie_id)
+              .eq('type', 'entreprise')
+              .single();
+            if (!compteLocataire) {
+              return NextResponse.json({ error: 'Compte entreprise locataire introuvable.' }, { status: 400 });
+            }
+            if (compteLocataire.solde < totalDue) {
+              return NextResponse.json({ error: 'Solde insuffisant pour payer le loyer journalier.' }, { status: 400 });
+            }
+            await admin.from('felitz_comptes')
+              .update({ solde: compteLocataire.solde - totalDue })
+              .eq('id', compteLocataire.id);
+            await admin.from('felitz_transactions').insert({
+              compte_id: compteLocataire.id,
+              type: 'debit',
+              montant: totalDue,
+              libelle: `Loyer avion (${daysDue}j)`
+            });
+            await admin.from('compagnie_locations')
+              .update({ last_billed_at: new Date(last + daysDue * 24 * 60 * 60 * 1000).toISOString() })
+              .eq('id', locationActive.id);
+          }
+        }
       }
       
       // Vérifier que l'avion est à l'aéroport de départ
@@ -152,6 +216,16 @@ export async function POST(request: Request) {
     
     // Si vol sans ATC, accepter automatiquement et mettre en autosurveillance
     if (vol_sans_atc) {
+      const locationFields = compagnie_avion_id && compagnie_id
+        ? await admin.from('compagnie_locations')
+            .select('*')
+            .eq('avion_id', compagnie_avion_id)
+            .eq('locataire_compagnie_id', compagnie_id)
+            .eq('statut', 'active')
+            .lte('start_at', new Date().toISOString())
+            .gte('end_at', new Date().toISOString())
+            .maybeSingle()
+        : { data: null };
       const { data, error } = await admin.from('plans_vol').insert({
         pilote_id: user.id,
         aeroport_depart: ad,
@@ -184,6 +258,10 @@ export async function POST(request: Request) {
         current_holder_aeroport: null,
         vol_sans_atc: true,
         vol_ferry: Boolean(vol_ferry),
+        location_id: locationFields.data?.id || null,
+        location_loueur_compagnie_id: locationFields.data?.loueur_compagnie_id || null,
+        location_pourcentage_revenu_loueur: locationFields.data?.pourcentage_revenu_loueur || null,
+        location_prix_journalier: locationFields.data?.prix_journalier || null,
       }).select('id').single();
 
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -260,6 +338,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Aucune fréquence ATC de votre aéroport de départ ou d\'arrivée est en ligne. Cochez "Voler sans ATC" pour effectuer ce vol en autosurveillance.' }, { status: 400 });
     }
 
+    const locationFields = compagnie_avion_id && compagnie_id
+      ? await admin.from('compagnie_locations')
+          .select('*')
+          .eq('avion_id', compagnie_avion_id)
+          .eq('locataire_compagnie_id', compagnie_id)
+          .eq('statut', 'active')
+          .lte('start_at', new Date().toISOString())
+          .gte('end_at', new Date().toISOString())
+          .maybeSingle()
+      : { data: null };
+
     const { data, error } = await admin.from('plans_vol').insert({
       pilote_id: user.id,
       aeroport_depart: ad,
@@ -290,6 +379,10 @@ export async function POST(request: Request) {
       current_holder_aeroport: holder.aeroport,
       vol_sans_atc: false,
       vol_ferry: Boolean(vol_ferry),
+      location_id: locationFields.data?.id || null,
+      location_loueur_compagnie_id: locationFields.data?.loueur_compagnie_id || null,
+      location_pourcentage_revenu_loueur: locationFields.data?.pourcentage_revenu_loueur || null,
+      location_prix_journalier: locationFields.data?.prix_journalier || null,
     }).select('id').single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

@@ -18,6 +18,7 @@ type Avion = {
   detruit_raison?: string | null;
   types_avion: { id: string; nom: string; constructeur: string } | { id: string; nom: string; constructeur: string }[] | null;
   compagnies: { id: string; nom: string } | { id: string; nom: string }[] | null;
+  source?: 'compagnie' | 'armee';
 };
 
 type Compagnie = { id: string; nom: string };
@@ -400,6 +401,7 @@ export default function AdminAvionsClient() {
             <tbody>
               {filteredAvions.map((avion) => {
                 const isEditing = editingId === avion.id;
+                const isArmee = avion.source === 'armee' || (Array.isArray(avion.compagnies) ? avion.compagnies[0]?.nom : avion.compagnies?.nom) === 'Armée';
                 const compagnieNom = Array.isArray(avion.compagnies) ? avion.compagnies[0]?.nom : avion.compagnies?.nom;
                 const typeNom = Array.isArray(avion.types_avion) ? avion.types_avion[0]?.nom : avion.types_avion?.nom;
                 const statut = getStatutLabel(avion.statut, avion.detruit);
@@ -517,37 +519,41 @@ export default function AdminAvionsClient() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => startEdit(avion)}
-                            className="text-sky-400 hover:text-sky-300"
-                            title="Modifier"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          {avion.detruit ? (
-                            <button
-                              onClick={() => restaurerAvion(avion.id, avion.immatriculation)}
-                              className="text-emerald-400 hover:text-emerald-300"
-                              title="Restaurer (annuler destruction)"
-                            >
-                              <RefreshCw className="h-4 w-4" />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => marquerDetruit(avion.id, avion.immatriculation)}
-                              className="text-orange-400 hover:text-orange-300"
-                              title="Marquer comme DÉTRUIT"
-                            >
-                              <Skull className="h-4 w-4" />
-                            </button>
+                          {!isArmee && (
+                            <>
+                              <button
+                                onClick={() => startEdit(avion)}
+                                className="text-sky-400 hover:text-sky-300"
+                                title="Modifier"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                              {avion.detruit ? (
+                                <button
+                                  onClick={() => restaurerAvion(avion.id, avion.immatriculation)}
+                                  className="text-emerald-400 hover:text-emerald-300"
+                                  title="Restaurer (annuler destruction)"
+                                >
+                                  <RefreshCw className="h-4 w-4" />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => marquerDetruit(avion.id, avion.immatriculation)}
+                                  className="text-orange-400 hover:text-orange-300"
+                                  title="Marquer comme DÉTRUIT"
+                                >
+                                  <Skull className="h-4 w-4" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => deleteAvion(avion.id, avion.immatriculation)}
+                                className="text-red-400 hover:text-red-300"
+                                title="Supprimer de la BDD"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
                           )}
-                          <button
-                            onClick={() => deleteAvion(avion.id, avion.immatriculation)}
-                            className="text-red-400 hover:text-red-300"
-                            title="Supprimer de la BDD"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
                         </div>
                       )}
                     </td>
