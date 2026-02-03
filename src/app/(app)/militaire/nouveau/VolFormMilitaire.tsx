@@ -10,7 +10,7 @@ type Profil = { id: string; identifiant: string };
 type InventaireItem = { 
   id: string; 
   nom_personnalise: string | null; 
-  types_avion: { id: string; nom: string; code_oaci: string | null } | null;
+  types_avion: { id: string; nom: string; code_oaci: string | null } | { id: string; nom: string; code_oaci: string | null }[] | null;
 };
 
 function parseUtcLocal(s: string): Date | null {
@@ -141,12 +141,15 @@ export default function VolFormMilitaire({ pilotesArmee, inventaireMilitaire = [
           required
         >
           <option value="">— Choisir un avion —</option>
-          {inventaireMilitaire.map((inv) => (
+          {inventaireMilitaire.map((inv) => {
+            const typeAvion = inv.types_avion ? (Array.isArray(inv.types_avion) ? inv.types_avion[0] : inv.types_avion) : null;
+            return (
             <option key={inv.id} value={inv.id}>
-              {inv.nom_personnalise || inv.types_avion?.nom || 'Avion militaire'}
-              {inv.types_avion?.code_oaci && ` (${inv.types_avion.code_oaci})`}
+              {inv.nom_personnalise || typeAvion?.nom || 'Avion militaire'}
+              {typeAvion?.code_oaci && ` (${typeAvion.code_oaci})`}
             </option>
-          ))}
+            );
+          })}
         </select>
         {inventaireMilitaire.length === 0 && (
           <p className="text-xs text-amber-400 mt-1">Aucun avion militaire dans l&apos;inventaire de l&apos;armée.</p>
