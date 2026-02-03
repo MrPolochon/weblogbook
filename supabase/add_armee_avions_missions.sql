@@ -21,7 +21,9 @@ ALTER TABLE public.vols
   ADD COLUMN IF NOT EXISTS mission_titre TEXT,
   ADD COLUMN IF NOT EXISTS mission_reward_base INTEGER,
   ADD COLUMN IF NOT EXISTS mission_reward_final INTEGER,
-  ADD COLUMN IF NOT EXISTS mission_delay_minutes INTEGER;
+  ADD COLUMN IF NOT EXISTS mission_delay_minutes INTEGER,
+  ADD COLUMN IF NOT EXISTS mission_status TEXT,
+  ADD COLUMN IF NOT EXISTS mission_refusals INTEGER NOT NULL DEFAULT 0;
 
 -- Historique des missions militaires (pour cooldown et audit)
 CREATE TABLE IF NOT EXISTS public.armee_missions_log (

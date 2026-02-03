@@ -21,6 +21,8 @@ type Vol = {
   mission_reward_base?: number | null;
   mission_reward_final?: number | null;
   mission_delay_minutes?: number | null;
+  mission_refusals?: number | null;
+  mission_status?: string | null;
   aeroport_depart?: string | null;
   aeroport_arrivee?: string | null;
   commandant_bord?: string | null;
@@ -118,6 +120,8 @@ export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
                   <p>
                     <span className="text-slate-500">Mission:</span> {v.mission_titre}
                     {v.mission_reward_base ? ` — base ${v.mission_reward_base.toLocaleString('fr-FR')} F$` : ''}
+                    {v.mission_refusals != null ? ` — refus ${v.mission_refusals}/3` : ''}
+                    {v.mission_status ? ` — ${v.mission_status}` : ''}
                   </p>
                 )}
               </div>

@@ -23,7 +23,7 @@ export async function PATCH(
     if (body.statut === 'validé' || body.statut === 'refusé') {
       if (!isAdmin) return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
       const { data: vol } = await supabase.from('vols')
-        .select('id, pilote_id, statut, type_vol, mission_id, mission_titre, mission_reward_base, mission_reward_final, depart_utc, arrivee_utc')
+        .select('id, pilote_id, statut, type_vol, mission_id, mission_titre, mission_reward_base, mission_reward_final, mission_refusals, depart_utc, arrivee_utc')
         .eq('id', id)
         .single();
       if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
@@ -36,6 +36,13 @@ export async function PATCH(
         updates.refusal_reason = body.refusal_reason ?? null;
         const { data: v } = await supabase.from('vols').select('refusal_count').eq('id', id).single();
         updates.refusal_count = (v?.refusal_count ?? 0) + 1;
+        if (vol.type_vol === 'Vol militaire' && vol.mission_id) {
+          const nextRefusals = (vol.mission_refusals ?? 0) + 1;
+          updates.mission_refusals = nextRefusals;
+          if (nextRefusals >= 3) {
+            updates.mission_status = 'echec';
+          }
+        }
       }
       if (body.statut === 'validé' && vol.type_vol === 'Vol militaire' && vol.mission_id && !vol.mission_reward_final) {
         const mission = ARME_MISSIONS.find((m) => m.id === vol.mission_id);
@@ -48,6 +55,7 @@ export async function PATCH(
 
         updates.mission_reward_final = finalReward;
         updates.mission_delay_minutes = delayMinutes;
+        updates.mission_status = 'valide';
 
         const adminClient = createAdminClient();
         const { data: compteMilitaire } = await adminClient.from('felitz_comptes')

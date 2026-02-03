@@ -174,6 +174,8 @@ export async function POST(request: Request) {
         mission_id: mission?.id || null,
         mission_titre: mission?.titre || null,
         mission_reward_base: missionRewardBase,
+        mission_status: mission ? 'en_attente' : null,
+        mission_refusals: mission ? 0 : 0,
         escadrille_ou_escadron: String(eoe),
         chef_escadron_id: eoe === 'escadron' ? user.id : null,
         nature_vol_militaire: mission ? String(nvm) : (eoe === 'autre' ? String(nvm) : null),

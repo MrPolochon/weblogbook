@@ -18,7 +18,7 @@ export default async function AdminVolsPage() {
   const [{ data: vols }, { data: types }, { data: compagnies }, { data: profiles }] = await Promise.all([
     admin.from('vols').select(`
       id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote, callsign, refusal_reason, instruction_type, type_avion_militaire,
-      aeroport_depart, aeroport_arrivee, commandant_bord, mission_titre, mission_reward_base, mission_reward_final, mission_delay_minutes,
+      aeroport_depart, aeroport_arrivee, commandant_bord, mission_titre, mission_reward_base, mission_reward_final, mission_delay_minutes, mission_refusals, mission_status,
       escadrille_ou_escadron, nature_vol_militaire, nature_vol_militaire_autre,
       pilote:profiles!vols_pilote_id_fkey(identifiant),
       type_avion:types_avion(nom),
