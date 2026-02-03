@@ -243,6 +243,9 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     const capacitePax = avion.capacite_pax ?? 0;
     const capaciteCargo = avion.capacite_cargo_kg ?? 0;
     const prixCargo = selectedCompagnie.prix_kg_cargo || 0;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:init',message:'Generation inputs',data:{capacitePax,capaciteCargo,prixBilletLiaison,prixCargo,aeroport_depart,aeroport_arrivee,compagnie_avion_id,nature_transport},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
 
     // Clé unique pour régénérer seulement quand les paramètres importants changent
     // NE PAS inclure nature_transport pour éviter la régénération en basculant entre passagers/cargo
@@ -290,6 +293,9 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       if (passagersAeroport) {
         pax = Math.min(pax, passagersAeroport.passagers_disponibles);
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:pax',message:'PAX computed',data:{capacitePax,coefMin,coefMax,coefAleatoire,pax,passagersDispo:passagersAeroport?.passagers_disponibles ?? null},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
     }
 
     // Calcul pour le CARGO (toujours calculé, même si passagers sélectionné)
@@ -312,6 +318,9 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       const maxCargo = Math.min(cargoDisponible, Math.floor(estimation.cargo + variation));
       
       cargo = Math.floor(Math.random() * (Math.max(1, maxCargo - minCargo) + 1)) + minCargo;
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:cargo',message:'Cargo computed',data:{capaciteCargo,prixCargo,cargoDisponible,minCargo,maxCargo,cargo},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
+      // #endregion
     }
 
     setGeneratedPax(pax);
