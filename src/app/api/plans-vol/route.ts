@@ -12,9 +12,6 @@ const ORDRE_ARRIVEE = ['Delivery', 'Center', 'APP', 'DEP', 'Tower', 'Ground', 'C
 
 export async function POST(request: Request) {
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'plans-vol/route.ts:POST:entry',message:'POST /api/plans-vol entry',data:{hasBody:true},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
@@ -55,9 +52,6 @@ export async function POST(request: Request) {
     
     const ad = String(aeroport_depart || '').toUpperCase();
     const aa = String(aeroport_arrivee || '').toUpperCase();
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'plans-vol/route.ts:POST:inputs',message:'Parsed plan inputs',data:{ad,aa,vol_sans_atc:Boolean(vol_sans_atc),vol_ferry:Boolean(vol_ferry),vol_commercial:Boolean(vol_commercial),hasCompagnieAvion:!!compagnie_avion_id},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     if (!CODES_OACI_VALIDES.has(ad) || !CODES_OACI_VALIDES.has(aa)) return NextResponse.json({ error: 'Aéroports invalides.' }, { status: 400 });
     if (!numero_vol || typeof numero_vol !== 'string' || !String(numero_vol).trim()) return NextResponse.json({ error: 'Numéro de vol requis.' }, { status: 400 });
     const t = parseInt(String(temps_prev_min), 10);
@@ -263,9 +257,6 @@ export async function POST(request: Request) {
     }
 
     if (!holder) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'plans-vol/route.ts:POST:no-holder',message:'No ATC holder found',data:{ad,aa},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
       return NextResponse.json({ error: 'Aucune fréquence ATC de votre aéroport de départ ou d\'arrivée est en ligne. Cochez "Voler sans ATC" pour effectuer ce vol en autosurveillance.' }, { status: 400 });
     }
 
@@ -303,9 +294,6 @@ export async function POST(request: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'plans-vol/route.ts:POST:inserted',message:'Plan inserted',data:{status:'en_attente',hasHolder:true,ad,aa},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H4'})}).catch(()=>{});
-    // #endregion
 
     // Enregistrer que cet ATC a contrôlé ce plan de vol
     try {
