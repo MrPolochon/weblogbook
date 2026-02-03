@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { addMinutes, parseISO } from 'date-fns';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
-import { AVIONS_MILITAIRES, NATURES_VOL_MILITAIRE } from '@/lib/avions-militaires';
+import { NATURES_VOL_MILITAIRE } from '@/lib/avions-militaires';
 
 export async function POST(request: Request) {
   try {
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     if (type_vol === 'Vol militaire') {
       if (!profile.armee && profile.role !== 'admin') return NextResponse.json({ error: 'Réservé aux utilisateurs avec le rôle Armée (ou aux admins).' }, { status: 403 });
       const {
-        type_avion_militaire: tam,
+        armee_avion_id: armeeAvionId,
         escadrille_ou_escadron: eoe,
         nature_vol_militaire: nvm,
         nature_vol_militaire_autre: nvma,
@@ -39,8 +39,8 @@ export async function POST(request: Request) {
         callsign: csB,
         equipage_ids: equipageIdsBody,
       } = body;
-      if (!tam || !(AVIONS_MILITAIRES as readonly string[]).includes(String(tam).trim())) {
-        return NextResponse.json({ error: 'Type d\'avion militaire invalide.' }, { status: 400 });
+      if (!armeeAvionId) {
+        return NextResponse.json({ error: 'Avion militaire requis.' }, { status: 400 });
       }
       if (!['escadrille', 'escadron', 'autre'].includes(String(eoe))) {
         return NextResponse.json({ error: 'Indiquez si le vol était en escadrille, en escadron ou autre.' }, { status: 400 });
@@ -58,6 +58,26 @@ export async function POST(request: Request) {
       }
       if (typeof dm !== 'number' || dm < 1 || !du || !cb) {
         return NextResponse.json({ error: 'Champs requis manquants ou invalides.' }, { status: 400 });
+      }
+
+      const admin = createAdminClient();
+      const { data: avionArmee } = await admin.from('armee_avions')
+        .select('id, nom_personnalise, types_avion:types_avion(id, nom, est_militaire)')
+        .eq('id', armeeAvionId)
+        .single();
+
+      if (!avionArmee?.types_avion) {
+        return NextResponse.json({ error: 'Avion militaire introuvable.' }, { status: 404 });
+      }
+
+      const typeAvion = Array.isArray(avionArmee.types_avion) ? avionArmee.types_avion[0] : avionArmee.types_avion;
+      if (!typeAvion?.est_militaire) {
+        return NextResponse.json({ error: 'Cet avion n\'est pas militaire.' }, { status: 400 });
+      }
+
+      const typeAvionMilitaire = (avionArmee.nom_personnalise || typeAvion.nom || '').trim();
+      if (!typeAvionMilitaire) {
+        return NextResponse.json({ error: 'Type d\'avion militaire invalide.' }, { status: 400 });
       }
 
       const isEscadrilleOuEscadron = eoe === 'escadrille' || eoe === 'escadron';
@@ -108,7 +128,8 @@ export async function POST(request: Request) {
         type_avion_id: null,
         compagnie_id: null,
         compagnie_libelle: 'Vol militaire',
-        type_avion_militaire: String(tam).trim(),
+        type_avion_militaire: typeAvionMilitaire,
+        armee_avion_id: avionArmee.id,
         escadrille_ou_escadron: String(eoe),
         chef_escadron_id: eoe === 'escadron' ? user.id : null,
         nature_vol_militaire: eoe === 'autre' ? String(nvm) : null,

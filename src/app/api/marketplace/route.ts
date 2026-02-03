@@ -32,17 +32,20 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const body = await req.json();
-    const { type_avion_id, pour_compagnie_id, nom_personnalise } = body;
+    const { type_avion_id, pour_compagnie_id, nom_personnalise, pour_armee } = body;
 
     if (!type_avion_id) {
       return NextResponse.json({ error: 'type_avion_id requis' }, { status: 400 });
+    }
+    if (pour_armee && pour_compagnie_id) {
+      return NextResponse.json({ error: 'Choisissez soit une compagnie, soit l\'armée.' }, { status: 400 });
     }
 
     const admin = createAdminClient();
 
     // Récupérer le prix de l'avion
     const { data: avion } = await admin.from('types_avion')
-      .select('id, nom, prix')
+      .select('id, nom, prix, est_militaire')
       .eq('id', type_avion_id)
       .single();
 
@@ -53,7 +56,51 @@ export async function POST(req: NextRequest) {
     let compteId: string;
     let compagnieNom: string | null = null;
 
-    if (pour_compagnie_id) {
+    if (pour_armee) {
+      // Achat pour l'armée - réservé au PDG militaire
+      if (!avion.est_militaire) {
+        return NextResponse.json({ error: 'Seuls les avions militaires peuvent être achetés par l\'armée.' }, { status: 400 });
+      }
+
+      const { data: compteMilitaire } = await admin.from('felitz_comptes')
+        .select('id, solde, proprietaire_id')
+        .eq('type', 'militaire')
+        .single();
+
+      if (!compteMilitaire) {
+        return NextResponse.json({ error: 'Compte militaire introuvable' }, { status: 404 });
+      }
+
+      if (compteMilitaire.proprietaire_id !== user.id) {
+        return NextResponse.json({ error: 'Seul le PDG militaire peut acheter pour l\'armée' }, { status: 403 });
+      }
+
+      if (compteMilitaire.solde < avion.prix) {
+        return NextResponse.json({ error: 'Solde militaire insuffisant' }, { status: 400 });
+      }
+
+      compteId = compteMilitaire.id;
+
+      // Débiter
+      await admin.from('felitz_comptes')
+        .update({ solde: compteMilitaire.solde - avion.prix })
+        .eq('id', compteId);
+
+      // Ajouter à l'inventaire de l'armée
+      await admin.from('armee_avions').insert({
+        type_avion_id,
+        nom_personnalise: nom_personnalise || null
+      });
+
+      // Transaction
+      await admin.from('felitz_transactions').insert({
+        compte_id: compteId,
+        type: 'debit',
+        montant: avion.prix,
+        libelle: `Achat armée ${avion.nom}`
+      });
+
+    } else if (pour_compagnie_id) {
       // Achat pour une compagnie - vérifier que l'utilisateur est PDG
       const { data: compagnie } = await admin.from('compagnies')
         .select('id, nom, pdg_id')

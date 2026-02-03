@@ -52,9 +52,6 @@ export async function POST(request: Request) {
     
     const ad = String(aeroport_depart || '').toUpperCase();
     const aa = String(aeroport_arrivee || '').toUpperCase();
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'plans-vol/route.ts:POST:values',message:'Server received plan values',data:{ad,aa,nb_pax_genere:nb_pax_genere ?? null,cargo_kg_genere:cargo_kg_genere ?? null,nature_transport:nature_transport ?? null,vol_commercial:Boolean(vol_commercial),vol_ferry:Boolean(vol_ferry)},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H4'})}).catch(()=>{});
-    // #endregion
     if (!CODES_OACI_VALIDES.has(ad) || !CODES_OACI_VALIDES.has(aa)) return NextResponse.json({ error: 'Aéroports invalides.' }, { status: 400 });
     if (!numero_vol || typeof numero_vol !== 'string' || !String(numero_vol).trim()) return NextResponse.json({ error: 'Numéro de vol requis.' }, { status: 400 });
     const t = parseInt(String(temps_prev_min), 10);

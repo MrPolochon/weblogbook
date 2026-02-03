@@ -22,21 +22,11 @@ export default async function NouveauVolMilitairePage() {
 
   const list = (pilotesArmee || []).filter((p) => p.id !== user.id);
 
-  // Récupérer les avions militaires de l'inventaire personnel
+  // Récupérer les avions possédés par l'armée
   const admin = createAdminClient();
-  const { data: inventaireMilitaire } = await admin.from('inventaire_avions')
-    .select('*, types_avion(id, nom, code_oaci)')
-    .eq('proprietaire_id', user.id);
-
-  // Filtrer uniquement les avions militaires (via jointure)
-  const { data: avionsMilitairesIds } = await admin.from('types_avion')
-    .select('id')
-    .eq('est_militaire', true);
-
-  const militaireIds = new Set((avionsMilitairesIds || []).map(a => a.id));
-  const inventaireMilitaireFiltre = (inventaireMilitaire || []).filter(inv => 
-    militaireIds.has(inv.type_avion_id)
-  );
+  const { data: inventaireMilitaire } = await admin.from('armee_avions')
+    .select('id, nom_personnalise, types_avion(id, nom, code_oaci)')
+    .order('created_at', { ascending: false });
 
   return (
     <div className="space-y-6">
@@ -46,7 +36,7 @@ export default async function NouveauVolMilitairePage() {
         </Link>
         <h1 className="text-2xl font-semibold text-slate-100">Nouveau vol militaire</h1>
       </div>
-      <VolFormMilitaire pilotesArmee={list} inventaireMilitaire={inventaireMilitaireFiltre} />
+      <VolFormMilitaire pilotesArmee={list} inventaireMilitaire={inventaireMilitaire || []} />
     </div>
   );
 }

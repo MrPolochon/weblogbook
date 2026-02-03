@@ -38,6 +38,15 @@ export default async function MarketplacePage() {
     }));
   }
 
+  // Compte militaire (si l'utilisateur est PDG)
+  const { data: compteMilitaire } = await admin.from('felitz_comptes')
+    .select('id, solde, proprietaire_id')
+    .eq('type', 'militaire')
+    .single();
+  const armeeCompte = compteMilitaire?.proprietaire_id === user.id
+    ? { id: compteMilitaire.id, solde: compteMilitaire.solde }
+    : null;
+
   // Liste des avions à vendre
   const { data: avions } = await admin.from('types_avion')
     .select('*')
@@ -67,13 +76,22 @@ export default async function MarketplacePage() {
             </p>
           </div>
         ))}
+        {armeeCompte && (
+          <div className="card bg-red-500/10 border-red-500/30">
+            <p className="text-sm text-red-400">Compte Armée</p>
+            <p className="text-2xl font-bold text-red-300">
+              {armeeCompte.solde.toLocaleString('fr-FR')} F$
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Liste des avions avec recherche */}
       <MarketplaceList 
         avions={avions || []} 
         soldePerso={comptePerso?.solde || 0} 
-        compagnies={compagniesWithSolde} 
+        compagnies={compagniesWithSolde}
+        armeeCompte={armeeCompte}
       />
     </div>
   );

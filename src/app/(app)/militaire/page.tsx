@@ -6,6 +6,7 @@ import { formatDuree } from '@/lib/utils';
 import { formatDateMediumUTC, formatTimeUTC } from '@/lib/date-utils';
 import { Plus } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
+import ArmeeMissionsClient from './ArmeeMissionsClient';
 
 export default async function MilitairePage() {
   const supabase = await createClient();
@@ -63,6 +64,8 @@ export default async function MilitairePage() {
         <h2 className="text-lg font-medium text-slate-200 mb-1">Total temps de vol (militaires validés)</h2>
         <p className="text-3xl font-bold text-sky-400">{formatDuree(totalMinutes)}</p>
       </div>
+
+      <ArmeeMissionsClient />
 
       <div className="card">
         <h2 className="text-lg font-medium text-slate-200 mb-4">Vols militaires</h2>

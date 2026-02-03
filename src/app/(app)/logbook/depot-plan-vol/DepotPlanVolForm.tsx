@@ -243,9 +243,6 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     const capacitePax = avion.capacite_pax ?? 0;
     const capaciteCargo = avion.capacite_cargo_kg ?? 0;
     const prixCargo = selectedCompagnie.prix_kg_cargo || 0;
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:init',message:'Generation inputs',data:{capacitePax,capaciteCargo,prixBilletLiaison,prixCargo,aeroport_depart,aeroport_arrivee,compagnie_avion_id,nature_transport},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
 
     // Clé unique pour régénérer seulement quand les paramètres importants changent
     // NE PAS inclure nature_transport pour éviter la régénération en basculant entre passagers/cargo
@@ -296,17 +293,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       // Ne jamais dépasser la capacité de l'avion
       const paxAvantCap = pax;
       pax = Math.min(pax, capacitePax);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:pax_clamp_state',message:'PAX clamp state',data:{paxAvantCap,pax,capacitePax,clampVersion:'v1'},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
       if (paxAvantCap !== pax) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:pax_cap',message:'PAX clamped to capacity',data:{paxAvantCap,pax,capacitePax},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H2'})}).catch(()=>{});
-        // #endregion
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:pax',message:'PAX computed',data:{capacitePax,coefMin,coefMax,coefAleatoire,pax,passagersDispo:passagersAeroport?.passagers_disponibles ?? null},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
     }
 
     // Calcul pour le CARGO (toujours calculé, même si passagers sélectionné)
@@ -332,17 +320,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       // Ne jamais dépasser la capacité cargo de l'avion
       const cargoAvantCap = cargo;
       cargo = Math.min(cargo, capaciteCargo);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:cargo_clamp_state',message:'Cargo clamp state',data:{cargoAvantCap,cargo,capaciteCargo,clampVersion:'v1'},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
       if (cargoAvantCap !== cargo) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:cargo_cap',message:'Cargo clamped to capacity',data:{cargoAvantCap,cargo,capaciteCargo},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
-        // #endregion
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:cargo',message:'Cargo computed',data:{capaciteCargo,prixCargo,cargoDisponible,minCargo,maxCargo,cargo},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
     }
 
     setGeneratedPax(pax);

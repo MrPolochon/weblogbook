@@ -27,6 +27,7 @@ interface Props {
   avions: Avion[];
   soldePerso: number;
   compagnies: Compagnie[];
+  armeeCompte?: { id: string; solde: number } | null;
 }
 
 const CATEGORIES: Record<string, { label: string; color: string }> = {
@@ -39,14 +40,14 @@ const CATEGORIES: Record<string, { label: string; color: string }> = {
   ravitailleur: { label: 'Ravitailleur', color: 'bg-orange-500/20 text-orange-400' },
 };
 
-export default function MarketplaceList({ avions, soldePerso, compagnies }: Props) {
+export default function MarketplaceList({ avions, soldePerso, compagnies, armeeCompte = null }: Props) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategorie, setSelectedCategorie] = useState<string | null>(null);
   const [showOnlyAffordable, setShowOnlyAffordable] = useState(false);
   const [sortBy, setSortBy] = useState<'prix_asc' | 'prix_desc' | 'nom'>('prix_asc');
 
   // Calculer le solde max disponible (perso + compagnies)
-  const maxSolde = Math.max(soldePerso, ...compagnies.map(c => c.solde));
+  const maxSolde = Math.max(soldePerso, ...compagnies.map(c => c.solde), armeeCompte?.solde || 0);
 
   // Extraire les catégories uniques présentes
   const categoriesPresentes = useMemo(() => {
@@ -254,8 +255,10 @@ export default function MarketplaceList({ avions, soldePerso, compagnies }: Prop
                     avionId={avion.id}
                     avionNom={avion.nom}
                     prix={avion.prix}
+                    estMilitaire={avion.est_militaire}
                     soldePerso={soldePerso}
                     compagnies={compagnies}
+                    armeeCompte={armeeCompte}
                   />
                 </div>
               </div>

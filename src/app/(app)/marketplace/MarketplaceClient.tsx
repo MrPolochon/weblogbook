@@ -14,19 +14,23 @@ interface Props {
   avionId: string;
   avionNom: string;
   prix: number;
+  estMilitaire: boolean;
   soldePerso: number;
   compagnies: Compagnie[];
+  armeeCompte?: { id: string; solde: number } | null;
 }
 
-export default function MarketplaceClient({ avionId, avionNom, prix, soldePerso, compagnies }: Props) {
+export default function MarketplaceClient({ avionId, avionNom, prix, estMilitaire, soldePerso, compagnies, armeeCompte = null }: Props) {
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [pourCompagnie, setPourCompagnie] = useState<string | null>(null);
+  const [pourArmee, setPourArmee] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const canBuyPersonal = soldePerso >= prix;
   const compagniesAffordable = compagnies.filter(c => c.solde >= prix);
+  const canBuyArmee = Boolean(armeeCompte && armeeCompte.solde >= prix && estMilitaire);
 
   async function handleAchat() {
     setError('');
@@ -38,7 +42,8 @@ export default function MarketplaceClient({ avionId, avionNom, prix, soldePerso,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type_avion_id: avionId,
-          pour_compagnie_id: pourCompagnie || undefined
+          pour_compagnie_id: pourArmee ? undefined : (pourCompagnie || undefined),
+          pour_armee: pourArmee || undefined
         })
       });
 
@@ -55,7 +60,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, soldePerso,
     }
   }
 
-  if (!canBuyPersonal && compagniesAffordable.length === 0) {
+  if (!canBuyPersonal && compagniesAffordable.length === 0 && !canBuyArmee) {
     return (
       <button 
         disabled 
@@ -89,9 +94,9 @@ export default function MarketplaceClient({ avionId, avionNom, prix, soldePerso,
             <div className="space-y-3 mb-6">
               {canBuyPersonal && (
                 <button
-                  onClick={() => setPourCompagnie(null)}
+                  onClick={() => { setPourCompagnie(null); setPourArmee(false); }}
                   className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                    pourCompagnie === null 
+                    pourCompagnie === null && !pourArmee
                       ? 'border-purple-500 bg-purple-500/20' 
                       : 'border-slate-600 hover:border-slate-500'
                   }`}
@@ -107,9 +112,9 @@ export default function MarketplaceClient({ avionId, avionNom, prix, soldePerso,
               {compagniesAffordable.map((c) => (
                 <button
                   key={c.id}
-                  onClick={() => setPourCompagnie(c.id)}
+                  onClick={() => { setPourCompagnie(c.id); setPourArmee(false); }}
                   className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                    pourCompagnie === c.id 
+                    pourCompagnie === c.id && !pourArmee
                       ? 'border-purple-500 bg-purple-500/20' 
                       : 'border-slate-600 hover:border-slate-500'
                   }`}
@@ -121,6 +126,22 @@ export default function MarketplaceClient({ avionId, avionNom, prix, soldePerso,
                   </div>
                 </button>
               ))}
+              {armeeCompte && estMilitaire && (
+                <button
+                  onClick={() => { setPourCompagnie(null); setPourArmee(true); }}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                    pourArmee
+                      ? 'border-red-500 bg-red-500/20'
+                      : 'border-slate-600 hover:border-slate-500'
+                  }`}
+                >
+                  <Building2 className="h-5 w-5 text-red-400" />
+                  <div className="text-left flex-1">
+                    <p className="text-slate-200 font-medium">Armée (PDG)</p>
+                    <p className="text-sm text-slate-400">Solde : {armeeCompte.solde.toLocaleString('fr-FR')} F$</p>
+                  </div>
+                </button>
+              )}
             </div>
 
             {error && <p className="text-sm text-red-400 mb-4">{error}</p>}
@@ -128,7 +149,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, soldePerso,
             <div className="flex gap-3">
               <button
                 onClick={handleAchat}
-                disabled={loading || (pourCompagnie === null && !canBuyPersonal)}
+                disabled={loading || (!pourArmee && pourCompagnie === null && !canBuyPersonal)}
                 className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
               >
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
