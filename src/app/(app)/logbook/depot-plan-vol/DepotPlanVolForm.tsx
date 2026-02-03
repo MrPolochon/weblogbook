@@ -293,6 +293,17 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       if (passagersAeroport) {
         pax = Math.min(pax, passagersAeroport.passagers_disponibles);
       }
+      // Ne jamais dépasser la capacité de l'avion
+      const paxAvantCap = pax;
+      pax = Math.min(pax, capacitePax);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:pax_clamp_state',message:'PAX clamp state',data:{paxAvantCap,pax,capacitePax,clampVersion:'v1'},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
+      if (paxAvantCap !== pax) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:pax_cap',message:'PAX clamped to capacity',data:{paxAvantCap,pax,capacitePax},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H2'})}).catch(()=>{});
+        // #endregion
+      }
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:pax',message:'PAX computed',data:{capacitePax,coefMin,coefMax,coefAleatoire,pax,passagersDispo:passagersAeroport?.passagers_disponibles ?? null},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H2'})}).catch(()=>{});
       // #endregion
@@ -318,6 +329,17 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       const maxCargo = Math.min(cargoDisponible, Math.floor(estimation.cargo + variation));
       
       cargo = Math.floor(Math.random() * (Math.max(1, maxCargo - minCargo) + 1)) + minCargo;
+      // Ne jamais dépasser la capacité cargo de l'avion
+      const cargoAvantCap = cargo;
+      cargo = Math.min(cargo, capaciteCargo);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:cargo_clamp_state',message:'Cargo clamp state',data:{cargoAvantCap,cargo,capaciteCargo,clampVersion:'v1'},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H3'})}).catch(()=>{});
+      // #endregion
+      if (cargoAvantCap !== cargo) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:cargo_cap',message:'Cargo clamped to capacity',data:{cargoAvantCap,cargo,capaciteCargo},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
+        // #endregion
+      }
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'DepotPlanVolForm.tsx:useEffect:cargo',message:'Cargo computed',data:{capaciteCargo,prixCargo,cargoDisponible,minCargo,maxCargo,cargo},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'H3'})}).catch(()=>{});
       // #endregion
