@@ -44,7 +44,7 @@ export default async function SiaviComptePage() {
     <div className="flex flex-col lg:flex-row lg:items-start gap-8 max-w-5xl">
       <div className="space-y-6 max-w-md">
         <h1 className="text-2xl font-semibold text-red-900">Mon compte SIAVI</h1>
-        <div className="rounded-xl border border-red-200 bg-white/90 p-4">
+        <div className="rounded-xl border border-red-200 bg-white p-4">
           <div className="space-y-3">
             <div>
               <p className="text-red-600 text-sm">Identifiant</p>
@@ -62,13 +62,13 @@ export default async function SiaviComptePage() {
             </div>
           </div>
         </div>
-        <div className="rounded-xl border border-red-200 bg-white/90 p-4">
+        <div className="rounded-xl border border-red-200 bg-white p-4">
           <CompteForm armee={false} isAdmin={isAdmin} variant="siavi" showArmee={false} />
         </div>
         <LicencesSection userId={user.id} variant="siavi" />
       </div>
       <div className="lg:min-w-[320px] lg:flex-1">
-        <div className="rounded-xl border border-red-200 bg-white/90 p-4">
+        <div className="rounded-xl border border-red-200 bg-white p-4">
           <h2 className="text-lg font-medium text-red-900 mb-4">{isAdmin ? 'Agents SIAVI et admins' : 'Agents SIAVI'}</h2>
           {list.length === 0 ? (
             <p className="text-slate-600 text-sm">Aucun agent SIAVI.</p>

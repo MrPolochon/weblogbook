@@ -21,7 +21,7 @@ export default async function SiaviDocumentsPage() {
       ) : (
         <div className="space-y-4">
           {sections.map((s) => (
-            <div key={s.id} className="rounded-xl border border-red-200 bg-white/90 p-4">
+            <div key={s.id} className="rounded-xl border border-red-200 bg-white p-4">
               <h2 className="flex items-center gap-2 font-medium text-red-800 mb-3">
                 <FolderOpen className="h-5 w-5 text-red-600" />
                 {s.nom}

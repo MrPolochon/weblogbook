@@ -45,7 +45,7 @@ export default function AdminSiaviSessionsEnLigne({ sessions }: { sessions: Sess
 
   if (sessions.length === 0) {
     return (
-      <div className="rounded-xl border border-red-200 bg-white/90 p-4">
+      <div className="rounded-xl border border-red-200 bg-white p-4">
         <h2 className="text-lg font-medium text-red-800 mb-2">Agents en service</h2>
         <p className="text-slate-600 text-sm">Aucun agent SIAVI en service.</p>
       </div>
@@ -53,7 +53,7 @@ export default function AdminSiaviSessionsEnLigne({ sessions }: { sessions: Sess
   }
 
   return (
-    <div className="rounded-xl border border-red-200 bg-white/90 p-4">
+    <div className="rounded-xl border border-red-200 bg-white p-4">
       <h2 className="text-lg font-medium text-red-800 mb-4">Agents en service</h2>
       
       {error && (

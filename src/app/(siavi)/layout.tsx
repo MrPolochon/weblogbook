@@ -58,7 +58,7 @@ export default async function SiaviLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-red-950/5">
+    <div className="min-h-screen flex flex-col">
       <AutoRefresh intervalSeconds={8} />
       <SiaviModeBg isAdmin={isAdmin} />
       <SiaviNavBar 
@@ -70,17 +70,17 @@ export default async function SiaviLayout({
       />
       <div className="flex flex-1 w-full min-h-0">
         {enService && estAfis && (
-          <aside className="w-44 flex-shrink-0 border-r border-red-300/50 bg-red-50/50 py-3 px-2 hidden md:flex flex-col">
-            <p className="text-xs font-semibold uppercase tracking-wider text-red-700 px-2 mb-1.5">Non surveillés</p>
+          <aside className="w-44 flex-shrink-0 border-r border-red-300 bg-red-50 py-3 px-2 hidden md:flex flex-col">
+            <p className="text-xs font-semibold uppercase tracking-wider text-red-800 px-2 mb-1.5">Non surveillés</p>
             {plansAuto.length === 0 ? (
-              <span className="text-red-600/70 text-sm px-2">Aucun</span>
+              <span className="text-red-600 text-sm px-2">Aucun</span>
             ) : (
               <ul className="space-y-0.5 mb-3">
                 {plansAuto.map((p) => (
                   <li key={p.id}>
                     <Link
                       href={`/siavi/plan/${p.id}`}
-                      className="block truncate text-sm font-medium text-red-700 hover:text-red-900 hover:bg-red-100 rounded px-2 py-1"
+                      className="block truncate text-sm font-medium text-red-800 hover:text-red-900 hover:bg-red-200 rounded px-2 py-1"
                       title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
                     >
                       {p.numero_vol} {p.aeroport_depart}→{p.aeroport_arrivee}
@@ -89,16 +89,16 @@ export default async function SiaviLayout({
                 ))}
               </ul>
             )}
-            <p className="text-xs font-semibold uppercase tracking-wider text-red-700 px-2 mb-1.5 mt-3">Mes surveillés</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-red-800 px-2 mb-1.5 mt-3">Mes surveillés</p>
             {plansSurveilles.length === 0 ? (
-              <span className="text-red-600/70 text-sm px-2">Aucun</span>
+              <span className="text-red-600 text-sm px-2">Aucun</span>
             ) : (
               <ul className="space-y-0.5">
                 {plansSurveilles.map((p) => (
                   <li key={p.id}>
                     <Link
                       href={`/siavi/plan/${p.id}`}
-                      className="block truncate text-sm font-medium text-red-700 hover:text-red-900 hover:bg-red-100 rounded px-2 py-1"
+                      className="block truncate text-sm font-medium text-red-800 hover:text-red-900 hover:bg-red-200 rounded px-2 py-1"
                       title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
                     >
                       {p.numero_vol} {p.aeroport_depart}→{p.aeroport_arrivee}

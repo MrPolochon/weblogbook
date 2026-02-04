@@ -63,7 +63,7 @@ export default async function MessagerieSiaviPage() {
 
       {/* Statistiques */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl bg-white/90 border border-red-200 shadow-sm p-4">
+        <div className="rounded-xl bg-white border border-red-200 shadow-sm p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-red-700 text-sm font-medium">Messages non lus</p>
@@ -74,7 +74,7 @@ export default async function MessagerieSiaviPage() {
             </div>
           </div>
         </div>
-        <div className="rounded-xl bg-white/90 border border-emerald-200 shadow-sm p-4">
+        <div className="rounded-xl bg-white border border-emerald-200 shadow-sm p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-emerald-700 text-sm font-medium">Chèques à encaisser</p>
@@ -85,7 +85,7 @@ export default async function MessagerieSiaviPage() {
             </div>
           </div>
         </div>
-        <div className="rounded-xl bg-white/90 border border-violet-200 shadow-sm p-4">
+        <div className="rounded-xl bg-white border border-violet-200 shadow-sm p-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-violet-700 text-sm font-medium">Messages envoyés</p>

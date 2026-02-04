@@ -158,7 +158,7 @@ export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, 
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === tab.id
                   ? 'bg-red-600 text-white shadow-sm'
-                  : 'bg-white/90 text-red-700 hover:bg-red-100 border border-red-200'
+                  : 'bg-white text-red-700 hover:bg-red-100 border border-red-200'
               }`}
             >
               <tab.icon className="h-4 w-4" />
@@ -172,7 +172,7 @@ export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, 
           ))}
         </div>
 
-        <div className="rounded-xl border border-red-200 bg-white/90 shadow-sm overflow-hidden max-h-[600px] overflow-y-auto">
+        <div className="rounded-xl border border-red-200 bg-white shadow-sm overflow-hidden max-h-[600px] overflow-y-auto">
           {activeTab === 'compose' ? (
             <form onSubmit={handleSendMessage} className="p-4 space-y-4">
               <h3 className="font-semibold text-red-900">Nouveau message</h3>
@@ -293,7 +293,7 @@ export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, 
 
       <div className="lg:col-span-2">
         {selectedMessage ? (
-          <div className="rounded-xl border border-red-200 bg-white/90 shadow-sm overflow-hidden">
+          <div className="rounded-xl border border-red-200 bg-white shadow-sm overflow-hidden">
             <div className="p-4 border-b border-red-100 bg-red-50">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -348,7 +348,7 @@ export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, 
             </div>
           </div>
         ) : (
-          <div className="rounded-xl border border-red-200 bg-white/90 shadow-sm p-12 text-center">
+          <div className="rounded-xl border border-red-200 bg-white shadow-sm p-12 text-center">
             <Mail className="h-16 w-16 text-red-300 mx-auto mb-4" />
             <p className="text-red-500">Sélectionnez un message pour le lire</p>
           </div>

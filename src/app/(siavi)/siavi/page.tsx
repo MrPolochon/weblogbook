@@ -150,7 +150,7 @@ export default async function SiaviPage() {
 
       {/* Plans de vol surveillés */}
       {session?.est_afis && (
-        <div className="rounded-xl border border-red-200 bg-white/80 overflow-hidden">
+        <div className="rounded-xl border border-red-200 bg-white overflow-hidden shadow-sm">
           <div className="flex items-center justify-between px-6 py-4 border-b border-red-200 bg-red-50">
             <h2 className="text-lg font-semibold text-red-900 flex items-center gap-2">
               <Eye className="h-5 w-5 text-red-600" />
@@ -209,7 +209,7 @@ export default async function SiaviPage() {
       )}
 
       {/* Positions en service (AFIS + ATC) */}
-      <div className="rounded-xl border border-red-200 bg-white/80 p-6">
+      <div className="rounded-xl border border-red-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-red-900 mb-4 flex items-center gap-2">
           <MapPin className="h-5 w-5 text-red-600" />
           Positions en service

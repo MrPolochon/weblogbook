@@ -121,7 +121,7 @@ export default async function SiaviPlanPage({ params }: { params: Promise<{ id: 
       </div>
 
       {/* Info vol principale */}
-      <div className="rounded-xl border border-red-200 bg-white/90 p-6">
+      <div className="rounded-xl border border-red-200 bg-white p-6 shadow-sm">
         <div className="grid gap-6 md:grid-cols-2">
           {/* Route */}
           <div>
@@ -272,7 +272,7 @@ export default async function SiaviPlanPage({ params }: { params: Promise<{ id: 
 
       {/* Actions AFIS */}
       {estEnService && estAfis && (
-        <div className="rounded-xl border border-red-200 bg-white/90 p-6">
+        <div className="rounded-xl border border-red-200 bg-white p-6 shadow-sm">
           <h3 className="font-semibold text-red-900 mb-4 flex items-center gap-2">
             <Eye className="h-5 w-5 text-red-600" />
             Actions AFIS

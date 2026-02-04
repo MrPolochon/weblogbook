@@ -658,59 +658,84 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
 
   // Combiné fermé
   if (!isOpen) {
+    const isEmergencyIncoming = callState === 'incoming' && incomingCall?.isEmergency;
     return (
       <>
         {showEmergencyOverlay && <EmergencyOverlay />}
         <button
           onClick={() => setIsOpen(true)}
-          className={`fixed bottom-0 left-1/2 -translate-x-1/2 z-50 bg-red-700 rounded-t-2xl shadow-2xl transition-all duration-300 hover:shadow-3xl group ${showEmergencyOverlay ? 'animate-bounce' : ''}`}
+          className={`fixed bottom-0 left-1/2 -translate-x-1/2 z-50 rounded-t-2xl shadow-2xl transition-all duration-300 hover:shadow-3xl group
+            ${isEmergencyIncoming || showEmergencyOverlay 
+              ? 'bg-red-600 animate-pulse ring-4 ring-red-400' 
+              : 'bg-slate-900 hover:bg-slate-800'}`}
           style={{ width: '280px', height: '48px' }}
           title="Téléphone SIAVI"
         >
           <div className="relative w-full h-full flex items-center justify-center">
-            <div className="absolute left-2 w-12 h-10 bg-red-800 rounded-lg" />
-            <div className="flex items-center gap-2 text-white">
-              <Flame className={`h-5 w-5 ${showEmergencyOverlay ? 'animate-ping' : 'group-hover:animate-bounce'}`} />
-              <span className="text-sm font-medium">{showEmergencyOverlay ? '🚨 URGENCE 🚨' : 'Téléphone SIAVI'}</span>
+            <div className={`absolute left-2 w-12 h-10 rounded-lg ${isEmergencyIncoming || showEmergencyOverlay ? 'bg-red-700' : 'bg-slate-700'}`} />
+            <div className={`flex items-center gap-2 ${isEmergencyIncoming || showEmergencyOverlay ? 'text-white' : 'text-amber-400'}`}>
+              <Flame className={`h-5 w-5 ${isEmergencyIncoming || showEmergencyOverlay ? 'animate-ping text-yellow-300' : 'group-hover:animate-bounce'}`} />
+              <span className="text-sm font-bold tracking-wide">
+                {isEmergencyIncoming || showEmergencyOverlay ? '🚨 URGENCE 🚨' : 'SIAVI'}
+              </span>
             </div>
-            <div className="absolute right-2 w-12 h-10 bg-red-800 rounded-lg" />
+            <div className={`absolute right-2 w-12 h-10 rounded-lg ${isEmergencyIncoming || showEmergencyOverlay ? 'bg-red-700' : 'bg-slate-700'}`} />
             
-            {callState === 'incoming' && (
-              <div className={`absolute -top-2 right-4 w-4 h-4 rounded-full animate-ping ${incomingCall?.isEmergency ? 'bg-amber-500' : 'bg-green-500'}`} />
+            {callState === 'incoming' && !incomingCall?.isEmergency && (
+              <div className="absolute -top-2 right-4 w-4 h-4 rounded-full animate-ping bg-green-500" />
             )}
           </div>
         </button>
+        {(isEmergencyIncoming || showEmergencyOverlay) && (
+          <style jsx>{`
+            @keyframes emergency-phone-flash {
+              0%, 100% { box-shadow: 0 0 20px 10px rgba(239, 68, 68, 0.8); }
+              50% { box-shadow: 0 0 40px 20px rgba(239, 68, 68, 0.4); }
+            }
+          `}</style>
+        )}
       </>
     );
   }
 
   // Combiné ouvert
+  const isEmergencyActive = showEmergencyOverlay || (callState === 'incoming' && incomingCall?.isEmergency);
+  
   return (
     <>
       {showEmergencyOverlay && <EmergencyOverlay />}
-      <div className={`fixed right-4 bottom-4 z-50 bg-red-800 rounded-3xl shadow-2xl transition-all duration-500 overflow-hidden ${showEmergencyOverlay ? 'ring-4 ring-amber-400 animate-pulse' : ''}`}
-           style={{ width: '200px', minHeight: '420px' }}>
+      <div className={`fixed right-4 bottom-4 z-50 rounded-3xl shadow-2xl transition-all duration-500 overflow-hidden
+        ${isEmergencyActive 
+          ? 'bg-red-800 ring-4 ring-red-400 animate-pulse' 
+          : 'bg-slate-900'}`}
+           style={{ width: '220px', minHeight: '440px' }}>
       
       {/* Écouteur */}
-      <div className="h-16 bg-red-900 rounded-t-3xl flex items-center justify-center relative">
-        <div className="w-20 h-3 bg-red-600 rounded-full opacity-60" />
+      <div className={`h-16 rounded-t-3xl flex items-center justify-center relative ${isEmergencyActive ? 'bg-red-900' : 'bg-slate-800'}`}>
+        <div className={`w-20 h-3 rounded-full opacity-60 ${isEmergencyActive ? 'bg-red-600' : 'bg-slate-600'}`} />
+        <Flame className={`absolute right-4 h-5 w-5 ${isEmergencyActive ? 'text-yellow-400 animate-ping' : 'text-amber-500'}`} />
       </div>
       
       {/* Écran LCD */}
-      <div className="mx-3 mt-3 p-2 bg-red-950 rounded-lg border-2 border-red-700">
-        <div className="text-center font-mono text-red-400 text-lg min-h-[28px] tracking-wider">
+      <div className={`mx-3 mt-3 p-3 rounded-lg border-2 ${isEmergencyActive ? 'bg-red-950 border-red-600' : 'bg-slate-800 border-amber-600/50'}`}>
+        <div className="text-center font-mono min-h-[32px] tracking-wider">
           {callState === 'incoming' && incomingCall ? (
-            <span className={`text-sm animate-pulse ${incomingCall.isEmergency ? 'text-amber-400' : ''}`}>
-              {incomingCall.isEmergency ? '🚨 URGENCE 🚨' : `${incomingCall.from} ${incomingCall.fromPosition}`}
-            </span>
+            <div className={`animate-pulse ${incomingCall.isEmergency ? 'text-red-400' : 'text-green-400'}`}>
+              <div className="text-xs font-bold mb-1">{incomingCall.isEmergency ? '🚨 URGENCE 🚨' : 'APPEL ENTRANT'}</div>
+              <div className="text-base font-bold">{incomingCall.from} {incomingCall.fromPosition}</div>
+            </div>
           ) : callState === 'connected' && currentCall ? (
-            <span className="text-sm text-green-400">
-              {currentCall.to} {currentCall.toPosition}
-            </span>
+            <div className="text-green-400">
+              <div className="text-xs mb-1">EN LIGNE</div>
+              <div className="text-base font-bold">{currentCall.to} {currentCall.toPosition}</div>
+            </div>
           ) : callState === 'ringing' ? (
-            <span className="text-sm animate-pulse">Appel en cours...</span>
+            <div className="text-amber-400 animate-pulse">
+              <div className="text-xs mb-1">APPEL...</div>
+              <div className="text-base font-bold">{number}</div>
+            </div>
           ) : (
-            number || '—'
+            <div className="text-amber-400 text-xl font-bold">{number || '—'}</div>
           )}
         </div>
       </div>
@@ -718,13 +743,16 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       {/* Clavier numérique */}
       <div className="p-3 space-y-2">
         {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['*', '0', '+']].map((row, i) => (
-          <div key={i} className="grid grid-cols-3 gap-1">
+          <div key={i} className="grid grid-cols-3 gap-1.5">
             {row.map(d => (
               <button
                 key={d}
                 onClick={() => handleNumberInput(d)}
                 disabled={callState === 'connected' || callState === 'ringing'}
-                className="h-10 bg-red-700 hover:bg-red-600 text-white rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50"
+                className={`h-11 rounded-lg font-bold text-lg transition-all active:scale-95 disabled:opacity-50
+                  ${isEmergencyActive 
+                    ? 'bg-red-700 hover:bg-red-600 text-white' 
+                    : 'bg-slate-700 hover:bg-slate-600 text-amber-400'}`}
               >
                 {d}
               </button>
@@ -733,11 +761,11 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         ))}
 
         {/* Boutons d'action */}
-        <div className="grid grid-cols-3 gap-1 pt-2">
+        <div className="grid grid-cols-3 gap-1.5 pt-2">
           <button
             onClick={handleDelete}
             disabled={!number || callState === 'connected' || callState === 'ringing'}
-            className="h-10 bg-amber-600 hover:bg-amber-500 text-white rounded-md flex items-center justify-center disabled:opacity-50 transition-all active:scale-95"
+            className="h-11 bg-amber-600 hover:bg-amber-500 text-white rounded-lg flex items-center justify-center disabled:opacity-50 transition-all active:scale-95"
           >
             <Delete className="h-5 w-5" />
           </button>
@@ -745,14 +773,17 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           {callState === 'incoming' ? (
             <button
               onClick={handleAnswer}
-              className={`h-10 text-white rounded-md flex items-center justify-center transition-all active:scale-95 ${incomingCall?.isEmergency ? 'bg-amber-500 hover:bg-amber-400 animate-pulse' : 'bg-green-600 hover:bg-green-500 animate-pulse'}`}
+              className={`h-11 text-white rounded-lg flex items-center justify-center transition-all active:scale-95 
+                ${incomingCall?.isEmergency 
+                  ? 'bg-red-500 hover:bg-red-400 animate-pulse ring-2 ring-yellow-400' 
+                  : 'bg-green-600 hover:bg-green-500 animate-pulse'}`}
             >
               <Phone className="h-5 w-5" />
             </button>
           ) : callState === 'connected' ? (
             <button
               onClick={toggleMute}
-              className={`h-10 ${isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'} text-white rounded-md flex items-center justify-center transition-all active:scale-95`}
+              className={`h-11 ${isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'} text-white rounded-lg flex items-center justify-center transition-all active:scale-95`}
             >
               {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
             </button>
@@ -760,7 +791,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
             <button
               onClick={handleCall}
               disabled={!number || callState === 'ringing'}
-              className="h-10 bg-green-600 hover:bg-green-500 text-white rounded-md flex items-center justify-center disabled:opacity-50 transition-all active:scale-95"
+              className="h-11 bg-green-600 hover:bg-green-500 text-white rounded-lg flex items-center justify-center disabled:opacity-50 transition-all active:scale-95"
             >
               <PhoneCall className="h-5 w-5" />
             </button>
@@ -769,21 +800,21 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           {callState === 'incoming' ? (
             <button
               onClick={handleReject}
-              className="h-10 bg-red-600 hover:bg-red-500 text-white rounded-md flex items-center justify-center transition-all active:scale-95"
+              className="h-11 bg-red-600 hover:bg-red-500 text-white rounded-lg flex items-center justify-center transition-all active:scale-95"
             >
               <PhoneOff className="h-5 w-5" />
             </button>
           ) : callState === 'connected' || callState === 'ringing' ? (
             <button
               onClick={handleHangup}
-              className="h-10 bg-red-600 hover:bg-red-500 text-white rounded-md flex items-center justify-center transition-all active:scale-95"
+              className="h-11 bg-red-600 hover:bg-red-500 text-white rounded-lg flex items-center justify-center transition-all active:scale-95"
             >
               <PhoneOff className="h-5 w-5" />
             </button>
           ) : (
             <button
               onClick={() => { setIsOpen(false); setNumber(''); setCallState('idle'); }}
-              className="h-10 bg-slate-500 hover:bg-slate-400 text-white rounded-md flex items-center justify-center transition-all active:scale-95"
+              className="h-11 bg-slate-600 hover:bg-slate-500 text-white rounded-lg flex items-center justify-center transition-all active:scale-95"
             >
               <PhoneOff className="h-5 w-5" />
             </button>
@@ -792,10 +823,10 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       </div>
 
       {/* Micro */}
-      <div className="h-14 bg-red-900 rounded-b-3xl flex items-center justify-center relative mt-2">
+      <div className={`h-14 rounded-b-3xl flex items-center justify-center relative mt-2 ${isEmergencyActive ? 'bg-red-900' : 'bg-slate-800'}`}>
         <div className="grid grid-cols-4 gap-1">
           {[...Array(16)].map((_, i) => (
-            <div key={i} className="w-2 h-2 rounded-full bg-red-600 opacity-60" />
+            <div key={i} className={`w-2 h-2 rounded-full opacity-60 ${isEmergencyActive ? 'bg-red-600' : 'bg-slate-600'}`} />
           ))}
         </div>
       </div>

@@ -54,7 +54,7 @@ export default async function FelitzBankSiaviPage() {
       </div>
 
       {/* Compte Personnel */}
-      <div className="rounded-xl bg-white/90 border border-red-200 shadow-sm p-6">
+      <div className="rounded-xl bg-white border border-red-200 shadow-sm p-6">
         <h2 className="text-lg font-semibold text-red-900 mb-4 flex items-center gap-2">
           <Landmark className="h-5 w-5 text-red-600" />
           Compte Personnel

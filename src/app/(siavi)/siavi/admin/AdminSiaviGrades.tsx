@@ -72,7 +72,7 @@ export default function AdminSiaviGrades({ grades }: { grades: Grade[] }) {
   }
 
   return (
-    <div className="rounded-xl border border-red-200 bg-white/90 p-4">
+    <div className="rounded-xl border border-red-200 bg-white p-4">
       <h2 className="text-lg font-medium text-red-800 mb-4">Grades SIAVI</h2>
       
       {error && (

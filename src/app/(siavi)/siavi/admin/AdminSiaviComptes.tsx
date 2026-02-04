@@ -69,7 +69,7 @@ export default function AdminSiaviComptes({ comptes, grades }: { comptes: Compte
 
   if (comptes.length === 0) {
     return (
-      <div className="rounded-xl border border-red-200 bg-white/90 p-4">
+      <div className="rounded-xl border border-red-200 bg-white p-4">
         <h2 className="text-lg font-medium text-red-800 mb-2">Comptes SIAVI</h2>
         <p className="text-slate-600 text-sm">Aucun compte SIAVI.</p>
       </div>
@@ -77,7 +77,7 @@ export default function AdminSiaviComptes({ comptes, grades }: { comptes: Compte
   }
 
   return (
-    <div className="rounded-xl border border-red-200 bg-white/90 p-4">
+    <div className="rounded-xl border border-red-200 bg-white p-4">
       <h2 className="text-lg font-medium text-red-800 mb-4">Comptes SIAVI ({comptes.length})</h2>
       
       {error && (
