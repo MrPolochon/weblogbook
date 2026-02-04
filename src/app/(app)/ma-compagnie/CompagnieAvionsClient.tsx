@@ -557,44 +557,52 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                               )}
                               {isLeasedIn && (
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAffreterTechniciens(a.id)}
-                                    disabled={actionId === a.id || (!isPdg && isLeasedIn) || !canAffreter}
-                                    className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
-                                    title={`Réparer sur place - Coût: ${COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$ (délai: ${TEMPS_MAINTENANCE_MIN}-${TEMPS_MAINTENANCE_MAX} min)`}
-                                  >
-                                    <Wrench className="inline h-3 w-3 mr-0.5" />
-                                    Affréter
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDebloquer(a.id)}
-                                    disabled={actionId === a.id || (!isPdg && isLeasedIn) || !canDebloquer}
-                                    className="text-xs text-amber-400 hover:underline disabled:opacity-50"
-                                    title={`Débloquer pour vol ferry - Coût: ${COUT_VOL_FERRY.toLocaleString('fr-FR')} F$`}
-                                  >
-                                    Débloquer
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleReparer(a.id)}
-                                    disabled={actionId === a.id || (!isPdg && isLeasedIn) || !canRepairHub}
-                                    className="text-xs text-sky-400 hover:underline disabled:opacity-50 inline-flex items-center gap-1"
-                                    title="Réparer au hub (gratuit)"
-                                  >
-                                    <Wrench className="h-3 w-3" />
-                                    Réparer
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleVerifierMaintenance(a.id)}
-                                    disabled={actionId === a.id || (!isPdg && isLeasedIn) || !canVerifierMaintenance}
-                                    className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
-                                    title="Terminer la maintenance"
-                                  >
-                                    Récupérer
-                                  </button>
+                                  {canAffreter && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAffreterTechniciens(a.id)}
+                                      disabled={actionId === a.id || (!isPdg && isLeasedIn)}
+                                      className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
+                                      title={`Réparer sur place - Coût: ${COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$ (délai: ${TEMPS_MAINTENANCE_MIN}-${TEMPS_MAINTENANCE_MAX} min)`}
+                                    >
+                                      <Wrench className="inline h-3 w-3 mr-0.5" />
+                                      Affréter
+                                    </button>
+                                  )}
+                                  {canDebloquer && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDebloquer(a.id)}
+                                      disabled={actionId === a.id || (!isPdg && isLeasedIn)}
+                                      className="text-xs text-amber-400 hover:underline disabled:opacity-50"
+                                      title={`Débloquer pour vol ferry - Coût: ${COUT_VOL_FERRY.toLocaleString('fr-FR')} F$`}
+                                    >
+                                      Débloquer
+                                    </button>
+                                  )}
+                                  {canRepairHub && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleReparer(a.id)}
+                                      disabled={actionId === a.id || (!isPdg && isLeasedIn)}
+                                      className="text-xs text-sky-400 hover:underline disabled:opacity-50 inline-flex items-center gap-1"
+                                      title="Réparer au hub (gratuit)"
+                                    >
+                                      <Wrench className="h-3 w-3" />
+                                      Réparer
+                                    </button>
+                                  )}
+                                  {canVerifierMaintenance && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleVerifierMaintenance(a.id)}
+                                      disabled={actionId === a.id || (!isPdg && isLeasedIn)}
+                                      className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
+                                      title="Terminer la maintenance"
+                                    >
+                                      Récupérer
+                                    </button>
+                                  )}
                                   {!isPdg && (
                                     <span className="text-xs text-pink-400">Actions PDG locataire</span>
                                   )}
