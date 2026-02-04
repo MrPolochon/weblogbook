@@ -16,7 +16,7 @@ export async function PATCH(
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, armee: armeeBody, atc: atcBody, atc_grade_id: atcGradeIdBody, role: roleBody, ifsa: ifsaBody } = body;
+    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, armee: armeeBody, atc: atcBody, atc_grade_id: atcGradeIdBody, role: roleBody, ifsa: ifsaBody, siavi: siaviBody } = body;
 
     const updates: Record<string, unknown> = {};
     if (typeof heures_initiales_minutes === 'number' && heures_initiales_minutes >= 0) {
@@ -29,6 +29,7 @@ export async function PATCH(
     if (atcBody !== undefined) updates.atc = Boolean(atcBody);
     if (atcGradeIdBody !== undefined) updates.atc_grade_id = (atcGradeIdBody === null || atcGradeIdBody === '') ? null : atcGradeIdBody;
     if (ifsaBody !== undefined) updates.ifsa = Boolean(ifsaBody);
+    if (siaviBody !== undefined) updates.siavi = Boolean(siaviBody);
 
     const admin = createAdminClient();
 

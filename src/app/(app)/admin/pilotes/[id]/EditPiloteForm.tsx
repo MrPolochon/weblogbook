@@ -10,6 +10,7 @@ export default function EditPiloteForm({
   armee: armeeInitial,
   atc: atcInitial,
   ifsa: ifsaInitial,
+  siavi: siaviInitial,
   heuresInitiales,
   blockedUntil,
   blockReason,
@@ -20,6 +21,7 @@ export default function EditPiloteForm({
   armee: boolean;
   atc: boolean;
   ifsa: boolean;
+  siavi: boolean;
   heuresInitiales: number;
   blockedUntil: string | null;
   blockReason: string | null;
@@ -30,6 +32,7 @@ export default function EditPiloteForm({
   const [armee, setArmee] = useState(armeeInitial);
   const [atc, setAtc] = useState(atcInitial);
   const [ifsa, setIfsa] = useState(ifsaInitial);
+  const [siavi, setSiavi] = useState(siaviInitial);
   const isAtcOnly = roleInitial === 'atc';
   const isPiloteEtAtc = roleInitial === 'pilote' && atcInitial;
   const [accesPilote, setAccesPilote] = useState(isAtcOnly ? false : isPiloteEtAtc);
@@ -44,6 +47,7 @@ export default function EditPiloteForm({
   useEffect(() => { setAtc(atcInitial); }, [atcInitial]);
   useEffect(() => { setAccesPilote(roleInitial === 'atc' ? false : !!(roleInitial === 'pilote' && atcInitial)); }, [roleInitial, atcInitial]);
   useEffect(() => { setIfsa(ifsaInitial); }, [ifsaInitial]);
+  useEffect(() => { setSiavi(siaviInitial); }, [siaviInitial]);
   useEffect(() => { setRole(roleInitial); }, [roleInitial]);
 
   const isBlocked = blockedUntil ? new Date(blockedUntil) > new Date() : false;
@@ -62,10 +66,12 @@ export default function EditPiloteForm({
         armee?: boolean; 
         atc?: boolean; 
         ifsa?: boolean;
+        siavi?: boolean;
         role?: string;
       } = { 
         identifiant: id,
-        ifsa: ifsa
+        ifsa: ifsa,
+        siavi: siavi
       };
 
       // Gestion du rôle principal
@@ -278,10 +284,21 @@ export default function EditPiloteForm({
               />
               <span className="text-slate-300">🛡️ IFSA (Modération aviation)</span>
             </label>
+
+            {/* SIAVI */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={siavi} 
+                onChange={(e) => setSiavi(e.target.checked)} 
+                className="rounded" 
+              />
+              <span className="text-slate-300">🚒 SIAVI (Espace SIAVI/Pompier)</span>
+            </label>
           </div>
 
           <p className="text-xs text-slate-500">
-            IFSA = International Flight Safety Authority. Permet de gérer les signalements, enquêtes et sanctions.
+            IFSA = International Flight Safety Authority. SIAVI = Service d&apos;Incendie et d&apos;Assistance aux Victimes d&apos;Incidents.
           </p>
         </div>
 
