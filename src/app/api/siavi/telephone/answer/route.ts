@@ -13,21 +13,34 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
 
-    // Récupérer l'appel pour vérifier si c'est un appel d'urgence
+    // Récupérer l'appel
     const { data: call } = await admin.from('atc_calls')
-      .select('id, is_emergency')
+      .select('id, is_emergency, to_user_id, from_user_id')
       .eq('id', callId)
-      .eq('to_user_id', user.id)
       .eq('status', 'ringing')
       .single();
 
     if (!call) {
-      return NextResponse.json({ error: 'Appel non trouvé' }, { status: 404 });
+      return NextResponse.json({ error: 'Appel non trouvé ou déjà répondu' }, { status: 404 });
     }
 
+    // Vérifier les permissions : soit c'est un appel d'urgence, soit l'appel est pour nous
+    const isForMe = call.to_user_id === user.id;
+    const canAnswerEmergency = call.is_emergency && call.from_user_id !== user.id;
+    
+    if (!isForMe && !canAnswerEmergency) {
+      return NextResponse.json({ error: 'Cet appel ne vous est pas destiné' }, { status: 403 });
+    }
+
+    // Pour les appels d'urgence, réassigner à l'utilisateur qui répond
     const { error } = await admin.from('atc_calls')
-      .update({ status: 'connected', connected_at: new Date().toISOString() })
-      .eq('id', callId);
+      .update({ 
+        status: 'connected', 
+        connected_at: new Date().toISOString(),
+        to_user_id: user.id // Réassigner à celui qui répond
+      })
+      .eq('id', callId)
+      .eq('status', 'ringing'); // Double vérification pour éviter les race conditions
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 

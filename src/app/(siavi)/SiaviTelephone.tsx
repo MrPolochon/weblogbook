@@ -613,20 +613,35 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
 
   const handleAnswer = async () => {
     if (!incomingCall) return;
+    console.log('Réponse à l\'appel:', incomingCall);
     try {
       const res = await fetch('/api/siavi/telephone/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ callId: incomingCall.callId }),
       });
+      const data = await res.json();
+      console.log('Réponse API answer:', { ok: res.ok, data });
+      
       if (res.ok) {
+        // Stopper les sonneries/alarmes
+        stopFireAlarm();
+        shouldRingRef.current = false;
+        
         await setupWebRTC(incomingCall.callId, false);
         setCurrentCall({ to: incomingCall.from, toPosition: incomingCall.fromPosition, callId: incomingCall.callId });
         setIncomingCall(null);
         setCallState('connected');
+      } else {
+        console.error('Erreur réponse:', data.error);
+        playMessage(data.error || 'Impossible de répondre');
+        setIncomingCall(null);
+        setCallState('idle');
       }
     } catch (err) {
       console.error('Erreur réponse:', err);
+      setIncomingCall(null);
+      setCallState('idle');
     }
   };
 
