@@ -414,10 +414,14 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                     : isLeasedIn
                       ? 'bg-pink-500/10'
                       : '';
+                const canRepairHub = a.statut === 'ground' && a.usure_percent < 100 && isAtHub && !isLeasedOut;
+                const canAffreter = (a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && !isLeasedOut;
+                const canDebloquer = (a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && !isLeasedOut;
+                const canVerifierMaintenance = maintenancePrete && !isLeasedOut;
 
                 if (isLeasedIn || isLeasedOut) {
                   // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CompagnieAvionsClient:row',message:'render_location_row',data:{compagnieId,isPdg,immatriculation:a.immatriculation,location_status:a.location_status,statut:a.statut,showActions:isPdg||isLeasedIn},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+                  fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CompagnieAvionsClient:row',message:'render_location_row',data:{compagnieId,isPdg,immatriculation:a.immatriculation,location_status:a.location_status,statut:a.statut,usure:a.usure_percent,isAtHub,maintenancePrete,showActions:isPdg||isLeasedIn,canRepairHub,canAffreter,canDebloquer,canVerifierMaintenance},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
                   // #endregion
                 }
                 
