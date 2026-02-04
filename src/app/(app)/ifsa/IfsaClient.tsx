@@ -869,7 +869,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {compagnieData.transactions.map((t) => (
                                 <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1">
-                                  <span data-ifsa-transaction-id={t.id} className="text-slate-400 truncate">{t.libelle}</span>
+                                  <span data-ifsa-transaction-id={t.id} className="text-slate-400 break-all">{t.libelle}</span>
                                   <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>
                                     {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
                                   </span>
@@ -1023,7 +1023,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {piloteData.transactions.map((t) => (
                                 <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1">
-                                  <span className="text-slate-400 truncate">{t.libelle}</span>
+                                  <span className="text-slate-400 break-all">{t.libelle}</span>
                                   <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>
                                     {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
                                   </span>
