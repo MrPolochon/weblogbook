@@ -153,20 +153,20 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
             {transactions.map((t) => (
               <div 
                 key={t.id} 
-                className="flex items-center justify-between bg-slate-800/30 rounded-lg p-3 border border-slate-700/30"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-800/30 rounded-lg p-3 border border-slate-700/30"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3 min-w-0">
                   {t.type === 'credit' ? (
                     <ArrowDownLeft className="h-4 w-4 text-emerald-400" />
                   ) : (
                     <ArrowUpRight className="h-4 w-4 text-red-400" />
                   )}
-                  <div>
-                    <p className="text-sm text-slate-200">{t.libelle}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm text-slate-200 break-all">{t.libelle}</p>
                     <p className="text-xs text-slate-500">{formatDate(t.created_at)}</p>
                   </div>
                 </div>
-                <span className={`font-semibold ${t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}`}>
+                <span className={`font-semibold ${t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'} sm:whitespace-nowrap`}>
                   {t.type === 'credit' ? '+' : '-'}{t.montant.toLocaleString('fr-FR')} F$
                 </span>
               </div>
