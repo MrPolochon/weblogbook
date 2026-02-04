@@ -16,6 +16,7 @@ interface Transaction {
   type: string;
   montant: number;
   libelle: string;
+  description?: string | null;
   created_at: string;
 }
 
@@ -152,7 +153,7 @@ export default function AdminFelitzClient({ compte, label, type, transactions = 
                     className="flex items-center justify-between text-xs bg-slate-900/40 rounded-md px-2 py-1.5 border border-slate-700/50"
                   >
                     <div className="min-w-0">
-                      <p className="text-slate-200 truncate">{t.libelle}</p>
+                      <p className="text-slate-200 truncate">{t.libelle || t.description || '—'}</p>
                       <p className="text-slate-500">{formatDate(t.created_at)}</p>
                     </div>
                     <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>

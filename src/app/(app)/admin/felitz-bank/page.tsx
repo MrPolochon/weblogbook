@@ -44,10 +44,10 @@ export default async function AdminFelitzBankPage() {
     ...(comptesEntreprise || []).map(c => c.id),
     ...(compteMilitaire ? [compteMilitaire.id] : []),
   ];
-  let transactionsByCompte: Record<string, Array<{ id: string; type: string; montant: number; libelle: string; created_at: string }>> = {};
+  let transactionsByCompte: Record<string, Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }>> = {};
   if (comptesIdsAll.length > 0) {
     const { data: allTransactions } = await admin.from('felitz_transactions')
-      .select('id, compte_id, type, montant, libelle, created_at')
+      .select('id, compte_id, type, montant, libelle, description, created_at')
       .in('compte_id', comptesIdsAll)
       .order('created_at', { ascending: false })
       .limit(600);
@@ -62,6 +62,7 @@ export default async function AdminFelitzBankPage() {
           type: t.type,
           montant: t.montant,
           libelle: t.libelle,
+          description: (t as { description?: string | null }).description ?? null,
           created_at: t.created_at,
         });
       }

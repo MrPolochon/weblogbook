@@ -378,11 +378,13 @@ async function envoyerChequesVol(
         .eq('id', pretActif.id);
 
       // Enregistrer la transaction de remboursement
+      const libelleRemboursement = `Remboursement prêt - Vol ${numeroVol}`;
       await admin.from('felitz_transactions').insert({
         compte_id: compteCompagnie.id,
         type: 'debit',
         montant: remboursementPret,
-        description: `Remboursement prêt - Vol ${numeroVol}`,
+        libelle: libelleRemboursement,
+        description: libelleRemboursement,
         reference: `LOAN-PAY-${pretActif.id.slice(0, 8)}`,
       });
     }

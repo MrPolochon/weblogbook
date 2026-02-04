@@ -39,11 +39,11 @@ export default async function FelitzBankPage() {
   }
 
   // Transactions récentes pour les comptes entreprise
-  let transactionsEntrepriseByCompte: Record<string, Array<{ id: string; type: string; montant: number; libelle: string; created_at: string }>> = {};
+  let transactionsEntrepriseByCompte: Record<string, Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }>> = {};
   if (comptesEntreprise.length > 0) {
     const compteIds = comptesEntreprise.map(c => c.id);
     const { data } = await admin.from('felitz_transactions')
-      .select('id, compte_id, type, montant, libelle, created_at')
+      .select('id, compte_id, type, montant, libelle, description, created_at')
       .in('compte_id', compteIds)
       .order('created_at', { ascending: false })
       .limit(200);
@@ -58,6 +58,7 @@ export default async function FelitzBankPage() {
           type: t.type,
           montant: t.montant,
           libelle: t.libelle,
+          description: (t as { description?: string | null }).description ?? null,
           created_at: t.created_at,
         });
       }
@@ -83,10 +84,10 @@ export default async function FelitzBankPage() {
   }
 
   // Transactions pour le compte militaire
-  let transactionsMilitaire: Array<{ id: string; type: string; montant: number; libelle: string; created_at: string }> = [];
+  let transactionsMilitaire: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
   if (compteMilitaire) {
     const { data } = await admin.from('felitz_transactions')
-      .select('*')
+      .select('id, type, montant, libelle, description, created_at')
       .eq('compte_id', compteMilitaire.id)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -202,7 +203,7 @@ export default async function FelitzBankPage() {
                   <div className="space-y-2 max-h-64 overflow-y-auto">
                     {transactionsMilitaire.map((t) => (
                       <div key={t.id} className="flex items-center justify-between text-sm py-1 border-b border-slate-700/30 last:border-0">
-                        <span className="text-slate-400 truncate flex-1">{t.libelle}</span>
+                        <span className="text-slate-400 truncate flex-1">{t.libelle || t.description || '—'}</span>
                         <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>
                           {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
                         </span>

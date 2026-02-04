@@ -47,11 +47,11 @@ export async function GET(req: NextRequest) {
         .eq('type', 'personnel')
         .single();
 
-      let transactions: Array<{ id: string; type: string; montant: number; libelle: string; created_at: string }> = [];
+      let transactions: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
       if (comptePerso) {
         const { data } = await admin
           .from('felitz_transactions')
-          .select('id, type, montant, libelle, created_at')
+          .select('id, type, montant, libelle, description, created_at')
           .eq('compte_id', comptePerso.id)
           .order('created_at', { ascending: false })
           .limit(100);
@@ -114,11 +114,11 @@ export async function GET(req: NextRequest) {
         .eq('type', 'entreprise')
         .single();
 
-      let transactions: Array<{ id: string; type: string; montant: number; libelle: string; created_at: string }> = [];
+      let transactions: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
       if (compteEntreprise) {
         const { data } = await admin
           .from('felitz_transactions')
-          .select('id, type, montant, libelle, created_at')
+          .select('id, type, montant, libelle, description, created_at')
           .eq('compte_id', compteEntreprise.id)
           .order('created_at', { ascending: false })
           .limit(100);

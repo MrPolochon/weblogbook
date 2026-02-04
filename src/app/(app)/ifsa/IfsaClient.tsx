@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   AlertTriangle, FileSearch, Gavel, Plus, X, Check, Loader2, 
@@ -85,6 +85,7 @@ interface IfsaTransaction {
   type: string;
   montant: number;
   libelle: string;
+  description?: string | null;
   created_at: string;
 }
 
@@ -188,20 +189,6 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   const [loadingPilote, setLoadingPilote] = useState(false);
   const compagniesPilotesCount = new Map(compagniesAvecPilotes.map((c) => [c.id, c.pilotes.length]));
 
-  useEffect(() => {
-    if (!compagnieData || !compagnieData.transactions.length) return;
-    const virement = compagnieData.transactions.find((t) => t.libelle?.toLowerCase().includes('virement'));
-    if (!virement) return;
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfsaClient.tsx:191',message:'ifsaVirementLabelData',data:{transactionId:virement.id,libelle:virement.libelle,libelleLength:virement.libelle?.length || 0,hasEllipsis:virement.libelle?.includes('...') || false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
-    const el = document.querySelector<HTMLElement>(`[data-ifsa-transaction-id="${virement.id}"]`);
-    if (!el) return;
-    const style = window.getComputedStyle(el);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfsaClient.tsx:199',message:'ifsaVirementLabelStyle',data:{transactionId:virement.id,clientWidth:el.clientWidth,scrollWidth:el.scrollWidth,whiteSpace:style.whiteSpace,overflow:style.overflow,textOverflow:style.textOverflow,display:style.display},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
-  }, [compagnieData]);
 
   // Modals
   const [showSanctionModal, setShowSanctionModal] = useState(false);
@@ -869,7 +856,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {compagnieData.transactions.map((t) => (
                                 <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1">
-                                  <span data-ifsa-transaction-id={t.id} className="text-slate-400 break-all">{t.libelle}</span>
+                                  <span className="text-slate-400 break-all">{t.libelle || t.description || '—'}</span>
                                   <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>
                                     {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
                                   </span>
@@ -1023,7 +1010,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {piloteData.transactions.map((t) => (
                                 <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1">
-                                  <span className="text-slate-400 break-all">{t.libelle}</span>
+                                  <span className="text-slate-400 break-all">{t.libelle || t.description || '—'}</span>
                                   <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>
                                     {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
                                   </span>

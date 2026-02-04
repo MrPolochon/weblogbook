@@ -172,11 +172,13 @@ export async function POST(
     }
 
     // Enregistrer la transaction
+    const libellePret = `Prêt bancaire - ${optionPret.montant.toLocaleString('fr-FR')} F$ à ${optionPret.tauxInteret}%`;
     await admin.from('felitz_transactions').insert({
       compte_id: compteCompagnie.id,
       type: 'credit',
       montant: optionPret.montant,
-      description: `Prêt bancaire - ${optionPret.montant.toLocaleString('fr-FR')} F$ à ${optionPret.tauxInteret}%`,
+      libelle: libellePret,
+      description: libellePret,
       reference: `LOAN-${nouveauPret.id.slice(0, 8)}`,
     });
 
