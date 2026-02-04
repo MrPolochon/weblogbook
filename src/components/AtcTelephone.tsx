@@ -326,7 +326,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       };
 
       const supabase = createClient();
-      const channel = supabase.channel(`atc-call-${callId}`)
+      const channel = supabase.channel(`call-${callId}`)
         .on('broadcast', { event: 'webrtc-signal' }, async (payload) => {
           const message = payload.payload;
           if (message.fromUserId === userId) return;

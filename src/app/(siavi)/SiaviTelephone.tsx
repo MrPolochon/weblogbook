@@ -79,8 +79,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       osc1.type = 'sawtooth';
       osc2.type = 'square';
       
-      // Volume modéré (réduit de 0.6 à 0.25)
-      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      // Volume bas (0.1)
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
       
       osc1.connect(gain);
       osc2.connect(gain);
@@ -406,7 +406,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       };
 
       const supabase = createClient();
-      const channel = supabase.channel(`siavi-call-${callId}`)
+      const channel = supabase.channel(`call-${callId}`)
         .on('broadcast', { event: 'webrtc-signal' }, async (payload) => {
           const message = payload.payload;
           if (message.fromUserId === userId) return;
