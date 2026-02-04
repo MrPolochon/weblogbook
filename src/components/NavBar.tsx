@@ -25,6 +25,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
   const router = useRouter();
   const [piloteMenuOpen, setPiloteMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -43,6 +44,19 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:41',message:'piloteMenuState',data:{piloteMenuOpen,hasDropdownRef:!!dropdownRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
+    if (piloteMenuOpen && dropdownRef.current) {
+      const rect = dropdownRef.current.getBoundingClientRect();
+      const style = window.getComputedStyle(dropdownRef.current);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:47',message:'piloteDropdownRect',data:{x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height),display:style.display,visibility:style.visibility,opacity:style.opacity,zIndex:style.zIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
+    }
+  }, [piloteMenuOpen]);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -111,7 +125,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             </button>
             
             {piloteMenuOpen && (
-              <div className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl z-50">
+              <div ref={dropdownRef} className="absolute left-0 top-full mt-1 w-56 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl z-50">
                 {piloteMenuItems.map((item) => {
                   const Icon = item.icon;
                   return (

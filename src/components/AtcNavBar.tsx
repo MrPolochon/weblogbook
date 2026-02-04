@@ -56,6 +56,7 @@ export default function AtcNavBar({
   const isDark = theme === 'dark';
   const [atcMenuOpen, setAtcMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -74,6 +75,19 @@ export default function AtcNavBar({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:72',message:'atcMenuState',data:{atcMenuOpen,hasDropdownRef:!!dropdownRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
+    if (atcMenuOpen && dropdownRef.current) {
+      const rect = dropdownRef.current.getBoundingClientRect();
+      const style = window.getComputedStyle(dropdownRef.current);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:78',message:'atcDropdownRect',data:{x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height),display:style.display,visibility:style.visibility,opacity:style.opacity,zIndex:style.zIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
+    }
+  }, [atcMenuOpen]);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -148,7 +162,7 @@ export default function AtcNavBar({
             </button>
             
             {atcMenuOpen && (
-              <div className={cn("absolute left-0 top-full mt-1 w-56 rounded-lg border py-1 shadow-xl z-50", dropdownBg)}>
+              <div ref={dropdownRef} className={cn("absolute left-0 top-full mt-1 w-56 rounded-lg border py-1 shadow-xl z-50", dropdownBg)}>
                 {atcMenuItems.map((item) => {
                   const Icon = item.icon;
                   return (
