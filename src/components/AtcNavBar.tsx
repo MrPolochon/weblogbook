@@ -58,6 +58,7 @@ export default function AtcNavBar({
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties | null>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -236,25 +237,84 @@ export default function AtcNavBar({
               {gradeNom}
             </span>
           )}
-          <Link href="/atc/compte" className={cn(linkBase, 'gap-1.5', pathname === '/atc/compte' ? linkActive : linkInactive)} title="Mon compte">
-            <User className="h-4 w-4 flex-shrink-0" />
-            <span className="hidden sm:inline">Mon compte</span>
-            <span className="sm:hidden">Compte</span>
-          </Link>
-          {isAdmin && (
-            <Link href="/logbook" className={cn(linkBase, 'gap-1.5', linkInactive)} title="Passer à l'espace pilotes">
-              <BookOpen className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Espace pilotes</span>
-              <span className="sm:hidden">Pilotes</span>
+          <div className="hidden sm:flex items-center gap-3">
+            <Link href="/atc/compte" className={cn(linkBase, 'gap-1.5', pathname === '/atc/compte' ? linkActive : linkInactive)} title="Mon compte">
+              <User className="h-4 w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Mon compte</span>
+              <span className="sm:hidden">Compte</span>
             </Link>
-          )}
-          {!enService && (
-            <button type="button" onClick={handleLogout} className={cn(linkBase, isDark ? 'text-slate-300 hover:bg-slate-700 hover:text-red-400' : 'text-slate-700 hover:bg-slate-100 hover:text-red-600')}>
-              <LogOut className="h-4 w-4 flex-shrink-0" />
-              Déconnexion
-            </button>
-          )}
+            {isAdmin && (
+              <Link href="/logbook" className={cn(linkBase, 'gap-1.5', linkInactive)} title="Passer à l'espace pilotes">
+                <BookOpen className="h-4 w-4 flex-shrink-0" />
+                <span className="hidden sm:inline">Espace pilotes</span>
+                <span className="sm:hidden">Pilotes</span>
+              </Link>
+            )}
+            {!enService && (
+              <button type="button" onClick={handleLogout} className={cn(linkBase, isDark ? 'text-slate-300 hover:bg-slate-700 hover:text-red-400' : 'text-slate-700 hover:bg-slate-100 hover:text-red-600')}>
+                <LogOut className="h-4 w-4 flex-shrink-0" />
+                Déconnexion
+              </button>
+            )}
+          </div>
         </div>
+      </div>
+
+      <div className="sm:hidden px-5 pb-3">
+        <button
+          type="button"
+          onClick={() => setAccountMenuOpen((prev) => !prev)}
+          className={cn(
+            'w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium border',
+            isDark ? 'bg-slate-800/60 text-slate-300 border-slate-700/60' : 'bg-slate-100 text-slate-700 border-slate-300'
+          )}
+        >
+          <span className="flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Compte
+          </span>
+          <ChevronDown className={cn('h-4 w-4 transition-transform', accountMenuOpen && 'rotate-180')} />
+        </button>
+
+        {accountMenuOpen && (
+          <div className="mt-2 grid gap-2">
+            <Link
+              href="/atc/compte"
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                pathname === '/atc/compte' ? linkActive : linkInactive
+              )}
+            >
+              <User className="h-4 w-4" />
+              Mon compte
+            </Link>
+            {isAdmin && (
+              <Link
+                href="/logbook"
+                className={cn(
+                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  linkInactive
+                )}
+              >
+                <BookOpen className="h-4 w-4" />
+                Espace pilotes
+              </Link>
+            )}
+            {!enService && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className={cn(
+                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  isDark ? 'bg-slate-800/60 text-slate-300 hover:bg-slate-700 hover:text-red-300' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-red-600'
+                )}
+              >
+                <LogOut className="h-4 w-4" />
+                Déconnexion
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

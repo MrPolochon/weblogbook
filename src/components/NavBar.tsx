@@ -27,6 +27,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties | null>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -242,36 +243,86 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             NOTAMs
           </Link>
         </nav>
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
-          {isAdmin && (
-            <Link
-              href="/atc"
-              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-slate-100"
-              title="Passer à l'espace ATC"
-            >
-              <Radio className="h-4 w-4" />
-              Espace ATC
-            </Link>
-          )}
-          <Link
-            href="/compte"
-            className={cn(
-              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-              pathname === '/compte'
-                ? 'bg-slate-700/50 text-sky-300'
-                : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+        <div className="w-full sm:w-auto">
+          <div className="hidden sm:flex items-center gap-2 justify-end flex-wrap">
+            {isAdmin && (
+              <Link
+                href="/atc"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-slate-100"
+                title="Passer à l'espace ATC"
+              >
+                <Radio className="h-4 w-4" />
+                Espace ATC
+              </Link>
             )}
-          >
-            <User className="h-4 w-4" />
-            Mon compte
-          </Link>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-red-400"
-          >
-            <LogOut className="h-4 w-4" />
-            Déconnexion
-          </button>
+            <Link
+              href="/compte"
+              className={cn(
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                pathname === '/compte'
+                  ? 'bg-slate-700/50 text-sky-300'
+                  : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+              )}
+            >
+              <User className="h-4 w-4" />
+              Mon compte
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-red-400"
+            >
+              <LogOut className="h-4 w-4" />
+              Déconnexion
+            </button>
+          </div>
+
+          <div className="sm:hidden">
+            <button
+              type="button"
+              onClick={() => setAccountMenuOpen((prev) => !prev)}
+              className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium bg-slate-800/50 text-slate-300 border border-slate-700/50"
+            >
+              <span className="flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Mon compte
+              </span>
+              <ChevronDown className={cn('h-4 w-4 transition-transform', accountMenuOpen && 'rotate-180')} />
+            </button>
+
+            {accountMenuOpen && (
+              <div className="mt-2 grid gap-2">
+                {isAdmin && (
+                  <Link
+                    href="/atc"
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800/50 hover:bg-slate-800"
+                    title="Passer à l'espace ATC"
+                  >
+                    <Radio className="h-4 w-4" />
+                    Espace ATC
+                  </Link>
+                )}
+                <Link
+                  href="/compte"
+                  className={cn(
+                    'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    pathname === '/compte'
+                      ? 'bg-slate-700/50 text-sky-300'
+                      : 'text-slate-300 bg-slate-800/50 hover:bg-slate-800'
+                  )}
+                >
+                  <User className="h-4 w-4" />
+                  Mon compte
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800/50 hover:bg-slate-800 hover:text-red-300"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Déconnexion
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>
