@@ -43,33 +43,33 @@ export default async function SiaviComptePage() {
   return (
     <div className="flex flex-col lg:flex-row lg:items-start gap-8 max-w-5xl">
       <div className="space-y-6 max-w-md">
-        <h1 className="text-2xl font-semibold text-red-900">Mon compte SIAVI</h1>
-        <div className="rounded-xl border border-red-200 bg-white p-4">
+        <h1 className="text-2xl font-bold text-red-400">Mon compte SIAVI</h1>
+        <div className="rounded-xl border-2 border-red-300 bg-white p-4 shadow-sm">
           <div className="space-y-3">
             <div>
-              <p className="text-red-600 text-sm">Identifiant</p>
-              <p className="text-slate-900 font-medium">{profile?.identifiant ?? '—'}</p>
+              <p className="text-red-700 text-sm font-medium">Identifiant</p>
+              <p className="text-slate-900 font-semibold">{profile?.identifiant ?? '—'}</p>
             </div>
             {monGrade && (
               <div>
-                <p className="text-red-600 text-sm">Grade SIAVI</p>
-                <p className="text-slate-900 font-medium">{monGrade}</p>
+                <p className="text-red-700 text-sm font-medium">Grade SIAVI</p>
+                <p className="text-slate-900 font-semibold">{monGrade}</p>
               </div>
             )}
             <div>
-              <p className="text-red-600 text-sm">Temps total en service</p>
-              <p className="text-slate-900 font-medium tabular-nums">{formatTemps(profile?.siavi_temps_total_minutes)}</p>
+              <p className="text-red-700 text-sm font-medium">Temps total en service</p>
+              <p className="text-slate-900 font-semibold tabular-nums">{formatTemps(profile?.siavi_temps_total_minutes)}</p>
             </div>
           </div>
         </div>
-        <div className="rounded-xl border border-red-200 bg-white p-4">
+        <div className="rounded-xl border-2 border-red-300 bg-white p-4 shadow-sm">
           <CompteForm armee={false} isAdmin={isAdmin} variant="siavi" showArmee={false} />
         </div>
         <LicencesSection userId={user.id} variant="siavi" />
       </div>
       <div className="lg:min-w-[320px] lg:flex-1">
-        <div className="rounded-xl border border-red-200 bg-white p-4">
-          <h2 className="text-lg font-medium text-red-900 mb-4">{isAdmin ? 'Agents SIAVI et admins' : 'Agents SIAVI'}</h2>
+        <div className="rounded-xl border-2 border-red-300 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-bold text-red-800 mb-4">{isAdmin ? 'Agents SIAVI et admins' : 'Agents SIAVI'}</h2>
           {list.length === 0 ? (
             <p className="text-slate-600 text-sm">Aucun agent SIAVI.</p>
           ) : (

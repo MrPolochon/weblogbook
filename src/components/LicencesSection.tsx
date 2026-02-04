@@ -22,7 +22,9 @@ type Props = {
 };
 
 export default function LicencesSection({ userId, variant = 'default' }: Props) {
-  const isAtcOrSiavi = variant === 'atc' || variant === 'siavi';
+  const isSiavi = variant === 'siavi';
+  const isAtcOrSiavi = variant === 'atc' || isSiavi;
+  const cardClass = isSiavi ? 'rounded-xl border-2 border-red-300 bg-white p-4 shadow-sm' : 'card';
   const [licences, setLicences] = useState<Licence[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -78,30 +80,30 @@ export default function LicencesSection({ userId, variant = 'default' }: Props) 
 
   if (loading) {
     return (
-      <div className="card">
-        <h2 className={`text-lg font-medium mb-4 ${isAtcOrSiavi ? 'text-slate-800' : 'text-slate-100'}`}>
+      <div className={cardClass}>
+        <h2 className={`text-lg font-bold mb-4 ${isSiavi ? 'text-red-800' : isAtcOrSiavi ? 'text-slate-800' : 'text-slate-100'}`}>
           Licences et qualifications
         </h2>
-        <p className="text-sm text-slate-500">Chargement…</p>
+        <p className={`text-sm ${isSiavi ? 'text-slate-600' : 'text-slate-500'}`}>Chargement…</p>
       </div>
     );
   }
 
   if (licences.length === 0) {
     return (
-      <div className="card">
-        <h2 className={`text-lg font-medium mb-4 ${isAtcOrSiavi ? 'text-slate-800' : 'text-slate-100'}`}>
+      <div className={cardClass}>
+        <h2 className={`text-lg font-bold mb-4 ${isSiavi ? 'text-red-800' : isAtcOrSiavi ? 'text-slate-800' : 'text-slate-100'}`}>
           Licences et qualifications
         </h2>
-        <p className="text-sm text-slate-500">Aucune licence ou qualification enregistrée.</p>
+        <p className={`text-sm ${isSiavi ? 'text-slate-600' : 'text-slate-500'}`}>Aucune licence ou qualification enregistrée.</p>
       </div>
     );
   }
 
   return (
-    <div className="card">
-      <h2 className={`text-lg font-medium mb-4 flex items-center gap-2 ${isAtcOrSiavi ? 'text-slate-800' : 'text-slate-100'}`}>
-        <Award className="h-5 w-5" />
+    <div className={cardClass}>
+      <h2 className={`text-lg font-bold mb-4 flex items-center gap-2 ${isSiavi ? 'text-red-800' : isAtcOrSiavi ? 'text-slate-800' : 'text-slate-100'}`}>
+        <Award className={`h-5 w-5 ${isSiavi ? 'text-red-600' : ''}`} />
         Licences et qualifications
       </h2>
       <div className="space-y-3">

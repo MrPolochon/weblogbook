@@ -5,10 +5,17 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'default', showArmee = true }: { armee: boolean; isAdmin: boolean; variant?: 'default' | 'atc' | 'siavi'; showArmee?: boolean }) {
-  const isAtcOrSiavi = variant === 'atc' || variant === 'siavi';
+  const isSiavi = variant === 'siavi';
+  const isAtc = variant === 'atc';
+  const isAtcOrSiavi = isAtc || isSiavi;
   const textTitle = isAtcOrSiavi ? 'text-slate-800' : 'text-slate-200';
   const textMuted = isAtcOrSiavi ? 'text-slate-600' : 'text-slate-400';
   const textCheck = isAtcOrSiavi ? 'text-slate-700' : 'text-slate-300';
+  
+  // Classes spécifiques pour SIAVI (fond blanc, texte foncé)
+  const labelClass = isSiavi ? 'block text-sm font-bold text-red-800 mb-1' : 'label';
+  const inputClass = isSiavi ? 'block w-full rounded-lg border-2 border-slate-300 bg-slate-700 px-3 py-2 text-white placeholder-slate-400 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500' : 'input';
+  const cardClass = isSiavi ? '' : 'card'; // SIAVI n'utilise pas .card car parent a déjà le style
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -69,7 +76,7 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
   return (
     <>
       {isAdmin && showArmee && (
-        <div className="card">
+        <div className={cardClass}>
           <h2 className={`text-lg font-medium mb-4 ${textTitle}`}>Rôle Armée (Espace militaire)</h2>
           <p className={`${textMuted} text-sm mb-3`}>En tant qu&apos;admin, vous pouvez vous attribuer le rôle Armée pour accéder à l&apos;Espace militaire. Le rôle Armée requiert l&apos;accès à l&apos;espace pilote.</p>
           <form onSubmit={handleArmeeSubmit} className="space-y-4">
@@ -78,22 +85,22 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
               <span className={textCheck}>J&apos;ai le rôle Armée</span>
             </label>
             {messageArmee && (
-              <p className={messageArmee.type === 'ok' ? 'text-emerald-400 text-sm' : 'text-red-400 text-sm'}>{messageArmee.text}</p>
+              <p className={messageArmee.type === 'ok' ? 'text-emerald-500 text-sm font-medium' : 'text-red-600 text-sm font-medium'}>{messageArmee.text}</p>
             )}
-            <button type="submit" className="btn-primary" disabled={loadingArmee}>
+            <button type="submit" className={isSiavi ? 'px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold transition-colors disabled:opacity-50' : 'btn-primary'} disabled={loadingArmee}>
               {loadingArmee ? 'Enregistrement…' : 'Enregistrer'}
             </button>
           </form>
         </div>
       )}
-      <div className="card">
-      <h2 className={`text-lg font-medium mb-4 ${textTitle}`}>Changer le mot de passe</h2>
+      <div className={cardClass}>
+      <h2 className={`text-lg font-bold mb-4 ${isSiavi ? 'text-slate-800' : textTitle}`}>Changer le mot de passe</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="label">Nouveau mot de passe</label>
+          <label className={labelClass}>Nouveau mot de passe</label>
           <input
             type="password"
-            className="input"
+            className={inputClass}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -102,10 +109,10 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
           />
         </div>
         <div>
-          <label className="label">Confirmer</label>
+          <label className={labelClass}>Confirmer</label>
           <input
             type="password"
-            className="input"
+            className={inputClass}
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             required
@@ -114,11 +121,11 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
           />
         </div>
         {message && (
-          <p className={message.type === 'ok' ? 'text-emerald-400 text-sm' : 'text-red-400 text-sm'}>
+          <p className={message.type === 'ok' ? (isSiavi ? 'text-emerald-600 text-sm font-medium' : 'text-emerald-400 text-sm') : (isSiavi ? 'text-red-600 text-sm font-medium' : 'text-red-400 text-sm')}>
             {message.text}
           </p>
         )}
-        <button type="submit" className="btn-primary" disabled={loading}>
+        <button type="submit" className={isSiavi ? 'px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold transition-colors disabled:opacity-50' : 'btn-primary'} disabled={loading}>
           {loading ? 'Enregistrement…' : 'Mettre à jour'}
         </button>
       </form>
