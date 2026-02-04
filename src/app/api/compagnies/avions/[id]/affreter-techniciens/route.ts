@@ -21,6 +21,16 @@ export async function POST(
       .single();
     if (!avion) return NextResponse.json({ error: 'Avion introuvable.' }, { status: 404 });
 
+    const nowIso = new Date().toISOString();
+    const { data: locationActive } = await admin
+      .from('compagnie_locations')
+      .select('id, loueur_compagnie_id, locataire_compagnie_id, start_at, end_at, statut')
+      .eq('avion_id', id)
+      .eq('statut', 'active')
+      .lte('start_at', nowIso)
+      .gte('end_at', nowIso)
+      .maybeSingle();
+
     // Vérifier si l'avion est déjà en maintenance
     if (avion.statut === 'maintenance' && avion.maintenance_fin_at) {
       const maintenanceFin = new Date(avion.maintenance_fin_at);
@@ -58,14 +68,18 @@ export async function POST(
       return NextResponse.json({ error: 'L\'avion n\'est pas bloqué à 0% d\'usure.' }, { status: 400 });
     }
 
+    const compagnieCibleId = locationActive?.locataire_compagnie_id || avion.compagnie_id;
     const { data: compagnie } = await admin
       .from('compagnies')
       .select('id, pdg_id')
-      .eq('id', avion.compagnie_id)
+      .eq('id', compagnieCibleId)
       .single();
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     
     if (compagnie?.pdg_id !== user.id && profile?.role !== 'admin') {
+      if (locationActive) {
+        return NextResponse.json({ error: 'Avion en location : le PDG locataire gère la maintenance.' }, { status: 403 });
+      }
       return NextResponse.json({ error: 'Seul le PDG peut affréter des techniciens.' }, { status: 403 });
     }
 
@@ -73,7 +87,7 @@ export async function POST(
     const { data: compte } = await admin
       .from('felitz_comptes')
       .select('id, solde')
-      .eq('compagnie_id', avion.compagnie_id)
+      .eq('compagnie_id', compagnieCibleId)
       .eq('type', 'entreprise')
       .single();
     

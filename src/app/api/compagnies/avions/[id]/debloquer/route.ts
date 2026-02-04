@@ -20,6 +20,16 @@ export async function POST(
       .single();
     if (!avion) return NextResponse.json({ error: 'Avion introuvable.' }, { status: 404 });
 
+    const nowIso = new Date().toISOString();
+    const { data: locationActive } = await admin
+      .from('compagnie_locations')
+      .select('id, loueur_compagnie_id, locataire_compagnie_id, start_at, end_at, statut')
+      .eq('avion_id', id)
+      .eq('statut', 'active')
+      .lte('start_at', nowIso)
+      .gte('end_at', nowIso)
+      .maybeSingle();
+
     if (avion.statut !== 'bloque') {
       return NextResponse.json({ error: 'L\'avion n\'est pas bloqué.' }, { status: 400 });
     }
@@ -34,6 +44,10 @@ export async function POST(
       .single();
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     
+    if (locationActive && profile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Avion en location : débloquage interdit pour le loueur.' }, { status: 403 });
+    }
+
     if (compagnie?.pdg_id !== user.id && profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Seul le PDG peut débloquer un avion.' }, { status: 403 });
     }

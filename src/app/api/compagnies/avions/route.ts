@@ -10,7 +10,23 @@ export async function GET(request: Request) {
 
     const admin = createAdminClient();
     
-    // Charger les avions
+    const nowIso = new Date().toISOString();
+
+    // Charger les locations actives (loueur ou locataire)
+    const { data: locations } = await admin
+      .from('compagnie_locations')
+      .select('id, avion_id, loueur_compagnie_id, locataire_compagnie_id, prix_journalier, pourcentage_revenu_loueur, start_at, end_at, statut')
+      .or(`loueur_compagnie_id.eq.${compagnie_id},locataire_compagnie_id.eq.${compagnie_id}`)
+      .eq('statut', 'active')
+      .lte('start_at', nowIso)
+      .gte('end_at', nowIso);
+
+    const leasedOut = (locations || []).filter((l) => l.loueur_compagnie_id === compagnie_id);
+    const leasedIn = (locations || []).filter((l) => l.locataire_compagnie_id === compagnie_id);
+    const leasedOutIds = new Set(leasedOut.map((l) => l.avion_id));
+    const leasedInIds = new Set(leasedIn.map((l) => l.avion_id));
+
+    // Charger les avions possédés par la compagnie
     const { data: avions, error } = await admin
       .from('compagnie_avions')
       .select('*')
@@ -19,8 +35,18 @@ export async function GET(request: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
+    // Charger les avions loués à la compagnie (locataire)
+    let avionsLoues: any[] = [];
+    if (leasedInIds.size > 0) {
+      const { data: loues } = await admin
+        .from('compagnie_avions')
+        .select('*')
+        .in('id', Array.from(leasedInIds));
+      avionsLoues = loues || [];
+    }
+
     // Enrichir avec les types d'avion
-    const avionsEnrichis = await Promise.all((avions || []).map(async (avion) => {
+    const avionsEnrichis = await Promise.all(([...(avions || []), ...avionsLoues]).map(async (avion) => {
       let types_avion = null;
       if (avion.type_avion_id) {
         const { data: typeData } = await admin
@@ -30,7 +56,27 @@ export async function GET(request: Request) {
           .single();
         types_avion = typeData;
       }
-      return { ...avion, types_avion };
+      const location =
+        leasedOutIds.has(avion.id)
+          ? leasedOut.find((l) => l.avion_id === avion.id)
+          : leasedInIds.has(avion.id)
+            ? leasedIn.find((l) => l.avion_id === avion.id)
+            : null;
+      const location_status = leasedOutIds.has(avion.id)
+        ? 'leased_out'
+        : leasedInIds.has(avion.id)
+          ? 'leased_in'
+          : null;
+      return {
+        ...avion,
+        types_avion,
+        location_status,
+        location_id: location?.id || null,
+        location_loueur_compagnie_id: location?.loueur_compagnie_id || null,
+        location_locataire_compagnie_id: location?.locataire_compagnie_id || null,
+        location_prix_journalier: location?.prix_journalier || null,
+        location_pourcentage_revenu_loueur: location?.pourcentage_revenu_loueur || null,
+      };
     }));
 
     return NextResponse.json(avionsEnrichis);

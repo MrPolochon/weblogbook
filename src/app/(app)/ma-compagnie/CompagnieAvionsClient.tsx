@@ -20,6 +20,12 @@ type Avion = {
   detruit?: boolean;
   detruit_at?: string | null;
   detruit_raison?: string | null;
+  location_status?: 'leased_out' | 'leased_in' | null;
+  location_id?: string | null;
+  location_loueur_compagnie_id?: string | null;
+  location_locataire_compagnie_id?: string | null;
+  location_prix_journalier?: number | null;
+  location_pourcentage_revenu_loueur?: number | null;
 };
 
 interface Props {
@@ -299,9 +305,9 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
     return 'text-red-400';
   }
 
-  const avionsBloques = avions.filter(a => a.statut === 'bloque' && a.usure_percent === 0);
+  const avionsBloques = avions.filter(a => a.statut === 'bloque' && a.usure_percent === 0 && a.location_status !== 'leased_out');
   const avionsEnVol = avions.filter(a => a.statut === 'in_flight').length;
-  const avionsDisponibles = avions.filter(a => a.statut === 'ground' && a.usure_percent > 0).length;
+  const avionsDisponibles = avions.filter(a => a.statut === 'ground' && a.usure_percent > 0 && a.location_status !== 'leased_out').length;
 
   return (
     <div className="card">
@@ -393,9 +399,18 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                 const typeNom = Array.isArray(a.types_avion) ? a.types_avion[0]?.nom : a.types_avion?.nom;
                 const isEditing = editingId === a.id;
                 const maintenancePrete = a.statut === 'maintenance' && a.maintenance_fin_at && new Date(a.maintenance_fin_at) <= new Date();
+                const isLeasedOut = a.location_status === 'leased_out';
+                const isLeasedIn = a.location_status === 'leased_in';
+                const rowClass = a.detruit
+                  ? 'bg-red-950/20 opacity-70'
+                  : isLeasedOut
+                    ? 'bg-slate-900/40 opacity-60'
+                    : isLeasedIn
+                      ? 'bg-pink-500/10'
+                      : '';
                 
                 return (
-                  <tr key={a.id} className={`border-b border-slate-700/50 last:border-0 ${a.detruit ? 'bg-red-950/20 opacity-70' : ''}`}>
+                  <tr key={a.id} className={`border-b border-slate-700/50 last:border-0 ${rowClass}`}>
                     <td className="py-2.5 pr-4">
                       {isEditing ? (
                         <input
@@ -411,6 +426,8 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                           <span className={`font-mono font-medium ${a.detruit ? 'text-red-400 line-through' : 'text-slate-200'}`}>
                             {a.immatriculation}
                           </span>
+                          {isLeasedOut && <span className="text-xs text-slate-400 ml-2">Loué</span>}
+                          {isLeasedIn && <span className="text-xs text-pink-400 ml-2">Loué</span>}
                         </div>
                       )}
                     </td>
@@ -438,6 +455,8 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                     </td>
                     <td className="py-2.5 pr-4">
                       <span className={statut.className}>{statut.text}</span>
+                      {isLeasedOut && <span className="block text-xs text-slate-400">En location</span>}
+                      {isLeasedIn && <span className="block text-xs text-pink-400">Loué par la compagnie</span>}
                     </td>
                     {isPdg && (
                       <td className="py-2.5">
@@ -494,7 +513,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                 </div>
                               ) : (
                                 <>
-                              {a.statut === 'ground' && (
+                              {a.statut === 'ground' && !isLeasedOut && !isLeasedIn && (
                                 <button
                                   type="button"
                                   onClick={() => startEdit(a)}
@@ -504,7 +523,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   <Edit2 className="h-3.5 w-3.5" />
                                 </button>
                               )}
-                              {a.statut === 'ground' && !a.detruit && (
+                              {a.statut === 'ground' && !a.detruit && !isLeasedOut && !isLeasedIn && (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -517,8 +536,11 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   <Handshake className="h-3.5 w-3.5" />
                                 </button>
                               )}
+                              {isLeasedOut && (
+                                <span className="text-xs text-slate-400">Géré par locataire</span>
+                              )}
                               {/* Avion bloqué ou au sol avec 0% d'usure = nécessite réparation */}
-                              {(a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && (
+                              {(a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && !isLeasedOut && (
                                 <>
                                   <button
                                     type="button"
@@ -541,7 +563,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   </button>
                                 </>
                               )}
-                              {maintenancePrete && (
+                              {maintenancePrete && !isLeasedOut && (
                                 <button
                                   type="button"
                                   onClick={() => handleVerifierMaintenance(a.id)}
@@ -555,7 +577,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                               {a.statut === 'maintenance' && a.maintenance_fin_at && !maintenancePrete && (
                                 <span className="text-xs text-slate-500">En réparation...</span>
                               )}
-                              {a.statut === 'ground' && a.usure_percent < 100 && isAtHub && (
+                              {a.statut === 'ground' && a.usure_percent < 100 && isAtHub && !isLeasedOut && (
                                 <button
                                   type="button"
                                   onClick={() => handleReparer(a.id)}
