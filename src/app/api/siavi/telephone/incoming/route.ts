@@ -14,6 +14,22 @@ export async function GET() {
 
     const admin = createAdminClient();
 
+    // Nettoyer les anciens appels expirés de l'utilisateur (ringing > 30s, connected > 10min)
+    const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
+    const tenMinutesAgo = new Date(Date.now() - 600000).toISOString();
+    
+    await admin.from('atc_calls')
+      .update({ status: 'ended', ended_at: new Date().toISOString() })
+      .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
+      .eq('status', 'ringing')
+      .lt('started_at', thirtySecondsAgo);
+    
+    await admin.from('atc_calls')
+      .update({ status: 'ended', ended_at: new Date().toISOString() })
+      .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
+      .eq('status', 'connected')
+      .lt('started_at', tenMinutesAgo);
+
     // Chercher un appel entrant pour cet AFIS (appel direct)
     const { data: call } = await admin.from('atc_calls')
       .select('*')

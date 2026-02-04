@@ -79,8 +79,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       osc1.type = 'sawtooth';
       osc2.type = 'square';
       
-      // Volume bas (0.1)
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      // Volume très bas (0.05)
+      gain.gain.setValueAtTime(0.05, ctx.currentTime);
       
       osc1.connect(gain);
       osc2.connect(gain);
