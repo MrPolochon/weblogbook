@@ -313,6 +313,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
   const avionsBloques = avions.filter(a => a.statut === 'bloque' && a.usure_percent === 0 && a.location_status !== 'leased_out');
   const avionsEnVol = avions.filter(a => a.statut === 'in_flight').length;
   const avionsDisponibles = avions.filter(a => a.statut === 'ground' && a.usure_percent > 0 && a.location_status !== 'leased_out').length;
+  const hasLeasedIn = avions.some((a) => a.location_status === 'leased_in');
 
   return (
     <div className="card">
@@ -394,7 +395,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                   </span>
                 </th>
                 <th className="pb-2 pr-4">Statut</th>
-                {isPdg && <th className="pb-2">Actions</th>}
+                {(isPdg || hasLeasedIn) && <th className="pb-2">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -416,7 +417,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
 
                 if (isLeasedIn || isLeasedOut) {
                   // #region agent log
-                  fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CompagnieAvionsClient:row',message:'render_location_row',data:{compagnieId,isPdg,immatriculation:a.immatriculation,location_status:a.location_status,statut:a.statut},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+                  fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CompagnieAvionsClient:row',message:'render_location_row',data:{compagnieId,isPdg,immatriculation:a.immatriculation,location_status:a.location_status,statut:a.statut,showActions:isPdg||isLeasedIn},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
                   // #endregion
                 }
                 
@@ -469,7 +470,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                       {isLeasedOut && <span className="block text-xs text-slate-400">En location</span>}
                       {isLeasedIn && <span className="block text-xs text-pink-400">Loué par la compagnie</span>}
                     </td>
-                    {isPdg && (
+                    {(isPdg || isLeasedIn) && (
                       <td className="py-2.5">
                         <div className="flex items-center gap-2">
                           {isEditing ? (
@@ -550,13 +551,16 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                               {isLeasedOut && (
                                 <span className="text-xs text-slate-400">Géré par locataire</span>
                               )}
+                              {!isPdg && isLeasedIn && (
+                                <span className="text-xs text-pink-400">Actions PDG locataire</span>
+                              )}
                               {/* Avion bloqué ou au sol avec 0% d'usure = nécessite réparation */}
                               {(a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && !isLeasedOut && (
                                 <>
                                   <button
                                     type="button"
                                     onClick={() => handleAffreterTechniciens(a.id)}
-                                    disabled={actionId === a.id}
+                                    disabled={actionId === a.id || (!isPdg && isLeasedIn)}
                                     className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
                                   title={`Réparer sur place - Coût: ${COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$ (délai: ${TEMPS_MAINTENANCE_MIN}-${TEMPS_MAINTENANCE_MAX} min)`}
                                   >
@@ -566,7 +570,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   <button
                                     type="button"
                                     onClick={() => handleDebloquer(a.id)}
-                                    disabled={actionId === a.id}
+                                    disabled={actionId === a.id || (!isPdg && isLeasedIn)}
                                     className="text-xs text-amber-400 hover:underline disabled:opacity-50"
                                     title={`Débloquer pour vol ferry - Coût: ${COUT_VOL_FERRY.toLocaleString('fr-FR')} F$`}
                                   >
@@ -578,7 +582,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                 <button
                                   type="button"
                                   onClick={() => handleVerifierMaintenance(a.id)}
-                                  disabled={actionId === a.id}
+                                  disabled={actionId === a.id || (!isPdg && isLeasedIn)}
                                   className="text-xs text-emerald-400 hover:underline disabled:opacity-50 animate-pulse font-semibold"
                                   title="Terminer la maintenance"
                                 >
@@ -592,7 +596,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                 <button
                                   type="button"
                                   onClick={() => handleReparer(a.id)}
-                                  disabled={actionId === a.id}
+                                  disabled={actionId === a.id || (!isPdg && isLeasedIn)}
                                   className="text-xs text-sky-400 hover:underline disabled:opacity-50 inline-flex items-center gap-1"
                                   title="Réparer au hub (gratuit)"
                                 >
