@@ -28,6 +28,9 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:33',message:'handleClickOutside',data:{piloteMenuOpen,hasMenuRef:!!menuRef.current,targetTag:(event.target as HTMLElement | null)?.tagName || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setPiloteMenuOpen(false);
       }
@@ -74,6 +77,14 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setPiloteMenuOpen(!piloteMenuOpen)}
+              // #region agent log
+              onMouseDown={() => {
+                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:76',message:'pilotMenuMouseDown',data:{piloteMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+              }}
+              // #endregion
+              onClickCapture={() => {
+                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:79',message:'pilotMenuClickCapture',data:{piloteMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+              }}
               className={cn(
                 'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
                 isPiloteActive
