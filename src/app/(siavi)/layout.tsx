@@ -23,7 +23,7 @@ export default async function SiaviLayout({
     .single();
 
   const isAdmin = profile?.role === 'admin';
-  const canAccessSiavi = isAdmin || Boolean(profile?.siavi);
+  const canAccessSiavi = isAdmin || profile?.role === 'siavi' || Boolean(profile?.siavi);
   if (!canAccessSiavi) redirect('/logbook');
 
   const admin = createAdminClient();

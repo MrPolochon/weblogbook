@@ -52,8 +52,8 @@ export default function LoginPage() {
       const { data: profile } = await supabase.from('profiles').select('role, atc, siavi').eq('id', uid).single();
       
       if (mode === 'siavi') {
-        // Les admins ont toujours accès à SIAVI
-        const canSiavi = profile?.role === 'admin' || Boolean(profile?.siavi);
+        // Les admins ont toujours accès à SIAVI, sinon vérifier siavi ou role siavi
+        const canSiavi = profile?.role === 'admin' || profile?.role === 'siavi' || Boolean(profile?.siavi);
         if (!canSiavi) throw new Error('Ce compte n\'a pas accès à l\'espace SIAVI.');
         router.replace('/siavi');
       } else if (mode === 'atc') {
@@ -61,7 +61,9 @@ export default function LoginPage() {
         if (!canAtc) throw new Error('Ce compte n\'a pas accès à l\'espace ATC.');
         router.replace('/atc');
       } else {
+        // Comptes exclusivement ATC ou SIAVI ne peuvent pas accéder à l'espace pilote
         if (profile?.role === 'atc') throw new Error('Ce compte est uniquement ATC. Sélectionnez "Contrôleur ATC" pour vous connecter.');
+        if (profile?.role === 'siavi') throw new Error('Ce compte est uniquement SIAVI. Sélectionnez "SIAVI" pour vous connecter.');
         router.replace('/logbook');
       }
       router.refresh();

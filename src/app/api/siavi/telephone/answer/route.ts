@@ -13,13 +13,41 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
 
-    const { error } = await admin.from('atc_calls')
-      .update({ status: 'connected', connected_at: new Date().toISOString() })
+    // Récupérer l'appel pour vérifier si c'est un appel d'urgence
+    const { data: call } = await admin.from('atc_calls')
+      .select('id, is_emergency')
       .eq('id', callId)
       .eq('to_user_id', user.id)
-      .eq('status', 'ringing');
+      .eq('status', 'ringing')
+      .single();
+
+    if (!call) {
+      return NextResponse.json({ error: 'Appel non trouvé' }, { status: 404 });
+    }
+
+    const { error } = await admin.from('atc_calls')
+      .update({ status: 'connected', connected_at: new Date().toISOString() })
+      .eq('id', callId);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    // Si c'est un appel d'urgence (911/112), vérifier si l'agent est pompier seul et le payer
+    if (call.is_emergency) {
+      const { data: session } = await admin.from('afis_sessions')
+        .select('aeroport, est_afis')
+        .eq('user_id', user.id)
+        .single();
+
+      // Payer seulement si pompier seul (pas AFIS)
+      if (session && !session.est_afis) {
+        await admin.rpc('pay_siavi_intervention', {
+          p_user_id: user.id,
+          p_call_id: callId,
+          p_aeroport: session.aeroport
+        });
+      }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('SIAVI answer:', err);

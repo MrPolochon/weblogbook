@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText, Mail, Moon, Sun, ChevronDown, Menu, Flame } from 'lucide-react';
+import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText, Mail, Moon, Sun, ChevronDown, Menu, Flame, Landmark } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useRef } from 'react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
@@ -110,6 +110,7 @@ export default function AtcNavBar({
     { href: '/atc', label: 'Tableau de bord', icon: Radio, badge: 0 },
     { href: '/atc/documents', label: 'Documents', icon: FileText, badge: 0 },
     { href: '/atc/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount },
+    { href: '/atc/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0 },
   ];
 
   const isAtcMenuActive = pathname === '/atc' || pathname.startsWith('/atc/documents') || pathname.startsWith('/atc/messagerie');

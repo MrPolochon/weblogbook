@@ -32,7 +32,7 @@ export default async function SiaviPlanPage({ params }: { params: Promise<{ id: 
     supabase.from('afis_sessions').select('id, est_afis').eq('user_id', user.id).single(),
   ]);
 
-  const canSiavi = profile?.role === 'admin' || Boolean(profile?.siavi);
+  const canSiavi = profile?.role === 'admin' || profile?.role === 'siavi' || Boolean(profile?.siavi);
   if (!canSiavi) redirect('/logbook');
 
   // Charger le plan de vol

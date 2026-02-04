@@ -187,5 +187,136 @@ CREATE TRIGGER afis_session_delete_temps
   FOR EACH ROW
   EXECUTE FUNCTION public.update_siavi_temps_total();
 
--- 15) Message de confirmation
+-- 15) Système de rémunération SIAVI
+-- - Pompier seul : 15 000 F$ par appel d'urgence (911/112) répondu
+-- - Agent AFIS : Perçoit les taxes aéroportuaires comme les ATC
+
+-- Table pour tracker les appels d'urgence répondus (pour paiement pompiers)
+CREATE TABLE IF NOT EXISTS public.siavi_interventions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  call_id UUID REFERENCES public.atc_calls(id) ON DELETE SET NULL,
+  aeroport TEXT NOT NULL,
+  type_intervention TEXT NOT NULL DEFAULT 'urgence_911', -- urgence_911, urgence_112
+  montant INT NOT NULL DEFAULT 15000,
+  paid BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_siavi_interventions_user ON public.siavi_interventions(user_id);
+CREATE INDEX IF NOT EXISTS idx_siavi_interventions_paid ON public.siavi_interventions(paid);
+
+ALTER TABLE public.siavi_interventions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "siavi_interventions_select" ON public.siavi_interventions;
+CREATE POLICY "siavi_interventions_select" ON public.siavi_interventions 
+  FOR SELECT TO authenticated USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "siavi_interventions_insert" ON public.siavi_interventions;
+CREATE POLICY "siavi_interventions_insert" ON public.siavi_interventions 
+  FOR INSERT TO authenticated WITH CHECK (true);
+
+COMMENT ON TABLE public.siavi_interventions IS 'Interventions d''urgence des pompiers SIAVI (15K F$ par appel 911/112 répondu)';
+
+-- 16) Fonction pour payer l'intervention pompier (appelée quand un appel 911/112 est répondu)
+CREATE OR REPLACE FUNCTION public.pay_siavi_intervention(
+  p_user_id UUID,
+  p_call_id UUID,
+  p_aeroport TEXT
+)
+RETURNS VOID AS $$
+DECLARE
+  v_identifiant TEXT;
+  v_compte_id UUID;
+BEGIN
+  -- Récupérer l'identifiant de l'agent
+  SELECT identifiant INTO v_identifiant FROM public.profiles WHERE id = p_user_id;
+  
+  -- Récupérer le compte Felitz de l'agent
+  SELECT id INTO v_compte_id FROM public.felitz_comptes 
+  WHERE proprietaire_id = p_user_id AND type = 'personnel';
+  
+  IF v_compte_id IS NULL THEN
+    RETURN; -- Pas de compte, pas de paiement
+  END IF;
+  
+  -- Enregistrer l'intervention
+  INSERT INTO public.siavi_interventions (user_id, call_id, aeroport, montant)
+  VALUES (p_user_id, p_call_id, p_aeroport, 15000);
+  
+  -- Créditer le compte
+  UPDATE public.felitz_comptes SET solde = solde + 15000 WHERE id = v_compte_id;
+  
+  -- Enregistrer la transaction
+  INSERT INTO public.felitz_transactions (compte_id, type, montant, libelle, description)
+  VALUES (v_compte_id, 'credit', 15000, 'Intervention urgence SIAVI', 
+          'Prime d''intervention urgence 911/112 - ' || p_aeroport);
+  
+  -- Envoyer un message/chèque
+  INSERT INTO public.messages (
+    destinataire_id, titre, contenu, type_message, 
+    cheque_montant, cheque_libelle
+  ) VALUES (
+    p_user_id,
+    'Prime d''intervention urgence',
+    'Félicitations ! Vous avez répondu à un appel d''urgence (911/112) sur ' || p_aeroport || '. Votre prime de 15 000 F$ a été créditée sur votre compte.',
+    'cheque_siavi_intervention',
+    15000,
+    'Prime intervention urgence SIAVI'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 17) Fonction pour payer les taxes AFIS (appelée quand un vol est clôturé sur un aéroport avec AFIS)
+CREATE OR REPLACE FUNCTION public.pay_siavi_taxes(
+  p_afis_user_id UUID,
+  p_vol_id UUID,
+  p_aeroport TEXT,
+  p_montant INT
+)
+RETURNS VOID AS $$
+DECLARE
+  v_identifiant TEXT;
+  v_compte_id UUID;
+  v_numero_vol TEXT;
+BEGIN
+  -- Récupérer l'identifiant de l'agent
+  SELECT identifiant INTO v_identifiant FROM public.profiles WHERE id = p_afis_user_id;
+  
+  -- Récupérer le numéro de vol
+  SELECT numero_vol INTO v_numero_vol FROM public.plans_vol WHERE id = p_vol_id;
+  
+  -- Récupérer le compte Felitz de l'agent
+  SELECT id INTO v_compte_id FROM public.felitz_comptes 
+  WHERE proprietaire_id = p_afis_user_id AND type = 'personnel';
+  
+  IF v_compte_id IS NULL OR p_montant <= 0 THEN
+    RETURN;
+  END IF;
+  
+  -- Créditer le compte
+  UPDATE public.felitz_comptes SET solde = solde + p_montant WHERE id = v_compte_id;
+  
+  -- Enregistrer la transaction
+  INSERT INTO public.felitz_transactions (compte_id, type, montant, libelle, description)
+  VALUES (v_compte_id, 'credit', p_montant, 'Taxes aéroportuaires AFIS', 
+          'Taxes vol ' || COALESCE(v_numero_vol, 'N/A') || ' - ' || p_aeroport);
+  
+  -- Envoyer un message/chèque
+  INSERT INTO public.messages (
+    destinataire_id, titre, contenu, type_message, 
+    cheque_montant, cheque_libelle, cheque_numero_vol
+  ) VALUES (
+    p_afis_user_id,
+    'Chèque taxes aéroportuaires AFIS',
+    'En tant qu''agent AFIS de service sur ' || p_aeroport || ', vous percevez les taxes aéroportuaires du vol ' || COALESCE(v_numero_vol, 'N/A') || '.',
+    'cheque_siavi_taxes',
+    p_montant,
+    'Taxes aéroportuaires AFIS',
+    v_numero_vol
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 18) Message de confirmation
 DO $$ BEGIN RAISE NOTICE '✅ Système SIAVI ajouté avec succès!'; END $$;

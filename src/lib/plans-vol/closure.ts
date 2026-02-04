@@ -22,6 +22,7 @@ type PlanPaiement = {
   location_loueur_compagnie_id?: string | null;
   location_pourcentage_revenu_loueur?: number | null;
   compagnie_avion_id?: string | null;
+  current_afis_user_id?: string | null;
 };
 
 /**
@@ -52,6 +53,51 @@ function calculerCoefficientPonctualite(
   const coeffArrondi = coeff < 0.01 ? 0 : coeff;
 
   return Math.max(0, Math.min(1, coeffArrondi));
+}
+
+/**
+ * Distribue les taxes à l'AFIS qui surveille le vol (si applicable).
+ * L'AFIS reçoit ses taxes immédiatement via un chèque.
+ */
+async function distribuerTaxesAFIS(
+  admin: AdminClient,
+  planVolId: string,
+  afisUserId: string,
+  taxesTotales: number,
+  aeroportArrivee: string,
+  numeroVol: string
+): Promise<boolean> {
+  if (taxesTotales <= 0) return false;
+
+  // Vérifier si l'AFIS est en mode AFIS (pas pompier seul)
+  const { data: afisSession } = await admin.from('afis_sessions')
+    .select('id, est_afis, aeroport')
+    .eq('user_id', afisUserId)
+    .single();
+
+  // Les pompiers seuls ne reçoivent pas de taxes, seulement les primes d'intervention
+  if (!afisSession || !afisSession.est_afis) {
+    return false;
+  }
+
+  // Récupérer le compte de l'AFIS
+  const { data: compteAfis } = await admin.from('felitz_comptes')
+    .select('id')
+    .eq('proprietaire_id', afisUserId)
+    .eq('type', 'personnel')
+    .single();
+
+  if (!compteAfis) return false;
+
+  // Envoyer le chèque via la fonction SQL
+  await admin.rpc('pay_siavi_taxes', {
+    p_afis_user_id: afisUserId,
+    p_vol_id: planVolId,
+    p_aeroport: aeroportArrivee,
+    p_montant: taxesTotales
+  });
+
+  return true;
 }
 
 /**
@@ -199,9 +245,11 @@ export async function envoyerChequesVol(
   const montantBonus = Math.round(revenuAvecCoef * bonusCargaison / 100);
   const revenuEffectif = revenuAvecCoef + montantBonus;
 
-  // Distribuer les taxes aux ATC
+  // Distribuer les taxes aux ATC et/ou AFIS
   const numeroVol = plan.numero_vol || 'N/A';
   const baseTaxes = coefficient === 0 ? plan.revenue_brut : revenuEffectif;
+  
+  // D'abord distribuer aux ATC
   const { taxesTotales } = await distribuerTaxesATC(
     admin,
     plan.id,
@@ -210,6 +258,27 @@ export async function envoyerChequesVol(
     plan.type_vol || 'IFR',
     numeroVol
   );
+
+  // Si un AFIS surveille ce vol et qu'aucun ATC n'a perçu les taxes, les donner à l'AFIS
+  if (plan.current_afis_user_id && taxesTotales > 0) {
+    // Vérifier si des ATC ont contrôlé ce vol
+    const { data: controles } = await admin.from('atc_plans_controles')
+      .select('id')
+      .eq('plan_vol_id', plan.id)
+      .limit(1);
+    
+    // Si aucun ATC n'a contrôlé, l'AFIS reçoit les taxes
+    if (!controles || controles.length === 0) {
+      await distribuerTaxesAFIS(
+        admin,
+        plan.id,
+        plan.current_afis_user_id,
+        taxesTotales,
+        plan.aeroport_arrivee || '',
+        numeroVol
+      );
+    }
+  }
 
   // Revenu après taxes
   const revenuApresTaxes = revenuEffectif - taxesTotales;
