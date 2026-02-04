@@ -93,6 +93,15 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
   const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
   const isAdmin = profile?.role === 'admin';
   const isHolder = plan.current_holder_user_id === user.id;
+  let holderSessionActive = false;
+  if (plan.current_holder_user_id) {
+    const { data: holderSession } = await admin.from('atc_sessions')
+      .select('id')
+      .eq('user_id', plan.current_holder_user_id)
+      .maybeSingle();
+    holderSessionActive = Boolean(holderSession);
+  }
+  const planOrphelin = ['depose', 'en_attente'].includes(plan.statut) && (!plan.current_holder_user_id || !holderSessionActive);
   const showConfirmerCloture = plan.statut === 'en_attente_cloture' && (isHolder || isAdmin);
   const showAccepterRefuser = plan.statut === 'en_attente' || plan.statut === 'depose';
   const showInstructionsTransfer = (plan.statut === 'accepte' || plan.statut === 'en_cours') && (isHolder || isAdmin) && !plan.automonitoring && !plan.pending_transfer_aeroport;
@@ -351,6 +360,23 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
           <p className="text-slate-600 text-sm mb-4">Ce vol n&apos;est actuellement pas contrôlé. Vous pouvez le prendre en charge.</p>
           <div className="flex items-center gap-3">
             <PrendrePlanButton planId={plan.id} aeroport={atcSession!.aeroport} position={atcSession!.position} />
+            <Link href="/atc" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+              Retour
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Plan orphelin */}
+      {planOrphelin && atcSession && (
+        <div className="card border-amber-300 bg-amber-50">
+          <div className="flex items-center gap-3 mb-3">
+            <Radar className="h-5 w-5 text-amber-600" />
+            <h3 className="font-semibold text-slate-900">Plan orphelin</h3>
+          </div>
+          <p className="text-slate-600 text-sm mb-4">Ce plan n&apos;est plus rattaché à un ATC en service. Vous pouvez le reprendre.</p>
+          <div className="flex items-center gap-3">
+            <PrendrePlanButton planId={plan.id} aeroport={atcSession.aeroport} position={atcSession.position} />
             <Link href="/atc" className="text-sm font-medium text-slate-600 hover:text-slate-900">
               Retour
             </Link>

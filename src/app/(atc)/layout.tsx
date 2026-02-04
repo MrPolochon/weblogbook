@@ -46,6 +46,7 @@ export default async function AtcLayout({
     .eq('lu', false);
 
   let plansAuto: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
+  let plansOrphelins: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansAAccepter: { id: string; numero_vol: string }[] = [];
   let plansAccepter: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansCloture: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
@@ -58,16 +59,20 @@ export default async function AtcLayout({
     // Si un plan n'a pas d'ATC assigné, le pilote peut le clôturer seul.
     // Chaque ATC ne voit que les plans qu'IL contrôle (current_holder_user_id === user.id).
     
-    const [{ data: dataAuto }, { data: dataAccept }, { data: dataPlansAccepter }, { data: dataCloture }] = await Promise.all([
+    const [{ data: dataAuto }, { data: dataAccept }, { data: dataPlansAccepter }, { data: dataCloture }, { data: dataOrphelinsRaw }, { data: sessionsActive }] = await Promise.all([
       admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('automonitoring', true).in('statut', ['accepte', 'en_cours']),
       admin.from('plans_vol').select('id, numero_vol').eq('pending_transfer_aeroport', session.aeroport).eq('pending_transfer_position', session.position),
       admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).in('statut', ['depose', 'en_attente']),
       admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).eq('statut', 'en_attente_cloture'),
+      admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee, current_holder_user_id').in('statut', ['depose', 'en_attente']),
+      admin.from('atc_sessions').select('user_id'),
     ]);
     plansAuto = dataAuto ?? [];
     plansAAccepter = dataAccept ?? [];
     plansAccepter = dataPlansAccepter ?? [];
     plansCloture = dataCloture ?? [];
+    const sessionsActives = new Set((sessionsActive ?? []).map((s) => s.user_id));
+    plansOrphelins = (dataOrphelinsRaw ?? []).filter((p) => !p.current_holder_user_id || !sessionsActives.has(p.current_holder_user_id));
   }
 
   return (
@@ -83,8 +88,26 @@ export default async function AtcLayout({
               {plansAuto.length === 0 ? (
                 <span className="text-slate-600 text-sm px-2">Aucun</span>
               ) : (
-                <ul className="space-y-0.5">
+                <ul className="space-y-0.5 mb-3">
                   {plansAuto.map((p) => (
+                    <li key={p.id}>
+                      <Link
+                        href={`/atc/plan/${p.id}`}
+                        className="block truncate text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-200 rounded px-2 py-1"
+                        title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
+                      >
+                        {p.numero_vol} {p.aeroport_depart}→{p.aeroport_arrivee}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-700 px-2 mb-1.5">Plans orphelins</p>
+              {plansOrphelins.length === 0 ? (
+                <span className="text-slate-600 text-sm px-2">Aucun</span>
+              ) : (
+                <ul className="space-y-0.5">
+                  {plansOrphelins.map((p) => (
                     <li key={p.id}>
                       <Link
                         href={`/atc/plan/${p.id}`}

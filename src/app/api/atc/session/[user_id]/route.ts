@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { finaliserCloturePlan } from '@/lib/plans-vol/closure';
 
 /**
  * DELETE - Déconnecter de force un ATC (admin uniquement)
@@ -45,6 +46,42 @@ export async function DELETE(
       const prev = (prof?.atc_temps_total_minutes ?? 0) | 0;
       await admin.from('profiles').update({ atc_temps_total_minutes: prev + durationMinutes }).eq('id', targetUserId);
     }
+
+    // Sécuriser les plans contrôlés par cet ATC
+    const { data: plansSousControle } = await admin
+      .from('plans_vol')
+      .select('id, statut, pilote_id, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, nature_transport, type_cargaison, compagnie_avion_id, location_loueur_compagnie_id, location_pourcentage_revenu_loueur')
+      .eq('current_holder_user_id', targetUserId)
+      .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture']);
+
+    const plansACloturer = (plansSousControle || []).filter((p) => p.statut === 'en_attente_cloture');
+    for (const plan of plansACloturer) {
+      const confirmationAt = new Date();
+      const result = await finaliserCloturePlan(admin, plan, confirmationAt);
+      if (!result.success) {
+        console.error('Cloture auto (deconnexion forcee) echouee:', result.error);
+      }
+    }
+
+    // Passer en autosurveillance les vols acceptés/en cours, libérer les autres en attente
+    await admin.from('plans_vol').update({
+      current_holder_user_id: null,
+      current_holder_position: null,
+      current_holder_aeroport: null,
+      pending_transfer_aeroport: null,
+      pending_transfer_position: null,
+      pending_transfer_at: null,
+      automonitoring: true,
+    }).eq('current_holder_user_id', targetUserId).in('statut', ['accepte', 'en_cours']);
+
+    await admin.from('plans_vol').update({
+      current_holder_user_id: null,
+      current_holder_position: null,
+      current_holder_aeroport: null,
+      pending_transfer_aeroport: null,
+      pending_transfer_position: null,
+      pending_transfer_at: null,
+    }).eq('current_holder_user_id', targetUserId).in('statut', ['depose', 'en_attente']);
 
     // Récupérer et traiter les taxes accumulées pendant cette session
     const { data: taxesPending } = await admin.from('atc_taxes_pending')

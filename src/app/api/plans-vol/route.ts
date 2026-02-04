@@ -4,8 +4,8 @@ import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES, genererTypeCargaison } from '@/lib/aeroports-ptfs';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol
-// AÉROPORT DE DÉPART : Delivery → Clairance → Ground → Tower → DEP → Center
-const ORDRE_DEPART = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'Center'] as const;
+// AÉROPORT DE DÉPART : Delivery → Clairance → Ground → Tower → DEP → APP → Center
+const ORDRE_DEPART = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
 
 // AÉROPORT D'ARRIVÉE (ordre inversé) : Delivery → Center → APP → DEP → Tower → Ground → Clairance
 const ORDRE_ARRIVEE = ['Delivery', 'Center', 'APP', 'DEP', 'Tower', 'Ground', 'Clairance'] as const;
@@ -386,6 +386,23 @@ export async function POST(request: Request) {
     }).select('id').single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    // Vérification de secours : si la session ATC a disparu juste après l'assignation
+    if (holder) {
+      const { data: sessionAtc } = await admin.from('atc_sessions')
+        .select('id')
+        .eq('user_id', holder.user_id)
+        .eq('aeroport', holder.aeroport)
+        .eq('position', holder.position)
+        .maybeSingle();
+      if (!sessionAtc) {
+        await admin.from('plans_vol').update({
+          current_holder_user_id: null,
+          current_holder_position: null,
+          current_holder_aeroport: null,
+        }).eq('id', data.id);
+      }
+    }
 
 
     // Enregistrer que cet ATC a contrôlé ce plan de vol

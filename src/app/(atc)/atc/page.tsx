@@ -22,11 +22,12 @@ export default async function AtcPage() {
   if (!user) return null;
 
   const admin = createAdminClient();
-  const [{ data: session }, { data: plansChezMoiRaw }, { data: sessionsEnServiceRaw }, { data: plansEnAttente }] = await Promise.all([
+  const [{ data: session }, { data: plansChezMoiRaw }, { data: sessionsEnServiceRaw }, { data: plansEnAttente }, { data: plansOrphelinsRaw }] = await Promise.all([
     supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single(),
     admin.from('plans_vol').select('*').eq('current_holder_user_id', user.id).is('pending_transfer_aeroport', null).in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente']).order('created_at', { ascending: false }),
     admin.from('atc_sessions').select('aeroport, position, user_id').order('aeroport').order('position'),
     admin.from('plans_vol').select('id').in('statut', ['depose', 'en_attente']),
+    admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee, current_holder_user_id').in('statut', ['depose', 'en_attente']).order('created_at', { ascending: false }).limit(20),
   ]);
 
   // Enrichir les plans avec les données pilote, compagnie et avion
@@ -74,6 +75,8 @@ export default async function AtcPage() {
 
   const totalAtcEnService = sessionsEnService?.length || 0;
   const totalPlansEnAttente = plansEnAttente?.length || 0;
+  const sessionsActives = new Set((sessionsEnServiceRaw ?? []).map((s) => s.user_id));
+  const plansOrphelins = (plansOrphelinsRaw ?? []).filter((p) => !p.current_holder_user_id || !sessionsActives.has(p.current_holder_user_id));
 
   return (
     <div className="space-y-6">
@@ -140,6 +143,39 @@ export default async function AtcPage() {
             </div>
             <HorsServiceButton />
           </div>
+        </div>
+      )}
+
+      {/* Plans orphelins */}
+      {session && (
+        <div className="card border-amber-300 bg-amber-50">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <Radar className="h-5 w-5 text-amber-600" />
+              Plans orphelins
+            </h2>
+            <span className="text-sm text-slate-600">{plansOrphelins.length} plan(s)</span>
+          </div>
+          {plansOrphelins.length === 0 ? (
+            <p className="text-slate-600 text-sm">Aucun plan orphelin détecté.</p>
+          ) : (
+            <div className="space-y-2">
+              {plansOrphelins.map((p) => (
+                <Link
+                  key={p.id}
+                  href={`/atc/plan/${p.id}`}
+                  className="flex items-center justify-between gap-3 p-3 rounded-lg bg-amber-100/40 border border-amber-200 hover:bg-amber-100 transition-colors"
+                  title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
+                >
+                  <div className="min-w-0">
+                    <p className="font-mono font-semibold text-slate-900">{p.numero_vol}</p>
+                    <p className="text-xs text-slate-600">{p.aeroport_depart} → {p.aeroport_arrivee}</p>
+                  </div>
+                  <span className="text-xs text-amber-700 font-medium">Ouvrir</span>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
