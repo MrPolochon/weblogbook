@@ -18,13 +18,21 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
 
-    // Nettoyer les appels expirés (ringing depuis plus de 60 secondes)
+    // Nettoyer les appels expirés de l'utilisateur (ringing > 60s ou connected > 10min)
     const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
-    await admin
-      .from('atc_calls')
+    const tenMinutesAgo = new Date(Date.now() - 600000).toISOString();
+    
+    await admin.from('atc_calls')
       .update({ status: 'ended', ended_at: new Date().toISOString() })
+      .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
       .eq('status', 'ringing')
       .lt('started_at', sixtySecondsAgo);
+    
+    await admin.from('atc_calls')
+      .update({ status: 'ended', ended_at: new Date().toISOString() })
+      .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
+      .eq('status', 'connected')
+      .lt('started_at', tenMinutesAgo);
 
     // Vérifier que l'utilisateur est en service
     const { data: session } = await admin

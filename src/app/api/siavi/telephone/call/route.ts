@@ -18,38 +18,57 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
 
-    // Vérifier pas d'appel en cours
+    // Nettoyer les appels expirés de l'utilisateur (ringing > 60s ou connected > 10min)
+    const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
+    const tenMinutesAgo = new Date(Date.now() - 600000).toISOString();
+    
+    await admin.from('atc_calls')
+      .update({ status: 'ended', ended_at: new Date().toISOString() })
+      .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
+      .eq('status', 'ringing')
+      .lt('started_at', sixtySecondsAgo);
+    
+    await admin.from('atc_calls')
+      .update({ status: 'ended', ended_at: new Date().toISOString() })
+      .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
+      .eq('status', 'connected')
+      .lt('started_at', tenMinutesAgo);
+
+    // Vérifier pas d'appel en cours (après nettoyage)
     const { data: existing } = await admin.from('atc_calls')
-      .select('id')
+      .select('id, status, started_at')
       .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
       .in('status', ['ringing', 'connected'])
       .maybeSingle();
 
-    if (existing) return NextResponse.json({ error: 'appel_en_cours' }, { status: 400 });
+    if (existing) {
+      console.log('Appel existant trouvé:', existing);
+      return NextResponse.json({ error: 'appel_en_cours' }, { status: 400 });
+    }
 
     let toUserId = null;
 
-    // Appel d'urgence 911/112 -> n'importe quel AFIS disponible
+    // Appel d'urgence 911/112 -> n'importe quel agent SIAVI disponible (AFIS OU pompier)
     if (is_emergency && to_position === 'AFIS') {
-      const { data: afisDisponible } = await admin.from('afis_sessions')
+      // Chercher n'importe quel agent SIAVI en service (est_afis true OU false = pompier)
+      const { data: agentDisponible } = await admin.from('afis_sessions')
         .select('user_id')
-        .eq('est_afis', true)
         .neq('user_id', user.id)
         .limit(1)
         .maybeSingle();
 
-      if (!afisDisponible) {
+      if (!agentDisponible) {
         return NextResponse.json({ error: 'no_afis' }, { status: 400 });
       }
 
-      // Créer l'appel d'urgence vers le premier AFIS disponible
+      // Créer l'appel d'urgence vers le premier agent disponible
       const { data: call, error } = await admin.from('atc_calls').insert({
         from_user_id: user.id,
         from_aeroport: session.aeroport,
         from_position: 'AFIS',
         to_aeroport: 'ANY',
         to_position: 'AFIS',
-        to_user_id: afisDisponible.user_id,
+        to_user_id: agentDisponible.user_id,
         number_dialed: numberDialed,
         status: 'ringing',
         is_emergency: true,

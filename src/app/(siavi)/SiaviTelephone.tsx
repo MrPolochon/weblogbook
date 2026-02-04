@@ -545,13 +545,26 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       console.log('SIAVI call response:', { ok: res.ok, status: res.status, data });
       
       if (!res.ok) {
+        // Si appel bloqué, réinitialiser automatiquement
+        if (data.error === 'appel_en_cours') {
+          console.log('Appel bloqué détecté, réinitialisation...');
+          await fetch('/api/siavi/telephone/hangup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reset: true }),
+          }).catch(console.error);
+          playMessage('Appel précédent réinitialisé. Réessayez.');
+          setCallState('idle');
+          setNumber('');
+          return;
+        }
+        
         const messages: Record<string, string> = {
           'offline': 'Aucun ATC en ligne sur cet aéroport',
           'position_offline': 'Cette position ATC n\'est pas en service',
           'no_afis': 'Aucun agent AFIS disponible',
           'rejected': 'Appel refusé',
           'non_en_service': 'Vous devez être en service pour appeler',
-          'appel_en_cours': 'Vous avez déjà un appel en cours',
           'cible_occupee': 'Votre correspondant est déjà en ligne',
           'erreur_creation': 'Erreur lors de la création de l\'appel',
         };

@@ -27,25 +27,27 @@ export async function GET() {
       return NextResponse.json({ call });
     }
 
-    // Chercher aussi les appels d'urgence (911/112) que n'importe quel AFIS/pompier peut prendre
+    // Chercher aussi les appels d'urgence (911/112) que n'importe quel agent SIAVI (AFIS ou pompier) peut prendre
+    // On cherche tous les appels d'urgence en attente, même s'ils sont assignés à quelqu'un d'autre
     const { data: emergencyCall } = await admin.from('atc_calls')
       .select('*')
       .eq('is_emergency', true)
-      .eq('to_position', 'AFIS')
       .eq('status', 'ringing')
       .neq('from_user_id', user.id) // Ne pas voir ses propres appels
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: true }) // Le plus ancien d'abord
       .limit(1)
       .maybeSingle();
 
     if (emergencyCall) {
-      // Réassigner l'appel d'urgence à cet AFIS qui le prend
-      await admin.from('atc_calls')
+      // Réassigner l'appel d'urgence à cet agent qui le prend (premier arrivé, premier servi)
+      const { error: updateError } = await admin.from('atc_calls')
         .update({ to_user_id: user.id })
         .eq('id', emergencyCall.id)
         .eq('status', 'ringing'); // Seulement si toujours en attente
       
-      return NextResponse.json({ call: { ...emergencyCall, to_user_id: user.id } });
+      if (!updateError) {
+        return NextResponse.json({ call: { ...emergencyCall, to_user_id: user.id } });
+      }
     }
 
     return NextResponse.json({ call: null });

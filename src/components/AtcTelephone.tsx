@@ -462,12 +462,25 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       const data = await res.json();
       
       if (!res.ok) {
+        // Si appel bloqué, réinitialiser automatiquement
+        if (data.error === 'appel_en_cours') {
+          console.log('Appel bloqué détecté, réinitialisation...');
+          await fetch('/api/atc/telephone/hangup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reset: true }),
+          }).catch(console.error);
+          playMessage('Appel précédent réinitialisé. Réessayez.');
+          setCallState('idle');
+          setNumber('');
+          return;
+        }
+        
         const messages: Record<string, string> = {
           'offline': 'Votre correspondant est hors ligne',
           'no_afis': 'Aucun agent AFIS disponible',
           'rejected': 'Appel refusé',
           'non_en_service': 'Vous devez être en service pour appeler',
-          'appel_en_cours': 'Vous avez déjà un appel en cours',
           'cible_occupee': 'Votre correspondant est déjà en ligne',
           'erreur_creation': 'Impossible de créer l\'appel',
         };
