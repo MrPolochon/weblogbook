@@ -12,8 +12,9 @@ export async function POST(request: Request) {
     if (!session) return NextResponse.json({ error: 'non_en_service' }, { status: 400 });
 
     const body = await request.json();
-    const { to_aeroport, to_position, is_emergency } = body;
-    console.log('SIAVI call request:', { to_aeroport, to_position, is_emergency, from_aeroport: session.aeroport });
+    const { to_aeroport, to_position, is_emergency, number } = body;
+    const numberDialed = number || `${to_aeroport}-${to_position}`;
+    console.log('SIAVI call request:', { to_aeroport, to_position, is_emergency, from_aeroport: session.aeroport, numberDialed });
 
     const admin = createAdminClient();
 
@@ -41,19 +42,23 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'no_afis' }, { status: 400 });
       }
 
-      // Créer l'appel d'urgence (sera assigné au premier AFIS qui répond)
+      // Créer l'appel d'urgence vers le premier AFIS disponible
       const { data: call, error } = await admin.from('atc_calls').insert({
         from_user_id: user.id,
         from_aeroport: session.aeroport,
         from_position: 'AFIS',
         to_aeroport: 'ANY',
         to_position: 'AFIS',
-        to_user_id: null, // Sera assigné au premier qui répond
+        to_user_id: afisDisponible.user_id,
+        number_dialed: numberDialed,
         status: 'ringing',
         is_emergency: true,
       }).select().single();
 
-      if (error) return NextResponse.json({ error: 'erreur_creation' }, { status: 500 });
+      if (error) {
+        console.error('Erreur création appel urgence:', error);
+        return NextResponse.json({ error: 'erreur_creation', details: error.message }, { status: 500 });
+      }
       return NextResponse.json({ call });
     }
 
@@ -123,11 +128,15 @@ export async function POST(request: Request) {
       to_aeroport,
       to_position,
       to_user_id: toUserId,
+      number_dialed: numberDialed,
       status: 'ringing',
       is_emergency: false,
     }).select().single();
 
-    if (error) return NextResponse.json({ error: 'erreur_creation' }, { status: 500 });
+    if (error) {
+      console.error('Erreur création appel:', error);
+      return NextResponse.json({ error: 'erreur_creation', details: error.message }, { status: 500 });
+    }
     return NextResponse.json({ call });
   } catch (err) {
     console.error('SIAVI call:', err);
