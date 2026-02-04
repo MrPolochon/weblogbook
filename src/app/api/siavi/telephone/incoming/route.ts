@@ -14,7 +14,7 @@ export async function GET() {
 
     const admin = createAdminClient();
 
-    // Chercher un appel entrant pour cet AFIS
+    // Chercher un appel entrant pour cet AFIS (appel direct)
     const { data: call } = await admin.from('atc_calls')
       .select('*')
       .eq('to_user_id', user.id)
@@ -23,29 +23,32 @@ export async function GET() {
       .limit(1)
       .maybeSingle();
 
-    if (!call) {
-      // Chercher aussi les appels d'urgence (911/112) pour n'importe quel AFIS
-      const { data: emergencyCall } = await admin.from('atc_calls')
-        .select('*')
-        .eq('is_emergency', true)
-        .eq('to_position', 'AFIS')
-        .eq('status', 'ringing')
-        .is('to_user_id', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (emergencyCall) {
-        // Assigner l'appel d'urgence à cet AFIS
-        await admin.from('atc_calls')
-          .update({ to_user_id: user.id })
-          .eq('id', emergencyCall.id);
-        
-        return NextResponse.json({ call: { ...emergencyCall, to_user_id: user.id } });
-      }
+    if (call) {
+      return NextResponse.json({ call });
     }
 
-    return NextResponse.json({ call });
+    // Chercher aussi les appels d'urgence (911/112) que n'importe quel AFIS/pompier peut prendre
+    const { data: emergencyCall } = await admin.from('atc_calls')
+      .select('*')
+      .eq('is_emergency', true)
+      .eq('to_position', 'AFIS')
+      .eq('status', 'ringing')
+      .neq('from_user_id', user.id) // Ne pas voir ses propres appels
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (emergencyCall) {
+      // Réassigner l'appel d'urgence à cet AFIS qui le prend
+      await admin.from('atc_calls')
+        .update({ to_user_id: user.id })
+        .eq('id', emergencyCall.id)
+        .eq('status', 'ringing'); // Seulement si toujours en attente
+      
+      return NextResponse.json({ call: { ...emergencyCall, to_user_id: user.id } });
+    }
+
+    return NextResponse.json({ call: null });
   } catch (err) {
     console.error('SIAVI incoming:', err);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

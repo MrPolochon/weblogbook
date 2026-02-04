@@ -332,7 +332,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           if (message.fromUserId === userId) return;
 
           try {
+            console.log('ATC received signal:', message.type);
             if (message.type === 'offer' && !isInitiator) {
+              console.log('ATC processing offer, creating answer');
               await pc.setRemoteDescription(new RTCSessionDescription(message.data));
               const answer = await pc.createAnswer();
               await pc.setLocalDescription(answer);
@@ -341,26 +343,50 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
                 event: 'webrtc-signal',
                 payload: { type: 'answer', data: answer, fromUserId: userId },
               });
+              console.log('ATC answer sent');
             } else if (message.type === 'answer' && isInitiator) {
+              console.log('ATC received answer, setting remote description');
               await pc.setRemoteDescription(new RTCSessionDescription(message.data));
             } else if (message.type === 'ice-candidate' && message.data) {
               await pc.addIceCandidate(new RTCIceCandidate(message.data));
             }
           } catch (err) {
-            console.error('Erreur signal:', err);
+            console.error('ATC signal error:', err);
           }
         })
         .subscribe(async (status) => {
+          console.log('ATC WebRTC channel status:', status, 'isInitiator:', isInitiator);
           if (status === 'SUBSCRIBED' && isInitiator) {
-            // Délai réduit pour laisser l'autre partie rejoindre le channel
-            await new Promise(resolve => setTimeout(resolve, 300));
-            const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
-            await pc.setLocalDescription(offer);
-            await channel.send({
-              type: 'broadcast',
-              event: 'webrtc-signal',
-              payload: { type: 'offer', data: offer, fromUserId: userId },
-            });
+            // Attendre plus longtemps et réessayer l'offer plusieurs fois
+            const sendOffer = async () => {
+              const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+              await pc.setLocalDescription(offer);
+              console.log('ATC sending offer');
+              await channel.send({
+                type: 'broadcast',
+                event: 'webrtc-signal',
+                payload: { type: 'offer', data: offer, fromUserId: userId },
+              });
+            };
+            
+            // Envoyer l'offer après 500ms, puis réessayer 2 fois si pas de réponse
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await sendOffer();
+            
+            // Réessayer après 1.5s et 3s si toujours pas de connexion
+            setTimeout(async () => {
+              if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
+                console.log('ATC retrying offer (1)');
+                await sendOffer();
+              }
+            }, 1500);
+            
+            setTimeout(async () => {
+              if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
+                console.log('ATC retrying offer (2)');
+                await sendOffer();
+              }
+            }, 3000);
           }
         });
 

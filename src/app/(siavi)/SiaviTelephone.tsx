@@ -412,7 +412,9 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           if (message.fromUserId === userId) return;
 
           try {
+            console.log('SIAVI received signal:', message.type);
             if (message.type === 'offer' && !isInitiator) {
+              console.log('SIAVI processing offer, creating answer');
               await pc.setRemoteDescription(new RTCSessionDescription(message.data));
               const answer = await pc.createAnswer();
               await pc.setLocalDescription(answer);
@@ -421,25 +423,50 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
                 event: 'webrtc-signal',
                 payload: { type: 'answer', data: answer, fromUserId: userId },
               });
+              console.log('SIAVI answer sent');
             } else if (message.type === 'answer' && isInitiator) {
+              console.log('SIAVI received answer, setting remote description');
               await pc.setRemoteDescription(new RTCSessionDescription(message.data));
             } else if (message.type === 'ice-candidate' && message.data) {
               await pc.addIceCandidate(new RTCIceCandidate(message.data));
             }
           } catch (err) {
-            console.error('Erreur signal:', err);
+            console.error('SIAVI signal error:', err);
           }
         })
         .subscribe(async (status) => {
+          console.log('SIAVI WebRTC channel status:', status, 'isInitiator:', isInitiator);
           if (status === 'SUBSCRIBED' && isInitiator) {
-            await new Promise(resolve => setTimeout(resolve, 300));
-            const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
-            await pc.setLocalDescription(offer);
-            await channel.send({
-              type: 'broadcast',
-              event: 'webrtc-signal',
-              payload: { type: 'offer', data: offer, fromUserId: userId },
-            });
+            // Attendre plus longtemps et réessayer l'offer plusieurs fois
+            const sendOffer = async () => {
+              const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+              await pc.setLocalDescription(offer);
+              console.log('SIAVI sending offer');
+              await channel.send({
+                type: 'broadcast',
+                event: 'webrtc-signal',
+                payload: { type: 'offer', data: offer, fromUserId: userId },
+              });
+            };
+            
+            // Envoyer l'offer après 500ms, puis réessayer 2 fois si pas de réponse
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await sendOffer();
+            
+            // Réessayer après 1.5s et 3s si toujours pas de connexion
+            setTimeout(async () => {
+              if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
+                console.log('SIAVI retrying offer (1)');
+                await sendOffer();
+              }
+            }, 1500);
+            
+            setTimeout(async () => {
+              if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
+                console.log('SIAVI retrying offer (2)');
+                await sendOffer();
+              }
+            }, 3000);
           }
         });
 
