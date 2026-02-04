@@ -95,14 +95,14 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
           {/* Menu déroulant Espace Pilote */}
           <div className="relative" ref={menuRef}>
             <button
-              onClick={() => setPiloteMenuOpen(!piloteMenuOpen)}
               // #region agent log
-              onMouseDown={() => {
-                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:76',message:'pilotMenuMouseDown',data:{piloteMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+              onPointerDown={() => {
+                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:76',message:'pilotMenuPointerDown',data:{piloteMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1'})}).catch(()=>{});
+                setPiloteMenuOpen((prev) => !prev);
               }}
               // #endregion
               onClickCapture={() => {
-                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:79',message:'pilotMenuClickCapture',data:{piloteMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:81',message:'pilotMenuClickCapture',data:{piloteMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1'})}).catch(()=>{});
               }}
               className={cn(
                 'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',

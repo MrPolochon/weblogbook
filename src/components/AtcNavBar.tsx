@@ -133,14 +133,14 @@ export default function AtcNavBar({
           {/* Menu déroulant ATC */}
           <div className="relative" ref={menuRef}>
             <button
-              onClick={() => setAtcMenuOpen(!atcMenuOpen)}
               // #region agent log
-              onMouseDown={() => {
-                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:114',message:'atcMenuMouseDown',data:{atcMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+              onPointerDown={() => {
+                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:114',message:'atcMenuPointerDown',data:{atcMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1'})}).catch(()=>{});
+                setAtcMenuOpen((prev) => !prev);
               }}
               // #endregion
               onClickCapture={() => {
-                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:117',message:'atcMenuClickCapture',data:{atcMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:120',message:'atcMenuClickCapture',data:{atcMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1'})}).catch(()=>{});
               }}
               className={cn(
                 'flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-colors relative flex-shrink-0',
