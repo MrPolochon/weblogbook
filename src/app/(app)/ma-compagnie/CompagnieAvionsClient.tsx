@@ -73,7 +73,12 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
     try {
       const res = await fetch(`/api/compagnies/avions?compagnie_id=${compagnieId}`);
       const d = await res.json().catch(() => ({}));
-      if (res.ok) setAvions(d || []);
+      if (res.ok) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CompagnieAvionsClient:loadAvions',message:'load_avions_success',data:{compagnieId,count:Array.isArray(d)?d.length:0,leasedInCount:Array.isArray(d)?d.filter((a:any)=>a?.location_status==='leased_in').length:0,leasedOutCount:Array.isArray(d)?d.filter((a:any)=>a?.location_status==='leased_out').length:0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+        // #endregion
+        setAvions(d || []);
+      }
       else setError(d.error || 'Erreur');
     } catch {
       setError('Erreur de chargement');
@@ -408,6 +413,12 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                     : isLeasedIn
                       ? 'bg-pink-500/10'
                       : '';
+
+                if (isLeasedIn || isLeasedOut) {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CompagnieAvionsClient:row',message:'render_location_row',data:{compagnieId,isPdg,immatriculation:a.immatriculation,location_status:a.location_status,statut:a.statut},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+                  // #endregion
+                }
                 
                 return (
                   <tr key={a.id} className={`border-b border-slate-700/50 last:border-0 ${rowClass}`}>

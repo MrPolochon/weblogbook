@@ -8,6 +8,10 @@ export async function GET(request: Request) {
     const compagnie_id = searchParams.get('compagnie_id');
     if (!compagnie_id) return NextResponse.json({ error: 'compagnie_id requis' }, { status: 400 });
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/compagnies/avions:GET',message:'get_avions_start',data:{compagnie_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
+
     const admin = createAdminClient();
     
     const nowIso = new Date().toISOString();
@@ -25,6 +29,10 @@ export async function GET(request: Request) {
     const leasedIn = (locations || []).filter((l) => l.locataire_compagnie_id === compagnie_id);
     const leasedOutIds = new Set(leasedOut.map((l) => l.avion_id));
     const leasedInIds = new Set(leasedIn.map((l) => l.avion_id));
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/compagnies/avions:GET',message:'get_avions_location_sets',data:{leasedOutCount:leasedOutIds.size,leasedInCount:leasedInIds.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
 
     // Charger les avions possédés par la compagnie
     const { data: avions, error } = await admin
@@ -44,6 +52,10 @@ export async function GET(request: Request) {
         .in('id', Array.from(leasedInIds));
       avionsLoues = loues || [];
     }
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'api/compagnies/avions:GET',message:'get_avions_counts',data:{ownedCount:(avions||[]).length,leasedInCount:avionsLoues.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
 
     // Enrichir avec les types d'avion
     const avionsEnrichis = await Promise.all(([...(avions || []), ...avionsLoues]).map(async (avion) => {
