@@ -85,13 +85,14 @@ export async function POST(request: Request) {
     }
 
     // Mode "existant" : ajouter le rôle SIAVI à un compte existant
+    // Recherche insensible à la casse
     const { data: targetProfile } = await admin.from('profiles')
-      .select('id, siavi')
-      .eq('identifiant', id)
+      .select('id, siavi, identifiant')
+      .ilike('identifiant', id)
       .single();
 
     if (!targetProfile) {
-      return NextResponse.json({ error: 'Pilote non trouvé' }, { status: 404 });
+      return NextResponse.json({ error: `Pilote "${identifiant}" non trouvé. Vérifiez l'orthographe.` }, { status: 404 });
     }
 
     if (targetProfile.siavi) {
