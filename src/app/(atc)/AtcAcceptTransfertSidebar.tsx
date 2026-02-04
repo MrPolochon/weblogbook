@@ -281,7 +281,7 @@ export default function AtcAcceptTransfertSidebar({
   
   return (
     <aside 
-      className={`atc-sidebar w-52 flex-shrink-0 ${sidebarBg} py-3 px-2 flex flex-col transition-all duration-300`}
+      className={`atc-sidebar w-52 flex-shrink-0 ${sidebarBg} py-3 px-2 hidden md:flex flex-col transition-all duration-300`}
       style={{
         borderLeft: `${sidebarBorderWidth}px solid rgb(249, 115, 22)`,
         boxShadow: `0 0 ${sidebarShadow}px rgba(249, 115, 22, ${0.3 + (maxUrgency * 0.1)})`,

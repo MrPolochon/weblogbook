@@ -106,8 +106,8 @@ export default function AtcNavBar({
 
   return (
     <header className={cn("atc-header sticky top-0 z-50 border-b backdrop-blur", headerBg)}>
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-5 sm:gap-5">
-        <nav className="flex flex-nowrap items-center gap-3">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-5 sm:gap-5 flex-wrap sm:flex-nowrap py-2 sm:py-0 sm:h-16">
+        <nav className="flex flex-nowrap items-center gap-3 overflow-x-auto sm:overflow-visible whitespace-nowrap scrollbar-hide">
           {/* Menu déroulant ATC */}
           <div className="relative" ref={menuRef}>
             <button

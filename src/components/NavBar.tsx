@@ -68,8 +68,8 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-700/50 bg-slate-900/95 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-        <nav className="flex items-center gap-1">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2 sm:h-14 sm:py-0 flex-col sm:flex-row gap-2">
+        <nav className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto sm:overflow-visible whitespace-nowrap scrollbar-hide">
           {/* Menu déroulant Espace Pilote */}
           <div className="relative" ref={menuRef}>
             <button
@@ -208,7 +208,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             NOTAMs
           </Link>
         </nav>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
           {isAdmin && (
             <Link
               href="/atc"

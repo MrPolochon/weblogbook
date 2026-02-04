@@ -78,7 +78,7 @@ export default async function AtcLayout({
         <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
         <div className="flex flex-1 w-full min-h-0">
           {enService && (
-            <aside className="atc-sidebar w-44 flex-shrink-0 border-r border-slate-300 bg-slate-100 py-3 px-2 flex flex-col">
+            <aside className="atc-sidebar w-44 flex-shrink-0 border-r border-slate-300 bg-slate-100 py-3 px-2 hidden md:flex flex-col">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-700 px-2 mb-1.5">Non contrôlés</p>
               {plansAuto.length === 0 ? (
                 <span className="text-slate-600 text-sm px-2">Aucun</span>

@@ -201,9 +201,15 @@ body.atc-dark .text-red-700 {
     @apply block w-full rounded-lg border border-slate-600 bg-slate-800/50 px-3 py-2 text-slate-100 placeholder-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500;
   }
   .card {
-    @apply rounded-xl border border-slate-700/50 bg-slate-800/30 p-6;
+    @apply rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 sm:p-6 overflow-x-auto sm:overflow-visible;
   }
   .label {
     @apply block text-sm font-medium text-slate-300 mb-1;
+  }
+}
+
+@media (max-width: 640px) {
+  .card table {
+    min-width: 640px;
   }
 }
