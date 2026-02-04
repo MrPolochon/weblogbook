@@ -280,13 +280,10 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             <button
               type="button"
               onClick={() => setAccountMenuOpen((prev) => !prev)}
-              className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium bg-slate-800/50 text-slate-300 border border-slate-700/50"
+              className="w-full flex items-center justify-center rounded-lg px-3 py-2 bg-slate-800/50 text-slate-300 border border-slate-700/50"
+              aria-label="Ouvrir le menu compte"
             >
-              <span className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Mon compte
-              </span>
-              <ChevronDown className={cn('h-4 w-4 transition-transform', accountMenuOpen && 'rotate-180')} />
+              <ChevronDown className={cn('h-5 w-5 transition-transform', accountMenuOpen && 'rotate-180')} />
             </button>
 
             {accountMenuOpen && (
