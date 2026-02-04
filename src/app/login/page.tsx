@@ -52,7 +52,8 @@ export default function LoginPage() {
       const { data: profile } = await supabase.from('profiles').select('role, atc, siavi').eq('id', uid).single();
       
       if (mode === 'siavi') {
-        const canSiavi = profile?.role === 'admin' || profile?.siavi;
+        // Les admins ont toujours accès à SIAVI
+        const canSiavi = profile?.role === 'admin' || Boolean(profile?.siavi);
         if (!canSiavi) throw new Error('Ce compte n\'a pas accès à l\'espace SIAVI.');
         router.replace('/siavi');
       } else if (mode === 'atc') {

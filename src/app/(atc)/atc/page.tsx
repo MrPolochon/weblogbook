@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
-import { Radio, Plane, Clock, MapPin, AlertTriangle, ArrowRight, Activity, Users, Package, Ship, Building2, User, FilePlus, Radar } from 'lucide-react';
+import { Radio, Plane, Clock, MapPin, AlertTriangle, ArrowRight, Activity, Users, Package, Ship, Building2, User, FilePlus, Radar, Flame } from 'lucide-react';
 import TranspondeurBadgeAtc from '@/components/TranspondeurBadgeAtc';
 import SeMettreEnServiceForm from '../SeMettreEnServiceForm';
 import HorsServiceButton from '../HorsServiceButton';
@@ -22,12 +22,13 @@ export default async function AtcPage() {
   if (!user) return null;
 
   const admin = createAdminClient();
-  const [{ data: session }, { data: plansChezMoiRaw }, { data: sessionsEnServiceRaw }, { data: plansEnAttente }, { data: plansOrphelinsRaw }] = await Promise.all([
+  const [{ data: session }, { data: plansChezMoiRaw }, { data: sessionsEnServiceRaw }, { data: plansEnAttente }, { data: plansOrphelinsRaw }, { data: afisSessionsRaw }] = await Promise.all([
     supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single(),
     admin.from('plans_vol').select('*').eq('current_holder_user_id', user.id).is('pending_transfer_aeroport', null).in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente']).order('created_at', { ascending: false }),
     admin.from('atc_sessions').select('aeroport, position, user_id').order('aeroport').order('position'),
     admin.from('plans_vol').select('id').in('statut', ['depose', 'en_attente']),
     admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee, current_holder_user_id').in('statut', ['depose', 'en_attente']).order('created_at', { ascending: false }).limit(20),
+    admin.from('afis_sessions').select('aeroport, est_afis, user_id').order('aeroport'),
   ]);
 
   // Enrichir les plans avec les données pilote, compagnie et avion
@@ -52,8 +53,18 @@ export default async function AtcPage() {
     return { ...plan, pilote, compagnie, avion };
   }));
 
-  // Enrichir les sessions avec les identifiants
+  // Enrichir les sessions ATC avec les identifiants
   const sessionsEnService = await Promise.all((sessionsEnServiceRaw || []).map(async (sess) => {
+    let profiles = null;
+    if (sess.user_id) {
+      const { data } = await admin.from('profiles').select('identifiant').eq('id', sess.user_id).single();
+      profiles = data;
+    }
+    return { ...sess, profiles };
+  }));
+
+  // Enrichir les sessions AFIS avec les identifiants
+  const afisEnService = await Promise.all((afisSessionsRaw || []).map(async (sess) => {
     let profiles = null;
     if (sess.user_id) {
       const { data } = await admin.from('profiles').select('identifiant').eq('id', sess.user_id).single();
@@ -304,36 +315,64 @@ export default async function AtcPage() {
         </div>
       )}
 
-      {/* Aéroports en service */}
+      {/* Positions en service (ATC + AFIS) */}
       <div className="card">
         <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
           <MapPin className="h-5 w-5 text-sky-600" />
-          Aéroports contrôlés
+          Positions en service
         </h2>
         
-        {Object.keys(byAeroport).length === 0 ? (
+        {Object.keys(byAeroport).length === 0 && afisEnService.length === 0 ? (
           <div className="text-center py-6">
             <Radio className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-            <p className="text-slate-600">Aucun contrôleur en service</p>
+            <p className="text-slate-600">Aucune position en service</p>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Contrôleurs ATC (en vert) */}
             {Object.entries(byAeroport).map(([apt, controllers]) => (
               <div 
-                key={apt} 
-                className="p-3 rounded-lg bg-slate-50 border border-slate-200"
+                key={`atc-${apt}`} 
+                className="p-3 rounded-lg bg-emerald-50 border border-emerald-200"
               >
                 <div className="flex items-center gap-2 mb-2">
+                  <Radio className="h-4 w-4 text-emerald-500" />
                   <span className="text-lg font-bold text-emerald-600 font-mono">{apt}</span>
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 </div>
                 <div className="space-y-1">
                   {controllers.map((c, idx) => (
                     <div key={`${apt}-${c.position}-${idx}`} className="flex items-center justify-between text-sm">
-                      <span className="text-slate-700 font-medium">{c.position}</span>
+                      <span className="text-emerald-700 font-medium">{c.position}</span>
                       <span className="text-slate-500 text-xs">{c.identifiant}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+            ))}
+            
+            {/* Agents AFIS (en rouge) */}
+            {afisEnService.map((sess, idx) => (
+              <div 
+                key={`afis-${sess.aeroport}-${idx}`}
+                className={`p-3 rounded-lg border ${sess.est_afis ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Flame className={`h-4 w-4 ${sess.est_afis ? 'text-red-500' : 'text-amber-500'}`} />
+                  <span className={`text-lg font-bold font-mono ${sess.est_afis ? 'text-red-600' : 'text-amber-600'}`}>{sess.aeroport}</span>
+                  {sess.est_afis ? (
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  ) : (
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  )}
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className={sess.est_afis ? 'text-red-700 font-medium' : 'text-amber-700 font-medium'}>
+                    {sess.est_afis ? 'AFIS' : 'Pompier seul'}
+                  </span>
+                  <span className="text-slate-500 text-xs">
+                    {(sess.profiles as any)?.identifiant || '—'}
+                  </span>
                 </div>
               </div>
             ))}
