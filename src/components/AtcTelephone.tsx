@@ -172,7 +172,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     };
   }, [callState]);
 
-  // Vérification appels entrants
+  // Vérification appels entrants (polling rapide pour réactivité)
   useEffect(() => {
     if (callState === 'idle') {
       checkIntervalRef.current = setInterval(async () => {
@@ -191,7 +191,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         } catch (err) {
           console.error('Erreur vérification appels:', err);
         }
-      }, 2000);
+      }, 1000); // Réduit de 2000ms à 1000ms pour détection plus rapide
     } else if (callState === 'incoming' && incomingCall) {
       checkIntervalRef.current = setInterval(async () => {
         try {
@@ -204,7 +204,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         } catch (err) {
           console.error('Erreur vérification statut:', err);
         }
-      }, 2000);
+      }, 1000); // Réduit de 2000ms à 1000ms
     }
     return () => {
       if (checkIntervalRef.current) {
@@ -273,7 +273,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       } catch (err) {
         console.error('Erreur vérification statut:', err);
       }
-    }, 2000);
+    }, 1500); // Réduit de 2000ms à 1500ms pour détection fin d'appel plus rapide
   };
 
   const setupWebRTC = async (callId: string, isInitiator: boolean) => {
@@ -292,7 +292,11 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' },
         ],
+        iceCandidatePoolSize: 10, // Pré-allocation des candidats ICE pour connexion plus rapide
       });
       peerConnectionRef.current = pc;
 
@@ -347,7 +351,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         })
         .subscribe(async (status) => {
           if (status === 'SUBSCRIBED' && isInitiator) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Délai réduit pour laisser l'autre partie rejoindre le channel
+            await new Promise(resolve => setTimeout(resolve, 300));
             const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
             await pc.setLocalDescription(offer);
             await channel.send({
@@ -439,9 +444,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       if (data.call) {
         setCurrentCall({ to: parsed.aeroport || aeroport, toPosition: parsed.position, callId: data.call.id });
         
-        // Attente réponse (30s max)
-        for (let i = 0; i < 30; i++) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+        // Attente réponse (30s max, vérification toutes les 500ms pour réactivité)
+        for (let i = 0; i < 60; i++) {
+          await new Promise(resolve => setTimeout(resolve, 500)); // Réduit de 1000ms à 500ms
           const statusRes = await fetch(`/api/atc/telephone/status?callId=${data.call.id}`);
           const statusData = await statusRes.json();
           
