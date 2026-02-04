@@ -26,6 +26,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
   const [piloteMenuOpen, setPiloteMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -55,6 +56,14 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:47',message:'piloteDropdownRect',data:{x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height),display:style.display,visibility:style.visibility,opacity:style.opacity,zIndex:style.zIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
       // #endregion
+      if (navRef.current) {
+        const navRect = navRef.current.getBoundingClientRect();
+        const navStyle = window.getComputedStyle(navRef.current);
+        const dropExceedsNavBottom = rect.bottom > navRect.bottom + 1;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:54',message:'navOverflowCheck',data:{navOverflowX:navStyle.overflowX,navOverflowY:navStyle.overflowY,navRect:{x:Math.round(navRect.x),y:Math.round(navRect.y),w:Math.round(navRect.width),h:Math.round(navRect.height)},dropExceedsNavBottom,navScrollTop:navRef.current.scrollTop,navScrollLeft:navRef.current.scrollLeft,navClientHeight:navRef.current.clientHeight,navScrollHeight:navRef.current.scrollHeight},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+        // #endregion
+      }
     }
   }, [piloteMenuOpen]);
 
@@ -91,7 +100,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
   return (
     <header className="sticky top-0 z-50 border-b border-slate-700/50 bg-slate-900/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2 sm:h-14 sm:py-0 flex-col sm:flex-row gap-2">
-        <nav className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
+        <nav ref={navRef} className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
           {/* Menu déroulant Espace Pilote */}
           <div className="relative" ref={menuRef}>
             <button

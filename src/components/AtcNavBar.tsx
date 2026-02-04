@@ -57,6 +57,7 @@ export default function AtcNavBar({
   const [atcMenuOpen, setAtcMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -86,6 +87,14 @@ export default function AtcNavBar({
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:78',message:'atcDropdownRect',data:{x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height),display:style.display,visibility:style.visibility,opacity:style.opacity,zIndex:style.zIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
       // #endregion
+      if (navRef.current) {
+        const navRect = navRef.current.getBoundingClientRect();
+        const navStyle = window.getComputedStyle(navRef.current);
+        const dropExceedsNavBottom = rect.bottom > navRect.bottom + 1;
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:86',message:'navOverflowCheck',data:{navOverflowX:navStyle.overflowX,navOverflowY:navStyle.overflowY,navRect:{x:Math.round(navRect.x),y:Math.round(navRect.y),w:Math.round(navRect.width),h:Math.round(navRect.height)},dropExceedsNavBottom,navScrollTop:navRef.current.scrollTop,navScrollLeft:navRef.current.scrollLeft,navClientHeight:navRef.current.clientHeight,navScrollHeight:navRef.current.scrollHeight},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+        // #endregion
+      }
     }
   }, [atcMenuOpen]);
 
@@ -129,7 +138,7 @@ export default function AtcNavBar({
   return (
     <header className={cn("atc-header sticky top-0 z-50 border-b backdrop-blur", headerBg)}>
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-5 sm:gap-5 flex-wrap sm:flex-nowrap py-2 sm:py-0 sm:h-16">
-        <nav className="flex flex-nowrap items-center gap-3 overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
+        <nav ref={navRef} className="flex flex-nowrap items-center gap-3 overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
           {/* Menu déroulant ATC */}
           <div className="relative" ref={menuRef}>
             <button
