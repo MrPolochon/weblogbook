@@ -58,6 +58,8 @@ export default function AtcNavBar({
   const menuRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties | null>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -96,6 +98,30 @@ export default function AtcNavBar({
         // #endregion
       }
     }
+  }, [atcMenuOpen]);
+
+  useEffect(() => {
+    function updateDropdownPosition() {
+      if (!atcMenuOpen || !triggerRef.current) {
+        setDropdownStyle(null);
+        return;
+      }
+      const rect = triggerRef.current.getBoundingClientRect();
+      const top = Math.round(rect.bottom + 4);
+      const left = Math.round(rect.left);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:102',message:'dropdownPosition',data:{top,left,buttonRect:{x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height)}},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+      // #endregion
+      setDropdownStyle({ position: 'fixed', top, left, zIndex: 70 });
+    }
+    updateDropdownPosition();
+    if (!atcMenuOpen) return;
+    window.addEventListener('resize', updateDropdownPosition);
+    window.addEventListener('scroll', updateDropdownPosition, true);
+    return () => {
+      window.removeEventListener('resize', updateDropdownPosition);
+      window.removeEventListener('scroll', updateDropdownPosition, true);
+    };
   }, [atcMenuOpen]);
 
   async function handleLogout() {
@@ -142,6 +168,7 @@ export default function AtcNavBar({
           {/* Menu déroulant ATC */}
           <div className="relative" ref={menuRef}>
             <button
+              ref={triggerRef}
               // #region agent log
               onPointerDown={() => {
                 fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:114',message:'atcMenuPointerDown',data:{atcMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1'})}).catch(()=>{});
@@ -171,7 +198,7 @@ export default function AtcNavBar({
             </button>
             
             {atcMenuOpen && (
-              <div ref={dropdownRef} className={cn("absolute left-0 top-full mt-1 w-56 rounded-lg border py-1 shadow-xl z-50", dropdownBg)}>
+              <div ref={dropdownRef} style={dropdownStyle ?? undefined} className={cn("fixed w-56 rounded-lg border py-1 shadow-xl z-50", dropdownBg)}>
                 {atcMenuItems.map((item) => {
                   const Icon = item.icon;
                   return (
