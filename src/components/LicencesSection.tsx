@@ -22,7 +22,7 @@ type Props = {
 };
 
 export default function LicencesSection({ userId, variant = 'default' }: Props) {
-  const isAtcOrSiaviOrSiavi = variant === 'atc' || variant === 'siavi';
+  const isAtcOrSiavi = variant === 'atc' || variant === 'siavi';
   const [licences, setLicences] = useState<Licence[]>([]);
   const [loading, setLoading] = useState(true);
 
