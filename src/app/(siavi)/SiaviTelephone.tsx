@@ -515,6 +515,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       });
 
       const data = await res.json();
+      console.log('SIAVI call response:', { ok: res.ok, status: res.status, data });
       
       if (!res.ok) {
         const messages: Record<string, string> = {
@@ -524,8 +525,10 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           'non_en_service': 'Vous devez être en service pour appeler',
           'appel_en_cours': 'Vous avez déjà un appel en cours',
           'cible_occupee': 'Votre correspondant est déjà en ligne',
+          'erreur_creation': 'Erreur lors de la création de l\'appel',
         };
-        playMessage(messages[data.error] || 'Erreur');
+        console.error('SIAVI call error:', data.error);
+        playMessage(messages[data.error] || 'Erreur inconnue');
         setCallState('idle');
         setNumber('');
         return;

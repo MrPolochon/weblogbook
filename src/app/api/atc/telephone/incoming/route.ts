@@ -22,7 +22,7 @@ export async function GET() {
     // Chercher les appels entrants en attente (récents uniquement)
     const { data: incomingCall } = await admin
       .from('atc_calls')
-      .select('id, from_user_id, from_aeroport, from_position, number_dialed, started_at')
+      .select('id, from_user_id, from_aeroport, from_position, number_dialed, started_at, is_emergency')
       .eq('to_user_id', user.id)
       .eq('status', 'ringing')
       .gte('started_at', sixtySecondsAgo)
@@ -37,6 +37,7 @@ export async function GET() {
           from_aeroport: incomingCall.from_aeroport,
           from_position: incomingCall.from_position,
           number_dialed: incomingCall.number_dialed,
+          is_emergency: incomingCall.is_emergency,
         },
       });
     }

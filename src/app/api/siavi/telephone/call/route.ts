@@ -13,6 +13,7 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const { to_aeroport, to_position, is_emergency } = body;
+    console.log('SIAVI call request:', { to_aeroport, to_position, is_emergency, from_aeroport: session.aeroport });
 
     const admin = createAdminClient();
 
@@ -68,12 +69,19 @@ export async function POST(request: Request) {
       toUserId = targetSession.user_id;
     } else {
       // Appel vers ATC normal
-      const { data: targetSession } = await admin.from('atc_sessions')
+      console.log('SIAVI->ATC call:', { to_aeroport, to_position });
+      
+      // Debug: lister toutes les sessions ATC actives
+      const { data: allAtcSessions } = await admin.from('atc_sessions').select('aeroport, position, user_id');
+      console.log('All active ATC sessions:', allAtcSessions);
+      
+      const { data: targetSession, error: sessionErr } = await admin.from('atc_sessions')
         .select('user_id')
         .eq('aeroport', to_aeroport)
         .eq('position', to_position)
         .maybeSingle();
 
+      console.log('Target ATC session found:', targetSession, 'Query error:', sessionErr);
       if (!targetSession) return NextResponse.json({ error: 'offline' }, { status: 400 });
       toUserId = targetSession.user_id;
     }
