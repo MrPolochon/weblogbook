@@ -4,10 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield } from 'lucide-react';
+import { Plane, Radio, Shield, Flame } from 'lucide-react';
 
 
-type LoginMode = 'pilote' | 'atc';
+type LoginMode = 'pilote' | 'atc' | 'siavi';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -49,9 +49,13 @@ export default function LoginPage() {
       if (signInErr) throw new Error(signInErr.message || 'Identifiant ou mot de passe incorrect.');
       const uid = signData?.user?.id;
       if (!uid) { router.replace('/logbook'); router.refresh(); return; }
-      const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', uid).single();
+      const { data: profile } = await supabase.from('profiles').select('role, atc, siavi').eq('id', uid).single();
       
-      if (mode === 'atc') {
+      if (mode === 'siavi') {
+        const canSiavi = profile?.role === 'admin' || profile?.siavi;
+        if (!canSiavi) throw new Error('Ce compte n\'a pas accès à l\'espace SIAVI.');
+        router.replace('/siavi');
+      } else if (mode === 'atc') {
         const canAtc = profile?.role === 'admin' || profile?.role === 'atc' || profile?.atc;
         if (!canAtc) throw new Error('Ce compte n\'a pas accès à l\'espace ATC.');
         router.replace('/atc');
@@ -104,26 +108,38 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => setMode('pilote')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-lg font-medium transition-all ${
               mode === 'pilote'
                 ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/30'
                 : 'bg-slate-800/80 text-slate-400 hover:bg-slate-700/80 hover:text-slate-300'
             }`}
           >
             <Plane className="h-5 w-5" />
-            <span>Pilote</span>
+            <span className="hidden sm:inline">Pilote</span>
           </button>
           <button
             type="button"
             onClick={() => setMode('atc')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg font-medium transition-all ${
+            className={`flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-lg font-medium transition-all ${
               mode === 'atc'
                 ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
                 : 'bg-slate-800/80 text-slate-400 hover:bg-slate-700/80 hover:text-slate-300'
             }`}
           >
             <Radio className="h-5 w-5" />
-            <span>Contrôleur ATC</span>
+            <span className="hidden sm:inline">ATC</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('siavi')}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-lg font-medium transition-all ${
+              mode === 'siavi'
+                ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                : 'bg-slate-800/80 text-slate-400 hover:bg-slate-700/80 hover:text-slate-300'
+            }`}
+          >
+            <Flame className="h-5 w-5" />
+            <span className="hidden sm:inline">SIAVI</span>
           </button>
         </div>
 
@@ -166,11 +182,13 @@ export default function LoginPage() {
               className={`w-full py-3 rounded-lg font-semibold transition-all ${
                 mode === 'pilote'
                   ? 'bg-sky-500 hover:bg-sky-600 text-white'
-                  : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                  : mode === 'atc'
+                    ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                    : 'bg-red-500 hover:bg-red-600 text-white'
               }`}
               disabled={submitting}
             >
-              {submitting ? 'Connexion…' : mode === 'pilote' ? 'Accéder à l\'espace pilote' : 'Accéder à l\'espace ATC'}
+              {submitting ? 'Connexion…' : mode === 'pilote' ? 'Accéder à l\'espace pilote' : mode === 'atc' ? 'Accéder à l\'espace ATC' : 'Accéder à l\'espace SIAVI'}
             </button>
           </form>
         </div>

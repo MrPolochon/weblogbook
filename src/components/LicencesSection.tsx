@@ -18,11 +18,11 @@ type Licence = {
 
 type Props = {
   userId: string;
-  variant?: 'default' | 'atc';
+  variant?: 'default' | 'atc' | 'siavi';
 };
 
 export default function LicencesSection({ userId, variant = 'default' }: Props) {
-  const isAtc = variant === 'atc';
+  const isAtcOrSiaviOrSiavi = variant === 'atc' || variant === 'siavi';
   const [licences, setLicences] = useState<Licence[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -79,7 +79,7 @@ export default function LicencesSection({ userId, variant = 'default' }: Props) 
   if (loading) {
     return (
       <div className="card">
-        <h2 className={`text-lg font-medium mb-4 ${isAtc ? 'text-slate-800' : 'text-slate-100'}`}>
+        <h2 className={`text-lg font-medium mb-4 ${isAtcOrSiavi ? 'text-slate-800' : 'text-slate-100'}`}>
           Licences et qualifications
         </h2>
         <p className="text-sm text-slate-500">Chargement…</p>
@@ -90,7 +90,7 @@ export default function LicencesSection({ userId, variant = 'default' }: Props) 
   if (licences.length === 0) {
     return (
       <div className="card">
-        <h2 className={`text-lg font-medium mb-4 ${isAtc ? 'text-slate-800' : 'text-slate-100'}`}>
+        <h2 className={`text-lg font-medium mb-4 ${isAtcOrSiavi ? 'text-slate-800' : 'text-slate-100'}`}>
           Licences et qualifications
         </h2>
         <p className="text-sm text-slate-500">Aucune licence ou qualification enregistrée.</p>
@@ -100,7 +100,7 @@ export default function LicencesSection({ userId, variant = 'default' }: Props) 
 
   return (
     <div className="card">
-      <h2 className={`text-lg font-medium mb-4 flex items-center gap-2 ${isAtc ? 'text-slate-800' : 'text-slate-100'}`}>
+      <h2 className={`text-lg font-medium mb-4 flex items-center gap-2 ${isAtcOrSiavi ? 'text-slate-800' : 'text-slate-100'}`}>
         <Award className="h-5 w-5" />
         Licences et qualifications
       </h2>
@@ -116,19 +116,19 @@ export default function LicencesSection({ userId, variant = 'default' }: Props) 
                   ? 'border-red-500/50 bg-red-500/10'
                   : expiringSoon
                     ? 'border-amber-500/50 bg-amber-500/10'
-                    : isAtc
+                    : isAtcOrSiavi
                       ? 'border-slate-200 bg-slate-50'
                       : 'border-slate-700/50 bg-slate-800/30'
               }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className={`font-semibold ${isAtc ? 'text-slate-900' : 'text-slate-100'}`}>
+                  <p className={`font-semibold ${isAtcOrSiavi ? 'text-slate-900' : 'text-slate-100'}`}>
                     {formatLibelle(lic)}
                   </p>
                   <div className="mt-1.5 space-y-1 text-sm">
                     {lic.date_delivrance && (
-                      <div className={`flex items-center gap-1.5 ${isAtc ? 'text-slate-600' : 'text-slate-400'}`}>
+                      <div className={`flex items-center gap-1.5 ${isAtcOrSiavi ? 'text-slate-600' : 'text-slate-400'}`}>
                         <Calendar className="h-3.5 w-3.5" />
                         <span>Délivré le {formatDate(lic.date_delivrance)}</span>
                       </div>
@@ -144,7 +144,7 @@ export default function LicencesSection({ userId, variant = 'default' }: Props) 
                             ? 'text-red-400'
                             : expiringSoon
                               ? 'text-amber-400'
-                              : isAtc
+                              : isAtcOrSiavi
                                 ? 'text-slate-600'
                                 : 'text-slate-400'
                         }`}
@@ -157,7 +157,7 @@ export default function LicencesSection({ userId, variant = 'default' }: Props) 
                       </div>
                     ) : null}
                     {lic.note && (
-                      <div className={`flex items-start gap-1.5 mt-1.5 ${isAtc ? 'text-slate-600' : 'text-slate-400'}`}>
+                      <div className={`flex items-start gap-1.5 mt-1.5 ${isAtcOrSiavi ? 'text-slate-600' : 'text-slate-400'}`}>
                         <FileText className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
                         <span className="text-xs">{lic.note}</span>
                       </div>

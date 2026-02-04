@@ -1,19 +1,18 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Phone, PhoneOff, PhoneCall, Mic, MicOff, Delete } from 'lucide-react';
-import { useAtcTheme } from '@/contexts/AtcThemeContext';
+import { Phone, PhoneOff, PhoneCall, Mic, MicOff, Delete, Flame } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connected' | 'ended';
 
-interface AtcTelephoneProps {
+interface SiaviTelephoneProps {
   aeroport: string;
-  position: string;
+  estAfis: boolean;
   userId: string;
 }
 
-// Mapping des positions vers les codes
+// Mapping des positions vers les codes (AFIS = 505)
 const POSITION_CODES: Record<string, string> = {
   'Delivery': '15',
   'Clairance': '16',
@@ -42,13 +41,11 @@ const CODE_TO_AEROPORT: Record<string, string> = Object.fromEntries(
   Object.entries(AEROPORT_CODES).map(([code, num]) => [num, code])
 );
 
-export default function AtcTelephone({ aeroport, position, userId }: AtcTelephoneProps) {
-  const { theme } = useAtcTheme();
-  const isDark = theme === 'dark';
+export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelephoneProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [number, setNumber] = useState('');
   const [callState, setCallState] = useState<CallState>('idle');
-  const [incomingCall, setIncomingCall] = useState<{ from: string; fromPosition: string; callId: string } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<{ from: string; fromPosition: string; callId: string; isEmergency?: boolean } | null>(null);
   const [currentCall, setCurrentCall] = useState<{ to: string; toPosition: string; callId: string } | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   
@@ -66,8 +63,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const dialToneAudioContextRef = useRef<AudioContext | null>(null);
   const shouldDialToneRef = useRef(false);
 
-  // Sonnerie téléphone réaliste
-  const playRingtone = () => {
+  // Sonnerie téléphone (urgence = plus rapide et stridente)
+  const playRingtone = (isEmergency = false) => {
     try {
       if (!ringtoneAudioContextRef.current) {
         ringtoneAudioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
@@ -77,14 +74,15 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       const osc2 = ctx.createOscillator();
       const gain = ctx.createGain();
       
-      osc1.frequency.value = 440;
-      osc2.frequency.value = 480;
+      // Urgence = fréquences plus hautes
+      osc1.frequency.value = isEmergency ? 600 : 440;
+      osc2.frequency.value = isEmergency ? 800 : 480;
       osc1.type = 'sine';
       osc2.type = 'sine';
       
       gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.1);
-      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+      gain.gain.linearRampToValueAtTime(isEmergency ? 0.5 : 0.3, ctx.currentTime + 0.05);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + (isEmergency ? 0.2 : 0.4));
       
       osc1.connect(gain);
       osc2.connect(gain);
@@ -92,8 +90,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       
       osc1.start();
       osc2.start();
-      osc1.stop(ctx.currentTime + 0.4);
-      osc2.stop(ctx.currentTime + 0.4);
+      osc1.stop(ctx.currentTime + (isEmergency ? 0.2 : 0.4));
+      osc2.stop(ctx.currentTime + (isEmergency ? 0.2 : 0.4));
     } catch (err) {
       console.error('Erreur sonnerie:', err);
     }
@@ -150,12 +148,13 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
 
   // Gestion sonnerie
   useEffect(() => {
-    if (callState === 'incoming') {
+    if (callState === 'incoming' && incomingCall) {
+      const isEmergency = incomingCall.isEmergency;
       shouldRingRef.current = true;
-      playRingtone();
+      playRingtone(isEmergency);
       ringtoneIntervalRef.current = setInterval(() => {
-        if (shouldRingRef.current) playRingtone();
-      }, 600);
+        if (shouldRingRef.current) playRingtone(isEmergency);
+      }, isEmergency ? 300 : 600);
     } else {
       shouldRingRef.current = false;
       if (ringtoneIntervalRef.current) {
@@ -171,32 +170,33 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       shouldRingRef.current = false;
       if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
     };
-  }, [callState]);
+  }, [callState, incomingCall]);
 
-  // Vérification appels entrants (polling rapide pour réactivité)
+  // Vérification appels entrants (inclut les appels AFIS)
   useEffect(() => {
     if (callState === 'idle') {
       checkIntervalRef.current = setInterval(async () => {
         try {
-          const res = await fetch('/api/atc/telephone/incoming');
+          const res = await fetch('/api/siavi/telephone/incoming');
           const data = await res.json();
           if (data.call?.id) {
             setIncomingCall({
               from: data.call.from_aeroport,
               fromPosition: data.call.from_position,
               callId: data.call.id,
+              isEmergency: data.call.is_emergency,
             });
             setCallState('incoming');
-            setIsOpen(true); // Ouvrir automatiquement le téléphone
+            setIsOpen(true);
           }
         } catch (err) {
           console.error('Erreur vérification appels:', err);
         }
-      }, 1000); // Réduit de 2000ms à 1000ms pour détection plus rapide
+      }, 1000);
     } else if (callState === 'incoming' && incomingCall) {
       checkIntervalRef.current = setInterval(async () => {
         try {
-          const res = await fetch(`/api/atc/telephone/status?callId=${incomingCall.callId}`);
+          const res = await fetch(`/api/siavi/telephone/status?callId=${incomingCall.callId}`);
           const data = await res.json();
           if (!data.call || data.status === 'ended' || data.status === 'rejected') {
             setIncomingCall(null);
@@ -205,7 +205,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         } catch (err) {
           console.error('Erreur vérification statut:', err);
         }
-      }, 1000); // Réduit de 2000ms à 1000ms
+      }, 1000);
     }
     return () => {
       if (checkIntervalRef.current) {
@@ -260,7 +260,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const startCallStatusMonitoring = (callId: string) => {
     callStatusIntervalRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/atc/telephone/status?callId=${callId}`);
+        const res = await fetch(`/api/siavi/telephone/status?callId=${callId}`);
         const data = await res.json();
         if (data.status === 'ended' || data.status === 'rejected' || !data.call) {
           cleanupWebRTC();
@@ -274,7 +274,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       } catch (err) {
         console.error('Erreur vérification statut:', err);
       }
-    }, 1500); // Réduit de 2000ms à 1500ms pour détection fin d'appel plus rapide
+    }, 1500);
   };
 
   const setupWebRTC = async (callId: string, isInitiator: boolean) => {
@@ -294,10 +294,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
           { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' },
         ],
-        iceCandidatePoolSize: 10, // Pré-allocation des candidats ICE pour connexion plus rapide
+        iceCandidatePoolSize: 10,
       });
       peerConnectionRef.current = pc;
 
@@ -326,7 +324,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       };
 
       const supabase = createClient();
-      const channel = supabase.channel(`atc-call-${callId}`)
+      const channel = supabase.channel(`siavi-call-${callId}`)
         .on('broadcast', { event: 'webrtc-signal' }, async (payload) => {
           const message = payload.payload;
           if (message.fromUserId === userId) return;
@@ -352,7 +350,6 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         })
         .subscribe(async (status) => {
           if (status === 'SUBSCRIBED' && isInitiator) {
-            // Délai réduit pour laisser l'autre partie rejoindre le channel
             await new Promise(resolve => setTimeout(resolve, 300));
             const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
             await pc.setLocalDescription(offer);
@@ -386,17 +383,19 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   };
 
   const parseNumber = (num: string) => {
-    // Appels d'urgence 911 ou 112 -> AFIS
+    // Code urgence 911 ou 112 -> appel n'importe quel AFIS
     if (num === '911' || num === '112') {
       return { aeroport: null, position: 'AFIS', isLocal: false, isEmergency: true };
     }
-    // Appel local (ex: *505 pour AFIS local)
+    
+    // Local: *505 -> AFIS local
     if (num.startsWith('*')) {
       const code = num.substring(1);
       const pos = CODE_TO_POSITION[code];
       return { aeroport: null, position: pos || null, isLocal: true, isEmergency: false };
     }
-    // Appel international (ex: +145570505 pour AFIS IRFD)
+    
+    // International: +14XXXX505 -> AFIS à l'aéroport XXXX
     if (num.startsWith('+14') && num.length >= 9) {
       const aeroportCode = num.substring(3, 7);
       const positionCode = num.substring(7);
@@ -422,7 +421,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     setCallState('ringing');
     
     try {
-      const res = await fetch('/api/atc/telephone/call', {
+      const res = await fetch('/api/siavi/telephone/call', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -443,7 +442,6 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           'non_en_service': 'Vous devez être en service pour appeler',
           'appel_en_cours': 'Vous avez déjà un appel en cours',
           'cible_occupee': 'Votre correspondant est déjà en ligne',
-          'erreur_creation': 'Impossible de créer l\'appel',
         };
         playMessage(messages[data.error] || 'Erreur');
         setCallState('idle');
@@ -454,10 +452,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       if (data.call) {
         setCurrentCall({ to: parsed.aeroport || aeroport, toPosition: parsed.position, callId: data.call.id });
         
-        // Attente réponse (30s max, vérification toutes les 500ms pour réactivité)
         for (let i = 0; i < 60; i++) {
-          await new Promise(resolve => setTimeout(resolve, 500)); // Réduit de 1000ms à 500ms
-          const statusRes = await fetch(`/api/atc/telephone/status?callId=${data.call.id}`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          const statusRes = await fetch(`/api/siavi/telephone/status?callId=${data.call.id}`);
           const statusData = await statusRes.json();
           
           if (statusData.status === 'connected') {
@@ -468,8 +465,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           if (statusData.status === 'rejected' || statusData.status === 'ended') break;
         }
         
-        // Timeout ou rejeté
-        await fetch('/api/atc/telephone/hangup', {
+        await fetch('/api/siavi/telephone/hangup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ callId: data.call.id }),
@@ -490,7 +486,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const handleAnswer = async () => {
     if (!incomingCall) return;
     try {
-      const res = await fetch('/api/atc/telephone/answer', {
+      const res = await fetch('/api/siavi/telephone/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ callId: incomingCall.callId }),
@@ -509,7 +505,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const handleReject = async () => {
     if (!incomingCall) return;
     try {
-      await fetch('/api/atc/telephone/reject', {
+      await fetch('/api/siavi/telephone/reject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ callId: incomingCall.callId }),
@@ -525,7 +521,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     const callId = currentCall?.callId || incomingCall?.callId;
     cleanupWebRTC();
     if (callId) {
-      await fetch('/api/atc/telephone/hangup', {
+      await fetch('/api/siavi/telephone/hangup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ callId }),
@@ -547,96 +543,52 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     }
   };
 
-  // Reset du téléphone (terminer tous les appels bloqués)
-  const resetPhone = async () => {
-    try {
-      await fetch('/api/atc/telephone/hangup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true }),
-      });
-      cleanupWebRTC();
-      setCallState('idle');
-      setNumber('');
-      setIncomingCall(null);
-      setCurrentCall(null);
-      setIsMuted(false);
-    } catch (err) {
-      console.error('Erreur reset téléphone:', err);
-    }
-  };
-
-  // Reset automatique à l'ouverture du téléphone
-  useEffect(() => {
-    if (isOpen && callState === 'idle') {
-      resetPhone();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
-
   useEffect(() => () => cleanupWebRTC(), []);
 
-  // Couleurs du combiné
-  const handsetBg = isDark ? 'bg-white' : 'bg-slate-900';
-  const handsetText = isDark ? 'text-slate-900' : 'text-white';
-  const screenBg = isDark ? 'bg-slate-100' : 'bg-slate-800';
-  const screenText = isDark ? 'text-slate-900' : 'text-emerald-400';
-  const keyBg = isDark ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600';
-  const keyText = isDark ? 'text-slate-900' : 'text-white';
-
-  // Combiné fermé (horizontal en bas)
+  // Combiné fermé
   if (!isOpen) {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-0 left-1/2 -translate-x-1/2 z-50 ${handsetBg} rounded-t-2xl shadow-2xl transition-all duration-300 hover:shadow-3xl group`}
+        className="fixed bottom-0 left-1/2 -translate-x-1/2 z-50 bg-red-700 rounded-t-2xl shadow-2xl transition-all duration-300 hover:shadow-3xl group"
         style={{ width: '280px', height: '48px' }}
-        title="Décrocher le téléphone"
+        title="Téléphone SIAVI"
       >
-        {/* Forme du combiné horizontal */}
         <div className="relative w-full h-full flex items-center justify-center">
-          {/* Écouteur gauche */}
-          <div className={`absolute left-2 w-12 h-10 ${isDark ? 'bg-slate-300' : 'bg-slate-700'} rounded-lg`} />
-          {/* Corps central */}
-          <div className={`flex items-center gap-2 ${handsetText}`}>
-            <Phone className="h-5 w-5 group-hover:animate-bounce" />
-            <span className="text-sm font-medium">Téléphone ATC</span>
+          <div className="absolute left-2 w-12 h-10 bg-red-800 rounded-lg" />
+          <div className="flex items-center gap-2 text-white">
+            <Flame className="h-5 w-5 group-hover:animate-bounce" />
+            <span className="text-sm font-medium">Téléphone SIAVI</span>
           </div>
-          {/* Micro droit */}
-          <div className={`absolute right-2 w-12 h-10 ${isDark ? 'bg-slate-300' : 'bg-slate-700'} rounded-lg`} />
+          <div className="absolute right-2 w-12 h-10 bg-red-800 rounded-lg" />
           
-          {/* Indicateur appel entrant */}
           {callState === 'incoming' && (
-            <div className="absolute -top-2 right-4 w-4 h-4 bg-green-500 rounded-full animate-ping" />
+            <div className={`absolute -top-2 right-4 w-4 h-4 rounded-full animate-ping ${incomingCall?.isEmergency ? 'bg-amber-500' : 'bg-green-500'}`} />
           )}
         </div>
       </button>
     );
   }
 
-  // Combiné ouvert (vertical à droite avec clavier)
+  // Combiné ouvert
   return (
-    <div className={`fixed right-4 bottom-4 z-50 ${handsetBg} rounded-3xl shadow-2xl transition-all duration-500 overflow-hidden`}
+    <div className="fixed right-4 bottom-4 z-50 bg-red-800 rounded-3xl shadow-2xl transition-all duration-500 overflow-hidden"
          style={{ width: '200px', minHeight: '420px' }}>
       
-      {/* Écouteur (haut du combiné) */}
-      <div className={`h-16 ${isDark ? 'bg-slate-300' : 'bg-slate-700'} rounded-t-3xl flex items-center justify-center relative`}>
-        <div className="w-20 h-3 bg-slate-500 rounded-full opacity-60" />
-        <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 flex justify-between">
-          <div className="w-2 h-2 rounded-full bg-slate-400" />
-          <div className="w-2 h-2 rounded-full bg-slate-400" />
-        </div>
+      {/* Écouteur */}
+      <div className="h-16 bg-red-900 rounded-t-3xl flex items-center justify-center relative">
+        <div className="w-20 h-3 bg-red-600 rounded-full opacity-60" />
       </div>
       
       {/* Écran LCD */}
-      <div className={`mx-3 mt-3 p-2 ${screenBg} rounded-lg border-2 ${isDark ? 'border-slate-300' : 'border-slate-600'}`}>
-        <div className={`text-center font-mono ${screenText} text-lg min-h-[28px] tracking-wider`}>
+      <div className="mx-3 mt-3 p-2 bg-red-950 rounded-lg border-2 border-red-700">
+        <div className="text-center font-mono text-red-400 text-lg min-h-[28px] tracking-wider">
           {callState === 'incoming' && incomingCall ? (
-            <span className="text-sm animate-pulse">
-              {incomingCall.from} {incomingCall.fromPosition}
+            <span className={`text-sm animate-pulse ${incomingCall.isEmergency ? 'text-amber-400' : ''}`}>
+              {incomingCall.isEmergency ? '🚨 URGENCE 🚨' : `${incomingCall.from} ${incomingCall.fromPosition}`}
             </span>
           ) : callState === 'connected' && currentCall ? (
-            <span className="text-sm text-emerald-500">
+            <span className="text-sm text-green-400">
               {currentCall.to} {currentCall.toPosition}
             </span>
           ) : callState === 'ringing' ? (
@@ -647,75 +599,25 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         </div>
       </div>
 
-      {/* Clavier numérique style PA */}
+      {/* Clavier numérique */}
       <div className="p-3 space-y-2">
-        {/* Rangée 1-2-3 */}
-        <div className="grid grid-cols-3 gap-1">
-          {['1', '2', '3'].map(d => (
-            <button
-              key={d}
-              onClick={() => handleNumberInput(d)}
-              disabled={callState === 'connected' || callState === 'ringing'}
-              className={`h-10 ${keyBg} ${keyText} rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50`}
-            >
-              {d}
-            </button>
-          ))}
-        </div>
-        {/* Rangée 4-5-6 */}
-        <div className="grid grid-cols-3 gap-1">
-          {['4', '5', '6'].map(d => (
-            <button
-              key={d}
-              onClick={() => handleNumberInput(d)}
-              disabled={callState === 'connected' || callState === 'ringing'}
-              className={`h-10 ${keyBg} ${keyText} rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50`}
-            >
-              {d}
-            </button>
-          ))}
-        </div>
-        {/* Rangée 7-8-9 */}
-        <div className="grid grid-cols-3 gap-1">
-          {['7', '8', '9'].map(d => (
-            <button
-              key={d}
-              onClick={() => handleNumberInput(d)}
-              disabled={callState === 'connected' || callState === 'ringing'}
-              className={`h-10 ${keyBg} ${keyText} rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50`}
-            >
-              {d}
-            </button>
-          ))}
-        </div>
-        {/* Rangée *-0-# */}
-        <div className="grid grid-cols-3 gap-1">
-          <button
-            onClick={() => handleNumberInput('*')}
-            disabled={callState === 'connected' || callState === 'ringing'}
-            className={`h-10 ${keyBg} ${keyText} rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50`}
-          >
-            *
-          </button>
-          <button
-            onClick={() => handleNumberInput('0')}
-            disabled={callState === 'connected' || callState === 'ringing'}
-            className={`h-10 ${keyBg} ${keyText} rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50`}
-          >
-            0
-          </button>
-          <button
-            onClick={() => handleNumberInput('+')}
-            disabled={callState === 'connected' || callState === 'ringing'}
-            className={`h-10 ${keyBg} ${keyText} rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50`}
-          >
-            +
-          </button>
-        </div>
+        {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['*', '0', '+']].map((row, i) => (
+          <div key={i} className="grid grid-cols-3 gap-1">
+            {row.map(d => (
+              <button
+                key={d}
+                onClick={() => handleNumberInput(d)}
+                disabled={callState === 'connected' || callState === 'ringing'}
+                className="h-10 bg-red-700 hover:bg-red-600 text-white rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50"
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+        ))}
 
         {/* Boutons d'action */}
         <div className="grid grid-cols-3 gap-1 pt-2">
-          {/* Bouton supprimer */}
           <button
             onClick={handleDelete}
             disabled={!number || callState === 'connected' || callState === 'ringing'}
@@ -724,11 +626,10 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
             <Delete className="h-5 w-5" />
           </button>
           
-          {/* Bouton appeler / répondre */}
           {callState === 'incoming' ? (
             <button
               onClick={handleAnswer}
-              className="h-10 bg-green-600 hover:bg-green-500 text-white rounded-md flex items-center justify-center transition-all active:scale-95 animate-pulse"
+              className={`h-10 text-white rounded-md flex items-center justify-center transition-all active:scale-95 ${incomingCall?.isEmergency ? 'bg-amber-500 hover:bg-amber-400 animate-pulse' : 'bg-green-600 hover:bg-green-500 animate-pulse'}`}
             >
               <Phone className="h-5 w-5" />
             </button>
@@ -749,7 +650,6 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
             </button>
           )}
           
-          {/* Bouton raccrocher / refuser / fermer */}
           {callState === 'incoming' ? (
             <button
               onClick={handleReject}
@@ -775,16 +675,16 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         </div>
       </div>
 
-      {/* Micro (bas du combiné) */}
-      <div className={`h-14 ${isDark ? 'bg-slate-300' : 'bg-slate-700'} rounded-b-3xl flex items-center justify-center relative mt-2`}>
+      {/* Micro */}
+      <div className="h-14 bg-red-900 rounded-b-3xl flex items-center justify-center relative mt-2">
         <div className="grid grid-cols-4 gap-1">
           {[...Array(16)].map((_, i) => (
-            <div key={i} className="w-2 h-2 rounded-full bg-slate-500 opacity-60" />
+            <div key={i} className="w-2 h-2 rounded-full bg-red-600 opacity-60" />
           ))}
         </div>
       </div>
 
-      {/* Audio éléments */}
+      {/* Audio */}
       <audio ref={localAudioRef} autoPlay muted playsInline />
       <audio ref={remoteAudioRef} autoPlay playsInline />
     </div>

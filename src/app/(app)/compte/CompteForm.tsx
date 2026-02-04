@@ -4,11 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
-export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'default', showArmee = true }: { armee: boolean; isAdmin: boolean; variant?: 'default' | 'atc'; showArmee?: boolean }) {
-  const isAtc = variant === 'atc';
-  const textTitle = isAtc ? 'text-slate-800' : 'text-slate-200';
-  const textMuted = isAtc ? 'text-slate-600' : 'text-slate-400';
-  const textCheck = isAtc ? 'text-slate-700' : 'text-slate-300';
+export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'default', showArmee = true }: { armee: boolean; isAdmin: boolean; variant?: 'default' | 'atc' | 'siavi'; showArmee?: boolean }) {
+  const isAtcOrSiavi = variant === 'atc' || variant === 'siavi';
+  const textTitle = isAtcOrSiavi ? 'text-slate-800' : 'text-slate-200';
+  const textMuted = isAtcOrSiavi ? 'text-slate-600' : 'text-slate-400';
+  const textCheck = isAtcOrSiavi ? 'text-slate-700' : 'text-slate-300';
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');

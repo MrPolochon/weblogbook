@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, Store, AlertTriangle } from 'lucide-react';
+import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, Store, AlertTriangle, Flame } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -246,14 +246,24 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
         <div className="w-full sm:w-auto">
           <div className="hidden sm:flex items-center gap-2 justify-end flex-wrap">
             {isAdmin && (
-              <Link
-                href="/atc"
-                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-slate-100"
-                title="Passer à l'espace ATC"
-              >
-                <Radio className="h-4 w-4" />
-                Espace ATC
-              </Link>
+              <>
+                <Link
+                  href="/atc"
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-slate-100"
+                  title="Passer à l'espace ATC"
+                >
+                  <Radio className="h-4 w-4" />
+                  Espace ATC
+                </Link>
+                <Link
+                  href="/siavi"
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-red-800/50 hover:text-red-200"
+                  title="Passer à l'espace SIAVI"
+                >
+                  <Flame className="h-4 w-4" />
+                  Espace SIAVI
+                </Link>
+              </>
             )}
             <Link
               href="/compte"
@@ -289,14 +299,24 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             {accountMenuOpen && (
               <div className="mt-2 grid gap-2">
                 {isAdmin && (
-                  <Link
-                    href="/atc"
-                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800/50 hover:bg-slate-800"
-                    title="Passer à l'espace ATC"
-                  >
-                    <Radio className="h-4 w-4" />
-                    Espace ATC
-                  </Link>
+                  <>
+                    <Link
+                      href="/atc"
+                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800/50 hover:bg-slate-800"
+                      title="Passer à l'espace ATC"
+                    >
+                      <Radio className="h-4 w-4" />
+                      Espace ATC
+                    </Link>
+                    <Link
+                      href="/siavi"
+                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 bg-red-900/50 hover:bg-red-800"
+                      title="Passer à l'espace SIAVI"
+                    >
+                      <Flame className="h-4 w-4" />
+                      Espace SIAVI
+                    </Link>
+                  </>
                 )}
                 <Link
                   href="/compte"

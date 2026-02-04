@@ -37,7 +37,98 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'non_en_service' }, { status: 403 });
     }
 
-    // Chercher l'ATC cible
+    // Gestion des appels d'urgence 911/112 vers AFIS
+    const isEmergency = number === '911' || number === '112';
+    if (isEmergency && to_position === 'AFIS') {
+      // Chercher n'importe quel AFIS disponible
+      const { data: afisSession } = await admin
+        .from('afis_sessions')
+        .select('user_id, aeroport')
+        .eq('est_afis', true)
+        .limit(1)
+        .maybeSingle();
+
+      if (!afisSession) {
+        return NextResponse.json({ error: 'no_afis' }, { status: 404 });
+      }
+
+      // Créer l'appel d'urgence
+      const { data: call, error } = await admin
+        .from('atc_calls')
+        .insert({
+          from_user_id: user.id,
+          from_aeroport: session.aeroport,
+          from_position: session.position,
+          to_user_id: afisSession.user_id,
+          to_aeroport: afisSession.aeroport,
+          to_position: 'AFIS',
+          number_dialed: number,
+          status: 'ringing',
+          started_at: new Date().toISOString(),
+          is_emergency: true,
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('Erreur création appel urgence:', error);
+        return NextResponse.json({ error: 'erreur_creation' }, { status: 400 });
+      }
+
+      return NextResponse.json({ call: { id: call.id } });
+    }
+
+    // Appel vers un AFIS spécifique (code 505)
+    if (to_position === 'AFIS') {
+      const { data: afisSession } = await admin
+        .from('afis_sessions')
+        .select('user_id, aeroport')
+        .eq('aeroport', to_aeroport)
+        .eq('est_afis', true)
+        .single();
+
+      if (!afisSession) {
+        return NextResponse.json({ error: 'offline' }, { status: 404 });
+      }
+
+      // Vérifier que l'AFIS n'est pas déjà en ligne
+      const { data: afisBusy } = await admin
+        .from('atc_calls')
+        .select('id')
+        .or(`from_user_id.eq.${afisSession.user_id},to_user_id.eq.${afisSession.user_id}`)
+        .in('status', ['ringing', 'connected'])
+        .maybeSingle();
+
+      if (afisBusy) {
+        return NextResponse.json({ error: 'cible_occupee' }, { status: 400 });
+      }
+
+      // Créer l'appel
+      const { data: call, error } = await admin
+        .from('atc_calls')
+        .insert({
+          from_user_id: user.id,
+          from_aeroport: session.aeroport,
+          from_position: session.position,
+          to_user_id: afisSession.user_id,
+          to_aeroport: to_aeroport,
+          to_position: 'AFIS',
+          number_dialed: number,
+          status: 'ringing',
+          started_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        console.error('Erreur création appel AFIS:', error);
+        return NextResponse.json({ error: 'erreur_creation' }, { status: 400 });
+      }
+
+      return NextResponse.json({ call: { id: call.id } });
+    }
+
+    // Chercher l'ATC cible (appel normal)
     const { data: targetSession } = await admin
       .from('atc_sessions')
       .select('user_id, aeroport, position')

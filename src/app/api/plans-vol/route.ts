@@ -7,8 +7,8 @@ import { CODES_OACI_VALIDES, genererTypeCargaison } from '@/lib/aeroports-ptfs';
 // AÉROPORT DE DÉPART : Delivery → Clairance → Ground → Tower → DEP → APP → Center
 const ORDRE_DEPART = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
 
-// AÉROPORT D'ARRIVÉE (ordre inversé) : Delivery → Center → APP → DEP → Tower → Ground → Clairance
-const ORDRE_ARRIVEE = ['Delivery', 'Center', 'APP', 'DEP', 'Tower', 'Ground', 'Clairance'] as const;
+// AÉROPORT D'ARRIVÉE (priorité APP avant Center)
+const ORDRE_ARRIVEE = ['Delivery', 'APP', 'DEP', 'Tower', 'Ground', 'Clairance', 'Center'] as const;
 
 export async function POST(request: Request) {
   try {
