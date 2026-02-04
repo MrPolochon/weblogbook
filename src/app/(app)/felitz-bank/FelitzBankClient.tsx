@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowUpRight, ArrowDownLeft, Send, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
@@ -32,6 +32,20 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    const virement = transactions.find((t) => t.libelle?.toLowerCase().includes('virement'));
+    if (!virement) return;
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FelitzBankClient.tsx:37',message:'virementLabelData',data:{compteId,transactionId:virement.id,libelle:virement.libelle,libelleLength:virement.libelle?.length || 0,hasEllipsis:virement.libelle?.includes('...') || false},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    const el = document.querySelector<HTMLElement>(`[data-transaction-id="${virement.id}"]`);
+    if (!el) return;
+    const style = window.getComputedStyle(el);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FelitzBankClient.tsx:45',message:'virementLabelStyle',data:{compteId,transactionId:virement.id,clientWidth:el.clientWidth,scrollWidth:el.scrollWidth,whiteSpace:style.whiteSpace,overflow:style.overflow,textOverflow:style.textOverflow,display:style.display},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
+  }, [compteId, transactions]);
 
   async function handleVirement(e: React.FormEvent) {
     e.preventDefault();
@@ -162,7 +176,7 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
                     <ArrowUpRight className="h-4 w-4 text-red-400" />
                   )}
                   <div className="min-w-0">
-                    <p className="text-sm text-slate-200 break-all">{t.libelle}</p>
+                    <p data-transaction-id={t.id} className="text-sm text-slate-200 break-all">{t.libelle}</p>
                     <p className="text-xs text-slate-500">{formatDate(t.created_at)}</p>
                   </div>
                 </div>

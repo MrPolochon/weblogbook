@@ -56,8 +56,6 @@ export default function AtcNavBar({
   const isDark = theme === 'dark';
   const [atcMenuOpen, setAtcMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navRef = useRef<HTMLElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties | null>(null);
 
@@ -80,27 +78,6 @@ export default function AtcNavBar({
   }, []);
 
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:72',message:'atcMenuState',data:{atcMenuOpen,hasDropdownRef:!!dropdownRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
-    // #endregion
-    if (atcMenuOpen && dropdownRef.current) {
-      const rect = dropdownRef.current.getBoundingClientRect();
-      const style = window.getComputedStyle(dropdownRef.current);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:78',message:'atcDropdownRect',data:{x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height),display:style.display,visibility:style.visibility,opacity:style.opacity,zIndex:style.zIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
-      // #endregion
-      if (navRef.current) {
-        const navRect = navRef.current.getBoundingClientRect();
-        const navStyle = window.getComputedStyle(navRef.current);
-        const dropExceedsNavBottom = rect.bottom > navRect.bottom + 1;
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:86',message:'navOverflowCheck',data:{navOverflowX:navStyle.overflowX,navOverflowY:navStyle.overflowY,navRect:{x:Math.round(navRect.x),y:Math.round(navRect.y),w:Math.round(navRect.width),h:Math.round(navRect.height)},dropExceedsNavBottom,navScrollTop:navRef.current.scrollTop,navScrollLeft:navRef.current.scrollLeft,navClientHeight:navRef.current.clientHeight,navScrollHeight:navRef.current.scrollHeight},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-        // #endregion
-      }
-    }
-  }, [atcMenuOpen]);
-
-  useEffect(() => {
     function updateDropdownPosition() {
       if (!atcMenuOpen || !triggerRef.current) {
         setDropdownStyle(null);
@@ -109,9 +86,6 @@ export default function AtcNavBar({
       const rect = triggerRef.current.getBoundingClientRect();
       const top = Math.round(rect.bottom + 4);
       const left = Math.round(rect.left);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:102',message:'dropdownPosition',data:{top,left,buttonRect:{x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height)}},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
-      // #endregion
       setDropdownStyle({ position: 'fixed', top, left, zIndex: 70 });
     }
     updateDropdownPosition();
@@ -164,19 +138,13 @@ export default function AtcNavBar({
   return (
     <header className={cn("atc-header sticky top-0 z-50 border-b backdrop-blur", headerBg)}>
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-5 sm:gap-5 flex-wrap sm:flex-nowrap py-2 sm:py-0 sm:h-16">
-        <nav ref={navRef} className="flex flex-nowrap items-center gap-3 overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
+        <nav className="flex flex-nowrap items-center gap-3 overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
           {/* Menu déroulant ATC */}
           <div className="relative" ref={menuRef}>
             <button
               ref={triggerRef}
-              // #region agent log
               onPointerDown={() => {
-                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:114',message:'atcMenuPointerDown',data:{atcMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1'})}).catch(()=>{});
                 setAtcMenuOpen((prev) => !prev);
-              }}
-              // #endregion
-              onClickCapture={() => {
-                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:120',message:'atcMenuClickCapture',data:{atcMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1'})}).catch(()=>{});
               }}
               className={cn(
                 'flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-colors relative flex-shrink-0',
@@ -198,7 +166,7 @@ export default function AtcNavBar({
             </button>
             
             {atcMenuOpen && (
-              <div ref={dropdownRef} style={dropdownStyle ?? undefined} className={cn("fixed w-56 rounded-lg border py-1 shadow-xl z-50", dropdownBg)}>
+              <div style={dropdownStyle ?? undefined} className={cn("fixed w-56 rounded-lg border py-1 shadow-xl z-50", dropdownBg)}>
                 {atcMenuItems.map((item) => {
                   const Icon = item.icon;
                   return (

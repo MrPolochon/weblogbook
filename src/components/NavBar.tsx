@@ -25,8 +25,6 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
   const router = useRouter();
   const [piloteMenuOpen, setPiloteMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const navRef = useRef<HTMLElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties | null>(null);
 
@@ -49,27 +47,6 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
   }, []);
 
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:41',message:'piloteMenuState',data:{piloteMenuOpen,hasDropdownRef:!!dropdownRef.current},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
-    // #endregion
-    if (piloteMenuOpen && dropdownRef.current) {
-      const rect = dropdownRef.current.getBoundingClientRect();
-      const style = window.getComputedStyle(dropdownRef.current);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:47',message:'piloteDropdownRect',data:{x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height),display:style.display,visibility:style.visibility,opacity:style.opacity,zIndex:style.zIndex},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
-      // #endregion
-      if (navRef.current) {
-        const navRect = navRef.current.getBoundingClientRect();
-        const navStyle = window.getComputedStyle(navRef.current);
-        const dropExceedsNavBottom = rect.bottom > navRect.bottom + 1;
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:54',message:'navOverflowCheck',data:{navOverflowX:navStyle.overflowX,navOverflowY:navStyle.overflowY,navRect:{x:Math.round(navRect.x),y:Math.round(navRect.y),w:Math.round(navRect.width),h:Math.round(navRect.height)},dropExceedsNavBottom,navScrollTop:navRef.current.scrollTop,navScrollLeft:navRef.current.scrollLeft,navClientHeight:navRef.current.clientHeight,navScrollHeight:navRef.current.scrollHeight},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-        // #endregion
-      }
-    }
-  }, [piloteMenuOpen]);
-
-  useEffect(() => {
     function updateDropdownPosition() {
       if (!piloteMenuOpen || !triggerRef.current) {
         setDropdownStyle(null);
@@ -78,9 +55,6 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
       const rect = triggerRef.current.getBoundingClientRect();
       const top = Math.round(rect.bottom + 4);
       const left = Math.round(rect.left);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:70',message:'dropdownPosition',data:{top,left,buttonRect:{x:Math.round(rect.x),y:Math.round(rect.y),w:Math.round(rect.width),h:Math.round(rect.height)}},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
-      // #endregion
       setDropdownStyle({ position: 'fixed', top, left, zIndex: 70 });
     }
     updateDropdownPosition();
@@ -126,19 +100,13 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
   return (
     <header className="sticky top-0 z-50 border-b border-slate-700/50 bg-slate-900/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2 sm:h-14 sm:py-0 flex-col sm:flex-row gap-2">
-        <nav ref={navRef} className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
+        <nav className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
           {/* Menu déroulant Espace Pilote */}
           <div className="relative" ref={menuRef}>
             <button
               ref={triggerRef}
-              // #region agent log
               onPointerDown={() => {
-                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:76',message:'pilotMenuPointerDown',data:{piloteMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1'})}).catch(()=>{});
                 setPiloteMenuOpen((prev) => !prev);
-              }}
-              // #endregion
-              onClickCapture={() => {
-                fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:81',message:'pilotMenuClickCapture',data:{piloteMenuOpen},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'H1'})}).catch(()=>{});
               }}
               className={cn(
                 'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
@@ -161,7 +129,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             </button>
             
             {piloteMenuOpen && (
-              <div ref={dropdownRef} style={dropdownStyle ?? undefined} className="fixed w-56 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl z-50">
+              <div style={dropdownStyle ?? undefined} className="fixed w-56 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl z-50">
                 {piloteMenuItems.map((item) => {
                   const Icon = item.icon;
                   return (
