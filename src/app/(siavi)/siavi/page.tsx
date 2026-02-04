@@ -75,18 +75,18 @@ export default async function SiaviPage() {
       {/* Header avec stats */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-red-100">
-            <Flame className="h-6 w-6 text-red-600" />
+          <div className="p-2 rounded-lg bg-red-500/20 border border-red-500/30">
+            <Flame className="h-6 w-6 text-red-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-red-900">Centre SIAVI</h1>
-            <p className="text-sm text-red-700">Service d&apos;Information de Vol</p>
+            <h1 className="text-xl font-bold text-red-400">Centre SIAVI</h1>
+            <p className="text-sm text-red-300">Service d&apos;Information de Vol</p>
           </div>
         </div>
         <div className="flex gap-4">
-          <div className="text-center px-4 py-2 rounded-lg bg-red-100 border border-red-200">
-            <p className="text-2xl font-bold text-red-600">{totalAfisEnService}</p>
-            <p className="text-xs text-red-700 uppercase tracking-wide">AFIS en ligne</p>
+          <div className="text-center px-4 py-2 rounded-lg bg-red-500/20 border-2 border-red-500/40">
+            <p className="text-2xl font-bold text-red-400">{totalAfisEnService}</p>
+            <p className="text-xs text-red-300 uppercase tracking-wide font-medium">AFIS en ligne</p>
           </div>
         </div>
       </div>
@@ -99,8 +99,8 @@ export default async function SiaviPage() {
               <AlertTriangle className="h-6 w-6 text-amber-600" />
             </div>
             <div className="flex-1">
-              <h2 className="text-lg font-semibold text-slate-900 mb-1">Hors service</h2>
-              <p className="text-slate-600 text-sm mb-4">
+              <h2 className="text-lg font-bold text-amber-900 mb-1">Hors service</h2>
+              <p className="text-amber-800 text-sm mb-4">
                 Vous n&apos;êtes pas en service. Sélectionnez un aéroport pour commencer votre surveillance.
               </p>
               <SeMettreEnServiceSiaviForm />
@@ -209,16 +209,16 @@ export default async function SiaviPage() {
       )}
 
       {/* Positions en service (AFIS + ATC) */}
-      <div className="rounded-xl border border-red-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-red-900 mb-4 flex items-center gap-2">
-          <MapPin className="h-5 w-5 text-red-600" />
+      <div className="rounded-xl border-2 border-red-300 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-bold text-red-800 mb-4 flex items-center gap-2">
+          <MapPin className="h-5 w-5 text-red-700" />
           Positions en service
         </h2>
         
         {afisEnService.length === 0 && atcEnService.length === 0 ? (
           <div className="text-center py-6">
-            <Flame className="h-10 w-10 text-red-300 mx-auto mb-2" />
-            <p className="text-red-600">Aucun agent en service</p>
+            <Flame className="h-10 w-10 text-red-400 mx-auto mb-2" />
+            <p className="text-red-700 font-medium">Aucun agent en service</p>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

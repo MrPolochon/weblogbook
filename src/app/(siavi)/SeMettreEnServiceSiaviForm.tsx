@@ -51,11 +51,11 @@ export default function SeMettreEnServiceSiaviForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-red-800 mb-1">Aéroport</label>
+        <label className="block text-sm font-bold text-amber-800 mb-1">Aéroport</label>
         <select
           value={aeroport}
           onChange={(e) => setAeroport(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border border-red-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+          className="w-full px-3 py-2 rounded-lg border-2 border-slate-300 bg-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-red-500"
         >
           <option value="">— Sélectionner un aéroport —</option>
           <optgroup label="🔥 Aéroports SIAVI (priorité AFIS)">
@@ -76,7 +76,7 @@ export default function SeMettreEnServiceSiaviForm() {
       </div>
 
       {error && (
-        <div className="p-3 rounded-lg bg-red-100 border border-red-300 text-red-700 text-sm">
+        <div className="p-3 rounded-lg bg-red-100 border border-red-300 text-red-800 text-sm font-medium">
           {error}
         </div>
       )}
@@ -84,12 +84,12 @@ export default function SeMettreEnServiceSiaviForm() {
       <button
         type="submit"
         disabled={loading || !aeroport}
-        className="w-full py-2.5 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-semibold transition-colors"
+        className="w-full py-2.5 rounded-lg bg-red-500 hover:bg-red-600 disabled:bg-red-400 text-white font-bold transition-colors"
       >
         {loading ? 'Connexion...' : 'Se mettre en service'}
       </button>
 
-      <p className="text-xs text-red-600/70">
+      <p className="text-xs text-amber-700 font-medium">
         Sur les aéroports SIAVI exclusifs, vous aurez automatiquement les fonctions AFIS.
         Sur les autres aéroports, vous serez AFIS uniquement si aucun ATC n&apos;est en ligne.
       </p>
