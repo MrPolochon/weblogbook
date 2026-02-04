@@ -62,9 +62,82 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   const dialToneIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const dialToneAudioContextRef = useRef<AudioContext | null>(null);
   const shouldDialToneRef = useRef(false);
+  const emergencyAlarmRef = useRef<{ osc1: OscillatorNode; osc2: OscillatorNode; gain: GainNode; ctx: AudioContext } | null>(null);
+  const [showEmergencyOverlay, setShowEmergencyOverlay] = useState(false);
 
-  // Sonnerie téléphone (urgence = plus rapide et stridente)
-  const playRingtone = (isEmergency = false) => {
+  // Alarme de caserne de pompier (sirène montante/descendante forte)
+  const playFireAlarm = () => {
+    try {
+      if (emergencyAlarmRef.current) return; // Déjà en cours
+      
+      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      // Sirène de pompier - deux fréquences alternantes
+      osc1.type = 'sawtooth';
+      osc2.type = 'square';
+      
+      // Volume fort
+      gain.gain.setValueAtTime(0.6, ctx.currentTime);
+      
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+      
+      // Effet sirène montante/descendante
+      const duration = 1.5;
+      osc1.frequency.setValueAtTime(600, ctx.currentTime);
+      osc1.frequency.linearRampToValueAtTime(900, ctx.currentTime + duration / 2);
+      osc1.frequency.linearRampToValueAtTime(600, ctx.currentTime + duration);
+      
+      osc2.frequency.setValueAtTime(650, ctx.currentTime);
+      osc2.frequency.linearRampToValueAtTime(950, ctx.currentTime + duration / 2);
+      osc2.frequency.linearRampToValueAtTime(650, ctx.currentTime + duration);
+      
+      osc1.start();
+      osc2.start();
+      
+      emergencyAlarmRef.current = { osc1, osc2, gain, ctx };
+      
+      // Répéter la sirène
+      const repeatSiren = () => {
+        if (!emergencyAlarmRef.current || !shouldRingRef.current) return;
+        const t = emergencyAlarmRef.current.ctx.currentTime;
+        emergencyAlarmRef.current.osc1.frequency.setValueAtTime(600, t);
+        emergencyAlarmRef.current.osc1.frequency.linearRampToValueAtTime(900, t + duration / 2);
+        emergencyAlarmRef.current.osc1.frequency.linearRampToValueAtTime(600, t + duration);
+        emergencyAlarmRef.current.osc2.frequency.setValueAtTime(650, t);
+        emergencyAlarmRef.current.osc2.frequency.linearRampToValueAtTime(950, t + duration / 2);
+        emergencyAlarmRef.current.osc2.frequency.linearRampToValueAtTime(650, t + duration);
+      };
+      
+      ringtoneIntervalRef.current = setInterval(repeatSiren, duration * 1000);
+      
+    } catch (err) {
+      console.error('Erreur alarme:', err);
+    }
+  };
+
+  const stopFireAlarm = () => {
+    if (emergencyAlarmRef.current) {
+      try {
+        emergencyAlarmRef.current.osc1.stop();
+        emergencyAlarmRef.current.osc2.stop();
+        emergencyAlarmRef.current.ctx.close();
+      } catch (e) { /* ignore */ }
+      emergencyAlarmRef.current = null;
+    }
+    if (ringtoneIntervalRef.current) {
+      clearInterval(ringtoneIntervalRef.current);
+      ringtoneIntervalRef.current = null;
+    }
+    setShowEmergencyOverlay(false);
+  };
+
+  // Sonnerie téléphone normale (appels 505)
+  const playRingtone = () => {
     try {
       if (!ringtoneAudioContextRef.current) {
         ringtoneAudioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
@@ -74,15 +147,14 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       const osc2 = ctx.createOscillator();
       const gain = ctx.createGain();
       
-      // Urgence = fréquences plus hautes
-      osc1.frequency.value = isEmergency ? 600 : 440;
-      osc2.frequency.value = isEmergency ? 800 : 480;
+      osc1.frequency.value = 440;
+      osc2.frequency.value = 480;
       osc1.type = 'sine';
       osc2.type = 'sine';
       
       gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(isEmergency ? 0.5 : 0.3, ctx.currentTime + 0.05);
-      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + (isEmergency ? 0.2 : 0.4));
+      gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
       
       osc1.connect(gain);
       osc2.connect(gain);
@@ -90,8 +162,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       
       osc1.start();
       osc2.start();
-      osc1.stop(ctx.currentTime + (isEmergency ? 0.2 : 0.4));
-      osc2.stop(ctx.currentTime + (isEmergency ? 0.2 : 0.4));
+      osc1.stop(ctx.currentTime + 0.4);
+      osc2.stop(ctx.currentTime + 0.4);
     } catch (err) {
       console.error('Erreur sonnerie:', err);
     }
@@ -151,12 +223,21 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     if (callState === 'incoming' && incomingCall) {
       const isEmergency = incomingCall.isEmergency;
       shouldRingRef.current = true;
-      playRingtone(isEmergency);
-      ringtoneIntervalRef.current = setInterval(() => {
-        if (shouldRingRef.current) playRingtone(isEmergency);
-      }, isEmergency ? 300 : 600);
+      
+      if (isEmergency) {
+        // Alarme de pompier + clignotement rouge
+        setShowEmergencyOverlay(true);
+        playFireAlarm();
+      } else {
+        // Sonnerie normale
+        playRingtone();
+        ringtoneIntervalRef.current = setInterval(() => {
+          if (shouldRingRef.current) playRingtone();
+        }, 600);
+      }
     } else {
       shouldRingRef.current = false;
+      stopFireAlarm();
       if (ringtoneIntervalRef.current) {
         clearInterval(ringtoneIntervalRef.current);
         ringtoneIntervalRef.current = null;
@@ -168,6 +249,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     }
     return () => {
       shouldRingRef.current = false;
+      stopFireAlarm();
       if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
     };
   }, [callState, incomingCall]);
@@ -545,35 +627,66 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
 
   useEffect(() => () => cleanupWebRTC(), []);
 
+  // Overlay clignotant rouge pour urgence
+  const EmergencyOverlay = () => (
+    <div className="fixed inset-0 z-[100] pointer-events-none animate-emergency-flash">
+      <div className="absolute inset-0 bg-red-600/40" />
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-600 text-white px-8 py-4 rounded-xl shadow-2xl pointer-events-auto animate-bounce">
+        <div className="flex items-center gap-3">
+          <Phone className="h-8 w-8 animate-pulse" />
+          <div>
+            <p className="text-xl font-bold">🚨 APPEL D&apos;URGENCE 🚨</p>
+            <p className="text-sm">911/112 - Décrochez immédiatement</p>
+          </div>
+          <Phone className="h-8 w-8 animate-pulse" />
+        </div>
+      </div>
+      <style jsx>{`
+        @keyframes emergency-flash {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
+        .animate-emergency-flash {
+          animation: emergency-flash 0.5s ease-in-out infinite;
+        }
+      `}</style>
+    </div>
+  );
+
   // Combiné fermé
   if (!isOpen) {
     return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-0 left-1/2 -translate-x-1/2 z-50 bg-red-700 rounded-t-2xl shadow-2xl transition-all duration-300 hover:shadow-3xl group"
-        style={{ width: '280px', height: '48px' }}
-        title="Téléphone SIAVI"
-      >
-        <div className="relative w-full h-full flex items-center justify-center">
-          <div className="absolute left-2 w-12 h-10 bg-red-800 rounded-lg" />
-          <div className="flex items-center gap-2 text-white">
-            <Flame className="h-5 w-5 group-hover:animate-bounce" />
-            <span className="text-sm font-medium">Téléphone SIAVI</span>
+      <>
+        {showEmergencyOverlay && <EmergencyOverlay />}
+        <button
+          onClick={() => setIsOpen(true)}
+          className={`fixed bottom-0 left-1/2 -translate-x-1/2 z-50 bg-red-700 rounded-t-2xl shadow-2xl transition-all duration-300 hover:shadow-3xl group ${showEmergencyOverlay ? 'animate-bounce' : ''}`}
+          style={{ width: '280px', height: '48px' }}
+          title="Téléphone SIAVI"
+        >
+          <div className="relative w-full h-full flex items-center justify-center">
+            <div className="absolute left-2 w-12 h-10 bg-red-800 rounded-lg" />
+            <div className="flex items-center gap-2 text-white">
+              <Flame className={`h-5 w-5 ${showEmergencyOverlay ? 'animate-ping' : 'group-hover:animate-bounce'}`} />
+              <span className="text-sm font-medium">{showEmergencyOverlay ? '🚨 URGENCE 🚨' : 'Téléphone SIAVI'}</span>
+            </div>
+            <div className="absolute right-2 w-12 h-10 bg-red-800 rounded-lg" />
+            
+            {callState === 'incoming' && (
+              <div className={`absolute -top-2 right-4 w-4 h-4 rounded-full animate-ping ${incomingCall?.isEmergency ? 'bg-amber-500' : 'bg-green-500'}`} />
+            )}
           </div>
-          <div className="absolute right-2 w-12 h-10 bg-red-800 rounded-lg" />
-          
-          {callState === 'incoming' && (
-            <div className={`absolute -top-2 right-4 w-4 h-4 rounded-full animate-ping ${incomingCall?.isEmergency ? 'bg-amber-500' : 'bg-green-500'}`} />
-          )}
-        </div>
-      </button>
+        </button>
+      </>
     );
   }
 
   // Combiné ouvert
   return (
-    <div className="fixed right-4 bottom-4 z-50 bg-red-800 rounded-3xl shadow-2xl transition-all duration-500 overflow-hidden"
-         style={{ width: '200px', minHeight: '420px' }}>
+    <>
+      {showEmergencyOverlay && <EmergencyOverlay />}
+      <div className={`fixed right-4 bottom-4 z-50 bg-red-800 rounded-3xl shadow-2xl transition-all duration-500 overflow-hidden ${showEmergencyOverlay ? 'ring-4 ring-amber-400 animate-pulse' : ''}`}
+           style={{ width: '200px', minHeight: '420px' }}>
       
       {/* Écouteur */}
       <div className="h-16 bg-red-900 rounded-t-3xl flex items-center justify-center relative">
@@ -688,5 +801,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       <audio ref={localAudioRef} autoPlay muted playsInline />
       <audio ref={remoteAudioRef} autoPlay playsInline />
     </div>
+    </>
   );
 }
