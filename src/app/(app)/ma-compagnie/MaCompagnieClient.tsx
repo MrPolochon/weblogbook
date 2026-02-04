@@ -69,6 +69,12 @@ export default function MaCompagnieClient({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MaCompagnieClient:props',message:'ma_compagnie_props',data:{selectedCompagnieId,compagnieId:compagnie.id,isPdg,compagniesCount:compagniesDisponibles.length,roles:compagniesDisponibles.slice(0,5).map(c=>({id:c.id,role:c.role}))},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
+  }, [selectedCompagnieId, compagnie.id, isPdg, compagniesDisponibles]);
+
   // Recrutement
   const [showRecrutement, setShowRecrutement] = useState(false);
   const [searchPilote, setSearchPilote] = useState('');
