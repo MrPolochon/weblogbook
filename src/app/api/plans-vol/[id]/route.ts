@@ -16,6 +16,10 @@ const ORDRE_ACCEPTATION_PLANS = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DE
  * - Denrées périssables (🧊) : double pénalité si retard/avance
  * - Autres types : pénalité normale
  * 
+ * Règle business :
+ * - 0 à 1 min d'écart => 100%
+ * - Au-delà => décroissance exponentielle, peut atteindre 0
+ * 
  * @param tempsPrevuMin Temps de vol prévu en minutes
  * @param tempsReelMin Temps de vol réel en minutes
  * @param typeCargaison Type de cargaison (optionnel, pour vols cargo)
@@ -26,7 +30,7 @@ function calculerCoefficientPonctualite(
   typeCargaison?: TypeCargaison | null
 ): number {
   const ecart = Math.abs(tempsReelMin - tempsPrevuMin);
-  if (ecart <= 5) return 1.0;
+  if (ecart <= 1) return 1.0;
   
   // Multiplicateur de sensibilité pour le cargo
   let sensibilite = 1.0;
@@ -35,15 +39,12 @@ function calculerCoefficientPonctualite(
     sensibilite = cargaisonInfo.sensibiliteRetard;
   }
   
-  // Pénalité de base : 3% par minute d'écart au-delà de 5 min
-  // Avec sensibilité : express/périssables = 6% par minute (double)
-  const penaliteParMinute = 3 * sensibilite;
-  const penalitePct = Math.min((ecart - 5) * penaliteParMinute, 50 * sensibilite);
+  // Décroissance exponentielle après 1 minute
+  const k = 0.07 * sensibilite;
+  const coeff = Math.exp(-k * (ecart - 1));
+  const coeffArrondi = coeff < 0.01 ? 0 : coeff;
   
-  // La pénalité maximale peut aller jusqu'à 100% pour les cargos sensibles
-  const penaliteMax = Math.min(penalitePct, 100);
-  
-  return Math.max(0, 1.0 - (penaliteMax / 100));
+  return Math.max(0, Math.min(1, coeffArrondi));
 }
 
 /**
@@ -235,10 +236,11 @@ async function envoyerChequesVol(
   
   // Distribuer les taxes aux ATC
   const numeroVol = plan.numero_vol || 'N/A';
+  const baseTaxes = coefficient === 0 ? plan.revenue_brut : revenuEffectif;
   const { taxesTotales } = await distribuerTaxesATC(
     admin,
     plan.id,
-    revenuEffectif,
+    baseTaxes,
     plan.aeroport_arrivee || '',
     plan.type_vol || 'IFR',
     numeroVol
@@ -291,6 +293,39 @@ async function envoyerChequesVol(
   }
 
   const coeffPct = Math.round(coefficient * 100);
+
+  // Si ponctualité = 0 : le vol n'est pas rentable, débiter les taxes directement
+  if (coefficient === 0 && taxesTotales > 0) {
+    const { data: compteSolde } = await admin.from('felitz_comptes')
+      .select('id, solde')
+      .eq('id', compteCompagnie.id)
+      .single();
+
+    if (compteSolde) {
+      const nouveauSolde = (compteSolde.solde || 0) - taxesTotales;
+      await admin.from('felitz_comptes')
+        .update({ solde: nouveauSolde })
+        .eq('id', compteCompagnie.id);
+
+      await admin.from('felitz_transactions').insert({
+        compte_id: compteCompagnie.id,
+        type: 'debit',
+        montant: taxesTotales,
+        description: `Taxes aéroportuaires (ponctualité 0) - Vol ${numeroVol}`,
+        reference: `TAX-${plan.id.slice(0, 8)}`
+      });
+
+      if (compagnie.pdg_id) {
+        await admin.from('messages').insert({
+          destinataire_id: compagnie.pdg_id,
+          expediteur_id: null,
+          titre: `Taxes aéroportuaires - Vol ${numeroVol}`,
+          contenu: `Le vol ${numeroVol} a un coefficient de ponctualité de 0%.\n\nLes taxes aéroportuaires (${taxesTotales.toLocaleString('fr-FR')} F$) ont été déduites directement du compte de la compagnie.`,
+          type_message: 'notification'
+        });
+      }
+    }
+  }
 
   // Chèque salaire pilote
   if (salaireEffectif > 0) {
