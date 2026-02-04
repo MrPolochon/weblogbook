@@ -82,7 +82,27 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       console.log('Target ATC session found:', targetSession, 'Query error:', sessionErr);
-      if (!targetSession) return NextResponse.json({ error: 'offline' }, { status: 400 });
+      
+      if (!targetSession) {
+        // Vérifier si l'aéroport a des ATC en ligne (mais pas sur cette position)
+        const { data: aeroportSessions } = await admin.from('atc_sessions')
+          .select('position')
+          .eq('aeroport', to_aeroport);
+        
+        if (aeroportSessions && aeroportSessions.length > 0) {
+          // Il y a des ATC mais pas sur cette position
+          const positions = aeroportSessions.map(s => s.position).join(', ');
+          console.log(`ATC offline for ${to_position} at ${to_aeroport}. Available positions: ${positions}`);
+          return NextResponse.json({ 
+            error: 'position_offline',
+            message: `Position ${to_position} non disponible. Positions en ligne: ${positions}`
+          }, { status: 400 });
+        }
+        
+        // Aucun ATC sur cet aéroport
+        console.log(`No ATC online at ${to_aeroport}`);
+        return NextResponse.json({ error: 'offline' }, { status: 400 });
+      }
       toUserId = targetSession.user_id;
     }
 

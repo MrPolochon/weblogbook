@@ -79,8 +79,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       osc1.type = 'sawtooth';
       osc2.type = 'square';
       
-      // Volume fort
-      gain.gain.setValueAtTime(0.6, ctx.currentTime);
+      // Volume modéré (réduit de 0.6 à 0.25)
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
       
       osc1.connect(gain);
       osc2.connect(gain);
@@ -519,7 +519,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       
       if (!res.ok) {
         const messages: Record<string, string> = {
-          'offline': 'Votre correspondant est hors ligne',
+          'offline': 'Aucun ATC en ligne sur cet aéroport',
+          'position_offline': 'Cette position ATC n\'est pas en service',
           'no_afis': 'Aucun agent AFIS disponible',
           'rejected': 'Appel refusé',
           'non_en_service': 'Vous devez être en service pour appeler',
@@ -527,8 +528,10 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           'cible_occupee': 'Votre correspondant est déjà en ligne',
           'erreur_creation': 'Erreur lors de la création de l\'appel',
         };
-        console.error('SIAVI call error:', data.error);
-        playMessage(messages[data.error] || 'Erreur inconnue');
+        console.error('SIAVI call error:', data.error, data.message);
+        // Utiliser le message détaillé si disponible
+        const errorMsg = data.message || messages[data.error] || 'Erreur inconnue';
+        playMessage(errorMsg);
         setCallState('idle');
         setNumber('');
         return;
