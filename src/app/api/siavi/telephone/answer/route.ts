@@ -53,7 +53,7 @@ export async function POST(request: Request) {
     const { error } = await admin.from('atc_calls')
       .update({ 
         status: 'connected', 
-        connected_at: new Date().toISOString(),
+        answered_at: new Date().toISOString(),
         to_user_id: user.id // Réassigner à celui qui répond
       })
       .eq('id', callId)
