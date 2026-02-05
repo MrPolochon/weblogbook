@@ -31,14 +31,8 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:33',message:'handleClickOutside',data:{piloteMenuOpen,hasMenuRef:!!menuRef.current,targetTag:(event.target as HTMLElement | null)?.tagName || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
       const targetNode = event.target as Node | null;
       const containsTarget = menuRef.current ? !!targetNode && menuRef.current.contains(targetNode) : false;
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'NavBar.tsx:39',message:'containsCheck',data:{containsTarget,hasMenuRef:!!menuRef.current,targetTag:(event.target as HTMLElement | null)?.tagName || null,menuOpen:piloteMenuOpen,hasComposedPath:typeof (event as unknown as { composedPath?: () => EventTarget[] }).composedPath === 'function'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
       if (menuRef.current && !containsTarget) {
         setPiloteMenuOpen(false);
       }
