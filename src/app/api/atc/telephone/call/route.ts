@@ -7,16 +7,10 @@ export async function POST(request: Request) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'atc/call/route.ts:entry',message:'ATC call API entry',data:{userId:user?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const body = await request.json();
     const { to_aeroport, to_position, number } = body;
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'atc/call/route.ts:params',message:'ATC call params',data:{to_aeroport,to_position,number},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
 
     if (!to_aeroport || !to_position) {
       return NextResponse.json({ error: 'Aéroport et position requis' }, { status: 400 });
@@ -94,16 +88,12 @@ export async function POST(request: Request) {
 
     // Appel vers un AFIS spécifique (code 505)
     if (to_position === 'AFIS') {
-      const { data: afisSession, error: afisErr } = await admin
+      const { data: afisSession } = await admin
         .from('afis_sessions')
         .select('user_id, aeroport')
         .eq('aeroport', to_aeroport)
         .eq('est_afis', true)
         .single();
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'atc/call/route.ts:afis-session',message:'AFIS session lookup',data:{afisSession,afisErr:afisErr?.message,to_aeroport},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
-      // #endregion
 
       if (!afisSession) {
         return NextResponse.json({ error: 'offline' }, { status: 404 });

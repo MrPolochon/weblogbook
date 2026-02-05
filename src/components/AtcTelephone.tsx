@@ -437,15 +437,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   };
 
   const handleCall = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcTelephone.tsx:handleCall',message:'ATC handleCall entry',data:{number,callState,aeroport},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2-client'})}).catch(()=>{});
-    // #endregion
     if (!number || callState !== 'dialing') return;
     
     const parsed = parseNumber(number);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcTelephone.tsx:parsed',message:'ATC parsed number',data:{parsed,number},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2-client'})}).catch(()=>{});
-    // #endregion
     if (!parsed.position) {
       playMessage('Numéro invalide');
       return;
@@ -466,9 +460,6 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       });
 
       const data = await res.json();
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcTelephone.tsx:response',message:'ATC call API response',data:{ok:res.ok,status:res.status,data},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2-client'})}).catch(()=>{});
-      // #endregion
       
       if (!res.ok) {
         // Si appel bloqué, réinitialiser automatiquement

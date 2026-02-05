@@ -612,9 +612,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   };
 
   const handleAnswer = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SiaviTelephone.tsx:handleAnswer',message:'handleAnswer entry',data:{incomingCall},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5-client'})}).catch(()=>{});
-    // #endregion
     if (!incomingCall) return;
     console.log('Réponse à l\'appel:', incomingCall);
     try {
@@ -624,9 +621,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         body: JSON.stringify({ callId: incomingCall.callId }),
       });
       const data = await res.json();
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SiaviTelephone.tsx:handleAnswer:response',message:'Answer API response',data:{ok:res.ok,status:res.status,data},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5-client'})}).catch(()=>{});
-      // #endregion
       console.log('Réponse API answer:', { ok: res.ok, data });
       
       if (res.ok) {
@@ -637,9 +631,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         try {
           await setupWebRTC(incomingCall.callId, false);
         } catch (webrtcErr) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SiaviTelephone.tsx:handleAnswer:webrtc-error',message:'WebRTC setup failed',data:{error:String(webrtcErr)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5-client'})}).catch(()=>{});
-          // #endregion
           console.error('WebRTC setup error:', webrtcErr);
         }
         setCurrentCall({ to: incomingCall.from, toPosition: incomingCall.fromPosition, callId: incomingCall.callId });
@@ -652,9 +643,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         setCallState('idle');
       }
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'SiaviTelephone.tsx:handleAnswer:catch',message:'handleAnswer exception',data:{error:String(err)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5-client'})}).catch(()=>{});
-      // #endregion
       console.error('Erreur réponse:', err);
       setIncomingCall(null);
       setCallState('idle');

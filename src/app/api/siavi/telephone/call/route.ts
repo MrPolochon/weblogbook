@@ -6,23 +6,14 @@ export async function POST(request: Request) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'siavi/call/route.ts:entry',message:'SIAVI call API entry',data:{userId:user?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const { data: session } = await supabase.from('afis_sessions').select('id, aeroport').eq('user_id', user.id).single();
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'siavi/call/route.ts:session',message:'SIAVI session check',data:{hasSession:!!session,aeroport:session?.aeroport},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     if (!session) return NextResponse.json({ error: 'non_en_service' }, { status: 400 });
 
     const body = await request.json();
     const { to_aeroport, to_position, is_emergency, number } = body;
     const numberDialed = number || `${to_aeroport}-${to_position}`;
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'siavi/call/route.ts:params',message:'SIAVI call params',data:{to_aeroport,to_position,is_emergency,numberDialed},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     console.log('SIAVI call request:', { to_aeroport, to_position, is_emergency, from_aeroport: session.aeroport, numberDialed });
 
     const admin = createAdminClient();
@@ -49,10 +40,6 @@ export async function POST(request: Request) {
       .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
       .in('status', ['ringing', 'connected'])
       .maybeSingle();
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'siavi/call/route.ts:existing',message:'Check existing call',data:{hasExisting:!!existing,existing},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
-    // #endregion
 
     if (existing) {
       console.log('Appel existant trouvé:', existing);
@@ -111,9 +98,6 @@ export async function POST(request: Request) {
       // Debug: lister toutes les sessions ATC actives
       const { data: allAtcSessions } = await admin.from('atc_sessions').select('aeroport, position, user_id');
       console.log('All active ATC sessions:', allAtcSessions);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'siavi/call/route.ts:atc-sessions',message:'All ATC sessions',data:{allAtcSessions,to_aeroport,to_position},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
-      // #endregion
       
       const { data: targetSession, error: sessionErr } = await admin.from('atc_sessions')
         .select('user_id')
@@ -122,9 +106,6 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       console.log('Target ATC session found:', targetSession, 'Query error:', sessionErr);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'siavi/call/route.ts:target-session',message:'Target ATC session',data:{targetSession,sessionErr:sessionErr?.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
-      // #endregion
       
       if (!targetSession) {
         // Vérifier si l'aéroport a des ATC en ligne (mais pas sur cette position)

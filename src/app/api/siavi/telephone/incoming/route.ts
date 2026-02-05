@@ -39,10 +39,6 @@ export async function GET() {
       .limit(1)
       .maybeSingle();
 
-    // #region agent log
-    if (call) fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'siavi/incoming/route.ts:direct-call',message:'Direct call found',data:{callId:call.id,from:call.from_user_id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-    // #endregion
-
     if (call) {
       return NextResponse.json({ call });
     }

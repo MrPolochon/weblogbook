@@ -1,0 +1,2 @@
+{"location":"SiaviTelephone.tsx:handleAnswer","message":"handleAnswer entry","data":{"incomingCall":{"from":"IRFD","fromPosition":"Tower","callId":"b5d9d754-d363-44ad-adc3-cd4a23005ae1","isEmergency":false}},"timestamp":1770251672142,"sessionId":"debug-session","hypothesisId":"H5-client"}
+{"location":"SiaviTelephone.tsx:handleAnswer:response","message":"Answer API response","data":{"ok":true,"status":200,"data":{"ok":true}},"timestamp":1770251673092,"sessionId":"debug-session","hypothesisId":"H5-client"}
