@@ -62,14 +62,8 @@ export default function AtcNavBar({
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:62',message:'handleClickOutside',data:{atcMenuOpen,hasMenuRef:!!menuRef.current,targetTag:(event.target as HTMLElement | null)?.tagName || null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
       const targetNode = event.target as Node | null;
       const containsTarget = menuRef.current ? !!targetNode && menuRef.current.contains(targetNode) : false;
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'AtcNavBar.tsx:68',message:'containsCheck',data:{containsTarget,hasMenuRef:!!menuRef.current,targetTag:(event.target as HTMLElement | null)?.tagName || null,menuOpen:atcMenuOpen,hasComposedPath:typeof (event as unknown as { composedPath?: () => EventTarget[] }).composedPath === 'function'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H3'})}).catch(()=>{});
-      // #endregion
       if (menuRef.current && !containsTarget) {
         setAtcMenuOpen(false);
       }
