@@ -39,6 +39,10 @@ export async function GET() {
       .limit(1)
       .maybeSingle();
 
+    // #region agent log
+    if (incomingCall) fetch('http://127.0.0.1:7242/ingest/a721640d-e3c8-4a56-a4cc-d919b111b0c0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'atc/incoming/route.ts:call-found',message:'Incoming call found for ATC',data:{callId:incomingCall.id,from:incomingCall.from_aeroport,fromPos:incomingCall.from_position},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+    // #endregion
+
     if (incomingCall) {
       return NextResponse.json({
         call: {
