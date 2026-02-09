@@ -52,6 +52,13 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const shouldPlaySoundRef = useRef(false);
   const emergencyAlarmRef = useRef<{ osc: OscillatorNode; ctx: AudioContext } | null>(null);
+  const audioContainerRef = useRef<HTMLDivElement | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Éviter les erreurs d'hydratation
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Messages vocaux
   const playMessage = useCallback((message: string) => {
@@ -293,7 +300,9 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         if (track.kind === Track.Kind.Audio) {
           const audioElement = track.attach();
           audioElement.volume = 1.0;
-          document.body.appendChild(audioElement);
+          if (audioContainerRef.current) {
+            audioContainerRef.current.appendChild(audioElement);
+          }
           audioLevelIntervalRef.current = setInterval(() => {
             const participants = Array.from(room.remoteParticipants.values());
             if (participants.length > 0) setAudioLevel(participants[0].audioLevel || 0);
@@ -492,14 +501,22 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
 
   const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`;
 
+  // Éviter le rendu côté serveur pour les fonctionnalités audio
+  if (!isMounted) {
+    return null;
+  }
+
   if (!isOpen) {
     return (
-      <button onClick={() => setIsOpen(true)}
-        className={`fixed bottom-4 right-4 z-50 bg-gradient-to-b from-red-800 to-red-900 text-white rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl ${callState === 'incoming' && incomingCall?.isEmergency ? 'animate-pulse ring-4 ring-red-500' : ''}`}>
-        <div className="p-2 rounded-xl bg-red-700/50"><Phone className="h-5 w-5 text-red-200" /></div>
-        <span className="font-medium">Téléphone SIAVI</span>
-        {callState === 'incoming' && <span className={`absolute -top-1 -right-1 w-4 h-4 rounded-full animate-ping ${incomingCall?.isEmergency ? 'bg-yellow-500' : 'bg-green-500'}`} />}
-      </button>
+      <>
+        <div ref={audioContainerRef} style={{ display: 'none' }} />
+        <button onClick={() => setIsOpen(true)}
+          className={`fixed bottom-4 right-4 z-50 bg-gradient-to-b from-red-800 to-red-900 text-white rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl ${callState === 'incoming' && incomingCall?.isEmergency ? 'animate-pulse ring-4 ring-red-500' : ''}`}>
+          <div className="p-2 rounded-xl bg-red-700/50"><Phone className="h-5 w-5 text-red-200" /></div>
+          <span className="font-medium">Téléphone SIAVI</span>
+          {callState === 'incoming' && <span className={`absolute -top-1 -right-1 w-4 h-4 rounded-full animate-ping ${incomingCall?.isEmergency ? 'bg-yellow-500' : 'bg-green-500'}`} />}
+        </button>
+      </>
     );
   }
 
@@ -507,6 +524,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   if (showEmergencyOverlay && callState === 'incoming' && incomingCall?.isEmergency) {
     return (
       <>
+        <div ref={audioContainerRef} style={{ display: 'none' }} />
         <div className="fixed inset-0 z-40 bg-red-600/30 animate-pulse pointer-events-none" />
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="bg-gradient-to-b from-red-800 to-red-950 rounded-3xl shadow-2xl p-8 max-w-md w-full text-center">
@@ -534,6 +552,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   }
 
   return (
+    <>
+    <div ref={audioContainerRef} style={{ display: 'none' }} />
     <div className="fixed right-4 bottom-4 z-50 bg-gradient-to-b from-red-800 to-red-950 rounded-3xl shadow-2xl overflow-hidden" style={{ width: '240px' }}>
       <div className="px-4 py-3 flex items-center justify-between border-b border-red-700/50">
         <div className="flex items-center gap-2">
@@ -648,5 +668,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         </div>
       </div>
     </div>
+    </>
   );
 }

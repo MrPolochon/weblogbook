@@ -53,6 +53,13 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const shouldPlaySoundRef = useRef(false);
+  const audioContainerRef = useRef<HTMLDivElement | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Éviter les erreurs d'hydratation
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Messages vocaux
   const playMessage = useCallback((message: string) => {
@@ -266,7 +273,10 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         if (track.kind === Track.Kind.Audio) {
           const audioElement = track.attach();
           audioElement.volume = 1.0;
-          document.body.appendChild(audioElement);
+          // Utiliser le conteneur ref pour éviter les erreurs d'hydratation
+          if (audioContainerRef.current) {
+            audioContainerRef.current.appendChild(audioElement);
+          }
           
           // Monitorer niveau audio
           audioLevelIntervalRef.current = setInterval(() => {
@@ -519,20 +529,30 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const keyBg = isDark ? 'bg-white hover:bg-slate-50 shadow-md' : 'bg-slate-700 hover:bg-slate-600 shadow-lg';
   const keyText = isDark ? 'text-slate-700' : 'text-white';
 
+  // Éviter le rendu côté serveur pour les fonctionnalités audio
+  if (!isMounted) {
+    return null;
+  }
+
   if (!isOpen) {
     return (
-      <button onClick={() => setIsOpen(true)}
-        className={`fixed bottom-4 right-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl`}>
-        <div className={`p-2 rounded-xl ${isDark ? 'bg-sky-100' : 'bg-sky-500/20'}`}>
-          <Phone className={`h-5 w-5 ${isDark ? 'text-sky-600' : 'text-sky-400'}`} />
-        </div>
-        <span className="font-medium">Téléphone</span>
-        {callState === 'incoming' && <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-ping" />}
-      </button>
+      <>
+        <div ref={audioContainerRef} style={{ display: 'none' }} />
+        <button onClick={() => setIsOpen(true)}
+          className={`fixed bottom-4 right-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl`}>
+          <div className={`p-2 rounded-xl ${isDark ? 'bg-sky-100' : 'bg-sky-500/20'}`}>
+            <Phone className={`h-5 w-5 ${isDark ? 'text-sky-600' : 'text-sky-400'}`} />
+          </div>
+          <span className="font-medium">Téléphone</span>
+          {callState === 'incoming' && <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-ping" />}
+        </button>
+      </>
     );
   }
 
   return (
+    <>
+    <div ref={audioContainerRef} style={{ display: 'none' }} />
     <div className={`fixed right-4 bottom-4 z-50 ${bgMain} rounded-3xl shadow-2xl overflow-hidden transition-all duration-500`} style={{ width: '240px' }}>
       <div className={`px-4 py-3 flex items-center justify-between border-b ${isDark ? 'border-slate-300' : 'border-slate-700'}`}>
         <div className="flex items-center gap-2">
@@ -649,5 +669,6 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         </div>
       </div>
     </div>
+    </>
   );
 }
