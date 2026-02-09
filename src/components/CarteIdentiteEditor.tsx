@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Save, Palette, Image, Type, Hash, Calendar, Grid3X3 } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { X, Save, Palette, Upload, Type, Hash, Calendar, Grid3X3, Loader2, Trash2 } from 'lucide-react';
 import CarteIdentite from './CarteIdentite';
+import Image from 'next/image';
 
 type CarteData = {
   couleur_fond: string;
@@ -41,6 +42,11 @@ const COULEURS_PREDEFINES = [
 export default function CarteIdentiteEditor({ userId, identifiant, initialData, onClose, onSave }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<CarteData>({
     couleur_fond: initialData?.couleur_fond || '#DC2626',
@@ -70,6 +76,49 @@ export default function CarteIdentiteEditor({ userId, identifiant, initialData, 
     setCasesBasInput(value);
     const cases = value.split(',').map(c => c.trim().toUpperCase()).filter(c => c.length > 0);
     setFormData(prev => ({ ...prev, cases_bas: cases }));
+  }
+
+  async function handleUpload(file: File, type: 'logo' | 'photo') {
+    const setUploading = type === 'logo' ? setUploadingLogo : setUploadingPhoto;
+    setUploading(true);
+    setError(null);
+
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
+      formDataUpload.append('user_id', userId);
+      formDataUpload.append('type', type);
+
+      const res = await fetch('/api/cartes/upload', {
+        method: 'POST',
+        body: formDataUpload,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Erreur lors de l\'upload');
+      }
+
+      // Mettre à jour l'URL dans le formulaire
+      if (type === 'logo') {
+        setFormData(prev => ({ ...prev, logo_url: data.url }));
+      } else {
+        setFormData(prev => ({ ...prev, photo_url: data.url }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur upload');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'photo') {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleUpload(file, type);
+    }
+    // Reset input pour permettre de re-sélectionner le même fichier
+    e.target.value = '';
   }
 
   async function handleSave() {
@@ -184,31 +233,118 @@ export default function CarteIdentiteEditor({ userId, identifiant, initialData, 
                 <p className="text-xs text-slate-500 mt-1">Ex: TRA, MAN, ITB, NAV</p>
               </div>
 
-              {/* Logo URL */}
+              {/* Upload Logo */}
               <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1">
-                  <Image className="h-4 w-4" />
-                  URL du logo
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
+                  <Upload className="h-4 w-4" />
+                  Logo
                 </label>
                 <input
-                  type="url"
-                  value={formData.logo_url || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, logo_url: e.target.value || null }))}
-                  className="input"
-                  placeholder="https://..."
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={e => handleFileSelect(e, 'logo')}
+                  className="hidden"
                 />
+                <div className="flex items-center gap-3">
+                  {formData.logo_url ? (
+                    <div className="relative">
+                      <Image
+                        src={formData.logo_url}
+                        alt="Logo"
+                        width={60}
+                        height={60}
+                        className="rounded-lg object-cover border border-slate-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, logo_url: null }))}
+                        className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-[60px] h-[60px] rounded-lg bg-slate-100 border border-dashed border-slate-300 flex items-center justify-center">
+                      <span className="text-xs text-slate-400">Logo</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => logoInputRef.current?.click()}
+                    disabled={uploadingLogo}
+                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {uploadingLogo ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Upload...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />
+                        {formData.logo_url ? 'Changer le logo' : 'Uploader un logo'}
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
-              {/* Photo URL */}
+              {/* Upload Photo */}
               <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">URL de la photo</label>
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
+                  <Upload className="h-4 w-4" />
+                  Photo de profil
+                </label>
                 <input
-                  type="url"
-                  value={formData.photo_url || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, photo_url: e.target.value || null }))}
-                  className="input"
-                  placeholder="https://..."
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={e => handleFileSelect(e, 'photo')}
+                  className="hidden"
                 />
+                <div className="flex items-center gap-3">
+                  {formData.photo_url ? (
+                    <div className="relative">
+                      <Image
+                        src={formData.photo_url}
+                        alt="Photo"
+                        width={60}
+                        height={75}
+                        className="rounded-lg object-cover border border-slate-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, photo_url: null }))}
+                        className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-[60px] h-[75px] rounded-lg bg-slate-100 border border-dashed border-slate-300 flex items-center justify-center">
+                      <span className="text-xs text-slate-400">Photo</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={uploadingPhoto}
+                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {uploadingPhoto ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Upload...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />
+                        {formData.photo_url ? 'Changer la photo' : 'Uploader une photo'}
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Nom affiché */}
