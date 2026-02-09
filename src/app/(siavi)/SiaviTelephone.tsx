@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX, AlertTriangle } from 'lucide-react';
 import { Room, RoomEvent, Track, ConnectionState } from 'livekit-client';
 
 type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connecting' | 'connected';
@@ -363,8 +363,15 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   const handleNumberInput = (digit: string) => {
     if (callState === 'idle' || callState === 'dialing') {
       playSound('beep');
-      setNumber(prev => prev + digit);
+      const newNumber = number + digit;
+      setNumber(newNumber);
       if (callState === 'idle') setCallState('dialing');
+      
+      // Code secret pour reset: 159753
+      if (newNumber === '159753') {
+        resetPhone();
+        playMessage('Téléphone réinitialisé');
+      }
     }
   };
 
@@ -560,14 +567,9 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           <Phone className="h-4 w-4 text-red-300" />
           <span className="text-sm font-semibold text-white">Téléphone SIAVI</span>
         </div>
-        <div className="flex items-center gap-1">
-          <button onClick={resetPhone} className="p-1.5 rounded-lg hover:bg-red-700/50" title="Réinitialiser">
-            <RotateCcw className="h-3.5 w-3.5 text-red-300" />
-          </button>
-          <button onClick={() => { setIsOpen(false); if (callState === 'idle') setNumber(''); }} className="p-1.5 rounded-lg hover:bg-red-700/50">
-            <X className="h-3.5 w-3.5 text-red-300" />
-          </button>
-        </div>
+        <button onClick={() => { setIsOpen(false); if (callState === 'idle') setNumber(''); }} className="p-1.5 rounded-lg hover:bg-red-700/50">
+          <X className="h-3.5 w-3.5 text-red-300" />
+        </button>
       </div>
       
       <div className="mx-3 mt-3 p-3 bg-slate-950 rounded-xl">

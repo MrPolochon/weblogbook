@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX, RotateCcw } from 'lucide-react';
+import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { Room, RoomEvent, Track, ConnectionState } from 'livekit-client';
 
@@ -349,8 +349,15 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const handleNumberInput = (digit: string) => {
     if (callState === 'idle' || callState === 'dialing') {
       playSound('beep');
-      setNumber(prev => prev + digit);
+      const newNumber = number + digit;
+      setNumber(newNumber);
       if (callState === 'idle') setCallState('dialing');
+      
+      // Code secret pour reset: 159753
+      if (newNumber === '159753') {
+        resetPhone();
+        playMessage('Téléphone réinitialisé');
+      }
     }
   };
 
@@ -559,14 +566,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           <Phone className={`h-4 w-4 ${isDark ? 'text-sky-600' : 'text-sky-400'}`} />
           <span className={`text-sm font-semibold ${textMain}`}>Téléphone ATC</span>
         </div>
-        <div className="flex items-center gap-1">
-          <button onClick={resetPhone} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-300' : 'hover:bg-slate-700'}`} title="Réinitialiser">
-            <RotateCcw className={`h-3.5 w-3.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-          </button>
-          <button onClick={() => { setIsOpen(false); if (callState === 'idle') setNumber(''); }} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-300' : 'hover:bg-slate-700'}`}>
-            <X className={`h-3.5 w-3.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-          </button>
-        </div>
+        <button onClick={() => { setIsOpen(false); if (callState === 'idle') setNumber(''); }} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-300' : 'hover:bg-slate-700'}`}>
+          <X className={`h-3.5 w-3.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+        </button>
       </div>
       
       <div className={`mx-3 mt-3 p-3 ${screenBg} rounded-xl`}>
