@@ -206,7 +206,7 @@ export default function AtcEnLigneModal({ totalAtc, sessionsEnService }: AtcEnLi
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
               <p className="text-xs text-slate-500 flex items-center gap-1">
                 <Eye className="h-3 w-3" />
-                Cliquez sur "Observer" pour voir l&apos;interface d&apos;un contrôleur
+                Cliquez sur « Observer » pour voir l&apos;interface d&apos;un contrôleur
               </p>
               <button
                 onClick={fetchSessions}

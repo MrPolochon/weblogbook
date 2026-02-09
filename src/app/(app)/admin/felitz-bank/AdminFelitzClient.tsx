@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Plus, Minus, RefreshCw, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
@@ -38,14 +38,8 @@ export default function AdminFelitzClient({ compte, label, type }: Props) {
   const [transactionsLoaded, setTransactionsLoaded] = useState(false);
   const [error, setError] = useState('');
 
-  // Charger les transactions quand on développe le compte
-  useEffect(() => {
-    if (expanded && !transactionsLoaded) {
-      loadTransactions();
-    }
-  }, [expanded, transactionsLoaded]);
-
-  async function loadTransactions() {
+  // Charger les transactions
+  const loadTransactions = useCallback(async () => {
     setLoadingTransactions(true);
     try {
       const supabase = createClient();
@@ -64,7 +58,14 @@ export default function AdminFelitzClient({ compte, label, type }: Props) {
     } finally {
       setLoadingTransactions(false);
     }
-  }
+  }, [compte.id]);
+
+  // Charger les transactions quand on développe le compte
+  useEffect(() => {
+    if (expanded && !transactionsLoaded) {
+      loadTransactions();
+    }
+  }, [expanded, transactionsLoaded, loadTransactions]);
 
   async function handleTransaction(transactionType: 'credit' | 'debit') {
     if (!montant || parseInt(montant) <= 0) return;
