@@ -47,18 +47,9 @@ export default async function AdminPiloteEditPage({
         )}
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Carte d'identité avec édition */}
-        <div className="lg:col-span-1">
-          <PiloteCarteSection 
-            userId={p.id} 
-            identifiant={p.identifiant ?? ''} 
-            initialCarte={carte} 
-          />
-        </div>
-
-        {/* Formulaire d'édition */}
-        <div className="lg:col-span-2">
+      <div className="flex flex-col xl:flex-row gap-6">
+        {/* Formulaire d'édition - priorité */}
+        <div className="flex-1 min-w-0">
           <EditPiloteForm
             piloteId={p.id}
             identifiant={p.identifiant ?? ''}
@@ -70,6 +61,15 @@ export default async function AdminPiloteEditPage({
             heuresInitiales={p.heures_initiales_minutes ?? 0}
             blockedUntil={p.blocked_until}
             blockReason={p.block_reason}
+          />
+        </div>
+
+        {/* Carte d'identité - sidebar */}
+        <div className="w-full xl:w-auto flex-shrink-0">
+          <PiloteCarteSection 
+            userId={p.id} 
+            identifiant={p.identifiant ?? ''} 
+            initialCarte={carte} 
           />
         </div>
       </div>
