@@ -329,14 +329,13 @@ export default function LoginPage() {
 
         {/* Lien téléchargement app */}
         <div className="mt-6 text-center animate-init animate-slide-up delay-800">
-          <button
-            type="button"
-            onClick={() => router.push('/download')}
+          <a
+            href="/download"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50 text-slate-300 hover:text-white hover:bg-slate-700/60 transition-all backdrop-blur-sm group cursor-pointer"
           >
             <Download className="h-4 w-4 text-sky-400 group-hover:scale-110 transition-transform" />
             <span>Télécharger notre application</span>
-          </button>
+          </a>
         </div>
       </div>
     </div>
