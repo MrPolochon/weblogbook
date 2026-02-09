@@ -292,6 +292,20 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           playMessage('Communications établie');
         }
       });
+
+      // Quand l'autre participant raccroche
+      room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+        console.log('[LiveKit] Participant disconnected:', participant.identity);
+        // L'autre a raccroché, on termine l'appel
+        cleanupLiveKit();
+        setCallState('idle');
+        setNumber('');
+        setIncomingCall(null);
+        setCurrentCall(null);
+        setIsMuted(false);
+        playSound('end');
+        playMessage('Correspondant a raccroché');
+      });
       
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         console.log('[LiveKit] Track subscribed:', track.kind, 'from', participant.identity);

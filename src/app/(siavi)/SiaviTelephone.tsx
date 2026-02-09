@@ -320,6 +320,21 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           playMessage('Communications établie');
         }
       });
+
+      // Quand l'autre participant raccroche
+      room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+        console.log('[LiveKit SIAVI] Participant disconnected:', participant.identity);
+        // L'autre a raccroché, on termine l'appel
+        stopEmergencyAlarm();
+        cleanupLiveKit();
+        setCallState('idle');
+        setNumber('');
+        setIncomingCall(null);
+        setCurrentCall(null);
+        setIsMuted(false);
+        playSound('end');
+        playMessage('Correspondant a raccroché');
+      });
       
       room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
         console.log('[LiveKit SIAVI] Track subscribed:', track.kind, 'from', participant.identity);
