@@ -109,17 +109,14 @@ export default function CarteIdentite({ carte, identifiant, size = 'md', classNa
                 className="object-contain"
               />
             ) : (
-              <div className="flex flex-col items-center">
-                <div 
-                  className="rounded-full border-2 border-white/50 flex items-center justify-center"
-                  style={{ 
-                    width: size === 'sm' ? 50 : size === 'md' ? 80 : 100,
-                    height: size === 'sm' ? 50 : size === 'md' ? 80 : 100,
-                  }}
-                >
-                  <span className={`${s.fontSize} text-white/70 font-bold`}>LOGO</span>
-                </div>
-                <span className={`${s.fontSize} text-white mt-1 font-semibold`}>{data.organisation}</span>
+              <div 
+                className="rounded-full border-2 border-white/50 flex items-center justify-center"
+                style={{ 
+                  width: size === 'sm' ? 50 : size === 'md' ? 80 : 100,
+                  height: size === 'sm' ? 50 : size === 'md' ? 80 : 100,
+                }}
+              >
+                <span className={`${s.fontSize} text-white/70 font-bold`}>LOGO</span>
               </div>
             )}
           </div>
