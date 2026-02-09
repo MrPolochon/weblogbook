@@ -38,36 +38,7 @@ export default async function AdminFelitzBankPage() {
     ? (Array.isArray(compteMilitaire.profiles) ? compteMilitaire.profiles[0] : compteMilitaire.profiles) 
     : null;
 
-  // Transactions récentes pour TOUS les comptes (admin)
-  const comptesIdsAll = [
-    ...(comptesPerso || []).map(c => c.id),
-    ...(comptesEntreprise || []).map(c => c.id),
-    ...(compteMilitaire ? [compteMilitaire.id] : []),
-  ];
-  let transactionsByCompte: Record<string, Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }>> = {};
-  if (comptesIdsAll.length > 0) {
-    const { data: allTransactions } = await admin.from('felitz_transactions')
-      .select('id, compte_id, type, montant, libelle, description, created_at')
-      .in('compte_id', comptesIdsAll)
-      .order('created_at', { ascending: false })
-      .limit(600);
-
-    (allTransactions || []).forEach((t) => {
-      if (!transactionsByCompte[t.compte_id]) {
-        transactionsByCompte[t.compte_id] = [];
-      }
-      if (transactionsByCompte[t.compte_id].length < 20) {
-        transactionsByCompte[t.compte_id].push({
-          id: t.id,
-          type: t.type,
-          montant: t.montant,
-          libelle: t.libelle,
-          description: (t as { description?: string | null }).description ?? null,
-          created_at: t.created_at,
-        });
-      }
-    });
-  }
+  // Les transactions sont maintenant chargées de manière lazy par chaque composant AdminFelitzClient
 
   return (
     <div className="space-y-6">
@@ -97,7 +68,6 @@ export default async function AdminFelitzBankPage() {
             compte={compteMilitaire}
             label="Armée"
             type="militaire"
-            transactions={transactionsByCompte[compteMilitaire.id] || []}
           />
         </div>
       )}
@@ -120,7 +90,6 @@ export default async function AdminFelitzBankPage() {
                   compte={compte}
                   label={(profileObj as { identifiant: string } | null)?.identifiant || 'Inconnu'}
                   type="personnel"
-                  transactions={transactionsByCompte[compte.id] || []}
                 />
               );
             })}
@@ -144,7 +113,6 @@ export default async function AdminFelitzBankPage() {
                   compte={compte}
                   label={(compagnieObj as { nom: string } | null)?.nom || 'Compagnie'}
                   type="entreprise"
-                  transactions={transactionsByCompte[compte.id] || []}
                 />
               );
             })}

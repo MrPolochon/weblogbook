@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Minus, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { Plus, Minus, RefreshCw, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
 interface Compte {
@@ -24,16 +25,46 @@ interface Props {
   compte: Compte;
   label: string;
   type: 'personnel' | 'entreprise' | 'militaire';
-  transactions?: Transaction[];
 }
 
-export default function AdminFelitzClient({ compte, label, type, transactions = [] }: Props) {
+export default function AdminFelitzClient({ compte, label, type }: Props) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
   const [montant, setMontant] = useState('');
   const [libelle, setLibelle] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactionsLoaded, setTransactionsLoaded] = useState(false);
   const [error, setError] = useState('');
+
+  // Charger les transactions quand on développe le compte
+  useEffect(() => {
+    if (expanded && !transactionsLoaded) {
+      loadTransactions();
+    }
+  }, [expanded, transactionsLoaded]);
+
+  async function loadTransactions() {
+    setLoadingTransactions(true);
+    try {
+      const supabase = createClient();
+      const { data, error: fetchError } = await supabase
+        .from('felitz_transactions')
+        .select('id, type, montant, libelle, description, created_at')
+        .eq('compte_id', compte.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (fetchError) throw fetchError;
+      setTransactions(data || []);
+      setTransactionsLoaded(true);
+    } catch (err) {
+      console.error('Erreur chargement transactions:', err);
+    } finally {
+      setLoadingTransactions(false);
+    }
+  }
 
   async function handleTransaction(transactionType: 'credit' | 'debit') {
     if (!montant || parseInt(montant) <= 0) return;
@@ -58,7 +89,8 @@ export default function AdminFelitzClient({ compte, label, type, transactions = 
 
       setMontant('');
       setLibelle('');
-      setExpanded(false);
+      // Recharger les transactions
+      setTransactionsLoaded(false);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -143,7 +175,12 @@ export default function AdminFelitzClient({ compte, label, type, transactions = 
             </button>
           </div>
 
-          {transactions.length > 0 ? (
+          {loadingTransactions ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-5 w-5 text-slate-400 animate-spin" />
+              <span className="ml-2 text-xs text-slate-400">Chargement des transactions...</span>
+            </div>
+          ) : transactions.length > 0 ? (
             <div className="pt-2 border-t border-slate-700/50">
               <p className={`text-xs font-semibold ${accentClass} mb-2`}>Transactions récentes</p>
               <div className="space-y-2 max-h-64 overflow-y-auto">

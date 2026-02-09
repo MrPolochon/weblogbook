@@ -1,11 +1,119 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
 import { Plane, Radio, Shield, Flame } from 'lucide-react';
 
+// Composant pour les nuages animés
+function AnimatedClouds() {
+  const clouds = useMemo(() => 
+    Array.from({ length: 6 }, (_, i) => ({
+      id: i,
+      size: 40 + Math.random() * 60,
+      top: 10 + Math.random() * 70,
+      duration: 25 + Math.random() * 20,
+      delay: Math.random() * -30,
+      opacity: 0.03 + Math.random() * 0.05,
+    })), []
+  );
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {clouds.map((cloud) => (
+        <div
+          key={cloud.id}
+          className="absolute animate-cloud"
+          style={{
+            top: `${cloud.top}%`,
+            width: `${cloud.size}px`,
+            height: `${cloud.size * 0.6}px`,
+            opacity: cloud.opacity,
+            animationDuration: `${cloud.duration}s`,
+            animationDelay: `${cloud.delay}s`,
+          }}
+        >
+          <svg viewBox="0 0 100 60" className="w-full h-full fill-white">
+            <ellipse cx="30" cy="40" rx="25" ry="18" />
+            <ellipse cx="55" cy="35" rx="30" ry="22" />
+            <ellipse cx="75" cy="42" rx="20" ry="15" />
+            <ellipse cx="45" cy="48" rx="28" ry="12" />
+          </svg>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Composant pour l'avion animé
+function FlyingPlane() {
+  const [visible, setVisible] = useState(false);
+  
+  useEffect(() => {
+    // Premier avion après 2s
+    const initialTimeout = setTimeout(() => setVisible(true), 2000);
+    
+    // Répéter toutes les 15-25 secondes
+    const interval = setInterval(() => {
+      setVisible(true);
+      setTimeout(() => setVisible(false), 8000);
+    }, 15000 + Math.random() * 10000);
+    
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="animate-fly-across absolute" style={{ top: '15%' }}>
+        <div className="relative">
+          {/* Trainée de l'avion */}
+          <div className="absolute right-full top-1/2 -translate-y-1/2 w-32 h-0.5 bg-gradient-to-l from-white/30 to-transparent" />
+          {/* Icône avion */}
+          <Plane className="h-6 w-6 text-white/60 transform -rotate-12" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Composant pour les étoiles scintillantes
+function TwinklingStars() {
+  const stars = useMemo(() => 
+    Array.from({ length: 20 }, (_, i) => ({
+      id: i,
+      left: Math.random() * 100,
+      top: Math.random() * 60,
+      size: 1 + Math.random() * 2,
+      duration: 2 + Math.random() * 3,
+      delay: Math.random() * 5,
+    })), []
+  );
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {stars.map((star) => (
+        <div
+          key={star.id}
+          className="absolute rounded-full bg-white animate-twinkle"
+          style={{
+            left: `${star.left}%`,
+            top: `${star.top}%`,
+            width: `${star.size}px`,
+            height: `${star.size}px`,
+            animationDuration: `${star.duration}s`,
+            animationDelay: `${star.delay}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 type LoginMode = 'pilote' | 'atc' | 'siavi';
 
@@ -93,13 +201,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center p-4">
+    <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden">
       {fond}
       {overlay}
+      
+      {/* Animations d'arrière-plan */}
+      <TwinklingStars />
+      <AnimatedClouds />
+      <FlyingPlane />
+      
       <div className="relative z-10 w-full max-w-md animate-fade-in">
         {/* Logo / Titre */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-sky-500/30 to-indigo-500/30 mb-4 shadow-xl shadow-sky-500/20 backdrop-blur-sm border border-sky-500/20">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-sky-500/30 to-indigo-500/30 mb-4 shadow-xl shadow-sky-500/20 backdrop-blur-sm border border-sky-500/20 animate-float">
             <Shield className="h-10 w-10 text-sky-400" />
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight">PTFS Logbook</h1>

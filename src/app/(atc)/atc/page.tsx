@@ -5,6 +5,8 @@ import { Radio, Plane, Clock, MapPin, AlertTriangle, ArrowRight, Activity, Users
 import TranspondeurBadgeAtc from '@/components/TranspondeurBadgeAtc';
 import SeMettreEnServiceForm from '../SeMettreEnServiceForm';
 import HorsServiceButton from '../HorsServiceButton';
+import PlansEnAttenteModal from '@/components/PlansEnAttenteModal';
+import AtcEnLigneModal from '@/components/AtcEnLigneModal';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -103,14 +105,16 @@ export default async function AtcPage() {
           </div>
         </div>
         <div className="flex gap-4">
-          <div className="text-center px-4 py-2 rounded-lg bg-emerald-100 border border-emerald-200">
-            <p className="text-2xl font-bold text-emerald-600">{totalAtcEnService}</p>
-            <p className="text-xs text-emerald-700 uppercase tracking-wide">ATC en ligne</p>
-          </div>
-          <div className="text-center px-4 py-2 rounded-lg bg-amber-100 border border-amber-200">
-            <p className="text-2xl font-bold text-amber-600">{totalPlansEnAttente}</p>
-            <p className="text-xs text-amber-700 uppercase tracking-wide">Plans en attente</p>
-          </div>
+          <AtcEnLigneModal 
+            totalAtc={totalAtcEnService} 
+            sessionsEnService={sessionsEnService.map(s => ({
+              aeroport: s.aeroport,
+              position: s.position,
+              user_id: s.user_id,
+              identifiant: (s.profiles as { identifiant?: string } | null)?.identifiant || '—'
+            }))} 
+          />
+          <PlansEnAttenteModal totalPlans={totalPlansEnAttente} />
         </div>
       </div>
 
