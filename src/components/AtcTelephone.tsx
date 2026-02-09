@@ -363,7 +363,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       await cleanupLiveKit();
       setCallState('idle');
     }
-  }, [aeroport, position, callState, cleanupLiveKit, playSound, playMessage]);
+  }, [aeroport, position, cleanupLiveKit, playSound, playMessage]);
 
   const parseNumber = (num: string) => {
     if (num === '911' || num === '112') return { aeroport: null, position: 'AFIS', isLocal: false, isEmergency: true };

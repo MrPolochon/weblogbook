@@ -385,7 +385,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       await cleanupLiveKit();
       setCallState('idle');
     }
-  }, [aeroport, callState, cleanupLiveKit, playSound, playMessage, stopEmergencyAlarm]);
+  }, [aeroport, cleanupLiveKit, playSound, playMessage, stopEmergencyAlarm]);
 
   const parseNumber = (num: string) => {
     if (num === '911' || num === '112') return { aeroport: null, position: 'AFIS', isLocal: false, isEmergency: true };
