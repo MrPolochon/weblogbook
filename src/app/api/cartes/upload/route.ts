@@ -42,6 +42,17 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
+
+    // Récupérer l'ancienne URL pour la supprimer après
+    let oldUrl: string | null = null;
+    if (type === 'photo') {
+      const { data: carte } = await admin
+        .from('cartes_identite')
+        .select('photo_url')
+        .eq('user_id', userId)
+        .single();
+      oldUrl = carte?.photo_url || null;
+    }
     
     // Nom du fichier unique
     const ext = file.name.split('.').pop() || 'png';
@@ -53,7 +64,7 @@ export async function POST(request: Request) {
       .from('cartes-identite')
       .upload(fileName, buffer, {
         contentType: file.type,
-        upsert: true,
+        upsert: false,
       });
 
     if (uploadError) {
@@ -65,6 +76,20 @@ export async function POST(request: Request) {
     const { data: { publicUrl } } = admin.storage
       .from('cartes-identite')
       .getPublicUrl(fileName);
+
+    // Supprimer l'ancienne photo de Storage pour économiser l'espace
+    if (oldUrl && type === 'photo') {
+      try {
+        const urlParts = oldUrl.split('/cartes-identite/');
+        if (urlParts.length >= 2) {
+          const oldPath = urlParts[1];
+          await admin.storage.from('cartes-identite').remove([oldPath]);
+        }
+      } catch (e) {
+        console.error('Erreur suppression ancienne photo:', e);
+        // On continue même si la suppression échoue
+      }
+    }
 
     return NextResponse.json({ url: publicUrl, path: uploadData.path });
   } catch (err) {

@@ -29,6 +29,15 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
+
+    // Récupérer l'ancienne photo pour la supprimer après
+    const { data: existingCarte } = await admin
+      .from('cartes_identite')
+      .select('id, photo_url')
+      .eq('user_id', user.id)
+      .single();
+    
+    const oldPhotoUrl = existingCarte?.photo_url || null;
     
     // Upload vers Supabase Storage
     const ext = file.name.split('.').pop() || 'png';
@@ -39,7 +48,7 @@ export async function POST(request: Request) {
       .from('cartes-identite')
       .upload(fileName, buffer, {
         contentType: file.type,
-        upsert: true,
+        upsert: false,
       });
 
     if (uploadError) {
@@ -51,13 +60,6 @@ export async function POST(request: Request) {
     const { data: { publicUrl } } = admin.storage
       .from('cartes-identite')
       .getPublicUrl(fileName);
-
-    // Vérifier si une carte existe déjà pour cet utilisateur
-    const { data: existingCarte } = await admin
-      .from('cartes_identite')
-      .select('id')
-      .eq('user_id', user.id)
-      .single();
 
     if (existingCarte) {
       // Mettre à jour seulement la photo
@@ -75,6 +77,19 @@ export async function POST(request: Request) {
           titre: 'IFSA',
           couleur_fond: '#DC2626'
         });
+    }
+
+    // Supprimer l'ancienne photo de Storage pour économiser l'espace
+    if (oldPhotoUrl) {
+      try {
+        const urlParts = oldPhotoUrl.split('/cartes-identite/');
+        if (urlParts.length >= 2) {
+          const oldPath = urlParts[1];
+          await admin.storage.from('cartes-identite').remove([oldPath]);
+        }
+      } catch (e) {
+        console.error('Erreur suppression ancienne photo:', e);
+      }
     }
 
     return NextResponse.json({ url: publicUrl, path: uploadData.path, ok: true });

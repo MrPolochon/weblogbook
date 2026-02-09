@@ -40,14 +40,87 @@ const COULEURS_PREDEFINES = [
   { nom: 'Rose', valeur: '#DB2777' },
 ];
 
+type Logo = {
+  name: string;
+  url: string;
+  created_at: string;
+};
+
 export default function CarteIdentiteEditor({ userId, identifiant, initialData, onClose, onSave }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [availableLogos, setAvailableLogos] = useState<Logo[]>([]);
+  const [loadingLogos, setLoadingLogos] = useState(false);
+  const [showLogoSelector, setShowLogoSelector] = useState(false);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Charger les logos disponibles
+  async function loadLogos() {
+    setLoadingLogos(true);
+    try {
+      const res = await fetch('/api/cartes/logos');
+      const data = await res.json();
+      if (data.logos) {
+        setAvailableLogos(data.logos);
+      }
+    } catch (e) {
+      console.error('Erreur chargement logos:', e);
+    } finally {
+      setLoadingLogos(false);
+    }
+  }
+
+  // Supprimer un logo définitivement
+  async function deleteLogo(logoUrl: string) {
+    if (!confirm('Supprimer ce logo définitivement ? Il sera retiré de toutes les cartes qui l\'utilisent.')) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/cartes/logos?url=${encodeURIComponent(logoUrl)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setAvailableLogos(prev => prev.filter(l => l.url !== logoUrl));
+        if (formData.logo_url === logoUrl) {
+          setFormData(prev => ({ ...prev, logo_url: null }));
+        }
+      }
+    } catch (e) {
+      console.error('Erreur suppression logo:', e);
+    }
+  }
+
+  // Upload d'un nouveau logo partagé
+  async function uploadNewLogo(file: File) {
+    setUploadingLogo(true);
+    setError(null);
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', file);
+
+      const res = await fetch('/api/cartes/logos', {
+        method: 'POST',
+        body: formDataUpload,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Erreur upload');
+      }
+
+      // Ajouter à la liste et sélectionner
+      setAvailableLogos(prev => [{ name: file.name, url: data.url, created_at: new Date().toISOString() }, ...prev]);
+      setFormData(prev => ({ ...prev, logo_url: data.url }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur upload');
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
 
   const [formData, setFormData] = useState<CarteData>({
     couleur_fond: initialData?.couleur_fond || '#DC2626',
@@ -243,7 +316,7 @@ export default function CarteIdentiteEditor({ userId, identifiant, initialData, 
                 Images
               </h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-6">
                 {/* Logo */}
                 <div>
                   <label className="text-sm font-medium text-slate-700 mb-3 block">Logo</label>
@@ -251,45 +324,114 @@ export default function CarteIdentiteEditor({ userId, identifiant, initialData, 
                     ref={logoInputRef}
                     type="file"
                     accept="image/*"
-                    onChange={e => handleFileSelect(e, 'logo')}
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadNewLogo(file);
+                      e.target.value = '';
+                    }}
                     className="hidden"
                   />
-                  <div className="flex items-center gap-4">
+                  
+                  <div className="flex items-start gap-4">
+                    {/* Logo actuel */}
                     {formData.logo_url ? (
-                      <div className="relative">
+                      <div className="relative flex-shrink-0">
                         <Image
                           src={formData.logo_url}
                           alt="Logo"
                           width={80}
                           height={80}
-                          className="rounded-xl object-cover border-2 border-slate-200"
+                          className="rounded-xl object-cover border-2 border-sky-500"
                         />
                         <button
                           type="button"
                           onClick={() => setFormData(prev => ({ ...prev, logo_url: null }))}
-                          className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg"
+                          className="absolute -top-2 -right-2 p-1.5 bg-slate-600 text-white rounded-full hover:bg-slate-700 shadow-lg"
+                          title="Retirer de cette carte"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <X className="h-3 w-3" />
                         </button>
                       </div>
                     ) : (
-                      <div className="w-20 h-20 rounded-xl bg-slate-200 border-2 border-dashed border-slate-400 flex items-center justify-center">
+                      <div className="w-20 h-20 rounded-xl bg-slate-200 border-2 border-dashed border-slate-400 flex items-center justify-center flex-shrink-0">
                         <span className="text-sm text-slate-500">Logo</span>
                       </div>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => logoInputRef.current?.click()}
-                      disabled={uploadingLogo}
-                      className="px-5 py-3 bg-white border-2 border-slate-300 rounded-xl hover:bg-slate-50 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
-                    >
-                      {uploadingLogo ? (
-                        <><Loader2 className="h-5 w-5 animate-spin" /> Upload...</>
-                      ) : (
-                        <><Upload className="h-5 w-5" /> {formData.logo_url ? 'Changer' : 'Uploader'}</>
-                      )}
-                    </button>
+                    
+                    {/* Boutons */}
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          loadLogos();
+                          setShowLogoSelector(!showLogoSelector);
+                        }}
+                        className="px-4 py-2 bg-white border-2 border-slate-300 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium"
+                      >
+                        {showLogoSelector ? 'Masquer les logos' : 'Choisir un logo existant'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={uploadingLogo}
+                        className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {uploadingLogo ? (
+                          <><Loader2 className="h-4 w-4 animate-spin" /> Upload...</>
+                        ) : (
+                          <><Upload className="h-4 w-4" /> Nouveau logo</>
+                        )}
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Sélecteur de logos existants */}
+                  {showLogoSelector && (
+                    <div className="mt-4 p-4 bg-white rounded-xl border border-slate-200">
+                      <p className="text-sm text-slate-600 mb-3">Logos disponibles :</p>
+                      {loadingLogos ? (
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Chargement...
+                        </div>
+                      ) : availableLogos.length === 0 ? (
+                        <p className="text-sm text-slate-400">Aucun logo uploadé. Uploadez-en un nouveau.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-3">
+                          {availableLogos.map((logo) => (
+                            <div key={logo.url} className="relative group">
+                              <button
+                                type="button"
+                                onClick={() => setFormData(prev => ({ ...prev, logo_url: logo.url }))}
+                                className={`w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                                  formData.logo_url === logo.url 
+                                    ? 'border-sky-500 ring-2 ring-sky-200' 
+                                    : 'border-slate-200 hover:border-slate-400'
+                                }`}
+                              >
+                                <Image
+                                  src={logo.url}
+                                  alt={logo.name}
+                                  width={64}
+                                  height={64}
+                                  className="w-full h-full object-cover"
+                                />
+                              </button>
+                              {/* Bouton supprimer définitivement */}
+                              <button
+                                type="button"
+                                onClick={() => deleteLogo(logo.url)}
+                                className="absolute -top-1 -right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                                title="Supprimer définitivement ce logo"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Photo */}
