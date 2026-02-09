@@ -22,14 +22,24 @@ export default function AtcEnLigneModal({ totalAtc, sessionsEnService }: AtcEnLi
   const [sessions, setSessions] = useState<AtcSession[]>(sessionsEnService);
   const [loading, setLoading] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // Récupérer l'ID de l'utilisateur courant
+  // Récupérer l'ID et le rôle de l'utilisateur courant
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      setCurrentUserId(data.user?.id || null);
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (data.user) {
+        setCurrentUserId(data.user.id);
+        // Vérifier si admin
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single();
+        setIsAdmin(profile?.role === 'admin');
+      }
     });
   }, []);
 
@@ -178,8 +188,12 @@ export default function AtcEnLigneModal({ totalAtc, sessionsEnService }: AtcEnLi
                               </div>
                             </div>
 
-                            {/* Bouton spectateur (pas pour soi-même) */}
-                            {controller.user_id !== currentUserId && (
+                            {/* Bouton spectateur (admin uniquement, pas pour soi-même) */}
+                            {controller.user_id === currentUserId ? (
+                              <span className="text-xs px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
+                                C&apos;est vous
+                              </span>
+                            ) : isAdmin ? (
                               <button
                                 onClick={() => handleSpectate(controller.user_id)}
                                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-100 text-sky-700 hover:bg-sky-200 transition-colors font-medium text-sm"
@@ -187,12 +201,7 @@ export default function AtcEnLigneModal({ totalAtc, sessionsEnService }: AtcEnLi
                                 <Eye className="h-4 w-4" />
                                 Observer
                               </button>
-                            )}
-                            {controller.user_id === currentUserId && (
-                              <span className="text-xs px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">
-                                C&apos;est vous
-                              </span>
-                            )}
+                            ) : null}
                           </div>
                         ))}
                       </div>
@@ -204,10 +213,16 @@ export default function AtcEnLigneModal({ totalAtc, sessionsEnService }: AtcEnLi
 
             {/* Footer */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
-              <p className="text-xs text-slate-500 flex items-center gap-1">
-                <Eye className="h-3 w-3" />
-                Cliquez sur « Observer » pour voir l&apos;interface d&apos;un contrôleur
-              </p>
+              {isAdmin ? (
+                <p className="text-xs text-slate-500 flex items-center gap-1">
+                  <Eye className="h-3 w-3" />
+                  Cliquez sur « Observer » pour voir l&apos;interface d&apos;un contrôleur
+                </p>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Liste des contrôleurs actuellement en service
+                </p>
+              )}
               <button
                 onClick={fetchSessions}
                 disabled={loading}

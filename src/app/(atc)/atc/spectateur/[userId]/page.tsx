@@ -14,15 +14,14 @@ export default async function SpectatorPage({ params }: Props) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // Vérifier que l'utilisateur courant a accès ATC
+  // Vérifier que l'utilisateur courant est admin (seuls les admins peuvent observer)
   const { data: currentProfile } = await supabase
     .from('profiles')
-    .select('role, atc')
+    .select('role')
     .eq('id', user.id)
     .single();
 
-  const canAccess = currentProfile?.role === 'admin' || currentProfile?.role === 'atc' || currentProfile?.atc;
-  if (!canAccess) redirect('/atc');
+  if (currentProfile?.role !== 'admin') redirect('/atc');
 
   // Vérifier que l'ATC cible est bien en service
   const admin = createAdminClient();
@@ -51,6 +50,15 @@ export default async function SpectatorPage({ params }: Props) {
     .is('pending_transfer_aeroport', null)
     .in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente'])
     .order('created_at', { ascending: false });
+
+  // Récupérer les transferts entrants vers la position de l'ATC cible (moins d'1 minute)
+  const oneMinAgo = new Date(Date.now() - 60000).toISOString();
+  const { data: transfertsEntrantsRaw } = await admin
+    .from('plans_vol')
+    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, pending_transfer_at, current_holder_user_id')
+    .eq('pending_transfer_aeroport', targetSession.aeroport)
+    .eq('pending_transfer_position', targetSession.position)
+    .gt('pending_transfer_at', oneMinAgo);
 
   // Enrichir les plans avec pilote, compagnie, avion
   const enrichedPlans = await Promise.all((plansChezLui || []).map(async (plan) => {
@@ -84,6 +92,7 @@ export default async function SpectatorPage({ params }: Props) {
         started_at: targetSession.started_at
       }}
       initialPlans={enrichedPlans}
+      initialTransfertsEntrants={transfertsEntrantsRaw || []}
     />
   );
 }

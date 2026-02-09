@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Eye, Radio, Clock, ArrowLeft, ArrowRight, Plane, Users, Package, Ship, Building2, User, RefreshCw, WifiOff, Wifi } from 'lucide-react';
+import { Eye, Radio, Clock, ArrowLeft, ArrowRight, Plane, Users, Package, Ship, Building2, User, RefreshCw, WifiOff, Wifi, ArrowDownToLine } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import TranspondeurBadgeAtc from '@/components/TranspondeurBadgeAtc';
@@ -39,6 +39,14 @@ interface Plan {
   avion?: { immatriculation: string; nom_bapteme?: string } | null;
 }
 
+interface TransfertEntrant {
+  id: string;
+  numero_vol: string;
+  aeroport_depart: string;
+  aeroport_arrivee: string;
+  pending_transfer_at: string;
+}
+
 interface SpectatorViewProps {
   targetUserId: string;
   targetIdentifiant: string;
@@ -48,15 +56,18 @@ interface SpectatorViewProps {
     started_at: string;
   };
   initialPlans: Plan[];
+  initialTransfertsEntrants: TransfertEntrant[];
 }
 
 export default function SpectatorView({ 
   targetUserId, 
   targetIdentifiant, 
   targetSession, 
-  initialPlans 
+  initialPlans,
+  initialTransfertsEntrants
 }: SpectatorViewProps) {
   const [plans, setPlans] = useState<Plan[]>(initialPlans);
+  const [transfertsEntrants, setTransfertsEntrants] = useState<TransfertEntrant[]>(initialTransfertsEntrants);
   const [isConnected, setIsConnected] = useState(true);
   const [isAtcOnline, setIsAtcOnline] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
@@ -154,6 +165,19 @@ export default function SpectatorView({
           setPlans(enriched);
           setLastUpdate(new Date());
         }
+
+        // Rafraîchir les transferts entrants (moins d'1 minute)
+        const oneMinAgo = new Date(Date.now() - 60000).toISOString();
+        const { data: freshTransferts } = await supabase
+          .from('plans_vol')
+          .select('id, numero_vol, aeroport_depart, aeroport_arrivee, pending_transfer_at')
+          .eq('pending_transfer_aeroport', targetSession.aeroport)
+          .eq('pending_transfer_position', targetSession.position)
+          .gt('pending_transfer_at', oneMinAgo);
+
+        if (freshTransferts) {
+          setTransfertsEntrants(freshTransferts);
+        }
       } catch (error) {
         console.error('Polling error:', error);
       }
@@ -164,7 +188,7 @@ export default function SpectatorView({
       supabase.removeChannel(sessionChannel);
       clearInterval(pollInterval);
     };
-  }, [targetUserId]);
+  }, [targetUserId, targetSession.aeroport, targetSession.position]);
 
   // Enrichir un plan avec pilote, compagnie, avion
   const enrichPlan = async (supabase: ReturnType<typeof createClient>, plan: any): Promise<Plan> => {
@@ -292,6 +316,34 @@ export default function SpectatorView({
           </div>
         </div>
       </div>
+
+      {/* Transferts entrants */}
+      {transfertsEntrants.length > 0 && (
+        <div className="card border-orange-400 bg-orange-50 animate-pulse">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+              <ArrowDownToLine className="h-5 w-5 text-orange-600" />
+              Transferts entrants
+            </h2>
+            <span className="text-sm text-orange-600 font-medium">{transfertsEntrants.length} en attente</span>
+          </div>
+          <div className="space-y-2">
+            {transfertsEntrants.map((t) => (
+              <div
+                key={t.id}
+                className="flex items-center justify-between gap-3 p-3 rounded-lg bg-orange-100 border border-orange-300"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono font-semibold text-slate-900">{t.numero_vol}</p>
+                  <p className="text-xs text-slate-600">{t.aeroport_depart} → {t.aeroport_arrivee}</p>
+                </div>
+                <span className="text-xs text-orange-700 font-medium">En attente</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-orange-600 mt-3">Expire après 1 minute</p>
+        </div>
+      )}
 
       {/* Plans de vol sous contrôle */}
       <div className="card">
