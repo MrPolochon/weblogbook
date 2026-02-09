@@ -226,14 +226,28 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     setConnectionStatus('Connexion...');
     
     try {
+      console.log('[LiveKit SIAVI] Fetching token...');
       const response = await fetch('/api/livekit/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roomName: `call-${callId}`, participantName: `${aeroport}-AFIS` }),
       });
       
-      if (!response.ok) throw new Error('Erreur token LiveKit');
-      const { token, url } = await response.json();
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.error('[LiveKit SIAVI] Token error:', data);
+        throw new Error(data.details || data.error || 'Erreur token LiveKit');
+      }
+      
+      const { token, url } = data;
+      
+      if (!url) {
+        console.error('[LiveKit SIAVI] URL manquante');
+        throw new Error('URL LiveKit non configurée');
+      }
+      
+      console.log('[LiveKit SIAVI] Token obtained, connecting to:', url);
       
       const room = new Room({
         adaptiveStream: true,
@@ -243,7 +257,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       roomRef.current = room;
       
       room.on(RoomEvent.Connected, () => {
-        console.log('[LiveKit SIAVI] Connected');
+        console.log('[LiveKit SIAVI] Connected to room');
         setCallState('connected');
         setConnectionStatus('Connecté');
         stopEmergencyAlarm();
@@ -251,8 +265,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         playMessage('Communications établie');
       });
       
-      room.on(RoomEvent.Disconnected, () => {
-        console.log('[LiveKit SIAVI] Disconnected');
+      room.on(RoomEvent.Disconnected, (reason) => {
+        console.log('[LiveKit SIAVI] Disconnected, reason:', reason);
         cleanupLiveKit();
         setCallState('idle');
         setNumber('');
@@ -263,8 +277,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         playMessage('Appel terminé');
       });
       
-      room.on(RoomEvent.ParticipantConnected, () => {
-        console.log('[LiveKit SIAVI] Participant connected');
+      room.on(RoomEvent.ParticipantConnected, (participant) => {
+        console.log('[LiveKit SIAVI] Participant connected:', participant.identity);
         if (callState !== 'connected') {
           setCallState('connected');
           setConnectionStatus('Connecté');
@@ -274,7 +288,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         }
       });
       
-      room.on(RoomEvent.TrackSubscribed, (track) => {
+      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        console.log('[LiveKit SIAVI] Track subscribed:', track.kind, 'from', participant.identity);
         if (track.kind === Track.Kind.Audio) {
           const audioElement = track.attach();
           audioElement.volume = 1.0;
@@ -287,17 +302,40 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       });
       
       room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
-        console.log('[LiveKit SIAVI] State:', state);
-        setConnectionStatus(state === ConnectionState.Connected ? 'Connecté' : state);
+        console.log('[LiveKit SIAVI] Connection state:', state);
+        if (state === ConnectionState.Connected) {
+          setConnectionStatus('Connecté');
+        } else if (state === ConnectionState.Reconnecting) {
+          setConnectionStatus('Reconnexion...');
+        } else if (state === ConnectionState.Disconnected) {
+          setConnectionStatus('Déconnecté');
+        } else {
+          setConnectionStatus(state);
+        }
+      });
+
+      room.on(RoomEvent.MediaDevicesError, (error) => {
+        console.error('[LiveKit SIAVI] Media devices error:', error);
+        playMessage('Erreur microphone');
       });
       
-      await room.connect(url, token);
+      // Connecter avec timeout
+      console.log('[LiveKit SIAVI] Connecting to room...');
+      const connectPromise = room.connect(url, token);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout connexion')), 15000)
+      );
+      
+      await Promise.race([connectPromise, timeoutPromise]);
+      
+      console.log('[LiveKit SIAVI] Connected, enabling microphone...');
       await room.localParticipant.setMicrophoneEnabled(true);
-      console.log('[LiveKit SIAVI] Publishing audio');
+      console.log('[LiveKit SIAVI] Audio publishing started');
       
     } catch (err) {
       console.error('[LiveKit SIAVI] Error:', err);
-      setConnectionStatus('Erreur');
+      const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
+      setConnectionStatus(`Erreur: ${errorMessage}`);
       playMessage('Impossible d\'établir la communication');
       await cleanupLiveKit();
       setCallState('idle');

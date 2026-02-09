@@ -10,21 +10,43 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     
     if (!user) {
+      console.error('[LiveKit Token] Utilisateur non authentifié');
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
     }
 
-    const { roomName, participantName } = await request.json();
+    const body = await request.json();
+    const { roomName, participantName } = body;
 
     if (!roomName) {
+      console.error('[LiveKit Token] roomName manquant');
       return NextResponse.json({ error: 'roomName requis' }, { status: 400 });
     }
 
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
+    const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
+
+    console.log('[LiveKit Token] Config check:', {
+      hasApiKey: !!apiKey,
+      hasApiSecret: !!apiSecret,
+      hasUrl: !!livekitUrl,
+      url: livekitUrl?.substring(0, 20) + '...',
+    });
 
     if (!apiKey || !apiSecret) {
-      console.error('LiveKit credentials manquants');
-      return NextResponse.json({ error: 'Service non configuré' }, { status: 500 });
+      console.error('[LiveKit Token] Credentials manquants - apiKey:', !!apiKey, 'apiSecret:', !!apiSecret);
+      return NextResponse.json({ 
+        error: 'Service non configuré',
+        details: 'Variables d\'environnement LiveKit manquantes'
+      }, { status: 500 });
+    }
+
+    if (!livekitUrl) {
+      console.error('[LiveKit Token] URL LiveKit manquante');
+      return NextResponse.json({ 
+        error: 'Service non configuré',
+        details: 'URL LiveKit manquante'
+      }, { status: 500 });
     }
 
     // Créer le token d'accès
@@ -45,12 +67,17 @@ export async function POST(request: NextRequest) {
 
     const token = await at.toJwt();
 
+    console.log('[LiveKit Token] Token généré pour room:', roomName, 'user:', user.id.substring(0, 8));
+
     return NextResponse.json({ 
       token,
-      url: process.env.NEXT_PUBLIC_LIVEKIT_URL,
+      url: livekitUrl,
     });
   } catch (error) {
-    console.error('Erreur génération token LiveKit:', error);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    console.error('[LiveKit Token] Erreur:', error);
+    return NextResponse.json({ 
+      error: 'Erreur serveur',
+      details: error instanceof Error ? error.message : 'Erreur inconnue'
+    }, { status: 500 });
   }
 }

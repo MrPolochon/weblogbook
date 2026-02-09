@@ -192,6 +192,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     
     try {
       // Obtenir le token
+      console.log('[LiveKit] Fetching token...');
       const response = await fetch('/api/livekit/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -201,11 +202,21 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         }),
       });
       
+      const data = await response.json();
+      
       if (!response.ok) {
-        throw new Error('Erreur token LiveKit');
+        console.error('[LiveKit] Token error:', data);
+        throw new Error(data.details || data.error || 'Erreur token LiveKit');
       }
       
-      const { token, url } = await response.json();
+      const { token, url } = data;
+      
+      if (!url) {
+        console.error('[LiveKit] URL manquante dans la réponse');
+        throw new Error('URL LiveKit non configurée');
+      }
+      
+      console.log('[LiveKit] Token obtained, connecting to:', url);
       
       // Créer la room
       const room = new Room({
@@ -221,15 +232,15 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       
       // Événements
       room.on(RoomEvent.Connected, () => {
-        console.log('[LiveKit] Connected');
+        console.log('[LiveKit] Connected to room');
         setCallState('connected');
         setConnectionStatus('Connecté');
         playSound('connected');
         playMessage('Communications établie');
       });
       
-      room.on(RoomEvent.Disconnected, () => {
-        console.log('[LiveKit] Disconnected');
+      room.on(RoomEvent.Disconnected, (reason) => {
+        console.log('[LiveKit] Disconnected, reason:', reason);
         cleanupLiveKit();
         setCallState('idle');
         setNumber('');
@@ -240,8 +251,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         playMessage('Appel terminé');
       });
       
-      room.on(RoomEvent.ParticipantConnected, () => {
-        console.log('[LiveKit] Other participant connected');
+      room.on(RoomEvent.ParticipantConnected, (participant) => {
+        console.log('[LiveKit] Participant connected:', participant.identity);
         if (callState !== 'connected') {
           setCallState('connected');
           setConnectionStatus('Connecté');
@@ -250,7 +261,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         }
       });
       
-      room.on(RoomEvent.TrackSubscribed, (track) => {
+      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        console.log('[LiveKit] Track subscribed:', track.kind, 'from', participant.identity);
         if (track.kind === Track.Kind.Audio) {
           const audioElement = track.attach();
           audioElement.volume = 1.0;
@@ -267,19 +279,41 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       });
       
       room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
-        console.log('[LiveKit] State:', state);
-        setConnectionStatus(state === ConnectionState.Connected ? 'Connecté' : state);
+        console.log('[LiveKit] Connection state:', state);
+        if (state === ConnectionState.Connected) {
+          setConnectionStatus('Connecté');
+        } else if (state === ConnectionState.Reconnecting) {
+          setConnectionStatus('Reconnexion...');
+        } else if (state === ConnectionState.Disconnected) {
+          setConnectionStatus('Déconnecté');
+        } else {
+          setConnectionStatus(state);
+        }
+      });
+
+      room.on(RoomEvent.MediaDevicesError, (error) => {
+        console.error('[LiveKit] Media devices error:', error);
+        playMessage('Erreur microphone');
       });
       
-      // Connecter
-      await room.connect(url, token);
+      // Connecter avec timeout
+      console.log('[LiveKit] Connecting to room...');
+      const connectPromise = room.connect(url, token);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout connexion')), 15000)
+      );
+      
+      await Promise.race([connectPromise, timeoutPromise]);
+      
+      console.log('[LiveKit] Connected, enabling microphone...');
       await room.localParticipant.setMicrophoneEnabled(true);
       
-      console.log('[LiveKit] Publishing audio');
+      console.log('[LiveKit] Audio publishing started');
       
     } catch (err) {
       console.error('[LiveKit] Error:', err);
-      setConnectionStatus('Erreur');
+      const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
+      setConnectionStatus(`Erreur: ${errorMessage}`);
       playMessage('Impossible d\'établir la communication');
       await cleanupLiveKit();
       setCallState('idle');
