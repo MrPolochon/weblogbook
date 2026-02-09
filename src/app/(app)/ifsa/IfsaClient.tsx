@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { formatDateMediumUTC, formatTimeUTC, toLocaleDateStringUTC, toLocaleStringUTC } from '@/lib/date-utils';
 import { formatDuree } from '@/lib/utils';
+import CarteIdentite from '@/components/CarteIdentite';
 
 interface Signalement {
   id: string;
@@ -116,12 +117,28 @@ interface IfsaVol {
   instructeur?: { identifiant?: string } | null;
 }
 
+interface IfsaCarte {
+  couleur_fond: string;
+  logo_url: string | null;
+  photo_url: string | null;
+  titre: string;
+  sous_titre: string | null;
+  nom_affiche: string | null;
+  organisation: string | null;
+  numero_carte: string | null;
+  date_delivrance: string | null;
+  date_expiration: string | null;
+  cases_haut: string[];
+  cases_bas: string[];
+}
+
 interface IfsaPiloteData {
   profile: { id: string; identifiant: string; role: string | null; heures_initiales_minutes: number | null };
   compte: IfsaCompte | null;
   transactions: IfsaTransaction[];
   licences: IfsaLicence[];
   logbook: { totalMinutes: number; vols: IfsaVol[] };
+  carte: IfsaCarte | null;
 }
 
 interface IfsaCompagnieData {
@@ -985,12 +1002,24 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
 
               {piloteData && (
                 <div className="space-y-4">
-                  <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-800/40">
-                    <p className="text-xs text-slate-500">Pilote</p>
-                    <p className="text-slate-200 font-semibold">{piloteData.profile.identifiant}</p>
-                    {piloteData.profile.role === 'atc' && (
-                      <p className="text-xs text-amber-400 mt-1">ATC uniquement</p>
-                    )}
+                  {/* Carte d'identité et infos pilote */}
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex-shrink-0">
+                      <CarteIdentite 
+                        carte={piloteData.carte} 
+                        identifiant={piloteData.profile.identifiant} 
+                        size="sm" 
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-800/40 h-full">
+                        <p className="text-xs text-slate-500">Pilote</p>
+                        <p className="text-slate-200 font-semibold text-lg">{piloteData.profile.identifiant}</p>
+                        {piloteData.profile.role === 'atc' && (
+                          <p className="text-xs text-amber-400 mt-1">ATC uniquement</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-900/40">

@@ -102,6 +102,13 @@ export async function GET(req: NextRequest) {
         (profile.heures_initiales_minutes ?? 0) +
         totalValides.reduce((s, v) => s + (v.duree_minutes || 0), 0);
 
+      // Récupérer la carte d'identité
+      const { data: carte } = await admin
+        .from('cartes_identite')
+        .select('*')
+        .eq('user_id', id)
+        .single();
+
       return NextResponse.json({
         profile,
         compte: comptePerso,
@@ -111,6 +118,7 @@ export async function GET(req: NextRequest) {
           totalMinutes,
           vols: vols || [],
         },
+        carte: carte || null,
       });
     }
 
