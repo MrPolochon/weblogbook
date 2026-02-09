@@ -35,8 +35,11 @@ export async function PATCH(
 
     // Rôle Armée requiert l'accès pilote : interdire armee=true pour role=atc ou role=siavi
     if (armeeBody === true) {
-      const { data: t } = await admin.from('profiles').select('role').eq('id', id).single();
-      if (t?.role === 'atc' || t?.role === 'siavi') return NextResponse.json({ error: 'Le rôle Armée requiert l\'accès à l\'espace pilote. Accordez d\'abord l\'accès pilote.' }, { status: 400 });
+      // Utiliser le rôle cible (roleBody) si fourni, sinon le rôle actuel
+      const targetRole = roleBody || (await admin.from('profiles').select('role').eq('id', id).single()).data?.role;
+      if (targetRole === 'atc' || targetRole === 'siavi') {
+        return NextResponse.json({ error: 'Le rôle Armée requiert l\'accès à l\'espace pilote.' }, { status: 400 });
+      }
     }
 
     // Gestion du changement de rôle (pilote, atc, siavi, admin)
@@ -53,31 +56,27 @@ export async function PATCH(
       }
       
       // Appliquer le changement de rôle
-      if (roleBody !== target.role) {
-        updates.role = roleBody;
-        
-        // Si on passe en admin, garder les autres accès
-        // Si on passe en atc uniquement, désactiver armee et siavi
-        if (roleBody === 'atc') {
-          updates.armee = false;
-          updates.atc = true;
-          updates.siavi = false;
-        }
-        // Si on passe en siavi uniquement, désactiver armee et atc
-        if (roleBody === 'siavi') {
-          updates.armee = false;
-          updates.atc = false;
-          updates.siavi = true;
-        }
-        // Si on passe en pilote depuis atc, activer atc aussi
-        if (roleBody === 'pilote' && target.role === 'atc') {
-          updates.atc = true;
-        }
-        // Si on passe en pilote depuis siavi, activer siavi aussi
-        if (roleBody === 'pilote' && target.role === 'siavi') {
-          updates.siavi = true;
-        }
+      updates.role = roleBody;
+      
+      // Si on passe en atc uniquement (role=atc), désactiver armee et siavi
+      if (roleBody === 'atc') {
+        updates.armee = false;
+        updates.siavi = false;
+        // atc est défini par le frontend (peut être true ou laisser tel quel)
+        if (atcBody === undefined) updates.atc = true;
       }
+      // Si on passe en siavi uniquement (role=siavi), désactiver armee et atc
+      else if (roleBody === 'siavi') {
+        updates.armee = false;
+        updates.atc = false;
+        // siavi est défini par le frontend (peut être true ou laisser tel quel)
+        if (siaviBody === undefined) updates.siavi = true;
+      }
+      // Si on passe en pilote, utiliser les valeurs du frontend
+      else if (roleBody === 'pilote') {
+        // Les valeurs atc, siavi, armee viennent du frontend
+      }
+      // Si on passe en admin, garder les autres accès
     }
 
     if (identifiantBody != null && typeof identifiantBody === 'string') {
