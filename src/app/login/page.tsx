@@ -201,7 +201,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden">
+    <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden animate-page-reveal">
       {fond}
       {overlay}
       
@@ -210,18 +210,18 @@ export default function LoginPage() {
       <AnimatedClouds />
       <FlyingPlane />
       
-      <div className="relative z-10 w-full max-w-md animate-fade-in">
+      <div className="relative z-10 w-full max-w-md">
         {/* Logo / Titre */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-sky-500/30 to-indigo-500/30 mb-4 shadow-xl shadow-sky-500/20 backdrop-blur-sm border border-sky-500/20 animate-float">
-            <Shield className="h-10 w-10 text-sky-400" />
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-sky-500/30 to-indigo-500/30 mb-4 shadow-xl shadow-sky-500/20 backdrop-blur-sm border border-sky-500/20 animate-zoom-bounce hover:animate-float">
+            <Shield className="h-10 w-10 text-sky-400 drop-shadow-lg" />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">PTFS Logbook</h1>
-          <p className="text-slate-400 text-sm mt-2">Système de gestion des vols</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight animate-init animate-slide-up delay-200">PTFS Logbook</h1>
+          <p className="text-slate-400 text-sm mt-2 animate-init animate-slide-up delay-300">Système de gestion des vols</p>
         </div>
 
         {/* Sélecteur de mode */}
-        <div className="flex gap-2 mb-6 p-1 bg-slate-800/50 rounded-2xl backdrop-blur-sm">
+        <div className="flex gap-2 mb-6 p-1 bg-slate-800/50 rounded-2xl backdrop-blur-sm animate-init animate-reveal-blur delay-400">
           <button
             type="button"
             onClick={() => setMode('pilote')}
@@ -261,7 +261,7 @@ export default function LoginPage() {
         </div>
 
         {/* Formulaire */}
-        <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl">
+        <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur delay-500">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="label text-slate-200">Identifiant</label>
@@ -323,7 +323,7 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-slate-500 text-sm mt-8 text-center">
+        <p className="text-slate-500 text-sm mt-8 text-center animate-init animate-slide-up delay-700">
           Premier accès ? <a href="/setup" className="text-sky-400 hover:text-sky-300 font-medium transition-colors">Créer le premier admin</a>
         </p>
       </div>
