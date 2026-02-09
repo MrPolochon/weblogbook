@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import CompteForm from './CompteForm';
 import LicencesSection from '@/components/LicencesSection';
-import CarteIdentite from '@/components/CarteIdentite';
+import MaCartePhoto from './MaCartePhoto';
 
 export default async function ComptePage() {
   const supabase = await createClient();
@@ -29,12 +29,11 @@ export default async function ComptePage() {
       <h1 className="text-2xl font-semibold text-slate-100">Mon compte</h1>
       
       <div className="flex flex-col md:flex-row gap-6">
-        {/* Carte d'identité */}
+        {/* Carte d'identité avec bouton pour changer la photo */}
         <div className="flex-shrink-0">
-          <CarteIdentite 
-            carte={carte} 
+          <MaCartePhoto 
+            initialCarte={carte} 
             identifiant={profile?.identifiant ?? '—'} 
-            size="md" 
           />
         </div>
 
