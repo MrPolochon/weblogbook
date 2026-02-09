@@ -66,10 +66,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Solde insuffisant ou compte modifié' }, { status: 400 });
     }
 
-    // Créditer destination (mise à jour atomique avec le solde actuel)
+    // Créditer destination avec mise à jour atomique
+    // On récupère le solde actuel et on l'incrémente
+    const { data: destActuel } = await admin.from('felitz_comptes')
+      .select('solde')
+      .eq('id', compteDest.id)
+      .single();
+    
+    if (!destActuel) {
+      // Rollback
+      await admin.from('felitz_comptes')
+        .update({ solde: debitResult[0].solde + montant })
+        .eq('id', compte_source_id);
+      return NextResponse.json({ error: 'Compte destination introuvable' }, { status: 404 });
+    }
+
     const { error: creditError } = await admin.from('felitz_comptes')
-      .update({ solde: compteDest.solde + montant })
-      .eq('id', compteDest.id);
+      .update({ solde: destActuel.solde + montant })
+      .eq('id', compteDest.id)
+      .eq('solde', destActuel.solde); // Vérifier que le solde n'a pas changé
 
     if (creditError) {
       // Rollback: rembourser le compte source (ajouter le montant débité)

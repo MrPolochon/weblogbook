@@ -9,6 +9,12 @@ import PlansEnAttenteModal from '@/components/PlansEnAttenteModal';
 import AtcEnLigneModal from '@/components/AtcEnLigneModal';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import type { PlanVol, AtcSession } from '@/lib/types';
+
+// Type pour les plans enrichis avec données relationnelles
+type EnrichedPlan = PlanVol & {
+  temps_prev_min?: number;
+};
 
 const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
   en_attente: { label: 'ATT', color: 'text-amber-700', bgColor: 'bg-amber-100' },
@@ -222,20 +228,11 @@ export default async function AtcPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {plansChezMoi.map((p) => {
+              {(plansChezMoi as EnrichedPlan[]).map((p) => {
                 const config = STATUT_CONFIG[p.statut] || { label: p.statut, color: 'text-slate-700', bgColor: 'bg-slate-100' };
-                const piloteData = (p as any).pilote;
-                const pilote = piloteData ? (Array.isArray(piloteData) ? piloteData[0] : piloteData) : null;
-                const compagnieData = (p as any).compagnie;
-                const compagnie = compagnieData ? (Array.isArray(compagnieData) ? compagnieData[0] : compagnieData) : null;
-                const avionData = (p as any).avion;
-                const avion = avionData ? (Array.isArray(avionData) ? avionData[0] : avionData) : null;
-                const isCommercial = (p as any).vol_commercial;
-                const isFerry = (p as any).vol_ferry;
-                const natureTrans = (p as any).nature_transport;
-                const typeCargo = (p as any).type_cargaison;
-                const nbPax = (p as any).nb_pax_genere;
-                const cargoKg = (p as any).cargo_kg_genere;
+                const pilote = p.pilote;
+                const compagnie = p.compagnie;
+                const avion = p.avion;
                 
                 return (
                   <Link 
@@ -254,29 +251,29 @@ export default async function AtcPage() {
                         <span className="font-bold text-slate-900 font-mono">{p.numero_vol}</span>
                         <span className="text-xs px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">{p.type_vol}</span>
                         {/* Transpondeur */}
-                        {(p as any).code_transpondeur && (
+                        {p.code_transpondeur && (
                           <TranspondeurBadgeAtc 
-                            code={(p as any).code_transpondeur} 
-                            mode={(p as any).mode_transpondeur || 'C'} 
+                            code={p.code_transpondeur} 
+                            mode={p.mode_transpondeur || 'C'} 
                             size="sm"
                           />
                         )}
-                        {isFerry && (
+                        {p.vol_ferry && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 flex items-center gap-1">
                             <Ship className="h-3 w-3" />
                             FERRY
                           </span>
                         )}
-                        {isCommercial && natureTrans === 'passagers' && (
+                        {p.vol_commercial && p.nature_transport === 'passagers' && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 flex items-center gap-1">
                             <Users className="h-3 w-3" />
-                            {nbPax || '?'} PAX
+                            {p.nb_pax_genere || '?'} PAX
                           </span>
                         )}
-                        {isCommercial && natureTrans === 'cargo' && (
+                        {p.vol_commercial && p.nature_transport === 'cargo' && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 flex items-center gap-1">
                             <Package className="h-3 w-3" />
-                            {cargoKg || '?'} kg {typeCargo ? `(${typeCargo})` : ''}
+                            {p.cargo_kg_genere || '?'} kg {p.type_cargaison ? `(${p.type_cargaison})` : ''}
                           </span>
                         )}
                       </div>
@@ -375,7 +372,7 @@ export default async function AtcPage() {
                     {sess.est_afis ? 'AFIS' : 'Pompier seul'}
                   </span>
                   <span className="text-slate-500 text-xs">
-                    {(sess.profiles as any)?.identifiant || '—'}
+                    {sess.profiles?.identifiant || '—'}
                   </span>
                 </div>
               </div>

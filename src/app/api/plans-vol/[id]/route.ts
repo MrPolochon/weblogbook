@@ -102,11 +102,11 @@ export async function PATCH(
         }
         
         // Appliquer l'usure à l'avion individuel si utilisé
-        if ((plan as any).compagnie_avion_id) {
+        if (plan.compagnie_avion_id) {
           const { data: avion } = await admin
             .from('compagnie_avions')
             .select('id, usure_percent')
-            .eq('id', (plan as any).compagnie_avion_id)
+            .eq('id', plan.compagnie_avion_id)
             .single();
           
           if (avion) {

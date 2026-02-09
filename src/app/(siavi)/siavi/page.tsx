@@ -242,7 +242,7 @@ export default async function SiaviPage() {
                     {sess.est_afis ? 'AFIS' : 'Pompier seul'}
                   </span>
                   <span className="text-slate-500 text-xs">
-                    {(sess.profiles as any)?.identifiant || '—'}
+                    {sess.profiles?.identifiant || '—'}
                   </span>
                 </div>
               </div>
@@ -262,7 +262,7 @@ export default async function SiaviPage() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-sky-700 font-medium">{sess.position}</span>
                   <span className="text-slate-500 text-xs">
-                    {(sess.profiles as any)?.identifiant || '—'}
+                    {sess.profiles?.identifiant || '—'}
                   </span>
                 </div>
               </div>

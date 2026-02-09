@@ -17,6 +17,7 @@ const TYPES_VALIDES = [
 ] as const;
 
 const TYPES_COM = ['COM 1', 'COM 2', 'COM 3', 'COM 4', 'COM 5', 'COM 6'] as const;
+const isTypeCom = (type: string): boolean => (TYPES_COM as readonly string[]).includes(type);
 const TYPE_QUALIFICATION_TYPE = 'Qualification Type';
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
@@ -63,7 +64,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
 
     const currentType = type || existing.type;
-    if (TYPES_COM.includes(currentType as any)) {
+    if (isTypeCom(currentType)) {
       if (langue !== undefined) {
         if (!langue || !String(langue).trim()) {
           return NextResponse.json({ error: 'langue requise pour COM' }, { status: 400 });

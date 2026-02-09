@@ -2,6 +2,69 @@ export type Role = 'admin' | 'pilote' | 'atc' | 'siavi';
 export type VolStatut = 'en_attente' | 'validé' | 'refusé';
 export type TypeVol = 'IFR' | 'VFR';
 export type RolePilote = 'Pilote' | 'Co-pilote';
+export type PlanStatut = 'depose' | 'en_attente' | 'accepte' | 'refuse' | 'en_cours' | 'automonitoring' | 'en_attente_cloture' | 'cloture';
+export type NatureTransport = 'passagers' | 'cargo' | 'mixte';
+export type TypeCargaison = 'generale' | 'dangereuse' | 'perissable' | 'vivante' | 'urgente';
+
+export interface PlanVol {
+  id: string;
+  numero_vol: string;
+  pilote_id: string;
+  copilote_id?: string | null;
+  compagnie_id?: string | null;
+  compagnie_avion_id?: string | null;
+  type_vol: TypeVol;
+  aeroport_depart: string;
+  aeroport_arrivee: string;
+  altitude_croisiere?: number | null;
+  vitesse_croisiere?: number | null;
+  route?: string | null;
+  duree_estimee_minutes?: number | null;
+  carburant_minutes?: number | null;
+  callsign?: string | null;
+  statut: PlanStatut;
+  
+  // Transpondeur
+  code_transpondeur?: string | null;
+  mode_transpondeur?: 'C' | 'S' | null;
+  
+  // Type de vol
+  vol_commercial?: boolean;
+  vol_ferry?: boolean;
+  vol_militaire?: boolean;
+  nature_transport?: NatureTransport | null;
+  type_cargaison?: TypeCargaison | null;
+  nb_pax_genere?: number | null;
+  cargo_kg_genere?: number | null;
+  
+  // ATC
+  current_holder_user_id?: string | null;
+  pending_transfer_aeroport?: string | null;
+  instructions?: string | null;
+  
+  // Dates
+  heure_depart_estimee?: string | null;
+  heure_depart_reelle?: string | null;
+  heure_arrivee_estimee?: string | null;
+  heure_arrivee_reelle?: string | null;
+  created_at: string;
+  updated_at?: string;
+  
+  // Relations enrichies (optionnelles)
+  pilote?: { identifiant: string } | null;
+  copilote?: { identifiant: string } | null;
+  compagnie?: { nom: string } | null;
+  avion?: { immatriculation: string; nom_bapteme?: string } | null;
+}
+
+export interface AtcSession {
+  id: string;
+  user_id: string;
+  aeroport: string;
+  position: string;
+  started_at: string;
+  profiles?: { identifiant: string } | null;
+}
 
 export interface Profile {
   id: string;

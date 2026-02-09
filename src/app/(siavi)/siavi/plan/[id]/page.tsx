@@ -6,6 +6,13 @@ import { ArrowLeft, Plane, Clock, FileText, Eye, Radio, Navigation, Users, Packa
 import PrendreVolAfisButton from './PrendreVolAfisButton';
 import RelacherVolAfisButton from './RelacherVolAfisButton';
 import TranspondeurBadgeAtc from '@/components/TranspondeurBadgeAtc';
+import type { PlanVol } from '@/lib/types';
+
+// Type étendu
+type ExtendedPlan = PlanVol & {
+  temps_prev_min?: number;
+  intentions_vol?: string;
+};
 
 export const dynamic = 'force-dynamic';
 
@@ -98,10 +105,10 @@ export default async function SiaviPlanPage({ params }: { params: Promise<{ id: 
               {statusConfig.label}
             </span>
             {/* Transpondeur */}
-            {(plan as any).code_transpondeur && (
+            {plan.code_transpondeur && (
               <TranspondeurBadgeAtc 
-                code={(plan as any).code_transpondeur} 
-                mode={(plan as any).mode_transpondeur || 'C'} 
+                code={plan.code_transpondeur} 
+                mode={plan.mode_transpondeur || 'C'} 
                 size="md"
               />
             )}
@@ -210,22 +217,22 @@ export default async function SiaviPlanPage({ params }: { params: Promise<{ id: 
           
           {/* Type de vol (commercial, ferry, etc.) */}
           <div className="flex flex-wrap gap-2 mt-4">
-            {(plan as any).vol_ferry && (
+            {plan.vol_ferry && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-sm font-medium">
                 <Ship className="h-4 w-4" />
                 Vol Ferry
               </span>
             )}
-            {(plan as any).vol_commercial && (plan as any).nature_transport === 'passagers' && (
+            {plan.vol_commercial && plan.nature_transport === 'passagers' && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-100 text-sky-700 text-sm font-medium">
                 <Users className="h-4 w-4" />
-                {(plan as any).nb_pax_genere || 0} passagers
+                {plan.nb_pax_genere || 0} passagers
               </span>
             )}
-            {(plan as any).vol_commercial && (plan as any).nature_transport === 'cargo' && (
+            {plan.vol_commercial && plan.nature_transport === 'cargo' && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-100 text-purple-700 text-sm font-medium">
                 <Package className="h-4 w-4" />
-                {(plan as any).cargo_kg_genere || 0} kg cargo
+                {plan.cargo_kg_genere || 0} kg cargo
               </span>
             )}
           </div>

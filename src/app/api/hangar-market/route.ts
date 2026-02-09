@@ -260,7 +260,8 @@ export async function POST(req: NextRequest) {
       await admin.rpc('crediter_compte', { p_compte_id: compteVendeurId, p_montant: annonce.prix });
 
       // Transactions
-      const avionNom = (annonce.types_avion as any)?.nom || 'Avion';
+      const typesAvion = annonce.types_avion as { nom: string } | null;
+      const avionNom = typesAvion?.nom || 'Avion';
       
       await admin.from('felitz_transactions').insert([
         {

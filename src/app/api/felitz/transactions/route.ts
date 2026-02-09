@@ -94,10 +94,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Solde insuffisant pour ce débit' }, { status: 400 });
     }
 
-    // Mettre à jour le solde
-    await admin.from('felitz_comptes')
+    // Mettre à jour le solde avec vérification atomique (optimistic locking)
+    const { data: updateResult, error: updateError } = await admin.from('felitz_comptes')
       .update({ solde: newSolde })
-      .eq('id', compte_id);
+      .eq('id', compte_id)
+      .eq('solde', compte.solde) // Vérifier que le solde n'a pas changé
+      .select('id');
+
+    if (updateError || !updateResult || updateResult.length === 0) {
+      return NextResponse.json({ error: 'Le solde a été modifié. Réessayez.' }, { status: 409 });
+    }
 
     // Créer la transaction
     const { data: transaction, error } = await admin.from('felitz_transactions').insert({

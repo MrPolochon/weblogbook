@@ -7,6 +7,7 @@ import { ArrowLeft, FileText, AlertCircle, Bell, Plane, Clock, CheckCircle2, XCi
 import PlanVolCloturerButton from './PlanVolCloturerButton';
 import PlanVolAnnulerButton from './PlanVolAnnulerButton';
 import TranspondeurInterface from './TranspondeurInterface';
+import type { PlanVol } from '@/lib/types';
 
 const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
   depose: { label: 'Déposé', color: 'text-slate-300', bgColor: 'bg-slate-500/20' },
@@ -39,7 +40,7 @@ export default async function MesPlansVolPage() {
   const plansEnCours = plans.filter((p: { statut: string }) => ['en_cours', 'accepte', 'automonitoring', 'en_attente_cloture'].includes(p.statut));
   
   // Plan actif avec transpondeur (accepté, en cours, automonitoring ou en attente de clôture)
-  const planActif = plans.find((p: { statut: string }) => ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'].includes(p.statut)) as any;
+  const planActif = plans.find((p: { statut: string }) => ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'].includes(p.statut)) as PlanVol | undefined;
   const hasActivePlan = !!planActif;
 
   // Récupérer l'identifiant du contrôleur en charge si plan actif
