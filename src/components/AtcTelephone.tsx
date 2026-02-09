@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Phone, PhoneOff, PhoneCall, Mic, MicOff, Delete } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX, RotateCcw } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { createClient } from '@/lib/supabase/client';
 
@@ -15,14 +15,8 @@ interface AtcTelephoneProps {
 
 // Mapping des positions vers les codes
 const POSITION_CODES: Record<string, string> = {
-  'Delivery': '15',
-  'Clairance': '16',
-  'Ground': '17',
-  'Tower': '18',
-  'DEP': '191',
-  'APP': '192',
-  'Center': '20',
-  'AFIS': '505', // Code AFIS
+  'Delivery': '15', 'Clairance': '16', 'Ground': '17', 'Tower': '18',
+  'DEP': '191', 'APP': '192', 'Center': '20', 'AFIS': '505',
 };
 
 const CODE_TO_POSITION: Record<string, string> = Object.fromEntries(
@@ -51,6 +45,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const [incomingCall, setIncomingCall] = useState<{ from: string; fromPosition: string; callId: string } | null>(null);
   const [currentCall, setCurrentCall] = useState<{ to: string; toPosition: string; callId: string } | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  const [callDuration, setCallDuration] = useState(0);
+  const [audioLevel, setAudioLevel] = useState(0);
   
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -58,122 +54,108 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const localStreamRef = useRef<MediaStream | null>(null);
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const signalingChannelRef = useRef<ReturnType<ReturnType<typeof createClient>['channel']> | null>(null);
-  const ringtoneIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const ringtoneAudioContextRef = useRef<AudioContext | null>(null);
-  const shouldRingRef = useRef(false);
-  const callStatusIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const dialToneIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const dialToneAudioContextRef = useRef<AudioContext | null>(null);
-  const shouldDialToneRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const callTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const shouldPlaySoundRef = useRef(false);
 
-  // Sonnerie téléphone réaliste
-  const playRingtone = () => {
+  // Sonnerie moderne
+  const playSound = useCallback((type: 'ring' | 'dial' | 'end' | 'beep') => {
+    if (!shouldPlaySoundRef.current && type !== 'beep') return;
     try {
-      if (!ringtoneAudioContextRef.current) {
-        ringtoneAudioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      }
-      const ctx = ringtoneAudioContextRef.current;
-      const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
-      const gain = ctx.createGain();
-      
-      osc1.frequency.value = 440;
-      osc2.frequency.value = 480;
-      osc1.type = 'sine';
-      osc2.type = 'sine';
-      
-      gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.1);
-      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
-      
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(ctx.destination);
-      
-      osc1.start();
-      osc2.start();
-      osc1.stop(ctx.currentTime + 0.4);
-      osc2.stop(ctx.currentTime + 0.4);
-    } catch (err) {
-      console.error('Erreur sonnerie:', err);
-    }
-  };
-
-  // Tonalité d'appel
-  const playDialTone = () => {
-    try {
-      if (!dialToneAudioContextRef.current) {
-        dialToneAudioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      }
-      const ctx = dialToneAudioContextRef.current;
+      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      
-      osc.frequency.value = 425;
-      osc.type = 'sine';
-      gain.gain.setValueAtTime(0.2, ctx.currentTime);
       
       osc.connect(gain);
       gain.connect(ctx.destination);
       
-      osc.start();
-      osc.stop(ctx.currentTime + 0.4);
-    } catch (err) {
-      console.error('Erreur tonalité:', err);
-    }
-  };
-
-  // Gestion tonalité d'appel
-  useEffect(() => {
-    if (callState === 'ringing') {
-      shouldDialToneRef.current = true;
-      playDialTone();
-      dialToneIntervalRef.current = setInterval(() => {
-        if (shouldDialToneRef.current) playDialTone();
-      }, 3000);
-    } else {
-      shouldDialToneRef.current = false;
-      if (dialToneIntervalRef.current) {
-        clearInterval(dialToneIntervalRef.current);
-        dialToneIntervalRef.current = null;
+      switch (type) {
+        case 'ring':
+          osc.frequency.value = 440;
+          osc.type = 'sine';
+          gain.gain.setValueAtTime(0, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.3);
+          break;
+        case 'dial':
+          osc.frequency.value = 425;
+          osc.type = 'sine';
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.2);
+          break;
+        case 'end':
+          osc.frequency.value = 480;
+          osc.type = 'sine';
+          gain.gain.setValueAtTime(0.2, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.5);
+          break;
+        case 'beep':
+          osc.frequency.value = 1000;
+          osc.type = 'sine';
+          gain.gain.setValueAtTime(0.1, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.05);
+          break;
       }
-      if (dialToneAudioContextRef.current) {
-        dialToneAudioContextRef.current.close().catch(() => {});
-        dialToneAudioContextRef.current = null;
-      }
+      setTimeout(() => ctx.close(), 600);
+    } catch (e) {
+      console.error('Audio error:', e);
     }
-    return () => {
-      shouldDialToneRef.current = false;
-      if (dialToneIntervalRef.current) clearInterval(dialToneIntervalRef.current);
-    };
-  }, [callState]);
+  }, []);
 
   // Gestion sonnerie
   useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    
     if (callState === 'incoming') {
-      shouldRingRef.current = true;
-      playRingtone();
-      ringtoneIntervalRef.current = setInterval(() => {
-        if (shouldRingRef.current) playRingtone();
-      }, 600);
+      shouldPlaySoundRef.current = true;
+      playSound('ring');
+      interval = setInterval(() => {
+        if (shouldPlaySoundRef.current) playSound('ring');
+      }, 500);
+    } else if (callState === 'ringing') {
+      shouldPlaySoundRef.current = true;
+      playSound('dial');
+      interval = setInterval(() => {
+        if (shouldPlaySoundRef.current) playSound('dial');
+      }, 2500);
     } else {
-      shouldRingRef.current = false;
-      if (ringtoneIntervalRef.current) {
-        clearInterval(ringtoneIntervalRef.current);
-        ringtoneIntervalRef.current = null;
+      shouldPlaySoundRef.current = false;
+    }
+    
+    return () => {
+      shouldPlaySoundRef.current = false;
+      if (interval) clearInterval(interval);
+    };
+  }, [callState, playSound]);
+
+  // Timer d'appel
+  useEffect(() => {
+    if (callState === 'connected') {
+      setCallDuration(0);
+      callTimerRef.current = setInterval(() => {
+        setCallDuration(d => d + 1);
+      }, 1000);
+    } else {
+      if (callTimerRef.current) {
+        clearInterval(callTimerRef.current);
+        callTimerRef.current = null;
       }
-      if (ringtoneAudioContextRef.current) {
-        ringtoneAudioContextRef.current.close().catch(() => {});
-        ringtoneAudioContextRef.current = null;
-      }
+      setCallDuration(0);
     }
     return () => {
-      shouldRingRef.current = false;
-      if (ringtoneIntervalRef.current) clearInterval(ringtoneIntervalRef.current);
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
     };
   }, [callState]);
 
-  // Vérification appels entrants (polling rapide pour réactivité)
+  // Vérification appels entrants
   useEffect(() => {
     if (callState === 'idle') {
       checkIntervalRef.current = setInterval(async () => {
@@ -187,12 +169,12 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
               callId: data.call.id,
             });
             setCallState('incoming');
-            setIsOpen(true); // Ouvrir automatiquement le téléphone
+            setIsOpen(true);
           }
         } catch (err) {
-          console.error('Erreur vérification appels:', err);
+          console.error('Check calls error:', err);
         }
-      }, 1000); // Réduit de 2000ms à 1000ms pour détection plus rapide
+      }, 1000);
     } else if (callState === 'incoming' && incomingCall) {
       checkIntervalRef.current = setInterval(async () => {
         try {
@@ -203,9 +185,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
             setCallState('idle');
           }
         } catch (err) {
-          console.error('Erreur vérification statut:', err);
+          console.error('Status check error:', err);
         }
-      }, 1000); // Réduit de 2000ms à 1000ms
+      }, 1000);
     }
     return () => {
       if (checkIntervalRef.current) {
@@ -215,31 +197,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     };
   }, [callState, incomingCall]);
 
-  const playMessage = (message: string) => {
-    if ('speechSynthesis' in window) {
-      const utterance = new SpeechSynthesisUtterance(message);
-      utterance.lang = 'fr-FR';
-      utterance.rate = 0.9;
-      speechSynthesis.speak(utterance);
-    }
-  };
-
-  const handleNumberInput = (digit: string) => {
-    if (callState === 'idle' || callState === 'dialing') {
-      setNumber(prev => prev + digit);
-      if (callState === 'idle') setCallState('dialing');
-    }
-  };
-
-  const handleDelete = () => {
-    setNumber(prev => {
-      const newNumber = prev.slice(0, -1);
-      if (newNumber.length === 0) setCallState('idle');
-      return newNumber;
-    });
-  };
-
-  const cleanupWebRTC = () => {
+  const cleanupWebRTC = useCallback(() => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
@@ -254,33 +212,14 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       signalingChannelRef.current.unsubscribe();
       signalingChannelRef.current = null;
     }
-    if (callStatusIntervalRef.current) {
-      clearInterval(callStatusIntervalRef.current);
-      callStatusIntervalRef.current = null;
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
     }
-  };
+    setAudioLevel(0);
+  }, []);
 
-  const startCallStatusMonitoring = (callId: string) => {
-    callStatusIntervalRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/atc/telephone/status?callId=${callId}`);
-        const data = await res.json();
-        if (data.status === 'ended' || data.status === 'rejected' || !data.call) {
-          cleanupWebRTC();
-          setCallState('idle');
-          setNumber('');
-          setIncomingCall(null);
-          setCurrentCall(null);
-          setIsMuted(false);
-          playMessage('Appel terminé');
-        }
-      } catch (err) {
-        console.error('Erreur vérification statut:', err);
-      }
-    }, 1500); // Réduit de 2000ms à 1500ms pour détection fin d'appel plus rapide
-  };
-
-  const setupWebRTC = async (callId: string, isInitiator: boolean) => {
+  const setupWebRTC = useCallback(async (callId: string, isInitiator: boolean) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -296,11 +235,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:stun3.l.google.com:19302' },
-          { urls: 'stun:stun4.l.google.com:19302' },
         ],
-        iceCandidatePoolSize: 10, // Pré-allocation des candidats ICE pour connexion plus rapide
+        iceCandidatePoolSize: 10,
       });
       peerConnectionRef.current = pc;
 
@@ -311,13 +247,33 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           remoteAudioRef.current.srcObject = event.streams[0];
           remoteAudioRef.current.volume = 1.0;
           remoteAudioRef.current.play().catch(console.error);
+          
+          // Analyse audio pour indicateur visuel
+          try {
+            audioContextRef.current = new AudioContext();
+            const source = audioContextRef.current.createMediaStreamSource(event.streams[0]);
+            analyserRef.current = audioContextRef.current.createAnalyser();
+            analyserRef.current.fftSize = 256;
+            source.connect(analyserRef.current);
+            
+            const updateLevel = () => {
+              if (!analyserRef.current) return;
+              const data = new Uint8Array(analyserRef.current.frequencyBinCount);
+              analyserRef.current.getByteFrequencyData(data);
+              const avg = data.reduce((a, b) => a + b, 0) / data.length;
+              setAudioLevel(avg / 255);
+              if (callState === 'connected') requestAnimationFrame(updateLevel);
+            };
+            updateLevel();
+          } catch (e) {
+            console.error('Audio analyser error:', e);
+          }
         }
       };
 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === 'connected') {
           setCallState('connected');
-          playMessage('Communications établie');
         } else if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
           cleanupWebRTC();
           setCallState('idle');
@@ -325,6 +281,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           setIncomingCall(null);
           setCurrentCall(null);
           setIsMuted(false);
+          playSound('end');
         }
       };
 
@@ -335,9 +292,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           if (message.fromUserId === userId) return;
 
           try {
-            console.log('ATC received signal:', message.type);
             if (message.type === 'offer' && !isInitiator) {
-              console.log('ATC processing offer, creating answer');
               await pc.setRemoteDescription(new RTCSessionDescription(message.data));
               const answer = await pc.createAnswer();
               await pc.setLocalDescription(answer);
@@ -346,50 +301,31 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
                 event: 'webrtc-signal',
                 payload: { type: 'answer', data: answer, fromUserId: userId },
               });
-              console.log('ATC answer sent');
             } else if (message.type === 'answer' && isInitiator) {
-              console.log('ATC received answer, setting remote description');
               await pc.setRemoteDescription(new RTCSessionDescription(message.data));
             } else if (message.type === 'ice-candidate' && message.data) {
               await pc.addIceCandidate(new RTCIceCandidate(message.data));
             }
           } catch (err) {
-            console.error('ATC signal error:', err);
+            console.error('Signal error:', err);
           }
         })
         .subscribe(async (status) => {
-          console.log('ATC WebRTC channel status:', status, 'isInitiator:', isInitiator);
           if (status === 'SUBSCRIBED' && isInitiator) {
-            // Envoyer l'offer avec retries optimisés
             const sendOffer = async () => {
-              const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+              const offer = await pc.createOffer({ offerToReceiveAudio: true });
               await pc.setLocalDescription(offer);
-              console.log('ATC sending offer');
               await channel.send({
                 type: 'broadcast',
                 event: 'webrtc-signal',
                 payload: { type: 'offer', data: offer, fromUserId: userId },
               });
             };
-            
-            // Envoyer l'offer immédiatement (délai réduit de 500ms à 100ms)
             await new Promise(resolve => setTimeout(resolve, 100));
             await sendOffer();
-            
-            // Réessayer rapidement si pas de connexion
-            setTimeout(async () => {
-              if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting' && pc.signalingState !== 'stable') {
-                console.log('ATC retrying offer (1)');
-                await sendOffer();
-              }
-            }, 800);
-            
-            setTimeout(async () => {
-              if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
-                console.log('ATC retrying offer (2)');
-                await sendOffer();
-              }
-            }, 2000);
+            setTimeout(() => {
+              if (pc.connectionState !== 'connected') sendOffer();
+            }, 1000);
           }
         });
 
@@ -405,27 +341,23 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         }
       };
 
-      startCallStatusMonitoring(callId);
       return pc;
     } catch (error) {
-      console.error('Erreur WebRTC:', error);
+      console.error('WebRTC error:', error);
       cleanupWebRTC();
       throw error;
     }
-  };
+  }, [userId, callState, cleanupWebRTC, playSound]);
 
   const parseNumber = (num: string) => {
-    // Appels d'urgence 911 ou 112 -> AFIS
     if (num === '911' || num === '112') {
       return { aeroport: null, position: 'AFIS', isLocal: false, isEmergency: true };
     }
-    // Appel local (ex: *505 pour AFIS local)
     if (num.startsWith('*')) {
       const code = num.substring(1);
       const pos = CODE_TO_POSITION[code];
       return { aeroport: null, position: pos || null, isLocal: true, isEmergency: false };
     }
-    // Appel international (ex: +145570505 pour AFIS IRFD)
     if (num.startsWith('+14') && num.length >= 9) {
       const aeroportCode = num.substring(3, 7);
       const positionCode = num.substring(7);
@@ -439,14 +371,27 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     return { aeroport: null, position: null, isLocal: false, isEmergency: false };
   };
 
+  const handleNumberInput = (digit: string) => {
+    if (callState === 'idle' || callState === 'dialing') {
+      playSound('beep');
+      setNumber(prev => prev + digit);
+      if (callState === 'idle') setCallState('dialing');
+    }
+  };
+
+  const handleDelete = () => {
+    setNumber(prev => {
+      const newNumber = prev.slice(0, -1);
+      if (newNumber.length === 0) setCallState('idle');
+      return newNumber;
+    });
+  };
+
   const handleCall = async () => {
     if (!number || callState !== 'dialing') return;
     
     const parsed = parseNumber(number);
-    if (!parsed.position) {
-      playMessage('Numéro invalide');
-      return;
-    }
+    if (!parsed.position) return;
 
     setCallState('ringing');
     
@@ -465,29 +410,14 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       const data = await res.json();
       
       if (!res.ok) {
-        // Si appel bloqué, réinitialiser automatiquement
         if (data.error === 'appel_en_cours') {
-          console.log('Appel bloqué détecté, réinitialisation...');
           await fetch('/api/atc/telephone/hangup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ reset: true }),
           }).catch(console.error);
-          playMessage('Appel précédent réinitialisé. Réessayez.');
-          setCallState('idle');
-          setNumber('');
-          return;
         }
-        
-        const messages: Record<string, string> = {
-          'offline': 'Votre correspondant est hors ligne',
-          'no_afis': 'Aucun agent AFIS disponible',
-          'rejected': 'Appel refusé',
-          'non_en_service': 'Vous devez être en service pour appeler',
-          'cible_occupee': 'Votre correspondant est déjà en ligne',
-          'erreur_creation': 'Impossible de créer l\'appel',
-        };
-        playMessage(messages[data.error] || 'Erreur');
+        playSound('end');
         setCallState('idle');
         setNumber('');
         return;
@@ -496,9 +426,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       if (data.call) {
         setCurrentCall({ to: parsed.aeroport || aeroport, toPosition: parsed.position, callId: data.call.id });
         
-        // Attente réponse (30s max, vérification toutes les 500ms pour réactivité)
         for (let i = 0; i < 60; i++) {
-          await new Promise(resolve => setTimeout(resolve, 500)); // Réduit de 1000ms à 500ms
+          await new Promise(resolve => setTimeout(resolve, 500));
           const statusRes = await fetch(`/api/atc/telephone/status?callId=${data.call.id}`);
           const statusData = await statusRes.json();
           
@@ -510,20 +439,19 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           if (statusData.status === 'rejected' || statusData.status === 'ended') break;
         }
         
-        // Timeout ou rejeté
         await fetch('/api/atc/telephone/hangup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ callId: data.call.id }),
         }).catch(console.error);
         
-        playMessage('Votre correspondant ne répond pas');
+        playSound('end');
         setCallState('idle');
         setNumber('');
         setCurrentCall(null);
       }
     } catch (err) {
-      console.error('Erreur appel:', err);
+      console.error('Call error:', err);
       setCallState('idle');
       setNumber('');
     }
@@ -544,7 +472,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         setCallState('connected');
       }
     } catch (err) {
-      console.error('Erreur réponse:', err);
+      console.error('Answer error:', err);
     }
   };
 
@@ -559,7 +487,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       setIncomingCall(null);
       setCallState('idle');
     } catch (err) {
-      console.error('Erreur refus:', err);
+      console.error('Reject error:', err);
     }
   };
 
@@ -573,6 +501,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         body: JSON.stringify({ callId }),
       }).catch(console.error);
     }
+    playSound('end');
     setCallState('idle');
     setNumber('');
     setIncomingCall(null);
@@ -589,7 +518,6 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     }
   };
 
-  // Reset du téléphone (terminer tous les appels bloqués)
   const resetPhone = async () => {
     try {
       await fetch('/api/atc/telephone/hangup', {
@@ -604,180 +532,163 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       setCurrentCall(null);
       setIsMuted(false);
     } catch (err) {
-      console.error('Erreur reset téléphone:', err);
+      console.error('Reset error:', err);
     }
   };
 
-  // Reset automatique à l'ouverture du téléphone
-  useEffect(() => {
-    if (isOpen && callState === 'idle') {
-      resetPhone();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  useEffect(() => () => cleanupWebRTC(), [cleanupWebRTC]);
 
-  useEffect(() => () => cleanupWebRTC(), []);
+  const formatDuration = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
-  // Couleurs du combiné
-  const handsetBg = isDark ? 'bg-white' : 'bg-slate-900';
-  const handsetText = isDark ? 'text-slate-900' : 'text-white';
-  const screenBg = isDark ? 'bg-slate-100' : 'bg-slate-800';
-  const screenText = isDark ? 'text-slate-900' : 'text-emerald-400';
-  const keyBg = isDark ? 'bg-slate-200 hover:bg-slate-300' : 'bg-slate-700 hover:bg-slate-600';
-  const keyText = isDark ? 'text-slate-900' : 'text-white';
+  // Styles
+  const bgMain = isDark ? 'bg-gradient-to-b from-slate-100 to-slate-200' : 'bg-gradient-to-b from-slate-800 to-slate-900';
+  const textMain = isDark ? 'text-slate-800' : 'text-slate-100';
+  const screenBg = isDark ? 'bg-slate-800' : 'bg-slate-950';
+  const keyBg = isDark ? 'bg-white hover:bg-slate-50 shadow-md' : 'bg-slate-700 hover:bg-slate-600 shadow-lg';
+  const keyText = isDark ? 'text-slate-700' : 'text-white';
 
-  // Combiné fermé (horizontal en bas)
+  // Badge téléphone fermé
   if (!isOpen) {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-0 left-1/2 -translate-x-1/2 z-50 ${handsetBg} rounded-t-2xl shadow-2xl transition-all duration-300 hover:shadow-3xl group`}
-        style={{ width: '280px', height: '48px' }}
-        title="Décrocher le téléphone"
+        className={`fixed bottom-4 right-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl group`}
       >
-        {/* Forme du combiné horizontal */}
-        <div className="relative w-full h-full flex items-center justify-center">
-          {/* Écouteur gauche */}
-          <div className={`absolute left-2 w-12 h-10 ${isDark ? 'bg-slate-300' : 'bg-slate-700'} rounded-lg`} />
-          {/* Corps central */}
-          <div className={`flex items-center gap-2 ${handsetText}`}>
-            <Phone className="h-5 w-5 group-hover:animate-bounce" />
-            <span className="text-sm font-medium">Téléphone ATC</span>
-          </div>
-          {/* Micro droit */}
-          <div className={`absolute right-2 w-12 h-10 ${isDark ? 'bg-slate-300' : 'bg-slate-700'} rounded-lg`} />
-          
-          {/* Indicateur appel entrant */}
-          {callState === 'incoming' && (
-            <div className="absolute -top-2 right-4 w-4 h-4 bg-green-500 rounded-full animate-ping" />
-          )}
+        <div className={`p-2 rounded-xl ${isDark ? 'bg-sky-100' : 'bg-sky-500/20'}`}>
+          <Phone className={`h-5 w-5 ${isDark ? 'text-sky-600' : 'text-sky-400'}`} />
         </div>
+        <span className="font-medium">Téléphone</span>
+        {callState === 'incoming' && (
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-ping" />
+        )}
       </button>
     );
   }
 
-  // Combiné ouvert (vertical à droite avec clavier)
+  // Interface téléphone ouverte
   return (
-    <div className={`fixed right-4 bottom-4 z-50 ${handsetBg} rounded-3xl shadow-2xl transition-all duration-500 overflow-hidden`}
-         style={{ width: '200px', minHeight: '420px' }}>
+    <div className={`fixed right-4 bottom-4 z-50 ${bgMain} rounded-3xl shadow-2xl overflow-hidden transition-all duration-500`}
+         style={{ width: '240px' }}>
       
-      {/* Écouteur (haut du combiné) */}
-      <div className={`h-16 ${isDark ? 'bg-slate-300' : 'bg-slate-700'} rounded-t-3xl flex items-center justify-center relative`}>
-        <div className="w-20 h-3 bg-slate-500 rounded-full opacity-60" />
-        <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 flex justify-between">
-          <div className="w-2 h-2 rounded-full bg-slate-400" />
-          <div className="w-2 h-2 rounded-full bg-slate-400" />
+      {/* Header */}
+      <div className={`px-4 py-3 flex items-center justify-between border-b ${isDark ? 'border-slate-300' : 'border-slate-700'}`}>
+        <div className="flex items-center gap-2">
+          <Phone className={`h-4 w-4 ${isDark ? 'text-sky-600' : 'text-sky-400'}`} />
+          <span className={`text-sm font-semibold ${textMain}`}>Téléphone ATC</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={resetPhone}
+            className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-300' : 'hover:bg-slate-700'} transition-colors`}
+            title="Réinitialiser"
+          >
+            <RotateCcw className={`h-3.5 w-3.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+          </button>
+          <button
+            onClick={() => { setIsOpen(false); if (callState === 'idle') setNumber(''); }}
+            className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-300' : 'hover:bg-slate-700'} transition-colors`}
+          >
+            <X className={`h-3.5 w-3.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+          </button>
         </div>
       </div>
       
-      {/* Écran LCD */}
-      <div className={`mx-3 mt-3 p-2 ${screenBg} rounded-lg border-2 ${isDark ? 'border-slate-300' : 'border-slate-600'}`}>
-        <div className={`text-center font-mono ${screenText} text-lg min-h-[28px] tracking-wider`}>
-          {callState === 'incoming' && incomingCall ? (
-            <span className="text-sm animate-pulse">
-              {incomingCall.from} {incomingCall.fromPosition}
-            </span>
-          ) : callState === 'connected' && currentCall ? (
-            <span className="text-sm text-emerald-500">
-              {currentCall.to} {currentCall.toPosition}
-            </span>
-          ) : callState === 'ringing' ? (
-            <span className="text-sm animate-pulse">Appel en cours...</span>
-          ) : (
-            number || '—'
+      {/* Écran */}
+      <div className={`mx-3 mt-3 p-3 ${screenBg} rounded-xl`}>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider">
+            {callState === 'incoming' ? 'Appel entrant' : 
+             callState === 'ringing' ? 'Appel...' : 
+             callState === 'connected' ? 'En ligne' : 'Composer'}
+          </span>
+          {callState === 'connected' && (
+            <div className="flex items-center gap-1">
+              {audioLevel > 0.1 ? (
+                <Volume2 className="h-3 w-3 text-emerald-400" style={{ opacity: 0.5 + audioLevel * 0.5 }} />
+              ) : (
+                <VolumeX className="h-3 w-3 text-slate-500" />
+              )}
+              <span className="text-[10px] text-emerald-400 font-mono">{formatDuration(callDuration)}</span>
+            </div>
           )}
         </div>
+        
+        <div className="text-center min-h-[32px] flex items-center justify-center">
+          {callState === 'incoming' && incomingCall ? (
+            <div className="animate-pulse">
+              <p className="text-lg font-bold text-emerald-400">{incomingCall.from}</p>
+              <p className="text-xs text-slate-400">{incomingCall.fromPosition}</p>
+            </div>
+          ) : callState === 'connected' && currentCall ? (
+            <div>
+              <p className="text-lg font-bold text-emerald-400">{currentCall.to}</p>
+              <p className="text-xs text-slate-400">{currentCall.toPosition}</p>
+            </div>
+          ) : callState === 'ringing' && currentCall ? (
+            <div className="animate-pulse">
+              <p className="text-lg font-bold text-sky-400">{currentCall.to}</p>
+              <p className="text-xs text-slate-400">{currentCall.toPosition}</p>
+            </div>
+          ) : (
+            <p className={`text-2xl font-mono tracking-wider ${number ? 'text-emerald-400' : 'text-slate-600'}`}>
+              {number || '—'}
+            </p>
+          )}
+        </div>
+        
+        {/* Barre de niveau audio */}
+        {callState === 'connected' && (
+          <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-75"
+              style={{ width: `${audioLevel * 100}%` }}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Clavier numérique style PA */}
-      <div className="p-3 space-y-2">
-        {/* Rangée 1-2-3 */}
-        <div className="grid grid-cols-3 gap-1">
-          {['1', '2', '3'].map(d => (
-            <button
-              key={d}
-              onClick={() => handleNumberInput(d)}
-              disabled={callState === 'connected' || callState === 'ringing'}
-              className={`h-10 ${keyBg} ${keyText} rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50`}
-            >
-              {d}
-            </button>
-          ))}
-        </div>
-        {/* Rangée 4-5-6 */}
-        <div className="grid grid-cols-3 gap-1">
-          {['4', '5', '6'].map(d => (
-            <button
-              key={d}
-              onClick={() => handleNumberInput(d)}
-              disabled={callState === 'connected' || callState === 'ringing'}
-              className={`h-10 ${keyBg} ${keyText} rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50`}
-            >
-              {d}
-            </button>
-          ))}
-        </div>
-        {/* Rangée 7-8-9 */}
-        <div className="grid grid-cols-3 gap-1">
-          {['7', '8', '9'].map(d => (
-            <button
-              key={d}
-              onClick={() => handleNumberInput(d)}
-              disabled={callState === 'connected' || callState === 'ringing'}
-              className={`h-10 ${keyBg} ${keyText} rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50`}
-            >
-              {d}
-            </button>
-          ))}
-        </div>
-        {/* Rangée *-0-# */}
-        <div className="grid grid-cols-3 gap-1">
-          <button
-            onClick={() => handleNumberInput('*')}
-            disabled={callState === 'connected' || callState === 'ringing'}
-            className={`h-10 ${keyBg} ${keyText} rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50`}
-          >
-            *
-          </button>
-          <button
-            onClick={() => handleNumberInput('0')}
-            disabled={callState === 'connected' || callState === 'ringing'}
-            className={`h-10 ${keyBg} ${keyText} rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50`}
-          >
-            0
-          </button>
-          <button
-            onClick={() => handleNumberInput('+')}
-            disabled={callState === 'connected' || callState === 'ringing'}
-            className={`h-10 ${keyBg} ${keyText} rounded-md font-bold text-lg transition-all active:scale-95 disabled:opacity-50`}
-          >
-            +
-          </button>
-        </div>
+      {/* Clavier */}
+      <div className="p-3 space-y-1.5">
+        {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['*', '0', '+']].map((row, i) => (
+          <div key={i} className="grid grid-cols-3 gap-1.5">
+            {row.map(d => (
+              <button
+                key={d}
+                onClick={() => handleNumberInput(d)}
+                disabled={callState === 'connected' || callState === 'ringing' || callState === 'incoming'}
+                className={`h-11 ${keyBg} ${keyText} rounded-xl font-semibold text-lg transition-all active:scale-95 disabled:opacity-40`}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+        ))}
 
-        {/* Boutons d'action */}
-        <div className="grid grid-cols-3 gap-1 pt-2">
-          {/* Bouton supprimer */}
+        {/* Actions */}
+        <div className="grid grid-cols-3 gap-1.5 pt-1">
           <button
             onClick={handleDelete}
-            disabled={!number || callState === 'connected' || callState === 'ringing'}
-            className="h-10 bg-amber-600 hover:bg-amber-500 text-white rounded-md flex items-center justify-center disabled:opacity-50 transition-all active:scale-95"
+            disabled={!number || callState !== 'dialing'}
+            className="h-11 bg-amber-500 hover:bg-amber-400 text-white rounded-xl flex items-center justify-center disabled:opacity-40 transition-all active:scale-95"
           >
-            <Delete className="h-5 w-5" />
+            <X className="h-5 w-5" />
           </button>
           
-          {/* Bouton appeler / répondre */}
           {callState === 'incoming' ? (
             <button
               onClick={handleAnswer}
-              className="h-10 bg-green-600 hover:bg-green-500 text-white rounded-md flex items-center justify-center transition-all active:scale-95 animate-pulse"
+              className="h-11 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl flex items-center justify-center transition-all active:scale-95 animate-pulse shadow-lg shadow-emerald-500/30"
             >
               <Phone className="h-5 w-5" />
             </button>
           ) : callState === 'connected' ? (
             <button
               onClick={toggleMute}
-              className={`h-10 ${isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'} text-white rounded-md flex items-center justify-center transition-all active:scale-95`}
+              className={`h-11 ${isMuted ? 'bg-red-500 hover:bg-red-400' : 'bg-sky-500 hover:bg-sky-400'} text-white rounded-xl flex items-center justify-center transition-all active:scale-95`}
             >
               {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
             </button>
@@ -785,31 +696,30 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
             <button
               onClick={handleCall}
               disabled={!number || callState === 'ringing'}
-              className="h-10 bg-green-600 hover:bg-green-500 text-white rounded-md flex items-center justify-center disabled:opacity-50 transition-all active:scale-95"
+              className="h-11 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl flex items-center justify-center disabled:opacity-40 transition-all active:scale-95"
             >
               <PhoneCall className="h-5 w-5" />
             </button>
           )}
           
-          {/* Bouton raccrocher / refuser / fermer */}
           {callState === 'incoming' ? (
             <button
               onClick={handleReject}
-              className="h-10 bg-red-600 hover:bg-red-500 text-white rounded-md flex items-center justify-center transition-all active:scale-95"
+              className="h-11 bg-red-500 hover:bg-red-400 text-white rounded-xl flex items-center justify-center transition-all active:scale-95"
             >
               <PhoneOff className="h-5 w-5" />
             </button>
           ) : callState === 'connected' || callState === 'ringing' ? (
             <button
               onClick={handleHangup}
-              className="h-10 bg-red-600 hover:bg-red-500 text-white rounded-md flex items-center justify-center transition-all active:scale-95"
+              className="h-11 bg-red-500 hover:bg-red-400 text-white rounded-xl flex items-center justify-center transition-all active:scale-95"
             >
               <PhoneOff className="h-5 w-5" />
             </button>
           ) : (
             <button
               onClick={() => { setIsOpen(false); setNumber(''); setCallState('idle'); }}
-              className="h-10 bg-slate-500 hover:bg-slate-400 text-white rounded-md flex items-center justify-center transition-all active:scale-95"
+              className={`h-11 ${isDark ? 'bg-slate-400 hover:bg-slate-300' : 'bg-slate-600 hover:bg-slate-500'} text-white rounded-xl flex items-center justify-center transition-all active:scale-95`}
             >
               <PhoneOff className="h-5 w-5" />
             </button>
@@ -817,16 +727,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         </div>
       </div>
 
-      {/* Micro (bas du combiné) */}
-      <div className={`h-14 ${isDark ? 'bg-slate-300' : 'bg-slate-700'} rounded-b-3xl flex items-center justify-center relative mt-2`}>
-        <div className="grid grid-cols-4 gap-1">
-          {[...Array(16)].map((_, i) => (
-            <div key={i} className="w-2 h-2 rounded-full bg-slate-500 opacity-60" />
-          ))}
-        </div>
-      </div>
-
-      {/* Audio éléments */}
+      {/* Audio */}
       <audio ref={localAudioRef} autoPlay muted playsInline />
       <audio ref={remoteAudioRef} autoPlay playsInline />
     </div>
