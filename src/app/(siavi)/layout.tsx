@@ -70,46 +70,58 @@ export default async function SiaviLayout({
       />
       <div className="flex flex-1 w-full min-h-0">
         {enService && estAfis && (
-          <aside className="w-44 flex-shrink-0 border-r border-red-300 bg-red-50 py-3 px-2 hidden md:flex flex-col">
-            <p className="text-xs font-semibold uppercase tracking-wider text-red-800 px-2 mb-1.5">Non surveillés</p>
-            {plansAuto.length === 0 ? (
-              <span className="text-red-600 text-sm px-2">Aucun</span>
-            ) : (
-              <ul className="space-y-0.5 mb-3">
-                {plansAuto.map((p) => (
-                  <li key={p.id}>
-                    <Link
-                      href={`/siavi/plan/${p.id}`}
-                      className="block truncate text-sm font-medium text-red-800 hover:text-red-900 hover:bg-red-200 rounded px-2 py-1"
-                      title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
-                    >
-                      {p.numero_vol} {p.aeroport_depart}→{p.aeroport_arrivee}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="text-xs font-semibold uppercase tracking-wider text-red-800 px-2 mb-1.5 mt-3">Mes surveillés</p>
-            {plansSurveilles.length === 0 ? (
-              <span className="text-red-600 text-sm px-2">Aucun</span>
-            ) : (
-              <ul className="space-y-0.5">
-                {plansSurveilles.map((p) => (
-                  <li key={p.id}>
-                    <Link
-                      href={`/siavi/plan/${p.id}`}
-                      className="block truncate text-sm font-medium text-red-800 hover:text-red-900 hover:bg-red-200 rounded px-2 py-1"
-                      title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
-                    >
-                      {p.numero_vol} {p.aeroport_depart}→{p.aeroport_arrivee}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <aside className="w-52 flex-shrink-0 border-r border-red-400/30 bg-gradient-to-b from-red-950/50 to-red-950/30 py-4 px-3 hidden md:flex flex-col backdrop-blur-sm">
+            <div className="mb-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-red-400 px-2 mb-2 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                Non surveillés
+              </p>
+              {plansAuto.length === 0 ? (
+                <span className="text-red-300/60 text-sm px-2 italic">Aucun vol</span>
+              ) : (
+                <ul className="space-y-1">
+                  {plansAuto.map((p) => (
+                    <li key={p.id}>
+                      <Link
+                        href={`/siavi/plan/${p.id}`}
+                        className="block truncate text-sm font-medium text-red-200 hover:text-white hover:bg-red-500/30 rounded-lg px-3 py-2 transition-all duration-200"
+                        title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
+                      >
+                        <span className="font-semibold">{p.numero_vol}</span>
+                        <span className="text-red-300/80 ml-1">{p.aeroport_depart}→{p.aeroport_arrivee}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="border-t border-red-500/20 pt-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 px-2 mb-2 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Mes surveillés
+              </p>
+              {plansSurveilles.length === 0 ? (
+                <span className="text-red-300/60 text-sm px-2 italic">Aucun vol</span>
+              ) : (
+                <ul className="space-y-1">
+                  {plansSurveilles.map((p) => (
+                    <li key={p.id}>
+                      <Link
+                        href={`/siavi/plan/${p.id}`}
+                        className="block truncate text-sm font-medium text-emerald-200 hover:text-white hover:bg-emerald-500/30 rounded-lg px-3 py-2 transition-all duration-200"
+                        title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
+                      >
+                        <span className="font-semibold">{p.numero_vol}</span>
+                        <span className="text-emerald-300/80 ml-1">{p.aeroport_depart}→{p.aeroport_arrivee}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </aside>
         )}
-        <main className="flex-1 min-w-0 mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
+        <main className="flex-1 min-w-0 mx-auto w-full max-w-6xl px-4 py-8">{children}</main>
       </div>
       {enService && session && (
         <SiaviTelephone 

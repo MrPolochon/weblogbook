@@ -113,33 +113,57 @@ export async function PATCH(
         compteId = compte.id;
       }
 
+      // Protection contre le double encaissement avec UPDATE conditionnel
+      // On marque d'abord le chèque comme encaissé UNIQUEMENT s'il ne l'est pas déjà
+      const { data: updateResult, error: updateError } = await admin.from('messages')
+        .update({
+          cheque_encaisse: true,
+          cheque_encaisse_at: new Date().toISOString(),
+          lu: true
+        })
+        .eq('id', id)
+        .eq('cheque_encaisse', false)
+        .select('id');
+      
+      if (updateError || !updateResult || updateResult.length === 0) {
+        return NextResponse.json({ error: 'Ce chèque a déjà été encaissé' }, { status: 400 });
+      }
+
       // Récupérer le solde actuel
-      const { data: compteData } = await admin.from('felitz_comptes')
+      const { data: compteData, error: compteError } = await admin.from('felitz_comptes')
         .select('id, solde')
         .eq('id', compteId)
         .single();
 
-      if (!compteData) return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
+      if (compteError || !compteData) {
+        // Rollback: remettre le chèque comme non encaissé
+        await admin.from('messages').update({ cheque_encaisse: false, cheque_encaisse_at: null }).eq('id', id);
+        return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
+      }
 
       // Créditer le compte
-      await admin.from('felitz_comptes')
+      const { error: creditError } = await admin.from('felitz_comptes')
         .update({ solde: compteData.solde + message.cheque_montant })
         .eq('id', compteId);
 
+      if (creditError) {
+        // Rollback: remettre le chèque comme non encaissé
+        await admin.from('messages').update({ cheque_encaisse: false, cheque_encaisse_at: null }).eq('id', id);
+        return NextResponse.json({ error: 'Erreur lors du crédit' }, { status: 500 });
+      }
+
       // Créer la transaction
-      await admin.from('felitz_transactions').insert({
+      const { error: txError } = await admin.from('felitz_transactions').insert({
         compte_id: compteId,
         type: 'credit',
         montant: message.cheque_montant,
         libelle: message.cheque_libelle || `Encaissement chèque vol ${message.cheque_numero_vol || ''}`
       });
 
-      // Marquer le chèque comme encaissé
-      await admin.from('messages').update({
-        cheque_encaisse: true,
-        cheque_encaisse_at: new Date().toISOString(),
-        lu: true
-      }).eq('id', id);
+      if (txError) {
+        console.error('Erreur création transaction chèque:', txError);
+        // Ne pas rollback car le compte a été crédité
+      }
 
       return NextResponse.json({ ok: true, montant: message.cheque_montant });
     }

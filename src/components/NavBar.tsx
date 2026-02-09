@@ -93,9 +93,9 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     pathname.startsWith('/signalement');
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-700/50 bg-slate-900/95 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2 sm:h-14 sm:py-0 flex-col sm:flex-row gap-2">
-        <nav className="flex items-center gap-1 w-full sm:w-auto overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
+    <header className="sticky top-0 z-50 border-b border-slate-700/30 bg-slate-900/80 backdrop-blur-xl shadow-lg shadow-slate-900/50">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2 sm:h-16 sm:py-0 flex-col sm:flex-row gap-2">
+        <nav className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
           {/* Menu déroulant Espace Pilote */}
           <div className="relative" ref={menuRef}>
             <button
@@ -124,25 +124,26 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             </button>
             
             {piloteMenuOpen && (
-              <div style={dropdownStyle ?? undefined} className="fixed w-56 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl z-50">
+              <div style={dropdownStyle ?? undefined} className="fixed w-60 rounded-2xl border border-slate-700/50 bg-slate-800/95 backdrop-blur-xl py-2 shadow-2xl shadow-slate-900/50 z-50 animate-fade-in">
                 {piloteMenuItems.map((item) => {
                   const Icon = item.icon;
+                  const isActive = pathname === item.href || (item.href !== '/logbook' && pathname.startsWith(item.href));
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
                       onClick={() => setPiloteMenuOpen(false)}
                       className={cn(
-                        'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
-                        pathname === item.href || (item.href !== '/logbook' && pathname.startsWith(item.href))
-                          ? 'bg-slate-700/50 text-sky-300'
-                          : 'text-slate-300 hover:bg-slate-700/30 hover:text-slate-100'
+                        'flex items-center gap-3 px-4 py-2.5 text-sm transition-all duration-200 mx-2 rounded-xl',
+                        isActive
+                          ? 'bg-gradient-to-r from-sky-600/30 to-sky-500/20 text-sky-300 shadow-sm'
+                          : 'text-slate-300 hover:bg-slate-700/40 hover:text-slate-100 hover:translate-x-1'
                       )}
                     >
-                      <Icon className="h-4 w-4" />
+                      <Icon className={cn("h-4 w-4 transition-colors", isActive && "text-sky-400")} />
                       {item.label}
                       {item.badge > 0 && (
-                        <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
+                        <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-gradient-to-r from-red-600 to-red-500 px-1.5 text-xs font-bold text-white shadow-lg shadow-red-500/30">
                           {item.badge > 99 ? '99+' : item.badge}
                         </span>
                       )}

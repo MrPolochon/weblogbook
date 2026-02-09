@@ -34,6 +34,8 @@ export default function CompagniePretClient({ compagnieId }: Props) {
   const [tauxPrelevement, setTauxPrelevement] = useState(30);
   const [selectedMontant, setSelectedMontant] = useState<number | null>(null);
   const [demandingPret, setDemandingPret] = useState(false);
+  const [montantRemboursement, setMontantRemboursement] = useState('');
+  const [remboursementEnCours, setRemboursementEnCours] = useState(false);
 
   useEffect(() => {
     loadPret();
@@ -93,6 +95,41 @@ export default function CompagniePretClient({ compagnieId }: Props) {
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setDemandingPret(false);
+    }
+  }
+
+  async function handleRembourserPret() {
+    const montant = parseInt(montantRemboursement, 10);
+    if (!montant || montant <= 0) {
+      setError('Montant invalide');
+      return;
+    }
+
+    if (!confirm(`Rembourser ${montant.toLocaleString('fr-FR')} F$ sur le prêt ?\n\nCe montant sera débité du compte de la compagnie.`)) {
+      return;
+    }
+
+    setRemboursementEnCours(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/compagnies/${compagnieId}/pret`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ montant }),
+      });
+      const data = await res.json();
+      
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      
+      alert(data.message);
+      setMontantRemboursement('');
+      loadPret();
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setRemboursementEnCours(false);
     }
   }
 
@@ -177,6 +214,36 @@ export default function CompagniePretClient({ compagnieId }: Props) {
             <p className="text-xs text-slate-400">
               <strong className="text-amber-400">{tauxPrelevement}%</strong> des revenus bruts de chaque vol commercial sont automatiquement prélevés pour rembourser le prêt.
             </p>
+          </div>
+
+          {/* Remboursement manuel */}
+          <div className="mt-4 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+            <h4 className="text-sm font-semibold text-emerald-200 mb-2 flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              Remboursement anticipé
+            </h4>
+            <p className="text-xs text-slate-400 mb-3">
+              Vous pouvez contribuer au remboursement du prêt à tout moment depuis le compte de la compagnie.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                max={resteARembourser}
+                value={montantRemboursement}
+                onChange={(e) => setMontantRemboursement(e.target.value)}
+                placeholder={`Max: ${resteARembourser.toLocaleString('fr-FR')} F$`}
+                className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 text-sm focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                type="button"
+                onClick={handleRembourserPret}
+                disabled={remboursementEnCours || !montantRemboursement}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm whitespace-nowrap"
+              >
+                {remboursementEnCours ? 'En cours...' : 'Rembourser'}
+              </button>
+            </div>
           </div>
         </div>
       ) : (

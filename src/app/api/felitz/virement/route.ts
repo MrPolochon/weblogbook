@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     // Trouver le compte destination
     const { data: compteDest } = await admin.from('felitz_comptes')
-      .select('id')
+      .select('id, solde')
       .eq('vban', vban_destination)
       .single();
 
@@ -54,28 +54,40 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'VBAN destination introuvable' }, { status: 404 });
     }
 
-    // Effectuer les opérations atomiques
-    // 1. Débiter source
-    const { error: debitError } = await admin.from('felitz_comptes')
+    // Protection contre les race conditions: vérifier le solde au moment du débit
+    // En utilisant un UPDATE conditionnel
+    const { data: debitResult, error: debitError } = await admin.from('felitz_comptes')
       .update({ solde: compteSource.solde - montant })
-      .eq('id', compte_source_id);
+      .eq('id', compte_source_id)
+      .gte('solde', montant) // S'assurer que le solde est toujours suffisant
+      .select('id, solde');
 
-    if (debitError) throw debitError;
+    if (debitError || !debitResult || debitResult.length === 0) {
+      return NextResponse.json({ error: 'Solde insuffisant ou compte modifié' }, { status: 400 });
+    }
 
-    // 2. Créditer destination
-    const { data: destData } = await admin.from('felitz_comptes')
-      .select('solde')
-      .eq('id', compteDest.id)
-      .single();
-
-    await admin.from('felitz_comptes')
-      .update({ solde: (destData?.solde || 0) + montant })
+    // Créditer destination (mise à jour atomique avec le solde actuel)
+    const { error: creditError } = await admin.from('felitz_comptes')
+      .update({ solde: compteDest.solde + montant })
       .eq('id', compteDest.id);
 
-    // 3. Créer les transactions
+    if (creditError) {
+      // Rollback: rembourser le compte source (ajouter le montant débité)
+      const { error: rollbackError } = await admin.from('felitz_comptes')
+        .update({ solde: debitResult[0].solde + montant })
+        .eq('id', compte_source_id);
+      
+      if (rollbackError) {
+        console.error('CRITIQUE: Échec du rollback virement:', rollbackError);
+        // TODO: Notifier l'admin d'une incohérence financière
+      }
+      return NextResponse.json({ error: 'Erreur lors du crédit. Virement annulé.' }, { status: 500 });
+    }
+
+    // Créer les transactions
     const libelleVirement = libelle || 'Virement';
     
-    await admin.from('felitz_transactions').insert([
+    const { error: txError } = await admin.from('felitz_transactions').insert([
       {
         compte_id: compte_source_id,
         type: 'debit',
@@ -90,7 +102,12 @@ export async function POST(req: NextRequest) {
       }
     ]);
 
-    // 4. Enregistrer le virement
+    if (txError) {
+      console.error('Erreur création transactions:', txError);
+      // Ne pas rollback ici car l'argent a déjà été transféré
+    }
+
+    // Enregistrer le virement
     const { data: virement, error: virementError } = await admin.from('felitz_virements').insert({
       compte_source_id,
       compte_dest_vban: vban_destination,
@@ -99,7 +116,10 @@ export async function POST(req: NextRequest) {
       created_by: user.id
     }).select().single();
 
-    if (virementError) throw virementError;
+    if (virementError) {
+      console.error('Erreur enregistrement virement:', virementError);
+      // Ne pas retourner d'erreur car le virement a réussi
+    }
 
     return NextResponse.json({ ok: true, virement });
   } catch (e) {

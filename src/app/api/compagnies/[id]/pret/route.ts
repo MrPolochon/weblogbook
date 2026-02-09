@@ -3,6 +3,144 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { OPTIONS_PRETS, calculerMontantTotalPret, TAUX_PRELEVEMENT_PRET } from '@/lib/compagnie-utils';
 
+// PATCH - Rembourser manuellement une partie du prêt
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+    const body = await request.json();
+    const { montant } = body;
+
+    if (!montant || montant <= 0) {
+      return NextResponse.json({ error: 'Montant invalide' }, { status: 400 });
+    }
+
+    const admin = createAdminClient();
+
+    // Vérifier que l'utilisateur est PDG ou admin
+    const { data: compagnie } = await admin
+      .from('compagnies')
+      .select('id, pdg_id, nom')
+      .eq('id', id)
+      .single();
+
+    if (!compagnie) {
+      return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
+    }
+
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const isAdmin = profile?.role === 'admin';
+    const isPdg = compagnie.pdg_id === user.id;
+
+    if (!isPdg && !isAdmin) {
+      return NextResponse.json({ error: 'Seul le PDG peut rembourser le prêt' }, { status: 403 });
+    }
+
+    // Récupérer le prêt actif
+    const { data: pret } = await admin
+      .from('prets_bancaires')
+      .select('*')
+      .eq('compagnie_id', id)
+      .eq('statut', 'actif')
+      .maybeSingle();
+
+    if (!pret) {
+      return NextResponse.json({ error: 'Aucun prêt actif à rembourser' }, { status: 404 });
+    }
+
+    const resteARembourser = pret.montant_total_du - pret.montant_rembourse;
+    const montantEffectif = Math.min(montant, resteARembourser);
+
+    if (montantEffectif <= 0) {
+      return NextResponse.json({ error: 'Le prêt est déjà entièrement remboursé' }, { status: 400 });
+    }
+
+    // Vérifier le solde du compte de la compagnie
+    const { data: compteCompagnie } = await admin
+      .from('felitz_comptes')
+      .select('id, solde')
+      .eq('compagnie_id', id)
+      .eq('type', 'entreprise')
+      .single();
+
+    if (!compteCompagnie) {
+      return NextResponse.json({ error: 'Compte de la compagnie introuvable' }, { status: 404 });
+    }
+
+    if (compteCompagnie.solde < montantEffectif) {
+      return NextResponse.json({ 
+        error: `Solde insuffisant. Disponible: ${compteCompagnie.solde.toLocaleString('fr-FR')} F$, requis: ${montantEffectif.toLocaleString('fr-FR')} F$` 
+      }, { status: 400 });
+    }
+
+    // Débiter le compte avec vérification atomique
+    const { data: debitResult, error: debitError } = await admin
+      .from('felitz_comptes')
+      .update({ solde: compteCompagnie.solde - montantEffectif })
+      .eq('id', compteCompagnie.id)
+      .gte('solde', montantEffectif)
+      .select('id');
+
+    if (debitError || !debitResult || debitResult.length === 0) {
+      return NextResponse.json({ error: 'Solde insuffisant ou compte modifié' }, { status: 400 });
+    }
+
+    // Mettre à jour le prêt
+    const nouveauMontantRembourse = pret.montant_rembourse + montantEffectif;
+    const pretRembourse = nouveauMontantRembourse >= pret.montant_total_du;
+
+    const { error: updateError } = await admin
+      .from('prets_bancaires')
+      .update({
+        montant_rembourse: nouveauMontantRembourse,
+        ...(pretRembourse && {
+          statut: 'rembourse',
+          rembourse_at: new Date().toISOString(),
+        }),
+      })
+      .eq('id', pret.id);
+
+    if (updateError) {
+      // Rollback: rembourser le compte
+      await admin.from('felitz_comptes')
+        .update({ solde: compteCompagnie.solde })
+        .eq('id', compteCompagnie.id);
+      return NextResponse.json({ error: 'Erreur lors de la mise à jour du prêt' }, { status: 500 });
+    }
+
+    // Enregistrer la transaction
+    await admin.from('felitz_transactions').insert({
+      compte_id: compteCompagnie.id,
+      type: 'debit',
+      montant: montantEffectif,
+      libelle: `Remboursement prêt bancaire`,
+      description: `Remboursement manuel - ${montantEffectif.toLocaleString('fr-FR')} F$`,
+      reference: `LOAN-REPAY-${pret.id.slice(0, 8)}`,
+    });
+
+    const nouveauReste = pret.montant_total_du - nouveauMontantRembourse;
+
+    return NextResponse.json({
+      ok: true,
+      message: pretRembourse 
+        ? `🎉 Prêt intégralement remboursé ! Félicitations !`
+        : `✅ Remboursement de ${montantEffectif.toLocaleString('fr-FR')} F$ effectué. Reste à payer: ${nouveauReste.toLocaleString('fr-FR')} F$`,
+      montantRembourse: montantEffectif,
+      resteARembourser: nouveauReste,
+      pretRembourse,
+    });
+  } catch (e) {
+    console.error('PATCH pret compagnie:', e);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  }
+}
+
 // GET - Récupérer le prêt actif de la compagnie
 export async function GET(
   _request: NextRequest,

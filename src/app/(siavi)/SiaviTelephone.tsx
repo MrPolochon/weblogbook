@@ -437,7 +437,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         .subscribe(async (status) => {
           console.log('SIAVI WebRTC channel status:', status, 'isInitiator:', isInitiator);
           if (status === 'SUBSCRIBED' && isInitiator) {
-            // Attendre plus longtemps et réessayer l'offer plusieurs fois
+            // Envoyer l'offer avec retries optimisés
             const sendOffer = async () => {
               const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
               await pc.setLocalDescription(offer);
@@ -449,24 +449,24 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
               });
             };
             
-            // Envoyer l'offer après 500ms, puis réessayer 2 fois si pas de réponse
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // Envoyer l'offer immédiatement (délai réduit de 500ms à 100ms)
+            await new Promise(resolve => setTimeout(resolve, 100));
             await sendOffer();
             
-            // Réessayer après 1.5s et 3s si toujours pas de connexion
+            // Réessayer rapidement si pas de connexion
             setTimeout(async () => {
-              if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
+              if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting' && pc.signalingState !== 'stable') {
                 console.log('SIAVI retrying offer (1)');
                 await sendOffer();
               }
-            }, 1500);
+            }, 800);
             
             setTimeout(async () => {
               if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
                 console.log('SIAVI retrying offer (2)');
                 await sendOffer();
               }
-            }, 3000);
+            }, 2000);
           }
         });
 

@@ -33,14 +33,14 @@ export async function PATCH(
 
     const admin = createAdminClient();
 
-    // Rôle Armée requiert l'accès pilote : interdire armee=true pour role=atc
+    // Rôle Armée requiert l'accès pilote : interdire armee=true pour role=atc ou role=siavi
     if (armeeBody === true) {
       const { data: t } = await admin.from('profiles').select('role').eq('id', id).single();
-      if (t?.role === 'atc') return NextResponse.json({ error: 'Le rôle Armée requiert l\'accès à l\'espace pilote. Accordez d\'abord l\'accès pilote.' }, { status: 400 });
+      if (t?.role === 'atc' || t?.role === 'siavi') return NextResponse.json({ error: 'Le rôle Armée requiert l\'accès à l\'espace pilote. Accordez d\'abord l\'accès pilote.' }, { status: 400 });
     }
 
-    // Gestion du changement de rôle (pilote, atc, admin)
-    if (roleBody && ['pilote', 'atc', 'admin'].includes(roleBody)) {
+    // Gestion du changement de rôle (pilote, atc, siavi, admin)
+    if (roleBody && ['pilote', 'atc', 'siavi', 'admin'].includes(roleBody)) {
       const { data: target } = await admin.from('profiles').select('role').eq('id', id).single();
       if (!target) return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
       
@@ -57,14 +57,25 @@ export async function PATCH(
         updates.role = roleBody;
         
         // Si on passe en admin, garder les autres accès
-        // Si on passe en atc uniquement, désactiver armee
+        // Si on passe en atc uniquement, désactiver armee et siavi
         if (roleBody === 'atc') {
           updates.armee = false;
           updates.atc = true;
+          updates.siavi = false;
+        }
+        // Si on passe en siavi uniquement, désactiver armee et atc
+        if (roleBody === 'siavi') {
+          updates.armee = false;
+          updates.atc = false;
+          updates.siavi = true;
         }
         // Si on passe en pilote depuis atc, activer atc aussi
         if (roleBody === 'pilote' && target.role === 'atc') {
           updates.atc = true;
+        }
+        // Si on passe en pilote depuis siavi, activer siavi aussi
+        if (roleBody === 'pilote' && target.role === 'siavi') {
+          updates.siavi = true;
         }
       }
     }

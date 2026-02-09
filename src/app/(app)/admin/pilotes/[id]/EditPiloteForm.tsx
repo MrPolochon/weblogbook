@@ -34,8 +34,10 @@ export default function EditPiloteForm({
   const [ifsa, setIfsa] = useState(ifsaInitial);
   const [siavi, setSiavi] = useState(siaviInitial);
   const isAtcOnly = roleInitial === 'atc';
+  const isSiaviOnly = roleInitial === 'siavi';
   const isPiloteEtAtc = roleInitial === 'pilote' && atcInitial;
-  const [accesPilote, setAccesPilote] = useState(isAtcOnly ? false : isPiloteEtAtc);
+  const isPiloteEtSiavi = roleInitial === 'pilote' && siaviInitial;
+  const [accesPilote, setAccesPilote] = useState(isAtcOnly || isSiaviOnly ? false : (isPiloteEtAtc || isPiloteEtSiavi));
   const [heures, setHeures] = useState(String(heuresInitiales));
   const [blockMinutes, setBlockMinutes] = useState('');
   const [blockReasonVal, setBlockReasonVal] = useState(blockReason ?? '');
@@ -45,7 +47,13 @@ export default function EditPiloteForm({
   const [success, setSuccess] = useState<string | null>(null);
   
   useEffect(() => { setAtc(atcInitial); }, [atcInitial]);
-  useEffect(() => { setAccesPilote(roleInitial === 'atc' ? false : !!(roleInitial === 'pilote' && atcInitial)); }, [roleInitial, atcInitial]);
+  useEffect(() => { 
+    if (roleInitial === 'atc' || roleInitial === 'siavi') {
+      setAccesPilote(false);
+    } else if (roleInitial === 'pilote') {
+      setAccesPilote(!!(atcInitial || siaviInitial));
+    }
+  }, [roleInitial, atcInitial, siaviInitial]);
   useEffect(() => { setIfsa(ifsaInitial); }, [ifsaInitial]);
   useEffect(() => { setSiavi(siaviInitial); }, [siaviInitial]);
   useEffect(() => { setRole(roleInitial); }, [roleInitial]);
@@ -80,11 +88,26 @@ export default function EditPiloteForm({
         // Les admins gardent leurs autres accès
         body.armee = armee;
         body.atc = atc;
+      } else if (role === 'siavi') {
+        // SIAVI uniquement
+        body.role = 'siavi';
+        body.armee = false;
+        body.atc = false;
+        body.siavi = true;
+        if (accesPilote) {
+          body.role = 'pilote';
+        }
       } else if (isAtcOnly) {
         body.armee = false;
         if (accesPilote) {
           body.role = 'pilote';
           body.atc = true;
+        }
+      } else if (isSiaviOnly) {
+        body.armee = false;
+        if (accesPilote) {
+          body.role = 'pilote';
+          body.siavi = true;
         }
       } else {
         body.armee = armee;
@@ -94,6 +117,9 @@ export default function EditPiloteForm({
         }
         if (isPiloteEtAtc && !accesPilote) {
           body.role = 'atc';
+        }
+        if (isPiloteEtSiavi && !accesPilote) {
+          body.role = 'siavi';
         }
       }
 
@@ -233,12 +259,14 @@ export default function EditPiloteForm({
           >
             <option value="pilote">Pilote</option>
             <option value="atc">ATC uniquement</option>
+            <option value="siavi">SIAVI/Pompier uniquement</option>
             <option value="admin">Administrateur</option>
           </select>
           <p className="text-xs text-slate-500 mt-1">
             {role === 'admin' && '⚠️ Les administrateurs ont accès à toutes les fonctionnalités du site.'}
             {role === 'atc' && 'Accès uniquement à l\'espace ATC, pas d\'espace pilote.'}
-            {role === 'pilote' && 'Accès à l\'espace pilote. Peut aussi avoir accès à l\'ATC si coché.'}
+            {role === 'siavi' && 'Accès uniquement à l\'espace SIAVI/Pompier, pas d\'espace pilote.'}
+            {role === 'pilote' && 'Accès à l\'espace pilote. Peut aussi avoir accès à l\'ATC ou SIAVI si coché.'}
           </p>
         </div>
 
@@ -254,9 +282,9 @@ export default function EditPiloteForm({
                 checked={armee} 
                 onChange={(e) => setArmee(e.target.checked)} 
                 className="rounded"
-                disabled={role === 'atc'}
+                disabled={role === 'atc' || role === 'siavi'}
               />
-              <span className={`${role === 'atc' ? 'text-slate-500' : 'text-slate-300'}`}>
+              <span className={`${role === 'atc' || role === 'siavi' ? 'text-slate-500' : 'text-slate-300'}`}>
                 🎖️ Armée (Espace militaire)
               </span>
             </label>
@@ -268,9 +296,10 @@ export default function EditPiloteForm({
                   type="checkbox" 
                   checked={atc} 
                   onChange={(e) => setAtc(e.target.checked)} 
-                  className="rounded" 
+                  className="rounded"
+                  disabled={role === 'siavi'}
                 />
-                <span className="text-slate-300">📡 ATC (Espace ATC)</span>
+                <span className={`${role === 'siavi' ? 'text-slate-500' : 'text-slate-300'}`}>📡 ATC (Espace ATC)</span>
               </label>
             )}
 
@@ -286,15 +315,18 @@ export default function EditPiloteForm({
             </label>
 
             {/* SIAVI */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={siavi} 
-                onChange={(e) => setSiavi(e.target.checked)} 
-                className="rounded" 
-              />
-              <span className="text-slate-300">🚒 SIAVI (Espace SIAVI/Pompier)</span>
-            </label>
+            {role !== 'siavi' && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={siavi} 
+                  onChange={(e) => setSiavi(e.target.checked)} 
+                  className="rounded"
+                  disabled={role === 'atc'}
+                />
+                <span className={`${role === 'atc' ? 'text-slate-500' : 'text-slate-300'}`}>🚒 SIAVI (Espace SIAVI/Pompier)</span>
+              </label>
+            )}
           </div>
 
           <p className="text-xs text-slate-500">
@@ -302,8 +334,8 @@ export default function EditPiloteForm({
           </p>
         </div>
 
-        {/* Accès pilote pour ATC */}
-        {isAtcOnly && (
+        {/* Accès pilote pour ATC ou SIAVI uniquement */}
+        {(isAtcOnly || isSiaviOnly) && (
           <label className="flex items-center gap-2 cursor-pointer">
             <input 
               type="checkbox" 
@@ -315,7 +347,7 @@ export default function EditPiloteForm({
           </label>
         )}
         
-        {isPiloteEtAtc && (
+        {(isPiloteEtAtc || isPiloteEtSiavi) && !isAtcOnly && !isSiaviOnly && (
           <label className="flex items-center gap-2 cursor-pointer" title="Décocher pour révoquer l'accès à l'espace pilote">
             <input 
               type="checkbox" 

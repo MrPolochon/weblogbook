@@ -118,19 +118,21 @@ export default async function AppLayout({
       <AdminModeBg />
       <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} />
       {plansNonCloturesCount > 0 && (
-        <div className="border-b border-amber-500/40 bg-amber-500/15">
-          <div className="mx-auto max-w-6xl px-4 py-2 flex items-center justify-center gap-2 flex-wrap">
-            <Bell className="h-4 w-4 flex-shrink-0 text-amber-400" />
-            <span className="text-amber-100 text-sm">
-              {plansNonCloturesCount} plan{plansNonCloturesCount > 1 ? 's' : ''} de vol non clôturé{plansNonCloturesCount > 1 ? 's' : ''}.
-            </span>
-            <Link href="/logbook/plans-vol" className="text-sm font-semibold text-amber-200 hover:text-amber-100 underline">
-              Clôturer mes plans de vol
+        <div className="border-b border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-amber-500/10 backdrop-blur-sm">
+          <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/30">
+              <Bell className="h-4 w-4 flex-shrink-0 text-amber-400 animate-pulse-soft" />
+              <span className="text-amber-100 text-sm font-medium">
+                {plansNonCloturesCount} plan{plansNonCloturesCount > 1 ? 's' : ''} de vol non clôturé{plansNonCloturesCount > 1 ? 's' : ''}
+              </span>
+            </div>
+            <Link href="/logbook/plans-vol" className="text-sm font-semibold text-amber-200 hover:text-amber-100 transition-colors px-3 py-1 rounded-full hover:bg-amber-500/20">
+              Clôturer maintenant →
             </Link>
           </div>
         </div>
       )}
-      <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
+      <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-8">{children}</main>
     </div>
   );
 }
