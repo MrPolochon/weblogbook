@@ -136,7 +136,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     return () => { shouldPlaySoundRef.current = false; if (interval) clearInterval(interval); };
   }, [callState, playSound]);
 
-  // Timer
+  // Timer appel connecté
   useEffect(() => {
     if (callState === 'connected') {
       setCallDuration(0);
@@ -147,6 +147,31 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     }
     return () => { if (callTimerRef.current) clearInterval(callTimerRef.current); };
   }, [callState]);
+
+  // Timeout 30s pour appels non connectés
+  useEffect(() => {
+    if (callState === 'ringing' || callState === 'connecting' || callState === 'incoming') {
+      const timeout = setTimeout(async () => {
+        console.log('[Telephone] Timeout 30s - reset automatique');
+        playMessage('Délai dépassé');
+        await cleanupLiveKit();
+        const callId = currentCall?.callId || incomingCall?.callId;
+        if (callId) {
+          await fetch('/api/atc/telephone/hangup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ callId }),
+          }).catch(console.error);
+        }
+        setCallState('idle');
+        setNumber('');
+        setIncomingCall(null);
+        setCurrentCall(null);
+        setIsMuted(false);
+      }, 30000);
+      return () => clearTimeout(timeout);
+    }
+  }, [callState, currentCall, incomingCall, cleanupLiveKit, playMessage]);
 
   // Polling appels entrants
   useEffect(() => {
