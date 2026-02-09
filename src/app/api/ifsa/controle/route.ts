@@ -40,25 +40,36 @@ export async function GET(req: NextRequest) {
 
       if (!profile) return NextResponse.json({ error: 'Pilote introuvable' }, { status: 404 });
 
-      const { data: comptePerso } = await admin
+      const { data: comptePerso, error: compteError } = await admin
         .from('felitz_comptes')
-        .select('id, vban, solde, type')
+        .select('*')
         .eq('proprietaire_id', id)
         .eq('type', 'personnel')
-        .single();
+        .maybeSingle();
+
+      if (compteError) {
+        console.error('Erreur chargement compte pilote:', compteError);
+      }
 
       let transactions: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
-      if (comptePerso) {
+      if (comptePerso && comptePerso.id) {
         const { data, error: txError } = await admin
           .from('felitz_transactions')
-          .select('id, type, montant, libelle, description, created_at')
+          .select('*')
           .eq('compte_id', comptePerso.id)
           .order('created_at', { ascending: false })
           .limit(100);
         if (txError) {
-          console.error('Erreur chargement transactions pilote:', txError);
+          console.error('Erreur chargement transactions pilote:', txError, 'compte_id:', comptePerso.id);
         }
-        transactions = data || [];
+        transactions = (data || []).map(t => ({
+          id: t.id,
+          type: t.type,
+          montant: t.montant,
+          libelle: t.libelle,
+          description: t.description,
+          created_at: t.created_at
+        }));
       }
 
       const { data: licences } = await admin
@@ -110,25 +121,36 @@ export async function GET(req: NextRequest) {
 
       if (!compagnie) return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
 
-      const { data: compteEntreprise } = await admin
+      const { data: compteEntreprise, error: compteError } = await admin
         .from('felitz_comptes')
-        .select('id, vban, solde, type')
+        .select('*')
         .eq('compagnie_id', id)
         .eq('type', 'entreprise')
-        .single();
+        .maybeSingle();
+
+      if (compteError) {
+        console.error('Erreur chargement compte compagnie:', compteError);
+      }
 
       let transactions: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
-      if (compteEntreprise) {
+      if (compteEntreprise && compteEntreprise.id) {
         const { data, error: txError } = await admin
           .from('felitz_transactions')
-          .select('id, type, montant, libelle, description, created_at')
+          .select('*')
           .eq('compte_id', compteEntreprise.id)
           .order('created_at', { ascending: false })
           .limit(100);
         if (txError) {
-          console.error('Erreur chargement transactions compagnie:', txError);
+          console.error('Erreur chargement transactions compagnie:', txError, 'compte_id:', compteEntreprise.id);
         }
-        transactions = data || [];
+        transactions = (data || []).map(t => ({
+          id: t.id,
+          type: t.type,
+          montant: t.montant,
+          libelle: t.libelle,
+          description: t.description,
+          created_at: t.created_at
+        }));
       }
 
       const { data: employes } = await admin
