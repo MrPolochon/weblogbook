@@ -9,7 +9,14 @@ Exécutez ces migrations dans l'ordre sur votre base de données Supabase.
 
 ## Migrations prioritaires
 
-### 1. fix_pay_siavi_taxes.sql
+### 1. add_statut_annule_plans_vol.sql
+**Priorité: CRITIQUE** | **Statut: À exécuter immédiatement**
+
+Ajoute le statut `'annule'` à la contrainte `plans_vol_statut_check`. Sans cette migration, l'annulation des plans de vol échoue avec l'erreur : `violates check constraint "plans_vol_statut_check"`.
+
+---
+
+### 2. fix_pay_siavi_taxes.sql
 **Priorité: CRITIQUE** | **Statut: À exécuter si SIAVI est actif**
 
 Corrige la fonction `pay_siavi_taxes` qui créditait directement le compte au lieu de créer un chèque à encaisser. 
@@ -18,7 +25,7 @@ Corrige la fonction `pay_siavi_taxes` qui créditait directement le compte au li
 
 ---
 
-### 2. add_remboursement_pret.sql  
+### 3. add_remboursement_pret.sql  
 **Priorité: NORMALE** | **Statut: À exécuter si prêts bancaires actifs**
 
 Met à jour la politique RLS pour permettre au PDG de contribuer manuellement au remboursement d'un prêt bancaire.
@@ -51,6 +58,7 @@ Les fichiers suivants sont des versions itératives du système Felitz Bank :
 
 | Bug | Fichiers modifiés |
 |-----|-------------------|
+| Annulation plans via modal contournait l'API | `PlansEnAttenteModal.tsx`, `api/plans-vol/[id]/route.ts` |
 | Types TypeScript incomplets (Role, Profile) | `src/lib/types.ts` |
 | Rôle SIAVI non sélectionnable | `EditPiloteForm.tsx`, `api/pilotes/[id]/route.ts` |
 | Bug toggleMute SIAVI (inversé) | `SiaviTelephone.tsx` |
