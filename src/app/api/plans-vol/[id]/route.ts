@@ -397,11 +397,18 @@ export async function PATCH(
 
     if (action === 'annuler') {
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-      if (profile?.role === 'atc') return NextResponse.json({ error: 'Annulation reservee au pilote.' }, { status: 403 });
-      if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
+      const isAdmin = profile?.role === 'admin';
+      
+      // Les admins peuvent annuler n'importe quel plan non accepté
+      // Les pilotes ne peuvent annuler que leurs propres plans
+      if (!isAdmin) {
+        if (profile?.role === 'atc') return NextResponse.json({ error: 'Annulation reservee au pilote ou admin.' }, { status: 403 });
+        if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
+      }
+      
       if (plan.statut === 'cloture') return NextResponse.json({ error: 'Ce plan est deja cloture.' }, { status: 400 });
       if (['accepte', 'en_cours', 'en_attente_cloture'].includes(plan.statut) || plan.accepted_at) {
-        return NextResponse.json({ error: 'Vous ne pouvez annuler qu\'un plan non accepte par l\'ATC.' }, { status: 400 });
+        return NextResponse.json({ error: 'Impossible d\'annuler un plan deja accepte par l\'ATC.' }, { status: 400 });
       }
 
       const { error: err } = await admin.from('plans_vol').update({

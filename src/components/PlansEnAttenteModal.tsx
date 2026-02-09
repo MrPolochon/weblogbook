@@ -72,54 +72,49 @@ export default function PlansEnAttenteModal({ totalPlans, initialPlans = [] }: P
     fetchPlans();
   };
 
-  // Annuler un plan
+  // Annuler un plan (via API pour inclure tous les effets secondaires)
   const handleAnnuler = async (planId: string) => {
     if (!confirm('Êtes-vous sûr de vouloir annuler ce plan de vol ?')) return;
     
     setActionLoading(planId);
     try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from('plans_vol')
-        .update({ statut: 'annule' })
-        .eq('id', planId);
-
-      if (error) throw error;
+      const res = await fetch(`/api/plans-vol/${planId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'annuler' }),
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur lors de l\'annulation');
       
       // Retirer le plan de la liste
       setPlans(prev => prev.filter(p => p.id !== planId));
     } catch (error) {
       console.error('Erreur annulation:', error);
-      alert('Erreur lors de l\'annulation du plan');
+      alert(error instanceof Error ? error.message : 'Erreur lors de l\'annulation du plan');
     } finally {
       setActionLoading(null);
     }
   };
 
-  // Accepter un plan rapidement
+  // Accepter un plan rapidement (via API pour inclure tous les effets secondaires)
   const handleAccepter = async (planId: string) => {
     setActionLoading(planId);
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Non connecté');
-
-      const { error } = await supabase
-        .from('plans_vol')
-        .update({ 
-          statut: 'accepte',
-          current_holder_user_id: user.id,
-          accepted_at: new Date().toISOString()
-        })
-        .eq('id', planId);
-
-      if (error) throw error;
+      const res = await fetch(`/api/plans-vol/${planId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'accepter' }),
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur lors de l\'acceptation');
       
       // Retirer le plan de la liste
       setPlans(prev => prev.filter(p => p.id !== planId));
     } catch (error) {
       console.error('Erreur acceptation:', error);
-      alert('Erreur lors de l\'acceptation du plan');
+      alert(error instanceof Error ? error.message : 'Erreur lors de l\'acceptation du plan');
     } finally {
       setActionLoading(null);
     }

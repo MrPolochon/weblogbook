@@ -147,32 +147,36 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
       )}
 
       {/* Historique des transactions */}
-      {!isMilitaire && transactions.length > 0 && (
+      {!isMilitaire && (
         <div className="mt-6">
           <h3 className="text-sm font-semibold text-slate-300 mb-3">Dernières transactions</h3>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {transactions.map((t) => (
-              <div 
-                key={t.id} 
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-800/30 rounded-lg p-3 border border-slate-700/30"
-              >
-                <div className="flex items-start gap-3 min-w-0">
-                  {t.type === 'credit' ? (
-                    <ArrowDownLeft className="h-4 w-4 text-emerald-400" />
-                  ) : (
-                    <ArrowUpRight className="h-4 w-4 text-red-400" />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-sm text-slate-200 break-all">{t.libelle || t.description || '—'}</p>
-                    <p className="text-xs text-slate-500">{formatDate(t.created_at)}</p>
+          {transactions.length > 0 ? (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {transactions.map((t) => (
+                <div 
+                  key={t.id} 
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-800/30 rounded-lg p-3 border border-slate-700/30"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    {t.type === 'credit' ? (
+                      <ArrowDownLeft className="h-4 w-4 text-emerald-400" />
+                    ) : (
+                      <ArrowUpRight className="h-4 w-4 text-red-400" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm text-slate-200 break-all">{t.libelle || t.description || '—'}</p>
+                      <p className="text-xs text-slate-500">{formatDate(t.created_at)}</p>
+                    </div>
                   </div>
+                  <span className={`font-semibold ${t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'} sm:whitespace-nowrap`}>
+                    {t.type === 'credit' ? '+' : '-'}{t.montant.toLocaleString('fr-FR')} F$
+                  </span>
                 </div>
-                <span className={`font-semibold ${t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'} sm:whitespace-nowrap`}>
-                  {t.type === 'credit' ? '+' : '-'}{t.montant.toLocaleString('fr-FR')} F$
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Aucune transaction</p>
+          )}
         </div>
       )}
     </div>
