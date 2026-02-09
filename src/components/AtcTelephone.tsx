@@ -353,16 +353,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       console.log('[LiveKit] Connected, enabling microphone...');
       await room.localParticipant.setMicrophoneEnabled(true);
       
-      console.log('[LiveKit] Audio publishing started');
-      
-      // Vérifier si l'autre participant est déjà là
-      if (room.remoteParticipants.size > 0) {
-        console.log('[LiveKit] Other participant already in room');
-        setCallState('connected');
-        setConnectionStatus('Connecté');
-        playSound('connected');
-        playMessage('Communications établie');
-      }
+      console.log('[LiveKit] Audio publishing started, waiting for other participant...');
       
     } catch (err) {
       console.error('[LiveKit] Error:', err);

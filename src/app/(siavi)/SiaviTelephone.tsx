@@ -375,17 +375,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       
       console.log('[LiveKit SIAVI] Connected, enabling microphone...');
       await room.localParticipant.setMicrophoneEnabled(true);
-      console.log('[LiveKit SIAVI] Audio publishing started');
-      
-      // Vérifier si l'autre participant est déjà là
-      if (room.remoteParticipants.size > 0) {
-        console.log('[LiveKit SIAVI] Other participant already in room');
-        stopEmergencyAlarm();
-        setCallState('connected');
-        setConnectionStatus('Connecté');
-        playSound('connected');
-        playMessage('Communications établie');
-      }
+      console.log('[LiveKit SIAVI] Audio publishing started, waiting for other participant...');
       
     } catch (err) {
       console.error('[LiveKit SIAVI] Error:', err);
