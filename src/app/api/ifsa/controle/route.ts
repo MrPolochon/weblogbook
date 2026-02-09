@@ -49,12 +49,15 @@ export async function GET(req: NextRequest) {
 
       let transactions: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
       if (comptePerso) {
-        const { data } = await admin
+        const { data, error: txError } = await admin
           .from('felitz_transactions')
           .select('id, type, montant, libelle, description, created_at')
           .eq('compte_id', comptePerso.id)
           .order('created_at', { ascending: false })
           .limit(100);
+        if (txError) {
+          console.error('Erreur chargement transactions pilote:', txError);
+        }
         transactions = data || [];
       }
 
@@ -116,12 +119,15 @@ export async function GET(req: NextRequest) {
 
       let transactions: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
       if (compteEntreprise) {
-        const { data } = await admin
+        const { data, error: txError } = await admin
           .from('felitz_transactions')
           .select('id, type, montant, libelle, description, created_at')
           .eq('compte_id', compteEntreprise.id)
           .order('created_at', { ascending: false })
           .limit(100);
+        if (txError) {
+          console.error('Erreur chargement transactions compagnie:', txError);
+        }
         transactions = data || [];
       }
 

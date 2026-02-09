@@ -852,7 +852,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                         </p>
                         <div className="mt-3">
                           <p className="text-xs text-slate-400 mb-1">Transactions récentes</p>
-                          {compagnieData.transactions.length > 0 ? (
+                          {compagnieData.transactions && compagnieData.transactions.length > 0 ? (
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {compagnieData.transactions.map((t) => (
                                 <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1">
@@ -1006,7 +1006,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                         </p>
                         <div className="mt-3">
                           <p className="text-xs text-slate-400 mb-1">Transactions récentes</p>
-                          {piloteData.transactions.length > 0 ? (
+                          {piloteData.transactions && piloteData.transactions.length > 0 ? (
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {piloteData.transactions.map((t) => (
                                 <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1">
