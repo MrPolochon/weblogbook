@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
 import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio } from 'lucide-react';
@@ -105,10 +105,13 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const selectedCompagnie = compagniesDisponibles.find(c => c.id === selectedCompagnieId) || null;
   
   // Get individual aircraft for the selected company, filtered by departure airport
-  const avionsCompagnie = selectedCompagnieId ? (avionsParCompagnie[selectedCompagnieId] || []) : [];
+  const avionsCompagnie = useMemo(() => 
+    selectedCompagnieId ? (avionsParCompagnie[selectedCompagnieId] || []) : [],
+    [selectedCompagnieId, avionsParCompagnie]
+  );
   // Pour les vols ferry, on peut inclure les avions à 0% d'usure et on n'exige pas qu'ils soient à l'aéroport de départ
   // Car le but du vol ferry est justement de ramener un avion bloqué/à 0% vers un hub
-  const avionsDisponibles = vol_ferry 
+  const avionsDisponibles = useMemo(() => vol_ferry 
     ? avionsCompagnie.filter(a => 
         a.statut === 'ground' // Avion au sol (débloqué)
       )
@@ -116,7 +119,9 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
         a.statut === 'ground' && 
         a.usure_percent > 0 &&
         (!aeroport_depart || a.aeroport_actuel === aeroport_depart.toUpperCase())
-      );
+      ),
+    [vol_ferry, avionsCompagnie, aeroport_depart]
+  );
   
   // Get selected aircraft info
   const selectedInventaire = inventairePersonnel.find(i => i.id === inventaire_avion_id);

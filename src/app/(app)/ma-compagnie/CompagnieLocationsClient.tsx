@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, X, Ban } from 'lucide-react';
 
@@ -25,7 +25,7 @@ export default function CompagnieLocationsClient({ compagnieId }: { compagnieId:
   const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
   const [loading, setLoading] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [locRes, compRes] = await Promise.all([
@@ -39,11 +39,11 @@ export default function CompagnieLocationsClient({ compagnieId }: { compagnieId:
     } finally {
       setLoading(false);
     }
-  }
+  }, [compagnieId]);
 
   useEffect(() => {
     load();
-  }, [compagnieId]);
+  }, [load]);
 
   const compagniesById = new Map(compagnies.map((c) => [c.id, c.nom]));
   const incoming = locations.filter((l) => l.locataire_compagnie_id === compagnieId && l.statut === 'pending');

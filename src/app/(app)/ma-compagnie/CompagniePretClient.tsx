@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Landmark, DollarSign, Percent, Clock, CheckCircle2, AlertTriangle, TrendingDown } from 'lucide-react';
 
@@ -37,11 +37,7 @@ export default function CompagniePretClient({ compagnieId }: Props) {
   const [montantRemboursement, setMontantRemboursement] = useState('');
   const [remboursementEnCours, setRemboursementEnCours] = useState(false);
 
-  useEffect(() => {
-    loadPret();
-  }, [compagnieId]);
-
-  async function loadPret() {
+  const loadPret = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/compagnies/${compagnieId}/pret`);
@@ -59,7 +55,11 @@ export default function CompagniePretClient({ compagnieId }: Props) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [compagnieId]);
+
+  useEffect(() => {
+    loadPret();
+  }, [loadPret]);
 
   async function handleDemanderPret() {
     if (!selectedMontant) return;

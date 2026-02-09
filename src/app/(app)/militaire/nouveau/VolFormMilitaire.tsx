@@ -59,7 +59,7 @@ export default function VolFormMilitaire({ pilotesArmee, inventaireMilitaire = [
     if (!callsign.trim()) {
       setCallsign(`${selectedMission.callsign_prefix}${Math.floor(100 + Math.random() * 900)}`);
     }
-  }, [selectedMission]);
+  }, [selectedMission, callsign]);
 
   function toggleEquipage(id: string) {
     setEquipageIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));

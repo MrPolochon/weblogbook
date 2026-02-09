@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { MapPin, Plus } from 'lucide-react';
 import { calculerPrixHub } from '@/lib/compagnie-utils';
@@ -22,11 +22,7 @@ export default function CompagnieHubsClient({ compagnieId }: { compagnieId: stri
   const [aeroportCode, setAeroportCode] = useState('');
   const [loadingAjouter, setLoadingAjouter] = useState(false);
 
-  useEffect(() => {
-    loadHubs();
-  }, [compagnieId]);
-
-  async function loadHubs() {
+  const loadHubs = useCallback(async () => {
     try {
       const res = await fetch(`/api/compagnies/hubs?compagnie_id=${compagnieId}`);
       const d = await res.json().catch(() => ({}));
@@ -37,7 +33,11 @@ export default function CompagnieHubsClient({ compagnieId }: { compagnieId: stri
     } finally {
       setLoading(false);
     }
-  }
+  }, [compagnieId]);
+
+  useEffect(() => {
+    loadHubs();
+  }, [loadHubs]);
 
   async function handleAjouter(e: React.FormEvent) {
     e.preventDefault();

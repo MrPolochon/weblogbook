@@ -39,8 +39,12 @@ export interface PlanVol {
   
   // ATC
   current_holder_user_id?: string | null;
+  current_holder_position?: string | null;
+  current_holder_aeroport?: string | null;
   pending_transfer_aeroport?: string | null;
   instructions?: string | null;
+  automonitoring?: boolean;
+  accepted_at?: string | null;
   
   // Dates
   heure_depart_estimee?: string | null;

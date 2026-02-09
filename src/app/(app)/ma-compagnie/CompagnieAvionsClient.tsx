@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plane, Plus, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2, Handshake } from 'lucide-react';
 import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX } from '@/lib/compagnie-utils';
@@ -54,6 +54,31 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
   const [editImmat, setEditImmat] = useState('');
   const [editNom, setEditNom] = useState('');
 
+  const loadAvions = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/compagnies/avions?compagnie_id=${compagnieId}`);
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setAvions(d || []);
+      }
+      else setError(d.error || 'Erreur');
+    } catch {
+      setError('Erreur de chargement');
+    } finally {
+      setLoading(false);
+    }
+  }, [compagnieId]);
+
+  const loadHubs = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/compagnies/hubs?compagnie_id=${compagnieId}`);
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) setHubs(d || []);
+    } catch {
+      console.error('Erreur chargement hubs');
+    }
+  }, [compagnieId]);
+
   useEffect(() => {
     loadAvions();
     loadHubs();
@@ -67,32 +92,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
         })
         .catch(() => {});
     }
-  }, [compagnieId]);
-
-  async function loadAvions() {
-    try {
-      const res = await fetch(`/api/compagnies/avions?compagnie_id=${compagnieId}`);
-      const d = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setAvions(d || []);
-      }
-      else setError(d.error || 'Erreur');
-    } catch {
-      setError('Erreur de chargement');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadHubs() {
-    try {
-      const res = await fetch(`/api/compagnies/hubs?compagnie_id=${compagnieId}`);
-      const d = await res.json().catch(() => ({}));
-      if (res.ok) setHubs(d || []);
-    } catch {
-      console.error('Erreur chargement hubs');
-    }
-  }
+  }, [compagnieId, isPdg, loadAvions, loadHubs]);
 
   async function handleReparer(avionId: string) {
     setActionId(avionId);

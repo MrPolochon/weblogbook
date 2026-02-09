@@ -129,13 +129,13 @@ export default async function MesPlansVolPage() {
           numeroVol={planActif.numero_vol}
           aeroportDepart={planActif.aeroport_depart}
           aeroportArrivee={planActif.aeroport_arrivee}
-          codeTranspondeur={planActif.code_transpondeur}
+          codeTranspondeur={planActif.code_transpondeur ?? null}
           modeTranspondeur={planActif.mode_transpondeur || 'C'}
-          acceptedAt={planActif.accepted_at}
+          acceptedAt={planActif.accepted_at ?? null}
           statut={planActif.statut}
           controleurIdentifiant={controleurIdentifiant}
-          controleurPosition={planActif.current_holder_position}
-          controleurAeroport={planActif.current_holder_aeroport}
+          controleurPosition={planActif.current_holder_position ?? null}
+          controleurAeroport={planActif.current_holder_aeroport ?? null}
           automonitoring={planActif.automonitoring || false}
         />
       )}

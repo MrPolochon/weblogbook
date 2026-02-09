@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Ship, Plus, Clock, Zap, User } from 'lucide-react';
 import { COUT_VOL_FERRY, COUT_VOL_FERRY_AUTO_MIN, COUT_VOL_FERRY_AUTO_MAX, DUREE_VOL_FERRY_AUTO_MIN, DUREE_VOL_FERRY_AUTO_MAX } from '@/lib/compagnie-utils';
@@ -45,13 +45,7 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
   const [loadingCreer, setLoadingCreer] = useState(false);
   const [modeAuto, setModeAuto] = useState(true); // Par défaut : automatique
 
-  useEffect(() => {
-    loadVols();
-    loadAvions();
-    loadHubs();
-  }, [compagnieId]);
-
-  async function loadVols() {
+  const loadVols = useCallback(async () => {
     try {
       const res = await fetch(`/api/compagnies/vols-ferry?compagnie_id=${compagnieId}`);
       const d = await res.json().catch(() => ({}));
@@ -62,9 +56,9 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
     } finally {
       setLoading(false);
     }
-  }
+  }, [compagnieId]);
 
-  async function loadAvions() {
+  const loadAvions = useCallback(async () => {
     try {
       const res = await fetch(`/api/compagnies/avions?compagnie_id=${compagnieId}`);
       const d = await res.json().catch(() => ({}));
@@ -76,9 +70,9 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
     } catch {
       console.error('Erreur chargement avions');
     }
-  }
+  }, [compagnieId]);
 
-  async function loadHubs() {
+  const loadHubs = useCallback(async () => {
     try {
       const res = await fetch(`/api/compagnies/hubs?compagnie_id=${compagnieId}`);
       const d = await res.json().catch(() => ({}));
@@ -86,7 +80,13 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
     } catch {
       console.error('Erreur chargement hubs');
     }
-  }
+  }, [compagnieId]);
+
+  useEffect(() => {
+    loadVols();
+    loadAvions();
+    loadHubs();
+  }, [loadVols, loadAvions, loadHubs]);
 
   async function handleCreer(e: React.FormEvent) {
     e.preventDefault();
