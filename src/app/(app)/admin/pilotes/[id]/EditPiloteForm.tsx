@@ -58,6 +58,26 @@ export default function EditPiloteForm({
     }
   }, [roleInitial, atcInitial, siaviInitial]);
 
+  // Quand le rôle change, synchroniser les accès automatiquement
+  const handleRoleChange = (newRole: string) => {
+    setRole(newRole);
+    
+    // Si on passe en SIAVI uniquement, désactiver ATC et Armée
+    if (newRole === 'siavi') {
+      setAtc(false);
+      setArmee(false);
+      setSiavi(true);
+    }
+    // Si on passe en ATC uniquement, désactiver SIAVI et Armée
+    else if (newRole === 'atc') {
+      setSiavi(false);
+      setArmee(false);
+      setAtc(true);
+    }
+    // Si on passe en pilote, garder les valeurs actuelles
+    // Si on passe en admin, garder les valeurs actuelles
+  };
+
   const isBlocked = blockedUntil ? new Date(blockedUntil) > new Date() : false;
 
   async function handleSaveRoles(e: React.FormEvent) {
@@ -247,7 +267,7 @@ export default function EditPiloteForm({
           <label className="label">Rôle principal</label>
           <select
             value={role}
-            onChange={(e) => setRole(e.target.value)}
+            onChange={(e) => handleRoleChange(e.target.value)}
             className="input max-w-xs"
           >
             <option value="pilote">Pilote</option>
