@@ -4,7 +4,8 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield, Flame } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download } from 'lucide-react';
+import Link from 'next/link';
 
 // Composant pour les nuages animés
 function AnimatedClouds() {
@@ -326,6 +327,17 @@ export default function LoginPage() {
         <p className="text-slate-500 text-sm mt-8 text-center animate-init animate-slide-up delay-700">
           Premier accès ? <a href="/setup" className="text-sky-400 hover:text-sky-300 font-medium transition-colors">Créer le premier admin</a>
         </p>
+
+        {/* Lien téléchargement app */}
+        <div className="mt-6 text-center animate-init animate-slide-up delay-800">
+          <Link 
+            href="/download"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50 text-slate-300 hover:text-white hover:bg-slate-700/60 transition-all backdrop-blur-sm group"
+          >
+            <Download className="h-4 w-4 text-sky-400 group-hover:scale-110 transition-transform" />
+            <span>Télécharger notre application</span>
+          </Link>
+        </div>
       </div>
     </div>
   );
