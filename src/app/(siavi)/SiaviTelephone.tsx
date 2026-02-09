@@ -290,12 +290,9 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       roomRef.current = room;
       
       room.on(RoomEvent.Connected, () => {
-        console.log('[LiveKit SIAVI] Connected to room');
-        setCallState('connected');
-        setConnectionStatus('Connecté');
-        stopEmergencyAlarm();
-        playSound('connected');
-        playMessage('Communications établie');
+        console.log('[LiveKit SIAVI] Connected to room, waiting for other participant...');
+        setConnectionStatus('En attente...');
+        // Ne pas dire "Communications établie" ici, attendre l'autre participant
       });
       
       room.on(RoomEvent.Disconnected, (reason) => {
@@ -312,13 +309,11 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       
       room.on(RoomEvent.ParticipantConnected, (participant) => {
         console.log('[LiveKit SIAVI] Participant connected:', participant.identity);
-        if (callState !== 'connected') {
-          setCallState('connected');
-          setConnectionStatus('Connecté');
-          stopEmergencyAlarm();
-          playSound('connected');
-          playMessage('Communications établie');
-        }
+        stopEmergencyAlarm();
+        setCallState('connected');
+        setConnectionStatus('Connecté');
+        playSound('connected');
+        playMessage('Communications établie');
       });
 
       // Quand l'autre participant raccroche
@@ -381,6 +376,16 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       console.log('[LiveKit SIAVI] Connected, enabling microphone...');
       await room.localParticipant.setMicrophoneEnabled(true);
       console.log('[LiveKit SIAVI] Audio publishing started');
+      
+      // Vérifier si l'autre participant est déjà là
+      if (room.remoteParticipants.size > 0) {
+        console.log('[LiveKit SIAVI] Other participant already in room');
+        stopEmergencyAlarm();
+        setCallState('connected');
+        setConnectionStatus('Connecté');
+        playSound('connected');
+        playMessage('Communications établie');
+      }
       
     } catch (err) {
       console.error('[LiveKit SIAVI] Error:', err);

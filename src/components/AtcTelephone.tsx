@@ -264,11 +264,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       
       // Événements
       room.on(RoomEvent.Connected, () => {
-        console.log('[LiveKit] Connected to room');
-        setCallState('connected');
-        setConnectionStatus('Connecté');
-        playSound('connected');
-        playMessage('Communications établie');
+        console.log('[LiveKit] Connected to room, waiting for other participant...');
+        setConnectionStatus('En attente...');
+        // Ne pas dire "Communications établie" ici, attendre l'autre participant
       });
       
       room.on(RoomEvent.Disconnected, (reason) => {
@@ -285,12 +283,10 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       
       room.on(RoomEvent.ParticipantConnected, (participant) => {
         console.log('[LiveKit] Participant connected:', participant.identity);
-        if (callState !== 'connected') {
-          setCallState('connected');
-          setConnectionStatus('Connecté');
-          playSound('connected');
-          playMessage('Communications établie');
-        }
+        setCallState('connected');
+        setConnectionStatus('Connecté');
+        playSound('connected');
+        playMessage('Communications établie');
       });
 
       // Quand l'autre participant raccroche
@@ -358,6 +354,15 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       await room.localParticipant.setMicrophoneEnabled(true);
       
       console.log('[LiveKit] Audio publishing started');
+      
+      // Vérifier si l'autre participant est déjà là
+      if (room.remoteParticipants.size > 0) {
+        console.log('[LiveKit] Other participant already in room');
+        setCallState('connected');
+        setConnectionStatus('Connecté');
+        playSound('connected');
+        playMessage('Communications établie');
+      }
       
     } catch (err) {
       console.error('[LiveKit] Error:', err);
