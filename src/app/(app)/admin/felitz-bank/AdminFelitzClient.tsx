@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
 import { Plus, Minus, RefreshCw, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
@@ -38,19 +37,16 @@ export default function AdminFelitzClient({ compte, label, type }: Props) {
   const [transactionsLoaded, setTransactionsLoaded] = useState(false);
   const [error, setError] = useState('');
 
-  // Charger les transactions
+  // Charger les transactions via l'API (bypass RLS)
   const loadTransactions = useCallback(async () => {
     setLoadingTransactions(true);
     try {
-      const supabase = createClient();
-      const { data, error: fetchError } = await supabase
-        .from('felitz_transactions')
-        .select('id, type, montant, libelle, description, created_at')
-        .eq('compte_id', compte.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (fetchError) throw fetchError;
+      const res = await fetch(`/api/felitz/transactions?compte_id=${compte.id}`);
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Erreur');
+      }
+      const data = await res.json();
       setTransactions(data || []);
       setTransactionsLoaded(true);
     } catch (err) {
