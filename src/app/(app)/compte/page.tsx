@@ -25,18 +25,10 @@ export default async function ComptePage() {
     .single();
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-3xl">
       <h1 className="text-2xl font-semibold text-slate-100">Mon compte</h1>
       
       <div className="flex flex-col md:flex-row gap-6">
-        {/* Carte d'identité avec bouton pour changer la photo */}
-        <div className="flex-shrink-0">
-          <MaCartePhoto 
-            initialCarte={carte} 
-            identifiant={profile?.identifiant ?? '—'} 
-          />
-        </div>
-
         {/* Informations compte */}
         <div className="flex-1 space-y-6">
           <div className="card">
@@ -44,10 +36,17 @@ export default async function ComptePage() {
             <p className="text-slate-100 font-medium">{profile?.identifiant ?? '—'}</p>
           </div>
           <CompteForm armee={Boolean(profile?.armee)} isAdmin={profile?.role === 'admin'} />
+          <LicencesSection userId={user.id} variant="default" />
+        </div>
+
+        {/* Carte d'identité à droite */}
+        <div className="flex-shrink-0 order-first md:order-last">
+          <MaCartePhoto 
+            initialCarte={carte} 
+            identifiant={profile?.identifiant ?? '—'} 
+          />
         </div>
       </div>
-
-      <LicencesSection userId={user.id} variant="default" />
     </div>
   );
 }

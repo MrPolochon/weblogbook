@@ -83,7 +83,7 @@ export default function MaCartePhoto({ initialCarte, identifiant }: Props) {
   }
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col gap-2">
       <CarteIdentite carte={carte} identifiant={identifiant} size="md" />
       
       <input
@@ -97,26 +97,26 @@ export default function MaCartePhoto({ initialCarte, identifiant }: Props) {
       <button
         onClick={() => fileInputRef.current?.click()}
         disabled={uploading}
-        className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors text-sm disabled:opacity-50"
+        className="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors text-xs disabled:opacity-50"
       >
         {uploading ? (
           <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Upload en cours...
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Upload...
           </>
         ) : (
           <>
-            <Camera className="h-4 w-4" />
+            <Camera className="h-3 w-3" />
             Changer ma photo
           </>
         )}
       </button>
 
       {error && (
-        <p className="text-red-400 text-sm">{error}</p>
+        <p className="text-red-400 text-xs text-center">{error}</p>
       )}
       {success && (
-        <p className="text-emerald-400 text-sm">Photo mise à jour !</p>
+        <p className="text-emerald-400 text-xs text-center">Photo mise à jour !</p>
       )}
     </div>
   );
