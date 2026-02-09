@@ -82,10 +82,6 @@ export default function CarteIdentite({ carte, identifiant, size = 'md', classNa
                 <span className={`${s.fontSize} font-bold text-slate-900`}>{c}</span>
               </div>
             ))}
-            {/* Case vide pour compléter si moins de 5 */}
-            {data.cases_haut.length < 5 && (
-              <div className="flex-1 bg-white rounded px-1 py-1" />
-            )}
           </div>
         )}
 
