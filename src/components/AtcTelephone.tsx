@@ -62,6 +62,18 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const iceCandidatesQueue = useRef<RTCIceCandidate[]>([]);
   const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Messages vocaux
+  const playMessage = useCallback((message: string) => {
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(message);
+      utterance.lang = 'fr-FR';
+      utterance.rate = 0.9;
+      utterance.volume = 0.8;
+      speechSynthesis.speak(utterance);
+    }
+  }, []);
+
   // Sons
   const playSound = useCallback((type: 'ring' | 'dial' | 'end' | 'beep' | 'connected') => {
     if (!shouldPlaySoundRef.current && type !== 'beep' && type !== 'connected') return;
@@ -312,6 +324,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           setCallState('connected');
           setConnectionStatus('Connecté');
           playSound('connected');
+          playMessage('Communications établie');
           if (connectionTimeoutRef.current) {
             clearTimeout(connectionTimeoutRef.current);
             connectionTimeoutRef.current = null;
@@ -339,6 +352,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           setCurrentCall(null);
           setIsMuted(false);
           playSound('end');
+          playMessage('Appel terminé');
         }
       };
 
@@ -409,7 +423,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         if (status === 'SUBSCRIBED' && isInitiator) {
           // Timeout de connexion
           connectionTimeoutRef.current = setTimeout(() => {
-            if (callState !== 'connected') {
+            if (pc.connectionState !== 'connected' && pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
               console.error('[WebRTC] Connection timeout');
               setConnectionStatus('Timeout');
               cleanupWebRTC();
@@ -417,6 +431,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
               setNumber('');
               setCurrentCall(null);
               playSound('end');
+              playMessage('Impossible d\'établir la communication');
             }
           }, WEBRTC_TIMEOUTS.CONNECTION_TIMEOUT);
 
@@ -534,6 +549,17 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ reset: true }),
           }).catch(console.error);
+          playMessage('Appel précédent réinitialisé, réessayez');
+        } else if (data.error === 'offline') {
+          playMessage('Votre correspondant est hors ligne');
+        } else if (data.error === 'no_afis') {
+          playMessage('Aucun agent AFIS disponible');
+        } else if (data.error === 'rejected') {
+          playMessage('Appel refusé');
+        } else if (data.error === 'cible_occupee') {
+          playMessage('Votre correspondant est déjà en ligne');
+        } else {
+          playMessage('Erreur lors de l\'appel');
         }
         playSound('end');
         setCallState('idle');
@@ -558,7 +584,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           if (statusData.status === 'rejected' || statusData.status === 'ended') break;
         }
         
-        // Timeout
+        // Timeout - pas de réponse
         await fetch('/api/atc/telephone/hangup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -566,12 +592,14 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         }).catch(console.error);
         
         playSound('end');
+        playMessage('Votre correspondant ne répond pas');
         setCallState('idle');
         setNumber('');
         setCurrentCall(null);
       }
     } catch (err) {
       console.error('Call error:', err);
+      playMessage('Erreur lors de l\'appel');
       setCallState('idle');
       setNumber('');
     }
@@ -620,6 +648,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
 
   const handleHangup = async () => {
     const callId = currentCall?.callId || incomingCall?.callId;
+    const wasConnected = callState === 'connected';
     cleanupWebRTC();
     if (callId) {
       await fetch('/api/atc/telephone/hangup', {
@@ -629,6 +658,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       }).catch(console.error);
     }
     playSound('end');
+    if (wasConnected) {
+      playMessage('Appel terminé');
+    }
     setCallState('idle');
     setNumber('');
     setIncomingCall(null);

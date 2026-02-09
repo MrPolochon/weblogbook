@@ -35,7 +35,7 @@ export const RTC_CONFIG: RTCConfiguration = {
 // Délais optimisés
 export const WEBRTC_TIMEOUTS = {
   OFFER_DELAY: 300,        // Délai avant envoi offer
-  RETRY_DELAYS: [500, 1500, 3000, 5000], // Délais de retry
-  ICE_TIMEOUT: 10000,      // Timeout pour la collecte ICE
-  CONNECTION_TIMEOUT: 30000, // Timeout connexion totale
+  RETRY_DELAYS: [500, 1500, 3000, 5000, 8000], // Délais de retry
+  ICE_TIMEOUT: 15000,      // Timeout pour la collecte ICE
+  CONNECTION_TIMEOUT: 60000, // Timeout connexion totale (60s au lieu de 30s)
 };
