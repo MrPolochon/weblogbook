@@ -5,11 +5,12 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isSetup = pathname === '/setup';
   const isLogin = pathname === '/login';
+  const isDownload = pathname === '/download';
   const isAuthCallback = pathname.startsWith('/auth/');
   const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin';
 
   // Routes publiques : aucune requête Supabase, réponse immédiate (évite blocage mobile)
-  if (isAuthCallback || isApiPublic || isSetup || isLogin) {
+  if (isAuthCallback || isApiPublic || isSetup || isLogin || isDownload) {
     return NextResponse.next({ request });
   }
 
