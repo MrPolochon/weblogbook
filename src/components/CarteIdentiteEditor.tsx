@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { X, Save, Palette, Upload, Type, Hash, Calendar, Grid3X3, Loader2, Trash2 } from 'lucide-react';
+import { X, Save, Palette, Upload, Type, Hash, Calendar, Grid3X3, Loader2, Trash2, User, Building } from 'lucide-react';
 import CarteIdentite from './CarteIdentite';
 import Image from 'next/image';
 
@@ -99,7 +99,6 @@ export default function CarteIdentiteEditor({ userId, identifiant, initialData, 
         throw new Error(data.error || 'Erreur lors de l\'upload');
       }
 
-      // Mettre à jour l'URL dans le formulaire
       if (type === 'logo') {
         setFormData(prev => ({ ...prev, logo_url: data.url }));
       } else {
@@ -117,7 +116,6 @@ export default function CarteIdentiteEditor({ userId, identifiant, initialData, 
     if (file) {
       handleUpload(file, type);
     }
-    // Reset input pour permettre de re-sélectionner le même fichier
     e.target.value = '';
   }
 
@@ -147,311 +145,337 @@ export default function CarteIdentiteEditor({ userId, identifiant, initialData, 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
-      <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm">
+      <div className="w-full max-w-6xl bg-white rounded-2xl shadow-2xl h-[95vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
-          <h2 className="text-lg font-bold text-slate-900">Modifier la carte de {identifiant}</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 rounded-t-2xl">
+          <h2 className="text-xl font-bold text-slate-900">Modifier la carte de {identifiant}</h2>
           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-lg transition-colors">
-            <X className="h-5 w-5 text-slate-600" />
+            <X className="h-6 w-6 text-slate-600" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Formulaire */}
-            <div className="space-y-4">
+        {/* Content - 2 colonnes */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Colonne gauche - Formulaire (scrollable) */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            
+            {/* Section: Apparence */}
+            <div className="bg-slate-50 rounded-xl p-5">
+              <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <Palette className="h-5 w-5 text-sky-600" />
+                Apparence
+              </h3>
+              
               {/* Couleur de fond */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
-                  <Palette className="h-4 w-4" />
-                  Couleur de fond
-                </label>
-                <div className="flex flex-wrap gap-2 mb-2">
+              <div className="mb-4">
+                <label className="text-sm font-medium text-slate-700 mb-2 block">Couleur de fond</label>
+                <div className="flex flex-wrap gap-3 mb-3">
                   {COULEURS_PREDEFINES.map(c => (
                     <button
                       key={c.valeur}
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, couleur_fond: c.valeur }))}
-                      className={`w-8 h-8 rounded-lg border-2 transition-all ${
-                        formData.couleur_fond === c.valeur ? 'border-slate-900 scale-110' : 'border-transparent'
+                      className={`w-10 h-10 rounded-xl border-2 transition-all hover:scale-105 ${
+                        formData.couleur_fond === c.valeur ? 'border-slate-900 scale-110 shadow-lg' : 'border-slate-300'
                       }`}
                       style={{ backgroundColor: c.valeur }}
                       title={c.nom}
                     />
                   ))}
                 </div>
-                <input
-                  type="color"
-                  value={formData.couleur_fond}
-                  onChange={e => setFormData(prev => ({ ...prev, couleur_fond: e.target.value }))}
-                  className="w-full h-10 rounded-lg cursor-pointer"
-                />
-              </div>
-
-              {/* Titre */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1">
-                  <Type className="h-4 w-4" />
-                  Titre principal
-                </label>
-                <input
-                  type="text"
-                  value={formData.titre}
-                  onChange={e => setFormData(prev => ({ ...prev, titre: e.target.value }))}
-                  className="input"
-                  placeholder="IFSA"
-                />
-              </div>
-
-              {/* Sous-titre */}
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Sous-titre</label>
-                <input
-                  type="text"
-                  value={formData.sous_titre || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, sous_titre: e.target.value || null }))}
-                  className="input"
-                  placeholder="délivré par l'instance de l'IFSA"
-                />
-              </div>
-
-              {/* Cases du haut */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1">
-                  <Grid3X3 className="h-4 w-4" />
-                  Cases du haut (séparées par des virgules)
-                </label>
-                <input
-                  type="text"
-                  value={casesHautInput}
-                  onChange={e => handleCasesHautChange(e.target.value)}
-                  className="input"
-                  placeholder="TRA, MAN, ITB, NAV"
-                />
-                <p className="text-xs text-slate-500 mt-1">Ex: TRA, MAN, ITB, NAV</p>
-              </div>
-
-              {/* Upload Logo */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
-                  <Upload className="h-4 w-4" />
-                  Logo
-                </label>
-                <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={e => handleFileSelect(e, 'logo')}
-                  className="hidden"
-                />
                 <div className="flex items-center gap-3">
-                  {formData.logo_url ? (
-                    <div className="relative">
-                      <Image
-                        src={formData.logo_url}
-                        alt="Logo"
-                        width={60}
-                        height={60}
-                        className="rounded-lg object-cover border border-slate-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, logo_url: null }))}
-                        className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-[60px] h-[60px] rounded-lg bg-slate-100 border border-dashed border-slate-300 flex items-center justify-center">
-                      <span className="text-xs text-slate-400">Logo</span>
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => logoInputRef.current?.click()}
-                    disabled={uploadingLogo}
-                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {uploadingLogo ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Upload...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4" />
-                        {formData.logo_url ? 'Changer le logo' : 'Uploader un logo'}
-                      </>
-                    )}
-                  </button>
+                  <input
+                    type="color"
+                    value={formData.couleur_fond}
+                    onChange={e => setFormData(prev => ({ ...prev, couleur_fond: e.target.value }))}
+                    className="w-20 h-10 rounded-lg cursor-pointer border border-slate-300"
+                  />
+                  <span className="text-sm text-slate-500">ou choisir une couleur personnalisée</span>
                 </div>
               </div>
+            </div>
 
-              {/* Upload Photo */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
-                  <Upload className="h-4 w-4" />
-                  Photo de profil
-                </label>
-                <input
-                  ref={photoInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={e => handleFileSelect(e, 'photo')}
-                  className="hidden"
-                />
-                <div className="flex items-center gap-3">
-                  {formData.photo_url ? (
-                    <div className="relative">
-                      <Image
-                        src={formData.photo_url}
-                        alt="Photo"
-                        width={60}
-                        height={75}
-                        className="rounded-lg object-cover border border-slate-200"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, photo_url: null }))}
-                        className="absolute -top-2 -right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="w-[60px] h-[75px] rounded-lg bg-slate-100 border border-dashed border-slate-300 flex items-center justify-center">
-                      <span className="text-xs text-slate-400">Photo</span>
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => photoInputRef.current?.click()}
-                    disabled={uploadingPhoto}
-                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {uploadingPhoto ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Upload...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4" />
-                        {formData.photo_url ? 'Changer la photo' : 'Uploader une photo'}
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Nom affiché */}
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Nom affiché</label>
-                <input
-                  type="text"
-                  value={formData.nom_affiche || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, nom_affiche: e.target.value || null }))}
-                  className="input"
-                  placeholder="DUVAL Martin"
-                />
-              </div>
-
-              {/* Organisation */}
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-1 block">Organisation</label>
-                <input
-                  type="text"
-                  value={formData.organisation || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, organisation: e.target.value || null }))}
-                  className="input"
-                  placeholder="IFSA"
-                />
-              </div>
-
-              {/* Numéro de carte */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1">
-                  <Hash className="h-4 w-4" />
-                  Numéro de carte
-                </label>
-                <input
-                  type="text"
-                  value={formData.numero_carte || ''}
-                  onChange={e => setFormData(prev => ({ ...prev, numero_carte: e.target.value || null }))}
-                  className="input font-mono"
-                  placeholder="000 00 000001"
-                />
-              </div>
-
-              {/* Dates */}
-              <div className="grid grid-cols-2 gap-3">
+            {/* Section: Textes */}
+            <div className="bg-slate-50 rounded-xl p-5">
+              <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <Type className="h-5 w-5 text-sky-600" />
+                Textes
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1">
-                    <Calendar className="h-4 w-4" />
-                    Date délivrance
+                  <label className="text-sm font-medium text-slate-700 mb-2 block">Titre principal</label>
+                  <input
+                    type="text"
+                    value={formData.titre}
+                    onChange={e => setFormData(prev => ({ ...prev, titre: e.target.value }))}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900"
+                    placeholder="IFSA"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-2 block">Sous-titre</label>
+                  <input
+                    type="text"
+                    value={formData.sous_titre || ''}
+                    onChange={e => setFormData(prev => ({ ...prev, sous_titre: e.target.value || null }))}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900"
+                    placeholder="délivré par l'instance de l'IFSA"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section: Images */}
+            <div className="bg-slate-50 rounded-xl p-5">
+              <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <Upload className="h-5 w-5 text-sky-600" />
+                Images
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Logo */}
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-3 block">Logo</label>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={e => handleFileSelect(e, 'logo')}
+                    className="hidden"
+                  />
+                  <div className="flex items-center gap-4">
+                    {formData.logo_url ? (
+                      <div className="relative">
+                        <Image
+                          src={formData.logo_url}
+                          alt="Logo"
+                          width={80}
+                          height={80}
+                          className="rounded-xl object-cover border-2 border-slate-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, logo_url: null }))}
+                          className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-20 h-20 rounded-xl bg-slate-200 border-2 border-dashed border-slate-400 flex items-center justify-center">
+                        <span className="text-sm text-slate-500">Logo</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      disabled={uploadingLogo}
+                      className="px-5 py-3 bg-white border-2 border-slate-300 rounded-xl hover:bg-slate-50 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {uploadingLogo ? (
+                        <><Loader2 className="h-5 w-5 animate-spin" /> Upload...</>
+                      ) : (
+                        <><Upload className="h-5 w-5" /> {formData.logo_url ? 'Changer' : 'Uploader'}</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Photo */}
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-3 block">Photo de profil</label>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={e => handleFileSelect(e, 'photo')}
+                    className="hidden"
+                  />
+                  <div className="flex items-center gap-4">
+                    {formData.photo_url ? (
+                      <div className="relative">
+                        <Image
+                          src={formData.photo_url}
+                          alt="Photo"
+                          width={80}
+                          height={100}
+                          className="rounded-xl object-cover border-2 border-slate-200"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, photo_url: null }))}
+                          className="absolute -top-2 -right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="w-20 h-24 rounded-xl bg-slate-200 border-2 border-dashed border-slate-400 flex items-center justify-center">
+                        <span className="text-sm text-slate-500">Photo</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => photoInputRef.current?.click()}
+                      disabled={uploadingPhoto}
+                      className="px-5 py-3 bg-white border-2 border-slate-300 rounded-xl hover:bg-slate-50 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {uploadingPhoto ? (
+                        <><Loader2 className="h-5 w-5 animate-spin" /> Upload...</>
+                      ) : (
+                        <><Upload className="h-5 w-5" /> {formData.photo_url ? 'Changer' : 'Uploader'}</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section: Informations */}
+            <div className="bg-slate-50 rounded-xl p-5">
+              <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <User className="h-5 w-5 text-sky-600" />
+                Informations
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-2 block">Nom affiché</label>
+                  <input
+                    type="text"
+                    value={formData.nom_affiche || ''}
+                    onChange={e => setFormData(prev => ({ ...prev, nom_affiche: e.target.value || null }))}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900"
+                    placeholder="DUVAL Martin"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-2 block flex items-center gap-2">
+                    <Building className="h-4 w-4" />
+                    Organisation
                   </label>
+                  <input
+                    type="text"
+                    value={formData.organisation || ''}
+                    onChange={e => setFormData(prev => ({ ...prev, organisation: e.target.value || null }))}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900"
+                    placeholder="IFSA"
+                  />
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-2 block flex items-center gap-2">
+                    <Hash className="h-4 w-4" />
+                    Numéro de carte
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.numero_carte || ''}
+                    onChange={e => setFormData(prev => ({ ...prev, numero_carte: e.target.value || null }))}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 font-mono text-slate-900"
+                    placeholder="000 00 000001"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section: Dates */}
+            <div className="bg-slate-50 rounded-xl p-5">
+              <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-sky-600" />
+                Dates
+              </h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-2 block">Date de délivrance</label>
                   <input
                     type="date"
                     value={formData.date_delivrance || ''}
                     onChange={e => setFormData(prev => ({ ...prev, date_delivrance: e.target.value || null }))}
-                    className="input"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900"
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700 mb-1 block">Date expiration</label>
+                  <label className="text-sm font-medium text-slate-700 mb-2 block">Date d&apos;expiration</label>
                   <input
                     type="date"
                     value={formData.date_expiration || ''}
                     onChange={e => setFormData(prev => ({ ...prev, date_expiration: e.target.value || null }))}
-                    className="input"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900"
                   />
                 </div>
               </div>
-
-              {/* Cases du bas */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1">
-                  <Grid3X3 className="h-4 w-4" />
-                  Cases du bas (séparées par des virgules)
-                </label>
-                <input
-                  type="text"
-                  value={casesBasInput}
-                  onChange={e => handleCasesBasChange(e.target.value)}
-                  className="input"
-                  placeholder="A, B, F, P"
-                />
-                <p className="text-xs text-slate-500 mt-1">Ex: A, B, F, P</p>
-              </div>
             </div>
 
-            {/* Prévisualisation */}
-            <div className="flex flex-col items-center">
-              <h3 className="text-sm font-medium text-slate-700 mb-4">Prévisualisation</h3>
+            {/* Section: Cases */}
+            <div className="bg-slate-50 rounded-xl p-5">
+              <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                <Grid3X3 className="h-5 w-5 text-sky-600" />
+                Cases personnalisées
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-2 block">
+                    Cases du haut (qualifications)
+                  </label>
+                  <input
+                    type="text"
+                    value={casesHautInput}
+                    onChange={e => handleCasesHautChange(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900"
+                    placeholder="TRA, MAN, ITB, NAV"
+                  />
+                  <p className="text-xs text-slate-500 mt-2">Séparez les valeurs par des virgules. Exemple: TRA, MAN, ITB, NAV</p>
+                </div>
+                
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-2 block">
+                    Cases du bas (catégories)
+                  </label>
+                  <input
+                    type="text"
+                    value={casesBasInput}
+                    onChange={e => handleCasesBasChange(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-slate-900"
+                    placeholder="A, B, F, P"
+                  />
+                  <p className="text-xs text-slate-500 mt-2">Séparez les valeurs par des virgules. Exemple: A, B, F, P</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Colonne droite - Prévisualisation (fixe) */}
+          <div className="w-80 lg:w-96 border-l border-slate-200 bg-slate-100 p-6 flex flex-col items-center">
+            <h3 className="text-base font-semibold text-slate-800 mb-6">Prévisualisation</h3>
+            <div className="sticky top-6">
               <CarteIdentite carte={formData} identifiant={identifiant} size="md" />
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-slate-200 bg-slate-50">
-          {error && <p className="text-red-500 text-sm">{error}</p>}
-          <div className="flex gap-3 ml-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-2xl">
+          {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
+          <div className="flex gap-4 ml-auto">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-lg transition-colors"
+              className="px-6 py-3 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors font-medium"
             >
               Annuler
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-xl transition-colors font-medium disabled:opacity-50"
             >
-              <Save className="h-4 w-4" />
+              <Save className="h-5 w-5" />
               {saving ? 'Sauvegarde...' : 'Sauvegarder'}
             </button>
           </div>
