@@ -4,8 +4,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX, RotateCcw } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { createClient } from '@/lib/supabase/client';
+import { RTC_CONFIG, WEBRTC_TIMEOUTS } from '@/lib/webrtc';
 
-type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connected' | 'ended';
+type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connecting' | 'connected';
 
 interface AtcTelephoneProps {
   aeroport: string;
@@ -13,7 +14,6 @@ interface AtcTelephoneProps {
   userId: string;
 }
 
-// Mapping des positions vers les codes
 const POSITION_CODES: Record<string, string> = {
   'Delivery': '15', 'Clairance': '16', 'Ground': '17', 'Tower': '18',
   'DEP': '191', 'APP': '192', 'Center': '20', 'AFIS': '505',
@@ -47,6 +47,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const [isMuted, setIsMuted] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [connectionStatus, setConnectionStatus] = useState('');
   
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -58,10 +59,12 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const analyserRef = useRef<AnalyserNode | null>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const shouldPlaySoundRef = useRef(false);
+  const iceCandidatesQueue = useRef<RTCIceCandidate[]>([]);
+  const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Sonnerie moderne
-  const playSound = useCallback((type: 'ring' | 'dial' | 'end' | 'beep') => {
-    if (!shouldPlaySoundRef.current && type !== 'beep') return;
+  // Sons
+  const playSound = useCallback((type: 'ring' | 'dial' | 'end' | 'beep' | 'connected') => {
+    if (!shouldPlaySoundRef.current && type !== 'beep' && type !== 'connected') return;
     try {
       const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       const osc = ctx.createOscillator();
@@ -75,36 +78,44 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           osc.frequency.value = 440;
           osc.type = 'sine';
           gain.gain.setValueAtTime(0, ctx.currentTime);
-          gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
-          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+          gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.05);
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
           osc.start();
-          osc.stop(ctx.currentTime + 0.3);
+          osc.stop(ctx.currentTime + 0.25);
           break;
         case 'dial':
           osc.frequency.value = 425;
           osc.type = 'sine';
-          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.setValueAtTime(0.12, ctx.currentTime);
           osc.start();
-          osc.stop(ctx.currentTime + 0.2);
+          osc.stop(ctx.currentTime + 0.15);
           break;
         case 'end':
           osc.frequency.value = 480;
           osc.type = 'sine';
-          gain.gain.setValueAtTime(0.2, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
           osc.start();
-          osc.stop(ctx.currentTime + 0.5);
+          osc.stop(ctx.currentTime + 0.4);
           break;
         case 'beep':
           osc.frequency.value = 1000;
           osc.type = 'sine';
-          gain.gain.setValueAtTime(0.1, ctx.currentTime);
-          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
+          gain.gain.setValueAtTime(0.08, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.04);
           osc.start();
-          osc.stop(ctx.currentTime + 0.05);
+          osc.stop(ctx.currentTime + 0.04);
+          break;
+        case 'connected':
+          osc.frequency.value = 880;
+          osc.type = 'sine';
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.2);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.2);
           break;
       }
-      setTimeout(() => ctx.close(), 600);
+      setTimeout(() => ctx.close(), 500);
     } catch (e) {
       console.error('Audio error:', e);
     }
@@ -119,13 +130,13 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       playSound('ring');
       interval = setInterval(() => {
         if (shouldPlaySoundRef.current) playSound('ring');
-      }, 500);
+      }, 600);
     } else if (callState === 'ringing') {
       shouldPlaySoundRef.current = true;
       playSound('dial');
       interval = setInterval(() => {
         if (shouldPlaySoundRef.current) playSound('dial');
-      }, 2500);
+      }, 2000);
     } else {
       shouldPlaySoundRef.current = false;
     }
@@ -174,7 +185,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         } catch (err) {
           console.error('Check calls error:', err);
         }
-      }, 1000);
+      }, 1500);
     } else if (callState === 'incoming' && incomingCall) {
       checkIntervalRef.current = setInterval(async () => {
         try {
@@ -187,7 +198,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         } catch (err) {
           console.error('Status check error:', err);
         }
-      }, 1000);
+      }, 1500);
     }
     return () => {
       if (checkIntervalRef.current) {
@@ -198,6 +209,11 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   }, [callState, incomingCall]);
 
   const cleanupWebRTC = useCallback(() => {
+    console.log('[WebRTC] Cleanup');
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current);
+      connectionTimeoutRef.current = null;
+    }
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
@@ -216,39 +232,54 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
     }
+    iceCandidatesQueue.current = [];
     setAudioLevel(0);
+    setConnectionStatus('');
   }, []);
 
   const setupWebRTC = useCallback(async (callId: string, isInitiator: boolean) => {
+    console.log(`[WebRTC] Setup - callId: ${callId}, isInitiator: ${isInitiator}`);
+    setConnectionStatus('Connexion...');
+    
     try {
+      // Obtenir le flux audio
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: { 
+          echoCancellation: true, 
+          noiseSuppression: true, 
+          autoGainControl: true,
+          sampleRate: 48000,
+        },
         video: false,
       });
       localStreamRef.current = stream;
+      console.log('[WebRTC] Got local stream');
+      
       if (localAudioRef.current) {
         localAudioRef.current.srcObject = stream;
         localAudioRef.current.volume = 0;
       }
 
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-        ],
-        iceCandidatePoolSize: 10,
-      });
+      // Créer la connexion peer
+      const pc = new RTCPeerConnection(RTC_CONFIG);
       peerConnectionRef.current = pc;
+      console.log('[WebRTC] PeerConnection created');
 
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      // Ajouter les tracks audio
+      stream.getTracks().forEach(track => {
+        pc.addTrack(track, stream);
+        console.log('[WebRTC] Track added:', track.kind);
+      });
 
+      // Gérer la réception de l'audio distant
       pc.ontrack = (event) => {
+        console.log('[WebRTC] Remote track received:', event.streams.length);
         if (event.streams?.[0] && remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = event.streams[0];
           remoteAudioRef.current.volume = 1.0;
-          remoteAudioRef.current.play().catch(console.error);
+          remoteAudioRef.current.play().catch(e => console.error('[WebRTC] Play error:', e));
           
-          // Analyse audio pour indicateur visuel
+          // Analyse audio
           try {
             audioContextRef.current = new AudioContext();
             const source = audioContextRef.current.createMediaStreamSource(event.streams[0]);
@@ -257,24 +288,50 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
             source.connect(analyserRef.current);
             
             const updateLevel = () => {
-              if (!analyserRef.current) return;
+              if (!analyserRef.current || callState !== 'connected') return;
               const data = new Uint8Array(analyserRef.current.frequencyBinCount);
               analyserRef.current.getByteFrequencyData(data);
               const avg = data.reduce((a, b) => a + b, 0) / data.length;
               setAudioLevel(avg / 255);
-              if (callState === 'connected') requestAnimationFrame(updateLevel);
+              requestAnimationFrame(updateLevel);
             };
             updateLevel();
           } catch (e) {
-            console.error('Audio analyser error:', e);
+            console.error('[WebRTC] Audio analyser error:', e);
           }
         }
       };
 
+      // État de la connexion ICE
+      pc.oniceconnectionstatechange = () => {
+        console.log('[WebRTC] ICE state:', pc.iceConnectionState);
+        setConnectionStatus(`ICE: ${pc.iceConnectionState}`);
+        
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          console.log('[WebRTC] ICE Connected!');
+          setCallState('connected');
+          setConnectionStatus('Connecté');
+          playSound('connected');
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+          }
+        } else if (pc.iceConnectionState === 'failed') {
+          console.error('[WebRTC] ICE Failed - attempting restart');
+          setConnectionStatus('Reconnexion...');
+          pc.restartIce();
+        } else if (pc.iceConnectionState === 'disconnected') {
+          setConnectionStatus('Déconnecté...');
+        }
+      };
+
+      // État de la connexion
       pc.onconnectionstatechange = () => {
+        console.log('[WebRTC] Connection state:', pc.connectionState);
         if (pc.connectionState === 'connected') {
           setCallState('connected');
-        } else if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+          setConnectionStatus('Connecté');
+        } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
           cleanupWebRTC();
           setCallState('idle');
           setNumber('');
@@ -285,65 +342,126 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         }
       };
 
+      // Signalisation via Supabase
       const supabase = createClient();
-      const channel = supabase.channel(`call-${callId}`)
-        .on('broadcast', { event: 'webrtc-signal' }, async (payload) => {
-          const message = payload.payload;
-          if (message.fromUserId === userId) return;
-
-          try {
-            if (message.type === 'offer' && !isInitiator) {
-              await pc.setRemoteDescription(new RTCSessionDescription(message.data));
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
-              await channel.send({
-                type: 'broadcast',
-                event: 'webrtc-signal',
-                payload: { type: 'answer', data: answer, fromUserId: userId },
-              });
-            } else if (message.type === 'answer' && isInitiator) {
-              await pc.setRemoteDescription(new RTCSessionDescription(message.data));
-            } else if (message.type === 'ice-candidate' && message.data) {
-              await pc.addIceCandidate(new RTCIceCandidate(message.data));
-            }
-          } catch (err) {
-            console.error('Signal error:', err);
-          }
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED' && isInitiator) {
-            const sendOffer = async () => {
-              const offer = await pc.createOffer({ offerToReceiveAudio: true });
-              await pc.setLocalDescription(offer);
-              await channel.send({
-                type: 'broadcast',
-                event: 'webrtc-signal',
-                payload: { type: 'offer', data: offer, fromUserId: userId },
-              });
-            };
-            await new Promise(resolve => setTimeout(resolve, 100));
-            await sendOffer();
-            setTimeout(() => {
-              if (pc.connectionState !== 'connected') sendOffer();
-            }, 1000);
-          }
-        });
-
+      const channel = supabase.channel(`call-${callId}`, {
+        config: { broadcast: { self: false } }
+      });
+      
       signalingChannelRef.current = channel;
 
+      // Gestionnaire de signaux
+      channel.on('broadcast', { event: 'signal' }, async ({ payload }) => {
+        if (!payload || payload.from === userId) return;
+        console.log('[WebRTC] Signal received:', payload.type);
+        
+        try {
+          if (payload.type === 'offer' && !isInitiator) {
+            console.log('[WebRTC] Processing offer');
+            await pc.setRemoteDescription(new RTCSessionDescription(payload.data));
+            
+            // Ajouter les candidats ICE en attente
+            for (const candidate of iceCandidatesQueue.current) {
+              await pc.addIceCandidate(candidate);
+            }
+            iceCandidatesQueue.current = [];
+            
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            console.log('[WebRTC] Sending answer');
+            await channel.send({
+              type: 'broadcast',
+              event: 'signal',
+              payload: { type: 'answer', data: answer, from: userId },
+            });
+          } else if (payload.type === 'answer' && isInitiator) {
+            console.log('[WebRTC] Processing answer');
+            await pc.setRemoteDescription(new RTCSessionDescription(payload.data));
+          } else if (payload.type === 'ice') {
+            console.log('[WebRTC] Processing ICE candidate');
+            if (pc.remoteDescription) {
+              await pc.addIceCandidate(new RTCIceCandidate(payload.data));
+            } else {
+              iceCandidatesQueue.current.push(new RTCIceCandidate(payload.data));
+            }
+          }
+        } catch (err) {
+          console.error('[WebRTC] Signal processing error:', err);
+        }
+      });
+
+      // Envoyer les candidats ICE
       pc.onicecandidate = async (event) => {
         if (event.candidate) {
+          console.log('[WebRTC] New ICE candidate');
           await channel.send({
             type: 'broadcast',
-            event: 'webrtc-signal',
-            payload: { type: 'ice-candidate', data: event.candidate, fromUserId: userId },
+            event: 'signal',
+            payload: { type: 'ice', data: event.candidate, from: userId },
           });
         }
       };
 
+      // S'abonner au channel
+      await channel.subscribe(async (status) => {
+        console.log('[WebRTC] Channel status:', status);
+        
+        if (status === 'SUBSCRIBED' && isInitiator) {
+          // Timeout de connexion
+          connectionTimeoutRef.current = setTimeout(() => {
+            if (callState !== 'connected') {
+              console.error('[WebRTC] Connection timeout');
+              setConnectionStatus('Timeout');
+              cleanupWebRTC();
+              setCallState('idle');
+              setNumber('');
+              setCurrentCall(null);
+              playSound('end');
+            }
+          }, WEBRTC_TIMEOUTS.CONNECTION_TIMEOUT);
+
+          // Fonction pour envoyer l'offer
+          const sendOffer = async (attempt: number) => {
+            if (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected') {
+              return;
+            }
+            console.log(`[WebRTC] Sending offer (attempt ${attempt + 1})`);
+            setConnectionStatus(`Tentative ${attempt + 1}...`);
+            
+            try {
+              const offer = await pc.createOffer({
+                offerToReceiveAudio: true,
+                offerToReceiveVideo: false,
+              });
+              await pc.setLocalDescription(offer);
+              await channel.send({
+                type: 'broadcast',
+                event: 'signal',
+                payload: { type: 'offer', data: offer, from: userId },
+              });
+            } catch (e) {
+              console.error('[WebRTC] Offer error:', e);
+            }
+          };
+
+          // Envoyer l'offer avec retries
+          await new Promise(resolve => setTimeout(resolve, WEBRTC_TIMEOUTS.OFFER_DELAY));
+          await sendOffer(0);
+          
+          WEBRTC_TIMEOUTS.RETRY_DELAYS.forEach((delay, index) => {
+            setTimeout(() => {
+              if (pc.connectionState !== 'connected' && pc.iceConnectionState !== 'connected') {
+                sendOffer(index + 1);
+              }
+            }, delay);
+          });
+        }
+      });
+
       return pc;
     } catch (error) {
-      console.error('WebRTC error:', error);
+      console.error('[WebRTC] Setup error:', error);
+      setConnectionStatus('Erreur');
       cleanupWebRTC();
       throw error;
     }
@@ -426,19 +544,21 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       if (data.call) {
         setCurrentCall({ to: parsed.aeroport || aeroport, toPosition: parsed.position, callId: data.call.id });
         
+        // Attendre que l'autre réponde (polling)
         for (let i = 0; i < 60; i++) {
           await new Promise(resolve => setTimeout(resolve, 500));
           const statusRes = await fetch(`/api/atc/telephone/status?callId=${data.call.id}`);
           const statusData = await statusRes.json();
           
           if (statusData.status === 'connected') {
+            setCallState('connecting');
             await setupWebRTC(data.call.id, true);
-            setCallState('connected');
             return;
           }
           if (statusData.status === 'rejected' || statusData.status === 'ended') break;
         }
         
+        // Timeout
         await fetch('/api/atc/telephone/hangup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -459,6 +579,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
 
   const handleAnswer = async () => {
     if (!incomingCall) return;
+    setCallState('connecting');
+    setConnectionStatus('Connexion...');
+    
     try {
       const res = await fetch('/api/atc/telephone/answer', {
         method: 'POST',
@@ -469,10 +592,14 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         await setupWebRTC(incomingCall.callId, false);
         setCurrentCall({ to: incomingCall.from, toPosition: incomingCall.fromPosition, callId: incomingCall.callId });
         setIncomingCall(null);
-        setCallState('connected');
+      } else {
+        setCallState('idle');
+        setIncomingCall(null);
       }
     } catch (err) {
       console.error('Answer error:', err);
+      setCallState('idle');
+      setIncomingCall(null);
     }
   };
 
@@ -484,11 +611,11 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ callId: incomingCall.callId }),
       });
-      setIncomingCall(null);
-      setCallState('idle');
     } catch (err) {
       console.error('Reject error:', err);
     }
+    setIncomingCall(null);
+    setCallState('idle');
   };
 
   const handleHangup = async () => {
@@ -551,7 +678,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const keyBg = isDark ? 'bg-white hover:bg-slate-50 shadow-md' : 'bg-slate-700 hover:bg-slate-600 shadow-lg';
   const keyText = isDark ? 'text-slate-700' : 'text-white';
 
-  // Badge téléphone fermé
+  // Badge fermé
   if (!isOpen) {
     return (
       <button
@@ -569,7 +696,6 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     );
   }
 
-  // Interface téléphone ouverte
   return (
     <div className={`fixed right-4 bottom-4 z-50 ${bgMain} rounded-3xl shadow-2xl overflow-hidden transition-all duration-500`}
          style={{ width: '240px' }}>
@@ -603,6 +729,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           <span className="text-[10px] text-slate-500 uppercase tracking-wider">
             {callState === 'incoming' ? 'Appel entrant' : 
              callState === 'ringing' ? 'Appel...' : 
+             callState === 'connecting' ? 'Connexion...' :
              callState === 'connected' ? 'En ligne' : 'Composer'}
           </span>
           {callState === 'connected' && (
@@ -628,7 +755,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
               <p className="text-lg font-bold text-emerald-400">{currentCall.to}</p>
               <p className="text-xs text-slate-400">{currentCall.toPosition}</p>
             </div>
-          ) : callState === 'ringing' && currentCall ? (
+          ) : (callState === 'ringing' || callState === 'connecting') && currentCall ? (
             <div className="animate-pulse">
               <p className="text-lg font-bold text-sky-400">{currentCall.to}</p>
               <p className="text-xs text-slate-400">{currentCall.toPosition}</p>
@@ -640,7 +767,12 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           )}
         </div>
         
-        {/* Barre de niveau audio */}
+        {/* Status de connexion */}
+        {connectionStatus && (callState === 'connecting' || callState === 'ringing') && (
+          <p className="text-[10px] text-center text-amber-400 mt-1">{connectionStatus}</p>
+        )}
+        
+        {/* Barre audio */}
         {callState === 'connected' && (
           <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
             <div 
@@ -659,7 +791,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
               <button
                 key={d}
                 onClick={() => handleNumberInput(d)}
-                disabled={callState === 'connected' || callState === 'ringing' || callState === 'incoming'}
+                disabled={callState === 'connected' || callState === 'ringing' || callState === 'incoming' || callState === 'connecting'}
                 className={`h-11 ${keyBg} ${keyText} rounded-xl font-semibold text-lg transition-all active:scale-95 disabled:opacity-40`}
               >
                 {d}
@@ -695,7 +827,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           ) : (
             <button
               onClick={handleCall}
-              disabled={!number || callState === 'ringing'}
+              disabled={!number || callState === 'ringing' || callState === 'connecting'}
               className="h-11 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl flex items-center justify-center disabled:opacity-40 transition-all active:scale-95"
             >
               <PhoneCall className="h-5 w-5" />
@@ -709,7 +841,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
             >
               <PhoneOff className="h-5 w-5" />
             </button>
-          ) : callState === 'connected' || callState === 'ringing' ? (
+          ) : callState === 'connected' || callState === 'ringing' || callState === 'connecting' ? (
             <button
               onClick={handleHangup}
               className="h-11 bg-red-500 hover:bg-red-400 text-white rounded-xl flex items-center justify-center transition-all active:scale-95"

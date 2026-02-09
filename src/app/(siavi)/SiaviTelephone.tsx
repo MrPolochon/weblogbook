@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX, RotateCcw, AlertTriangle } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { RTC_CONFIG, WEBRTC_TIMEOUTS } from '@/lib/webrtc';
 
-type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connected' | 'ended';
+type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connecting' | 'connected';
 
 interface SiaviTelephoneProps {
   aeroport: string;
@@ -12,7 +13,6 @@ interface SiaviTelephoneProps {
   userId: string;
 }
 
-// Mapping des positions vers les codes
 const POSITION_CODES: Record<string, string> = {
   'Delivery': '15', 'Clairance': '16', 'Ground': '17', 'Tower': '18',
   'DEP': '191', 'APP': '192', 'Center': '20', 'AFIS': '505',
@@ -44,6 +44,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   const [isMuted, setIsMuted] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [connectionStatus, setConnectionStatus] = useState('');
   const [showEmergencyOverlay, setShowEmergencyOverlay] = useState(false);
   
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -56,11 +57,13 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   const analyserRef = useRef<AnalyserNode | null>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const shouldPlaySoundRef = useRef(false);
-  const emergencyAlarmRef = useRef<{ osc: OscillatorNode; gain: GainNode; ctx: AudioContext } | null>(null);
+  const iceCandidatesQueue = useRef<RTCIceCandidate[]>([]);
+  const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const emergencyAlarmRef = useRef<{ osc: OscillatorNode; ctx: AudioContext } | null>(null);
 
   // Sons
-  const playSound = useCallback((type: 'ring' | 'dial' | 'end' | 'beep') => {
-    if (!shouldPlaySoundRef.current && type !== 'beep') return;
+  const playSound = useCallback((type: 'ring' | 'dial' | 'end' | 'beep' | 'connected') => {
+    if (!shouldPlaySoundRef.current && type !== 'beep' && type !== 'connected') return;
     try {
       const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       const osc = ctx.createOscillator();
@@ -74,42 +77,50 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           osc.frequency.value = 440;
           osc.type = 'sine';
           gain.gain.setValueAtTime(0, ctx.currentTime);
-          gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
-          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+          gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.05);
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
           osc.start();
-          osc.stop(ctx.currentTime + 0.3);
+          osc.stop(ctx.currentTime + 0.25);
           break;
         case 'dial':
           osc.frequency.value = 425;
           osc.type = 'sine';
-          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.setValueAtTime(0.12, ctx.currentTime);
           osc.start();
-          osc.stop(ctx.currentTime + 0.2);
+          osc.stop(ctx.currentTime + 0.15);
           break;
         case 'end':
           osc.frequency.value = 480;
           osc.type = 'sine';
-          gain.gain.setValueAtTime(0.2, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
           osc.start();
-          osc.stop(ctx.currentTime + 0.5);
+          osc.stop(ctx.currentTime + 0.4);
           break;
         case 'beep':
           osc.frequency.value = 1000;
           osc.type = 'sine';
-          gain.gain.setValueAtTime(0.1, ctx.currentTime);
-          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.05);
+          gain.gain.setValueAtTime(0.08, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.04);
           osc.start();
-          osc.stop(ctx.currentTime + 0.05);
+          osc.stop(ctx.currentTime + 0.04);
+          break;
+        case 'connected':
+          osc.frequency.value = 880;
+          osc.type = 'sine';
+          gain.gain.setValueAtTime(0.15, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.2);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.2);
           break;
       }
-      setTimeout(() => ctx.close(), 600);
+      setTimeout(() => ctx.close(), 500);
     } catch (e) {
       console.error('Audio error:', e);
     }
   }, []);
 
-  // Alarme d'urgence (sirène de pompier)
+  // Alarme d'urgence
   const playEmergencyAlarm = useCallback(() => {
     if (emergencyAlarmRef.current) return;
     try {
@@ -118,20 +129,18 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       const gain = ctx.createGain();
       
       osc.type = 'sawtooth';
-      gain.gain.setValueAtTime(0.03, ctx.currentTime); // Volume très bas
+      gain.gain.setValueAtTime(0.03, ctx.currentTime);
       
       osc.connect(gain);
       gain.connect(ctx.destination);
       
-      // Effet sirène
       osc.frequency.setValueAtTime(600, ctx.currentTime);
       osc.frequency.linearRampToValueAtTime(900, ctx.currentTime + 0.75);
       osc.frequency.linearRampToValueAtTime(600, ctx.currentTime + 1.5);
       
       osc.start();
-      emergencyAlarmRef.current = { osc, gain, ctx };
+      emergencyAlarmRef.current = { osc, ctx };
       
-      // Répéter
       const repeatSiren = setInterval(() => {
         if (!emergencyAlarmRef.current) {
           clearInterval(repeatSiren);
@@ -142,7 +151,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         emergencyAlarmRef.current.osc.frequency.linearRampToValueAtTime(900, t + 0.75);
         emergencyAlarmRef.current.osc.frequency.linearRampToValueAtTime(600, t + 1.5);
       }, 1500);
-      
     } catch (e) {
       console.error('Emergency alarm error:', e);
     }
@@ -173,13 +181,13 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       playSound('ring');
       interval = setInterval(() => {
         if (shouldPlaySoundRef.current) playSound('ring');
-      }, 500);
+      }, 600);
     } else if (callState === 'ringing') {
       shouldPlaySoundRef.current = true;
       playSound('dial');
       interval = setInterval(() => {
         if (shouldPlaySoundRef.current) playSound('dial');
-      }, 2500);
+      }, 2000);
     } else {
       shouldPlaySoundRef.current = false;
       stopEmergencyAlarm();
@@ -191,26 +199,19 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     };
   }, [callState, incomingCall, playSound, playEmergencyAlarm, stopEmergencyAlarm]);
 
-  // Timer d'appel
+  // Timer
   useEffect(() => {
     if (callState === 'connected') {
       setCallDuration(0);
-      callTimerRef.current = setInterval(() => {
-        setCallDuration(d => d + 1);
-      }, 1000);
+      callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
     } else {
-      if (callTimerRef.current) {
-        clearInterval(callTimerRef.current);
-        callTimerRef.current = null;
-      }
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
       setCallDuration(0);
     }
-    return () => {
-      if (callTimerRef.current) clearInterval(callTimerRef.current);
-    };
+    return () => { if (callTimerRef.current) clearInterval(callTimerRef.current); };
   }, [callState]);
 
-  // Vérification appels entrants
+  // Polling appels entrants
   useEffect(() => {
     if (callState === 'idle') {
       checkIntervalRef.current = setInterval(async () => {
@@ -230,7 +231,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         } catch (err) {
           console.error('Check calls error:', err);
         }
-      }, 1000);
+      }, 1500);
     } else if (callState === 'incoming' && incomingCall) {
       checkIntervalRef.current = setInterval(async () => {
         try {
@@ -244,17 +245,16 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         } catch (err) {
           console.error('Status check error:', err);
         }
-      }, 1000);
+      }, 1500);
     }
     return () => {
-      if (checkIntervalRef.current) {
-        clearInterval(checkIntervalRef.current);
-        checkIntervalRef.current = null;
-      }
+      if (checkIntervalRef.current) clearInterval(checkIntervalRef.current);
     };
   }, [callState, incomingCall, stopEmergencyAlarm]);
 
   const cleanupWebRTC = useCallback(() => {
+    console.log('[WebRTC SIAVI] Cleanup');
+    if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current);
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
@@ -273,38 +273,44 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
     }
+    iceCandidatesQueue.current = [];
     stopEmergencyAlarm();
     setAudioLevel(0);
+    setConnectionStatus('');
   }, [stopEmergencyAlarm]);
 
   const setupWebRTC = useCallback(async (callId: string, isInitiator: boolean) => {
+    console.log(`[WebRTC SIAVI] Setup - callId: ${callId}, isInitiator: ${isInitiator}`);
+    setConnectionStatus('Connexion...');
+    
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: 48000 },
         video: false,
       });
       localStreamRef.current = stream;
+      console.log('[WebRTC SIAVI] Got local stream');
+      
       if (localAudioRef.current) {
         localAudioRef.current.srcObject = stream;
         localAudioRef.current.volume = 0;
       }
 
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-        ],
-        iceCandidatePoolSize: 10,
-      });
+      const pc = new RTCPeerConnection(RTC_CONFIG);
       peerConnectionRef.current = pc;
+      console.log('[WebRTC SIAVI] PeerConnection created');
 
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      stream.getTracks().forEach(track => {
+        pc.addTrack(track, stream);
+        console.log('[WebRTC SIAVI] Track added:', track.kind);
+      });
 
       pc.ontrack = (event) => {
+        console.log('[WebRTC SIAVI] Remote track received');
         if (event.streams?.[0] && remoteAudioRef.current) {
           remoteAudioRef.current.srcObject = event.streams[0];
           remoteAudioRef.current.volume = 1.0;
-          remoteAudioRef.current.play().catch(console.error);
+          remoteAudioRef.current.play().catch(e => console.error('[WebRTC SIAVI] Play error:', e));
           
           try {
             audioContextRef.current = new AudioContext();
@@ -314,25 +320,41 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
             source.connect(analyserRef.current);
             
             const updateLevel = () => {
-              if (!analyserRef.current) return;
+              if (!analyserRef.current || callState !== 'connected') return;
               const data = new Uint8Array(analyserRef.current.frequencyBinCount);
               analyserRef.current.getByteFrequencyData(data);
-              const avg = data.reduce((a, b) => a + b, 0) / data.length;
-              setAudioLevel(avg / 255);
-              if (callState === 'connected') requestAnimationFrame(updateLevel);
+              setAudioLevel(data.reduce((a, b) => a + b, 0) / data.length / 255);
+              requestAnimationFrame(updateLevel);
             };
             updateLevel();
           } catch (e) {
-            console.error('Audio analyser error:', e);
+            console.error('[WebRTC SIAVI] Audio analyser error:', e);
           }
         }
       };
 
+      pc.oniceconnectionstatechange = () => {
+        console.log('[WebRTC SIAVI] ICE state:', pc.iceConnectionState);
+        setConnectionStatus(`ICE: ${pc.iceConnectionState}`);
+        
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          setCallState('connected');
+          setConnectionStatus('Connecté');
+          stopEmergencyAlarm();
+          playSound('connected');
+          if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current);
+        } else if (pc.iceConnectionState === 'failed') {
+          setConnectionStatus('Reconnexion...');
+          pc.restartIce();
+        }
+      };
+
       pc.onconnectionstatechange = () => {
+        console.log('[WebRTC SIAVI] Connection state:', pc.connectionState);
         if (pc.connectionState === 'connected') {
           setCallState('connected');
-          stopEmergencyAlarm();
-        } else if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+          setConnectionStatus('Connecté');
+        } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
           cleanupWebRTC();
           setCallState('idle');
           setNumber('');
@@ -344,64 +366,109 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       };
 
       const supabase = createClient();
-      const channel = supabase.channel(`call-${callId}`)
-        .on('broadcast', { event: 'webrtc-signal' }, async (payload) => {
-          const message = payload.payload;
-          if (message.fromUserId === userId) return;
-
-          try {
-            if (message.type === 'offer' && !isInitiator) {
-              await pc.setRemoteDescription(new RTCSessionDescription(message.data));
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
-              await channel.send({
-                type: 'broadcast',
-                event: 'webrtc-signal',
-                payload: { type: 'answer', data: answer, fromUserId: userId },
-              });
-            } else if (message.type === 'answer' && isInitiator) {
-              await pc.setRemoteDescription(new RTCSessionDescription(message.data));
-            } else if (message.type === 'ice-candidate' && message.data) {
-              await pc.addIceCandidate(new RTCIceCandidate(message.data));
-            }
-          } catch (err) {
-            console.error('Signal error:', err);
-          }
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED' && isInitiator) {
-            const sendOffer = async () => {
-              const offer = await pc.createOffer({ offerToReceiveAudio: true });
-              await pc.setLocalDescription(offer);
-              await channel.send({
-                type: 'broadcast',
-                event: 'webrtc-signal',
-                payload: { type: 'offer', data: offer, fromUserId: userId },
-              });
-            };
-            await new Promise(resolve => setTimeout(resolve, 100));
-            await sendOffer();
-            setTimeout(() => {
-              if (pc.connectionState !== 'connected') sendOffer();
-            }, 1000);
-          }
-        });
-
+      const channel = supabase.channel(`call-${callId}`, {
+        config: { broadcast: { self: false } }
+      });
       signalingChannelRef.current = channel;
+
+      channel.on('broadcast', { event: 'signal' }, async ({ payload }) => {
+        if (!payload || payload.from === userId) return;
+        console.log('[WebRTC SIAVI] Signal received:', payload.type);
+        
+        try {
+          if (payload.type === 'offer' && !isInitiator) {
+            console.log('[WebRTC SIAVI] Processing offer');
+            await pc.setRemoteDescription(new RTCSessionDescription(payload.data));
+            
+            for (const candidate of iceCandidatesQueue.current) {
+              await pc.addIceCandidate(candidate);
+            }
+            iceCandidatesQueue.current = [];
+            
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            console.log('[WebRTC SIAVI] Sending answer');
+            await channel.send({
+              type: 'broadcast',
+              event: 'signal',
+              payload: { type: 'answer', data: answer, from: userId },
+            });
+          } else if (payload.type === 'answer' && isInitiator) {
+            console.log('[WebRTC SIAVI] Processing answer');
+            await pc.setRemoteDescription(new RTCSessionDescription(payload.data));
+          } else if (payload.type === 'ice') {
+            if (pc.remoteDescription) {
+              await pc.addIceCandidate(new RTCIceCandidate(payload.data));
+            } else {
+              iceCandidatesQueue.current.push(new RTCIceCandidate(payload.data));
+            }
+          }
+        } catch (err) {
+          console.error('[WebRTC SIAVI] Signal error:', err);
+        }
+      });
 
       pc.onicecandidate = async (event) => {
         if (event.candidate) {
           await channel.send({
             type: 'broadcast',
-            event: 'webrtc-signal',
-            payload: { type: 'ice-candidate', data: event.candidate, fromUserId: userId },
+            event: 'signal',
+            payload: { type: 'ice', data: event.candidate, from: userId },
           });
         }
       };
 
+      await channel.subscribe(async (status) => {
+        console.log('[WebRTC SIAVI] Channel status:', status);
+        
+        if (status === 'SUBSCRIBED' && isInitiator) {
+          connectionTimeoutRef.current = setTimeout(() => {
+            if (callState !== 'connected') {
+              console.error('[WebRTC SIAVI] Connection timeout');
+              setConnectionStatus('Timeout');
+              cleanupWebRTC();
+              setCallState('idle');
+              setNumber('');
+              setCurrentCall(null);
+              playSound('end');
+            }
+          }, WEBRTC_TIMEOUTS.CONNECTION_TIMEOUT);
+
+          const sendOffer = async (attempt: number) => {
+            if (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected') return;
+            console.log(`[WebRTC SIAVI] Sending offer (attempt ${attempt + 1})`);
+            setConnectionStatus(`Tentative ${attempt + 1}...`);
+            
+            try {
+              const offer = await pc.createOffer({ offerToReceiveAudio: true });
+              await pc.setLocalDescription(offer);
+              await channel.send({
+                type: 'broadcast',
+                event: 'signal',
+                payload: { type: 'offer', data: offer, from: userId },
+              });
+            } catch (e) {
+              console.error('[WebRTC SIAVI] Offer error:', e);
+            }
+          };
+
+          await new Promise(resolve => setTimeout(resolve, WEBRTC_TIMEOUTS.OFFER_DELAY));
+          await sendOffer(0);
+          
+          WEBRTC_TIMEOUTS.RETRY_DELAYS.forEach((delay, index) => {
+            setTimeout(() => {
+              if (pc.connectionState !== 'connected' && pc.iceConnectionState !== 'connected') {
+                sendOffer(index + 1);
+              }
+            }, delay);
+          });
+        }
+      });
+
       return pc;
     } catch (error) {
-      console.error('WebRTC error:', error);
+      console.error('[WebRTC SIAVI] Setup error:', error);
+      setConnectionStatus('Erreur');
       cleanupWebRTC();
       throw error;
     }
@@ -490,8 +557,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           const statusData = await statusRes.json();
           
           if (statusData.status === 'connected') {
+            setCallState('connecting');
             await setupWebRTC(data.call.id, true);
-            setCallState('connected');
             return;
           }
           if (statusData.status === 'rejected' || statusData.status === 'ended') break;
@@ -517,7 +584,10 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
 
   const handleAnswer = async () => {
     if (!incomingCall) return;
+    setCallState('connecting');
+    setConnectionStatus('Connexion...');
     stopEmergencyAlarm();
+    
     try {
       const res = await fetch('/api/siavi/telephone/answer', {
         method: 'POST',
@@ -528,10 +598,14 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         await setupWebRTC(incomingCall.callId, false);
         setCurrentCall({ to: incomingCall.from, toPosition: incomingCall.fromPosition, callId: incomingCall.callId });
         setIncomingCall(null);
-        setCallState('connected');
+      } else {
+        setCallState('idle');
+        setIncomingCall(null);
       }
     } catch (err) {
       console.error('Answer error:', err);
+      setCallState('idle');
+      setIncomingCall(null);
     }
   };
 
@@ -544,11 +618,11 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ callId: incomingCall.callId }),
       });
-      setIncomingCall(null);
-      setCallState('idle');
     } catch (err) {
       console.error('Reject error:', err);
     }
+    setIncomingCall(null);
+    setCallState('idle');
   };
 
   const handleHangup = async () => {
@@ -571,9 +645,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
 
   const toggleMute = () => {
     if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = isMuted;
-      });
+      localStreamRef.current.getAudioTracks().forEach(track => { track.enabled = isMuted; });
       setIsMuted(!isMuted);
     }
   };
@@ -605,12 +677,12 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Badge téléphone fermé
+  // Badge fermé
   if (!isOpen) {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-4 right-4 z-50 bg-gradient-to-b from-red-800 to-red-900 text-white rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl group ${
+        className={`fixed bottom-4 right-4 z-50 bg-gradient-to-b from-red-800 to-red-900 text-white rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl ${
           callState === 'incoming' && incomingCall?.isEmergency ? 'animate-pulse ring-4 ring-red-500' : ''
         }`}
       >
@@ -627,16 +699,13 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     );
   }
 
-  // Overlay d'urgence
+  // Overlay urgence
   if (showEmergencyOverlay && callState === 'incoming' && incomingCall?.isEmergency) {
     return (
       <>
-        {/* Fond rouge clignotant */}
         <div className="fixed inset-0 z-40 bg-red-600/30 animate-pulse pointer-events-none" />
-        
-        {/* Interface d'urgence */}
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="bg-gradient-to-b from-red-800 to-red-950 rounded-3xl shadow-2xl p-8 max-w-md w-full text-center animate-bounce-slow">
+          <div className="bg-gradient-to-b from-red-800 to-red-950 rounded-3xl shadow-2xl p-8 max-w-md w-full text-center">
             <div className="mb-6">
               <div className="w-20 h-20 mx-auto bg-yellow-500 rounded-full flex items-center justify-center animate-pulse shadow-lg shadow-yellow-500/50">
                 <AlertTriangle className="h-10 w-10 text-red-900" />
@@ -644,7 +713,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
             </div>
             
             <h2 className="text-2xl font-bold text-white mb-2">APPEL D&apos;URGENCE</h2>
-            <p className="text-red-200 mb-1">{incomingCall.isEmergency ? '911 / 112' : ''}</p>
             <p className="text-xl font-semibold text-yellow-400 mb-6">
               {incomingCall.from} - {incomingCall.fromPosition}
             </p>
@@ -666,16 +734,14 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
             </div>
           </div>
         </div>
-        
         <audio ref={localAudioRef} autoPlay muted playsInline />
         <audio ref={remoteAudioRef} autoPlay playsInline />
       </>
     );
   }
 
-  // Interface téléphone normale
   return (
-    <div className="fixed right-4 bottom-4 z-50 bg-gradient-to-b from-red-800 to-red-950 rounded-3xl shadow-2xl overflow-hidden transition-all duration-500"
+    <div className="fixed right-4 bottom-4 z-50 bg-gradient-to-b from-red-800 to-red-950 rounded-3xl shadow-2xl overflow-hidden"
          style={{ width: '240px' }}>
       
       {/* Header */}
@@ -685,17 +751,10 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           <span className="text-sm font-semibold text-white">Téléphone SIAVI</span>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            onClick={resetPhone}
-            className="p-1.5 rounded-lg hover:bg-red-700/50 transition-colors"
-            title="Réinitialiser"
-          >
+          <button onClick={resetPhone} className="p-1.5 rounded-lg hover:bg-red-700/50" title="Réinitialiser">
             <RotateCcw className="h-3.5 w-3.5 text-red-300" />
           </button>
-          <button
-            onClick={() => { setIsOpen(false); if (callState === 'idle') setNumber(''); }}
-            className="p-1.5 rounded-lg hover:bg-red-700/50 transition-colors"
-          >
+          <button onClick={() => { setIsOpen(false); if (callState === 'idle') setNumber(''); }} className="p-1.5 rounded-lg hover:bg-red-700/50">
             <X className="h-3.5 w-3.5 text-red-300" />
           </button>
         </div>
@@ -707,6 +766,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           <span className="text-[10px] text-slate-500 uppercase tracking-wider">
             {callState === 'incoming' ? (incomingCall?.isEmergency ? 'URGENCE' : 'Appel entrant') : 
              callState === 'ringing' ? 'Appel...' : 
+             callState === 'connecting' ? 'Connexion...' :
              callState === 'connected' ? 'En ligne' : 'Composer'}
           </span>
           {callState === 'connected' && (
@@ -734,7 +794,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
               <p className="text-lg font-bold text-emerald-400">{currentCall.to}</p>
               <p className="text-xs text-slate-400">{currentCall.toPosition}</p>
             </div>
-          ) : callState === 'ringing' && currentCall ? (
+          ) : (callState === 'ringing' || callState === 'connecting') && currentCall ? (
             <div className="animate-pulse">
               <p className="text-lg font-bold text-sky-400">{currentCall.to}</p>
               <p className="text-xs text-slate-400">{currentCall.toPosition}</p>
@@ -746,12 +806,14 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           )}
         </div>
         
+        {connectionStatus && (callState === 'connecting' || callState === 'ringing') && (
+          <p className="text-[10px] text-center text-amber-400 mt-1">{connectionStatus}</p>
+        )}
+        
         {callState === 'connected' && (
           <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-75"
-              style={{ width: `${audioLevel * 100}%` }}
-            />
+            <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-75"
+                 style={{ width: `${audioLevel * 100}%` }} />
           </div>
         )}
       </div>
@@ -764,7 +826,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
               <button
                 key={d}
                 onClick={() => handleNumberInput(d)}
-                disabled={callState === 'connected' || callState === 'ringing' || callState === 'incoming'}
+                disabled={callState === 'connected' || callState === 'ringing' || callState === 'incoming' || callState === 'connecting'}
                 className="h-11 bg-red-700/60 hover:bg-red-600/60 text-white rounded-xl font-semibold text-lg transition-all active:scale-95 disabled:opacity-40 shadow-lg"
               >
                 {d}
@@ -802,7 +864,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           ) : (
             <button
               onClick={handleCall}
-              disabled={!number || callState === 'ringing'}
+              disabled={!number || callState === 'ringing' || callState === 'connecting'}
               className="h-11 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl flex items-center justify-center disabled:opacity-40 transition-all active:scale-95"
             >
               <PhoneCall className="h-5 w-5" />
@@ -816,7 +878,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
             >
               <PhoneOff className="h-5 w-5" />
             </button>
-          ) : callState === 'connected' || callState === 'ringing' ? (
+          ) : callState === 'connected' || callState === 'ringing' || callState === 'connecting' ? (
             <button
               onClick={handleHangup}
               className="h-11 bg-red-500 hover:bg-red-400 text-white rounded-xl flex items-center justify-center transition-all active:scale-95"
@@ -834,7 +896,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         </div>
       </div>
 
-      {/* Audio */}
       <audio ref={localAudioRef} autoPlay muted playsInline />
       <audio ref={remoteAudioRef} autoPlay playsInline />
     </div>
