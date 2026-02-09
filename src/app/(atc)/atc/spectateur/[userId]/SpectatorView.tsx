@@ -24,6 +24,7 @@ interface Plan {
   aeroport_arrivee: string;
   type_vol: string;
   statut: string;
+  current_holder_user_id?: string;
   temps_prev_min?: number;
   code_transpondeur?: string;
   mode_transpondeur?: string;
