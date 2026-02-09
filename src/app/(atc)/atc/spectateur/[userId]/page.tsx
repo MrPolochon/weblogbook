@@ -51,6 +51,13 @@ export default async function SpectatorPage({ params }: Props) {
     .in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente'])
     .order('created_at', { ascending: false });
 
+  // Récupérer les transferts entrants vers la position de l'ATC cible
+  const { data: transfertsEntrants } = await admin
+    .from('plans_vol')
+    .select('id, numero_vol, aeroport_depart, aeroport_arrivee')
+    .eq('pending_transfer_aeroport', targetSession.aeroport)
+    .eq('pending_transfer_position', targetSession.position);
+
 
   // Enrichir les plans avec pilote, compagnie, avion
   const enrichedPlans = await Promise.all((plansChezLui || []).map(async (plan) => {
@@ -84,6 +91,7 @@ export default async function SpectatorPage({ params }: Props) {
         started_at: targetSession.started_at
       }}
       initialPlans={enrichedPlans}
+      transfertsEntrants={transfertsEntrants || []}
     />
   );
 }
