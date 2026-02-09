@@ -314,8 +314,11 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   };
 
   const handleDelete = () => {
-    setNumber(prev => prev.slice(0, -1));
-    if (number.length === 1) setCallState('idle');
+    setNumber(prev => {
+      const newNumber = prev.slice(0, -1);
+      if (newNumber.length === 0) setCallState('idle');
+      return newNumber;
+    });
   };
 
   const cleanupWebRTC = () => {
@@ -684,7 +687,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   const toggleMute = () => {
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach(track => {
-        track.enabled = isMuted;
+        track.enabled = !isMuted; // Si on mute (isMuted devient true), enabled doit être false
       });
       setIsMuted(!isMuted);
     }

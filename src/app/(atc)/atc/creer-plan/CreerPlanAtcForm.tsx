@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { Plane, Search, User, Clock, CheckCircle2 } from 'lucide-react';

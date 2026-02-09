@@ -232,8 +232,11 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   };
 
   const handleDelete = () => {
-    setNumber(prev => prev.slice(0, -1));
-    if (number.length === 1) setCallState('idle');
+    setNumber(prev => {
+      const newNumber = prev.slice(0, -1);
+      if (newNumber.length === 0) setCallState('idle');
+      return newNumber;
+    });
   };
 
   const cleanupWebRTC = () => {

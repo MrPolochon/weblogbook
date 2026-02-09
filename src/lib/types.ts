@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'pilote';
+export type Role = 'admin' | 'pilote' | 'atc' | 'siavi';
 export type VolStatut = 'en_attente' | 'validé' | 'refusé';
 export type TypeVol = 'IFR' | 'VFR';
 export type RolePilote = 'Pilote' | 'Co-pilote';
@@ -10,6 +10,12 @@ export interface Profile {
   heures_initiales_minutes: number;
   blocked_until: string | null;
   block_reason: string | null;
+  armee: boolean;
+  atc: boolean;
+  siavi: boolean;
+  ifsa: boolean;
+  atc_grade_id: string | null;
+  siavi_grade_id: string | null;
   created_at: string;
   updated_at: string;
 }
