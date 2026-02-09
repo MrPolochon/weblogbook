@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Save, Palette, Upload, Type, Hash, Calendar, Grid3X3, Loader2, Trash2, User, Building } from 'lucide-react';
 import CarteIdentite from './CarteIdentite';
 import Image from 'next/image';
@@ -144,8 +145,15 @@ export default function CarteIdentiteEditor({ userId, identifiant, initialData, 
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm">
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm">
       <div className="w-full max-w-6xl bg-white rounded-2xl shadow-2xl h-[95vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50 rounded-t-2xl">
@@ -481,6 +489,7 @@ export default function CarteIdentiteEditor({ userId, identifiant, initialData, 
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
