@@ -461,6 +461,94 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
+    // ============================================================
+    // CLÔTURE FORCÉE PAR ADMIN — amende 50 000 F$
+    // ============================================================
+    if (action === 'cloture_forcee') {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs.' }, { status: 403 });
+      if (plan.statut === 'cloture' || plan.statut === 'annule') return NextResponse.json({ error: 'Ce plan est déjà clôturé ou annulé.' }, { status: 400 });
+
+      const AMENDE = 50000;
+      const now = new Date();
+      let amendeAppliquee = false;
+      let compteDebiteVban = '';
+
+      // 1) Trouver le compte à débiter : compte entreprise (si vol commercial) ou perso du pilote
+      let compteId: string | null = null;
+      if (plan.vol_commercial && plan.compagnie_id) {
+        const { data: compteComp } = await admin.from('felitz_comptes')
+          .select('id, solde, vban').eq('compagnie_id', plan.compagnie_id).eq('type', 'entreprise').single();
+        if (compteComp) {
+          compteId = compteComp.id;
+          compteDebiteVban = compteComp.vban;
+          await admin.from('felitz_comptes').update({ solde: compteComp.solde - AMENDE }).eq('id', compteComp.id);
+          await admin.from('felitz_transactions').insert({ compte_id: compteComp.id, type: 'debit', montant: AMENDE, libelle: `Amende clôture forcée — Plan ${plan.numero_vol}` });
+          amendeAppliquee = true;
+        }
+      }
+      if (!amendeAppliquee) {
+        const { data: comptePerso } = await admin.from('felitz_comptes')
+          .select('id, solde, vban').eq('proprietaire_id', plan.pilote_id).eq('type', 'personnel').single();
+        if (comptePerso) {
+          compteId = comptePerso.id;
+          compteDebiteVban = comptePerso.vban;
+          await admin.from('felitz_comptes').update({ solde: comptePerso.solde - AMENDE }).eq('id', comptePerso.id);
+          await admin.from('felitz_transactions').insert({ compte_id: comptePerso.id, type: 'debit', montant: AMENDE, libelle: `Amende clôture forcée — Plan ${plan.numero_vol}` });
+          amendeAppliquee = true;
+        }
+      }
+
+      // 2) Clôturer le plan de vol
+      await admin.from('plans_vol').update({
+        statut: 'cloture',
+        cloture_at: now.toISOString(),
+        current_holder_user_id: null,
+        current_holder_position: null,
+        current_holder_aeroport: null,
+        automonitoring: false,
+        pending_transfer_aeroport: null,
+        pending_transfer_position: null,
+        pending_transfer_at: null,
+      }).eq('id', id);
+
+      // 3) Remettre l'avion au sol si utilisé
+      if (plan.compagnie_avion_id) {
+        await admin.from('compagnie_avions').update({
+          statut: 'ground',
+          aeroport_actuel: plan.aeroport_arrivee || plan.aeroport_depart,
+        }).eq('id', plan.compagnie_avion_id);
+      }
+
+      // 4) Restituer les passagers/cargo consommés (vol annulé sans complétion)
+      const aeroportDepart = plan.aeroport_depart || '';
+      if (plan.vol_commercial && aeroportDepart) {
+        if (plan.nature_transport === 'passagers' && plan.nb_pax_genere && plan.nb_pax_genere > 0) {
+          const { data: currentPax } = await admin.from('aeroport_passagers').select('passagers_disponibles, passagers_max').eq('code_oaci', aeroportDepart).single();
+          if (currentPax) {
+            await admin.from('aeroport_passagers').update({ passagers_disponibles: Math.min(currentPax.passagers_max ?? 999999, currentPax.passagers_disponibles + plan.nb_pax_genere) }).eq('code_oaci', aeroportDepart);
+          }
+        }
+        if (plan.nature_transport === 'cargo' && plan.cargo_kg_genere && plan.cargo_kg_genere > 0) {
+          const { data: currentCargo } = await admin.from('aeroport_cargo').select('cargo_disponible, cargo_max').eq('code_oaci', aeroportDepart).single();
+          if (currentCargo) {
+            await admin.from('aeroport_cargo').update({ cargo_disponible: Math.min(currentCargo.cargo_max ?? 999999, currentCargo.cargo_disponible + plan.cargo_kg_genere) }).eq('code_oaci', aeroportDepart);
+          }
+        }
+      }
+
+      // 5) Envoyer un message au pilote
+      await admin.from('messages').insert({
+        destinataire_id: plan.pilote_id,
+        titre: `⚠️ Plan ${plan.numero_vol} clôturé de force`,
+        contenu: `Votre plan de vol ${plan.numero_vol} (${plan.aeroport_depart} → ${plan.aeroport_arrivee}) a été clôturé de force par un administrateur pour non-clôture.\n\nUne amende de ${AMENDE.toLocaleString('fr-FR')} F$ a été prélevée sur votre compte${plan.vol_commercial ? ' entreprise' : ' personnel'}.\n\nVeuillez clôturer vos plans de vol en temps voulu.`,
+        type_message: 'systeme',
+        expediteur_id: user.id,
+      });
+
+      return NextResponse.json({ ok: true, amende: AMENDE, amendeAppliquee, compteDebite: compteDebiteVban });
+    }
+
     return NextResponse.json({ error: 'Action inconnue.' }, { status: 400 });
   } catch (e) {
     console.error('plans-vol PATCH:', e);

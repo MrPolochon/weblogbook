@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus, Store, MapPin } from 'lucide-react';
+import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus, Store, MapPin, AlertTriangle } from 'lucide-react';
 
 const links = [
+  { href: '/admin/plans-vol', label: 'Plans de vol non clôturés', icon: AlertTriangle },
   { href: '/admin/vols', label: 'Vols en attente', icon: Clock },
   { href: '/admin/militaire', label: 'Vols militaires', icon: Shield },
   { href: '/admin/armee', label: 'Gestion Armée', icon: Shield },
