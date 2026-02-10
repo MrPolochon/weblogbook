@@ -80,7 +80,15 @@ export async function PATCH(
       // Si un ATC contrôle le vol (current_holder_user_id défini et automonitoring === false), 
       // le pilote doit demander la clôture et l'ATC doit confirmer
       const enAutoSurveillanceActive = plan.automonitoring === true;
-      const pasAtcAssigne = !plan.current_holder_user_id;
+      let holderActif = false;
+      if (plan.current_holder_user_id) {
+        const { data: holderSession } = await admin.from('atc_sessions')
+          .select('id')
+          .eq('user_id', plan.current_holder_user_id)
+          .maybeSingle();
+        holderActif = Boolean(holderSession);
+      }
+      const pasAtcAssigne = !plan.current_holder_user_id || !holderActif;
       const closDirect = enAutoSurveillanceActive || (pasAtcAssigne && planAccepte);
       
       const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
