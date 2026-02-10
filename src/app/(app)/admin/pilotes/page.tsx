@@ -5,6 +5,7 @@ import { formatDateUTC, formatDateMediumUTC } from '@/lib/date-utils';
 import { ArrowLeft } from 'lucide-react';
 import CreatePiloteForm from './CreatePiloteForm';
 import PilotesActions from './PilotesActions';
+import GenerateAllCardsButton from './GenerateAllCardsButton';
 
 export default async function AdminPilotesPage() {
   const supabase = await createClient();
@@ -64,6 +65,10 @@ export default async function AdminPilotesPage() {
       </div>
 
       <CreatePiloteForm />
+
+      <div className="card p-4">
+        <GenerateAllCardsButton />
+      </div>
 
       <div className="card">
         <h2 className="text-lg font-medium text-slate-200 mb-4">Pilotes</h2>
