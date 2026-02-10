@@ -166,10 +166,10 @@ export default function CarteIdentite({ carte, identifiant, size = 'md', classNa
 
         {/* Cases du bas (catégories) */}
         {data.cases_bas.length > 0 && (
-          <div className="flex gap-1 mt-auto pt-3">
+          <div className="flex gap-1 mt-auto pt-3 overflow-hidden">
             {data.cases_bas.map((c, i) => (
-              <div key={i} className="flex-1 bg-white rounded px-2 py-2 text-center">
-                <span className={`${size === 'sm' ? 'text-lg' : size === 'md' ? 'text-2xl' : 'text-3xl'} font-bold text-slate-900`}>
+              <div key={i} className="flex-1 min-w-0 bg-white rounded px-1 py-2 text-center">
+                <span className={`${size === 'sm' ? 'text-base' : size === 'md' ? 'text-xl' : 'text-2xl'} font-bold text-slate-900 truncate block`}>
                   {c}
                 </span>
               </div>
