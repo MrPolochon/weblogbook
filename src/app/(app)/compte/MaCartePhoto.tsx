@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Camera, Loader2 } from 'lucide-react';
+import { Camera, Loader2, Sparkles } from 'lucide-react';
 import CarteIdentite from '@/components/CarteIdentite';
 
 type CarteData = {
@@ -27,9 +27,35 @@ type Props = {
 export default function MaCartePhoto({ initialCarte, identifiant }: Props) {
   const [carte, setCarte] = useState<CarteData | null>(initialCarte);
   const [uploading, setUploading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/cartes/auto-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (data.data) {
+        setCarte(data.data);
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      } else if (data.error) {
+        setError(data.error);
+      }
+    } catch (e) {
+      setError('Erreur lors de la génération');
+      console.error(e);
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -93,30 +119,52 @@ export default function MaCartePhoto({ initialCarte, identifiant }: Props) {
         onChange={handleFileSelect}
         className="hidden"
       />
-      
-      <button
-        onClick={() => fileInputRef.current?.click()}
-        disabled={uploading}
-        className="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors text-xs disabled:opacity-50"
-      >
-        {uploading ? (
-          <>
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Upload...
-          </>
-        ) : (
-          <>
-            <Camera className="h-3 w-3" />
-            Changer ma photo
-          </>
+
+      <div className="flex gap-2">
+        {!carte && (
+          <button
+            onClick={handleGenerate}
+            disabled={generating}
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-xs disabled:opacity-50"
+          >
+            {generating ? (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Génération...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-3 w-3" />
+                Générer ma carte
+              </>
+            )}
+          </button>
         )}
-      </button>
+        
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className={`flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors text-xs disabled:opacity-50 ${!carte ? 'flex-1' : 'w-full'}`}
+        >
+          {uploading ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Upload...
+            </>
+          ) : (
+            <>
+              <Camera className="h-3 w-3" />
+              Changer ma photo
+            </>
+          )}
+        </button>
+      </div>
 
       {error && (
         <p className="text-red-400 text-xs text-center">{error}</p>
       )}
       {success && (
-        <p className="text-emerald-400 text-xs text-center">Photo mise à jour !</p>
+        <p className="text-emerald-400 text-xs text-center">Carte mise à jour !</p>
       )}
     </div>
   );
