@@ -76,7 +76,7 @@ export async function POST() {
 
   for (const p of profilesToGenerate) {
     let couleur_fond = '#1E3A8A'; // Bleu par défaut (pilote)
-    let titre = 'IFSA';
+    let titre = "Carte d'identification de membre d'équipage"; // Pilote par défaut
     let organisation = 'IFSA';
     let numero_prefix = 'PIL';
     let sous_titre = "délivré par l'instance de l'IFSA";
@@ -92,7 +92,7 @@ export async function POST() {
     // ATC
     else if (p.role === 'atc' || p.atc) {
       couleur_fond = '#EA580C';
-      titre = 'ATC';
+      titre = 'Opération de contrôle aérienne';
       organisation = 'Service ATS';
       numero_prefix = 'ATC';
       sous_titre = "délivré par l'instance de l'IFSA";
@@ -100,7 +100,7 @@ export async function POST() {
     // SIAVI (Pompier)
     else if (p.siavi) {
       couleur_fond = '#DC2626';
-      titre = 'SIAVI';
+      titre = 'Service incendie';
       organisation = 'Service Incendie Aéroportuaire et Information de Vol';
       numero_prefix = 'SIAVI';
       sous_titre = "délivré par l'instance de l'IFSA";

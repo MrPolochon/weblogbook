@@ -60,54 +60,54 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Profil introuvable' }, { status: 404 });
   }
 
-  // Déterminer les valeurs par défaut selon le rôle
-  let couleur_fond = '#1E3A8A'; // Bleu par défaut (pilote)
-  let titre = 'IFSA';
-  let organisation = 'IFSA';
-  let numero_prefix = 'PIL';
-  let sous_titre = "délivré par l'instance de l'IFSA";
+    // Déterminer les valeurs par défaut selon le rôle
+    let couleur_fond = '#1E3A8A'; // Bleu par défaut (pilote)
+    let titre = "Carte d'identification de membre d'équipage"; // Pilote par défaut
+    let organisation = 'IFSA';
+    let numero_prefix = 'PIL';
+    let sous_titre = "délivré par l'instance de l'IFSA";
 
-  // Admin
-  if (profile.role === 'admin') {
-    couleur_fond = '#1F2937'; // Noir/gris foncé
-    titre = 'STAFF';
-    organisation = 'Mixou Airlines';
-    numero_prefix = 'STAFF M';
-    sous_titre = 'délivré par Mixou Airlines';
-  }
-  // ATC
-  else if (profile.role === 'atc' || profile.atc) {
-    couleur_fond = '#EA580C'; // Orange
-    titre = 'ATC';
-    organisation = 'Service ATS';
-    numero_prefix = 'ATC';
-    sous_titre = "délivré par l'instance de l'IFSA";
-  }
-  // SIAVI (Pompier)
-  else if (profile.siavi) {
-    couleur_fond = '#DC2626'; // Rouge
-    titre = 'SIAVI';
-    organisation = 'Service Incendie Aéroportuaire et Information de Vol';
-    numero_prefix = 'SIAVI';
-    sous_titre = "délivré par l'instance de l'IFSA";
-  }
-  // Pilote - récupérer la compagnie
-  else {
-    // Chercher la compagnie du pilote
-    const { data: emploi } = await admin
-      .from('compagnie_employes')
-      .select('compagnies(nom)')
-      .eq('pilote_id', targetUserId)
-      .limit(1)
-      .single();
+    // Admin
+    if (profile.role === 'admin') {
+      couleur_fond = '#1F2937'; // Noir/gris foncé
+      titre = 'STAFF';
+      organisation = 'Mixou Airlines';
+      numero_prefix = 'STAFF M';
+      sous_titre = 'délivré par Mixou Airlines';
+    }
+    // ATC
+    else if (profile.role === 'atc' || profile.atc) {
+      couleur_fond = '#EA580C'; // Orange
+      titre = 'Opération de contrôle aérienne';
+      organisation = 'Service ATS';
+      numero_prefix = 'ATC';
+      sous_titre = "délivré par l'instance de l'IFSA";
+    }
+    // SIAVI (Pompier)
+    else if (profile.siavi) {
+      couleur_fond = '#DC2626'; // Rouge
+      titre = 'Service incendie';
+      organisation = 'Service Incendie Aéroportuaire et Information de Vol';
+      numero_prefix = 'SIAVI';
+      sous_titre = "délivré par l'instance de l'IFSA";
+    }
+    // Pilote - récupérer la compagnie
+    else {
+      // Chercher la compagnie du pilote
+      const { data: emploi } = await admin
+        .from('compagnie_employes')
+        .select('compagnies(nom)')
+        .eq('pilote_id', targetUserId)
+        .limit(1)
+        .single();
 
-    if (emploi?.compagnies) {
-      const compagnie = Array.isArray(emploi.compagnies) ? emploi.compagnies[0] : emploi.compagnies;
-      if (compagnie?.nom) {
-        organisation = compagnie.nom;
+      if (emploi?.compagnies) {
+        const compagnie = Array.isArray(emploi.compagnies) ? emploi.compagnies[0] : emploi.compagnies;
+        if (compagnie?.nom) {
+          organisation = compagnie.nom;
+        }
       }
     }
-  }
 
   // Générer le numéro de carte unique (sauf pour admin qui peuvent partager)
   let numero_carte: string;
