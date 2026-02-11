@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare } from 'lucide-react';
+import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
 export type StripData = {
   id: string;
@@ -154,7 +155,7 @@ function InlineEdit({
     return (
       <input
         ref={inputRef}
-        className={`bg-white text-slate-900 border-2 border-sky-400 rounded outline-none w-full font-mono z-10 ${large ? 'text-base font-bold px-1 py-1' : 'text-sm font-semibold px-1 py-0.5'}`}
+        className={`bg-white text-slate-900 border-2 border-sky-500 rounded outline-none w-full font-mono z-10 font-bold ${large ? 'text-base px-1 py-1' : 'text-sm px-1 py-0.5'}`}
         value={text}
         maxLength={maxLength || 20}
         onChange={(e) => setText(e.target.value)}
@@ -168,7 +169,7 @@ function InlineEdit({
 
   return (
     <div
-      className={`relative cursor-text min-h-[24px] flex items-center rounded px-0.5 transition-colors ${hovered ? 'bg-white/50 ring-1 ring-sky-300' : ''} ${error ? 'ring-1 ring-red-400 bg-red-50/30' : ''}`}
+      className={`relative cursor-text min-h-[24px] flex items-center rounded px-0.5 transition-colors ${hovered ? 'bg-white/30 ring-1 ring-sky-400' : ''} ${error ? 'ring-1 ring-red-400 bg-red-50/30' : ''}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={(e) => {
@@ -179,7 +180,7 @@ function InlineEdit({
       }}
       title={error ? 'Erreur de sauvegarde — cliquer pour réessayer' : undefined}
     >
-      <span className={`font-mono leading-snug ${large ? 'text-base font-bold' : 'text-sm font-semibold'} ${displayValue ? 'text-slate-900' : 'text-slate-500 italic'}`}>
+      <span className={`font-mono leading-snug ${large ? 'text-base font-bold' : 'text-sm font-semibold'}`}>
         {displayValue || placeholder}
       </span>
       {error && <span className="text-[8px] text-red-500 ml-0.5">!</span>}
@@ -215,7 +216,7 @@ function FlUnitToggle({ planId, unit }: { planId: string; unit: string | null; o
     }
   };
   return (
-    <button type="button" onClick={toggle} className="text-[10px] font-bold text-sky-700 hover:text-sky-500 bg-sky-100 hover:bg-sky-200 rounded px-1.5 py-0.5 leading-none" title={`Basculer FL/ft`}>
+    <button type="button" onClick={toggle} className="text-[11px] font-black text-sky-700 hover:text-sky-500 bg-sky-100 hover:bg-sky-200 rounded px-1.5 py-0.5 leading-none shadow-sm" title={`Basculer FL/ft`}>
       {current}
     </button>
   );
@@ -225,11 +226,12 @@ function FlUnitToggle({ planId, unit }: { planId: string; unit: string | null; o
 /*  ACTION BAR                                                     */
 /* ============================================================ */
 function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: () => void }) {
+  const { theme } = useAtcTheme();
+  const isDark = theme === 'dark';
   const [loading, setLoading] = useState<string | null>(null);
   const [showRefuse, setShowRefuse] = useState(false);
-  const [showInstructions, setShowInstructions] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [refuseReason, setRefuseReason] = useState('');
-  const [instructionsText, setInstructionsText] = useState(strip.instructions_atc || '');
 
   const callAction = async (action: string, body: Record<string, unknown> = {}) => {
     setLoading(action);
@@ -247,23 +249,37 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
 
   if (showRefuse) {
     return (
-      <div className="px-2 py-2 bg-red-50 border-t border-red-200 space-y-1" onClick={(e) => e.stopPropagation()}>
-        <textarea autoFocus value={refuseReason} onChange={(e) => setRefuseReason(e.target.value)} placeholder="Raison du refus…" className="w-full text-xs border border-red-300 rounded px-2 py-1 bg-white text-slate-800 min-h-[36px] resize-none" />
+      <div className={`px-2 py-2 border-t space-y-1 ${isDark ? 'bg-red-950 border-red-800' : 'bg-red-50 border-red-200'}`} onClick={(e) => e.stopPropagation()}>
+        <textarea autoFocus value={refuseReason} onChange={(e) => setRefuseReason(e.target.value)} placeholder="Raison du refus…" className={`w-full text-sm border rounded px-2 py-1 min-h-[36px] resize-none font-semibold ${isDark ? 'bg-slate-900 text-slate-100 border-red-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-red-300'}`} />
         <div className="flex gap-1.5">
-          <button type="button" onClick={async () => { if (!refuseReason.trim()) { alert('Raison obligatoire'); return; } await callAction('refuser', { refusal_reason: refuseReason.trim() }); setShowRefuse(false); setRefuseReason(''); }} disabled={loading === 'refuser'} className="px-2 py-0.5 text-[10px] font-semibold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">{loading === 'refuser' ? '…' : 'Confirmer refus'}</button>
-          <button type="button" onClick={() => { setShowRefuse(false); setRefuseReason(''); }} className="px-2 py-0.5 text-[10px] text-slate-600">Annuler</button>
+          <button type="button" onClick={async () => { if (!refuseReason.trim()) { alert('Raison obligatoire'); return; } await callAction('refuser', { refusal_reason: refuseReason.trim() }); setShowRefuse(false); setRefuseReason(''); }} disabled={loading === 'refuser'} className="px-2 py-1 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 shadow-sm">{loading === 'refuser' ? '…' : 'Confirmer refus'}</button>
+          <button type="button" onClick={() => { setShowRefuse(false); setRefuseReason(''); }} className={`px-2 py-1 text-xs font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Annuler</button>
         </div>
       </div>
     );
   }
 
-  if (showInstructions) {
+  if (showCancelConfirm) {
     return (
-      <div className="px-2 py-2 bg-sky-50 border-t border-sky-200 space-y-1" onClick={(e) => e.stopPropagation()}>
-        <textarea autoFocus value={instructionsText} onChange={(e) => setInstructionsText(e.target.value)} placeholder="Instructions ATC…" className="w-full text-xs border border-sky-300 rounded px-2 py-1 bg-white text-slate-800 min-h-[36px] resize-none" />
+      <div className={`px-2 py-2 border-t space-y-2 ${isDark ? 'bg-orange-950 border-orange-800' : 'bg-orange-50 border-orange-200'}`} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start gap-2">
+          <div className={`p-1 rounded ${isDark ? 'bg-orange-900' : 'bg-orange-200'}`}>
+            <XCircle className={`h-4 w-4 ${isDark ? 'text-orange-300' : 'text-orange-700'}`} />
+          </div>
+          <div className="flex-1">
+            <p className={`text-sm font-bold ${isDark ? 'text-orange-200' : 'text-orange-900'}`}>Annuler le vol ?</p>
+            <p className={`text-xs ${isDark ? 'text-orange-300' : 'text-orange-700'}`}>
+              Le plan de vol <span className="font-mono font-bold">{strip.numero_vol}</span> sera définitivement supprimé.
+            </p>
+          </div>
+        </div>
         <div className="flex gap-1.5">
-          <button type="button" onClick={async () => { await callAction('instructions', { instructions: instructionsText }); setShowInstructions(false); }} disabled={loading === 'instructions'} className="px-2 py-0.5 text-[10px] font-semibold bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50">{loading === 'instructions' ? '…' : 'Enregistrer'}</button>
-          <button type="button" onClick={() => setShowInstructions(false)} className="px-2 py-0.5 text-[10px] text-slate-600">Annuler</button>
+          <button type="button" onClick={async () => { await callAction('annuler'); setShowCancelConfirm(false); }} disabled={loading === 'annuler'} className="flex-1 px-2 py-1.5 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 shadow-sm">
+            {loading === 'annuler' ? '…' : 'Confirmer l\'annulation'}
+          </button>
+          <button type="button" onClick={() => setShowCancelConfirm(false)} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
+            Retour
+          </button>
         </div>
       </div>
     );
@@ -273,9 +289,9 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
   if (!hasActions) return null;
 
   return (
-    <div className="px-1.5 py-1 border-t border-slate-200 bg-slate-50/80 flex items-center gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
+    <div className={`px-1.5 py-1 border-t ${isDark ? 'border-slate-700 bg-slate-900/80' : 'border-slate-200 bg-slate-50/80'} flex items-center gap-1 flex-wrap`} onClick={(e) => e.stopPropagation()}>
       {strip.pilote_identifiant && (
-        <span className="text-[10px] text-slate-600 mr-auto flex items-center gap-1 font-semibold"><Plane className="h-3 w-3" />{strip.pilote_identifiant}</span>
+        <span className={`text-[11px] mr-auto flex items-center gap-1 font-bold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}><Plane className="h-3 w-3" />{strip.pilote_identifiant}</span>
       )}
       {(statut === 'en_attente' || statut === 'depose') && (
         <>
@@ -289,8 +305,8 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
       {(statut === 'en_cours' || statut === 'accepte') && !isAutomonitoring && (
         <button type="button" onClick={() => callAction('transferer', { automonitoring: true })} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 shadow-sm"><Radio className="h-3.5 w-3.5" />{loading === 'transferer' ? '…' : 'Autosurv.'}</button>
       )}
-      {(statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
-        <button type="button" onClick={() => { setInstructionsText(strip.instructions_atc || ''); setShowInstructions(true); }} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50 shadow-sm"><MessageSquare className="h-3.5 w-3.5" />Instr.</button>
+      {(statut === 'en_attente' || statut === 'depose' || statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
+        <button type="button" onClick={() => setShowCancelConfirm(true)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 shadow-sm"><XCircle className="h-3.5 w-3.5" />Annuler vol</button>
       )}
     </div>
   );
@@ -325,27 +341,48 @@ export default function FlightStrip({
   onContextMenu?: (e: React.MouseEvent, stripId: string) => void;
   dragHandleProps?: { draggable: true; onDragStart: (e: React.DragEvent) => void; onDragEnd: (e: React.DragEvent) => void; };
 }) {
+  const { theme } = useAtcTheme();
+  const isDark = theme === 'dark';
+  
   const sqColor = getSquawkColor(strip.code_transpondeur);
   const sqLabel = getSquawkLabel(strip.code_transpondeur);
   const isEmergency = !!sqColor;
   const squawkMismatch = strip.squawk_attendu && strip.code_transpondeur && strip.code_transpondeur !== strip.squawk_attendu;
   const noSquawk = strip.squawk_attendu && !strip.code_transpondeur;
 
-  // Color scheme
-  const border = isEmergency ? (sqColor === 'hijack' ? 'border-red-700' : sqColor === 'radio' ? 'border-amber-600' : 'border-red-600') : 'border-[#8fbc8f]';
-  const leftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-100' : sqColor === 'radio' ? 'bg-amber-100' : 'bg-red-100') : 'bg-[#d5ecd5]';
-  const rightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : 'bg-[#f5f0c8]';
-  const topBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : 'bg-[#c5dcc5]';
-  const sep = isEmergency ? 'border-red-300' : 'border-[#8fbc8f]';
-  const txt = 'text-slate-900';
-  const lbl = 'text-slate-600';
+  // Color scheme - Mode clair
+  const lightBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-700' : sqColor === 'radio' ? 'border-amber-600' : 'border-red-600') : 'border-[#8fbc8f]';
+  const lightLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-100' : sqColor === 'radio' ? 'bg-amber-100' : 'bg-red-100') : 'bg-[#d5ecd5]';
+  const lightRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : 'bg-[#f5f0c8]';
+  const lightTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : 'bg-[#c5dcc5]';
+  const lightSep = isEmergency ? 'border-red-300' : 'border-[#8fbc8f]';
+  const lightTxt = 'text-slate-900';
+  const lightLbl = 'text-slate-600';
+
+  // Color scheme - Mode sombre (couleurs inversées avec meilleur contraste)
+  const darkBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-500' : sqColor === 'radio' ? 'border-amber-500' : 'border-red-500') : 'border-emerald-600';
+  const darkLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-950' : sqColor === 'radio' ? 'bg-amber-950' : 'bg-red-950') : 'bg-emerald-950';
+  const darkRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : 'bg-yellow-950';
+  const darkTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : 'bg-emerald-900';
+  const darkSep = isEmergency ? 'border-red-700' : 'border-emerald-700';
+  const darkTxt = 'text-slate-100';
+  const darkLbl = 'text-slate-300';
+
+  // Appliquer le bon thème
+  const border = isDark ? darkBorder : lightBorder;
+  const leftBg = isDark ? darkLeftBg : lightLeftBg;
+  const rightBg = isDark ? darkRightBg : lightRightBg;
+  const topBg = isDark ? darkTopBg : lightTopBg;
+  const sep = isDark ? darkSep : lightSep;
+  const txt = isDark ? darkTxt : lightTxt;
+  const lbl = isDark ? darkLbl : lightLbl;
 
   return (
     <div className={`border ${border} rounded shadow-sm select-none overflow-hidden`} onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, strip.id); }}>
       {/* Emergency banner */}
-      {sqLabel && <div className="bg-black text-white text-center text-sm font-black tracking-[0.3em] py-1 animate-pulse">{sqLabel}</div>}
+      {sqLabel && <div className={`text-center text-sm font-black tracking-[0.3em] py-1 animate-pulse ${isDark ? 'bg-red-600 text-white' : 'bg-black text-white'}`}>{sqLabel}</div>}
       {(squawkMismatch || noSquawk) && !sqLabel && (
-        <div className="bg-amber-400 text-black text-center text-xs font-bold py-1">
+        <div className={`text-center text-xs font-bold py-1 ${isDark ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black'}`}>
           {noSquawk ? '⚠ PAS DE TRANSPONDEUR' : `⚠ SQUAWK INCORRECT (attendu: ${strip.squawk_attendu})`}
         </div>
       )}
@@ -356,7 +393,7 @@ export default function FlightStrip({
           className={`w-5 flex items-center justify-center cursor-grab active:cursor-grabbing ${topBg} border-r ${sep} shrink-0`}
           {...dragHandleProps}
         >
-          <GripVertical className="h-3.5 w-3.5 text-slate-400" />
+          <GripVertical className={`h-3.5 w-3.5 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
         </div>
 
         {/* ═══ STRIP BODY ═══ */}

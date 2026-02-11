@@ -197,6 +197,23 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
+    if (action === 'annuler') {
+      const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
+      const isAdmin = profile?.role === 'admin';
+      const isAtc = profile?.role === 'atc' || Boolean(profile?.atc);
+      const canCancel = isAdmin || isAtc;
+      if (!canCancel) return NextResponse.json({ error: 'Seul un ATC ou un admin peut annuler un vol.' }, { status: 403 });
+      
+      // Vérifier que le plan n'est pas déjà clôturé
+      if (plan.statut === 'cloture') return NextResponse.json({ error: 'Un plan de vol cloture ne peut pas etre annule.' }, { status: 400 });
+
+      // Supprimer le plan de vol (suppression en cascade des données liées)
+      const { error } = await admin.from('plans_vol').delete().eq('id', id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      
+      return NextResponse.json({ ok: true, deleted: true });
+    }
+
     if (action === 'modifier_et_renvoyer') {
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
       if (profile?.role === 'atc') return NextResponse.json({ error: 'Reserve au pilote.' }, { status: 403 });

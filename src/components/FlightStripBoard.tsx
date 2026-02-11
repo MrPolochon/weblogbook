@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import FlightStrip, { type StripData } from './FlightStrip';
 import { X } from 'lucide-react';
+import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
 type ZoneId = 'sol' | 'depart' | 'arrivee';
 type ZoneOrNull = ZoneId | null;
@@ -13,31 +14,65 @@ const ZONE_LABELS: Record<ZoneId, string> = {
   depart: 'Trafic au départ',
   arrivee: "Trafic à l'arrivée",
 };
-const ZONE_COLORS: Record<ZoneId, string> = {
+const ZONE_COLORS_LIGHT: Record<ZoneId, string> = {
   sol: 'border-amber-400 bg-amber-50/60',
   depart: 'border-sky-400 bg-sky-50/60',
   arrivee: 'border-emerald-400 bg-emerald-50/60',
 };
-const ZONE_HEADER: Record<ZoneId, string> = {
+const ZONE_COLORS_DARK: Record<ZoneId, string> = {
+  sol: 'border-amber-600 bg-amber-950/40',
+  depart: 'border-sky-600 bg-sky-950/40',
+  arrivee: 'border-emerald-600 bg-emerald-950/40',
+};
+const ZONE_HEADER_LIGHT: Record<ZoneId, string> = {
   sol: 'bg-amber-200 text-amber-900',
   depart: 'bg-sky-200 text-sky-900',
   arrivee: 'bg-emerald-200 text-emerald-900',
 };
+const ZONE_HEADER_DARK: Record<ZoneId, string> = {
+  sol: 'bg-amber-800 text-amber-100',
+  depart: 'bg-sky-800 text-sky-100',
+  arrivee: 'bg-emerald-800 text-emerald-100',
+};
 
 export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
   const router = useRouter();
+  const { theme } = useAtcTheme();
+  const isDark = theme === 'dark';
   const [transferDialog, setTransferDialog] = useState<string | null>(null);
 
   // ═══════════════════════════════════════════════
   //  PICK & PLACE — clic droit prend, clic gauche pose
   // ═══════════════════════════════════════════════
   const [pickedId, setPickedId] = useState<string | null>(null);
+  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Track cursor position when picking
+  useEffect(() => {
+    if (!pickedId) {
+      setIsDragging(false);
+      return;
+    }
+    
+    setIsDragging(true);
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      setCursorPos({ x: e.clientX, y: e.clientY });
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [pickedId]);
 
   // Cancel pick on Escape
   useEffect(() => {
     if (!pickedId) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setPickedId(null);
+      if (e.key === 'Escape') {
+        setPickedId(null);
+        setIsDragging(false);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -50,6 +85,7 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
       if (e.button === 2) {
         e.preventDefault();
         setPickedId(null);
+        setIsDragging(false);
       }
     };
     window.addEventListener('mousedown', handler);
@@ -103,6 +139,7 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
     if (!pickedId) return;
     const stripId = pickedId;
     setPickedId(null);
+    setIsDragging(false);
     const zoneStrips = strips.filter((s) => s.strip_zone === zone);
     const maxOrder = zoneStrips.reduce((max, s) => Math.max(max, s.strip_order), -1);
     await fetch(`/api/plans-vol/${stripId}`, {
@@ -115,9 +152,10 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
   /* ═══ Place strip before/after another strip ═══ */
   const placeNearStrip = useCallback(async (targetId: string, zone: ZoneOrNull, position: 'before' | 'after') => {
-    if (!pickedId || pickedId === targetId) { setPickedId(null); return; }
+    if (!pickedId || pickedId === targetId) { setPickedId(null); setIsDragging(false); return; }
     const stripId = pickedId;
     setPickedId(null);
+    setIsDragging(false);
 
     const zoneStrips = strips.filter((s) => s.strip_zone === zone).sort((a, b) => a.strip_order - b.strip_order);
     const targetIdx = zoneStrips.findIndex((s) => s.id === targetId);
@@ -174,28 +212,31 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
   /* ═══ Render a zone ═══ */
   const renderZone = (zone: ZoneId, zs: StripData[]) => {
     const canDrop = !!pickedId;
+    const ZONE_COLORS = isDark ? ZONE_COLORS_DARK : ZONE_COLORS_LIGHT;
+    const ZONE_HEADER = isDark ? ZONE_HEADER_DARK : ZONE_HEADER_LIGHT;
+    
     return (
       <div
         key={zone}
-        className={`flex-1 min-w-[480px] border-2 rounded-lg flex flex-col transition-all ${ZONE_COLORS[zone]} ${canDrop ? 'ring-2 ring-sky-300 ring-dashed' : ''}`}
+        className={`flex-1 min-w-[480px] border-2 rounded-lg flex flex-col transition-all ${ZONE_COLORS[zone]} ${canDrop ? (isDark ? 'ring-2 ring-sky-500 ring-dashed' : 'ring-2 ring-sky-300 ring-dashed') : ''}`}
         onClick={() => handleZoneClick(zone)}
       >
         <div className={`px-3 py-2 text-base font-bold uppercase tracking-wider ${ZONE_HEADER[zone]} rounded-t-md flex items-center justify-between`}>
           <span>{ZONE_LABELS[zone]}</span>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold opacity-80">{zs.length} vol(s)</span>
-            {canDrop && <span className="text-xs font-bold bg-white/70 rounded px-2 py-1 animate-pulse shadow-sm">Cliquer pour poser</span>}
+            <span className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'opacity-80'}`}>{zs.length} vol(s)</span>
+            {canDrop && <span className={`text-xs font-bold rounded px-2 py-1 animate-pulse shadow-sm ${isDark ? 'bg-slate-700 text-slate-100' : 'bg-white/70'}`}>Cliquer pour poser</span>}
           </div>
         </div>
         <div className="flex-1 p-2 space-y-1 overflow-y-auto max-h-[calc(100vh-320px)]">
           {zs.length === 0 ? (
-            <div className={`text-center py-8 rounded-lg border-2 border-dashed ${canDrop ? 'border-sky-400 bg-sky-50' : 'border-transparent'}`}>
-              <p className="text-slate-500 text-base font-medium italic">{canDrop ? 'Cliquer ici pour poser le strip' : 'Aucun strip'}</p>
+            <div className={`text-center py-8 rounded-lg border-2 border-dashed ${canDrop ? (isDark ? 'border-sky-500 bg-sky-950/50' : 'border-sky-400 bg-sky-50') : 'border-transparent'}`}>
+              <p className={`text-base font-semibold italic ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{canDrop ? 'Cliquer ici pour poser le strip' : 'Aucun strip'}</p>
             </div>
           ) : zs.map((s) => (
             <div
               key={s.id}
-              className={`transition-all relative ${pickedId === s.id ? 'opacity-40 scale-[0.97]' : ''} ${canDrop && pickedId !== s.id ? 'cursor-pointer' : ''}`}
+              className={`transition-all duration-300 ease-out relative ${pickedId === s.id ? 'opacity-0 scale-75' : 'opacity-100 scale-100'} ${canDrop && pickedId !== s.id ? 'cursor-pointer hover:scale-[1.02]' : ''}`}
               onClick={(e) => handleStripAreaClick(e, s.id, zone)}
             >
               {/* Drop indicator line when hovering */}
@@ -214,9 +255,9 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
     <div className="flex flex-col gap-4 h-full">
       {/* Pick mode banner */}
       {pickedStrip && (
-        <div className="bg-sky-600 text-white px-5 py-3 rounded-lg flex items-center justify-between shadow-lg animate-in">
+        <div className={`px-5 py-3 rounded-lg flex items-center justify-between shadow-xl animate-in ${isDark ? 'bg-sky-700 text-slate-100' : 'bg-sky-600 text-white'}`}>
           <span className="text-base font-semibold">
-            Strip <strong className="font-mono text-lg">{pickedStrip.numero_vol}</strong> sélectionné — <span className="opacity-90">cliquez sur une zone ou à côté d&apos;un strip pour le poser. Clic droit ou Échap pour annuler.</span>
+            Strip <strong className="font-mono text-lg">{pickedStrip.numero_vol}</strong> sélectionné — <span className={isDark ? 'text-slate-200' : 'opacity-90'}>cliquez sur une zone ou à côté d&apos;un strip pour le poser. Clic droit ou Échap pour annuler.</span>
           </span>
           <button type="button" onClick={() => setPickedId(null)} className="p-1.5 hover:bg-white/20 rounded transition-colors" title="Annuler">
             <X className="h-5 w-5" />
@@ -233,25 +274,25 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
       {/* Unassigned */}
       <div
-        className={`border-2 rounded-lg transition-all ${pickedId ? 'ring-2 ring-sky-300 ring-dashed border-slate-400' : 'border-slate-300'} bg-slate-50/60`}
+        className={`border-2 rounded-lg transition-all ${pickedId ? (isDark ? 'ring-2 ring-sky-500 ring-dashed border-slate-600' : 'ring-2 ring-sky-300 ring-dashed border-slate-400') : (isDark ? 'border-slate-600' : 'border-slate-300')} ${isDark ? 'bg-slate-900/40' : 'bg-slate-50/60'}`}
         onClick={() => handleZoneClick(null)}
       >
-        <div className="px-3 py-2 text-base font-bold uppercase tracking-wider bg-slate-200 text-slate-700 rounded-t-md flex items-center justify-between">
+        <div className={`px-3 py-2 text-base font-bold uppercase tracking-wider rounded-t-md flex items-center justify-between ${isDark ? 'bg-slate-700 text-slate-100' : 'bg-slate-200 text-slate-700'}`}>
           <span>Non assignés</span>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold opacity-80">{unassigned.length} vol(s)</span>
-            {pickedId && <span className="text-xs font-bold bg-white/70 rounded px-2 py-1 animate-pulse shadow-sm">Cliquer pour poser</span>}
+            <span className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'opacity-80'}`}>{unassigned.length} vol(s)</span>
+            {pickedId && <span className={`text-xs font-bold rounded px-2 py-1 animate-pulse shadow-sm ${isDark ? 'bg-slate-600 text-slate-100' : 'bg-white/70'}`}>Cliquer pour poser</span>}
           </div>
         </div>
         <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
           {unassigned.length === 0 ? (
-            <div className={`text-center py-6 rounded-lg border-2 border-dashed ${pickedId ? 'border-sky-400 bg-sky-50' : 'border-transparent'}`}>
-              <p className="text-slate-500 text-base font-medium italic">{pickedId ? 'Cliquer ici pour poser' : 'Tous assignés.'}</p>
+            <div className={`text-center py-6 rounded-lg border-2 border-dashed ${pickedId ? (isDark ? 'border-sky-500 bg-sky-950/50' : 'border-sky-400 bg-sky-50') : 'border-transparent'}`}>
+              <p className={`text-base font-semibold italic ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{pickedId ? 'Cliquer ici pour poser' : 'Tous assignés.'}</p>
             </div>
           ) : unassigned.map((s) => (
             <div
               key={s.id}
-              className={`transition-all relative ${pickedId === s.id ? 'opacity-40 scale-[0.97]' : ''} ${pickedId && pickedId !== s.id ? 'cursor-pointer' : ''}`}
+              className={`transition-all duration-300 ease-out relative ${pickedId === s.id ? 'opacity-0 scale-75' : 'opacity-100 scale-100'} ${pickedId && pickedId !== s.id ? 'cursor-pointer hover:scale-[1.02]' : ''}`}
               onClick={(e) => handleStripAreaClick(e, s.id, null)}
             >
               <FlightStrip strip={s} onRefresh={refresh} onContextMenu={handleStripRightClickWithDouble} dragHandleProps={makeDragProps(s.id)} />
@@ -262,6 +303,23 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
       {/* Transfer dialog */}
       {transferDialog && <TransferDialog planId={transferDialog} onClose={() => setTransferDialog(null)} />}
+
+      {/* Floating strip that follows cursor */}
+      {isDragging && pickedStrip && (
+        <div
+          className="fixed pointer-events-none z-[100]"
+          style={{
+            left: cursorPos.x,
+            top: cursorPos.y,
+            transform: 'translate(-50%, -50%) rotate(-3deg) scale(1.05)',
+            transition: 'transform 0.1s ease-out',
+          }}
+        >
+          <div className="animate-pulse shadow-2xl">
+            <FlightStrip strip={pickedStrip} dragHandleProps={makeDragProps(pickedStrip.id)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -269,6 +327,8 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 /* ============================================================ */
 function TransferDialog({ planId, onClose }: { planId: string; onClose: () => void }) {
   const router = useRouter();
+  const { theme } = useAtcTheme();
+  const isDark = theme === 'dark';
   const [aeroport, setAeroport] = useState('');
   const [position, setPosition] = useState('');
   const [loading, setLoading] = useState(false);
@@ -289,28 +349,28 @@ function TransferDialog({ planId, onClose }: { planId: string; onClose: () => vo
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl p-6 w-96" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-semibold text-slate-900 mb-4">Transférer le vol</h3>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
+      <div className={`rounded-xl shadow-2xl p-6 w-96 ${isDark ? 'bg-slate-800' : 'bg-white'}`} onClick={(e) => e.stopPropagation()}>
+        <h3 className={`text-lg font-bold mb-4 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>Transférer le vol</h3>
         <div className="space-y-3">
           <div>
-            <label className="text-sm text-slate-600">Aéroport</label>
-            <input className="w-full border rounded-lg px-3 py-2 text-sm font-mono" placeholder="IRFD" value={aeroport} onChange={(e) => setAeroport(e.target.value.toUpperCase())} disabled={autoSurv} />
+            <label className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Aéroport</label>
+            <input className={`w-full border rounded-lg px-3 py-2 text-sm font-mono font-bold ${isDark ? 'bg-slate-900 border-slate-600 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-300 text-slate-900'}`} placeholder="IRFD" value={aeroport} onChange={(e) => setAeroport(e.target.value.toUpperCase())} disabled={autoSurv} />
           </div>
           <div>
-            <label className="text-sm text-slate-600">Position</label>
-            <select className="w-full border rounded-lg px-3 py-2 text-sm" value={position} onChange={(e) => setPosition(e.target.value)} disabled={autoSurv}>
+            <label className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Position</label>
+            <select className={`w-full border rounded-lg px-3 py-2 text-sm font-semibold ${isDark ? 'bg-slate-900 border-slate-600 text-slate-100' : 'bg-white border-slate-300 text-slate-900'}`} value={position} onChange={(e) => setPosition(e.target.value)} disabled={autoSurv}>
               <option value="">— Sélectionner —</option>
               {['Delivery','Clairance','Ground','Tower','APP','DEP','Center'].map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" checked={autoSurv} onChange={(e) => setAutoSurv(e.target.checked)} /> Autosurveillance
+          <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+            <input type="checkbox" checked={autoSurv} onChange={(e) => setAutoSurv(e.target.checked)} className="w-4 h-4" /> Autosurveillance
           </label>
         </div>
         <div className="flex gap-3 mt-5">
-          <button type="button" className="flex-1 bg-sky-600 text-white rounded-lg py-2 text-sm font-medium hover:bg-sky-700 disabled:opacity-50" onClick={handleTransfer} disabled={loading || (!autoSurv && (!aeroport || !position))}>{loading ? '…' : 'Transférer'}</button>
-          <button type="button" className="flex-1 bg-slate-200 text-slate-700 rounded-lg py-2 text-sm font-medium hover:bg-slate-300" onClick={onClose}>Annuler</button>
+          <button type="button" className="flex-1 bg-sky-600 text-white rounded-lg py-2 text-sm font-bold hover:bg-sky-700 disabled:opacity-50 shadow-sm" onClick={handleTransfer} disabled={loading || (!autoSurv && (!aeroport || !position))}>{loading ? '…' : 'Transférer'}</button>
+          <button type="button" className={`flex-1 rounded-lg py-2 text-sm font-bold shadow-sm ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`} onClick={onClose}>Annuler</button>
         </div>
       </div>
     </div>
