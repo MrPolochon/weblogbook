@@ -1,11 +1,11 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import AtcNavBar from '@/components/AtcNavBar';
 import AtcModeBg from '@/components/AtcModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import AtcAcceptTransfertSidebar from './AtcAcceptTransfertSidebar';
+import AtcLeftSidebar from './AtcLeftSidebar';
 import { AtcThemeProvider } from '@/contexts/AtcThemeContext';
 import AtcTelephone from '@/components/AtcTelephone';
 
@@ -82,49 +82,8 @@ export default async function AtcLayout({
         <AtcModeBg isAdmin={isAdmin} />
         <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
         <div className="flex flex-1 w-full min-h-0">
-          {enService && (
-            <aside className="atc-sidebar w-44 flex-shrink-0 border-r border-slate-300 bg-slate-100 py-3 px-2 hidden md:flex flex-col">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 mb-1">Non contrôlés ({plansAuto.length})</p>
-              {plansAuto.length === 0 ? (
-                <span className="text-slate-500 text-xs px-2 block mb-2">Aucun</span>
-              ) : (
-                <ul className="space-y-0.5 mb-3">
-                  {plansAuto.map((p) => (
-                    <li key={p.id}>
-                      <Link
-                        href={`/atc/plan/${p.id}`}
-                        className="block text-xs font-mono text-slate-700 hover:text-slate-900 hover:bg-slate-200 rounded px-2 py-1 leading-tight"
-                        title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee} — Cliquer pour prendre le plan`}
-                      >
-                        <span className="font-bold">{p.numero_vol}</span>
-                        <br />
-                        <span className="text-[10px] text-slate-500">{p.aeroport_depart}→{p.aeroport_arrivee}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <p className="text-[10px] font-bold uppercase tracking-wider text-orange-600 px-2 mb-1">Orphelins ({plansOrphelins.length})</p>
-              {plansOrphelins.length === 0 ? (
-                <span className="text-slate-500 text-xs px-2 block">Aucun</span>
-              ) : (
-                <ul className="space-y-0.5">
-                  {plansOrphelins.map((p) => (
-                    <li key={p.id}>
-                      <Link
-                        href={`/atc/plan/${p.id}`}
-                        className="block text-xs font-mono text-orange-700 hover:text-orange-900 hover:bg-orange-100 rounded px-2 py-1 leading-tight"
-                        title={`${p.numero_vol} — Cliquer pour prendre ce plan orphelin`}
-                      >
-                        <span className="font-bold">{p.numero_vol}</span>
-                        <br />
-                        <span className="text-[10px] text-orange-500">{p.aeroport_depart}→{p.aeroport_arrivee}</span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </aside>
+          {enService && session && (
+            <AtcLeftSidebar plansAuto={plansAuto} plansOrphelins={plansOrphelins} sessionAeroport={session.aeroport} sessionPosition={session.position} />
           )}
           <main className="flex-1 min-w-0 w-full px-4 py-6 overflow-x-auto">{children}</main>
           {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} />}

@@ -35,6 +35,7 @@ export default async function AtcPage() {
     let immatriculation: string | null = null;
     let typeAvionCodeOaci: string | null = null;
     let typeAvionNom: string | null = null;
+    let piloteIdentifiant: string | null = null;
 
     if (plan.compagnie_avion_id) {
       const { data: avionData } = await admin.from('compagnie_avions')
@@ -54,6 +55,14 @@ export default async function AtcPage() {
           }
         }
       }
+    }
+
+    if (plan.pilote_id) {
+      const { data: piloteData } = await admin.from('profiles')
+        .select('identifiant')
+        .eq('id', plan.pilote_id)
+        .single();
+      if (piloteData) piloteIdentifiant = piloteData.identifiant;
     }
 
     return {
@@ -82,6 +91,10 @@ export default async function AtcPage() {
       strip_note_3: plan.strip_note_3 || null,
       strip_zone: plan.strip_zone || null,
       strip_order: plan.strip_order ?? 0,
+      pilote_identifiant: piloteIdentifiant,
+      intentions_vol: plan.intentions_vol || null,
+      instructions_atc: plan.instructions || null,
+      automonitoring: plan.automonitoring ?? false,
     } as StripData;
   }));
 
