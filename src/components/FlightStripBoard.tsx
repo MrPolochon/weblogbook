@@ -13,15 +13,15 @@ const ZONE_LABELS: Record<ZoneId, string> = {
 };
 
 const ZONE_COLORS: Record<ZoneId, string> = {
-  sol: 'border-amber-400 bg-amber-50/50',
-  depart: 'border-sky-400 bg-sky-50/50',
-  arrivee: 'border-emerald-400 bg-emerald-50/50',
+  sol: 'border-amber-400 bg-amber-50/60',
+  depart: 'border-sky-400 bg-sky-50/60',
+  arrivee: 'border-emerald-400 bg-emerald-50/60',
 };
 
 const ZONE_HEADER: Record<ZoneId, string> = {
-  sol: 'bg-amber-100 text-amber-800',
-  depart: 'bg-sky-100 text-sky-800',
-  arrivee: 'bg-emerald-100 text-emerald-800',
+  sol: 'bg-amber-200 text-amber-900',
+  depart: 'bg-sky-200 text-sky-900',
+  arrivee: 'bg-emerald-200 text-emerald-900',
 };
 
 export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
@@ -29,6 +29,7 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; stripId: string } | null>(null);
   const [transferDialog, setTransferDialog] = useState<string | null>(null);
   const [draggedStripId, setDraggedStripId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const contextRef = useRef<HTMLDivElement>(null);
 
   // Sort strips by zone and order
@@ -56,11 +57,13 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
     }
   }, [contextMenu]);
 
+  // ---------- Context menu ----------
   const handleContextMenu = useCallback((e: React.MouseEvent, stripId: string) => {
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, stripId });
   }, []);
 
+  // ---------- Move to zone ----------
   const moveToZone = useCallback(async (stripId: string, zone: ZoneId | null) => {
     setContextMenu(null);
     const zoneStrips = strips.filter((s) => s.strip_zone === zone);
@@ -77,16 +80,30 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
     router.refresh();
   }, [strips, router]);
 
+  // ---------- Transfer dialog ----------
   const openTransferDialog = useCallback((stripId: string) => {
     setContextMenu(null);
     setTransferDialog(stripId);
   }, []);
 
-  // Drag & drop between strips for reordering
+  // ---------- Drag & drop ----------
   const handleDragStart = useCallback((e: React.DragEvent, stripId: string) => {
     setDraggedStripId(stripId);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', stripId);
+    // Set a transparent drag image so it's less obtrusive
+    if (e.dataTransfer.setDragImage) {
+      const el = document.createElement('div');
+      el.style.width = '200px';
+      el.style.height = '30px';
+      el.style.background = 'rgba(0,0,0,0.2)';
+      el.style.borderRadius = '6px';
+      el.style.position = 'absolute';
+      el.style.top = '-999px';
+      document.body.appendChild(el);
+      e.dataTransfer.setDragImage(el, 100, 15);
+      setTimeout(() => document.body.removeChild(el), 0);
+    }
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -94,8 +111,22 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
     e.dataTransfer.dropEffect = 'move';
   }, []);
 
+  const handleDragEnterZone = useCallback((zone: string) => {
+    setDropTarget(zone);
+  }, []);
+
+  const handleDragLeaveZone = useCallback(() => {
+    setDropTarget(null);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedStripId(null);
+    setDropTarget(null);
+  }, []);
+
   const handleDropOnZone = useCallback(async (e: React.DragEvent, zone: ZoneId | null) => {
     e.preventDefault();
+    setDropTarget(null);
     const stripId = e.dataTransfer.getData('text/plain') || draggedStripId;
     if (!stripId) return;
     setDraggedStripId(null);
@@ -105,6 +136,7 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
   const handleDropOnStrip = useCallback(async (e: React.DragEvent, targetStripId: string, zone: ZoneId | null) => {
     e.preventDefault();
     e.stopPropagation();
+    setDropTarget(null);
     const srcId = e.dataTransfer.getData('text/plain') || draggedStripId;
     if (!srcId || srcId === targetStripId) { setDraggedStripId(null); return; }
 
@@ -116,14 +148,10 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
     const reordered = zoneStrips.filter((s) => s.id !== srcId);
     const srcStrip = strips.find((s) => s.id === srcId);
     if (srcStrip) {
-      reordered.splice(targetIdx, 0, { ...srcStrip, strip_zone: zone, strip_order: 0 });
+      reordered.splice(targetIdx >= 0 ? targetIdx : reordered.length, 0, { ...srcStrip, strip_zone: zone, strip_order: 0 });
     }
 
     const batch = reordered.map((s, i) => ({ id: s.id, strip_zone: zone, strip_order: i }));
-    // also add the source strip if it was from another zone
-    if (!zoneStrips.find((s) => s.id === srcId)) {
-      // Already handled in splice above
-    }
 
     setDraggedStripId(null);
     await fetch(`/api/plans-vol/${srcId}`, {
@@ -136,41 +164,63 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
   const onRefresh = useCallback(() => router.refresh(), [router]);
 
-  const renderZone = (zone: ZoneId, zoneStrips: StripData[]) => (
-    <div
-      key={zone}
-      className={`flex-1 min-w-[350px] border-2 rounded-lg ${ZONE_COLORS[zone]} flex flex-col`}
-      onDragOver={handleDragOver}
-      onDrop={(e) => handleDropOnZone(e, zone)}
-    >
-      <div className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider ${ZONE_HEADER[zone]} rounded-t-md`}>
-        {ZONE_LABELS[zone]} ({zoneStrips.length})
-      </div>
-      <div className="flex-1 p-2 space-y-1.5 overflow-y-auto max-h-[calc(100vh-280px)]">
-        {zoneStrips.length === 0 ? (
-          <p className="text-slate-400 text-xs text-center py-4 italic">Aucun strip</p>
-        ) : (
-          zoneStrips.map((s) => (
-            <div
-              key={s.id}
-              draggable
-              onDragStart={(e) => handleDragStart(e, s.id)}
-              onDragOver={handleDragOver}
-              onDrop={(e) => handleDropOnStrip(e, s.id, zone)}
-              className={`transition-opacity ${draggedStripId === s.id ? 'opacity-30' : ''}`}
-            >
-              <FlightStrip strip={s} onRefresh={onRefresh} onContextMenu={handleContextMenu} />
+  // ---------- Navigate to plan on click ----------
+  const handleStripClick = useCallback((stripId: string) => {
+    window.open(`/atc/plan/${stripId}`, '_blank');
+  }, []);
+
+  // ---------- Render a zone ----------
+  const renderZone = (zone: ZoneId, zoneStrips: StripData[]) => {
+    const isDropping = dropTarget === zone && draggedStripId;
+    return (
+      <div
+        key={zone}
+        className={`flex-1 min-w-[540px] border-2 rounded-lg flex flex-col transition-all ${ZONE_COLORS[zone]} ${isDropping ? 'ring-4 ring-sky-300 scale-[1.01]' : ''}`}
+        onDragOver={handleDragOver}
+        onDragEnter={() => handleDragEnterZone(zone)}
+        onDragLeave={handleDragLeaveZone}
+        onDrop={(e) => handleDropOnZone(e, zone)}
+      >
+        <div className={`px-3 py-2 text-sm font-bold uppercase tracking-wider ${ZONE_HEADER[zone]} rounded-t-md flex items-center justify-between`}>
+          <span>{ZONE_LABELS[zone]}</span>
+          <span className="text-xs font-normal opacity-70">{zoneStrips.length} vol(s)</span>
+        </div>
+        <div className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-300px)]">
+          {zoneStrips.length === 0 ? (
+            <div className={`text-center py-8 ${isDropping ? '' : ''}`}>
+              <p className="text-slate-400 text-sm italic">
+                {isDropping ? 'Déposer ici' : 'Aucun strip — glissez-en un ici'}
+              </p>
             </div>
-          ))
-        )}
+          ) : (
+            zoneStrips.map((s) => (
+              <div
+                key={s.id}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDropOnStrip(e, s.id, zone)}
+                className={`transition-all ${draggedStripId === s.id ? 'opacity-30 scale-95' : ''}`}
+              >
+                <FlightStrip
+                  strip={s}
+                  onRefresh={onRefresh}
+                  onContextMenu={handleContextMenu}
+                  dragHandleProps={{
+                    draggable: true,
+                    onDragStart: (e) => handleDragStart(e, s.id),
+                  }}
+                />
+              </div>
+            ))
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
-    <div className="flex flex-col gap-3 h-full">
-      {/* Main zones */}
-      <div className="flex gap-3 flex-1 min-h-0">
+    <div className="flex flex-col gap-4 h-full">
+      {/* Main zones - horizontal scroll if needed */}
+      <div className="flex gap-3 flex-1 min-h-0 overflow-x-auto pb-1">
         {renderZone('sol', solStrips)}
         {renderZone('depart', departStrips)}
         {renderZone('arrivee', arriveeStrips)}
@@ -178,44 +228,61 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
       {/* Unassigned strips at bottom */}
       <div
-        className="border-2 border-slate-300 bg-slate-50/50 rounded-lg"
+        className={`border-2 rounded-lg transition-all ${
+          dropTarget === 'unassigned' && draggedStripId
+            ? 'border-sky-400 bg-sky-50/60 ring-4 ring-sky-300'
+            : 'border-slate-300 bg-slate-50/60'
+        }`}
         onDragOver={handleDragOver}
+        onDragEnter={() => handleDragEnterZone('unassigned')}
+        onDragLeave={handleDragLeaveZone}
         onDrop={(e) => handleDropOnZone(e, null)}
       >
-        <div className="px-3 py-1 text-xs font-bold uppercase tracking-wider bg-slate-200 text-slate-700 rounded-t-md">
-          Non assignés ({unassigned.length})
+        <div className="px-3 py-2 text-sm font-bold uppercase tracking-wider bg-slate-200 text-slate-700 rounded-t-md flex items-center justify-between">
+          <span>Non assignés</span>
+          <span className="text-xs font-normal opacity-70">{unassigned.length} vol(s)</span>
         </div>
-        <div className="p-2 flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+        <div className="p-3 space-y-2 max-h-60 overflow-y-auto">
           {unassigned.length === 0 ? (
-            <p className="text-slate-400 text-xs italic">Tous les strips sont assignés à une zone.</p>
+            <p className="text-slate-400 text-sm italic text-center py-3">
+              Tous les strips sont assignés à une zone.
+            </p>
           ) : (
             unassigned.map((s) => (
               <div
                 key={s.id}
-                draggable
-                onDragStart={(e) => handleDragStart(e, s.id)}
-                className={`w-[490px] transition-opacity ${draggedStripId === s.id ? 'opacity-30' : ''}`}
+                className={`transition-all cursor-pointer ${draggedStripId === s.id ? 'opacity-30 scale-95' : 'hover:ring-2 hover:ring-sky-300 rounded-lg'}`}
+                onClick={() => handleStripClick(s.id)}
+                title="Cliquer pour ouvrir le plan de vol"
               >
-                <FlightStrip strip={s} onRefresh={onRefresh} onContextMenu={handleContextMenu} />
+                <FlightStrip
+                  strip={s}
+                  onRefresh={onRefresh}
+                  onContextMenu={handleContextMenu}
+                  dragHandleProps={{
+                    draggable: true,
+                    onDragStart: (e) => handleDragStart(e, s.id),
+                  }}
+                />
               </div>
             ))
           )}
         </div>
       </div>
 
-      {/* Context menu */}
+      {/* Context menu (right-click) */}
       {contextMenu && (
         <div
           ref={contextRef}
-          className="fixed z-50 bg-white border border-slate-300 rounded-lg shadow-xl py-1 min-w-[180px]"
+          className="fixed z-50 bg-white border border-slate-300 rounded-xl shadow-2xl py-1.5 min-w-[200px]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
-          <p className="px-3 py-1 text-[10px] text-slate-400 uppercase tracking-wider">Déplacer vers</p>
+          <p className="px-4 py-1 text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Déplacer vers</p>
           {(['sol', 'depart', 'arrivee'] as ZoneId[]).map((z) => (
             <button
               key={z}
               type="button"
-              className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100"
+              className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 transition-colors"
               onClick={() => moveToZone(contextMenu.stripId, z)}
             >
               {ZONE_LABELS[z]}
@@ -223,23 +290,30 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
           ))}
           <button
             type="button"
-            className="w-full text-left px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100"
+            className="w-full text-left px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 transition-colors"
             onClick={() => moveToZone(contextMenu.stripId, null)}
           >
-            Non assigné
+            ↩ Non assigné
           </button>
           <hr className="my-1 border-slate-200" />
           <button
             type="button"
-            className="w-full text-left px-3 py-1.5 text-sm text-sky-600 hover:bg-sky-50"
+            className="w-full text-left px-4 py-2 text-sm text-sky-600 hover:bg-sky-50 font-medium transition-colors"
             onClick={() => openTransferDialog(contextMenu.stripId)}
           >
-            Transférer le vol...
+            Transférer le vol…
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-4 py-2 text-sm text-emerald-600 hover:bg-emerald-50 font-medium transition-colors"
+            onClick={() => { setContextMenu(null); handleStripClick(contextMenu.stripId); }}
+          >
+            Ouvrir le plan
           </button>
           <hr className="my-1 border-slate-200" />
           <button
             type="button"
-            className="w-full text-left px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-100"
+            className="w-full text-left px-4 py-2 text-sm text-slate-400 hover:bg-slate-100 transition-colors"
             onClick={() => setContextMenu(null)}
           >
             Annuler
@@ -247,7 +321,12 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
         </div>
       )}
 
-      {/* Transfer dialog (double right-click) */}
+      {/* onDragEnd to cleanup */}
+      {draggedStripId && (
+        <div className="fixed inset-0 z-40" onDragEnd={handleDragEnd} style={{ pointerEvents: 'none' }} />
+      )}
+
+      {/* Transfer dialog */}
       {transferDialog && (
         <TransferDialog planId={transferDialog} onClose={() => setTransferDialog(null)} />
       )}
@@ -255,6 +334,9 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Transfer dialog                                                     */
+/* ------------------------------------------------------------------ */
 function TransferDialog({ planId, onClose }: { planId: string; onClose: () => void }) {
   const router = useRouter();
   const [aeroport, setAeroport] = useState('');
@@ -329,7 +411,7 @@ function TransferDialog({ planId, onClose }: { planId: string; onClose: () => vo
             onClick={handleTransfer}
             disabled={loading || (!autoSurv && (!aeroport || !position))}
           >
-            {loading ? '...' : 'Transférer'}
+            {loading ? '…' : 'Transférer'}
           </button>
           <button
             type="button"

@@ -84,37 +84,41 @@ export default async function AtcLayout({
         <div className="flex flex-1 w-full min-h-0">
           {enService && (
             <aside className="atc-sidebar w-44 flex-shrink-0 border-r border-slate-300 bg-slate-100 py-3 px-2 hidden md:flex flex-col">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-700 px-2 mb-1.5">Non contrôlés</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 mb-1">Non contrôlés ({plansAuto.length})</p>
               {plansAuto.length === 0 ? (
-                <span className="text-slate-600 text-sm px-2">Aucun</span>
+                <span className="text-slate-500 text-xs px-2 block mb-2">Aucun</span>
               ) : (
                 <ul className="space-y-0.5 mb-3">
                   {plansAuto.map((p) => (
                     <li key={p.id}>
                       <Link
                         href={`/atc/plan/${p.id}`}
-                        className="block truncate text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-200 rounded px-2 py-1"
-                        title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
+                        className="block text-xs font-mono text-slate-700 hover:text-slate-900 hover:bg-slate-200 rounded px-2 py-1 leading-tight"
+                        title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee} — Cliquer pour prendre le plan`}
                       >
-                        {p.numero_vol} {p.aeroport_depart}→{p.aeroport_arrivee}
+                        <span className="font-bold">{p.numero_vol}</span>
+                        <br />
+                        <span className="text-[10px] text-slate-500">{p.aeroport_depart}→{p.aeroport_arrivee}</span>
                       </Link>
                     </li>
                   ))}
                 </ul>
               )}
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-700 px-2 mb-1.5">Plans orphelins</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-orange-600 px-2 mb-1">Orphelins ({plansOrphelins.length})</p>
               {plansOrphelins.length === 0 ? (
-                <span className="text-slate-600 text-sm px-2">Aucun</span>
+                <span className="text-slate-500 text-xs px-2 block">Aucun</span>
               ) : (
                 <ul className="space-y-0.5">
                   {plansOrphelins.map((p) => (
                     <li key={p.id}>
                       <Link
                         href={`/atc/plan/${p.id}`}
-                        className="block truncate text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-200 rounded px-2 py-1"
-                        title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
+                        className="block text-xs font-mono text-orange-700 hover:text-orange-900 hover:bg-orange-100 rounded px-2 py-1 leading-tight"
+                        title={`${p.numero_vol} — Cliquer pour prendre ce plan orphelin`}
                       >
-                        {p.numero_vol} {p.aeroport_depart}→{p.aeroport_arrivee}
+                        <span className="font-bold">{p.numero_vol}</span>
+                        <br />
+                        <span className="text-[10px] text-orange-500">{p.aeroport_depart}→{p.aeroport_arrivee}</span>
                       </Link>
                     </li>
                   ))}
@@ -122,7 +126,7 @@ export default async function AtcLayout({
               )}
             </aside>
           )}
-          <main className="flex-1 min-w-0 mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
+          <main className="flex-1 min-w-0 w-full px-4 py-6 overflow-x-auto">{children}</main>
           {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} />}
         </div>
         {enService && session && (
