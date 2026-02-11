@@ -84,15 +84,22 @@ function InlineEdit({
   const save = useCallback(async (val: string) => {
     setSaving(true);
     try {
-      await fetch(`/api/plans-vol/${planId}`, {
+      const res = await fetch(`/api/plans-vol/${planId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update_strip', [field]: val }),
       });
-      onSaved?.();
-    } catch { /* ignore */ }
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        console.error('Strip save error:', d.error || res.statusText);
+      }
+    } catch (err) {
+      console.error('Strip save error:', err);
+    }
     setSaving(false);
     setEditing(false);
+    // Refresh AFTER editing state is cleared to avoid losing input
+    onSaved?.();
   }, [planId, field, onSaved]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -117,7 +124,10 @@ function InlineEdit({
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         onBlur={() => save(text)}
-        onMouseDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => {
+          // Only stop propagation for left-click; let right-click bubble for context menu
+          if (e.button === 0) e.stopPropagation();
+        }}
         disabled={saving}
       />
     );
@@ -129,6 +139,8 @@ function InlineEdit({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onMouseDown={(e) => {
+        // Only handle left-click for editing; let right-click bubble for context menu
+        if (e.button !== 0) return;
         e.stopPropagation();
         e.preventDefault();
         setEditing(true);
@@ -139,7 +151,7 @@ function InlineEdit({
         {value || placeholder}
       </span>
       {hovered && value && (
-        <button type="button" onMouseDown={clear} className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 z-10 shadow" title="Effacer">
+        <button type="button" onMouseDown={(e) => { if (e.button === 0) clear(e); }} className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 z-10 shadow" title="Effacer">
           <Trash2 className="h-2.5 w-2.5" />
         </button>
       )}
@@ -153,6 +165,7 @@ function InlineEdit({
 function FlUnitToggle({ planId, unit, onSaved }: { planId: string; unit: string | null; onSaved?: () => void }) {
   const current = unit || 'FL';
   const toggle = async (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Only left-click
     e.stopPropagation();
     e.preventDefault();
     const next = current === 'FL' ? 'ft' : 'FL';
@@ -195,7 +208,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
 
   if (showRefuse) {
     return (
-      <div className="px-2 py-2 bg-red-50 border-t border-red-200 space-y-1" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="px-2 py-2 bg-red-50 border-t border-red-200 space-y-1" onMouseDown={(e) => { if (e.button === 0) e.stopPropagation(); }}>
         <textarea autoFocus value={refuseReason} onChange={(e) => setRefuseReason(e.target.value)} placeholder="Raison du refus…" className="w-full text-xs border border-red-300 rounded px-2 py-1 bg-white text-slate-800 min-h-[36px] resize-none" />
         <div className="flex gap-1.5">
           <button type="button" onClick={async () => { if (!refuseReason.trim()) { alert('Raison obligatoire'); return; } await callAction('refuser', { refusal_reason: refuseReason.trim() }); setShowRefuse(false); setRefuseReason(''); }} disabled={loading === 'refuser'} className="px-2 py-0.5 text-[10px] font-semibold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">{loading === 'refuser' ? '…' : 'Confirmer refus'}</button>
@@ -207,7 +220,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
 
   if (showInstructions) {
     return (
-      <div className="px-2 py-2 bg-sky-50 border-t border-sky-200 space-y-1" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="px-2 py-2 bg-sky-50 border-t border-sky-200 space-y-1" onMouseDown={(e) => { if (e.button === 0) e.stopPropagation(); }}>
         <textarea autoFocus value={instructionsText} onChange={(e) => setInstructionsText(e.target.value)} placeholder="Instructions ATC…" className="w-full text-xs border border-sky-300 rounded px-2 py-1 bg-white text-slate-800 min-h-[36px] resize-none" />
         <div className="flex gap-1.5">
           <button type="button" onClick={async () => { await callAction('instructions', { instructions: instructionsText }); setShowInstructions(false); }} disabled={loading === 'instructions'} className="px-2 py-0.5 text-[10px] font-semibold bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50">{loading === 'instructions' ? '…' : 'Enregistrer'}</button>
@@ -221,7 +234,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
   if (!hasActions) return null;
 
   return (
-    <div className="px-1.5 py-1 border-t border-slate-200 bg-slate-50/80 flex items-center gap-1 flex-wrap" onMouseDown={(e) => e.stopPropagation()}>
+    <div className="px-1.5 py-1 border-t border-slate-200 bg-slate-50/80 flex items-center gap-1 flex-wrap" onMouseDown={(e) => { if (e.button === 0) e.stopPropagation(); }}>
       {strip.pilote_identifiant && (
         <span className="text-[9px] text-slate-500 mr-auto flex items-center gap-0.5"><Plane className="h-2.5 w-2.5" />{strip.pilote_identifiant}</span>
       )}
