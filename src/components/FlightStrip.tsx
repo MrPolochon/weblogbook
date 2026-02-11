@@ -431,7 +431,14 @@ export default function FlightStrip({
               </Cell>
               <Cell className="flex-1">
                 <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>ADEP</div>
-                <span className={`text-base font-mono font-bold ${txt}`}>{strip.aeroport_depart}</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className={`text-base font-mono font-bold ${txt}`}>{strip.aeroport_depart}</span>
+                  {strip.intentions_vol && (
+                    <span className={`text-[9px] ${txt} opacity-70 leading-tight`} title={strip.intentions_vol}>
+                      {strip.intentions_vol.length > 30 ? strip.intentions_vol.slice(0, 30) + '...' : strip.intentions_vol}
+                    </span>
+                  )}
+                </div>
               </Cell>
             </div>
             {/* ROW 3 */}

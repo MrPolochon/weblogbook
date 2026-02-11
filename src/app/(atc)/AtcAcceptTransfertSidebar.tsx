@@ -109,6 +109,9 @@ export default function AtcAcceptTransfertSidebar({
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(Date.now());
   
+  // Tracker les plans activés (qui ont été affichés dans les strips)
+  const [activatedPlanIds, setActivatedPlanIds] = useState<Set<string>>(new Set());
+  
   // Tracker quand chaque élément a été vu pour la première fois
   const firstSeenRef = useRef<Map<string, number>>(new Map());
   const lastReminderRef = useRef<Map<string, number>>(new Map());
@@ -231,6 +234,20 @@ export default function AtcAcceptTransfertSidebar({
     }
   }
 
+  // Fonction pour activer un plan (le faire apparaître dans les strips)
+  function handleActiverPlan(planId: string) {
+    // Ajouter aux plans activés localement
+    setActivatedPlanIds((prev) => {
+      const next = new Set(prev);
+      next.add(planId);
+      return next;
+    });
+
+    // Dispatcher l'événement global pour le FlightStripBoardWrapper
+    const event = new CustomEvent('activateStrip', { detail: { planId } });
+    window.dispatchEvent(event);
+  }
+
   // Générer les classes CSS dynamiques basées sur l'urgence
   function getItemClass(itemId: string, baseColor: 'orange' | 'red'): string {
     const firstSeen = firstSeenRef.current.get(itemId) || currentTime;
@@ -323,16 +340,17 @@ export default function AtcAcceptTransfertSidebar({
       )}
 
       {/* Plans à accepter */}
-      {plansAccepter.length > 0 && (
+      {plansAccepter.filter(p => !activatedPlanIds.has(p.id)).length > 0 && (
         <div className="mb-3">
           <p className={`text-[10px] font-semibold ${isDark ? 'text-orange-400' : 'text-orange-800'} px-2 mb-1`}>Plans à traiter</p>
           <ul className="space-y-1">
-            {plansAccepter.map((p) => {
+            {plansAccepter.filter(p => !activatedPlanIds.has(p.id)).map((p) => {
               const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
               return (
                 <li key={p.id} className="relative">
-                  <Link
-                    href={`/atc/plan/${p.id}`}
+                  <button
+                    type="button"
+                    onClick={() => handleActiverPlan(p.id)}
                     className={`block ${getItemClass(p.id, 'orange')}`}
                     title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
                     style={{
@@ -342,7 +360,7 @@ export default function AtcAcceptTransfertSidebar({
                     }}
                   >
                     {p.numero_vol} {p.aeroport_depart}→{p.aeroport_arrivee}
-                  </Link>
+                  </button>
                   <span className="absolute -top-1 -right-1 text-[9px] bg-orange-700 text-white px-1 rounded">
                     {formatElapsed(p.id)}
                   </span>

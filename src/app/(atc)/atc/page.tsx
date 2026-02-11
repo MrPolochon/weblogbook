@@ -6,7 +6,7 @@ import SeMettreEnServiceForm from '../SeMettreEnServiceForm';
 import HorsServiceButton from '../HorsServiceButton';
 import PlansEnAttenteModal from '@/components/PlansEnAttenteModal';
 import AtcEnLigneModal from '@/components/AtcEnLigneModal';
-import FlightStripBoard from '@/components/FlightStripBoard';
+import FlightStripBoardWrapper from '@/components/FlightStripBoardWrapper';
 import { getTypeWake } from '@/lib/wake-turbulence';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -229,7 +229,10 @@ export default async function AtcPage() {
               <p className="text-slate-500 text-sm mt-1">Les nouveaux plans apparaîtront ici automatiquement</p>
             </div>
           ) : (
-            <FlightStripBoard strips={plansChezMoi} />
+            <FlightStripBoardWrapper 
+              allStrips={plansChezMoi} 
+              plansATraiter={plansChezMoi.filter(s => ['depose', 'en_attente'].includes(s.statut)).map(s => s.id)}
+            />
           )}
         </div>
       )}
