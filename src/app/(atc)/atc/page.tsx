@@ -81,6 +81,8 @@ export default async function AtcPage() {
       code_transpondeur: plan.code_transpondeur || null,
       squawk_attendu: plan.code_transpondeur || null,
       sid_depart: plan.sid_depart || null,
+      star_arrivee: plan.star_arrivee || null,
+      route_ifr: plan.route_ifr || null,
       strip_atd: plan.strip_atd || null,
       strip_rwy: plan.strip_rwy || null,
       strip_fl: plan.strip_fl || null,

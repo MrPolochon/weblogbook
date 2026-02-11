@@ -285,7 +285,11 @@ export default function AtcAcceptTransfertSidebar({
     return `${mins}m${secs.toString().padStart(2, '0')}s`;
   }
 
-  if (plansTransfert.length === 0 && plansAccepter.length === 0 && plansCloture.length === 0) return null;
+  // Filtrer les plans encore visibles (non activés)
+  const plansAccepterVisibles = plansAccepter.filter(p => !activatedPlanIds.has(p.id));
+  
+  // Si plus rien à afficher, masquer complètement la sidebar
+  if (plansTransfert.length === 0 && plansAccepterVisibles.length === 0 && plansCloture.length === 0) return null;
 
   const maxUrgency = getMaxUrgency();
   
@@ -340,11 +344,11 @@ export default function AtcAcceptTransfertSidebar({
       )}
 
       {/* Plans à accepter */}
-      {plansAccepter.filter(p => !activatedPlanIds.has(p.id)).length > 0 && (
+      {plansAccepterVisibles.length > 0 && (
         <div className="mb-3">
           <p className={`text-[10px] font-semibold ${isDark ? 'text-orange-400' : 'text-orange-800'} px-2 mb-1`}>Plans à traiter</p>
           <ul className="space-y-1">
-            {plansAccepter.filter(p => !activatedPlanIds.has(p.id)).map((p) => {
+            {plansAccepterVisibles.map((p) => {
               const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
               return (
                 <li key={p.id} className="relative">
