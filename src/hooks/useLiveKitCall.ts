@@ -121,9 +121,10 @@ export function useLiveKitCall(options: UseLiveKitCallOptions = {}) {
       room.on(RoomEvent.TrackSubscribed, (track, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
         console.log('[LiveKit] Track subscribed:', track.kind);
         if (track.kind === Track.Kind.Audio) {
-          // Attacher l'audio à un élément
+          // Attacher l'audio à un élément (document.body - pas de display:none sur parent)
           const audioElement = track.attach();
           audioElement.volume = 1.0;
+          (audioElement as HTMLAudioElement).style.display = 'none';
           audioElementRef.current = audioElement;
           document.body.appendChild(audioElement);
           

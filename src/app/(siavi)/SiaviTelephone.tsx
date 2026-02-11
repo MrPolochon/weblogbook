@@ -53,6 +53,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   const shouldPlaySoundRef = useRef(false);
   const emergencyAlarmRef = useRef<{ osc: OscillatorNode; ctx: AudioContext } | null>(null);
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
+  const attachedAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [isMounted, setIsMounted] = useState(false);
 
   // Éviter les erreurs d'hydratation
@@ -220,8 +221,20 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   // Cleanup LiveKit
   const cleanupLiveKit = useCallback(async () => {
     console.log('[LiveKit SIAVI] Cleanup');
-    if (audioLevelIntervalRef.current) { clearInterval(audioLevelIntervalRef.current); audioLevelIntervalRef.current = null; }
-    if (roomRef.current) { await roomRef.current.disconnect(); roomRef.current = null; }
+    if (audioLevelIntervalRef.current) {
+      clearInterval(audioLevelIntervalRef.current);
+      audioLevelIntervalRef.current = null;
+    }
+    attachedAudioElementsRef.current.forEach((el) => {
+      try {
+        el.remove();
+      } catch (_) { /* ignore */ }
+    });
+    attachedAudioElementsRef.current.clear();
+    if (roomRef.current) {
+      await roomRef.current.disconnect();
+      roomRef.current = null;
+    }
     stopEmergencyAlarm();
     setAudioLevel(0);
     setConnectionStatus('');
@@ -314,6 +327,14 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         setConnectionStatus('Connecté');
         playSound('connected');
         playMessage('Communications établie');
+        
+        // Attacher les tracks audio déjà publiés (si le participant a rejoint avant nous)
+        participant.audioTrackPublications.forEach((publication) => {
+          if (publication.track && publication.isSubscribed) {
+            console.log('[LiveKit SIAVI] Attaching existing audio track from', participant.identity);
+            attachRemoteAudioTrack(publication.track, room);
+          }
+        });
       });
 
       // Quand l'autre participant raccroche
@@ -331,18 +352,24 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         playMessage('Correspondant a raccroché');
       });
       
-      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
         console.log('[LiveKit SIAVI] Track subscribed:', track.kind, 'from', participant.identity);
         if (track.kind === Track.Kind.Audio) {
-          const audioElement = track.attach();
-          audioElement.volume = 1.0;
-          if (audioContainerRef.current) {
-            audioContainerRef.current.appendChild(audioElement);
+          attachRemoteAudioTrack(track, room);
+        }
+      });
+
+      room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        if (track.kind === Track.Kind.Audio) {
+          const sid = (track as { sid?: string }).sid;
+          if (sid) {
+            const el = attachedAudioElementsRef.current.get(sid);
+            if (el) {
+              el.remove();
+              attachedAudioElementsRef.current.delete(sid);
+            }
           }
-          audioLevelIntervalRef.current = setInterval(() => {
-            const participants = Array.from(room.remoteParticipants.values());
-            if (participants.length > 0) setAudioLevel(participants[0].audioLevel || 0);
-          }, 100);
+          track.detach();
         }
       });
       
@@ -364,9 +391,9 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         playMessage('Erreur microphone');
       });
       
-      // Connecter avec timeout
+      // Connecter avec timeout et autoSubscribe
       console.log('[LiveKit SIAVI] Connecting to room...');
-      const connectPromise = room.connect(url, token);
+      const connectPromise = room.connect(url, token, { autoSubscribe: true });
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Timeout connexion')), 15000)
       );
@@ -385,7 +412,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       await cleanupLiveKit();
       setCallState('idle');
     }
-  }, [aeroport, cleanupLiveKit, playSound, playMessage, stopEmergencyAlarm]);
+  }, [aeroport, cleanupLiveKit, playSound, playMessage, stopEmergencyAlarm, attachRemoteAudioTrack]);
 
   const parseNumber = (num: string) => {
     if (num === '911' || num === '112') return { aeroport: null, position: 'AFIS', isLocal: false, isEmergency: true };
@@ -552,7 +579,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   if (!isOpen) {
     return (
       <>
-        <div ref={audioContainerRef} style={{ display: 'none' }} />
+        <div ref={audioContainerRef} style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }} aria-hidden="true" />
         <button onClick={() => setIsOpen(true)}
           className={`fixed bottom-4 right-4 z-50 bg-gradient-to-b from-red-800 to-red-900 text-white rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl ${callState === 'incoming' && incomingCall?.isEmergency ? 'animate-pulse ring-4 ring-red-500' : ''}`}>
           <div className="p-2 rounded-xl bg-red-700/50"><Phone className="h-5 w-5 text-red-200" /></div>
@@ -567,7 +594,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   if (showEmergencyOverlay && callState === 'incoming' && incomingCall?.isEmergency) {
     return (
       <>
-        <div ref={audioContainerRef} style={{ display: 'none' }} />
+        <div ref={audioContainerRef} style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }} aria-hidden="true" />
         <div className="fixed inset-0 z-40 bg-red-600/30 animate-pulse pointer-events-none" />
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="bg-gradient-to-b from-red-800 to-red-950 rounded-3xl shadow-2xl p-8 max-w-md w-full text-center">

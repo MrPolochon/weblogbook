@@ -54,6 +54,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const shouldPlaySoundRef = useRef(false);
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
+  const attachedAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const [isMounted, setIsMounted] = useState(false);
 
   // Éviter les erreurs d'hydratation
@@ -177,6 +178,26 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     return () => { if (checkIntervalRef.current) clearInterval(checkIntervalRef.current); };
   }, [callState, incomingCall]);
 
+  // Attacher une track audio au DOM (évite display:none qui bloque la lecture)
+  const attachRemoteAudioTrack = useCallback((track: { kind: string; sid?: string; attach: () => HTMLMediaElement }, room: Room) => {
+    if (track.kind !== Track.Kind.Audio) return;
+    const audioElement = track.attach() as HTMLAudioElement;
+    audioElement.volume = 1.0;
+    audioElement.style.display = 'none'; // Cacher l'élément audio lui-même, pas le parent
+    const container = audioContainerRef.current ?? document.body;
+    container.appendChild(audioElement);
+    const trackSid = (track as { sid?: string }).sid ?? `audio-${Date.now()}`;
+    attachedAudioElementsRef.current.set(trackSid, audioElement);
+    if (!audioLevelIntervalRef.current) {
+      audioLevelIntervalRef.current = setInterval(() => {
+        const participants = Array.from(room.remoteParticipants.values());
+        if (participants.length > 0) {
+          setAudioLevel(participants[0].audioLevel || 0);
+        }
+      }, 100);
+    }
+  }, []);
+
   // Cleanup LiveKit
   const cleanupLiveKit = useCallback(async () => {
     console.log('[LiveKit] Cleanup');
@@ -184,6 +205,12 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       clearInterval(audioLevelIntervalRef.current);
       audioLevelIntervalRef.current = null;
     }
+    attachedAudioElementsRef.current.forEach((el) => {
+      try {
+        el.remove();
+      } catch (_) { /* ignore */ }
+    });
+    attachedAudioElementsRef.current.clear();
     if (roomRef.current) {
       await roomRef.current.disconnect();
       roomRef.current = null;
@@ -287,6 +314,12 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         setConnectionStatus('Connecté');
         playSound('connected');
         playMessage('Communications établie');
+        // Traiter les tracks déjà publiés (cas où on rejoint après l'autre participant)
+        participant.audioTrackPublications.forEach((pub) => {
+          if (pub.track && pub.track.kind === Track.Kind.Audio) {
+            attachRemoteAudioTrack(pub.track, room);
+          }
+        });
       });
 
       // Quand l'autre participant raccroche
@@ -303,23 +336,24 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         playMessage('Correspondant a raccroché');
       });
       
-      room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
         console.log('[LiveKit] Track subscribed:', track.kind, 'from', participant.identity);
         if (track.kind === Track.Kind.Audio) {
-          const audioElement = track.attach();
-          audioElement.volume = 1.0;
-          // Utiliser le conteneur ref pour éviter les erreurs d'hydratation
-          if (audioContainerRef.current) {
-            audioContainerRef.current.appendChild(audioElement);
-          }
-          
-          // Monitorer niveau audio
-          audioLevelIntervalRef.current = setInterval(() => {
-            const participants = Array.from(room.remoteParticipants.values());
-            if (participants.length > 0) {
-              setAudioLevel(participants[0].audioLevel || 0);
+          attachRemoteAudioTrack(track, room);
+        }
+      });
+
+      room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        if (track.kind === Track.Kind.Audio) {
+          const sid = (track as { sid?: string }).sid;
+          if (sid) {
+            const el = attachedAudioElementsRef.current.get(sid);
+            if (el) {
+              el.remove();
+              attachedAudioElementsRef.current.delete(sid);
             }
-          }, 100);
+          }
+          track.detach();
         }
       });
       
@@ -341,9 +375,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         playMessage('Erreur microphone');
       });
       
-      // Connecter avec timeout
+      // Connecter avec timeout (autoSubscribe: true pour recevoir les tracks des participants)
       console.log('[LiveKit] Connecting to room...');
-      const connectPromise = room.connect(url, token);
+      const connectPromise = room.connect(url, token, { autoSubscribe: true });
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Timeout connexion')), 15000)
       );
@@ -363,7 +397,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       await cleanupLiveKit();
       setCallState('idle');
     }
-  }, [aeroport, position, cleanupLiveKit, playSound, playMessage]);
+  }, [aeroport, position, cleanupLiveKit, playSound, playMessage, attachRemoteAudioTrack]);
 
   const parseNumber = (num: string) => {
     if (num === '911' || num === '112') return { aeroport: null, position: 'AFIS', isLocal: false, isEmergency: true };
@@ -579,7 +613,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   if (!isOpen) {
     return (
       <>
-        <div ref={audioContainerRef} style={{ display: 'none' }} />
+        {/* Conteneur audio: éviter display:none qui bloque la lecture (cf. bug unidirectionnel) */}
+        <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
         <button onClick={() => setIsOpen(true)}
           className={`fixed bottom-4 right-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl`}>
           <div className={`p-2 rounded-xl ${isDark ? 'bg-sky-100' : 'bg-sky-500/20'}`}>
@@ -594,7 +629,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
 
   return (
     <>
-    <div ref={audioContainerRef} style={{ display: 'none' }} />
+    {/* Conteneur audio: éviter display:none qui bloque la lecture (cf. bug unidirectionnel) */}
+    <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
     <div className={`fixed right-4 bottom-4 z-50 ${bgMain} rounded-3xl shadow-2xl overflow-hidden transition-all duration-500`} style={{ width: '240px' }}>
       <div className={`px-4 py-3 flex items-center justify-between border-b ${isDark ? 'border-slate-300' : 'border-slate-700'}`}>
         <div className="flex items-center gap-2">
