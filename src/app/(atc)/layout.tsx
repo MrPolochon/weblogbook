@@ -78,7 +78,7 @@ export default async function AtcLayout({
   return (
     <AtcThemeProvider>
       <div className="min-h-screen flex flex-col">
-        <AutoRefresh intervalSeconds={8} />
+        <AutoRefresh intervalSeconds={15} />
         <AtcModeBg isAdmin={isAdmin} />
         <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
         <div className="flex flex-1 w-full min-h-0">

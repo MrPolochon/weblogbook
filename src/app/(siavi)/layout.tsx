@@ -59,7 +59,7 @@ export default async function SiaviLayout({
 
   return (
     <div className="min-h-screen flex flex-col">
-      <AutoRefresh intervalSeconds={8} />
+      <AutoRefresh intervalSeconds={15} />
       <SiaviModeBg isAdmin={isAdmin} />
       <SiaviNavBar 
         isAdmin={isAdmin} 

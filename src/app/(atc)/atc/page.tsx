@@ -23,11 +23,11 @@ export default async function AtcPage() {
   // D'abord récupérer la session pour l'utiliser dans les requêtes suivantes
   const { data: session } = await supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single();
   
-  const [{ data: plansChezMoiRaw }, { data: sessionsEnServiceRaw }, { data: plansEnAttente }, { data: afisSessionsRaw }] = await Promise.all([
+  const [{ data: plansChezMoiRaw }, { data: sessionsEnService }, { data: plansEnAttente }, { data: afisEnService }] = await Promise.all([
     admin.from('plans_vol').select('*').eq('current_holder_user_id', user.id).is('pending_transfer_aeroport', null).in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente']).order('created_at', { ascending: false }),
-    admin.from('atc_sessions').select('aeroport, position, user_id').order('aeroport').order('position'),
+    admin.from('atc_sessions').select('aeroport, position, user_id, profiles!atc_sessions_user_id_fkey(identifiant)').order('aeroport').order('position'),
     admin.from('plans_vol').select('id').in('statut', ['depose', 'en_attente']),
-    admin.from('afis_sessions').select('aeroport, est_afis, user_id').order('aeroport'),
+    admin.from('afis_sessions').select('aeroport, est_afis, user_id, profiles!afis_sessions_user_id_fkey(identifiant)').order('aeroport'),
   ]);
 
   // Enrichir les plans avec les données pilote, compagnie et avion (pour strips)
@@ -102,28 +102,13 @@ export default async function AtcPage() {
     } as StripData;
   }));
 
-  // Enrichir les sessions ATC avec les identifiants
-  const sessionsEnService = await Promise.all((sessionsEnServiceRaw || []).map(async (sess) => {
-    let profiles = null;
-    if (sess.user_id) {
-      const { data } = await admin.from('profiles').select('identifiant').eq('id', sess.user_id).single();
-      profiles = data;
-    }
-    return { ...sess, profiles };
-  }));
-
-  // Enrichir les sessions AFIS avec les identifiants
-  const afisEnService = await Promise.all((afisSessionsRaw || []).map(async (sess) => {
-    let profiles = null;
-    if (sess.user_id) {
-      const { data } = await admin.from('profiles').select('identifiant').eq('id', sess.user_id).single();
-      profiles = data;
-    }
-    return { ...sess, profiles };
-  }));
+  // Les sessions sont déjà enrichies avec les JOIN dans la requête ci-dessus
+  // Fallback pour éviter les erreurs TypeScript
+  const sessionsEnServiceSafe = sessionsEnService ?? [];
+  const afisEnServiceSafe = afisEnService ?? [];
 
   // Grouper les sessions par aéroport
-  const byAeroport = (sessionsEnService ?? []).reduce<Record<string, Array<{ position: string; identifiant: string }>>>((acc, s) => {
+  const byAeroport = sessionsEnServiceSafe.reduce<Record<string, Array<{ position: string; identifiant: string }>>>((acc, s) => {
     const k = s.aeroport;
     if (!acc[k]) acc[k] = [];
     const profileData = s.profiles;
@@ -152,7 +137,7 @@ export default async function AtcPage() {
         <div className="flex gap-4">
           <AtcEnLigneModal 
             totalAtc={totalAtcEnService} 
-            sessionsEnService={sessionsEnService.map(s => ({
+            sessionsEnService={sessionsEnServiceSafe.map(s => ({
               aeroport: s.aeroport,
               position: s.position,
               user_id: s.user_id,
@@ -248,7 +233,7 @@ export default async function AtcPage() {
           Positions en service
         </h2>
         
-        {Object.keys(byAeroport).length === 0 && afisEnService.length === 0 ? (
+        {Object.keys(byAeroport).length === 0 && afisEnServiceSafe.length === 0 ? (
           <div className="text-center py-6">
             <Radio className="h-10 w-10 text-slate-400 mx-auto mb-2" />
             <p className="text-slate-600">Aucune position en service</p>
@@ -278,7 +263,7 @@ export default async function AtcPage() {
             ))}
             
             {/* Agents AFIS (en rouge) */}
-            {afisEnService.map((sess, idx) => (
+            {afisEnServiceSafe.map((sess, idx) => (
               <div 
                 key={`afis-${sess.aeroport}-${idx}`}
                 className={`p-3 rounded-lg border ${sess.est_afis ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}
@@ -297,7 +282,7 @@ export default async function AtcPage() {
                     {sess.est_afis ? 'AFIS' : 'Pompier seul'}
                   </span>
                   <span className="text-slate-500 text-xs">
-                    {sess.profiles?.identifiant || '—'}
+                    {(sess.profiles as { identifiant?: string } | null)?.identifiant || '—'}
                   </span>
                 </div>
               </div>
