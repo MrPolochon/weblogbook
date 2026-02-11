@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES, genererTypeCargaison } from '@/lib/aeroports-ptfs';
+import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol
 // AÉROPORT DE DÉPART : Delivery → Clairance → Ground → Tower → DEP → APP → Center
@@ -79,6 +80,63 @@ export async function POST(request: Request) {
       }
       if (!compagnie_id) {
         return NextResponse.json({ error: 'Un vol ferry doit être effectué pour une compagnie.' }, { status: 400 });
+      }
+    }
+
+    // Coût vol ferry : débiter la compagnie à la création du plan
+    let ferryCoutTotal = 0;
+    if (vol_ferry && compagnie_id) {
+      // Coût de base
+      const coutBase = COUT_VOL_FERRY; // 10 000 F$
+      // Taxes aéroportuaires sur l'arrivée
+      const { data: taxesData } = await admin.from('taxes_aeroport')
+        .select('taxe_pourcent')
+        .eq('code_oaci', aa)
+        .single();
+      const tauxTaxe = taxesData?.taxe_pourcent || 2;
+      const taxesFerry = Math.round(coutBase * tauxTaxe / 100);
+      ferryCoutTotal = coutBase + taxesFerry;
+
+      // Vérifier le solde
+      const { data: compteFerry } = await admin
+        .from('felitz_comptes')
+        .select('id, solde')
+        .eq('compagnie_id', compagnie_id)
+        .eq('type', 'entreprise')
+        .single();
+
+      if (!compteFerry) {
+        return NextResponse.json({ error: 'Compte entreprise introuvable.' }, { status: 500 });
+      }
+      if (compteFerry.solde < ferryCoutTotal) {
+        return NextResponse.json({
+          error: `Solde insuffisant pour le vol ferry. Coût : ${coutBase.toLocaleString('fr-FR')} F$ + ${taxesFerry.toLocaleString('fr-FR')} F$ de taxes = ${ferryCoutTotal.toLocaleString('fr-FR')} F$.`
+        }, { status: 400 });
+      }
+
+      // Débiter
+      await admin.from('felitz_comptes')
+        .update({ solde: compteFerry.solde - ferryCoutTotal })
+        .eq('id', compteFerry.id);
+
+      // Transaction pour le coût de base
+      await admin.from('felitz_transactions').insert({
+        compte_id: compteFerry.id,
+        type: 'debit',
+        montant: coutBase,
+        libelle: `Vol ferry ${ad} → ${aa}`,
+        description: `Vol ferry ${ad} → ${aa}`,
+      });
+
+      // Transaction pour les taxes
+      if (taxesFerry > 0) {
+        await admin.from('felitz_transactions').insert({
+          compte_id: compteFerry.id,
+          type: 'debit',
+          montant: taxesFerry,
+          libelle: `Taxes aéroportuaires ${aa} (vol ferry)`,
+          description: `Taxes aéroportuaires ${aa} (vol ferry)`,
+        });
       }
     }
 

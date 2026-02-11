@@ -568,7 +568,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           
           {vol_ferry && (
             <p className="text-amber-400 text-sm">
-              Vol à vide pour déplacer un avion. Pas de passagers/cargo. La compagnie paie les taxes aéroportuaires.
+              Vol à vide pour déplacer un avion. Pas de passagers/cargo. Coût : 10 000 F$ + taxes aéroportuaires, débité du compte compagnie.
             </p>
           )}
           

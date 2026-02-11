@@ -1,28 +1,17 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
-import { Radio, Plane, Clock, MapPin, AlertTriangle, ArrowRight, Activity, Users, Package, Ship, Building2, User, FilePlus, Flame } from 'lucide-react';
-import TranspondeurBadgeAtc from '@/components/TranspondeurBadgeAtc';
+import { Radio, Plane, Clock, MapPin, AlertTriangle, Activity, FilePlus, Flame } from 'lucide-react';
 import SeMettreEnServiceForm from '../SeMettreEnServiceForm';
 import HorsServiceButton from '../HorsServiceButton';
 import PlansEnAttenteModal from '@/components/PlansEnAttenteModal';
 import AtcEnLigneModal from '@/components/AtcEnLigneModal';
+import FlightStripBoard from '@/components/FlightStripBoard';
+import { getTypeWake } from '@/lib/wake-turbulence';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import type { PlanVol, AtcSession } from '@/lib/types';
+import type { StripData } from '@/components/FlightStrip';
 
-// Type pour les plans enrichis avec données relationnelles
-type EnrichedPlan = PlanVol & {
-  temps_prev_min?: number;
-};
-
-const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
-  en_attente: { label: 'ATT', color: 'text-amber-700', bgColor: 'bg-amber-100' },
-  depose: { label: 'DEP', color: 'text-amber-700', bgColor: 'bg-amber-100' },
-  accepte: { label: 'ACC', color: 'text-emerald-700', bgColor: 'bg-emerald-100' },
-  en_cours: { label: 'VOL', color: 'text-sky-700', bgColor: 'bg-sky-100' },
-  en_attente_cloture: { label: 'CLO', color: 'text-orange-700', bgColor: 'bg-orange-100' },
-};
 
 export default async function AtcPage() {
   const supabase = await createClient();
@@ -41,26 +30,59 @@ export default async function AtcPage() {
     admin.from('afis_sessions').select('aeroport, est_afis, user_id').order('aeroport'),
   ]);
 
-  // Enrichir les plans avec les données pilote, compagnie et avion
-  const plansChezMoi = await Promise.all((plansChezMoiRaw || []).map(async (plan) => {
-    let pilote = null;
-    let compagnie = null;
-    let avion = null;
+  // Enrichir les plans avec les données pilote, compagnie et avion (pour strips)
+  const plansChezMoi: StripData[] = await Promise.all((plansChezMoiRaw || []).map(async (plan) => {
+    let immatriculation: string | null = null;
+    let typeAvionCodeOaci: string | null = null;
+    let typeAvionNom: string | null = null;
 
-    if (plan.pilote_id) {
-      const { data } = await admin.from('profiles').select('identifiant').eq('id', plan.pilote_id).single();
-      pilote = data;
-    }
-    if (plan.compagnie_id) {
-      const { data } = await admin.from('compagnies').select('nom').eq('id', plan.compagnie_id).single();
-      compagnie = data;
-    }
     if (plan.compagnie_avion_id) {
-      const { data } = await admin.from('compagnie_avions').select('immatriculation, nom_bapteme').eq('id', plan.compagnie_avion_id).single();
-      avion = data;
+      const { data: avionData } = await admin.from('compagnie_avions')
+        .select('immatriculation, type_avion_id')
+        .eq('id', plan.compagnie_avion_id)
+        .single();
+      if (avionData) {
+        immatriculation = avionData.immatriculation;
+        if (avionData.type_avion_id) {
+          const { data: typeData } = await admin.from('types_avion')
+            .select('nom, code_oaci')
+            .eq('id', avionData.type_avion_id)
+            .single();
+          if (typeData) {
+            typeAvionCodeOaci = typeData.code_oaci;
+            typeAvionNom = typeData.nom;
+          }
+        }
+      }
     }
 
-    return { ...plan, pilote, compagnie, avion };
+    return {
+      id: plan.id,
+      numero_vol: plan.numero_vol || '',
+      aeroport_depart: plan.aeroport_depart || '',
+      aeroport_arrivee: plan.aeroport_arrivee || '',
+      type_vol: plan.type_vol || '',
+      statut: plan.statut || '',
+      created_at: plan.created_at || '',
+      accepted_at: plan.accepted_at || null,
+      immatriculation,
+      type_avion_code_oaci: typeAvionCodeOaci,
+      type_avion_nom: typeAvionNom,
+      type_wake: getTypeWake(typeAvionCodeOaci),
+      code_transpondeur: plan.code_transpondeur || null,
+      squawk_attendu: plan.code_transpondeur || null,
+      sid_depart: plan.sid_depart || null,
+      strip_atd: plan.strip_atd || null,
+      strip_rwy: plan.strip_rwy || null,
+      strip_fl: plan.strip_fl || null,
+      strip_fl_unit: plan.strip_fl_unit || null,
+      strip_sid_atc: plan.strip_sid_atc || null,
+      strip_note_1: plan.strip_note_1 || null,
+      strip_note_2: plan.strip_note_2 || null,
+      strip_note_3: plan.strip_note_3 || null,
+      strip_zone: plan.strip_zone || null,
+      strip_order: plan.strip_order ?? 0,
+    } as StripData;
   }));
 
   // Enrichir les sessions ATC avec les identifiants
@@ -167,10 +189,10 @@ export default async function AtcPage() {
         </div>
       )}
 
-      {/* Plans de vol sous contrôle */}
+      {/* Flight Strips Board */}
       {session && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
+        <div>
+          <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
               <Activity className="h-5 w-5 text-sky-600" />
               Trafic sous contrôle
@@ -188,97 +210,13 @@ export default async function AtcPage() {
           </div>
           
           {!plansChezMoi || plansChezMoi.length === 0 ? (
-            <div className="text-center py-8">
+            <div className="card text-center py-8">
               <Plane className="h-12 w-12 text-slate-400 mx-auto mb-3" />
               <p className="text-slate-600">Aucun plan de vol sous votre contrôle</p>
               <p className="text-slate-500 text-sm mt-1">Les nouveaux plans apparaîtront ici automatiquement</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {(plansChezMoi as EnrichedPlan[]).map((p) => {
-                const config = STATUT_CONFIG[p.statut] || { label: p.statut, color: 'text-slate-700', bgColor: 'bg-slate-100' };
-                const pilote = p.pilote;
-                const compagnie = p.compagnie;
-                const avion = p.avion;
-                
-                return (
-                  <Link 
-                    key={p.id} 
-                    href={`/atc/plan/${p.id}`}
-                    className="flex items-center gap-4 p-3 rounded-lg bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-all group"
-                  >
-                    {/* Indicateur de statut */}
-                    <div className={`px-2 py-1 rounded font-mono text-xs font-bold ${config.bgColor} ${config.color}`}>
-                      {config.label}
-                    </div>
-                    
-                    {/* Info vol */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-slate-900 font-mono">{p.numero_vol}</span>
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">{p.type_vol}</span>
-                        {/* Transpondeur */}
-                        {p.code_transpondeur && (
-                          <TranspondeurBadgeAtc 
-                            code={p.code_transpondeur} 
-                            mode={p.mode_transpondeur || 'C'} 
-                            size="sm"
-                          />
-                        )}
-                        {p.vol_ferry && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 flex items-center gap-1">
-                            <Ship className="h-3 w-3" />
-                            FERRY
-                          </span>
-                        )}
-                        {p.vol_commercial && p.nature_transport === 'passagers' && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 flex items-center gap-1">
-                            <Users className="h-3 w-3" />
-                            {p.nb_pax_genere || '?'} PAX
-                          </span>
-                        )}
-                        {p.vol_commercial && p.nature_transport === 'cargo' && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 flex items-center gap-1">
-                            <Package className="h-3 w-3" />
-                            {p.cargo_kg_genere || '?'} kg {p.type_cargaison ? `(${p.type_cargaison})` : ''}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 text-sm text-slate-600 mt-0.5 flex-wrap">
-                        <span className="font-mono text-sky-600">{p.aeroport_depart}</span>
-                        <ArrowRight className="h-3 w-3" />
-                        <span className="font-mono text-emerald-600">{p.aeroport_arrivee}</span>
-                        {p.temps_prev_min && (
-                          <span className="ml-1 text-slate-500">• {p.temps_prev_min} min</span>
-                        )}
-                        {avion?.immatriculation && (
-                          <span className="ml-1 text-slate-500 font-mono">• {avion.immatriculation}</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                        {pilote?.identifiant && (
-                          <span className="flex items-center gap-1">
-                            <User className="h-3 w-3" />
-                            {pilote.identifiant}
-                          </span>
-                        )}
-                        {compagnie?.nom && (
-                          <span className="flex items-center gap-1">
-                            <Building2 className="h-3 w-3" />
-                            {compagnie.nom}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Action */}
-                    <div className="text-sm text-sky-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                      Voir →
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
+            <FlightStripBoard strips={plansChezMoi} />
           )}
         </div>
       )}

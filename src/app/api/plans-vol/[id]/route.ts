@@ -557,6 +557,45 @@ export async function PATCH(
       return NextResponse.json({ ok: true, amende: AMENDE, amendeAppliquee, compteDebite: compteDebiteVban });
     }
 
+    if (action === 'update_strip') {
+      const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
+      const isAdmin = profile?.role === 'admin';
+      const canAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
+      if (!canAtc) return NextResponse.json({ error: 'Accès ATC requis.' }, { status: 403 });
+
+      const allowedFields = ['strip_atd', 'strip_rwy', 'strip_fl', 'strip_fl_unit', 'strip_sid_atc', 'strip_note_1', 'strip_note_2', 'strip_note_3', 'strip_zone', 'strip_order'];
+      const update: Record<string, unknown> = {};
+      for (const field of allowedFields) {
+        if (body[field] !== undefined) {
+          update[field] = body[field] === '' ? null : body[field];
+        }
+      }
+      if (Object.keys(update).length === 0) return NextResponse.json({ error: 'Aucun champ strip à mettre à jour.' }, { status: 400 });
+
+      const { error: err } = await admin.from('plans_vol').update(update).eq('id', id);
+      if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === 'reorder_strips') {
+      const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
+      const isAdmin = profile?.role === 'admin';
+      const canAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
+      if (!canAtc) return NextResponse.json({ error: 'Accès ATC requis.' }, { status: 403 });
+
+      const { strips } = body; // Array of { id, strip_zone, strip_order }
+      if (!Array.isArray(strips)) return NextResponse.json({ error: 'Format invalide.' }, { status: 400 });
+
+      for (const s of strips) {
+        if (!s.id) continue;
+        await admin.from('plans_vol').update({
+          strip_zone: s.strip_zone || null,
+          strip_order: s.strip_order ?? 0,
+        }).eq('id', s.id);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     return NextResponse.json({ error: 'Action inconnue.' }, { status: 400 });
   } catch (e) {
     console.error('plans-vol PATCH:', e);

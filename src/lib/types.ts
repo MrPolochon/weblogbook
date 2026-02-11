@@ -54,6 +54,19 @@ export interface PlanVol {
   created_at: string;
   updated_at?: string;
   
+  // Flight strip fields (ATC)
+  sid_depart?: string | null;
+  strip_atd?: string | null;
+  strip_rwy?: string | null;
+  strip_fl?: string | null;
+  strip_fl_unit?: string | null;
+  strip_sid_atc?: string | null;
+  strip_note_1?: string | null;
+  strip_note_2?: string | null;
+  strip_note_3?: string | null;
+  strip_zone?: string | null;
+  strip_order?: number;
+
   // Relations enrichies (optionnelles)
   pilote?: { identifiant: string } | null;
   copilote?: { identifiant: string } | null;
