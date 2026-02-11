@@ -353,6 +353,7 @@ export async function PATCH(
           pending_transfer_aeroport: null,
           pending_transfer_position: null,
           pending_transfer_at: null,
+          strip_zone: null,
         }).eq('id', id);
         if (err) return NextResponse.json({ error: err.message }, { status: 400 });
         return NextResponse.json({ ok: true });
@@ -381,6 +382,7 @@ export async function PATCH(
           pending_transfer_aeroport: null,
           pending_transfer_position: null,
           pending_transfer_at: null,
+          strip_zone: null,
         }).eq('id', id);
         if (err) return NextResponse.json({ error: err.message }, { status: 400 });
         return NextResponse.json({ ok: true });
@@ -415,6 +417,7 @@ export async function PATCH(
         pending_transfer_aeroport: null,
         pending_transfer_position: null,
         pending_transfer_at: null,
+        strip_zone: null,
       }).eq('id', id);
       if (err) return NextResponse.json({ error: err.message }, { status: 400 });
       return NextResponse.json({ ok: true });

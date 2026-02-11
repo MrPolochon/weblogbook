@@ -289,7 +289,7 @@ export default function AtcAcceptTransfertSidebar({
   const plansAccepterVisibles = plansAccepter.filter(p => !activatedPlanIds.has(p.id));
   
   // Si plus rien à afficher, masquer complètement la sidebar
-  if (plansTransfert.length === 0 && plansAccepterVisibles.length === 0 && plansCloture.length === 0) return null;
+  if (plansTransfert.length === 0 && plansAccepterVisibles.length === 0) return null;
 
   const maxUrgency = getMaxUrgency();
   
@@ -312,36 +312,6 @@ export default function AtcAcceptTransfertSidebar({
         À traiter {maxUrgency >= 3 && '⚠️'}
       </p>
 
-      {/* Demandes de clôture - PRIORITÉ HAUTE */}
-      {plansCloture.length > 0 && (
-        <div className="mb-3">
-          <p className={`text-[10px] font-semibold ${isDark ? 'text-red-400' : 'text-red-800'} px-2 mb-1`}>⚠️ Clôtures à confirmer</p>
-          <ul className="space-y-1">
-            {plansCloture.map((p) => {
-              const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
-              return (
-                <li key={p.id} className="relative">
-                  <Link
-                    href={`/atc/plan/${p.id}`}
-                    className={`block ${getItemClass(p.id, 'red')}`}
-                    title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee} - CLÔTURE DEMANDÉE`}
-                    style={{
-                      animation: `blink ${Math.max(0.15, 0.5 - (urgency * 0.08))}s ease-in-out infinite`,
-                      transform: `scale(${1 + (urgency * 0.02)})`,
-                      boxShadow: `0 0 ${urgency * 6}px rgba(239, 68, 68, 0.8)`,
-                    }}
-                  >
-                    🛬 {p.numero_vol}
-                  </Link>
-                  <span className="absolute -top-1 -right-1 text-[9px] bg-red-700 text-white px-1 rounded">
-                    {formatElapsed(p.id)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
 
       {/* Plans à accepter */}
       {plansAccepterVisibles.length > 0 && (

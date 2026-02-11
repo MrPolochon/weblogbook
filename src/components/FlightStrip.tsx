@@ -347,28 +347,60 @@ export default function FlightStrip({
 }) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
+  const isClotureRequested = strip.statut === 'en_attente_cloture';
+  
+  // Son de notification pour demande de clôture
+  useEffect(() => {
+    if (!isClotureRequested) return;
+    
+    // Jouer le son une seule fois au montage
+    const playClotureSound = () => {
+      try {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContext) return;
+        
+        const ctx = new AudioContext();
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        oscillator.frequency.value = 400;
+        gainNode.gain.value = 0.3;
+        oscillator.start();
+        setTimeout(() => { oscillator.frequency.value = 500; }, 200);
+        setTimeout(() => { oscillator.frequency.value = 400; }, 400);
+        setTimeout(() => { oscillator.stop(); ctx.close(); }, 600);
+      } catch (e) {
+        console.warn('Audio not available:', e);
+      }
+    };
+    
+    playClotureSound();
+  }, [isClotureRequested]);
   
   const sqColor = getSquawkColor(strip.code_transpondeur);
   const sqLabel = getSquawkLabel(strip.code_transpondeur);
   const isEmergency = !!sqColor;
   const squawkMismatch = strip.squawk_attendu && strip.code_transpondeur && strip.code_transpondeur !== strip.squawk_attendu;
   const noSquawk = strip.squawk_attendu && !strip.code_transpondeur;
-
+  
   // Color scheme - Mode clair
-  const lightBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-700' : sqColor === 'radio' ? 'border-amber-600' : 'border-red-600') : 'border-[#8fbc8f]';
-  const lightLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-100' : sqColor === 'radio' ? 'bg-amber-100' : 'bg-red-100') : 'bg-[#d5ecd5]';
-  const lightRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : 'bg-[#f5f0c8]';
-  const lightTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : 'bg-[#c5dcc5]';
-  const lightSep = isEmergency ? 'border-red-300' : 'border-[#8fbc8f]';
+  const lightBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-700' : sqColor === 'radio' ? 'border-amber-600' : 'border-red-600') : isClotureRequested ? 'border-red-500' : 'border-[#8fbc8f]';
+  const lightLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-100' : sqColor === 'radio' ? 'bg-amber-100' : 'bg-red-100') : isClotureRequested ? 'bg-red-50' : 'bg-[#d5ecd5]';
+  const lightRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : isClotureRequested ? 'bg-red-100' : 'bg-[#f5f0c8]';
+  const lightTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : isClotureRequested ? 'bg-red-100' : 'bg-[#c5dcc5]';
+  const lightSep = isEmergency ? 'border-red-300' : isClotureRequested ? 'border-red-300' : 'border-[#8fbc8f]';
   const lightTxt = 'text-slate-900';
   const lightLbl = 'text-slate-600';
 
   // Color scheme - Mode sombre (couleurs inversées avec meilleur contraste)
-  const darkBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-500' : sqColor === 'radio' ? 'border-amber-500' : 'border-red-500') : 'border-emerald-600';
-  const darkLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-950' : sqColor === 'radio' ? 'bg-amber-950' : 'bg-red-950') : 'bg-emerald-950';
-  const darkRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : 'bg-yellow-950';
-  const darkTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : 'bg-emerald-900';
-  const darkSep = isEmergency ? 'border-red-700' : 'border-emerald-700';
+  const darkBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-500' : sqColor === 'radio' ? 'border-amber-500' : 'border-red-500') : isClotureRequested ? 'border-red-500' : 'border-emerald-600';
+  const darkLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-950' : sqColor === 'radio' ? 'bg-amber-950' : 'bg-red-950') : isClotureRequested ? 'bg-red-950' : 'bg-emerald-950';
+  const darkRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : isClotureRequested ? 'bg-red-900' : 'bg-yellow-950';
+  const darkTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : isClotureRequested ? 'bg-red-900' : 'bg-emerald-900';
+  const darkSep = isEmergency ? 'border-red-700' : isClotureRequested ? 'border-red-700' : 'border-emerald-700';
   const darkTxt = 'text-slate-100';
   const darkLbl = 'text-slate-300';
 
@@ -382,9 +414,23 @@ export default function FlightStrip({
   const lbl = isDark ? darkLbl : lightLbl;
 
   return (
-    <div className={`border ${border} rounded shadow-sm select-none overflow-hidden`} onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, strip.id); }}>
+    <div 
+      className={`border ${border} rounded shadow-sm select-none overflow-hidden ${isClotureRequested ? 'animate-pulse-red' : ''}`} 
+      onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, strip.id); }}
+      style={isClotureRequested ? {
+        animation: 'pulse-red 1.5s ease-in-out infinite',
+        boxShadow: '0 0 20px rgba(239, 68, 68, 0.6)'
+      } : undefined}
+    >
       {/* Emergency banner */}
       {sqLabel && <div className={`text-center text-sm font-black tracking-[0.3em] py-1 animate-pulse ${isDark ? 'bg-red-600 text-white' : 'bg-black text-white'}`}>{sqLabel}</div>}
+      
+      {/* Closure request banner */}
+      {isClotureRequested && (
+        <div className="text-center text-sm font-bold py-1 bg-red-600 text-white animate-pulse">
+          🛬 DEMANDE DE CLÔTURE
+        </div>
+      )}
       {(squawkMismatch || noSquawk) && !sqLabel && (
         <div className={`text-center text-xs font-bold py-1 ${isDark ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black'}`}>
           {noSquawk ? '⚠ PAS DE TRANSPONDEUR' : `⚠ SQUAWK INCORRECT (attendu: ${strip.squawk_attendu})`}
@@ -528,6 +574,22 @@ export default function FlightStrip({
 
       {/* ACTION BAR */}
       <StripActionBar strip={strip} onRefresh={onRefresh} />
+      
+      {/* Animation CSS pour clignotement rouge */}
+      {isClotureRequested && (
+        <style jsx>{`
+          @keyframes pulse-red {
+            0%, 100% {
+              border-color: rgb(185, 28, 28);
+              box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+            }
+            50% {
+              border-color: rgb(239, 68, 68);
+              box-shadow: 0 0 30px rgba(239, 68, 68, 0.9);
+            }
+          }
+        `}</style>
+      )}
     </div>
   );
 }
