@@ -46,12 +46,17 @@ export async function POST(req: NextRequest) {
 
     // Trouver le compte destination
     const { data: compteDest } = await admin.from('felitz_comptes')
-      .select('id, solde')
+      .select('id, solde, vban')
       .eq('vban', vban_destination)
       .single();
 
     if (!compteDest) {
       return NextResponse.json({ error: 'VBAN destination introuvable' }, { status: 404 });
+    }
+
+    // Interdire virement vers le même compte
+    if (compteSource.id === compteDest.id) {
+      return NextResponse.json({ error: 'Virement vers le même compte impossible' }, { status: 400 });
     }
 
     // Protection contre les race conditions: vérifier le solde au moment du débit

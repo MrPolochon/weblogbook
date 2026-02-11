@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'pilote' | 'atc' | 'siavi';
+export type Role = 'admin' | 'pilote' | 'atc' | 'ifsa' | 'siavi';
 export type VolStatut = 'en_attente' | 'validé' | 'refusé';
 export type TypeVol = 'IFR' | 'VFR';
 export type RolePilote = 'Pilote' | 'Co-pilote';

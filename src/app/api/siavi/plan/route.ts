@@ -9,7 +9,7 @@ export async function PATCH(request: Request) {
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const { data: profile } = await supabase.from('profiles').select('role, siavi').eq('id', user.id).single();
-    const canSiavi = profile?.role === 'admin' || Boolean(profile?.siavi);
+    const canSiavi = profile?.role === 'admin' || profile?.role === 'siavi' || Boolean(profile?.siavi);
     if (!canSiavi) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
 
     // Vérifier que l'AFIS est en service avec fonctions AFIS

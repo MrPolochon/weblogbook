@@ -65,7 +65,7 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
       if (res.ok) {
         const avs = d || [];
         // Afficher les avions qui ne sont pas en vol et non loués
-        setAvions(avs.filter((a: Avion & { location_status?: string | null }) => a.statut !== 'in_flight' && !a.location_status));
+        setAvions(avs.filter((a: Avion & { location_status?: string | null }) => a.statut !== 'in_flight' && a.location_status !== 'leased_out'));
       }
     } catch {
       console.error('Erreur chargement avions');

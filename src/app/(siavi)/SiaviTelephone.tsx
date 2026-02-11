@@ -644,7 +644,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
 
   return (
     <>
-    <div ref={audioContainerRef} style={{ display: 'none' }} />
+    <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
     <div className="fixed right-4 bottom-4 z-50 bg-gradient-to-b from-red-800 to-red-950 rounded-3xl shadow-2xl overflow-hidden" style={{ width: '240px' }}>
       <div className="px-4 py-3 flex items-center justify-between border-b border-red-700/50">
         <div className="flex items-center gap-2">

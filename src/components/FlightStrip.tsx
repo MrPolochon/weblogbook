@@ -415,7 +415,7 @@ export default function FlightStrip({
 
   return (
     <div 
-      className={`border ${border} rounded shadow-sm select-none overflow-hidden ${isClotureRequested ? 'animate-pulse-red' : ''}`} 
+          className={`border ${border} rounded shadow-sm select-none overflow-hidden`}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, strip.id); }}
       style={isClotureRequested ? {
         animation: 'pulse-red 1.5s ease-in-out infinite',
@@ -557,13 +557,15 @@ export default function FlightStrip({
                   strip.statut === 'en_cours' ? 'text-sky-700' :
                   strip.statut === 'en_attente_cloture' ? 'text-orange-700' :
                   strip.statut === 'accepte' ? 'text-emerald-700' :
-                  (strip.statut === 'depose' || strip.statut === 'en_attente') ? 'text-amber-700' : txt
+                  (strip.statut === 'depose' || strip.statut === 'en_attente') ? 'text-amber-700' : 
+                  strip.statut === 'automonitoring' ? 'text-purple-700' : txt
                 }`}>
                   {strip.statut === 'en_cours' ? 'EN VOL' :
                    strip.statut === 'en_attente_cloture' ? 'CLÔTURE' :
                    strip.statut === 'accepte' ? 'ACCEPTÉ' :
                    strip.statut === 'depose' ? 'DÉPOSÉ' :
                    strip.statut === 'en_attente' ? 'EN ATTENTE' :
+                   strip.statut === 'automonitoring' ? 'AUTOSURV.' :
                    strip.statut}
                 </span>
               </Cell>

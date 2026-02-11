@@ -348,7 +348,7 @@ export default function AtcAcceptTransfertSidebar({
       {/* Transferts */}
       {plansTransfert.length > 0 && (
         <div>
-          <p className="text-[10px] font-semibold text-orange-800 px-2 mb-1">Transferts (1 min)</p>
+          <p className={`text-[10px] font-semibold px-2 mb-1 ${isDark ? 'text-orange-400' : 'text-orange-800'}`}>Transferts (1 min)</p>
           <ul className="space-y-1">
             {plansTransfert.map((p) => {
               const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
