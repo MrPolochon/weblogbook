@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import FlightStrip, { type StripData } from './FlightStrip';
 import { X } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
+import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
 type ZoneId = 'sol' | 'depart' | 'arrivee';
 type ZoneOrNull = ZoneId | null;
@@ -355,7 +356,19 @@ function TransferDialog({ planId, onClose }: { planId: string; onClose: () => vo
         <div className="space-y-3">
           <div>
             <label className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Aéroport</label>
-            <input className={`w-full border rounded-lg px-3 py-2 text-sm font-mono font-bold ${isDark ? 'bg-slate-900 border-slate-600 text-slate-100 placeholder:text-slate-500' : 'bg-white border-slate-300 text-slate-900'}`} placeholder="IRFD" value={aeroport} onChange={(e) => setAeroport(e.target.value.toUpperCase())} disabled={autoSurv} />
+            <select 
+              className={`w-full border rounded-lg px-3 py-2 text-sm font-mono font-bold ${isDark ? 'bg-slate-900 border-slate-600 text-slate-100' : 'bg-white border-slate-300 text-slate-900'}`} 
+              value={aeroport} 
+              onChange={(e) => setAeroport(e.target.value)} 
+              disabled={autoSurv}
+            >
+              <option value="">— Sélectionner un aéroport —</option>
+              {AEROPORTS_PTFS.map((apt) => (
+                <option key={apt.code} value={apt.code}>
+                  {apt.code} – {apt.nom}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className={`text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Position</label>
