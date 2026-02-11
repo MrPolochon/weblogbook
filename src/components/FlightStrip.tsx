@@ -60,20 +60,31 @@ function formatCtot(createdAt: string): string {
 
 /* ============================================================ */
 /*  INLINE EDIT — champ modifiable dans le strip                  */
+/*  Stratégie de persistance :                                    */
+/*   - Le texte est gardé localement après sauvegarde             */
+/*   - On ne fait PAS de router.refresh() après un edit inline    */
+/*   - Si l'API échoue, le texte reste affiché avec bordure rouge */
+/*   - Le sync serveur ne peut pas écraser une valeur locale      */
 /* ============================================================ */
+const NOT_SET = Symbol('NOT_SET');
+
 function InlineEdit({
-  value, field, planId, placeholder, maxLength, onSaved, large,
+  value, field, planId, placeholder, maxLength, large,
 }: {
   value: string | null; field: EditableField; planId: string;
   placeholder: string; maxLength?: number; onSaved?: () => void; large?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(value || '');
+  // localOverride: symbol NOT_SET = never modified locally, string = local override
+  const localOverride = useRef<string | typeof NOT_SET>(NOT_SET);
+  const [, forceRender] = useState(0);
   const [saving, setSaving] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [error, setError] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Force focus when editing starts — runs after render so input exists in DOM
+  // Force focus when editing starts
   useEffect(() => {
     if (editing && inputRef.current) {
       inputRef.current.focus();
@@ -81,34 +92,56 @@ function InlineEdit({
     }
   }, [editing]);
 
-  // Sync external value when not editing
+  // What to display: local override if set, otherwise server value
+  const hasLocal = localOverride.current !== NOT_SET;
+  const displayValue = hasLocal ? (localOverride.current as string) : (value || '');
+
+  // Sync from server — only when we have NO local override
   useEffect(() => {
-    if (!editing) setText(value || '');
-  }, [value, editing]);
+    if (!editing && !saving && !hasLocal) {
+      setText(value || '');
+    }
+  }, [value, editing, saving, hasLocal]);
+
+  // When server catches up to our local value, clear the override
+  useEffect(() => {
+    if (hasLocal && value === localOverride.current) {
+      localOverride.current = NOT_SET;
+    }
+  }, [value, hasLocal]);
 
   const save = useCallback(async (val: string) => {
     setSaving(true);
+    setError(false);
+    const trimmed = val.trim();
+    // Immediately set local override so text is visible even before API responds
+    localOverride.current = trimmed;
+    forceRender((n) => n + 1);
+
     try {
       const res = await fetch(`/api/plans-vol/${planId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_strip', [field]: val }),
+        body: JSON.stringify({ action: 'update_strip', [field]: trimmed || '' }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         console.error('Strip save error:', d.error || res.statusText);
+        setError(true);
+        // Keep localOverride — text stays visible with a red border
       }
     } catch (err) {
       console.error('Strip save error:', err);
+      setError(true);
+      // Keep localOverride — text stays visible with a red border
     }
     setSaving(false);
     setEditing(false);
-    onSaved?.();
-  }, [planId, field, onSaved]);
+  }, [planId, field]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); save(text); }
-    if (e.key === 'Escape') { setEditing(false); setText(value || ''); }
+    if (e.key === 'Escape') { setEditing(false); setText(displayValue); }
   };
 
   const clearField = (e: React.MouseEvent) => {
@@ -135,19 +168,22 @@ function InlineEdit({
 
   return (
     <div
-      className={`relative cursor-text min-h-[22px] flex items-center rounded px-0.5 transition-colors ${hovered ? 'bg-white/50 ring-1 ring-sky-300' : ''}`}
+      className={`relative cursor-text min-h-[22px] flex items-center rounded px-0.5 transition-colors ${hovered ? 'bg-white/50 ring-1 ring-sky-300' : ''} ${error ? 'ring-1 ring-red-400 bg-red-50/30' : ''}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={(e) => {
         e.stopPropagation();
         setEditing(true);
-        setText(value || '');
+        setText(displayValue);
+        setError(false);
       }}
+      title={error ? 'Erreur de sauvegarde — cliquer pour réessayer' : undefined}
     >
-      <span className={`font-mono leading-snug ${large ? 'text-sm font-bold' : 'text-xs'} ${value ? 'text-slate-900' : 'text-slate-400 italic'}`}>
-        {value || placeholder}
+      <span className={`font-mono leading-snug ${large ? 'text-sm font-bold' : 'text-xs'} ${displayValue ? 'text-slate-900' : 'text-slate-400 italic'}`}>
+        {displayValue || placeholder}
       </span>
-      {hovered && value && (
+      {error && <span className="text-[8px] text-red-500 ml-0.5">!</span>}
+      {hovered && displayValue && !error && (
         <button type="button" onClick={clearField} className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 z-10 shadow" title="Effacer">
           <Trash2 className="h-2.5 w-2.5" />
         </button>
@@ -159,16 +195,24 @@ function InlineEdit({
 /* ============================================================ */
 /*  FL / ft toggle                                                */
 /* ============================================================ */
-function FlUnitToggle({ planId, unit, onSaved }: { planId: string; unit: string | null; onSaved?: () => void }) {
-  const current = unit || 'FL';
+function FlUnitToggle({ planId, unit }: { planId: string; unit: string | null; onSaved?: () => void }) {
+  const [current, setCurrent] = useState(unit || 'FL');
   const toggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
     const next = current === 'FL' ? 'ft' : 'FL';
-    await fetch(`/api/plans-vol/${planId}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update_strip', strip_fl_unit: next }),
-    });
-    onSaved?.();
+    setCurrent(next); // Optimistic update
+    try {
+      const res = await fetch(`/api/plans-vol/${planId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_strip', strip_fl_unit: next }),
+      });
+      if (!res.ok) {
+        console.error('FlUnitToggle save error');
+        setCurrent(current); // Revert on error
+      }
+    } catch {
+      setCurrent(current); // Revert on error
+    }
   };
   return (
     <button type="button" onClick={toggle} className="text-[9px] font-bold text-sky-700 hover:text-sky-500 bg-sky-100 hover:bg-sky-200 rounded px-1 leading-none" title={`Basculer FL/ft`}>

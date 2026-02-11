@@ -1,13 +1,26 @@
 -- ============================================================
--- FIX: vols_ferry pilote_id nullable (pour vols ferry automatiques)
+-- MIGRATION OBLIGATOIRE - À exécuter dans l'éditeur SQL Supabase
+-- Ce script est IDEMPOTENT (safe à exécuter plusieurs fois)
+-- ============================================================
+
+-- ============================================================
+-- 1. FIX: vols_ferry pilote_id nullable (vols ferry automatiques)
 -- ============================================================
 ALTER TABLE public.vols_ferry ALTER COLUMN pilote_id DROP NOT NULL;
 
 -- ============================================================
--- FLIGHT STRIPS - Champs supplémentaires pour les strips ATC
+-- 2. MAINTENANCE: colonne maintenance_fin_at sur compagnie_avions
 -- ============================================================
+ALTER TABLE public.compagnie_avions
+  ADD COLUMN IF NOT EXISTS maintenance_fin_at TIMESTAMPTZ DEFAULT NULL;
 
--- Champs strip sur plans_vol
+COMMENT ON COLUMN public.compagnie_avions.maintenance_fin_at IS 'Date de fin de maintenance lorsque des techniciens sont affrétés';
+
+-- ============================================================
+-- 3. FLIGHT STRIPS - Champs supplémentaires pour les strips ATC
+--    CRITIQUE: sans ces colonnes, les champs éditables des strips
+--    ne sauvegarderont pas (le texte disparaît).
+-- ============================================================
 ALTER TABLE public.plans_vol
   ADD COLUMN IF NOT EXISTS strip_atd TEXT,
   ADD COLUMN IF NOT EXISTS strip_rwy TEXT,
@@ -22,3 +35,13 @@ ALTER TABLE public.plans_vol
 
 -- Index pour ordonner les strips par zone
 CREATE INDEX IF NOT EXISTS idx_plans_vol_strip_zone ON public.plans_vol (strip_zone, strip_order);
+
+-- ============================================================
+-- 4. Vérification: cette requête doit retourner 10 colonnes strip
+-- ============================================================
+SELECT column_name 
+FROM information_schema.columns 
+WHERE table_schema = 'public' 
+  AND table_name = 'plans_vol' 
+  AND column_name LIKE 'strip_%'
+ORDER BY column_name;

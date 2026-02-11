@@ -3,8 +3,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import FlightStrip, { type StripData } from './FlightStrip';
+import { X } from 'lucide-react';
 
 type ZoneId = 'sol' | 'depart' | 'arrivee';
+type ZoneOrNull = ZoneId | null;
 
 const ZONE_LABELS: Record<ZoneId, string> = {
   sol: 'Trafic au sol',
@@ -24,13 +26,37 @@ const ZONE_HEADER: Record<ZoneId, string> = {
 
 export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
   const router = useRouter();
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; stripId: string } | null>(null);
   const [transferDialog, setTransferDialog] = useState<string | null>(null);
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [hoverZone, setHoverZone] = useState<string | null>(null);
-  const ctxRef = useRef<HTMLDivElement>(null);
 
-  const getZone = useCallback((zone: ZoneId | null) =>
+  // ═══════════════════════════════════════════════
+  //  PICK & PLACE — clic droit prend, clic gauche pose
+  // ═══════════════════════════════════════════════
+  const [pickedId, setPickedId] = useState<string | null>(null);
+
+  // Cancel pick on Escape
+  useEffect(() => {
+    if (!pickedId) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPickedId(null);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [pickedId]);
+
+  // Cancel pick on right-click anywhere (when already picking)
+  useEffect(() => {
+    if (!pickedId) return;
+    const handler = (e: MouseEvent) => {
+      if (e.button === 2) {
+        e.preventDefault();
+        setPickedId(null);
+      }
+    };
+    window.addEventListener('mousedown', handler);
+    return () => window.removeEventListener('mousedown', handler);
+  }, [pickedId]);
+
+  const getZone = useCallback((zone: ZoneOrNull) =>
     strips.filter((s) => s.strip_zone === zone).sort((a, b) => a.strip_order - b.strip_order),
   [strips]);
 
@@ -39,25 +65,44 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
   const departStrips = getZone('depart');
   const arriveeStrips = getZone('arrivee');
 
-  // Close context menu on outside click
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handler = (e: MouseEvent) => {
-      if (ctxRef.current && !ctxRef.current.contains(e.target as Node)) setContextMenu(null);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [contextMenu]);
-
-  /* ======== Context menu ======== */
-  const handleContextMenu = useCallback((e: React.MouseEvent, stripId: string) => {
+  /* ═══ Right-click on a strip = pick it ═══ */
+  const handleStripRightClick = useCallback((e: React.MouseEvent, stripId: string) => {
     e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, stripId });
-  }, []);
+    // If already picking this one, cancel
+    if (pickedId === stripId) {
+      setPickedId(null);
+      return;
+    }
+    setPickedId(stripId);
+  }, [pickedId]);
 
-  /* ======== Move to zone (API) ======== */
-  const moveToZone = useCallback(async (stripId: string, zone: ZoneId | null) => {
-    setContextMenu(null);
+  /* ═══ Double right-click = transfer dialog ═══ */
+  // We handle this by tracking right-click timing
+  const lastRightClick = useRef<{ id: string; time: number } | null>(null);
+  const handleStripRightClickWithDouble = useCallback((e: React.MouseEvent, stripId: string) => {
+    e.preventDefault();
+    const now = Date.now();
+    if (lastRightClick.current && lastRightClick.current.id === stripId && now - lastRightClick.current.time < 400) {
+      // Double right-click → transfer
+      setPickedId(null);
+      setTransferDialog(stripId);
+      lastRightClick.current = null;
+      return;
+    }
+    lastRightClick.current = { id: stripId, time: now };
+    // Single right-click → pick
+    if (pickedId === stripId) {
+      setPickedId(null);
+    } else {
+      setPickedId(stripId);
+    }
+  }, [pickedId]);
+
+  /* ═══ Place strip in a zone (at the end) ═══ */
+  const placeInZone = useCallback(async (zone: ZoneOrNull) => {
+    if (!pickedId) return;
+    const stripId = pickedId;
+    setPickedId(null);
     const zoneStrips = strips.filter((s) => s.strip_zone === zone);
     const maxOrder = zoneStrips.reduce((max, s) => Math.max(max, s.strip_order), -1);
     await fetch(`/api/plans-vol/${stripId}`, {
@@ -66,114 +111,98 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
       body: JSON.stringify({ action: 'update_strip', strip_zone: zone, strip_order: maxOrder + 1 }),
     });
     router.refresh();
-  }, [strips, router]);
+  }, [pickedId, strips, router]);
 
-  const openTransferDialog = useCallback((stripId: string) => {
-    setContextMenu(null);
-    setTransferDialog(stripId);
-  }, []);
-
-  const setAutomonitoring = useCallback(async (stripId: string) => {
-    setContextMenu(null);
-    try {
-      const res = await fetch(`/api/plans-vol/${stripId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'transferer', automonitoring: true }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
-    } catch (e) { alert(e instanceof Error ? e.message : 'Erreur'); }
-  }, [router]);
-
-  /* ======== DRAG & DROP ======== */
-  const onDragStart = useCallback((e: React.DragEvent, id: string) => {
-    setDragId(id);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', id);
-    // Mini ghost
-    const ghost = document.createElement('div');
-    ghost.textContent = strips.find((s) => s.id === id)?.numero_vol || '';
-    ghost.style.cssText = 'position:fixed;top:-999px;left:-999px;padding:4px 12px;background:#0ea5e9;color:#fff;border-radius:6px;font:bold 12px monospace;';
-    document.body.appendChild(ghost);
-    e.dataTransfer.setDragImage(ghost, 40, 14);
-    requestAnimationFrame(() => document.body.removeChild(ghost));
-  }, [strips]);
-
-  const onDragEnd = useCallback(() => {
-    setDragId(null);
-    setHoverZone(null);
-  }, []);
-
-  const onDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  const onDropOnZone = useCallback(async (e: React.DragEvent, zone: ZoneId | null) => {
-    e.preventDefault();
-    setHoverZone(null);
-    const id = e.dataTransfer.getData('text/plain') || dragId;
-    if (!id) return;
-    setDragId(null);
-    await moveToZone(id, zone);
-  }, [dragId, moveToZone]);
-
-  const onDropOnStrip = useCallback(async (e: React.DragEvent, targetId: string, zone: ZoneId | null) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setHoverZone(null);
-    const srcId = e.dataTransfer.getData('text/plain') || dragId;
-    if (!srcId || srcId === targetId) { setDragId(null); return; }
+  /* ═══ Place strip before/after another strip ═══ */
+  const placeNearStrip = useCallback(async (targetId: string, zone: ZoneOrNull, position: 'before' | 'after') => {
+    if (!pickedId || pickedId === targetId) { setPickedId(null); return; }
+    const stripId = pickedId;
+    setPickedId(null);
 
     const zoneStrips = strips.filter((s) => s.strip_zone === zone).sort((a, b) => a.strip_order - b.strip_order);
     const targetIdx = zoneStrips.findIndex((s) => s.id === targetId);
-    const reordered = zoneStrips.filter((s) => s.id !== srcId);
-    const srcStrip = strips.find((s) => s.id === srcId);
-    if (srcStrip) reordered.splice(targetIdx >= 0 ? targetIdx : reordered.length, 0, { ...srcStrip, strip_zone: zone, strip_order: 0 });
+    const reordered = zoneStrips.filter((s) => s.id !== stripId);
+    const srcStrip = strips.find((s) => s.id === stripId);
+    if (!srcStrip) return;
+
+    const insertIdx = position === 'before'
+      ? (targetIdx >= 0 ? reordered.findIndex((s) => s.id === targetId) : reordered.length)
+      : (targetIdx >= 0 ? reordered.findIndex((s) => s.id === targetId) + 1 : reordered.length);
+
+    reordered.splice(insertIdx, 0, { ...srcStrip, strip_zone: zone, strip_order: 0 });
     const batch = reordered.map((s, i) => ({ id: s.id, strip_zone: zone, strip_order: i }));
 
-    setDragId(null);
-    await fetch(`/api/plans-vol/${srcId}`, {
+    await fetch(`/api/plans-vol/${stripId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'reorder_strips', strips: batch }),
     });
     router.refresh();
-  }, [strips, dragId, router]);
+  }, [pickedId, strips, router]);
+
+  /* ═══ Click on a strip wrapper → place picked strip there ═══ */
+  const handleStripAreaClick = useCallback((e: React.MouseEvent, targetId: string, zone: ZoneOrNull) => {
+    if (!pickedId || pickedId === targetId) return;
+    e.stopPropagation();
+    // Determine if mouse is on top or bottom half of the target
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const mouseY = e.clientY - rect.top;
+    const isTopHalf = mouseY < rect.height / 2;
+    placeNearStrip(targetId, zone, isTopHalf ? 'before' : 'after');
+  }, [pickedId, placeNearStrip]);
+
+  /* ═══ Click on zone empty area → place at end ═══ */
+  const handleZoneClick = useCallback((zone: ZoneOrNull) => {
+    if (!pickedId) return;
+    placeInZone(zone);
+  }, [pickedId, placeInZone]);
 
   const refresh = useCallback(() => router.refresh(), [router]);
+  const pickedStrip = pickedId ? strips.find((s) => s.id === pickedId) : null;
 
-  /* ======== Make dragHandleProps for each strip ======== */
+  /* ═══ Drag handle props (grip icon, kept as backup) ═══ */
   const makeDragProps = (id: string) => ({
     draggable: true as const,
-    onDragStart: (e: React.DragEvent) => onDragStart(e, id),
-    onDragEnd,
+    onDragStart: (e: React.DragEvent) => {
+      setPickedId(null); // Cancel pick mode if dragging
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', id);
+    },
+    onDragEnd: () => {},
   });
 
-  /* ======== Render a zone ======== */
+  /* ═══ Render a zone ═══ */
   const renderZone = (zone: ZoneId, zs: StripData[]) => {
-    const dropping = hoverZone === zone && !!dragId;
+    const canDrop = !!pickedId;
     return (
       <div
         key={zone}
-        className={`flex-1 min-w-[480px] border-2 rounded-lg flex flex-col transition-all ${ZONE_COLORS[zone]} ${dropping ? 'ring-4 ring-sky-300 scale-[1.005]' : ''}`}
-        onDragOver={onDragOver}
-        onDragEnter={() => setHoverZone(zone)}
-        onDragLeave={() => setHoverZone(null)}
-        onDrop={(e) => onDropOnZone(e, zone)}
+        className={`flex-1 min-w-[480px] border-2 rounded-lg flex flex-col transition-all ${ZONE_COLORS[zone]} ${canDrop ? 'ring-2 ring-sky-300 ring-dashed' : ''}`}
+        onClick={() => handleZoneClick(zone)}
       >
         <div className={`px-3 py-1.5 text-sm font-bold uppercase tracking-wider ${ZONE_HEADER[zone]} rounded-t-md flex items-center justify-between`}>
           <span>{ZONE_LABELS[zone]}</span>
-          <span className="text-xs font-normal opacity-70">{zs.length} vol(s)</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-normal opacity-70">{zs.length} vol(s)</span>
+            {canDrop && <span className="text-xs font-semibold bg-white/60 rounded px-1.5 py-0.5 animate-pulse">Cliquer pour poser</span>}
+          </div>
         </div>
-        <div className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-320px)]">
+        <div className="flex-1 p-2 space-y-1 overflow-y-auto max-h-[calc(100vh-320px)]">
           {zs.length === 0 ? (
-            <p className="text-slate-400 text-sm italic text-center py-6">{dropping ? 'Déposer ici' : 'Glissez un strip ici'}</p>
+            <div className={`text-center py-6 rounded-lg border-2 border-dashed ${canDrop ? 'border-sky-400 bg-sky-50' : 'border-transparent'}`}>
+              <p className="text-slate-400 text-sm italic">{canDrop ? 'Cliquer ici pour poser le strip' : 'Aucun strip'}</p>
+            </div>
           ) : zs.map((s) => (
-            <div key={s.id} onDragOver={onDragOver} onDrop={(e) => onDropOnStrip(e, s.id, zone)} className={`transition-opacity ${dragId === s.id ? 'opacity-30' : ''}`}>
-              <FlightStrip strip={s} onRefresh={refresh} onContextMenu={handleContextMenu} dragHandleProps={makeDragProps(s.id)} />
+            <div
+              key={s.id}
+              className={`transition-all relative ${pickedId === s.id ? 'opacity-40 scale-[0.97]' : ''} ${canDrop && pickedId !== s.id ? 'cursor-pointer' : ''}`}
+              onClick={(e) => handleStripAreaClick(e, s.id, zone)}
+            >
+              {/* Drop indicator line when hovering */}
+              {canDrop && pickedId !== s.id && (
+                <div className="absolute inset-x-0 top-0 h-1 bg-sky-400 rounded opacity-0 hover:opacity-100 transition-opacity z-20" />
+              )}
+              <FlightStrip strip={s} onRefresh={refresh} onContextMenu={handleStripRightClickWithDouble} dragHandleProps={makeDragProps(s.id)} />
             </div>
           ))}
         </div>
@@ -183,6 +212,18 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
   return (
     <div className="flex flex-col gap-4 h-full">
+      {/* Pick mode banner */}
+      {pickedStrip && (
+        <div className="bg-sky-600 text-white px-4 py-2 rounded-lg flex items-center justify-between shadow-lg animate-in">
+          <span className="text-sm font-medium">
+            Strip <strong className="font-mono">{pickedStrip.numero_vol}</strong> sélectionné — <span className="opacity-80">cliquez sur une zone ou à côté d&apos;un strip pour le poser. Clic droit ou Échap pour annuler.</span>
+          </span>
+          <button type="button" onClick={() => setPickedId(null)} className="p-1 hover:bg-white/20 rounded transition-colors" title="Annuler">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* 3 zones */}
       <div className="flex gap-3 flex-1 min-h-0 overflow-x-auto pb-1">
         {renderZone('sol', solStrips)}
@@ -192,42 +233,32 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
       {/* Unassigned */}
       <div
-        className={`border-2 rounded-lg transition-all ${hoverZone === 'unassigned' && dragId ? 'border-sky-400 bg-sky-50/60 ring-4 ring-sky-300' : 'border-slate-300 bg-slate-50/60'}`}
-        onDragOver={onDragOver}
-        onDragEnter={() => setHoverZone('unassigned')}
-        onDragLeave={() => setHoverZone(null)}
-        onDrop={(e) => onDropOnZone(e, null)}
+        className={`border-2 rounded-lg transition-all ${pickedId ? 'ring-2 ring-sky-300 ring-dashed border-slate-400' : 'border-slate-300'} bg-slate-50/60`}
+        onClick={() => handleZoneClick(null)}
       >
         <div className="px-3 py-1.5 text-sm font-bold uppercase tracking-wider bg-slate-200 text-slate-700 rounded-t-md flex items-center justify-between">
           <span>Non assignés</span>
-          <span className="text-xs font-normal opacity-70">{unassigned.length} vol(s)</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-normal opacity-70">{unassigned.length} vol(s)</span>
+            {pickedId && <span className="text-xs font-semibold bg-white/60 rounded px-1.5 py-0.5 animate-pulse">Cliquer pour poser</span>}
+          </div>
         </div>
-        <div className="p-2 space-y-2 max-h-60 overflow-y-auto">
+        <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
           {unassigned.length === 0 ? (
-            <p className="text-slate-400 text-sm italic text-center py-3">Tous les strips sont assignés.</p>
+            <div className={`text-center py-3 rounded-lg border-2 border-dashed ${pickedId ? 'border-sky-400 bg-sky-50' : 'border-transparent'}`}>
+              <p className="text-slate-400 text-sm italic">{pickedId ? 'Cliquer ici pour poser' : 'Tous assignés.'}</p>
+            </div>
           ) : unassigned.map((s) => (
-            <div key={s.id} onDragOver={onDragOver} onDrop={(e) => onDropOnStrip(e, s.id, null)} className={`transition-opacity ${dragId === s.id ? 'opacity-30' : ''}`}>
-              <FlightStrip strip={s} onRefresh={refresh} onContextMenu={handleContextMenu} dragHandleProps={makeDragProps(s.id)} />
+            <div
+              key={s.id}
+              className={`transition-all relative ${pickedId === s.id ? 'opacity-40 scale-[0.97]' : ''} ${pickedId && pickedId !== s.id ? 'cursor-pointer' : ''}`}
+              onClick={(e) => handleStripAreaClick(e, s.id, null)}
+            >
+              <FlightStrip strip={s} onRefresh={refresh} onContextMenu={handleStripRightClickWithDouble} dragHandleProps={makeDragProps(s.id)} />
             </div>
           ))}
         </div>
       </div>
-
-      {/* Context menu */}
-      {contextMenu && (
-        <div ref={ctxRef} className="fixed z-50 bg-white border border-slate-300 rounded-xl shadow-2xl py-1 min-w-[190px]" style={{ left: contextMenu.x, top: contextMenu.y }}>
-          <p className="px-3 py-1 text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Déplacer vers</p>
-          {(['sol', 'depart', 'arrivee'] as ZoneId[]).map((z) => (
-            <button key={z} type="button" className="w-full text-left px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100" onClick={() => moveToZone(contextMenu.stripId, z)}>{ZONE_LABELS[z]}</button>
-          ))}
-          <button type="button" className="w-full text-left px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100" onClick={() => moveToZone(contextMenu.stripId, null)}>↩ Non assigné</button>
-          <hr className="my-1 border-slate-200" />
-          <button type="button" className="w-full text-left px-3 py-1.5 text-sm text-sky-600 hover:bg-sky-50 font-medium" onClick={() => openTransferDialog(contextMenu.stripId)}>Transférer…</button>
-          <button type="button" className="w-full text-left px-3 py-1.5 text-sm text-purple-600 hover:bg-purple-50 font-medium" onClick={() => setAutomonitoring(contextMenu.stripId)}>Autosurveillance</button>
-          <hr className="my-1 border-slate-200" />
-          <button type="button" className="w-full text-left px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-100" onClick={() => setContextMenu(null)}>Annuler</button>
-        </div>
-      )}
 
       {/* Transfer dialog */}
       {transferDialog && <TransferDialog planId={transferDialog} onClose={() => setTransferDialog(null)} />}
