@@ -180,17 +180,17 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
         className={`flex-1 min-w-[480px] border-2 rounded-lg flex flex-col transition-all ${ZONE_COLORS[zone]} ${canDrop ? 'ring-2 ring-sky-300 ring-dashed' : ''}`}
         onClick={() => handleZoneClick(zone)}
       >
-        <div className={`px-3 py-1.5 text-sm font-bold uppercase tracking-wider ${ZONE_HEADER[zone]} rounded-t-md flex items-center justify-between`}>
+        <div className={`px-3 py-2 text-base font-bold uppercase tracking-wider ${ZONE_HEADER[zone]} rounded-t-md flex items-center justify-between`}>
           <span>{ZONE_LABELS[zone]}</span>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-normal opacity-70">{zs.length} vol(s)</span>
-            {canDrop && <span className="text-xs font-semibold bg-white/60 rounded px-1.5 py-0.5 animate-pulse">Cliquer pour poser</span>}
+            <span className="text-sm font-semibold opacity-80">{zs.length} vol(s)</span>
+            {canDrop && <span className="text-xs font-bold bg-white/70 rounded px-2 py-1 animate-pulse shadow-sm">Cliquer pour poser</span>}
           </div>
         </div>
         <div className="flex-1 p-2 space-y-1 overflow-y-auto max-h-[calc(100vh-320px)]">
           {zs.length === 0 ? (
-            <div className={`text-center py-6 rounded-lg border-2 border-dashed ${canDrop ? 'border-sky-400 bg-sky-50' : 'border-transparent'}`}>
-              <p className="text-slate-400 text-sm italic">{canDrop ? 'Cliquer ici pour poser le strip' : 'Aucun strip'}</p>
+            <div className={`text-center py-8 rounded-lg border-2 border-dashed ${canDrop ? 'border-sky-400 bg-sky-50' : 'border-transparent'}`}>
+              <p className="text-slate-500 text-base font-medium italic">{canDrop ? 'Cliquer ici pour poser le strip' : 'Aucun strip'}</p>
             </div>
           ) : zs.map((s) => (
             <div
@@ -214,12 +214,12 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
     <div className="flex flex-col gap-4 h-full">
       {/* Pick mode banner */}
       {pickedStrip && (
-        <div className="bg-sky-600 text-white px-4 py-2 rounded-lg flex items-center justify-between shadow-lg animate-in">
-          <span className="text-sm font-medium">
-            Strip <strong className="font-mono">{pickedStrip.numero_vol}</strong> sélectionné — <span className="opacity-80">cliquez sur une zone ou à côté d&apos;un strip pour le poser. Clic droit ou Échap pour annuler.</span>
+        <div className="bg-sky-600 text-white px-5 py-3 rounded-lg flex items-center justify-between shadow-lg animate-in">
+          <span className="text-base font-semibold">
+            Strip <strong className="font-mono text-lg">{pickedStrip.numero_vol}</strong> sélectionné — <span className="opacity-90">cliquez sur une zone ou à côté d&apos;un strip pour le poser. Clic droit ou Échap pour annuler.</span>
           </span>
-          <button type="button" onClick={() => setPickedId(null)} className="p-1 hover:bg-white/20 rounded transition-colors" title="Annuler">
-            <X className="h-4 w-4" />
+          <button type="button" onClick={() => setPickedId(null)} className="p-1.5 hover:bg-white/20 rounded transition-colors" title="Annuler">
+            <X className="h-5 w-5" />
           </button>
         </div>
       )}
@@ -236,17 +236,17 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
         className={`border-2 rounded-lg transition-all ${pickedId ? 'ring-2 ring-sky-300 ring-dashed border-slate-400' : 'border-slate-300'} bg-slate-50/60`}
         onClick={() => handleZoneClick(null)}
       >
-        <div className="px-3 py-1.5 text-sm font-bold uppercase tracking-wider bg-slate-200 text-slate-700 rounded-t-md flex items-center justify-between">
+        <div className="px-3 py-2 text-base font-bold uppercase tracking-wider bg-slate-200 text-slate-700 rounded-t-md flex items-center justify-between">
           <span>Non assignés</span>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-normal opacity-70">{unassigned.length} vol(s)</span>
-            {pickedId && <span className="text-xs font-semibold bg-white/60 rounded px-1.5 py-0.5 animate-pulse">Cliquer pour poser</span>}
+            <span className="text-sm font-semibold opacity-80">{unassigned.length} vol(s)</span>
+            {pickedId && <span className="text-xs font-bold bg-white/70 rounded px-2 py-1 animate-pulse shadow-sm">Cliquer pour poser</span>}
           </div>
         </div>
         <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
           {unassigned.length === 0 ? (
-            <div className={`text-center py-3 rounded-lg border-2 border-dashed ${pickedId ? 'border-sky-400 bg-sky-50' : 'border-transparent'}`}>
-              <p className="text-slate-400 text-sm italic">{pickedId ? 'Cliquer ici pour poser' : 'Tous assignés.'}</p>
+            <div className={`text-center py-6 rounded-lg border-2 border-dashed ${pickedId ? 'border-sky-400 bg-sky-50' : 'border-transparent'}`}>
+              <p className="text-slate-500 text-base font-medium italic">{pickedId ? 'Cliquer ici pour poser' : 'Tous assignés.'}</p>
             </div>
           ) : unassigned.map((s) => (
             <div

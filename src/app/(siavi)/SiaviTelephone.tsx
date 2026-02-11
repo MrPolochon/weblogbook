@@ -332,7 +332,13 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         participant.audioTrackPublications.forEach((publication) => {
           if (publication.track && publication.isSubscribed) {
             console.log('[LiveKit SIAVI] Attaching existing audio track from', participant.identity);
-            attachRemoteAudioTrack(publication.track, room);
+            const audioElement = publication.track.attach() as HTMLAudioElement;
+            audioElement.volume = 1.0;
+            audioElement.style.display = 'none';
+            const container = audioContainerRef.current ?? document.body;
+            container.appendChild(audioElement);
+            const trackSid = (publication.track as { sid?: string }).sid ?? `audio-${Date.now()}`;
+            attachedAudioElementsRef.current.set(trackSid, audioElement);
           }
         });
       });
@@ -355,7 +361,22 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
         console.log('[LiveKit SIAVI] Track subscribed:', track.kind, 'from', participant.identity);
         if (track.kind === Track.Kind.Audio) {
-          attachRemoteAudioTrack(track, room);
+          const audioElement = track.attach() as HTMLAudioElement;
+          audioElement.volume = 1.0;
+          audioElement.style.display = 'none';
+          const container = audioContainerRef.current ?? document.body;
+          container.appendChild(audioElement);
+          const trackSid = (track as { sid?: string }).sid ?? `audio-${Date.now()}`;
+          attachedAudioElementsRef.current.set(trackSid, audioElement);
+          
+          if (!audioLevelIntervalRef.current) {
+            audioLevelIntervalRef.current = setInterval(() => {
+              const participants = Array.from(room.remoteParticipants.values());
+              if (participants.length > 0) {
+                setAudioLevel(participants[0].audioLevel || 0);
+              }
+            }, 100);
+          }
         }
       });
 
@@ -412,7 +433,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       await cleanupLiveKit();
       setCallState('idle');
     }
-  }, [aeroport, cleanupLiveKit, playSound, playMessage, stopEmergencyAlarm, attachRemoteAudioTrack]);
+  }, [aeroport, cleanupLiveKit, playSound, playMessage, stopEmergencyAlarm]);
 
   const parseNumber = (num: string) => {
     if (num === '911' || num === '112') return { aeroport: null, position: 'AFIS', isLocal: false, isEmergency: true };

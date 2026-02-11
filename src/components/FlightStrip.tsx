@@ -154,7 +154,7 @@ function InlineEdit({
     return (
       <input
         ref={inputRef}
-        className={`bg-white text-slate-900 border-2 border-sky-400 rounded outline-none w-full font-mono z-10 ${large ? 'text-sm px-1 py-0.5' : 'text-xs px-1 py-0.5'}`}
+        className={`bg-white text-slate-900 border-2 border-sky-400 rounded outline-none w-full font-mono z-10 ${large ? 'text-base font-bold px-1 py-1' : 'text-sm font-semibold px-1 py-0.5'}`}
         value={text}
         maxLength={maxLength || 20}
         onChange={(e) => setText(e.target.value)}
@@ -168,7 +168,7 @@ function InlineEdit({
 
   return (
     <div
-      className={`relative cursor-text min-h-[22px] flex items-center rounded px-0.5 transition-colors ${hovered ? 'bg-white/50 ring-1 ring-sky-300' : ''} ${error ? 'ring-1 ring-red-400 bg-red-50/30' : ''}`}
+      className={`relative cursor-text min-h-[24px] flex items-center rounded px-0.5 transition-colors ${hovered ? 'bg-white/50 ring-1 ring-sky-300' : ''} ${error ? 'ring-1 ring-red-400 bg-red-50/30' : ''}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={(e) => {
@@ -179,7 +179,7 @@ function InlineEdit({
       }}
       title={error ? 'Erreur de sauvegarde — cliquer pour réessayer' : undefined}
     >
-      <span className={`font-mono leading-snug ${large ? 'text-sm font-bold' : 'text-xs'} ${displayValue ? 'text-slate-900' : 'text-slate-400 italic'}`}>
+      <span className={`font-mono leading-snug ${large ? 'text-base font-bold' : 'text-sm font-semibold'} ${displayValue ? 'text-slate-900' : 'text-slate-500 italic'}`}>
         {displayValue || placeholder}
       </span>
       {error && <span className="text-[8px] text-red-500 ml-0.5">!</span>}
@@ -215,7 +215,7 @@ function FlUnitToggle({ planId, unit }: { planId: string; unit: string | null; o
     }
   };
   return (
-    <button type="button" onClick={toggle} className="text-[9px] font-bold text-sky-700 hover:text-sky-500 bg-sky-100 hover:bg-sky-200 rounded px-1 leading-none" title={`Basculer FL/ft`}>
+    <button type="button" onClick={toggle} className="text-[10px] font-bold text-sky-700 hover:text-sky-500 bg-sky-100 hover:bg-sky-200 rounded px-1.5 py-0.5 leading-none" title={`Basculer FL/ft`}>
       {current}
     </button>
   );
@@ -275,22 +275,22 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
   return (
     <div className="px-1.5 py-1 border-t border-slate-200 bg-slate-50/80 flex items-center gap-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
       {strip.pilote_identifiant && (
-        <span className="text-[9px] text-slate-500 mr-auto flex items-center gap-0.5"><Plane className="h-2.5 w-2.5" />{strip.pilote_identifiant}</span>
+        <span className="text-[10px] text-slate-600 mr-auto flex items-center gap-1 font-semibold"><Plane className="h-3 w-3" />{strip.pilote_identifiant}</span>
       )}
       {(statut === 'en_attente' || statut === 'depose') && (
         <>
-          <button type="button" onClick={() => callAction('accepter')} disabled={loading !== null} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"><CheckCircle className="h-3 w-3" />{loading === 'accepter' ? '…' : 'Accepter'}</button>
-          <button type="button" onClick={() => setShowRefuse(true)} disabled={loading !== null} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"><XCircle className="h-3 w-3" />Refuser</button>
+          <button type="button" onClick={() => callAction('accepter')} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 shadow-sm"><CheckCircle className="h-3.5 w-3.5" />{loading === 'accepter' ? '…' : 'Accepter'}</button>
+          <button type="button" onClick={() => setShowRefuse(true)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 shadow-sm"><XCircle className="h-3.5 w-3.5" />Refuser</button>
         </>
       )}
       {statut === 'en_attente_cloture' && (
-        <button type="button" onClick={() => callAction('confirmer_cloture')} disabled={loading !== null} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 animate-pulse"><CheckCircle className="h-3 w-3" />{loading === 'confirmer_cloture' ? '…' : 'Confirmer clôture'}</button>
+        <button type="button" onClick={() => callAction('confirmer_cloture')} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 animate-pulse shadow-sm"><CheckCircle className="h-3.5 w-3.5" />{loading === 'confirmer_cloture' ? '…' : 'Confirmer clôture'}</button>
       )}
       {(statut === 'en_cours' || statut === 'accepte') && !isAutomonitoring && (
-        <button type="button" onClick={() => callAction('transferer', { automonitoring: true })} disabled={loading !== null} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50"><Radio className="h-3 w-3" />{loading === 'transferer' ? '…' : 'Autosurv.'}</button>
+        <button type="button" onClick={() => callAction('transferer', { automonitoring: true })} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 shadow-sm"><Radio className="h-3.5 w-3.5" />{loading === 'transferer' ? '…' : 'Autosurv.'}</button>
       )}
       {(statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
-        <button type="button" onClick={() => { setInstructionsText(strip.instructions_atc || ''); setShowInstructions(true); }} disabled={loading !== null} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50"><MessageSquare className="h-3 w-3" />Instr.</button>
+        <button type="button" onClick={() => { setInstructionsText(strip.instructions_atc || ''); setShowInstructions(true); }} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50 shadow-sm"><MessageSquare className="h-3.5 w-3.5" />Instr.</button>
       )}
     </div>
   );
@@ -338,14 +338,14 @@ export default function FlightStrip({
   const topBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : 'bg-[#c5dcc5]';
   const sep = isEmergency ? 'border-red-300' : 'border-[#8fbc8f]';
   const txt = 'text-slate-900';
-  const lbl = 'text-slate-500';
+  const lbl = 'text-slate-600';
 
   return (
     <div className={`border ${border} rounded shadow-sm select-none overflow-hidden`} onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, strip.id); }}>
       {/* Emergency banner */}
-      {sqLabel && <div className="bg-black text-white text-center text-xs font-black tracking-[0.3em] py-0.5 animate-pulse">{sqLabel}</div>}
+      {sqLabel && <div className="bg-black text-white text-center text-sm font-black tracking-[0.3em] py-1 animate-pulse">{sqLabel}</div>}
       {(squawkMismatch || noSquawk) && !sqLabel && (
-        <div className="bg-amber-400 text-black text-center text-[10px] font-bold py-0.5">
+        <div className="bg-amber-400 text-black text-center text-xs font-bold py-1">
           {noSquawk ? '⚠ PAS DE TRANSPONDEUR' : `⚠ SQUAWK INCORRECT (attendu: ${strip.squawk_attendu})`}
         </div>
       )}
@@ -366,50 +366,50 @@ export default function FlightStrip({
             {/* ROW 1 */}
             <div className={`flex ${topBg} border-b ${sep}`}>
               <Cell className={`w-[70px] border-r ${sep}`}>
-                <div className={`text-[9px] ${lbl} leading-none`}>ATD</div>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>ATD</div>
                 <InlineEdit value={strip.strip_atd} field="strip_atd" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
               </Cell>
               <Cell className={`w-[100px] border-r ${sep}`}>
-                <div className={`text-[9px] ${lbl} leading-none`}>TYPE/W</div>
-                <span className={`text-sm font-mono font-bold ${txt}`}>{strip.type_wake}</span>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>TYPE/W</div>
+                <span className={`text-base font-mono font-bold ${txt}`}>{strip.type_wake}</span>
               </Cell>
               <Cell className={`w-[50px] border-r ${sep} text-center`}>
-                <div className={`text-[9px] ${lbl} leading-none`}>{strip.type_vol}</div>
-                <span className={`text-xs font-mono font-bold ${txt}`}>1</span>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>{strip.type_vol}</div>
+                <span className={`text-sm font-mono font-bold ${txt}`}>1</span>
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-[9px] ${lbl} leading-none`}>NOTE</div>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>NOTE</div>
                 <InlineEdit value={strip.strip_note_1} field="strip_note_1" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={20} />
               </Cell>
             </div>
             {/* ROW 2 */}
             <div className={`flex ${leftBg} border-b ${sep}`}>
               <Cell className={`w-[70px] border-r ${sep}`}>
-                <div className={`text-[9px] ${lbl} leading-none`}>ADES</div>
-                <span className={`text-base font-mono font-black ${txt} leading-tight`}>{strip.aeroport_arrivee}</span>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>ADES</div>
+                <span className={`text-lg font-mono font-black ${txt} leading-tight`}>{strip.aeroport_arrivee}</span>
               </Cell>
               <Cell className={`w-[150px] border-r ${sep}`}>
-                <div className={`text-[9px] ${lbl} leading-none`}>CALLSIGN</div>
-                <span className={`text-lg font-mono font-black tracking-wide ${txt} leading-tight`}>{strip.numero_vol}</span>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>CALLSIGN</div>
+                <span className={`text-xl font-mono font-black tracking-wide ${txt} leading-tight`}>{strip.numero_vol}</span>
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-[9px] ${lbl} leading-none`}>ADEP</div>
-                <span className={`text-sm font-mono font-semibold ${txt}`}>{strip.aeroport_depart}</span>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>ADEP</div>
+                <span className={`text-base font-mono font-bold ${txt}`}>{strip.aeroport_depart}</span>
               </Cell>
             </div>
             {/* ROW 3 */}
             <div className={`flex ${leftBg}`}>
               <Cell className={`w-[70px] border-r ${sep}`}>
-                <div className={`text-[9px] ${lbl} leading-none`}>RWY</div>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>RWY</div>
                 <InlineEdit value={strip.strip_rwy} field="strip_rwy" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
               </Cell>
               <Cell className={`w-[100px] border-r ${sep}`}>
-                <div className={`text-[9px] ${lbl} leading-none`}>CTOT</div>
-                <span className={`text-sm font-mono font-semibold ${txt}`}>{formatCtot(strip.created_at)}</span>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>CTOT</div>
+                <span className={`text-base font-mono font-bold ${txt}`}>{formatCtot(strip.created_at)}</span>
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-[9px] ${lbl} leading-none`}>TAIL</div>
-                <span className={`text-sm font-mono font-bold ${txt}`}>{strip.immatriculation || '—'}</span>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>TAIL</div>
+                <span className={`text-base font-mono font-bold ${txt}`}>{strip.immatriculation || '—'}</span>
               </Cell>
             </div>
           </div>
@@ -422,40 +422,40 @@ export default function FlightStrip({
             {/* ROW 1 */}
             <div className={`flex border-b ${sep}`}>
               <Cell className={`w-[90px] border-r ${sep}`}>
-                <div className={`text-[9px] ${lbl} leading-none`}>SQUAWK</div>
-                <span className={`text-sm font-mono font-black ${txt}`}>{strip.code_transpondeur || '—'}</span>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>SQUAWK</div>
+                <span className={`text-base font-mono font-black ${txt}`}>{strip.code_transpondeur || '—'}</span>
               </Cell>
               <Cell className={`w-[90px] border-r ${sep}`}>
-                <div className={`text-[9px] ${lbl} leading-none`}>CLR REV</div>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>CLR REV</div>
                 <InlineEdit value={strip.strip_note_2} field="strip_note_2" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={20} />
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-[9px] ${lbl} leading-none`}>INFO</div>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>INFO</div>
                 <InlineEdit value={strip.strip_note_3} field="strip_note_3" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={30} />
               </Cell>
             </div>
             {/* ROW 2 */}
             <div className={`flex border-b ${sep}`}>
               <Cell className={`w-[90px] border-r ${sep}`}>
-                <div className={`text-[9px] ${lbl} leading-none`}>SID</div>
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>SID</div>
                 <InlineEdit value={strip.strip_sid_atc || strip.sid_depart} field="strip_sid_atc" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={15} large />
               </Cell>
               <Cell className="flex-1">
-                <span className={`text-[10px] font-mono ${txt}`}>{strip.type_avion_nom || ''}</span>
+                <span className={`text-xs font-mono font-semibold ${txt}`}>{strip.type_avion_nom || ''}</span>
               </Cell>
             </div>
             {/* ROW 3 */}
             <div className="flex">
               <Cell className={`w-[90px] border-r ${sep}`}>
-                <div className="flex items-center gap-0.5">
+                <div className="flex items-center gap-1 mb-0.5">
                   <FlUnitToggle planId={strip.id} unit={strip.strip_fl_unit} onSaved={onRefresh} />
-                  <span className={`text-[9px] ${lbl}`}>ALT</span>
+                  <span className={`text-[10px] ${lbl} font-semibold`}>ALT</span>
                 </div>
                 <InlineEdit value={strip.strip_fl} field="strip_fl" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-[9px] ${lbl} leading-none`}>STATUT</div>
-                <span className={`text-[11px] font-semibold uppercase ${
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>STATUT</div>
+                <span className={`text-xs font-bold uppercase ${
                   strip.statut === 'en_cours' ? 'text-sky-700' :
                   strip.statut === 'en_attente_cloture' ? 'text-orange-700' :
                   strip.statut === 'accepte' ? 'text-emerald-700' :
