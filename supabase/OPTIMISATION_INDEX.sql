@@ -14,58 +14,105 @@ END $$;
 
 -- ============================================================
 -- 1. PLANS DE VOL (table la plus sollicitée)
+-- PRIORITÉ : Dépôt, Clôture, Transferts
 -- ============================================================
 
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'plans_vol' AND column_name = 'current_holder_user_id') THEN
-    CREATE INDEX IF NOT EXISTS idx_plans_vol_holder ON public.plans_vol(current_holder_user_id) WHERE current_holder_user_id IS NOT NULL;
-    RAISE NOTICE '✅ Index plans_vol.current_holder_user_id créé';
+  -- INDEX CRITIQUE #1 : Transferts en attente (sidebar orange)
+  -- Utilisé pour afficher les plans en attente de transfert par aéroport
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'plans_vol' AND column_name = 'pending_transfer_aeroport') THEN
+    CREATE INDEX IF NOT EXISTS idx_plans_vol_pending_transfer 
+      ON public.plans_vol(pending_transfer_aeroport, pending_transfer_at) 
+      WHERE pending_transfer_aeroport IS NOT NULL;
+    RAISE NOTICE '🚀 Index CRITIQUE: plans_vol transferts (pending_transfer_aeroport, pending_transfer_at)';
   END IF;
 
+  -- INDEX CRITIQUE #2 : Statut + Created_at pour les nouveaux dépôts
+  -- Utilisé pour afficher les plans "en_attente" par ordre d'arrivée
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'plans_vol' AND column_name = 'statut') 
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'plans_vol' AND column_name = 'created_at') THEN
+    CREATE INDEX IF NOT EXISTS idx_plans_vol_statut_created 
+      ON public.plans_vol(statut, created_at) 
+      WHERE statut IN ('en_attente', 'accepte', 'en_cours', 'automonitoring');
+    RAISE NOTICE '🚀 Index CRITIQUE: plans_vol statut actifs + date création';
+  END IF;
+
+  -- INDEX CRITIQUE #3 : Holder pour les plans contrôlés par un ATC
+  -- Utilisé pour afficher les plans d'un ATC spécifique (page principale)
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'plans_vol' AND column_name = 'current_holder_user_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_plans_vol_holder 
+      ON public.plans_vol(current_holder_user_id, statut) 
+      WHERE current_holder_user_id IS NOT NULL;
+    RAISE NOTICE '🚀 Index CRITIQUE: plans_vol holder + statut';
+  END IF;
+
+  -- INDEX CRITIQUE #4 : Demandes de clôture
+  -- Utilisé pour détecter rapidement les demandes de clôture en attente
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'plans_vol' AND column_name = 'cloture_requested_at') THEN
+    CREATE INDEX IF NOT EXISTS idx_plans_vol_cloture_requests 
+      ON public.plans_vol(current_holder_user_id, cloture_requested_at) 
+      WHERE cloture_requested_at IS NOT NULL;
+    RAISE NOTICE '🚀 Index CRITIQUE: plans_vol demandes de clôture';
+  END IF;
+
+  -- INDEX STANDARD : Statut général
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'plans_vol' AND column_name = 'statut') THEN
     CREATE INDEX IF NOT EXISTS idx_plans_vol_statut ON public.plans_vol(statut);
     RAISE NOTICE '✅ Index plans_vol.statut créé';
   END IF;
 
+  -- INDEX STANDARD : Pilote + Statut (page pilote)
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'plans_vol' AND column_name = 'pilote_id') THEN
     CREATE INDEX IF NOT EXISTS idx_plans_vol_pilote_statut ON public.plans_vol(pilote_id, statut);
     RAISE NOTICE '✅ Index plans_vol (pilote, statut) créé';
   END IF;
 
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'plans_vol' AND column_name = 'pending_transfer_aeroport') THEN
-    CREATE INDEX IF NOT EXISTS idx_plans_vol_pending_transfer ON public.plans_vol(pending_transfer_aeroport, pending_transfer_at) WHERE pending_transfer_aeroport IS NOT NULL;
-    RAISE NOTICE '✅ Index plans_vol transferts créé';
+  -- INDEX STANDARD : Aéroport de départ (recherche par ADEP)
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'plans_vol' AND column_name = 'aeroport_depart') THEN
+    CREATE INDEX IF NOT EXISTS idx_plans_vol_depart ON public.plans_vol(aeroport_depart) WHERE statut != 'cloture';
+    RAISE NOTICE '✅ Index plans_vol.aeroport_depart créé';
+  END IF;
+
+  -- INDEX STANDARD : Aéroport d'arrivée (recherche par ADES)
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'plans_vol' AND column_name = 'aeroport_arrivee') THEN
+    CREATE INDEX IF NOT EXISTS idx_plans_vol_arrivee ON public.plans_vol(aeroport_arrivee) WHERE statut != 'cloture';
+    RAISE NOTICE '✅ Index plans_vol.aeroport_arrivee créé';
   END IF;
 END $$;
 
 -- ============================================================
 -- 2. SESSIONS ATC & SIAVI
+-- PRIORITÉ : Lookup rapide des contrôleurs par aéroport
 -- ============================================================
 
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'atc_sessions') THEN
+    -- INDEX CRITIQUE : Aéroport + Position (utilisé pour afficher les ATC en service)
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'atc_sessions' AND column_name = 'aeroport') THEN
+      CREATE INDEX IF NOT EXISTS idx_atc_sessions_aeroport ON public.atc_sessions(aeroport, position);
+      RAISE NOTICE '🚀 Index CRITIQUE: atc_sessions (aeroport, position)';
+    END IF;
+
+    -- INDEX STANDARD : User ID
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'atc_sessions' AND column_name = 'user_id') THEN
       CREATE INDEX IF NOT EXISTS idx_atc_sessions_user ON public.atc_sessions(user_id);
       RAISE NOTICE '✅ Index atc_sessions.user_id créé';
     END IF;
-    
-    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'atc_sessions' AND column_name = 'aeroport') THEN
-      CREATE INDEX IF NOT EXISTS idx_atc_sessions_aeroport ON public.atc_sessions(aeroport, position);
-      RAISE NOTICE '✅ Index atc_sessions (aeroport, position) créé';
-    END IF;
   END IF;
 
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'afis_sessions') THEN
+    -- INDEX CRITIQUE : Aéroport (utilisé pour afficher les AFIS en service)
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'afis_sessions' AND column_name = 'aeroport') THEN
+      CREATE INDEX IF NOT EXISTS idx_afis_sessions_aeroport ON public.afis_sessions(aeroport);
+      RAISE NOTICE '🚀 Index CRITIQUE: afis_sessions.aeroport';
+    END IF;
+
+    -- INDEX STANDARD : User ID
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'afis_sessions' AND column_name = 'user_id') THEN
       CREATE INDEX IF NOT EXISTS idx_afis_sessions_user ON public.afis_sessions(user_id);
       RAISE NOTICE '✅ Index afis_sessions.user_id créé';
-    END IF;
-    
-    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'afis_sessions' AND column_name = 'aeroport') THEN
-      CREATE INDEX IF NOT EXISTS idx_afis_sessions_aeroport ON public.afis_sessions(aeroport);
-      RAISE NOTICE '✅ Index afis_sessions.aeroport créé';
     END IF;
   END IF;
 END $$;

@@ -368,26 +368,34 @@ export async function POST(request: Request) {
     }
     
     // Sinon, chercher un ATC pour recevoir le plan
-    // D'abord vérifier l'aéroport de départ avec l'ordre DEPART
-    // Puis si aucun ATC trouvé, vérifier l'aéroport d'arrivée avec l'ordre ARRIVEE
+    // OPTIMISÉ : Une seule requête pour récupérer toutes les sessions ATC actives
     let holder: { user_id: string; position: string; aeroport: string } | null = null;
     
-    // 1. Chercher à l'aéroport de DÉPART
-    for (const pos of ORDRE_DEPART) {
-      const { data: s } = await admin.from('atc_sessions').select('user_id').eq('aeroport', ad).eq('position', pos).single();
-      if (s?.user_id) { 
-        holder = { user_id: s.user_id, position: pos, aeroport: ad }; 
-        break; 
-      }
-    }
+    // Récupérer toutes les sessions ATC des deux aéroports en UNE SEULE requête
+    const aeroportsCibles = aa !== ad ? [ad, aa] : [ad];
+    const { data: allSessions } = await admin
+      .from('atc_sessions')
+      .select('user_id, position, aeroport')
+      .in('aeroport', aeroportsCibles);
     
-    // 2. Si aucun ATC au départ et aéroport d'arrivée différent, chercher à l'ARRIVÉE
-    if (!holder && aa !== ad) {
-      for (const pos of ORDRE_ARRIVEE) {
-        const { data: s } = await admin.from('atc_sessions').select('user_id').eq('aeroport', aa).eq('position', pos).single();
-        if (s?.user_id) { 
-          holder = { user_id: s.user_id, position: pos, aeroport: aa }; 
-          break; 
+    if (allSessions && allSessions.length > 0) {
+      // 1. Chercher à l'aéroport de DÉPART en priorité
+      for (const pos of ORDRE_DEPART) {
+        const session = allSessions.find(s => s.aeroport === ad && s.position === pos);
+        if (session?.user_id) {
+          holder = { user_id: session.user_id, position: pos, aeroport: ad };
+          break;
+        }
+      }
+      
+      // 2. Si aucun ATC au départ et aéroport d'arrivée différent, chercher à l'ARRIVÉE
+      if (!holder && aa !== ad) {
+        for (const pos of ORDRE_ARRIVEE) {
+          const session = allSessions.find(s => s.aeroport === aa && s.position === pos);
+          if (session?.user_id) {
+            holder = { user_id: session.user_id, position: pos, aeroport: aa };
+            break;
+          }
         }
       }
     }
