@@ -30,6 +30,8 @@ export type StripData = {
   strip_note_1: string | null;
   strip_note_2: string | null;
   strip_note_3: string | null;
+  strip_star: string | null;
+  strip_route: string | null;
   strip_zone: string | null;
   strip_order: number;
   pilote_identifiant?: string | null;
@@ -38,7 +40,7 @@ export type StripData = {
   automonitoring?: boolean;
 };
 
-type EditableField = 'strip_atd' | 'strip_rwy' | 'strip_fl' | 'strip_fl_unit' | 'strip_sid_atc' | 'strip_note_1' | 'strip_note_2' | 'strip_note_3';
+type EditableField = 'strip_atd' | 'strip_rwy' | 'strip_fl' | 'strip_fl_unit' | 'strip_sid_atc' | 'strip_note_1' | 'strip_note_2' | 'strip_note_3' | 'strip_star' | 'strip_route';
 
 function getSquawkColor(code: string | null): string | null {
   if (!code) return null;
@@ -485,21 +487,13 @@ export default function FlightStrip({
               <Cell className={`w-[90px] border-r ${sep}`}>
                 <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>SID/STAR</div>
                 <div className="flex flex-col gap-0.5">
-                  <InlineEdit value={strip.strip_sid_atc || strip.sid_depart} field="strip_sid_atc" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={15} large />
-                  {strip.star_arrivee && (
-                    <span className={`text-sm font-mono font-bold ${txt}`} title={`STAR: ${strip.star_arrivee}`}>
-                      {strip.star_arrivee}
-                    </span>
-                  )}
+                  <InlineEdit value={strip.strip_sid_atc || strip.sid_depart} field="strip_sid_atc" planId={strip.id} placeholder="SID" onSaved={onRefresh} maxLength={15} large />
+                  <InlineEdit value={strip.strip_star || strip.star_arrivee} field="strip_star" planId={strip.id} placeholder="STAR" onSaved={onRefresh} maxLength={15} large />
                 </div>
               </Cell>
               <Cell className="flex-1">
-                <span className={`text-xs font-mono font-semibold ${txt}`}>{strip.type_avion_nom || ''}</span>
-                {strip.route_ifr && (
-                  <div className={`text-sm font-mono font-bold ${txt} mt-0.5 leading-tight`} title={`Route: ${strip.route_ifr}`}>
-                    {strip.route_ifr.length > 35 ? strip.route_ifr.slice(0, 35) + '...' : strip.route_ifr}
-                  </div>
-                )}
+                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>ROUTE</div>
+                <InlineEdit value={strip.strip_route || strip.route_ifr} field="strip_route" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={40} large />
               </Cell>
             </div>
             {/* ROW 3 */}

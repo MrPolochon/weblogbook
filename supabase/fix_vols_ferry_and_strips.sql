@@ -27,6 +27,8 @@ ALTER TABLE public.plans_vol
   ADD COLUMN IF NOT EXISTS strip_fl TEXT,
   ADD COLUMN IF NOT EXISTS strip_fl_unit TEXT DEFAULT 'FL',
   ADD COLUMN IF NOT EXISTS strip_sid_atc TEXT,
+  ADD COLUMN IF NOT EXISTS strip_star TEXT,
+  ADD COLUMN IF NOT EXISTS strip_route TEXT,
   ADD COLUMN IF NOT EXISTS strip_note_1 TEXT,
   ADD COLUMN IF NOT EXISTS strip_note_2 TEXT,
   ADD COLUMN IF NOT EXISTS strip_note_3 TEXT,
@@ -37,7 +39,7 @@ ALTER TABLE public.plans_vol
 CREATE INDEX IF NOT EXISTS idx_plans_vol_strip_zone ON public.plans_vol (strip_zone, strip_order);
 
 -- ============================================================
--- 4. Vérification: cette requête doit retourner 10 colonnes strip
+-- 4. Vérification: cette requête doit retourner 12 colonnes strip
 -- ============================================================
 SELECT column_name 
 FROM information_schema.columns 

@@ -580,7 +580,7 @@ export async function PATCH(
       const canAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
       if (!canAtc) return NextResponse.json({ error: 'Accès ATC requis.' }, { status: 403 });
 
-      const allowedFields = ['strip_atd', 'strip_rwy', 'strip_fl', 'strip_fl_unit', 'strip_sid_atc', 'strip_note_1', 'strip_note_2', 'strip_note_3', 'strip_zone', 'strip_order'];
+      const allowedFields = ['strip_atd', 'strip_rwy', 'strip_fl', 'strip_fl_unit', 'strip_sid_atc', 'strip_star', 'strip_route', 'strip_note_1', 'strip_note_2', 'strip_note_3', 'strip_zone', 'strip_order'];
       const update: Record<string, unknown> = {};
       for (const field of allowedFields) {
         if (body[field] !== undefined) {
