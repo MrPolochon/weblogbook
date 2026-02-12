@@ -133,3 +133,22 @@ BEGIN
   RAISE NOTICE 'Colonnes strip trouvées: %', strip_count;
   RAISE NOTICE '==============================================';
 END $$;
+
+-- ============================================================
+-- 6) Colonne dernier_changement_principal_at sur compagnies
+--    (cooldown 1 semaine pour changer le hub principal)
+-- ============================================================
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'compagnies'
+      AND column_name = 'dernier_changement_principal_at'
+  ) THEN
+    ALTER TABLE public.compagnies
+      ADD COLUMN dernier_changement_principal_at TIMESTAMPTZ;
+    RAISE NOTICE '✅ Colonne dernier_changement_principal_at ajoutée à compagnies';
+  ELSE
+    RAISE NOTICE 'ℹ️ Colonne dernier_changement_principal_at existe déjà';
+  END IF;
+END $$;

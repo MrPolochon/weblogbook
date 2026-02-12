@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
 import { calculerUsureVol } from '@/lib/compagnie-utils';
-import { envoyerChequesVol, finaliserCloturePlan } from '@/lib/plans-vol/closure';
+import { envoyerChequesVol, finaliserCloturePlan, parseStripATD } from '@/lib/plans-vol/closure';
 
 const STATUTS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring'];
 // Ordre de priorité pour recevoir un plan de vol (départ puis arrivée)
@@ -47,7 +47,7 @@ export async function PATCH(
 
     const admin = createAdminClient();
     const { data: plan } = await admin.from('plans_vol')
-      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, compagnie_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id')
+      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, compagnie_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd')
       .eq('id', id)
       .single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
@@ -118,11 +118,12 @@ export async function PATCH(
             .single();
           
           if (avion) {
-            // Calculer le temps réel de vol
+            // Calculer le temps réel de vol — utiliser ATD si valide, sinon accepted_at
             let tempsReelMin = plan.temps_prev_min;
             if (plan.accepted_at) {
               const acceptedAt = new Date(plan.accepted_at);
-              const diffMs = demandeClotureAt.getTime() - acceptedAt.getTime();
+              const departureTime = parseStripATD(plan.strip_atd, acceptedAt) || acceptedAt;
+              const diffMs = demandeClotureAt.getTime() - departureTime.getTime();
               tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
             }
             

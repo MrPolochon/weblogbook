@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { Package } from 'lucide-react';
 import MarketplaceList from './MarketplaceList';
+import HubsMapSection from './HubsMapSection';
 
 export default async function MarketplacePage() {
   const supabase = await createClient();
@@ -85,6 +86,9 @@ export default async function MarketplacePage() {
           </div>
         )}
       </div>
+
+      {/* Carte des hubs par aéroport */}
+      <HubsMapSection />
 
       {/* Liste des avions avec recherche */}
       <MarketplaceList 
