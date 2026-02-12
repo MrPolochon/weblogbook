@@ -152,3 +152,21 @@ DO $$ BEGIN
     RAISE NOTICE 'ℹ️ Colonne dernier_changement_principal_at existe déjà';
   END IF;
 END $$;
+
+-- ============================================================
+-- 7) Colonne logo_url sur compagnies (logo de la compagnie)
+-- ============================================================
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'compagnies'
+      AND column_name = 'logo_url'
+  ) THEN
+    ALTER TABLE public.compagnies
+      ADD COLUMN logo_url TEXT;
+    RAISE NOTICE '✅ Colonne logo_url ajoutée à compagnies';
+  ELSE
+    RAISE NOTICE 'ℹ️ Colonne logo_url existe déjà';
+  END IF;
+END $$;

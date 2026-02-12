@@ -91,12 +91,12 @@ export async function POST(request: Request) {
       numero_prefix = 'SIAVI';
       sous_titre = "délivré par l'instance de l'IFSA";
     }
-    // Pilote - récupérer la compagnie
+    // Pilote - récupérer la compagnie et son logo
     else {
       // Chercher la compagnie du pilote
       const { data: emploi } = await admin
         .from('compagnie_employes')
-        .select('compagnies(nom)')
+        .select('compagnies(nom, logo_url)')
         .eq('pilote_id', targetUserId)
         .limit(1)
         .single();
@@ -105,6 +105,32 @@ export async function POST(request: Request) {
         const compagnie = Array.isArray(emploi.compagnies) ? emploi.compagnies[0] : emploi.compagnies;
         if (compagnie?.nom) {
           organisation = compagnie.nom;
+        }
+      }
+    }
+
+    // Récupérer le logo de la compagnie si applicable (pilote, pas staff)
+    let logo_url: string | null = null;
+    if (profile.role !== 'admin') {
+      // Chercher si le user est PDG d'une compagnie
+      const { data: compPdg } = await admin
+        .from('compagnies')
+        .select('logo_url')
+        .eq('pdg_id', targetUserId)
+        .maybeSingle();
+      if (compPdg?.logo_url) {
+        logo_url = compPdg.logo_url;
+      } else {
+        // Sinon chercher la compagnie employeur
+        const { data: compEmp } = await admin
+          .from('compagnie_employes')
+          .select('compagnies(logo_url)')
+          .eq('pilote_id', targetUserId)
+          .limit(1)
+          .maybeSingle();
+        if (compEmp?.compagnies) {
+          const c = Array.isArray(compEmp.compagnies) ? compEmp.compagnies[0] : compEmp.compagnies;
+          if (c?.logo_url) logo_url = c.logo_url;
         }
       }
     }
@@ -124,6 +150,7 @@ export async function POST(request: Request) {
     .insert({
       user_id: targetUserId,
       couleur_fond,
+      logo_url: logo_url || null,
       titre,
       sous_titre,
       nom_affiche: profile.identifiant?.toUpperCase() || null,

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart, UserPlus, Send, X, Check, Loader2, Search } from 'lucide-react';
+import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart, UserPlus, Send, X, Check, Loader2, Search, ImagePlus, Trash2 } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import TarifsLiaisonsClient from './TarifsLiaisonsClient';
 import CompagnieHubsClient from './CompagnieHubsClient';
@@ -27,6 +28,7 @@ interface Compagnie {
   pourcentage_salaire: number;
   prix_billet_pax: number;
   prix_kg_cargo: number;
+  logo_url: string | null;
 }
 
 interface Employe {
@@ -68,6 +70,12 @@ export default function MaCompagnieClient({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Logo compagnie
+  const [logoUrl, setLogoUrl] = useState<string | null>(compagnie.logo_url);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoError, setLogoError] = useState('');
+  const [logoSuccess, setLogoSuccess] = useState('');
 
   // Recrutement
   const [showRecrutement, setShowRecrutement] = useState(false);
@@ -172,6 +180,59 @@ export default function MaCompagnieClient({
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
+    }
+  }
+
+  async function handleUploadLogo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setLogoError('Le fichier doit être une image');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoError('Fichier trop volumineux (max 5 MB)');
+      return;
+    }
+    setUploadingLogo(true);
+    setLogoError('');
+    setLogoSuccess('');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('compagnie_id', compagnie.id);
+      const res = await fetch('/api/compagnies/logo', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setLogoUrl(data.logo_url);
+      setLogoSuccess(`Logo mis à jour ! ${data.cartes_mises_a_jour} carte(s) mise(s) à jour.`);
+      setTimeout(() => setLogoSuccess(''), 5000);
+      router.refresh();
+    } catch (err) {
+      setLogoError(err instanceof Error ? err.message : 'Erreur upload');
+    } finally {
+      setUploadingLogo(false);
+      // Reset input
+      e.target.value = '';
+    }
+  }
+
+  async function handleDeleteLogo() {
+    if (!confirm('Supprimer le logo de la compagnie ? Il sera retiré de toutes les cartes des employés.')) return;
+    setUploadingLogo(true);
+    setLogoError('');
+    try {
+      const res = await fetch(`/api/compagnies/logo?compagnie_id=${compagnie.id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setLogoUrl(null);
+      setLogoSuccess('Logo supprimé');
+      setTimeout(() => setLogoSuccess(''), 3000);
+      router.refresh();
+    } catch (err) {
+      setLogoError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setUploadingLogo(false);
     }
   }
 
@@ -319,6 +380,65 @@ export default function MaCompagnieClient({
             {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Sauvegarder
           </button>
+
+          {/* Section Logo */}
+          <div className="mt-6 pt-6 border-t border-slate-700">
+            <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+              <ImagePlus className="h-4 w-4 text-sky-400" />
+              Logo de la compagnie
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">
+              Ce logo sera automatiquement appliqué sur les cartes d&apos;identité de tous vos employés et de vous-même.
+              Les cartes staff (noires) ne sont pas affectées.
+            </p>
+            {logoError && <p className="text-red-400 text-sm mb-2">{logoError}</p>}
+            {logoSuccess && <p className="text-emerald-400 text-sm mb-2">{logoSuccess}</p>}
+            
+            <div className="flex items-center gap-4">
+              {logoUrl ? (
+                <div className="relative group">
+                  <Image
+                    src={logoUrl}
+                    alt="Logo compagnie"
+                    width={80}
+                    height={80}
+                    className="rounded-lg border border-slate-600 object-contain bg-white p-1"
+                    unoptimized
+                  />
+                  <button
+                    onClick={handleDeleteLogo}
+                    disabled={uploadingLogo}
+                    className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                    title="Supprimer le logo"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-600 flex items-center justify-center text-slate-500">
+                  <ImagePlus className="h-6 w-6" />
+                </div>
+              )}
+              <div>
+                <label className="btn-primary text-sm cursor-pointer flex items-center gap-2">
+                  {uploadingLogo ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ImagePlus className="h-4 w-4" />
+                  )}
+                  {logoUrl ? 'Changer le logo' : 'Uploader un logo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleUploadLogo}
+                    disabled={uploadingLogo}
+                  />
+                </label>
+                <p className="text-xs text-slate-500 mt-1">PNG, JPG, max 5 MB</p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -330,9 +450,21 @@ export default function MaCompagnieClient({
             Informations
           </h2>
           <div className="space-y-3">
-            <div>
-              <p className="text-sm text-slate-400">Nom</p>
-              <p className="text-slate-200 font-medium">{compagnie.nom}</p>
+            <div className="flex items-center gap-3">
+              {logoUrl && (
+                <Image
+                  src={logoUrl}
+                  alt={`Logo ${compagnie.nom}`}
+                  width={48}
+                  height={48}
+                  className="rounded-lg border border-slate-600 object-contain bg-white p-0.5"
+                  unoptimized
+                />
+              )}
+              <div>
+                <p className="text-sm text-slate-400">Nom</p>
+                <p className="text-slate-200 font-medium">{compagnie.nom}</p>
+              </div>
             </div>
             {compagnie.code_oaci && (
               <div>

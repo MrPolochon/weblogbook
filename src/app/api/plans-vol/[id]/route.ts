@@ -6,7 +6,7 @@ import { ATC_POSITIONS } from '@/lib/atc-positions';
 import { calculerUsureVol } from '@/lib/compagnie-utils';
 import { envoyerChequesVol, finaliserCloturePlan, parseStripATD } from '@/lib/plans-vol/closure';
 
-const STATUTS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring'];
+const STATUTS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
 // Ordre de priorité pour recevoir un plan de vol (départ puis arrivée)
 const ORDRE_ACCEPTATION_PLANS = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
 
@@ -150,10 +150,21 @@ export async function PATCH(
     }
 
     if (action === 'confirmer_cloture') {
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
       const isAdmin = profile?.role === 'admin';
       const isHolder = plan.current_holder_user_id === user.id;
-      const canAtc = isAdmin || isHolder;
+      
+      // Si le holder est hors ligne, n'importe quel ATC en service peut confirmer
+      let holderEnLigne = false;
+      if (plan.current_holder_user_id) {
+        const { data: holderSession } = await admin.from('atc_sessions')
+          .select('id')
+          .eq('user_id', plan.current_holder_user_id)
+          .maybeSingle();
+        holderEnLigne = Boolean(holderSession);
+      }
+      const isAtc = profile?.role === 'atc' || Boolean(profile?.atc);
+      const canAtc = isAdmin || isHolder || (isAtc && !holderEnLigne);
       if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui detient le plan ou un admin peut confirmer la cloture.' }, { status: 403 });
       if (plan.statut !== 'en_attente_cloture') return NextResponse.json({ error: 'Aucune demande de cloture en attente.' }, { status: 400 });
 
