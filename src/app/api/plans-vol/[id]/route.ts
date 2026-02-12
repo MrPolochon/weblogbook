@@ -208,6 +208,46 @@ export async function PATCH(
       // Vérifier que le plan n'est pas déjà clôturé
       if (plan.statut === 'cloture') return NextResponse.json({ error: 'Un plan de vol cloture ne peut pas etre annule.' }, { status: 400 });
 
+      // Remettre l'avion au sol si un avion individuel était assigné
+      if (plan.compagnie_avion_id) {
+        await admin.from('compagnie_avions')
+          .update({ statut: 'ground', aeroport_actuel: plan.aeroport_depart || undefined })
+          .eq('id', plan.compagnie_avion_id);
+      }
+
+      // Rembourser les passagers/cargo consommés
+      const aeroportDepart = plan.aeroport_depart || '';
+      if (plan.vol_commercial && aeroportDepart) {
+        if (plan.nb_pax_genere && plan.nb_pax_genere > 0) {
+          const { data: currentPax } = await admin
+            .from('aeroport_passagers')
+            .select('passagers_disponibles, passagers_max')
+            .eq('code_oaci', aeroportDepart)
+            .single();
+          if (currentPax) {
+            const maxValue = currentPax.passagers_max ?? currentPax.passagers_disponibles;
+            const newValue = Math.min(maxValue, currentPax.passagers_disponibles + plan.nb_pax_genere);
+            await admin.from('aeroport_passagers')
+              .update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() })
+              .eq('code_oaci', aeroportDepart);
+          }
+        }
+        if (plan.nature_transport === 'cargo' && plan.cargo_kg_genere && plan.cargo_kg_genere > 0) {
+          const { data: currentCargo } = await admin
+            .from('aeroport_cargo')
+            .select('cargo_disponible, cargo_max')
+            .eq('code_oaci', aeroportDepart)
+            .single();
+          if (currentCargo) {
+            const maxValue = currentCargo.cargo_max ?? currentCargo.cargo_disponible;
+            const newValue = Math.min(maxValue, currentCargo.cargo_disponible + plan.cargo_kg_genere);
+            await admin.from('aeroport_cargo')
+              .update({ cargo_disponible: newValue, updated_at: new Date().toISOString() })
+              .eq('code_oaci', aeroportDepart);
+          }
+        }
+      }
+
       // Supprimer le plan de vol (suppression en cascade des données liées)
       const { error } = await admin.from('plans_vol').delete().eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
