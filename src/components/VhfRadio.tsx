@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Radio, Mic, MicOff, Volume2, Settings2, Users, AlertTriangle, X, SlidersHorizontal } from 'lucide-react';
+import { Radio, Mic, MicOff, Volume2, Settings2, Users, AlertTriangle, X, SlidersHorizontal, RefreshCw, Power, ArrowLeftRight } from 'lucide-react';
 import VhfDial from './VhfDial';
 import {
   ALL_VHF_DECIMALS,
@@ -42,7 +42,7 @@ const AUDIO_OUTPUT_KEY = 'vhf-audio-output';
 const DISPLAY_MODE_KEY = 'vhf-display-mode';
 const DEFAULT_PTT = 'Space';
 const COLLISION_THRESHOLD = 0.01;
-const COLLISION_CHECK_MS = 80;
+const COLLISION_CHECK_MS = 300;
 
 type DisplayMode = 'auto' | 'mobile' | 'desktop';
 
@@ -73,23 +73,39 @@ export default function VhfRadio({
   lockedFrequency,
   participantName,
 }: VhfRadioProps) {
-  /* ── Fréquence ── */
   const mhzRange = getMhzRange();
   const initialFreq = lockedFrequency ? parseFrequency(lockedFrequency) : null;
+  const isLocked = mode !== 'pilot';
 
-  const [mhzIndex, setMhzIndex] = useState(
+  /* ── ON / OFF ── */
+  const [radioOn, setRadioOn] = useState(false);
+
+  /* ── Fréquence Active (connectée) ── */
+  const [actMhzIndex, setActMhzIndex] = useState(
     initialFreq ? mhzRange.indexOf(initialFreq.mhz) : 0
   );
-  const [decIndex, setDecIndex] = useState(
+  const [actDecIndex, setActDecIndex] = useState(
     initialFreq ? ALL_VHF_DECIMALS.indexOf(initialFreq.decimal) : 0
   );
 
-  const currentMhz = mhzRange[mhzIndex] ?? 118;
-  const validDecimals = getDecimalsForMhz(currentMhz);
-  const safeDecIndex = Math.min(decIndex, validDecimals.length - 1);
-  const currentDecimal = validDecimals[safeDecIndex] ?? '000';
-  const currentFreq = formatFrequency(currentMhz, currentDecimal);
-  const isLocked = mode !== 'pilot';
+  /* ── Fréquence Standby (modifiable par molettes) ── */
+  const [stbyMhzIndex, setStbyMhzIndex] = useState(
+    initialFreq ? mhzRange.indexOf(initialFreq.mhz) : 0
+  );
+  const [stbyDecIndex, setStbyDecIndex] = useState(
+    initialFreq ? ALL_VHF_DECIMALS.indexOf(initialFreq.decimal) : 0
+  );
+
+  /* Computed frequencies */
+  const actMhz = mhzRange[actMhzIndex] ?? 118;
+  const actDecimals = getDecimalsForMhz(actMhz);
+  const safeActDecIndex = Math.min(actDecIndex, actDecimals.length - 1);
+  const activeFreq = formatFrequency(actMhz, actDecimals[safeActDecIndex] ?? '000');
+
+  const stbyMhz = mhzRange[stbyMhzIndex] ?? 118;
+  const stbyDecimals = getDecimalsForMhz(stbyMhz);
+  const safeStbyDecIndex = Math.min(stbyDecIndex, stbyDecimals.length - 1);
+  const standbyFreq = formatFrequency(stbyMhz, stbyDecimals[safeStbyDecIndex] ?? '000');
 
   /* ── LiveKit ── */
   const roomRef = useRef<Room | null>(null);
@@ -110,7 +126,7 @@ export default function VhfRadio({
   const collisionOscRef = useRef<OscillatorNode | null>(null);
   const collisionCtxRef = useRef<AudioContext | null>(null);
 
-  /* ── MediaSession (background PTT + freq change) ── */
+  /* ── MediaSession ── */
   const silentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   /* ── Audio devices ── */
@@ -119,9 +135,11 @@ export default function VhfRadio({
   const [selectedInput, setSelectedInput] = useState('');
   const [selectedOutput, setSelectedOutput] = useState('');
 
-  /* ── Mobile modals ── */
+  /* ── Reconnexion ── */
+  const [isReconnecting, setIsReconnecting] = useState(false);
+
+  /* ── Mobile / display ── */
   const [showFreqModal, setShowFreqModal] = useState(false);
-  const [showPttModal, setShowPttModal] = useState(false);
   const [autoIsMobile, setAutoIsMobile] = useState(false);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('auto');
   const isMobile = displayMode === 'auto' ? autoIsMobile : displayMode === 'mobile';
@@ -161,6 +179,20 @@ export default function VhfRadio({
   }, []);
 
   /* ══════════════════════════════════════════════════
+     Switch Active ⇄ Standby
+     ══════════════════════════════════════════════════ */
+
+  function handleSwapFrequencies() {
+    if (isLocked) return; // ATC/AFIS can't swap
+    const tmpMhz = actMhzIndex;
+    const tmpDec = actDecIndex;
+    setActMhzIndex(stbyMhzIndex);
+    setActDecIndex(stbyDecIndex);
+    setStbyMhzIndex(tmpMhz);
+    setStbyDecIndex(tmpDec);
+  }
+
+  /* ══════════════════════════════════════════════════
      LiveKit
      ══════════════════════════════════════════════════ */
 
@@ -183,12 +215,8 @@ export default function VhfRadio({
       room.disconnect(true);
       roomRef.current = null;
     }
-    // Clean MediaSession
     if ('mediaSession' in navigator) {
-      try {
-        navigator.mediaSession.metadata = null;
-        navigator.mediaSession.playbackState = 'none';
-      } catch { /* */ }
+      try { navigator.mediaSession.metadata = null; navigator.mediaSession.playbackState = 'none'; } catch { /* */ }
     }
     setConnectionState('disconnected');
     setParticipants([]);
@@ -271,14 +299,27 @@ export default function VhfRadio({
     setParticipants(list);
   }
 
-  const prevFreqRef = useRef('');
+  /* Connect / disconnect when radio ON/OFF or active freq changes */
+  const prevActiveFreqRef = useRef('');
   useEffect(() => {
-    if (currentFreq !== prevFreqRef.current) {
-      prevFreqRef.current = currentFreq;
-      connectToFrequency(currentFreq);
+    if (!radioOn) {
+      if (roomRef.current) cleanupRoom();
+      prevActiveFreqRef.current = '';
+      return;
+    }
+    if (activeFreq !== prevActiveFreqRef.current) {
+      prevActiveFreqRef.current = activeFreq;
+      connectToFrequency(activeFreq);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentFreq]);
+  }, [radioOn, activeFreq]);
+
+  /* Auto-ON for ATC/AFIS (locked freq) */
+  useEffect(() => {
+    if (isLocked && lockedFrequency) {
+      setRadioOn(true);
+    }
+  }, [isLocked, lockedFrequency]);
 
   useEffect(() => {
     return () => { cleanupRoom(); };
@@ -290,7 +331,7 @@ export default function VhfRadio({
      ══════════════════════════════════════════════════ */
 
   const startTransmit = useCallback(async () => {
-    if (pttActiveRef.current) return;
+    if (!radioOn || pttActiveRef.current) return;
     pttActiveRef.current = true;
     setIsTransmitting(true);
     const room = roomRef.current;
@@ -299,7 +340,7 @@ export default function VhfRadio({
       const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
       if (micPub) await micPub.unmute();
     } catch (err) { console.error('[VHF] Unmute error:', err); }
-  }, []);
+  }, [radioOn]);
 
   const stopTransmit = useCallback(async () => {
     if (!pttActiveRef.current) return;
@@ -315,7 +356,7 @@ export default function VhfRadio({
 
   useEffect(() => {
     const handleDown = (e: KeyboardEvent) => {
-      if (waitingForKey) return;
+      if (waitingForKey || !radioOn) return;
       if (matchesPttKey(e, pttKey)) { e.preventDefault(); startTransmit(); }
     };
     const handleUp = (e: KeyboardEvent) => {
@@ -324,54 +365,46 @@ export default function VhfRadio({
     window.addEventListener('keydown', handleDown);
     window.addEventListener('keyup', handleUp);
     return () => { window.removeEventListener('keydown', handleDown); window.removeEventListener('keyup', handleUp); };
-  }, [pttKey, startTransmit, stopTransmit, waitingForKey]);
+  }, [pttKey, startTransmit, stopTransmit, waitingForKey, radioOn]);
 
   /* ══════════════════════════════════════════════════
-     MediaSession — background PTT + freq via notif
+     MediaSession
      ══════════════════════════════════════════════════ */
 
-  // Silent audio loop to keep MediaSession alive in background
   useEffect(() => {
     if (connectionState !== 'connected') return;
-    // Tiny silent WAV (44 bytes header + minimal samples), looped
     const silentDataUri = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
     const audio = new Audio(silentDataUri);
     audio.loop = true;
-    audio.volume = 0.01; // near-silent
-    audio.play().catch(() => { /* autoplay blocked, fine */ });
+    audio.volume = 0.01;
+    audio.play().catch(() => {});
     silentAudioRef.current = audio;
-    return () => {
-      audio.pause();
-      audio.src = '';
-      silentAudioRef.current = null;
-    };
+    return () => { audio.pause(); audio.src = ''; silentAudioRef.current = null; };
   }, [connectionState]);
 
-  // Frequency change helpers for MediaSession (next/prev decimal)
   const freqStepUp = useCallback(() => {
     if (isLocked) return;
-    const decs = getDecimalsForMhz(currentMhz);
-    if (safeDecIndex < decs.length - 1) {
-      setDecIndex(safeDecIndex + 1);
-    } else if (mhzIndex < mhzRange.length - 1) {
-      setMhzIndex(mhzIndex + 1);
-      setDecIndex(0);
+    const decs = getDecimalsForMhz(stbyMhz);
+    if (safeStbyDecIndex < decs.length - 1) {
+      setStbyDecIndex(safeStbyDecIndex + 1);
+    } else if (stbyMhzIndex < mhzRange.length - 1) {
+      setStbyMhzIndex(stbyMhzIndex + 1);
+      setStbyDecIndex(0);
     }
-  }, [isLocked, currentMhz, safeDecIndex, mhzIndex, mhzRange.length]);
+  }, [isLocked, stbyMhz, safeStbyDecIndex, stbyMhzIndex, mhzRange.length]);
 
   const freqStepDown = useCallback(() => {
     if (isLocked) return;
-    if (safeDecIndex > 0) {
-      setDecIndex(safeDecIndex - 1);
-    } else if (mhzIndex > 0) {
-      const prevMhz = mhzRange[mhzIndex - 1];
+    if (safeStbyDecIndex > 0) {
+      setStbyDecIndex(safeStbyDecIndex - 1);
+    } else if (stbyMhzIndex > 0) {
+      const prevMhz = mhzRange[stbyMhzIndex - 1];
       const prevDecs = getDecimalsForMhz(prevMhz);
-      setMhzIndex(mhzIndex - 1);
-      setDecIndex(prevDecs.length - 1);
+      setStbyMhzIndex(stbyMhzIndex - 1);
+      setStbyDecIndex(prevDecs.length - 1);
     }
-  }, [isLocked, safeDecIndex, mhzIndex, mhzRange]);
+  }, [isLocked, safeStbyDecIndex, stbyMhzIndex, mhzRange]);
 
-  // Setup MediaSession handlers + metadata
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
     if (connectionState !== 'connected') {
@@ -379,65 +412,41 @@ export default function VhfRadio({
       navigator.mediaSession.playbackState = 'none';
       return;
     }
-
-    // Metadata — shows frequency in notification
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: `VHF ${currentFreq}`,
-      artist: isTransmitting ? '🔴 TRANSMISSION' : '🎧 En écoute',
-      album: 'WebLogbook Radio',
-    });
-    navigator.mediaSession.playbackState = isTransmitting ? 'playing' : 'paused';
-
-    // Play = start PTT
-    navigator.mediaSession.setActionHandler('play', () => {
-      startTransmit();
-      navigator.mediaSession.playbackState = 'playing';
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: `VHF ${currentFreq}`,
-        artist: '🔴 TRANSMISSION',
-        album: 'WebLogbook Radio',
-      });
-    });
-
-    // Pause = stop PTT
-    navigator.mediaSession.setActionHandler('pause', () => {
-      stopTransmit();
-      navigator.mediaSession.playbackState = 'paused';
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: `VHF ${currentFreq}`,
-        artist: '🎧 En écoute',
-        album: 'WebLogbook Radio',
-      });
-    });
-
-    // Next track = frequency +1 step (pilots only)
+    navigator.mediaSession.setActionHandler('play', () => { startTransmit(); });
+    navigator.mediaSession.setActionHandler('pause', () => { stopTransmit(); });
     if (!isLocked) {
-      navigator.mediaSession.setActionHandler('nexttrack', () => {
-        freqStepUp();
-      });
-      navigator.mediaSession.setActionHandler('previoustrack', () => {
-        freqStepDown();
-      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => { freqStepUp(); });
+      navigator.mediaSession.setActionHandler('previoustrack', () => { freqStepDown(); });
     } else {
       navigator.mediaSession.setActionHandler('nexttrack', null);
       navigator.mediaSession.setActionHandler('previoustrack', null);
     }
-
     return () => {
       try {
         navigator.mediaSession.setActionHandler('play', null);
         navigator.mediaSession.setActionHandler('pause', null);
         navigator.mediaSession.setActionHandler('nexttrack', null);
         navigator.mediaSession.setActionHandler('previoustrack', null);
-        navigator.mediaSession.metadata = null;
-        navigator.mediaSession.playbackState = 'none';
       } catch { /* */ }
     };
-  }, [connectionState, currentFreq, isTransmitting, isLocked, startTransmit, stopTransmit, freqStepUp, freqStepDown]);
+  }, [connectionState, isLocked, startTransmit, stopTransmit, freqStepUp, freqStepDown]);
+
+  useEffect(() => {
+    if (!('mediaSession' in navigator) || connectionState !== 'connected') return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: `VHF ${activeFreq}`,
+      artist: isTransmitting ? 'TRANSMISSION' : `STBY ${standbyFreq}`,
+      album: 'WebLogbook Radio',
+    });
+    navigator.mediaSession.playbackState = isTransmitting ? 'playing' : 'paused';
+  }, [connectionState, activeFreq, standbyFreq, isTransmitting]);
 
   /* ══════════════════════════════════════════════════
      Collision detection
      ══════════════════════════════════════════════════ */
+
+  const prevParticipantsKeyRef = useRef('');
+  const prevCollisionRef = useRef(false);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -445,15 +454,22 @@ export default function VhfRadio({
       if (!room) return;
       let speakingCount = 0;
       if (pttActiveRef.current) speakingCount++;
-      room.remoteParticipants.forEach((p: RemoteParticipant) => {
-        if (p.audioLevel > COLLISION_THRESHOLD) speakingCount++;
-      });
       const list: ParticipantInfo[] = [];
       room.remoteParticipants.forEach((p: RemoteParticipant) => {
-        list.push({ identity: p.identity, name: p.name || p.identity, isSpeaking: p.audioLevel > COLLISION_THRESHOLD });
+        const speaking = p.audioLevel > COLLISION_THRESHOLD;
+        if (speaking) speakingCount++;
+        list.push({ identity: p.identity, name: p.name || p.identity, isSpeaking: speaking });
       });
-      setParticipants(list);
-      setCollision(speakingCount >= 2);
+      const key = list.map(p => `${p.identity}:${p.isSpeaking ? '1' : '0'}`).join(',');
+      if (key !== prevParticipantsKeyRef.current) {
+        prevParticipantsKeyRef.current = key;
+        setParticipants(list);
+      }
+      const isCollision = speakingCount >= 2;
+      if (isCollision !== prevCollisionRef.current) {
+        prevCollisionRef.current = isCollision;
+        setCollision(isCollision);
+      }
     }, COLLISION_CHECK_MS);
     return () => clearInterval(interval);
   }, []);
@@ -493,13 +509,13 @@ export default function VhfRadio({
   }, [waitingForKey]);
 
   /* ══════════════════════════════════════════════════
-     Device handlers
+     Device / display handlers
      ══════════════════════════════════════════════════ */
 
   function handleInputChange(deviceId: string) {
     setSelectedInput(deviceId);
     localStorage.setItem(AUDIO_INPUT_KEY, deviceId);
-    if (roomRef.current && currentFreq) connectToFrequency(currentFreq);
+    if (roomRef.current && radioOn) connectToFrequency(activeFreq);
   }
 
   function handleOutputChange(deviceId: string) {
@@ -512,9 +528,33 @@ export default function VhfRadio({
     });
   }
 
-  function handleDecChange(idx: number) {
-    const decs = getDecimalsForMhz(currentMhz);
-    setDecIndex(Math.min(idx, decs.length - 1));
+  function handleStbyDecChange(idx: number) {
+    const decs = getDecimalsForMhz(stbyMhz);
+    setStbyDecIndex(Math.min(idx, decs.length - 1));
+  }
+
+  const handleReconnect = useCallback(async () => {
+    if (isReconnecting || !radioOn) return;
+    setIsReconnecting(true);
+    cleanupRoom();
+    await new Promise(r => setTimeout(r, 500));
+    prevActiveFreqRef.current = '';
+    await connectToFrequency(activeFreq);
+    setIsReconnecting(false);
+  }, [isReconnecting, radioOn, cleanupRoom, connectToFrequency, activeFreq]);
+
+  function handleDisplayModeChange(m: DisplayMode) {
+    setDisplayMode(m);
+    localStorage.setItem(DISPLAY_MODE_KEY, m);
+  }
+
+  function handleToggleRadio() {
+    if (radioOn) {
+      cleanupRoom();
+      setRadioOn(false);
+    } else {
+      setRadioOn(true);
+    }
   }
 
   /* ══════════════════════════════════════════════════
@@ -526,21 +566,67 @@ export default function VhfRadio({
 
   const statusDot = (
     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+      !radioOn ? 'bg-slate-600' :
       isConnected ? 'bg-emerald-400 shadow-emerald-400/50 shadow-sm' :
       isConnecting ? 'bg-amber-400 animate-pulse' : 'bg-red-500'
     }`} />
   );
 
-  /** Bloc fréquence + molettes */
-  const freqDisplay = (
-    <div className={`text-center ${collision ? 'bg-red-950/30 rounded-lg p-2' : ''}`}>
-      <span className={`font-mono text-3xl font-bold tracking-widest ${
-        collision ? 'text-red-400 animate-pulse' : 'text-emerald-300'
-      }`}>
-        {currentFreq}
-      </span>
+  /** ON / OFF button */
+  const onOffButton = (
+    <button
+      onClick={handleToggleRadio}
+      className={`flex items-center justify-center rounded-lg transition-all touch-manipulation ${
+        radioOn
+          ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20'
+          : 'bg-slate-700 text-slate-500 hover:bg-slate-600'
+      } ${isMobile ? 'w-10 h-10' : 'w-8 h-8'}`}
+      title={radioOn ? 'Éteindre la radio' : 'Allumer la radio'}
+    >
+      <Power className={isMobile ? 'h-5 w-5' : 'h-4 w-4'} />
+    </button>
+  );
+
+  /** Dual frequency display — Active + Standby */
+  const dualFreqDisplay = (
+    <div className={`rounded-lg p-2 ${collision ? 'bg-red-950/30' : 'bg-slate-900/50'}`}>
+      <div className="flex items-center justify-between gap-2">
+        {/* Active */}
+        <div className="flex-1 text-center">
+          <div className="text-[9px] text-slate-500 uppercase tracking-widest mb-0.5">ACT</div>
+          <div className={`font-mono text-2xl font-bold tracking-wider ${
+            !radioOn ? 'text-slate-600' :
+            collision ? 'text-red-400 animate-pulse' : 'text-emerald-300'
+          }`}>
+            {activeFreq}
+          </div>
+        </div>
+
+        {/* Swap button */}
+        {!isLocked && (
+          <button
+            onClick={handleSwapFrequencies}
+            disabled={!radioOn}
+            className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-amber-400 hover:text-amber-300 transition-colors disabled:opacity-30 disabled:cursor-not-allowed touch-manipulation flex-shrink-0"
+            title="Échanger ACT ⇄ STBY"
+          >
+            <ArrowLeftRight className="h-4 w-4" />
+          </button>
+        )}
+
+        {/* Standby */}
+        <div className="flex-1 text-center">
+          <div className="text-[9px] text-slate-500 uppercase tracking-widest mb-0.5">STBY</div>
+          <div className={`font-mono text-2xl font-bold tracking-wider ${
+            !radioOn ? 'text-slate-600' : 'text-amber-300/70'
+          }`}>
+            {standbyFreq}
+          </div>
+        </div>
+      </div>
+
       {collision && (
-        <div className="flex items-center justify-center gap-1 mt-1">
+        <div className="flex items-center justify-center gap-1 mt-1.5">
           <AlertTriangle className="h-3 w-3 text-red-400" />
           <span className="text-[10px] text-red-400 font-semibold uppercase">Double transmission</span>
         </div>
@@ -548,15 +634,19 @@ export default function VhfRadio({
     </div>
   );
 
+  /** Dials — always control STANDBY */
   const dialControls = (
-    <div className="flex items-center justify-center gap-3">
-      <VhfDial values={mhzRange.map(String)} currentIndex={mhzIndex} onChange={setMhzIndex} disabled={isLocked} label="MHz" size={isMobile ? 80 : 68} />
-      <span className="text-2xl font-mono text-slate-500 mt-4">.</span>
-      <VhfDial values={validDecimals} currentIndex={safeDecIndex} onChange={handleDecChange} disabled={isLocked} label="kHz" size={isMobile ? 80 : 68} />
+    <div className="flex flex-col items-center gap-1">
+      <div className="text-[9px] text-amber-400/60 uppercase tracking-widest">Réglage STBY</div>
+      <div className="flex items-center justify-center gap-3">
+        <VhfDial values={mhzRange.map(String)} currentIndex={stbyMhzIndex} onChange={setStbyMhzIndex} disabled={isLocked || !radioOn} label="MHz" size={isMobile ? 80 : 68} />
+        <span className="text-2xl font-mono text-slate-500 mt-4">.</span>
+        <VhfDial values={stbyDecimals} currentIndex={safeStbyDecIndex} onChange={handleStbyDecChange} disabled={isLocked || !radioOn} label="kHz" size={isMobile ? 80 : 68} />
+      </div>
     </div>
   );
 
-  /** Bouton PTT (desktop inline) */
+  /** PTT button (desktop inline) */
   const pttButton = (
     <button
       onMouseDown={startTransmit}
@@ -565,11 +655,11 @@ export default function VhfRadio({
       onTouchStart={(e) => { e.preventDefault(); startTransmit(); }}
       onTouchEnd={(e) => { e.preventDefault(); stopTransmit(); }}
       onTouchCancel={stopTransmit}
-      disabled={!isConnected}
+      disabled={!isConnected || !radioOn}
       className={`w-full py-2.5 rounded-lg font-semibold text-sm uppercase tracking-wide transition-all flex items-center justify-center gap-2 touch-manipulation select-none ${
         isTransmitting
           ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 scale-[0.98]'
-          : isConnected
+          : isConnected && radioOn
             ? 'bg-slate-700 text-slate-300 hover:bg-slate-600 active:bg-emerald-600'
             : 'bg-slate-800 text-slate-600 cursor-not-allowed'
       }`}
@@ -582,15 +672,9 @@ export default function VhfRadio({
     </button>
   );
 
-  function handleDisplayModeChange(mode: DisplayMode) {
-    setDisplayMode(mode);
-    localStorage.setItem(DISPLAY_MODE_KEY, mode);
-  }
-
-  /** Paramètres audio (partagé desktop/modal) */
+  /** Settings panel */
   const settingsPanel = (
     <div className="space-y-3">
-      {/* Mode d'affichage */}
       <div>
         <label className="text-[10px] text-slate-400 block mb-1.5">Mode d&apos;affichage</label>
         <div className="flex rounded-lg overflow-hidden border border-slate-600">
@@ -599,29 +683,16 @@ export default function VhfRadio({
             { value: 'mobile' as DisplayMode, label: 'Mobile' },
             { value: 'desktop' as DisplayMode, label: 'Desktop' },
           ]).map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => handleDisplayModeChange(value)}
+            <button key={value} onClick={() => handleDisplayModeChange(value)}
               className={`flex-1 py-1.5 text-xs font-medium transition-colors touch-manipulation ${
-                displayMode === value
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-slate-700 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {label}
-            </button>
+                displayMode === value ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400 hover:text-slate-200'
+              }`}>{label}</button>
           ))}
         </div>
         <span className="text-[9px] text-slate-500 mt-0.5 block">
-          {displayMode === 'auto'
-            ? `Détection auto (${autoIsMobile ? 'mobile' : 'desktop'})`
-            : displayMode === 'mobile'
-              ? 'Forcé en mode mobile'
-              : 'Forcé en mode desktop'}
+          {displayMode === 'auto' ? `Détection auto (${autoIsMobile ? 'mobile' : 'desktop'})` : displayMode === 'mobile' ? 'Forcé en mode mobile' : 'Forcé en mode desktop'}
         </span>
       </div>
-
-      {/* PTT key (not on mobile) */}
       {!isMobile && (
         <div>
           <label className="text-[10px] text-slate-400 block mb-1">Touche PTT</label>
@@ -658,8 +729,8 @@ export default function VhfRadio({
     </div>
   );
 
-  /** Liste participants (ATC/AFIS) */
-  const participantsList = mode !== 'pilot' && isConnected && (
+  /** Participants list (ATC/AFIS) */
+  const participantsList = mode !== 'pilot' && isConnected && radioOn && (
     <div>
       <div className="flex items-center gap-1 mb-1">
         <Users className="h-3 w-3 text-slate-400" />
@@ -688,51 +759,60 @@ export default function VhfRadio({
   if (isMobile) {
     return (
       <>
-        {/* Barre compacte */}
-        <div className={`rounded-xl border overflow-hidden ${collision ? 'border-red-500/50 bg-red-950/20' : 'border-slate-700 bg-slate-800/90'}`}>
+        <div className={`rounded-xl border overflow-hidden ${!radioOn ? 'border-slate-700/50 bg-slate-800/50 opacity-75' : collision ? 'border-red-500/50 bg-red-950/20' : 'border-slate-700 bg-slate-800/90'}`}>
           <div className="flex items-center justify-between px-3 py-2.5">
-            {/* Freq + status */}
-            <button
-              onClick={() => !isLocked && setShowFreqModal(true)}
-              className="flex items-center gap-2 touch-manipulation"
-            >
-              <Radio className={`h-4 w-4 flex-shrink-0 ${collision ? 'text-red-400' : 'text-emerald-400'}`} />
-              <span className={`font-mono text-xl font-bold tracking-wider ${collision ? 'text-red-400' : 'text-emerald-300'}`}>
-                {currentFreq}
-              </span>
-              {!isLocked && (
-                <SlidersHorizontal className="h-3.5 w-3.5 text-slate-500" />
-              )}
-            </button>
-
+            {/* ON/OFF + Freq */}
             <div className="flex items-center gap-2">
-              {statusDot}
-              {/* Settings button */}
+              {onOffButton}
               <button
-                onClick={() => setShowPttConfig(!showPttConfig)}
-                className="p-1.5 rounded-lg bg-slate-700 text-slate-400 hover:text-slate-200 touch-manipulation"
+                onClick={() => radioOn && !isLocked && setShowFreqModal(true)}
+                className="flex items-center gap-1.5 touch-manipulation"
+                disabled={!radioOn}
               >
-                <Settings2 className="h-4 w-4" />
+                <div className="text-left">
+                  <div className={`font-mono text-lg font-bold tracking-wider ${!radioOn ? 'text-slate-600' : collision ? 'text-red-400' : 'text-emerald-300'}`}>
+                    {activeFreq}
+                  </div>
+                  {radioOn && !isLocked && (
+                    <div className="font-mono text-[10px] text-amber-400/60 tracking-wider">
+                      STBY {standbyFreq}
+                    </div>
+                  )}
+                </div>
+                {radioOn && !isLocked && <SlidersHorizontal className="h-3.5 w-3.5 text-slate-500" />}
               </button>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              {statusDot}
+              {radioOn && (
+                <>
+                  <button onClick={handleReconnect} disabled={isReconnecting || isConnecting}
+                    className="p-1.5 rounded-lg bg-slate-700 text-slate-400 hover:text-slate-200 touch-manipulation disabled:opacity-30">
+                    <RefreshCw className={`h-4 w-4 ${isReconnecting ? 'animate-spin' : ''}`} />
+                  </button>
+                  <button onClick={() => setShowPttConfig(!showPttConfig)}
+                    className="p-1.5 rounded-lg bg-slate-700 text-slate-400 hover:text-slate-200 touch-manipulation">
+                    <Settings2 className="h-4 w-4" />
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Settings panel inline */}
-          {showPttConfig && (
+          {showPttConfig && radioOn && (
             <div className="px-3 pb-3 pt-1 border-t border-slate-700/50">
               {settingsPanel}
             </div>
           )}
 
-          {/* Collision warning */}
-          {collision && (
+          {collision && radioOn && (
             <div className="flex items-center justify-center gap-1 pb-2">
               <AlertTriangle className="h-3 w-3 text-red-400" />
               <span className="text-[10px] text-red-400 font-semibold uppercase">Double transmission</span>
             </div>
           )}
 
-          {/* Participants (ATC/AFIS) */}
           {participantsList && (
             <div className="px-3 pb-2 border-t border-slate-700/50 pt-2">
               {participantsList}
@@ -740,8 +820,8 @@ export default function VhfRadio({
           )}
         </div>
 
-        {/* Bouton PTT flottant */}
-        {isConnected && (
+        {/* Floating PTT */}
+        {isConnected && radioOn && (
           <button
             onTouchStart={(e) => { e.preventDefault(); startTransmit(); }}
             onTouchEnd={(e) => { e.preventDefault(); stopTransmit(); }}
@@ -757,21 +837,14 @@ export default function VhfRadio({
                   : 'bg-slate-700 shadow-slate-900/50 active:bg-emerald-500'
             }`}
           >
-            {isTransmitting ? (
-              <Mic className="h-7 w-7 text-white" />
-            ) : (
-              <MicOff className="h-7 w-7 text-slate-300" />
-            )}
+            {isTransmitting ? <Mic className="h-7 w-7 text-white" /> : <MicOff className="h-7 w-7 text-slate-300" />}
           </button>
         )}
 
-        {/* Modal changement de fréquence */}
-        {showFreqModal && (
+        {/* Frequency modal */}
+        {showFreqModal && radioOn && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowFreqModal(false)}>
-            <div
-              className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl p-5 space-y-4 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
+            <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wider">Fréquence VHF</h3>
                 <button onClick={() => setShowFreqModal(false)} className="p-1 text-slate-500 hover:text-slate-200 touch-manipulation">
@@ -779,10 +852,17 @@ export default function VhfRadio({
                 </button>
               </div>
 
-              {freqDisplay}
+              {dualFreqDisplay}
+
+              {!isLocked && (
+                <button onClick={handleSwapFrequencies}
+                  className="w-full py-2 rounded-lg bg-amber-600/20 border border-amber-500/30 text-amber-400 font-semibold text-sm flex items-center justify-center gap-2 touch-manipulation active:bg-amber-600/30">
+                  <ArrowLeftRight className="h-4 w-4" /> Basculer STBY → ACT
+                </button>
+              )}
+
               {dialControls}
 
-              {/* Drag handle */}
               <div className="flex justify-center pt-2">
                 <div className="w-10 h-1 rounded-full bg-slate-700" />
               </div>
@@ -790,7 +870,6 @@ export default function VhfRadio({
           </div>
         )}
 
-        {/* Audio container */}
         <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
       </>
     );
@@ -801,53 +880,58 @@ export default function VhfRadio({
      ══════════════════════════════════════════════════ */
 
   return (
-    <div className="rounded-xl border border-slate-700 bg-gradient-to-b from-slate-800 to-slate-900 shadow-lg overflow-hidden">
+    <div className={`rounded-xl border bg-gradient-to-b from-slate-800 to-slate-900 shadow-lg overflow-hidden ${!radioOn ? 'border-slate-700/50 opacity-60' : collision ? 'border-red-500/50' : 'border-slate-700'}`}>
       {/* Header */}
       <div className={`flex items-center justify-between px-4 py-2 border-b ${
-        collision ? 'bg-red-900/50 border-red-500/50' : 'bg-slate-800/80 border-slate-700'
+        collision && radioOn ? 'bg-red-900/50 border-red-500/50' : 'bg-slate-800/80 border-slate-700'
       }`}>
         <div className="flex items-center gap-2">
-          <Radio className={`h-4 w-4 ${collision ? 'text-red-400' : 'text-emerald-400'}`} />
+          {onOffButton}
+          <Radio className={`h-4 w-4 ${!radioOn ? 'text-slate-600' : collision ? 'text-red-400' : 'text-emerald-400'}`} />
           <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">VHF COM1</span>
         </div>
         <div className="flex items-center gap-2">
           {statusDot}
           <span className="text-[10px] text-slate-500">
-            {isConnected ? 'EN LIGNE' : isConnecting ? 'CONNEXION...' : 'HORS LIGNE'}
+            {!radioOn ? 'OFF' : isConnected ? 'EN LIGNE' : isConnecting ? 'CONNEXION...' : 'HORS LIGNE'}
           </span>
+          {radioOn && (
+            <button onClick={handleReconnect} disabled={isReconnecting || isConnecting} title="Reconnexion"
+              className="p-1 rounded text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-colors disabled:opacity-30">
+              <RefreshCw className={`h-3.5 w-3.5 ${isReconnecting ? 'animate-spin' : ''}`} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Frequency */}
-      <div className="py-3 px-4">{freqDisplay}</div>
+      {/* Dual Frequency display */}
+      <div className="py-3 px-4">{dualFreqDisplay}</div>
 
-      {/* Dials */}
-      <div className="px-4 pb-3">{dialControls}</div>
+      {/* Dials (controls standby) */}
+      {!isLocked && radioOn && (
+        <div className="px-4 pb-3">{dialControls}</div>
+      )}
 
       {/* PTT */}
-      <div className="px-4 pb-3">{pttButton}</div>
+      {radioOn && <div className="px-4 pb-3">{pttButton}</div>}
 
       {/* Settings toggle */}
-      <div className="px-4 pb-3">
-        <button onClick={() => setShowPttConfig(!showPttConfig)} className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-300 transition-colors">
-          <Settings2 className="h-3 w-3" />
-          Paramètres audio
-        </button>
-        {showPttConfig && (
-          <div className="mt-2 p-3 rounded-lg bg-slate-800/50 border border-slate-700">
-            {settingsPanel}
-          </div>
-        )}
-      </div>
-
-      {/* Participants */}
-      {participantsList && (
-        <div className="px-4 pb-3 border-t border-slate-700/50 pt-2">
-          {participantsList}
+      {radioOn && (
+        <div className="px-4 pb-3">
+          <button onClick={() => setShowPttConfig(!showPttConfig)} className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-300 transition-colors">
+            <Settings2 className="h-3 w-3" /> Paramètres audio
+          </button>
+          {showPttConfig && (
+            <div className="mt-2 p-3 rounded-lg bg-slate-800/50 border border-slate-700">{settingsPanel}</div>
+          )}
         </div>
       )}
 
-      {/* Audio container */}
+      {/* Participants */}
+      {participantsList && (
+        <div className="px-4 pb-3 border-t border-slate-700/50 pt-2">{participantsList}</div>
+      )}
+
       <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
     </div>
   );
