@@ -104,7 +104,8 @@ class LiveKitManager(private val context: Context) {
 
             // Collect events in background
             scope.launch {
-                newRoom.events.collect { event ->
+                @Suppress("UNCHECKED_CAST")
+                (newRoom.events as Flow<RoomEvent>).collect { event ->
                     handleRoomEvent(event, newRoom)
                 }
             }
@@ -212,8 +213,8 @@ class LiveKitManager(private val context: Context) {
         room.remoteParticipants.values.forEach { p ->
             list.add(
                 ParticipantInfo(
-                    identity = p.identity ?: "",
-                    name = p.name ?: p.identity ?: "Inconnu",
+                    identity = p.identity?.toString() ?: "",
+                    name = p.name?.toString() ?: p.identity?.toString() ?: "Inconnu",
                     isSpeaking = p.isSpeaking
                 )
             )
@@ -251,8 +252,8 @@ class LiveKitManager(private val context: Context) {
             if (speaking) speakingCount++
             list.add(
                 ParticipantInfo(
-                    identity = p.identity ?: "",
-                    name = p.name ?: p.identity ?: "Inconnu",
+                    identity = p.identity?.toString() ?: "",
+                    name = p.name?.toString() ?: p.identity?.toString() ?: "Inconnu",
                     isSpeaking = speaking
                 )
             )
