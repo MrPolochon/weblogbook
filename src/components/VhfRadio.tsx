@@ -371,15 +371,53 @@ export default function VhfRadio({
      MediaSession
      ══════════════════════════════════════════════════ */
 
+  // Keep-alive audio for MediaSession in background (proper silent WAV generation)
   useEffect(() => {
     if (connectionState !== 'connected') return;
-    const silentDataUri = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-    const audio = new Audio(silentDataUri);
-    audio.loop = true;
-    audio.volume = 0.01;
-    audio.play().catch(() => {});
-    silentAudioRef.current = audio;
-    return () => { audio.pause(); audio.src = ''; silentAudioRef.current = null; };
+    try {
+      // Generate a real 1-second silent WAV (8kHz, 8-bit, mono)
+      const sampleRate = 8000;
+      const numSamples = sampleRate; // 1 sec
+      const fileSize = 44 + numSamples;
+      const buf = new ArrayBuffer(fileSize);
+      const v = new DataView(buf);
+      // RIFF header
+      [0x52,0x49,0x46,0x46].forEach((b,i) => v.setUint8(i, b)); // "RIFF"
+      v.setUint32(4, fileSize - 8, true);
+      [0x57,0x41,0x56,0x45].forEach((b,i) => v.setUint8(8+i, b)); // "WAVE"
+      // fmt chunk
+      [0x66,0x6d,0x74,0x20].forEach((b,i) => v.setUint8(12+i, b)); // "fmt "
+      v.setUint32(16, 16, true); // chunk size
+      v.setUint16(20, 1, true);  // PCM
+      v.setUint16(22, 1, true);  // mono
+      v.setUint32(24, sampleRate, true); // sample rate
+      v.setUint32(28, sampleRate, true); // byte rate
+      v.setUint16(32, 1, true);  // block align
+      v.setUint16(34, 8, true);  // 8 bits per sample
+      // data chunk
+      [0x64,0x61,0x74,0x61].forEach((b,i) => v.setUint8(36+i, b)); // "data"
+      v.setUint32(40, numSamples, true);
+      // Silent samples (128 = silence for unsigned 8-bit)
+      for (let i = 0; i < numSamples; i++) v.setUint8(44 + i, 128);
+
+      const blob = new Blob([buf], { type: 'audio/wav' });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.loop = true;
+      audio.volume = 0.01;
+      audio.play().catch(() => {});
+      silentAudioRef.current = audio;
+
+      return () => {
+        audio.pause();
+        audio.src = '';
+        URL.revokeObjectURL(url);
+        silentAudioRef.current = null;
+      };
+    } catch {
+      // Silent fail — MediaSession won't work in background but no crash
+      return;
+    }
   }, [connectionState]);
 
   const freqStepUp = useCallback(() => {
