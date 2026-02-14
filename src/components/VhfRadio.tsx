@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Radio, Mic, MicOff, Volume2, Settings2, Users, AlertTriangle } from 'lucide-react';
+import { Radio, Mic, MicOff, Volume2, Settings2, Users, AlertTriangle, X, SlidersHorizontal } from 'lucide-react';
 import VhfDial from './VhfDial';
 import {
   ALL_VHF_DECIMALS,
@@ -18,16 +18,13 @@ import {
   Track,
   ConnectionState,
   RemoteParticipant,
-  LocalParticipant,
 } from 'livekit-client';
 
 /* ───────────────────── Types ───────────────────── */
 
 interface VhfRadioProps {
   mode: 'pilot' | 'atc' | 'afis';
-  /** Fréquence imposée (ATC/AFIS) */
   lockedFrequency?: string;
-  /** Identifiant affiché dans le room */
   participantName?: string;
 }
 
@@ -43,7 +40,7 @@ const PTT_STORAGE_KEY = 'vhf-ptt-key';
 const AUDIO_INPUT_KEY = 'vhf-audio-input';
 const AUDIO_OUTPUT_KEY = 'vhf-audio-output';
 const DEFAULT_PTT = 'Space';
-const COLLISION_THRESHOLD = 0.01; // seuil audioLevel pour considérer qu'on parle
+const COLLISION_THRESHOLD = 0.01;
 const COLLISION_CHECK_MS = 80;
 
 /* ─────────────── Helpers PTT ───────────────────── */
@@ -75,9 +72,7 @@ export default function VhfRadio({
 }: VhfRadioProps) {
   /* ── Fréquence ── */
   const mhzRange = getMhzRange();
-  const initialFreq = lockedFrequency
-    ? parseFrequency(lockedFrequency)
-    : null;
+  const initialFreq = lockedFrequency ? parseFrequency(lockedFrequency) : null;
 
   const [mhzIndex, setMhzIndex] = useState(
     initialFreq ? mhzRange.indexOf(initialFreq.mhz) : 0
@@ -107,7 +102,7 @@ export default function VhfRadio({
   const [waitingForKey, setWaitingForKey] = useState(false);
   const pttActiveRef = useRef(false);
 
-  /* ── Collision (double transmission) ── */
+  /* ── Collision ── */
   const [collision, setCollision] = useState(false);
   const collisionOscRef = useRef<OscillatorNode | null>(null);
   const collisionCtxRef = useRef<AudioContext | null>(null);
@@ -118,11 +113,22 @@ export default function VhfRadio({
   const [selectedInput, setSelectedInput] = useState('');
   const [selectedOutput, setSelectedOutput] = useState('');
 
+  /* ── Mobile modals ── */
+  const [showFreqModal, setShowFreqModal] = useState(false);
+  const [showPttModal, setShowPttModal] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
   /* ══════════════════════════════════════════════════
      Initialisation
      ══════════════════════════════════════════════════ */
 
-  // Charger PTT key et devices depuis localStorage
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   useEffect(() => {
     const saved = localStorage.getItem(PTT_STORAGE_KEY);
     if (saved) setPttKey(saved);
@@ -132,40 +138,31 @@ export default function VhfRadio({
     if (savedOut) setSelectedOutput(savedOut);
   }, []);
 
-  // Énumérer les périphériques audio
   useEffect(() => {
     async function enumerate() {
       try {
-        // Demander l'accès au micro pour pouvoir lister les devices
         await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop()));
         const devices = await navigator.mediaDevices.enumerateDevices();
         setAudioInputs(devices.filter(d => d.kind === 'audioinput'));
         setAudioOutputs(devices.filter(d => d.kind === 'audiooutput'));
-      } catch {
-        // Silencieux si pas de permission
-      }
+      } catch { /* silent */ }
     }
     enumerate();
   }, []);
 
   /* ══════════════════════════════════════════════════
-     Connexion / Déconnexion LiveKit
+     LiveKit
      ══════════════════════════════════════════════════ */
 
   const cleanupRoom = useCallback(() => {
-    // Stopper la détection de collision
     if (collisionOscRef.current) {
-      try { collisionOscRef.current.stop(); } catch { /* ignore */ }
+      try { collisionOscRef.current.stop(); } catch { /* */ }
       collisionOscRef.current = null;
     }
-
-    // Détacher tous les éléments audio
     attachedAudioRef.current.forEach((el) => {
-      try { el.pause(); el.remove(); } catch { /* ignore */ }
+      try { el.pause(); el.remove(); } catch { /* */ }
     });
     attachedAudioRef.current.clear();
-
-    // Déconnecter la room
     const room = roomRef.current;
     if (room) {
       room.removeAllListeners();
@@ -182,11 +179,8 @@ export default function VhfRadio({
     async (freq: string) => {
       if (!isValidVhfFrequency(freq)) return;
       cleanupRoom();
-
       try {
         setConnectionState('connecting');
-
-        // Obtenir un token LiveKit
         const res = await fetch('/api/livekit/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -195,18 +189,9 @@ export default function VhfRadio({
             participantName: participantName || 'Inconnu',
           }),
         });
-
-        if (!res.ok) {
-          console.error('[VHF] Token error:', await res.text());
-          setConnectionState('error');
-          return;
-        }
-
+        if (!res.ok) { setConnectionState('error'); return; }
         const { token, url } = await res.json();
-        if (!token || !url) {
-          setConnectionState('error');
-          return;
-        }
+        if (!token || !url) { setConnectionState('error'); return; }
 
         const room = new Room({
           adaptiveStream: true,
@@ -219,16 +204,13 @@ export default function VhfRadio({
           },
         });
 
-        // ── Events ──
         room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
           setConnectionState(state);
         });
-
         room.on(RoomEvent.TrackSubscribed, (track) => {
           if (track.kind !== Track.Kind.Audio) return;
           const audioElement = track.attach() as HTMLAudioElement;
           audioElement.volume = 1.0;
-          // Appliquer le périphérique de sortie si possible
           if (selectedOutput && 'setSinkId' in audioElement) {
             (audioElement as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> })
               .setSinkId(selectedOutput).catch(() => {});
@@ -237,24 +219,15 @@ export default function VhfRadio({
           container.appendChild(audioElement);
           attachedAudioRef.current.set(track.sid ?? '', audioElement);
         });
-
         room.on(RoomEvent.TrackUnsubscribed, (track) => {
           const sid = track.sid ?? '';
           const el = attachedAudioRef.current.get(sid);
-          if (el) {
-            el.pause();
-            el.remove();
-            attachedAudioRef.current.delete(sid);
-          }
+          if (el) { el.pause(); el.remove(); attachedAudioRef.current.delete(sid); }
         });
-
         room.on(RoomEvent.ParticipantConnected, () => updateParticipants(room));
         room.on(RoomEvent.ParticipantDisconnected, () => updateParticipants(room));
 
-        // Connecter
         await room.connect(url, token, { autoSubscribe: true });
-
-        // Micro muté par défaut (PTT)
         await room.localParticipant.setMicrophoneEnabled(true);
         const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
         if (micPub) await micPub.mute();
@@ -272,16 +245,11 @@ export default function VhfRadio({
   function updateParticipants(room: Room) {
     const list: ParticipantInfo[] = [];
     room.remoteParticipants.forEach((p: RemoteParticipant) => {
-      list.push({
-        identity: p.identity,
-        name: p.name || p.identity,
-        isSpeaking: p.isSpeaking,
-      });
+      list.push({ identity: p.identity, name: p.name || p.identity, isSpeaking: p.isSpeaking });
     });
     setParticipants(list);
   }
 
-  /* ── Se connecter à la fréquence actuelle ── */
   const prevFreqRef = useRef('');
   useEffect(() => {
     if (currentFreq !== prevFreqRef.current) {
@@ -291,14 +259,13 @@ export default function VhfRadio({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFreq]);
 
-  // Cleanup au démontage
   useEffect(() => {
     return () => { cleanupRoom(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ══════════════════════════════════════════════════
-     Push-To-Talk
+     PTT
      ══════════════════════════════════════════════════ */
 
   const startTransmit = useCallback(async () => {
@@ -310,9 +277,7 @@ export default function VhfRadio({
     try {
       const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
       if (micPub) await micPub.unmute();
-    } catch (err) {
-      console.error('[VHF] Unmute error:', err);
-    }
+    } catch (err) { console.error('[VHF] Unmute error:', err); }
   }, []);
 
   const stopTransmit = useCallback(async () => {
@@ -324,154 +289,350 @@ export default function VhfRadio({
     try {
       const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
       if (micPub) await micPub.mute();
-    } catch (err) {
-      console.error('[VHF] Mute error:', err);
-    }
+    } catch (err) { console.error('[VHF] Mute error:', err); }
   }, []);
 
-  // Keyboard PTT listeners
   useEffect(() => {
     const handleDown = (e: KeyboardEvent) => {
-      if (waitingForKey) return; // Config mode
-      if (matchesPttKey(e, pttKey)) {
-        e.preventDefault();
-        startTransmit();
-      }
+      if (waitingForKey) return;
+      if (matchesPttKey(e, pttKey)) { e.preventDefault(); startTransmit(); }
     };
     const handleUp = (e: KeyboardEvent) => {
-      if (matchesPttKey(e, pttKey)) {
-        e.preventDefault();
-        stopTransmit();
-      }
+      if (matchesPttKey(e, pttKey)) { e.preventDefault(); stopTransmit(); }
     };
     window.addEventListener('keydown', handleDown);
     window.addEventListener('keyup', handleUp);
-    return () => {
-      window.removeEventListener('keydown', handleDown);
-      window.removeEventListener('keyup', handleUp);
-    };
+    return () => { window.removeEventListener('keydown', handleDown); window.removeEventListener('keyup', handleUp); };
   }, [pttKey, startTransmit, stopTransmit, waitingForKey]);
 
   /* ══════════════════════════════════════════════════
-     Détection de double transmission (collision)
+     Collision detection
      ══════════════════════════════════════════════════ */
 
   useEffect(() => {
     const interval = setInterval(() => {
       const room = roomRef.current;
       if (!room) return;
-
-      // Compter combien de participants émettent (y compris nous)
       let speakingCount = 0;
-
-      // Nous
       if (pttActiveRef.current) speakingCount++;
-
-      // Remote participants
       room.remoteParticipants.forEach((p: RemoteParticipant) => {
         if (p.audioLevel > COLLISION_THRESHOLD) speakingCount++;
       });
-
-      // Mettre à jour la liste des participants (speaking state)
       const list: ParticipantInfo[] = [];
       room.remoteParticipants.forEach((p: RemoteParticipant) => {
-        list.push({
-          identity: p.identity,
-          name: p.name || p.identity,
-          isSpeaking: p.audioLevel > COLLISION_THRESHOLD,
-        });
+        list.push({ identity: p.identity, name: p.name || p.identity, isSpeaking: p.audioLevel > COLLISION_THRESHOLD });
       });
       setParticipants(list);
-
-      const isCollision = speakingCount >= 2;
-      setCollision(isCollision);
+      setCollision(speakingCount >= 2);
     }, COLLISION_CHECK_MS);
-
     return () => clearInterval(interval);
   }, []);
 
-  // Son de collision (oscillateur aigu)
   useEffect(() => {
     if (collision) {
       try {
-        if (!collisionCtxRef.current) {
-          collisionCtxRef.current = new AudioContext();
-        }
+        if (!collisionCtxRef.current) collisionCtxRef.current = new AudioContext();
         const ctx = collisionCtxRef.current;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 1200;
-        gain.gain.value = 0.15;
-        osc.connect(gain).connect(ctx.destination);
-        osc.start();
+        osc.type = 'sine'; osc.frequency.value = 1200; gain.gain.value = 0.15;
+        osc.connect(gain).connect(ctx.destination); osc.start();
         collisionOscRef.current = osc;
-      } catch { /* ignore */ }
+      } catch { /* */ }
     } else {
       if (collisionOscRef.current) {
-        try { collisionOscRef.current.stop(); } catch { /* ignore */ }
+        try { collisionOscRef.current.stop(); } catch { /* */ }
         collisionOscRef.current = null;
       }
     }
   }, [collision]);
 
   /* ══════════════════════════════════════════════════
-     PTT Key Configuration
+     PTT Config
      ══════════════════════════════════════════════════ */
 
   useEffect(() => {
     if (!waitingForKey) return;
     const handler = (e: KeyboardEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       const label = keyEventToLabel(e);
-      if (label) {
-        setPttKey(label);
-        localStorage.setItem(PTT_STORAGE_KEY, label);
-        setWaitingForKey(false);
-      }
+      if (label) { setPttKey(label); localStorage.setItem(PTT_STORAGE_KEY, label); setWaitingForKey(false); }
     };
     window.addEventListener('keydown', handler, true);
     return () => window.removeEventListener('keydown', handler, true);
   }, [waitingForKey]);
 
   /* ══════════════════════════════════════════════════
-     Device change handlers
+     Device handlers
      ══════════════════════════════════════════════════ */
 
   function handleInputChange(deviceId: string) {
     setSelectedInput(deviceId);
     localStorage.setItem(AUDIO_INPUT_KEY, deviceId);
-    // Reconnecter avec le nouveau device
-    if (roomRef.current && currentFreq) {
-      connectToFrequency(currentFreq);
-    }
+    if (roomRef.current && currentFreq) connectToFrequency(currentFreq);
   }
 
   function handleOutputChange(deviceId: string) {
     setSelectedOutput(deviceId);
     localStorage.setItem(AUDIO_OUTPUT_KEY, deviceId);
-    // Appliquer à tous les éléments audio existants
     attachedAudioRef.current.forEach((el) => {
       if ('setSinkId' in el) {
-        (el as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> })
-          .setSinkId(deviceId).catch(() => {});
+        (el as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> }).setSinkId(deviceId).catch(() => {});
       }
     });
   }
 
-  /* ── Decimal index handler pour respecter les limites de 132 ── */
   function handleDecChange(idx: number) {
     const decs = getDecimalsForMhz(currentMhz);
     setDecIndex(Math.min(idx, decs.length - 1));
   }
 
   /* ══════════════════════════════════════════════════
-     Rendu
+     Sous-composants partagés
      ══════════════════════════════════════════════════ */
 
   const isConnected = connectionState === 'connected';
   const isConnecting = connectionState === 'connecting';
+
+  const statusDot = (
+    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+      isConnected ? 'bg-emerald-400 shadow-emerald-400/50 shadow-sm' :
+      isConnecting ? 'bg-amber-400 animate-pulse' : 'bg-red-500'
+    }`} />
+  );
+
+  /** Bloc fréquence + molettes */
+  const freqDisplay = (
+    <div className={`text-center ${collision ? 'bg-red-950/30 rounded-lg p-2' : ''}`}>
+      <span className={`font-mono text-3xl font-bold tracking-widest ${
+        collision ? 'text-red-400 animate-pulse' : 'text-emerald-300'
+      }`}>
+        {currentFreq}
+      </span>
+      {collision && (
+        <div className="flex items-center justify-center gap-1 mt-1">
+          <AlertTriangle className="h-3 w-3 text-red-400" />
+          <span className="text-[10px] text-red-400 font-semibold uppercase">Double transmission</span>
+        </div>
+      )}
+    </div>
+  );
+
+  const dialControls = (
+    <div className="flex items-center justify-center gap-3">
+      <VhfDial values={mhzRange.map(String)} currentIndex={mhzIndex} onChange={setMhzIndex} disabled={isLocked} label="MHz" size={isMobile ? 80 : 68} />
+      <span className="text-2xl font-mono text-slate-500 mt-4">.</span>
+      <VhfDial values={validDecimals} currentIndex={safeDecIndex} onChange={handleDecChange} disabled={isLocked} label="kHz" size={isMobile ? 80 : 68} />
+    </div>
+  );
+
+  /** Bouton PTT (desktop inline) */
+  const pttButton = (
+    <button
+      onMouseDown={startTransmit}
+      onMouseUp={stopTransmit}
+      onMouseLeave={stopTransmit}
+      onTouchStart={(e) => { e.preventDefault(); startTransmit(); }}
+      onTouchEnd={(e) => { e.preventDefault(); stopTransmit(); }}
+      onTouchCancel={stopTransmit}
+      disabled={!isConnected}
+      className={`w-full py-2.5 rounded-lg font-semibold text-sm uppercase tracking-wide transition-all flex items-center justify-center gap-2 touch-manipulation select-none ${
+        isTransmitting
+          ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 scale-[0.98]'
+          : isConnected
+            ? 'bg-slate-700 text-slate-300 hover:bg-slate-600 active:bg-emerald-600'
+            : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+      }`}
+    >
+      {isTransmitting ? (
+        <><Mic className="h-4 w-4" /> TX — Transmission</>
+      ) : (
+        <><MicOff className="h-4 w-4" /> PTT {!isMobile && `— [${pttKey}]`}</>
+      )}
+    </button>
+  );
+
+  /** Paramètres audio (partagé desktop/modal) */
+  const settingsPanel = (
+    <div className="space-y-3">
+      {/* PTT key (desktop only) */}
+      {!isMobile && (
+        <div>
+          <label className="text-[10px] text-slate-400 block mb-1">Touche PTT</label>
+          {waitingForKey ? (
+            <div className="text-xs text-amber-400 animate-pulse py-1">Appuyez sur une touche...</div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono text-emerald-300 bg-slate-700 px-2 py-1 rounded">{pttKey}</span>
+              <button onClick={() => setWaitingForKey(true)} className="text-[10px] text-sky-400 hover:text-sky-300">Modifier</button>
+            </div>
+          )}
+        </div>
+      )}
+      {audioInputs.length > 0 && (
+        <div>
+          <label className="text-[10px] text-slate-400 block mb-1"><Mic className="h-3 w-3 inline mr-1" />Microphone</label>
+          <select value={selectedInput} onChange={(e) => handleInputChange(e.target.value)}
+            className="w-full text-xs bg-slate-700 text-slate-200 rounded px-2 py-1.5 border border-slate-600">
+            <option value="">Par défaut</option>
+            {audioInputs.map((d) => (<option key={d.deviceId} value={d.deviceId}>{d.label || `Micro ${d.deviceId.slice(0, 8)}`}</option>))}
+          </select>
+        </div>
+      )}
+      {audioOutputs.length > 0 && (
+        <div>
+          <label className="text-[10px] text-slate-400 block mb-1"><Volume2 className="h-3 w-3 inline mr-1" />Sortie audio</label>
+          <select value={selectedOutput} onChange={(e) => handleOutputChange(e.target.value)}
+            className="w-full text-xs bg-slate-700 text-slate-200 rounded px-2 py-1.5 border border-slate-600">
+            <option value="">Par défaut</option>
+            {audioOutputs.map((d) => (<option key={d.deviceId} value={d.deviceId}>{d.label || `Sortie ${d.deviceId.slice(0, 8)}`}</option>))}
+          </select>
+        </div>
+      )}
+    </div>
+  );
+
+  /** Liste participants (ATC/AFIS) */
+  const participantsList = mode !== 'pilot' && isConnected && (
+    <div>
+      <div className="flex items-center gap-1 mb-1">
+        <Users className="h-3 w-3 text-slate-400" />
+        <span className="text-[10px] text-slate-400 uppercase">Sur la fréquence ({participants.length})</span>
+      </div>
+      {participants.length === 0 ? (
+        <p className="text-[10px] text-slate-600 italic">Aucun utilisateur</p>
+      ) : (
+        <div className="space-y-0.5 max-h-32 overflow-y-auto">
+          {participants.map((p) => (
+            <div key={p.identity} className={`flex items-center gap-1.5 text-xs rounded px-1.5 py-0.5 ${p.isSpeaking ? 'bg-emerald-900/30 text-emerald-300' : 'text-slate-400'}`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${p.isSpeaking ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+              <span className="font-mono text-[11px]">{p.name}</span>
+              {p.isSpeaking && <Mic className="h-3 w-3 text-emerald-400 ml-auto" />}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  /* ══════════════════════════════════════════════════
+     RENDU MOBILE
+     ══════════════════════════════════════════════════ */
+
+  if (isMobile) {
+    return (
+      <>
+        {/* Barre compacte */}
+        <div className={`rounded-xl border overflow-hidden ${collision ? 'border-red-500/50 bg-red-950/20' : 'border-slate-700 bg-slate-800/90'}`}>
+          <div className="flex items-center justify-between px-3 py-2.5">
+            {/* Freq + status */}
+            <button
+              onClick={() => !isLocked && setShowFreqModal(true)}
+              className="flex items-center gap-2 touch-manipulation"
+            >
+              <Radio className={`h-4 w-4 flex-shrink-0 ${collision ? 'text-red-400' : 'text-emerald-400'}`} />
+              <span className={`font-mono text-xl font-bold tracking-wider ${collision ? 'text-red-400' : 'text-emerald-300'}`}>
+                {currentFreq}
+              </span>
+              {!isLocked && (
+                <SlidersHorizontal className="h-3.5 w-3.5 text-slate-500" />
+              )}
+            </button>
+
+            <div className="flex items-center gap-2">
+              {statusDot}
+              {/* Settings button */}
+              <button
+                onClick={() => setShowPttConfig(!showPttConfig)}
+                className="p-1.5 rounded-lg bg-slate-700 text-slate-400 hover:text-slate-200 touch-manipulation"
+              >
+                <Settings2 className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Settings panel inline */}
+          {showPttConfig && (
+            <div className="px-3 pb-3 pt-1 border-t border-slate-700/50">
+              {settingsPanel}
+            </div>
+          )}
+
+          {/* Collision warning */}
+          {collision && (
+            <div className="flex items-center justify-center gap-1 pb-2">
+              <AlertTriangle className="h-3 w-3 text-red-400" />
+              <span className="text-[10px] text-red-400 font-semibold uppercase">Double transmission</span>
+            </div>
+          )}
+
+          {/* Participants (ATC/AFIS) */}
+          {participantsList && (
+            <div className="px-3 pb-2 border-t border-slate-700/50 pt-2">
+              {participantsList}
+            </div>
+          )}
+        </div>
+
+        {/* Bouton PTT flottant */}
+        {isConnected && (
+          <button
+            onTouchStart={(e) => { e.preventDefault(); startTransmit(); }}
+            onTouchEnd={(e) => { e.preventDefault(); stopTransmit(); }}
+            onTouchCancel={stopTransmit}
+            onMouseDown={startTransmit}
+            onMouseUp={stopTransmit}
+            onMouseLeave={stopTransmit}
+            className={`fixed bottom-6 right-6 z-50 w-16 h-16 rounded-full shadow-2xl flex items-center justify-center touch-manipulation select-none transition-all ${
+              isTransmitting
+                ? 'bg-emerald-500 scale-110 shadow-emerald-500/40'
+                : collision
+                  ? 'bg-red-600 shadow-red-600/30'
+                  : 'bg-slate-700 shadow-slate-900/50 active:bg-emerald-500'
+            }`}
+          >
+            {isTransmitting ? (
+              <Mic className="h-7 w-7 text-white" />
+            ) : (
+              <MicOff className="h-7 w-7 text-slate-300" />
+            )}
+          </button>
+        )}
+
+        {/* Modal changement de fréquence */}
+        {showFreqModal && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowFreqModal(false)}>
+            <div
+              className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl p-5 space-y-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wider">Fréquence VHF</h3>
+                <button onClick={() => setShowFreqModal(false)} className="p-1 text-slate-500 hover:text-slate-200 touch-manipulation">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {freqDisplay}
+              {dialControls}
+
+              {/* Drag handle */}
+              <div className="flex justify-center pt-2">
+                <div className="w-10 h-1 rounded-full bg-slate-700" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Audio container */}
+        <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
+      </>
+    );
+  }
+
+  /* ══════════════════════════════════════════════════
+     RENDU DESKTOP
+     ══════════════════════════════════════════════════ */
 
   return (
     <div className="rounded-xl border border-slate-700 bg-gradient-to-b from-slate-800 to-slate-900 shadow-lg overflow-hidden">
@@ -481,211 +642,47 @@ export default function VhfRadio({
       }`}>
         <div className="flex items-center gap-2">
           <Radio className={`h-4 w-4 ${collision ? 'text-red-400' : 'text-emerald-400'}`} />
-          <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-            VHF COM1
-          </span>
+          <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">VHF COM1</span>
         </div>
         <div className="flex items-center gap-2">
-          {/* Connection status dot */}
-          <div className={`w-2 h-2 rounded-full ${
-            isConnected ? 'bg-emerald-400 shadow-emerald-400/50 shadow-sm' :
-            isConnecting ? 'bg-amber-400 animate-pulse' :
-            'bg-red-500'
-          }`} />
+          {statusDot}
           <span className="text-[10px] text-slate-500">
             {isConnected ? 'EN LIGNE' : isConnecting ? 'CONNEXION...' : 'HORS LIGNE'}
           </span>
         </div>
       </div>
 
-      {/* Frequency display */}
-      <div className={`text-center py-3 px-4 ${collision ? 'bg-red-950/30' : ''}`}>
-        <span className={`font-mono text-3xl font-bold tracking-widest ${
-          collision ? 'text-red-400 animate-pulse' : 'text-emerald-300'
-        }`}>
-          {currentFreq}
-        </span>
-        {collision && (
-          <div className="flex items-center justify-center gap-1 mt-1">
-            <AlertTriangle className="h-3 w-3 text-red-400" />
-            <span className="text-[10px] text-red-400 font-semibold uppercase">
-              Double transmission
-            </span>
-          </div>
-        )}
-      </div>
+      {/* Frequency */}
+      <div className="py-3 px-4">{freqDisplay}</div>
 
       {/* Dials */}
-      <div className="flex items-center justify-center gap-3 px-4 pb-3">
-        <VhfDial
-          values={mhzRange.map(String)}
-          currentIndex={mhzIndex}
-          onChange={setMhzIndex}
-          disabled={isLocked}
-          label="MHz"
-          size={68}
-        />
-        <span className="text-2xl font-mono text-slate-500 mt-4">.</span>
-        <VhfDial
-          values={validDecimals}
-          currentIndex={safeDecIndex}
-          onChange={handleDecChange}
-          disabled={isLocked}
-          label="kHz"
-          size={68}
-        />
-      </div>
+      <div className="px-4 pb-3">{dialControls}</div>
 
       {/* PTT */}
-      <div className="px-4 pb-3">
-        <button
-          onMouseDown={startTransmit}
-          onMouseUp={stopTransmit}
-          onMouseLeave={stopTransmit}
-          disabled={!isConnected}
-          className={`w-full py-2.5 rounded-lg font-semibold text-sm uppercase tracking-wide transition-all flex items-center justify-center gap-2 ${
-            isTransmitting
-              ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 scale-[0.98]'
-              : isConnected
-                ? 'bg-slate-700 text-slate-300 hover:bg-slate-600 active:bg-emerald-600'
-                : 'bg-slate-800 text-slate-600 cursor-not-allowed'
-          }`}
-        >
-          {isTransmitting ? (
-            <>
-              <Mic className="h-4 w-4" />
-              TX — Transmission en cours
-            </>
-          ) : (
-            <>
-              <MicOff className="h-4 w-4" />
-              PTT — Maintenir [{pttKey}]
-            </>
-          )}
-        </button>
-      </div>
+      <div className="px-4 pb-3">{pttButton}</div>
 
-      {/* Settings (devices + PTT config) */}
+      {/* Settings toggle */}
       <div className="px-4 pb-3">
-        <button
-          onClick={() => setShowPttConfig(!showPttConfig)}
-          className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
-        >
+        <button onClick={() => setShowPttConfig(!showPttConfig)} className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-300 transition-colors">
           <Settings2 className="h-3 w-3" />
           Paramètres audio
         </button>
-
         {showPttConfig && (
-          <div className="mt-2 p-3 rounded-lg bg-slate-800/50 border border-slate-700 space-y-3">
-            {/* PTT key */}
-            <div>
-              <label className="text-[10px] text-slate-400 block mb-1">Touche PTT</label>
-              {waitingForKey ? (
-                <div className="text-xs text-amber-400 animate-pulse py-1">
-                  Appuyez sur une touche...
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-emerald-300 bg-slate-700 px-2 py-1 rounded">
-                    {pttKey}
-                  </span>
-                  <button
-                    onClick={() => setWaitingForKey(true)}
-                    className="text-[10px] text-sky-400 hover:text-sky-300"
-                  >
-                    Modifier
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Micro */}
-            {audioInputs.length > 0 && (
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1">
-                  <Mic className="h-3 w-3 inline mr-1" />
-                  Microphone
-                </label>
-                <select
-                  value={selectedInput}
-                  onChange={(e) => handleInputChange(e.target.value)}
-                  className="w-full text-xs bg-slate-700 text-slate-200 rounded px-2 py-1 border border-slate-600"
-                >
-                  <option value="">Par défaut</option>
-                  {audioInputs.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Micro ${d.deviceId.slice(0, 8)}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Sortie */}
-            {audioOutputs.length > 0 && (
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1">
-                  <Volume2 className="h-3 w-3 inline mr-1" />
-                  Sortie audio
-                </label>
-                <select
-                  value={selectedOutput}
-                  onChange={(e) => handleOutputChange(e.target.value)}
-                  className="w-full text-xs bg-slate-700 text-slate-200 rounded px-2 py-1 border border-slate-600"
-                >
-                  <option value="">Par défaut</option>
-                  {audioOutputs.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Sortie ${d.deviceId.slice(0, 8)}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+          <div className="mt-2 p-3 rounded-lg bg-slate-800/50 border border-slate-700">
+            {settingsPanel}
           </div>
         )}
       </div>
 
-      {/* Participants list (ATC/AFIS only) */}
-      {mode !== 'pilot' && isConnected && (
+      {/* Participants */}
+      {participantsList && (
         <div className="px-4 pb-3 border-t border-slate-700/50 pt-2">
-          <div className="flex items-center gap-1 mb-1">
-            <Users className="h-3 w-3 text-slate-400" />
-            <span className="text-[10px] text-slate-400 uppercase">
-              Sur la fréquence ({participants.length})
-            </span>
-          </div>
-          {participants.length === 0 ? (
-            <p className="text-[10px] text-slate-600 italic">Aucun utilisateur</p>
-          ) : (
-            <div className="space-y-0.5 max-h-24 overflow-y-auto">
-              {participants.map((p) => (
-                <div
-                  key={p.identity}
-                  className={`flex items-center gap-1.5 text-xs rounded px-1.5 py-0.5 ${
-                    p.isSpeaking ? 'bg-emerald-900/30 text-emerald-300' : 'text-slate-400'
-                  }`}
-                >
-                  <div className={`w-1.5 h-1.5 rounded-full ${
-                    p.isSpeaking ? 'bg-emerald-400' : 'bg-slate-600'
-                  }`} />
-                  <span className="font-mono text-[11px]">{p.name}</span>
-                  {p.isSpeaking && (
-                    <Mic className="h-3 w-3 text-emerald-400 ml-auto" />
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          {participantsList}
         </div>
       )}
 
-      {/* Audio container (hidden) */}
-      <div
-        ref={audioContainerRef}
-        style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }}
-        aria-hidden="true"
-      />
+      {/* Audio container */}
+      <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
     </div>
   );
 }

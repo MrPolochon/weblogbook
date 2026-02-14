@@ -202,3 +202,102 @@ DO $$ BEGIN
     RAISE NOTICE 'ℹ️ Table vhf_position_frequencies existe déjà';
   END IF;
 END $$;
+
+-- ============================================================
+-- 9) Seed des fréquences VHF par aéroport / position
+--    TWR : 118-119  |  GND : 121  |  APP : 119-120  |  CTR : 124-130
+-- ============================================================
+INSERT INTO public.vhf_position_frequencies (aeroport, position, frequency) VALUES
+  -- ITKO (Tokyo)
+  ('ITKO', 'Tower',   '118.050'),
+  ('ITKO', 'Ground',  '121.625'),
+  ('ITKO', 'APP',     '119.300'),
+  ('ITKO', 'Center',  '124.850'),
+  -- IPPH (Perth)
+  ('IPPH', 'Tower',   '118.700'),
+  ('IPPH', 'Ground',  '121.900'),
+  ('IPPH', 'APP',     '120.175'),
+  ('IPPH', 'Center',  '125.400'),
+  -- IZOL (Izolirani)
+  ('IZOL', 'Tower',   '119.150'),
+  ('IZOL', 'Ground',  '121.750'),
+  ('IZOL', 'APP',     '120.500'),
+  ('IZOL', 'Center',  '126.275'),
+  -- ILAR (Larnaca)
+  ('ILAR', 'Tower',   '118.350'),
+  ('ILAR', 'Ground',  '121.680'),
+  ('ILAR', 'APP',     '119.850'),
+  ('ILAR', 'Center',  '127.525'),
+  -- ISAU (Sauthemtoma)
+  ('ISAU', 'Tower',   '119.500'),
+  ('ISAU', 'Ground',  '121.835'),
+  ('ISAU', 'APP',     '120.325'),
+  ('ISAU', 'Center',  '128.150'),
+  -- IRFD (Greater Rockford)
+  ('IRFD', 'Tower',   '118.925'),
+  ('IRFD', 'Ground',  '121.700'),
+  ('IRFD', 'APP',     '120.775'),
+  ('IRFD', 'Center',  '125.050'),
+  -- IMLR (Mellor)
+  ('IMLR', 'Tower',   '118.450'),
+  ('IMLR', 'Ground',  '121.575'),
+  ('IMLR', 'APP',     '119.775'),
+  ('IMLR', 'Center',  '129.375'),
+  -- IGRV (Grindavik)
+  ('IGRV', 'Tower',   '119.325'),
+  ('IGRV', 'Ground',  '121.850'),
+  ('IGRV', 'APP',     '120.600'),
+  ('IGRV', 'Center',  '130.275'),
+  -- IPAP (Paphos Intl.) — international
+  ('IPAP', 'Tower',   '118.575'),
+  ('IPAP', 'Ground',  '121.650'),
+  ('IPAP', 'APP',     '120.150'),
+  ('IPAP', 'Center',  '126.800'),
+  -- IJAF (Al Najaf) — régional
+  ('IJAF', 'Tower',   '118.275'),
+  ('IJAF', 'Ground',  '121.525'),
+  ('IJAF', 'APP',     '120.025'),
+  -- IBLT (Boltic Airfield) — régional
+  ('IBLT', 'Tower',   '119.050'),
+  ('IBLT', 'Ground',  '121.775'),
+  ('IBLT', 'APP',     '120.400'),
+  -- IDCS (Saba Airport) — petit
+  ('IDCS', 'Tower',   '118.175'),
+  ('IDCS', 'Ground',  '121.950'),
+  -- IBTH (Saint Barthelemy) — petit
+  ('IBTH', 'Tower',   '119.200'),
+  ('IBTH', 'Ground',  '121.600'),
+  -- ISKP (Skopelos Airfield) — petit
+  ('ISKP', 'Tower',   '118.800'),
+  ('ISKP', 'Ground',  '121.500'),
+  -- ILKL (Lukla Airport) — petit
+  ('ILKL', 'Tower',   '118.150'),
+  ('ILKL', 'Ground',  '121.975'),
+  -- IBAR (Barra Airport) — petit
+  ('IBAR', 'Tower',   '119.400'),
+  ('IBAR', 'Ground',  '121.550'),
+  -- IHEN (Henstridge Airfield) — petit
+  ('IHEN', 'Tower',   '118.625'),
+  ('IHEN', 'Ground',  '121.800'),
+  -- ITRC (Training Centre) — petit
+  ('ITRC', 'Tower',   '119.075'),
+  ('ITRC', 'Ground',  '121.725'),
+  -- IBRD (Bird Island Airfield) — petit
+  ('IBRD', 'Tower',   '118.500'),
+  ('IBRD', 'Ground',  '121.475'),
+  -- IUFO (UFO Base) — petit
+  ('IUFO', 'Tower',   '119.550'),
+  ('IUFO', 'Ground',  '121.425'),
+  -- IIAB (McConnell AFB) — militaire
+  ('IIAB', 'Tower',   '118.100'),
+  ('IIAB', 'Ground',  '121.300'),
+  ('IIAB', 'APP',     '120.850'),
+  -- IGAR (Air Base Garry) — militaire
+  ('IGAR', 'Tower',   '119.600'),
+  ('IGAR', 'Ground',  '121.350'),
+  ('IGAR', 'APP',     '120.925'),
+  -- ISCM (RAF Scampton) — militaire
+  ('ISCM', 'Tower',   '118.875'),
+  ('ISCM', 'Ground',  '121.250'),
+  ('ISCM', 'APP',     '120.275')
+ON CONFLICT DO NOTHING;
