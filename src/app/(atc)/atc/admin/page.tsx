@@ -6,6 +6,7 @@ import AdminAtcGrades from './AdminAtcGrades';
 import AdminCreateAtcForm from './AdminCreateAtcForm';
 import AdminAtcComptes from './AdminAtcComptes';
 import AdminAtcSessionsEnLigne from './AdminAtcSessionsEnLigne';
+import FrequencesVhfSection from './FrequencesVhfSection';
 
 export default async function AtcAdminPage() {
   const supabase = await createClient();
@@ -41,6 +42,7 @@ export default async function AtcAdminPage() {
       </div>
 
       <AdminAtcSessionsEnLigne sessions={sessionsEnLigne} />
+      <FrequencesVhfSection />
       <AdminAtcGrades grades={grades || []} />
       <AdminCreateAtcForm grades={grades || []} />
       <AdminAtcComptes comptes={atcComptes || []} grades={grades || []} />

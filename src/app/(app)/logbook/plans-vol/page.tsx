@@ -7,6 +7,7 @@ import { ArrowLeft, FileText, AlertCircle, Bell, Plane, Clock, CheckCircle2, XCi
 import PlanVolCloturerButton from './PlanVolCloturerButton';
 import PlanVolAnnulerButton from './PlanVolAnnulerButton';
 import TranspondeurInterface from './TranspondeurInterface';
+import VhfRadio from '@/components/VhfRadio';
 import type { PlanVol } from '@/lib/types';
 
 const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
@@ -25,8 +26,9 @@ export default async function MesPlansVolPage() {
   const admin = createAdminClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const { data: profile } = await supabase.from('profiles').select('role, identifiant').eq('id', user.id).single();
   if (profile?.role === 'atc') redirect('/logbook');
+  const piloteIdentifiant = profile?.identifiant || 'Pilote';
 
   const { data: raw } = await supabase
     .from('plans_vol')
@@ -121,6 +123,14 @@ export default async function MesPlansVolPage() {
           </div>
         </div>
       </div>
+
+      {/* Radio VHF - Vol actif */}
+      {planActif && (
+        <VhfRadio
+          mode="pilot"
+          participantName={piloteIdentifiant}
+        />
+      )}
 
       {/* Interface Transpondeur - Vol actif */}
       {planActif && (

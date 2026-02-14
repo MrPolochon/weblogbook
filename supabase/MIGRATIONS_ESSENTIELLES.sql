@@ -170,3 +170,35 @@ DO $$ BEGIN
     RAISE NOTICE 'ℹ️ Colonne logo_url existe déjà';
   END IF;
 END $$;
+
+-- ============================================================
+-- 8) Table vhf_position_frequencies (radio VHF par position ATC/AFIS)
+-- ============================================================
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'vhf_position_frequencies'
+  ) THEN
+    CREATE TABLE public.vhf_position_frequencies (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      aeroport TEXT NOT NULL,
+      position TEXT NOT NULL,
+      frequency TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE(aeroport, position),
+      UNIQUE(frequency)
+    );
+    -- RLS : lecture pour tous les authentifiés, écriture admin only
+    ALTER TABLE public.vhf_position_frequencies ENABLE ROW LEVEL SECURITY;
+    CREATE POLICY "vhf_freq_select" ON public.vhf_position_frequencies
+      FOR SELECT TO authenticated USING (true);
+    CREATE POLICY "vhf_freq_admin" ON public.vhf_position_frequencies
+      FOR ALL USING (
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+      );
+    RAISE NOTICE '✅ Table vhf_position_frequencies créée avec RLS';
+  ELSE
+    RAISE NOTICE 'ℹ️ Table vhf_position_frequencies existe déjà';
+  END IF;
+END $$;

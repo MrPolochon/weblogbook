@@ -7,6 +7,7 @@ import HorsServiceButton from '../HorsServiceButton';
 import PlansEnAttenteModal from '@/components/PlansEnAttenteModal';
 import AtcEnLigneModal from '@/components/AtcEnLigneModal';
 import FlightStripBoardWrapper from '@/components/FlightStripBoardWrapper';
+import VhfRadio from '@/components/VhfRadio';
 import { getTypeWake } from '@/lib/wake-turbulence';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -107,6 +108,35 @@ export default async function AtcPage() {
   const sessionsEnServiceSafe = sessionsEnService ?? [];
   const afisEnServiceSafe = afisEnService ?? [];
 
+  // Récupérer la fréquence VHF de la position de l'ATC + identifiant
+  let atcFrequency: string | null = null;
+  let atcIdentifiant = 'ATC';
+  if (session) {
+    const { data: vhfData } = await admin
+      .from('vhf_position_frequencies')
+      .select('frequency')
+      .eq('aeroport', session.aeroport)
+      .eq('position', session.position)
+      .maybeSingle();
+    atcFrequency = vhfData?.frequency || null;
+
+    const { data: profData } = await admin
+      .from('profiles')
+      .select('identifiant')
+      .eq('id', user.id)
+      .single();
+    atcIdentifiant = profData?.identifiant || 'ATC';
+  }
+
+  // Récupérer TOUTES les fréquences VHF pour affichage dans la liste des positions
+  const { data: allVhfFreqs } = await admin
+    .from('vhf_position_frequencies')
+    .select('aeroport, position, frequency');
+  const vhfFreqMap = new Map<string, string>();
+  (allVhfFreqs || []).forEach(f => {
+    vhfFreqMap.set(`${f.aeroport}-${f.position}`, f.frequency);
+  });
+
   // Grouper les sessions par aéroport
   const byAeroport = sessionsEnServiceSafe.reduce<Record<string, Array<{ position: string; identifiant: string }>>>((acc, s) => {
     const k = s.aeroport;
@@ -191,6 +221,15 @@ export default async function AtcPage() {
         </div>
       )}
 
+      {/* Radio VHF */}
+      {session && atcFrequency && (
+        <VhfRadio
+          mode="atc"
+          lockedFrequency={atcFrequency}
+          participantName={`${atcIdentifiant} (${session.aeroport} ${session.position})`}
+        />
+      )}
+
       {/* Flight Strips Board */}
       {session && (
         <div>
@@ -252,12 +291,18 @@ export default async function AtcPage() {
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 </div>
                 <div className="space-y-1">
-                  {controllers.map((c, idx) => (
-                    <div key={`${apt}-${c.position}-${idx}`} className="flex items-center justify-between text-sm">
-                      <span className="text-emerald-700 font-medium">{c.position}</span>
-                      <span className="text-slate-500 text-xs">{c.identifiant}</span>
-                    </div>
-                  ))}
+                  {controllers.map((c, idx) => {
+                    const freq = vhfFreqMap.get(`${apt}-${c.position}`);
+                    return (
+                      <div key={`${apt}-${c.position}-${idx}`} className="flex items-center justify-between text-sm gap-2">
+                        <span className="text-emerald-700 font-medium">{c.position}</span>
+                        {freq && (
+                          <span className="text-emerald-600/70 font-mono text-[11px]">{freq}</span>
+                        )}
+                        <span className="text-slate-500 text-xs ml-auto">{c.identifiant}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -277,11 +322,16 @@ export default async function AtcPage() {
                     <span className="w-2 h-2 rounded-full bg-amber-500" />
                   )}
                 </div>
-                <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center justify-between text-sm gap-2">
                   <span className={sess.est_afis ? 'text-red-700 font-medium' : 'text-amber-700 font-medium'}>
                     {sess.est_afis ? 'AFIS' : 'Pompier seul'}
                   </span>
-                  <span className="text-slate-500 text-xs">
+                  {sess.est_afis && vhfFreqMap.get(`${sess.aeroport}-AFIS`) && (
+                    <span className="text-red-600/70 font-mono text-[11px]">
+                      {vhfFreqMap.get(`${sess.aeroport}-AFIS`)}
+                    </span>
+                  )}
+                  <span className="text-slate-500 text-xs ml-auto">
                     {(sess.profiles as { identifiant?: string } | null)?.identifiant || '—'}
                   </span>
                 </div>

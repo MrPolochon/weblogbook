@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Flame, Plane, Clock, MapPin, AlertTriangle, ArrowRight, Activity, Users, Eye, Radio } from 'lucide-react';
 import SeMettreEnServiceSiaviForm from '../SeMettreEnServiceSiaviForm';
 import HorsServiceSiaviButton from '../HorsServiceSiaviButton';
+import VhfRadio from '@/components/VhfRadio';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -69,6 +70,26 @@ export default async function SiaviPage() {
   }
 
   const totalAfisEnService = afisEnService?.length || 0;
+
+  // Récupérer la fréquence VHF AFIS et l'identifiant
+  let afisFrequency: string | null = null;
+  let afisIdentifiant = 'AFIS';
+  if (session?.est_afis) {
+    const { data: vhfData } = await admin
+      .from('vhf_position_frequencies')
+      .select('frequency')
+      .eq('aeroport', session.aeroport)
+      .eq('position', 'AFIS')
+      .maybeSingle();
+    afisFrequency = vhfData?.frequency || null;
+
+    const { data: profData } = await admin
+      .from('profiles')
+      .select('identifiant')
+      .eq('id', user.id)
+      .single();
+    afisIdentifiant = profData?.identifiant || 'AFIS';
+  }
 
   return (
     <div className="space-y-6">
@@ -146,6 +167,15 @@ export default async function SiaviPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Radio VHF AFIS */}
+      {session?.est_afis && afisFrequency && (
+        <VhfRadio
+          mode="afis"
+          lockedFrequency={afisFrequency}
+          participantName={`${afisIdentifiant} (${session.aeroport} AFIS)`}
+        />
       )}
 
       {/* Plans de vol surveillés */}
