@@ -7,7 +7,6 @@ import HorsServiceButton from '../HorsServiceButton';
 import PlansEnAttenteModal from '@/components/PlansEnAttenteModal';
 import AtcEnLigneModal from '@/components/AtcEnLigneModal';
 import FlightStripBoardWrapper from '@/components/FlightStripBoardWrapper';
-import VhfRadio from '@/components/VhfRadio';
 import { getTypeWake } from '@/lib/wake-turbulence';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -108,26 +107,6 @@ export default async function AtcPage() {
   const sessionsEnServiceSafe = sessionsEnService ?? [];
   const afisEnServiceSafe = afisEnService ?? [];
 
-  // Récupérer la fréquence VHF de la position de l'ATC + identifiant
-  let atcFrequency: string | null = null;
-  let atcIdentifiant = 'ATC';
-  if (session) {
-    const { data: vhfData } = await admin
-      .from('vhf_position_frequencies')
-      .select('frequency')
-      .eq('aeroport', session.aeroport)
-      .eq('position', session.position)
-      .maybeSingle();
-    atcFrequency = vhfData?.frequency || null;
-
-    const { data: profData } = await admin
-      .from('profiles')
-      .select('identifiant')
-      .eq('id', user.id)
-      .single();
-    atcIdentifiant = profData?.identifiant || 'ATC';
-  }
-
   // Récupérer TOUTES les fréquences VHF pour affichage dans la liste des positions
   const { data: allVhfFreqs } = await admin
     .from('vhf_position_frequencies')
@@ -219,15 +198,6 @@ export default async function AtcPage() {
             <HorsServiceButton />
           </div>
         </div>
-      )}
-
-      {/* Radio VHF */}
-      {session && atcFrequency && (
-        <VhfRadio
-          mode="atc"
-          lockedFrequency={atcFrequency}
-          participantName={`${atcIdentifiant} (${session.aeroport} ${session.position})`}
-        />
       )}
 
       {/* Flight Strips Board */}

@@ -1,13 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AccessToken } from 'livekit-server-sdk';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createBrowserClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    // Support both cookie-based auth (web) and Bearer token auth (Electron app)
+    let user: { id: string } | null = null;
+    const authHeader = request.headers.get('authorization');
+
+    if (authHeader?.startsWith('Bearer ')) {
+      // Electron app — authenticate via access token
+      const accessToken = authHeader.substring(7);
+      const supabaseAdmin = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      );
+      const { data: { user: tokenUser } } = await supabaseAdmin.auth.getUser(accessToken);
+      user = tokenUser;
+    } else {
+      // Web — authenticate via cookies
+      const supabase = await createClient();
+      const { data: { user: cookieUser } } = await supabase.auth.getUser();
+      user = cookieUser;
+    }
     
     if (!user) {
       console.error('[LiveKit Token] Utilisateur non authentifié');
@@ -72,12 +100,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       token,
       url: livekitUrl,
-    });
+    }, { headers: corsHeaders });
   } catch (error) {
     console.error('[LiveKit Token] Erreur:', error);
     return NextResponse.json({ 
       error: 'Erreur serveur',
       details: error instanceof Error ? error.message : 'Erreur inconnue'
-    }, { status: 500 });
+    }, { status: 500, headers: corsHeaders });
   }
 }

@@ -1,9 +1,37 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient as createBrowserClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { isValidVhfFrequency } from '@/lib/vhf-frequencies';
 
 export const dynamic = 'force-dynamic';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+export async function OPTIONS() {
+  return NextResponse.json({}, { headers: corsHeaders });
+}
+
+/** Helper: authenticate via cookies or Bearer token */
+async function getAuthUser(request: Request): Promise<{ id: string } | null> {
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const accessToken = authHeader.substring(7);
+    const sb = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    const { data: { user } } = await sb.auth.getUser(accessToken);
+    return user;
+  }
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
+}
 
 /**
  * GET — Liste toutes les fréquences VHF assignées
@@ -12,8 +40,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(request);
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
@@ -47,11 +74,11 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(request);
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const admin = createAdminClient();
+    const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single();
     if (profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 });
     }
@@ -67,8 +94,6 @@ export async function POST(request: Request) {
     if (!isValidVhfFrequency(frequency)) {
       return NextResponse.json({ error: `Fréquence invalide : ${frequency}. Format attendu : XXX.YYY (118.000 à 132.975)` }, { status: 400 });
     }
-
-    const admin = createAdminClient();
 
     const { data, error } = await admin
       .from('vhf_position_frequencies')
@@ -105,11 +130,11 @@ export async function POST(request: Request) {
  */
 export async function PATCH(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(request);
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const adminClient = createAdminClient();
+    const { data: profile } = await adminClient.from('profiles').select('role').eq('id', user.id).single();
     if (profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 });
     }
@@ -125,9 +150,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: `Fréquence invalide : ${frequency}` }, { status: 400 });
     }
 
-    const admin = createAdminClient();
-
-    const { data, error } = await admin
+    const { data, error } = await adminClient
       .from('vhf_position_frequencies')
       .update({ frequency })
       .eq('id', id)
@@ -155,11 +178,11 @@ export async function PATCH(request: Request) {
  */
 export async function DELETE(request: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getAuthUser(request);
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const adminDel = createAdminClient();
+    const { data: profile } = await adminDel.from('profiles').select('role').eq('id', user.id).single();
     if (profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 });
     }
@@ -168,8 +191,7 @@ export async function DELETE(request: Request) {
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 });
 
-    const admin = createAdminClient();
-    const { error } = await admin
+    const { error } = await adminDel
       .from('vhf_position_frequencies')
       .delete()
       .eq('id', id);

@@ -1,0 +1,21 @@
+appId: com.weblogbook.vhf-radio
+productName: VHF Radio
+copyright: Copyright © 2026 WebLogbook
+
+directories:
+  output: release
+
+win:
+  target: nsis
+  artifactName: VHF-Radio-Setup-${version}.${ext}
+
+nsis:
+  oneClick: true
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json

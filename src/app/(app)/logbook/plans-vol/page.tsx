@@ -7,7 +7,6 @@ import { ArrowLeft, FileText, AlertCircle, Bell, Plane, Clock, CheckCircle2, XCi
 import PlanVolCloturerButton from './PlanVolCloturerButton';
 import PlanVolAnnulerButton from './PlanVolAnnulerButton';
 import TranspondeurInterface from './TranspondeurInterface';
-import VhfRadio from '@/components/VhfRadio';
 import type { PlanVol } from '@/lib/types';
 
 const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
@@ -123,14 +122,6 @@ export default async function MesPlansVolPage() {
           </div>
         </div>
       </div>
-
-      {/* Radio VHF - Vol actif */}
-      {planActif && (
-        <VhfRadio
-          mode="pilot"
-          participantName={piloteIdentifiant}
-        />
-      )}
 
       {/* Interface Transpondeur - Vol actif */}
       {planActif && (
