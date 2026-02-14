@@ -7,6 +7,12 @@ asar: false
 directories:
   output: release
 
+publish:
+  - provider: github
+    owner: MrPolochon
+    repo: weblogbook
+    releaseType: release
+
 win:
   target: nsis
   artifactName: VHF-Radio-Setup-${version}.${ext}

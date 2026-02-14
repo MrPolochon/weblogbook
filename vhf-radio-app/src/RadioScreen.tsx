@@ -139,7 +139,7 @@ export default function RadioScreen({ profile, initialMode, accessToken, onLogou
             Met-toi en service sur le site WebLogbook pour que ta fréquence soit assignée automatiquement.
           </p>
           <p className="text-[10px] text-amber-400/60 mt-1">
-            Vérification automatique toutes les 15 secondes...
+            Vérification automatique toutes les 30 secondes...
           </p>
         </div>
       )}

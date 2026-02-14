@@ -242,6 +242,9 @@ export default function VhfRadio({
           return;
         }
 
+        console.log('[VHF] Fetching token from:', `${API_BASE_URL}/api/livekit/token`);
+        console.log('[VHF] Token length:', accessToken?.length, 'Room:', frequencyToRoomName(freq));
+
         const res = await fetch(`${API_BASE_URL}/api/livekit/token`, {
           method: 'POST',
           headers: {
@@ -253,9 +256,23 @@ export default function VhfRadio({
             participantName: participantName || 'Inconnu',
           }),
         });
-        if (!res.ok) { setConnectionState('error'); return; }
-        const { token, url } = await res.json();
-        if (!token || !url) { setConnectionState('error'); return; }
+
+        if (!res.ok) {
+          const errBody = await res.text().catch(() => '');
+          console.error('[VHF] Token fetch failed:', res.status, res.statusText, errBody);
+          setConnectionState('error');
+          return;
+        }
+
+        const data = await res.json();
+        const { token, url } = data;
+        console.log('[VHF] Got token:', !!token, 'URL:', url?.substring(0, 30));
+
+        if (!token || !url) {
+          console.error('[VHF] Missing token or url in response:', data);
+          setConnectionState('error');
+          return;
+        }
 
         const room = new Room({
           adaptiveStream: true,
@@ -613,9 +630,7 @@ export default function VhfRadio({
                     <button onClick={() => setWaitingForKey(true)} className="text-[10px] text-sky-400 hover:text-sky-300">Modifier</button>
                   </div>
                 )}
-                {window.electronAPI && (
-                  <p className="text-[9px] text-slate-500 mt-1">PTT global activé — fonctionne même en arrière-plan</p>
-                )}
+                <p className="text-[9px] text-slate-500 mt-1">Maintiens la touche enfoncée pour parler</p>
               </div>
               {audioInputs.length > 0 && (
                 <div>

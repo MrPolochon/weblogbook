@@ -1,6 +1,6 @@
 {
   "name": "vhf-radio",
-  "version": "1.2.1",
+  "version": "1.4.0",
   "description": "WebLogbook VHF Radio — Application radio standalone",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
+    "electron-updater": "^6.7.3",
     "livekit-client": "^2.9.5",
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",
@@ -32,24 +33,5 @@
     "vite": "^6.0.7",
     "vite-plugin-electron": "^0.28.8",
     "wait-on": "^8.0.3"
-  },
-  "build": {
-    "appId": "com.weblogbook.vhf-radio",
-    "productName": "VHF Radio",
-    "directories": {
-      "output": "release"
-    },
-    "win": {
-      "target": "nsis",
-      "icon": "public/icon.png"
-    },
-    "nsis": {
-      "oneClick": true,
-      "allowToChangeInstallationDirectory": false
-    },
-    "files": [
-      "dist/**/*",
-      "dist-electron/**/*"
-    ]
   }
 }

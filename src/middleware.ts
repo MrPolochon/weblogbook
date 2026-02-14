@@ -6,23 +6,22 @@ export async function middleware(request: NextRequest) {
   const isSetup = pathname === '/setup';
   const isLogin = pathname === '/login';
   const isDownload = pathname === '/download';
-  const isRadio = pathname === '/radio';
   const isAuthCallback = pathname.startsWith('/auth/');
   const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin';
 
-  // CORS preflight : laisser passer sans vérification (requis pour l'app Electron VHF)
+  // CORS preflight : laisser passer sans vérification (requis pour l'app Electron/Android VHF)
   if (request.method === 'OPTIONS') {
     return NextResponse.next({ request });
   }
 
-  // Requêtes API avec Bearer token (app Electron) : laisser la route gérer l'auth elle-même
+  // Requêtes API avec Bearer token (app Electron/Android) : laisser la route gérer l'auth elle-même
   const authHeader = request.headers.get('authorization');
   if (pathname.startsWith('/api/') && authHeader?.startsWith('Bearer ')) {
     return NextResponse.next({ request });
   }
 
-  // Routes publiques : aucune requête Supabase, réponse immédiate (évite blocage mobile)
-  if (isAuthCallback || isApiPublic || isSetup || isLogin || isDownload || isRadio) {
+  // Routes publiques : aucune requête Supabase, réponse immédiate
+  if (isAuthCallback || isApiPublic || isSetup || isLogin || isDownload) {
     return NextResponse.next({ request });
   }
 

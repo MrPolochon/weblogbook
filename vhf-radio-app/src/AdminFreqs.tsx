@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Radio, Plus, Trash2, Edit3, Save, X, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
 import { API_BASE_URL } from './lib/config';
-import { supabase } from './lib/supabase';
 import { isValidVhfFrequency } from './lib/vhf-frequencies';
 
 interface Frequency {
@@ -13,9 +12,10 @@ interface Frequency {
 
 interface AdminFreqsProps {
   onBack: () => void;
+  accessToken: string;
 }
 
-export default function AdminFreqs({ onBack }: AdminFreqsProps) {
+export default function AdminFreqs({ onBack, accessToken }: AdminFreqsProps) {
   const [frequencies, setFrequencies] = useState<Frequency[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,18 +27,17 @@ export default function AdminFreqs({ onBack }: AdminFreqsProps) {
   const [newFrequency, setNewFrequency] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const getAuthHeaders = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+  const getAuthHeaders = useCallback(() => {
     return {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session?.access_token || ''}`,
+      'Authorization': `Bearer ${accessToken}`,
     };
-  }, []);
+  }, [accessToken]);
 
   const fetchFrequencies = useCallback(async () => {
     try {
       setLoading(true);
-      const headers = await getAuthHeaders();
+      const headers = getAuthHeaders();
       const res = await fetch(`${API_BASE_URL}/api/vhf/frequencies`, { headers });
       if (!res.ok) throw new Error('Erreur serveur');
       const data = await res.json();
@@ -68,7 +67,7 @@ export default function AdminFreqs({ onBack }: AdminFreqsProps) {
     setSaving(true);
     setError('');
     try {
-      const headers = await getAuthHeaders();
+      const headers = getAuthHeaders();
       const res = await fetch(`${API_BASE_URL}/api/vhf/frequencies`, {
         method: 'POST',
         headers,
@@ -104,7 +103,7 @@ export default function AdminFreqs({ onBack }: AdminFreqsProps) {
     setSaving(true);
     setError('');
     try {
-      const headers = await getAuthHeaders();
+      const headers = getAuthHeaders();
       const res = await fetch(`${API_BASE_URL}/api/vhf/frequencies`, {
         method: 'PATCH',
         headers,
@@ -129,7 +128,7 @@ export default function AdminFreqs({ onBack }: AdminFreqsProps) {
   async function handleDelete(id: string) {
     if (!confirm('Supprimer cette fréquence ?')) return;
     try {
-      const headers = await getAuthHeaders();
+      const headers = getAuthHeaders();
       const res = await fetch(`${API_BASE_URL}/api/vhf/frequencies?id=${id}`, {
         method: 'DELETE',
         headers,

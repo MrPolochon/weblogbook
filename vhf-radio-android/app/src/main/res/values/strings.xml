@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VHF Radio</string>
+    <string name="channel_name">VHF Radio Active</string>
+    <string name="channel_description">Notification de la radio VHF en cours</string>
+</resources>
