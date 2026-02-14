@@ -6,6 +6,7 @@ export async function middleware(request: NextRequest) {
   const isSetup = pathname === '/setup';
   const isLogin = pathname === '/login';
   const isDownload = pathname === '/download';
+  const isRadio = pathname === '/radio';
   const isAuthCallback = pathname.startsWith('/auth/');
   const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin';
 
@@ -21,7 +22,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Routes publiques : aucune requête Supabase, réponse immédiate (évite blocage mobile)
-  if (isAuthCallback || isApiPublic || isSetup || isLogin || isDownload) {
+  if (isAuthCallback || isApiPublic || isSetup || isLogin || isDownload || isRadio) {
     return NextResponse.next({ request });
   }
 
