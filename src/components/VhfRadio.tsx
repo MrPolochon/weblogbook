@@ -110,6 +110,9 @@ export default function VhfRadio({
   const collisionOscRef = useRef<OscillatorNode | null>(null);
   const collisionCtxRef = useRef<AudioContext | null>(null);
 
+  /* ── MediaSession (background PTT + freq change) ── */
+  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
+
   /* ── Audio devices ── */
   const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
   const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
@@ -166,6 +169,10 @@ export default function VhfRadio({
       try { collisionOscRef.current.stop(); } catch { /* */ }
       collisionOscRef.current = null;
     }
+    if (silentAudioRef.current) {
+      try { silentAudioRef.current.pause(); silentAudioRef.current.src = ''; } catch { /* */ }
+      silentAudioRef.current = null;
+    }
     attachedAudioRef.current.forEach((el) => {
       try { el.pause(); el.remove(); } catch { /* */ }
     });
@@ -175,6 +182,13 @@ export default function VhfRadio({
       room.removeAllListeners();
       room.disconnect(true);
       roomRef.current = null;
+    }
+    // Clean MediaSession
+    if ('mediaSession' in navigator) {
+      try {
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = 'none';
+      } catch { /* */ }
     }
     setConnectionState('disconnected');
     setParticipants([]);
@@ -311,6 +325,115 @@ export default function VhfRadio({
     window.addEventListener('keyup', handleUp);
     return () => { window.removeEventListener('keydown', handleDown); window.removeEventListener('keyup', handleUp); };
   }, [pttKey, startTransmit, stopTransmit, waitingForKey]);
+
+  /* ══════════════════════════════════════════════════
+     MediaSession — background PTT + freq via notif
+     ══════════════════════════════════════════════════ */
+
+  // Silent audio loop to keep MediaSession alive in background
+  useEffect(() => {
+    if (connectionState !== 'connected') return;
+    // Tiny silent WAV (44 bytes header + minimal samples), looped
+    const silentDataUri = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+    const audio = new Audio(silentDataUri);
+    audio.loop = true;
+    audio.volume = 0.01; // near-silent
+    audio.play().catch(() => { /* autoplay blocked, fine */ });
+    silentAudioRef.current = audio;
+    return () => {
+      audio.pause();
+      audio.src = '';
+      silentAudioRef.current = null;
+    };
+  }, [connectionState]);
+
+  // Frequency change helpers for MediaSession (next/prev decimal)
+  const freqStepUp = useCallback(() => {
+    if (isLocked) return;
+    const decs = getDecimalsForMhz(currentMhz);
+    if (safeDecIndex < decs.length - 1) {
+      setDecIndex(safeDecIndex + 1);
+    } else if (mhzIndex < mhzRange.length - 1) {
+      setMhzIndex(mhzIndex + 1);
+      setDecIndex(0);
+    }
+  }, [isLocked, currentMhz, safeDecIndex, mhzIndex, mhzRange.length]);
+
+  const freqStepDown = useCallback(() => {
+    if (isLocked) return;
+    if (safeDecIndex > 0) {
+      setDecIndex(safeDecIndex - 1);
+    } else if (mhzIndex > 0) {
+      const prevMhz = mhzRange[mhzIndex - 1];
+      const prevDecs = getDecimalsForMhz(prevMhz);
+      setMhzIndex(mhzIndex - 1);
+      setDecIndex(prevDecs.length - 1);
+    }
+  }, [isLocked, safeDecIndex, mhzIndex, mhzRange]);
+
+  // Setup MediaSession handlers + metadata
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    if (connectionState !== 'connected') {
+      navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = 'none';
+      return;
+    }
+
+    // Metadata — shows frequency in notification
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: `VHF ${currentFreq}`,
+      artist: isTransmitting ? '🔴 TRANSMISSION' : '🎧 En écoute',
+      album: 'WebLogbook Radio',
+    });
+    navigator.mediaSession.playbackState = isTransmitting ? 'playing' : 'paused';
+
+    // Play = start PTT
+    navigator.mediaSession.setActionHandler('play', () => {
+      startTransmit();
+      navigator.mediaSession.playbackState = 'playing';
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: `VHF ${currentFreq}`,
+        artist: '🔴 TRANSMISSION',
+        album: 'WebLogbook Radio',
+      });
+    });
+
+    // Pause = stop PTT
+    navigator.mediaSession.setActionHandler('pause', () => {
+      stopTransmit();
+      navigator.mediaSession.playbackState = 'paused';
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: `VHF ${currentFreq}`,
+        artist: '🎧 En écoute',
+        album: 'WebLogbook Radio',
+      });
+    });
+
+    // Next track = frequency +1 step (pilots only)
+    if (!isLocked) {
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        freqStepUp();
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        freqStepDown();
+      });
+    } else {
+      navigator.mediaSession.setActionHandler('nexttrack', null);
+      navigator.mediaSession.setActionHandler('previoustrack', null);
+    }
+
+    return () => {
+      try {
+        navigator.mediaSession.setActionHandler('play', null);
+        navigator.mediaSession.setActionHandler('pause', null);
+        navigator.mediaSession.setActionHandler('nexttrack', null);
+        navigator.mediaSession.setActionHandler('previoustrack', null);
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = 'none';
+      } catch { /* */ }
+    };
+  }, [connectionState, currentFreq, isTransmitting, isLocked, startTransmit, stopTransmit, freqStepUp, freqStepDown]);
 
   /* ══════════════════════════════════════════════════
      Collision detection
@@ -459,10 +582,46 @@ export default function VhfRadio({
     </button>
   );
 
+  function handleDisplayModeChange(mode: DisplayMode) {
+    setDisplayMode(mode);
+    localStorage.setItem(DISPLAY_MODE_KEY, mode);
+  }
+
   /** Paramètres audio (partagé desktop/modal) */
   const settingsPanel = (
     <div className="space-y-3">
-      {/* PTT key (desktop only) */}
+      {/* Mode d'affichage */}
+      <div>
+        <label className="text-[10px] text-slate-400 block mb-1.5">Mode d&apos;affichage</label>
+        <div className="flex rounded-lg overflow-hidden border border-slate-600">
+          {([
+            { value: 'auto' as DisplayMode, label: 'Auto' },
+            { value: 'mobile' as DisplayMode, label: 'Mobile' },
+            { value: 'desktop' as DisplayMode, label: 'Desktop' },
+          ]).map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => handleDisplayModeChange(value)}
+              className={`flex-1 py-1.5 text-xs font-medium transition-colors touch-manipulation ${
+                displayMode === value
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="text-[9px] text-slate-500 mt-0.5 block">
+          {displayMode === 'auto'
+            ? `Détection auto (${autoIsMobile ? 'mobile' : 'desktop'})`
+            : displayMode === 'mobile'
+              ? 'Forcé en mode mobile'
+              : 'Forcé en mode desktop'}
+        </span>
+      </div>
+
+      {/* PTT key (not on mobile) */}
       {!isMobile && (
         <div>
           <label className="text-[10px] text-slate-400 block mb-1">Touche PTT</label>
