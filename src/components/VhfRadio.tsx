@@ -39,9 +39,12 @@ interface ParticipantInfo {
 const PTT_STORAGE_KEY = 'vhf-ptt-key';
 const AUDIO_INPUT_KEY = 'vhf-audio-input';
 const AUDIO_OUTPUT_KEY = 'vhf-audio-output';
+const DISPLAY_MODE_KEY = 'vhf-display-mode';
 const DEFAULT_PTT = 'Space';
 const COLLISION_THRESHOLD = 0.01;
 const COLLISION_CHECK_MS = 80;
+
+type DisplayMode = 'auto' | 'mobile' | 'desktop';
 
 /* ─────────────── Helpers PTT ───────────────────── */
 
@@ -116,14 +119,16 @@ export default function VhfRadio({
   /* ── Mobile modals ── */
   const [showFreqModal, setShowFreqModal] = useState(false);
   const [showPttModal, setShowPttModal] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [autoIsMobile, setAutoIsMobile] = useState(false);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('auto');
+  const isMobile = displayMode === 'auto' ? autoIsMobile : displayMode === 'mobile';
 
   /* ══════════════════════════════════════════════════
      Initialisation
      ══════════════════════════════════════════════════ */
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
+    const check = () => setAutoIsMobile(window.innerWidth < 768);
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
@@ -136,6 +141,8 @@ export default function VhfRadio({
     if (savedIn) setSelectedInput(savedIn);
     const savedOut = localStorage.getItem(AUDIO_OUTPUT_KEY);
     if (savedOut) setSelectedOutput(savedOut);
+    const savedMode = localStorage.getItem(DISPLAY_MODE_KEY) as DisplayMode | null;
+    if (savedMode && ['auto', 'mobile', 'desktop'].includes(savedMode)) setDisplayMode(savedMode);
   }, []);
 
   useEffect(() => {
