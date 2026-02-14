@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { LogOut, Settings, Radio, Plane, Flame } from 'lucide-react';
 import VhfRadio from './components/VhfRadio';
-import { supabase } from './lib/supabase';
+import { API_BASE_URL } from './lib/config';
 
 interface UserProfile {
   id: string;
@@ -16,82 +16,74 @@ type RadioMode = 'pilot' | 'atc' | 'afis';
 interface RadioScreenProps {
   profile: UserProfile;
   initialMode: RadioMode;
+  accessToken: string;
   onLogout: () => void;
   onAdmin: () => void;
 }
 
-export default function RadioScreen({ profile, initialMode, onLogout, onAdmin }: RadioScreenProps) {
+export default function RadioScreen({ profile, initialMode, accessToken, onLogout, onAdmin }: RadioScreenProps) {
   const [lockedFrequency, setLockedFrequency] = useState<string | null>(null);
   const [mode] = useState<RadioMode>(initialMode);
   const [sessionInfo, setSessionInfo] = useState<string>('');
   const [noSession, setNoSession] = useState(false);
 
+  // Track last known session info to avoid unnecessary state resets
+  const lastSessionKeyRef = useRef('');
+
   useEffect(() => {
-    async function loadFrequency() {
-      setNoSession(false);
-      setLockedFrequency(null);
-      setSessionInfo('');
+    let cancelled = false;
 
-      if (mode === 'atc') {
-        // Check if user has an active ATC session on the website
-        const { data: atcSession } = await supabase
-          .from('atc_sessions')
-          .select('aeroport, position')
-          .eq('user_id', profile.id)
-          .maybeSingle();
+    async function checkSession() {
+      if (cancelled) return;
 
-        if (atcSession) {
-          setSessionInfo(`${atcSession.aeroport} ${atcSession.position}`);
-          const { data: vhfData } = await supabase
-            .from('vhf_position_frequencies')
-            .select('frequency')
-            .eq('aeroport', atcSession.aeroport)
-            .eq('position', atcSession.position)
-            .maybeSingle();
-          if (vhfData?.frequency) {
-            setLockedFrequency(vhfData.frequency);
+      let newSessionInfo = '';
+      let newFrequency: string | null = null;
+      let newNoSession = false;
+
+      if (mode === 'pilot') {
+        // Pilot mode: no locked frequency, no session needed
+      } else {
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/atc/my-session?mode=${mode}`, {
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.noSession) {
+              newNoSession = true;
+            } else if (data.session) {
+              newSessionInfo = `${data.session.aeroport} ${data.session.position}`;
+              if (data.frequency) newFrequency = data.frequency;
+            }
           }
-        } else {
-          setNoSession(true);
-        }
-      } else if (mode === 'afis') {
-        const { data: afisSession } = await supabase
-          .from('afis_sessions')
-          .select('aeroport, est_afis')
-          .eq('user_id', profile.id)
-          .maybeSingle();
-
-        if (afisSession?.est_afis) {
-          setSessionInfo(`${afisSession.aeroport} AFIS`);
-          const { data: vhfData } = await supabase
-            .from('vhf_position_frequencies')
-            .select('frequency')
-            .eq('aeroport', afisSession.aeroport)
-            .eq('position', 'AFIS')
-            .maybeSingle();
-          if (vhfData?.frequency) {
-            setLockedFrequency(vhfData.frequency);
-          }
-        } else {
-          setNoSession(true);
+        } catch (err) {
+          console.error('[RadioScreen] Session check error:', err);
         }
       }
-      // Pilot mode: no locked frequency, no session needed
+
+      if (cancelled) return;
+
+      // Only update state if something actually changed
+      const sessionKey = `${newSessionInfo}|${newFrequency}|${newNoSession}`;
+      if (sessionKey !== lastSessionKeyRef.current) {
+        lastSessionKeyRef.current = sessionKey;
+        setSessionInfo(newSessionInfo);
+        setLockedFrequency(newFrequency);
+        setNoSession(newNoSession);
+      }
     }
 
-    loadFrequency();
-
-    // Re-check every 15s in case user opens/closes a session on the website
-    const interval = setInterval(loadFrequency, 15000);
-    return () => clearInterval(interval);
-  }, [profile, mode]);
+    checkSession();
+    const interval = setInterval(checkSession, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [profile, mode, accessToken]);
 
   const participantName = sessionInfo
     ? `${profile.identifiant} (${sessionInfo})`
     : profile.identifiant;
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
+  function handleLogout() {
+    // Don't call supabase.auth.signOut() — it would invalidate the website session too
     onLogout();
   }
 
@@ -159,6 +151,7 @@ export default function RadioScreen({ profile, initialMode, onLogout, onAdmin }:
             mode={mode}
             lockedFrequency={lockedFrequency ?? undefined}
             participantName={participantName}
+            accessToken={accessToken}
           />
         ) : noSession ? (
           <div className="text-center py-12">

@@ -11,7 +11,7 @@ import {
   isValidVhfFrequency,
 } from '../lib/vhf-frequencies';
 import { API_BASE_URL } from '../lib/config';
-import { supabase } from '../lib/supabase';
+
 import {
   Room,
   RoomEvent,
@@ -26,6 +26,7 @@ interface VhfRadioProps {
   mode: 'pilot' | 'atc' | 'afis';
   lockedFrequency?: string;
   participantName?: string;
+  accessToken?: string;
 }
 
 interface ParticipantInfo {
@@ -69,6 +70,7 @@ export default function VhfRadio({
   mode,
   lockedFrequency,
   participantName,
+  accessToken,
 }: VhfRadioProps) {
   const mhzRange = getMhzRange();
   const initialFreq = lockedFrequency ? parseFrequency(lockedFrequency) : null;
@@ -133,6 +135,34 @@ export default function VhfRadio({
   const [isReconnecting, setIsReconnecting] = useState(false);
 
   /* ══════════════════════════════════════════════════
+     PTT (must be declared before useEffects that reference them)
+     ══════════════════════════════════════════════════ */
+
+  const startTransmit = useCallback(async () => {
+    if (!radioOn || pttActiveRef.current) return;
+    pttActiveRef.current = true;
+    setIsTransmitting(true);
+    const room = roomRef.current;
+    if (!room) return;
+    try {
+      const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+      if (micPub) await micPub.unmute();
+    } catch (err) { console.error('[VHF] Unmute error:', err); }
+  }, [radioOn]);
+
+  const stopTransmit = useCallback(async () => {
+    if (!pttActiveRef.current) return;
+    pttActiveRef.current = false;
+    setIsTransmitting(false);
+    const room = roomRef.current;
+    if (!room) return;
+    try {
+      const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+      if (micPub) await micPub.mute();
+    } catch (err) { console.error('[VHF] Mute error:', err); }
+  }, []);
+
+  /* ══════════════════════════════════════════════════
      Initialisation
      ══════════════════════════════════════════════════ */
 
@@ -157,29 +187,8 @@ export default function VhfRadio({
     enumerate();
   }, []);
 
-  // Register global PTT shortcut (Electron)
-  useEffect(() => {
-    if (window.electronAPI) {
-      window.electronAPI.registerPTT(pttKey);
-    }
-  }, [pttKey]);
-
-  // Listen for global PTT activated (from main process)
-  useEffect(() => {
-    if (!window.electronAPI) return;
-    const cleanup = window.electronAPI.onPTTActivated(() => {
-      if (!radioOn || !roomRef.current) return;
-      // Toggle: if transmitting, stop; if not, start a short burst
-      if (pttActiveRef.current) {
-        stopTransmit();
-      } else {
-        startTransmit();
-        // Auto-release after key up is not detectable via globalShortcut
-        // The user must press again to stop, or use the in-app PTT
-      }
-    });
-    return cleanup;
-  }, [radioOn]);
+  // Note: PTT is handled via keydown/keyup events in the renderer (see below).
+  // globalShortcut was removed because it cannot detect key release properly.
 
   /* ══════════════════════════════════════════════════
      Switch Active ⇄ Standby
@@ -227,10 +236,8 @@ export default function VhfRadio({
       try {
         setConnectionState('connecting');
 
-        // Get auth token from Supabase session
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token) {
-          console.error('[VHF] No auth session');
+        if (!accessToken) {
+          console.error('[VHF] No access token');
           setConnectionState('error');
           return;
         }
@@ -239,7 +246,7 @@ export default function VhfRadio({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
+            'Authorization': `Bearer ${accessToken}`,
           },
           body: JSON.stringify({
             roomName: frequencyToRoomName(freq),
@@ -296,7 +303,7 @@ export default function VhfRadio({
         setConnectionState('error');
       }
     },
-    [cleanupRoom, participantName, selectedInput, selectedOutput]
+    [cleanupRoom, participantName, selectedInput, selectedOutput, accessToken]
   );
 
   function updateParticipants(room: Room) {
@@ -332,34 +339,7 @@ export default function VhfRadio({
     return () => { cleanupRoom(); };
   }, []);
 
-  /* ══════════════════════════════════════════════════
-     PTT
-     ══════════════════════════════════════════════════ */
-
-  const startTransmit = useCallback(async () => {
-    if (!radioOn || pttActiveRef.current) return;
-    pttActiveRef.current = true;
-    setIsTransmitting(true);
-    const room = roomRef.current;
-    if (!room) return;
-    try {
-      const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
-      if (micPub) await micPub.unmute();
-    } catch (err) { console.error('[VHF] Unmute error:', err); }
-  }, [radioOn]);
-
-  const stopTransmit = useCallback(async () => {
-    if (!pttActiveRef.current) return;
-    pttActiveRef.current = false;
-    setIsTransmitting(false);
-    const room = roomRef.current;
-    if (!room) return;
-    try {
-      const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
-      if (micPub) await micPub.mute();
-    } catch (err) { console.error('[VHF] Mute error:', err); }
-  }, []);
-
+  /* ── Keyboard PTT ── */
   useEffect(() => {
     const handleDown = (e: KeyboardEvent) => {
       if (waitingForKey || !radioOn) return;

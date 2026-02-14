@@ -2,6 +2,8 @@ appId: com.weblogbook.vhf-radio
 productName: VHF Radio
 copyright: Copyright © 2026 WebLogbook
 
+asar: false
+
 directories:
   output: release
 

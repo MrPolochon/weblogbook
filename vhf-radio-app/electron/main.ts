@@ -3,6 +3,9 @@ import * as path from 'path';
 
 let mainWindow: BrowserWindow | null = null;
 let registeredShortcut: string | null = null;
+let pttHeld = false;
+let pttReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+const PTT_RELEASE_DELAY = 250; // ms — if no repeat within this window, key was released
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -48,7 +51,20 @@ ipcMain.on('ptt:register', (_event, accelerator: string) => {
     if (!electronAccelerator) return;
 
     globalShortcut.register(electronAccelerator, () => {
-      mainWindow?.webContents.send('ptt:activated');
+      // First fire or repeated fire while holding the key
+      if (!pttHeld) {
+        pttHeld = true;
+        mainWindow?.webContents.send('ptt:down');
+      }
+      // Reset the release timer on every fire (holds keep resetting)
+      if (pttReleaseTimer) clearTimeout(pttReleaseTimer);
+      pttReleaseTimer = setTimeout(() => {
+        if (pttHeld) {
+          pttHeld = false;
+          mainWindow?.webContents.send('ptt:up');
+        }
+        pttReleaseTimer = null;
+      }, PTT_RELEASE_DELAY);
     });
     registeredShortcut = electronAccelerator;
   } catch (err) {
@@ -61,6 +77,9 @@ ipcMain.on('ptt:unregister', () => {
     try { globalShortcut.unregister(registeredShortcut); } catch { /* */ }
     registeredShortcut = null;
   }
+  // Clean up PTT state
+  if (pttReleaseTimer) { clearTimeout(pttReleaseTimer); pttReleaseTimer = null; }
+  pttHeld = false;
 });
 
 /**

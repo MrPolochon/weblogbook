@@ -11,7 +11,7 @@ function identifiantToEmail(identifiant: string): string {
 type RadioMode = 'pilot' | 'atc' | 'afis';
 
 interface LoginScreenProps {
-  onLogin: (profile: { id: string; identifiant: string; role: string; atc: boolean; siavi: boolean }, mode: RadioMode) => void;
+  onLogin: (profile: { id: string; identifiant: string; role: string; atc: boolean; siavi: boolean }, mode: RadioMode, accessToken: string) => void;
 }
 
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
@@ -90,13 +90,17 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         }
       }
 
+      // Extract the access token, then sign out locally to not interfere with website session
+      const token = data.session?.access_token || '';
+      await supabase.auth.signOut({ scope: 'local' });
+
       onLogin({
         id: data.user.id,
         identifiant: profile.identifiant,
         role: profile.role,
         atc: profile.atc ?? false,
         siavi: profile.siavi ?? false,
-      }, mode);
+      }, mode, token);
     } catch (err) {
       setError('Erreur de connexion. Vérifie ta connexion internet.');
       console.error(err);

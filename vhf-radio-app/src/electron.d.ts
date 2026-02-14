@@ -5,7 +5,8 @@ declare global {
     electronAPI?: {
       registerPTT: (accelerator: string) => void;
       unregisterPTT: () => void;
-      onPTTActivated: (callback: () => void) => () => void;
+      onPTTDown: (callback: () => void) => () => void;
+      onPTTUp: (callback: () => void) => () => void;
       platform: string;
     };
   }
