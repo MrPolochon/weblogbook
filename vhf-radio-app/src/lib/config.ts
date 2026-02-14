@@ -6,8 +6,8 @@
  */
 
 // Supabase — ces valeurs sont publiques (anon key)
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://llhdagshfjtwowuqjjdh.supabase.co';
-export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsaGRhZ3NoZmp0d293dXFqamRoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzc2NTk0MTcsImV4cCI6MjA1MzIzNTQxN30.mwMOBCxHSHMbpMBVFOgjnMbX7TXuyaO_5eY9kVwumFU';
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://iajcynzzybkomaouxwji.supabase.co';
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhamN5bnp6eWJrb21hb3V4d2ppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg3NTkwMDQsImV4cCI6MjA4NDMzNTAwNH0.L4lkhc64EMP7Al3_s5JLipUdy5TbbHiz92UaALm8nuE';
 
 // API WebLogbook (Vercel) — pour le token LiveKit
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://weblogbook.vercel.app';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://www.mixouairlinesptfsweblogbook.com';

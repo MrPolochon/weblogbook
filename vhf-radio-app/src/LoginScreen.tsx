@@ -1,16 +1,25 @@
 import { useState } from 'react';
-import { Radio, LogIn, AlertCircle, Loader2 } from 'lucide-react';
+import { Radio, LogIn, AlertCircle, Loader2, Plane, Flame } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
+const EMAIL_DOMAIN = 'logbook.local';
+
+function identifiantToEmail(identifiant: string): string {
+  return `${String(identifiant).trim().toLowerCase()}@${EMAIL_DOMAIN}`;
+}
+
+type RadioMode = 'pilot' | 'atc' | 'afis';
+
 interface LoginScreenProps {
-  onLogin: (profile: { id: string; identifiant: string; role: string; atc: boolean; siavi: boolean }) => void;
+  onLogin: (profile: { id: string; identifiant: string; role: string; atc: boolean; siavi: boolean }, mode: RadioMode) => void;
 }
 
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
-  const [email, setEmail] = useState('');
+  const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<RadioMode>('pilot');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -18,14 +27,16 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     setLoading(true);
 
     try {
+      const email = identifiantToEmail(identifiant);
+
       const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email,
         password,
       });
 
       if (authError) {
         setError(authError.message === 'Invalid login credentials'
-          ? 'Email ou mot de passe incorrect'
+          ? 'Identifiant ou mot de passe incorrect'
           : authError.message);
         setLoading(false);
         return;
@@ -50,13 +61,42 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         return;
       }
 
+      // Validate role access
+      if (mode === 'atc') {
+        const canAtc = profile.role === 'admin' || profile.role === 'atc' || profile.atc;
+        if (!canAtc) {
+          setError('Ce compte n\'a pas accès en tant qu\'ATC.');
+          setLoading(false);
+          return;
+        }
+      } else if (mode === 'afis') {
+        const canAfis = profile.role === 'admin' || profile.role === 'siavi' || profile.siavi;
+        if (!canAfis) {
+          setError('Ce compte n\'a pas accès en tant qu\'AFIS.');
+          setLoading(false);
+          return;
+        }
+      } else {
+        // Pilot — check account isn't exclusively ATC/SIAVI
+        if (profile.role === 'atc') {
+          setError('Ce compte est uniquement ATC. Sélectionne "ATC" pour te connecter.');
+          setLoading(false);
+          return;
+        }
+        if (profile.role === 'siavi') {
+          setError('Ce compte est uniquement SIAVI. Sélectionne "AFIS" pour te connecter.');
+          setLoading(false);
+          return;
+        }
+      }
+
       onLogin({
         id: data.user.id,
         identifiant: profile.identifiant,
         role: profile.role,
         atc: profile.atc ?? false,
         siavi: profile.siavi ?? false,
-      });
+      }, mode);
     } catch (err) {
       setError('Erreur de connexion. Vérifie ta connexion internet.');
       console.error(err);
@@ -77,18 +117,59 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
           <p className="text-sm text-slate-400 mt-1">Connexion WebLogbook</p>
         </div>
 
+        {/* Mode selector */}
+        <div className="flex gap-1 mb-5 p-1 bg-slate-800/60 rounded-xl">
+          <button
+            type="button"
+            onClick={() => setMode('pilot')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg font-semibold text-xs transition-all ${
+              mode === 'pilot'
+                ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+            }`}
+          >
+            <Plane className="h-4 w-4" />
+            Pilote
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('atc')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg font-semibold text-xs transition-all ${
+              mode === 'atc'
+                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+            }`}
+          >
+            <Radio className="h-4 w-4" />
+            ATC
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('afis')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg font-semibold text-xs transition-all ${
+              mode === 'afis'
+                ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+            }`}
+          >
+            <Flame className="h-4 w-4" />
+            AFIS
+          </button>
+        </div>
+
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-xs text-slate-400 block mb-1.5">Adresse email</label>
+            <label className="text-xs text-slate-400 block mb-1.5">Identifiant</label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              value={identifiant}
+              onChange={(e) => setIdentifiant(e.target.value)}
               required
               autoFocus
+              autoComplete="username"
               className="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 text-sm"
-              placeholder="pilote@weblogbook.fr"
+              placeholder="Ton identifiant"
             />
           </div>
           <div>
@@ -98,6 +179,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoComplete="current-password"
               className="w-full px-3 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 text-sm"
               placeholder="••••••••"
             />
@@ -113,18 +195,28 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`w-full py-2.5 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-white ${
+              mode === 'pilot'
+                ? 'bg-sky-600 hover:bg-sky-700'
+                : mode === 'atc'
+                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                  : 'bg-red-600 hover:bg-red-700'
+            }`}
           >
             {loading ? (
               <><Loader2 className="h-4 w-4 animate-spin" /> Connexion...</>
             ) : (
-              <><LogIn className="h-4 w-4" /> Se connecter</>
+              <><LogIn className="h-4 w-4" /> {
+                mode === 'pilot' ? 'Connexion Pilote' :
+                mode === 'atc' ? 'Connexion ATC' :
+                'Connexion AFIS'
+              }</>
             )}
           </button>
         </form>
 
         <p className="text-center text-[10px] text-slate-600 mt-6">
-          Utilise les mêmes identifiants que ton compte WebLogbook
+          Mêmes identifiants que sur WebLogbook
         </p>
       </div>
     </div>

@@ -13,11 +13,13 @@ interface UserProfile {
   siavi: boolean;
 }
 
+type RadioMode = 'pilot' | 'atc' | 'afis';
 type Screen = 'loading' | 'login' | 'radio' | 'admin';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('loading');
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [radioMode, setRadioMode] = useState<RadioMode>('pilot');
 
   // Auto-login from stored session
   useEffect(() => {
@@ -46,6 +48,13 @@ export default function App() {
         atc: profileData.atc ?? false,
         siavi: profileData.siavi ?? false,
       });
+
+      // Restore last used mode from localStorage
+      const savedMode = localStorage.getItem('vhf-radio-mode') as RadioMode | null;
+      if (savedMode && ['pilot', 'atc', 'afis'].includes(savedMode)) {
+        setRadioMode(savedMode);
+      }
+
       setScreen('radio');
     }
 
@@ -79,8 +88,10 @@ export default function App() {
   if (screen === 'login' || !profile) {
     return (
       <LoginScreen
-        onLogin={(p) => {
+        onLogin={(p, mode) => {
           setProfile(p);
+          setRadioMode(mode);
+          localStorage.setItem('vhf-radio-mode', mode);
           setScreen('radio');
         }}
       />
@@ -94,8 +105,10 @@ export default function App() {
   return (
     <RadioScreen
       profile={profile}
+      initialMode={radioMode}
       onLogout={() => {
         setProfile(null);
+        localStorage.removeItem('vhf-radio-mode');
         setScreen('login');
       }}
       onAdmin={() => setScreen('admin')}
