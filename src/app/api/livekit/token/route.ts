@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     
     if (!user) {
       console.error('[LiveKit Token] Utilisateur non authentifié');
-      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders });
     }
 
     const body = await request.json();
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     if (!roomName) {
       console.error('[LiveKit Token] roomName manquant');
-      return NextResponse.json({ error: 'roomName requis' }, { status: 400 });
+      return NextResponse.json({ error: 'roomName requis' }, { status: 400, headers: corsHeaders });
     }
 
     const apiKey = process.env.LIVEKIT_API_KEY;
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: 'Service non configuré',
         details: 'Variables d\'environnement LiveKit manquantes'
-      }, { status: 500 });
+      }, { status: 500, headers: corsHeaders });
     }
 
     if (!livekitUrl) {
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: 'Service non configuré',
         details: 'URL LiveKit manquante'
-      }, { status: 500 });
+      }, { status: 500, headers: corsHeaders });
     }
 
     // Créer le token d'accès
