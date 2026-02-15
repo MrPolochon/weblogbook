@@ -21,6 +21,7 @@ export interface FormData {
   description: string;
   delivery_mode: 'webhook' | 'review';
   webhook_url: string;
+  webhook_role_id: string;
   is_published: boolean;
   sections: Section[];
 }
@@ -48,6 +49,7 @@ export default function FormBuilder({ initial }: Props) {
     description: '',
     delivery_mode: 'review',
     webhook_url: '',
+    webhook_role_id: '',
     is_published: false,
     sections: [createEmptySection()],
   });
@@ -128,6 +130,7 @@ export default function FormBuilder({ initial }: Props) {
         description: form.description.trim(),
         delivery_mode: form.delivery_mode,
         webhook_url: form.delivery_mode === 'webhook' ? form.webhook_url.trim() : null,
+        webhook_role_id: form.delivery_mode === 'webhook' && form.webhook_role_id?.trim() ? form.webhook_role_id.trim() : null,
         is_published: form.is_published,
         sections: form.sections,
       };
@@ -217,18 +220,31 @@ export default function FormBuilder({ initial }: Props) {
             </div>
           </div>
 
-          {/* URL Webhook */}
+          {/* URL Webhook + Rôle à ping */}
           {form.delivery_mode === 'webhook' && (
-            <div>
-              <label className="text-slate-400 text-sm mb-2 block">URL du Webhook</label>
-              <input
-                type="url"
-                value={form.webhook_url}
-                onChange={(e) => updateForm({ webhook_url: e.target.value })}
-                placeholder="https://discord.com/api/webhooks/..."
-                className="w-full bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm px-3 py-2 outline-none focus:border-purple-500 transition-colors"
-              />
-            </div>
+            <>
+              <div>
+                <label className="text-slate-400 text-sm mb-2 block">URL du Webhook</label>
+                <input
+                  type="url"
+                  value={form.webhook_url}
+                  onChange={(e) => updateForm({ webhook_url: e.target.value })}
+                  placeholder="https://discord.com/api/webhooks/..."
+                  className="w-full bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm px-3 py-2 outline-none focus:border-purple-500 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-slate-400 text-sm mb-2 block">ID du rôle Discord à mentionner <span className="text-slate-500">(optionnel)</span></label>
+                <input
+                  type="text"
+                  value={form.webhook_role_id || ''}
+                  onChange={(e) => updateForm({ webhook_role_id: e.target.value.replace(/\D/g, '') })}
+                  placeholder="123456789012345678"
+                  className="w-full bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm px-3 py-2 outline-none focus:border-purple-500 transition-colors font-mono"
+                />
+                <p className="text-slate-500 text-xs mt-1">Clic droit sur le rôle Discord → Copier l&apos;identifiant du rôle</p>
+              </div>
+            </>
           )}
 
           {/* Publié */}

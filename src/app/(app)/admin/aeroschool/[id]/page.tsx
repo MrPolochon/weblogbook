@@ -24,6 +24,7 @@ export default function AdminAeroSchoolEditPage() {
           description: data.description || '',
           delivery_mode: data.delivery_mode || 'review',
           webhook_url: data.webhook_url || '',
+          webhook_role_id: data.webhook_role_id || '',
           is_published: Boolean(data.is_published),
           sections: Array.isArray(data.sections) ? data.sections : [],
         });

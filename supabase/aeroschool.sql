@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS aeroschool_forms (
   is_published BOOLEAN DEFAULT false,
   delivery_mode TEXT NOT NULL DEFAULT 'review' CHECK (delivery_mode IN ('webhook', 'review')),
   webhook_url TEXT,
+  webhook_role_id TEXT,
   sections JSONB NOT NULL DEFAULT '[]'::jsonb
 );
 

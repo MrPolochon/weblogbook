@@ -63,6 +63,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (body.description !== undefined) updates.description = String(body.description || '').trim();
     if (body.delivery_mode !== undefined) updates.delivery_mode = body.delivery_mode === 'webhook' ? 'webhook' : 'review';
     if (body.webhook_url !== undefined) updates.webhook_url = body.webhook_url ? String(body.webhook_url).trim() : null;
+    if (body.webhook_role_id !== undefined) updates.webhook_role_id = body.webhook_role_id ? String(body.webhook_role_id).trim() : null;
     if (body.sections !== undefined) updates.sections = Array.isArray(body.sections) ? body.sections : [];
     if (body.is_published !== undefined) updates.is_published = Boolean(body.is_published);
 

@@ -86,6 +86,21 @@ function buildDiscordEmbed(
   };
 }
 
+// Ajoute la mention de rôle dans le content (hors embed) pour que Discord ping
+function buildWebhookPayload(
+  embedPayload: ReturnType<typeof buildDiscordEmbed>,
+  webhookRoleId?: string | null,
+) {
+  if (webhookRoleId && /^\d+$/.test(webhookRoleId)) {
+    return {
+      content: `<@&${webhookRoleId}>`,
+      allowed_mentions: { roles: [webhookRoleId] },
+      ...embedPayload,
+    };
+  }
+  return embedPayload;
+}
+
 // POST — soumettre une réponse (public, pas besoin d'auth)
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -162,10 +177,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           maxScore,
         );
 
+        const payload = buildWebhookPayload(embedPayload, form.webhook_role_id);
+
         const webhookRes = await fetch(form.webhook_url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(embedPayload),
+          body: JSON.stringify(payload),
         });
 
         if (!webhookRes.ok) {
