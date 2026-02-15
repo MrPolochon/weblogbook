@@ -9,6 +9,11 @@
 ALTER TABLE public.vols_ferry ALTER COLUMN pilote_id DROP NOT NULL;
 
 -- ============================================================
+-- 1b. FIX: plans_vol pilote_id nullable (strips manuels ATC sans pilote)
+-- ============================================================
+ALTER TABLE public.plans_vol ALTER COLUMN pilote_id DROP NOT NULL;
+
+-- ============================================================
 -- 2. MAINTENANCE: colonne maintenance_fin_at sur compagnie_avions
 -- ============================================================
 ALTER TABLE public.compagnie_avions

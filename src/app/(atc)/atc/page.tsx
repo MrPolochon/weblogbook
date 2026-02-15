@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
-import { Radio, Plane, Clock, MapPin, AlertTriangle, Activity, FilePlus, Flame } from 'lucide-react';
+import { Radio, Plane, Clock, MapPin, AlertTriangle, Activity, Flame } from 'lucide-react';
+import CreateManualStripButton from '../CreateManualStripButton';
 import SeMettreEnServiceForm from '../SeMettreEnServiceForm';
 import HorsServiceButton from '../HorsServiceButton';
 import PlansEnAttenteModal from '@/components/PlansEnAttenteModal';
@@ -210,13 +211,7 @@ export default async function AtcPage() {
             </h2>
             <div className="flex items-center gap-3">
               <span className="text-sm text-slate-600">{plansChezMoi?.length || 0} vol(s)</span>
-              <Link
-                href="/atc/creer-plan"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
-              >
-                <FilePlus className="h-4 w-4" />
-                Créer un plan
-              </Link>
+              <CreateManualStripButton sessionAeroport={session.aeroport} />
             </div>
           </div>
           
