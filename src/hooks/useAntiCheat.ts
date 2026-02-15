@@ -5,25 +5,54 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 interface AntiCheatOptions {
   enabled?: boolean;
   onCheatDetected?: () => void;
+  /** Délai en ms avant d'activer la détection (défaut: 3000) */
+  graceMs?: number;
 }
 
-// Vérifie si un élément appartient à notre app Next.js
-function isAppElement(el: Element | null): boolean {
+/**
+ * Vérifie si un élément est injecté par une extension (et non par notre app).
+ * On remonte le DOM : si on croise un shadow host, un iframe,
+ * ou un élément avec des attributs d'extension connus, c'est suspect.
+ * Si on arrive au body sans rien trouver de suspect, c'est ok.
+ */
+function isExtensionElement(el: Element | null): boolean {
   if (!el) return false;
-  // L'app Next.js vit dans #__next ou dans le body directement
-  const appRoot = document.getElementById('__next') || document.querySelector('[data-nextjs-scroll-focus-boundary]');
-  if (appRoot && appRoot.contains(el)) return true;
-  // Éléments standards du navigateur (html, body, head)
-  if (el === document.body || el === document.documentElement || el === document.head) return true;
+
+  let current: Element | null = el;
+  while (current && current !== document.body && current !== document.documentElement) {
+    // Shadow DOM host = probablement une extension
+    if (current.shadowRoot) return true;
+
+    // Iframe injectée
+    const tag = current.tagName?.toLowerCase();
+    if (tag === 'iframe') return true;
+
+    // Attributs typiques d'extensions IA
+    const id = current.id?.toLowerCase() || '';
+    const cls = current.className?.toString().toLowerCase() || '';
+    if (
+      id.includes('blackbox') || id.includes('chatgpt') || id.includes('copilot') ||
+      cls.includes('blackbox') || cls.includes('chatgpt') || cls.includes('copilot') ||
+      current.hasAttribute('data-grammarly') ||
+      id.includes('grammarly')
+    ) {
+      return true;
+    }
+
+    current = current.parentElement;
+  }
+
   return false;
 }
 
-export function useAntiCheat({ enabled = true, onCheatDetected }: AntiCheatOptions = {}) {
+export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000 }: AntiCheatOptions = {}) {
   const [cheatingDetected, setCheatingDetected] = useState(false);
   const cheatingRef = useRef(false);
+  const activeRef = useRef(false); // Période de grâce
 
   const triggerCheat = useCallback(() => {
-    if (cheatingRef.current) return; // Déjà déclenché
+    if (cheatingRef.current) return;
+    if (!activeRef.current) return; // Période de grâce active
     cheatingRef.current = true;
     setCheatingDetected(true);
     onCheatDetected?.();
@@ -32,24 +61,25 @@ export function useAntiCheat({ enabled = true, onCheatDetected }: AntiCheatOptio
   useEffect(() => {
     if (!enabled || cheatingRef.current) return;
 
-    // ── 1. Détection changement d'onglet / application ──
+    // Période de grâce : laisser la page se charger et le focus se stabiliser
+    activeRef.current = false;
+    const graceTimeout = setTimeout(() => {
+      activeRef.current = true;
+    }, graceMs);
+
+    // ── 1. Détection changement d'onglet ──
     const handleVisibilityChange = () => {
       if (document.hidden) {
         triggerCheat();
       }
     };
 
-    // ── 2. Détection perte de focus fenêtre ──
-    const handleBlur = () => {
-      triggerCheat();
-    };
-
-    // ── 3. Empêcher de quitter la page ──
+    // ── 2. Empêcher de quitter la page ──
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
     };
 
-    // ── 4. Bloquer raccourcis clavier ──
+    // ── 3. Bloquer raccourcis clavier ──
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'F12') {
         e.preventDefault();
@@ -72,12 +102,12 @@ export function useAntiCheat({ enabled = true, onCheatDetected }: AntiCheatOptio
       }
     };
 
-    // ── 5. Bloquer clic droit ──
+    // ── 4. Bloquer clic droit ──
     const handleContextMenu = (e: Event) => {
       e.preventDefault();
     };
 
-    // ── 6. Bloquer copier/coller ──
+    // ── 5. Bloquer copier/coller ──
     const handlePaste = (e: Event) => {
       e.preventDefault();
     };
@@ -85,50 +115,57 @@ export function useAntiCheat({ enabled = true, onCheatDetected }: AntiCheatOptio
       e.preventDefault();
     };
 
-    // ── 7. Détection extensions IA / overlays injectés ──
-    // Quand le focus va vers un élément qui n'est PAS dans notre app
-    // (= l'utilisateur clique/tape dans un popup d'extension)
+    // ── 6. Détection interaction avec extension IA ──
+    // Si le focus va vers un élément identifié comme venant d'une extension
     const handleFocusIn = (e: FocusEvent) => {
       const target = e.target as Element | null;
-      if (target && !isAppElement(target)) {
+      if (target && isExtensionElement(target)) {
         triggerCheat();
       }
     };
 
-    // Surveillance périodique : si activeElement est hors de l'app
-    // (certaines extensions capturent le focus sans déclencher focusin)
+    // ── 7. Surveillance périodique du focus ──
     const focusCheckInterval = setInterval(() => {
-      if (cheatingRef.current) return;
+      if (cheatingRef.current || !activeRef.current) return;
       const active = document.activeElement;
-      if (active && active !== document.body && !isAppElement(active)) {
+      if (active && isExtensionElement(active)) {
         triggerCheat();
       }
-    }, 1000);
+    }, 1500);
 
-    // MutationObserver : détecter les gros overlays injectés par des extensions
-    // (quand un élément visible > 200x200 est ajouté au body, hors de l'app)
+    // ── 8. MutationObserver : détecter les overlays injectés ──
     const observer = new MutationObserver((mutations) => {
-      if (cheatingRef.current) return;
+      if (cheatingRef.current || !activeRef.current) return;
       for (const mutation of mutations) {
         for (let i = 0; i < mutation.addedNodes.length; i++) {
           const node = mutation.addedNodes[i];
           if (node.nodeType !== Node.ELEMENT_NODE) continue;
           const el = node as HTMLElement;
-          // Ignorer les éléments de notre app
-          if (isAppElement(el)) continue;
-          // Ignorer les scripts et styles (inoffensifs visuellement)
+
           const tag = el.tagName?.toLowerCase();
+          // Ignorer scripts, styles, meta
           if (tag === 'script' || tag === 'style' || tag === 'link' || tag === 'meta') continue;
-          // Vérifier si l'élément est visible et assez grand (overlay d'extension)
-          const rect = el.getBoundingClientRect();
-          if (rect.width > 150 && rect.height > 150) {
-            triggerCheat();
-            return;
-          }
-          // Vérifier les iframes injectées (souvent utilisées par les extensions)
+
+          // Iframe injectée = extension
           if (tag === 'iframe') {
             triggerCheat();
             return;
+          }
+
+          // Overlay visible et assez grand (> 150x150)
+          if (isExtensionElement(el)) {
+            triggerCheat();
+            return;
+          }
+
+          // Gros élément ajouté directement au body (pas dans notre app React)
+          // Seulement si c'est un enfant direct du body et qu'il est gros
+          if (el.parentElement === document.body) {
+            const rect = el.getBoundingClientRect();
+            if (rect.width > 200 && rect.height > 200) {
+              triggerCheat();
+              return;
+            }
           }
         }
       }
@@ -136,9 +173,8 @@ export function useAntiCheat({ enabled = true, onCheatDetected }: AntiCheatOptio
 
     observer.observe(document.body, { childList: true, subtree: false });
 
-    // Enregistrer tous les listeners
+    // Enregistrer les listeners
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleBlur);
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('contextmenu', handleContextMenu);
@@ -147,8 +183,8 @@ export function useAntiCheat({ enabled = true, onCheatDetected }: AntiCheatOptio
     document.addEventListener('focusin', handleFocusIn);
 
     return () => {
+      clearTimeout(graceTimeout);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleBlur);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('contextmenu', handleContextMenu);
@@ -158,7 +194,7 @@ export function useAntiCheat({ enabled = true, onCheatDetected }: AntiCheatOptio
       clearInterval(focusCheckInterval);
       observer.disconnect();
     };
-  }, [enabled, triggerCheat]);
+  }, [enabled, triggerCheat, graceMs]);
 
   return { cheatingDetected };
 }
