@@ -188,7 +188,7 @@ export default function FormRenderer({ form }: Props) {
 
   return (
     <div className="min-h-screen bg-slate-900 py-8 px-4">
-      <div className="max-w-3xl mx-auto space-y-6">
+      <form className="max-w-3xl mx-auto space-y-6" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
         {/* Barre de progression */}
         <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
           <div
@@ -237,6 +237,11 @@ export default function FormRenderer({ form }: Props) {
                   value={(answers[q.id] as string) || ''}
                   onChange={(e) => updateAnswer(q.id, e.target.value)}
                   placeholder="Votre réponse"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  name={q.id}
                   className="w-full bg-transparent border-b border-slate-600 focus:border-sky-500 text-slate-200 py-2 outline-none transition-colors"
                 />
               )}
@@ -248,6 +253,11 @@ export default function FormRenderer({ form }: Props) {
                   onChange={(e) => updateAnswer(q.id, e.target.value)}
                   placeholder="Votre réponse"
                   rows={4}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  name={q.id}
                   className="w-full bg-slate-700/30 border border-slate-600 focus:border-sky-500 rounded-lg text-slate-200 p-3 outline-none transition-colors resize-y"
                 />
               )}
@@ -381,7 +391,7 @@ export default function FormRenderer({ form }: Props) {
             </button>
           )}
         </div>
-      </div>
+      </form>
     </div>
   );
 }
