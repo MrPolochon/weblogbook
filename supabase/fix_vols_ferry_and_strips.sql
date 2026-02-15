@@ -40,6 +40,10 @@ ALTER TABLE public.plans_vol
   ADD COLUMN IF NOT EXISTS strip_zone TEXT,
   ADD COLUMN IF NOT EXISTS strip_order INTEGER DEFAULT 0;
 
+-- Champ texte libre pour le nom du pilote sur les strips manuels
+ALTER TABLE public.plans_vol
+  ADD COLUMN IF NOT EXISTS strip_pilote_text TEXT;
+
 -- Index pour ordonner les strips par zone
 CREATE INDEX IF NOT EXISTS idx_plans_vol_strip_zone ON public.plans_vol (strip_zone, strip_order);
 

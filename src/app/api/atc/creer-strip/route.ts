@@ -1,9 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 
-export async function POST(request: Request) {
+export async function POST() {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -22,34 +21,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Vous devez être en service.' }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { numero_vol, aeroport_arrivee, type_vol } = body;
-
-    const ad = session?.aeroport || String(body.aeroport_depart || '').toUpperCase();
-    const aa = String(aeroport_arrivee || '').toUpperCase();
-
-    if (!CODES_OACI_VALIDES.has(ad)) {
-      return NextResponse.json({ error: 'Aéroport de départ invalide.' }, { status: 400 });
-    }
-    if (!CODES_OACI_VALIDES.has(aa)) {
-      return NextResponse.json({ error: 'Aéroport d\'arrivée invalide.' }, { status: 400 });
-    }
-    if (!numero_vol || !String(numero_vol).trim()) {
-      return NextResponse.json({ error: 'Callsign requis.' }, { status: 400 });
-    }
-    if (!type_vol || !['VFR', 'IFR'].includes(String(type_vol))) {
-      return NextResponse.json({ error: 'Type de vol VFR ou IFR requis.' }, { status: 400 });
-    }
+    const ad = session?.aeroport || 'XXXX';
 
     const admin = createAdminClient();
 
     const { data, error } = await admin.from('plans_vol').insert({
       pilote_id: null,
       aeroport_depart: ad,
-      aeroport_arrivee: aa,
-      numero_vol: String(numero_vol).trim().toUpperCase(),
+      aeroport_arrivee: '????',
+      numero_vol: '????',
       temps_prev_min: 30,
-      type_vol: String(type_vol),
+      type_vol: 'VFR',
       statut: 'accepte',
       accepted_at: new Date().toISOString(),
       current_holder_user_id: user.id,

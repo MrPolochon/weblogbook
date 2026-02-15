@@ -636,8 +636,21 @@ export async function PATCH(
       if (!canAtc) return NextResponse.json({ error: 'Accès ATC requis.' }, { status: 403 });
 
       const allowedFields = ['strip_atd', 'strip_rwy', 'strip_fl', 'strip_fl_unit', 'strip_sid_atc', 'strip_star', 'strip_route', 'strip_note_1', 'strip_note_2', 'strip_note_3', 'strip_zone', 'strip_order'];
+      const manualOnlyFields = ['numero_vol', 'aeroport_depart', 'aeroport_arrivee', 'type_vol', 'strip_pilote_text'];
+
+      const hasManualFields = manualOnlyFields.some((f) => body[f] !== undefined);
+      let isManualStrip = false;
+      if (hasManualFields) {
+        const { data: planCheck } = await admin.from('plans_vol').select('created_by_atc, pilote_id').eq('id', id).single();
+        isManualStrip = Boolean(planCheck?.created_by_atc) && !planCheck?.pilote_id;
+        if (!isManualStrip) {
+          return NextResponse.json({ error: 'Ces champs ne sont modifiables que sur les strips manuels.' }, { status: 403 });
+        }
+      }
+
+      const effectiveFields = isManualStrip ? [...allowedFields, ...manualOnlyFields] : allowedFields;
       const update: Record<string, unknown> = {};
-      for (const field of allowedFields) {
+      for (const field of effectiveFields) {
         if (body[field] !== undefined) {
           update[field] = body[field] === '' ? null : body[field];
         }

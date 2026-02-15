@@ -34,13 +34,15 @@ export type StripData = {
   strip_route: string | null;
   strip_zone: string | null;
   strip_order: number;
+  strip_pilote_text: string | null;
   pilote_identifiant?: string | null;
   intentions_vol?: string | null;
   instructions_atc?: string | null;
   automonitoring?: boolean;
+  isManual?: boolean;
 };
 
-type EditableField = 'strip_atd' | 'strip_rwy' | 'strip_fl' | 'strip_fl_unit' | 'strip_sid_atc' | 'strip_note_1' | 'strip_note_2' | 'strip_note_3' | 'strip_star' | 'strip_route';
+type EditableField = 'strip_atd' | 'strip_rwy' | 'strip_fl' | 'strip_fl_unit' | 'strip_sid_atc' | 'strip_note_1' | 'strip_note_2' | 'strip_note_3' | 'strip_star' | 'strip_route' | 'numero_vol' | 'aeroport_depart' | 'aeroport_arrivee' | 'type_vol' | 'strip_pilote_text';
 
 function getSquawkColor(code: string | null): string | null {
   if (!code) return null;
@@ -294,9 +296,14 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
 
   return (
     <div className={`px-1.5 py-1 border-t ${isDark ? 'border-slate-700 bg-slate-900/80' : 'border-slate-200 bg-slate-50/80'} flex items-center gap-1 flex-wrap`} onClick={(e) => e.stopPropagation()}>
-      {strip.pilote_identifiant && (
+      {strip.isManual ? (
+        <span className={`text-[11px] mr-auto flex items-center gap-1 font-bold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+          <Plane className="h-3 w-3" />
+          <InlineEdit value={strip.strip_pilote_text} field="strip_pilote_text" planId={strip.id} placeholder="Pilote…" maxLength={30} />
+        </span>
+      ) : strip.pilote_identifiant ? (
         <span className={`text-[11px] mr-auto flex items-center gap-1 font-bold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}><Plane className="h-3 w-3" />{strip.pilote_identifiant}</span>
-      )}
+      ) : null}
       {(statut === 'en_attente' || statut === 'depose') && (
         <>
           <button type="button" onClick={() => callAction('accepter')} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 shadow-sm"><CheckCircle className="h-3.5 w-3.5" />{loading === 'accepter' ? '…' : 'Accepter'}</button>
@@ -383,24 +390,25 @@ export default function FlightStrip({
   const sqColor = getSquawkColor(strip.code_transpondeur);
   const sqLabel = getSquawkLabel(strip.code_transpondeur);
   const isEmergency = !!sqColor;
+  const isManual = strip.isManual ?? false;
   const squawkMismatch = strip.squawk_attendu && strip.code_transpondeur && strip.code_transpondeur !== strip.squawk_attendu;
   const noSquawk = strip.squawk_attendu && !strip.code_transpondeur;
   
   // Color scheme - Mode clair
-  const lightBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-700' : sqColor === 'radio' ? 'border-amber-600' : 'border-red-600') : isClotureRequested ? 'border-red-500' : 'border-[#8fbc8f]';
-  const lightLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-100' : sqColor === 'radio' ? 'bg-amber-100' : 'bg-red-100') : isClotureRequested ? 'bg-red-50' : 'bg-[#d5ecd5]';
-  const lightRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : isClotureRequested ? 'bg-red-100' : 'bg-[#f5f0c8]';
-  const lightTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : isClotureRequested ? 'bg-red-100' : 'bg-[#c5dcc5]';
-  const lightSep = isEmergency ? 'border-red-300' : isClotureRequested ? 'border-red-300' : 'border-[#8fbc8f]';
+  const lightBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-700' : sqColor === 'radio' ? 'border-amber-600' : 'border-red-600') : isClotureRequested ? 'border-red-500' : isManual ? 'border-[#7b8fbc]' : 'border-[#8fbc8f]';
+  const lightLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-100' : sqColor === 'radio' ? 'bg-amber-100' : 'bg-red-100') : isClotureRequested ? 'bg-red-50' : isManual ? 'bg-[#d5ddef]' : 'bg-[#d5ecd5]';
+  const lightRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : isClotureRequested ? 'bg-red-100' : isManual ? 'bg-[#e8dff5]' : 'bg-[#f5f0c8]';
+  const lightTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : isClotureRequested ? 'bg-red-100' : isManual ? 'bg-[#c5d0e5]' : 'bg-[#c5dcc5]';
+  const lightSep = isEmergency ? 'border-red-300' : isClotureRequested ? 'border-red-300' : isManual ? 'border-[#7b8fbc]' : 'border-[#8fbc8f]';
   const lightTxt = 'text-slate-900';
   const lightLbl = 'text-slate-600';
 
   // Color scheme - Mode sombre (couleurs inversées avec meilleur contraste)
-  const darkBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-500' : sqColor === 'radio' ? 'border-amber-500' : 'border-red-500') : isClotureRequested ? 'border-red-500' : 'border-emerald-600';
-  const darkLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-950' : sqColor === 'radio' ? 'bg-amber-950' : 'bg-red-950') : isClotureRequested ? 'bg-red-950' : 'bg-emerald-950';
-  const darkRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : isClotureRequested ? 'bg-red-900' : 'bg-yellow-950';
-  const darkTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : isClotureRequested ? 'bg-red-900' : 'bg-emerald-900';
-  const darkSep = isEmergency ? 'border-red-700' : isClotureRequested ? 'border-red-700' : 'border-emerald-700';
+  const darkBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-500' : sqColor === 'radio' ? 'border-amber-500' : 'border-red-500') : isClotureRequested ? 'border-red-500' : isManual ? 'border-indigo-600' : 'border-emerald-600';
+  const darkLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-950' : sqColor === 'radio' ? 'bg-amber-950' : 'bg-red-950') : isClotureRequested ? 'bg-red-950' : isManual ? 'bg-indigo-950' : 'bg-emerald-950';
+  const darkRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : isClotureRequested ? 'bg-red-900' : isManual ? 'bg-violet-950' : 'bg-yellow-950';
+  const darkTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : isClotureRequested ? 'bg-red-900' : isManual ? 'bg-indigo-900' : 'bg-emerald-900';
+  const darkSep = isEmergency ? 'border-red-700' : isClotureRequested ? 'border-red-700' : isManual ? 'border-indigo-700' : 'border-emerald-700';
   const darkTxt = 'text-slate-100';
   const darkLbl = 'text-slate-300';
 
@@ -461,8 +469,17 @@ export default function FlightStrip({
                 <span className={`text-base font-mono font-bold ${txt}`}>{strip.type_wake}</span>
               </Cell>
               <Cell className={`w-[50px] border-r ${sep} text-center`}>
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>{strip.type_vol}</div>
-                <span className={`text-sm font-mono font-bold ${txt}`}>1</span>
+                {isManual ? (
+                  <>
+                    <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>TYPE</div>
+                    <InlineEdit value={strip.type_vol} field="type_vol" planId={strip.id} placeholder="VFR" onSaved={onRefresh} maxLength={3} />
+                  </>
+                ) : (
+                  <>
+                    <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>{strip.type_vol}</div>
+                    <span className={`text-sm font-mono font-bold ${txt}`}>1</span>
+                  </>
+                )}
               </Cell>
               <Cell className="flex-1">
                 <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>NOTE</div>
@@ -473,16 +490,28 @@ export default function FlightStrip({
             <div className={`flex ${leftBg} border-b ${sep}`}>
               <Cell className={`w-[70px] border-r ${sep}`}>
                 <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>ADES</div>
-                <span className={`text-lg font-mono font-black ${txt} leading-tight`}>{strip.aeroport_arrivee}</span>
+                {isManual ? (
+                  <InlineEdit value={strip.aeroport_arrivee} field="aeroport_arrivee" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={4} large />
+                ) : (
+                  <span className={`text-lg font-mono font-black ${txt} leading-tight`}>{strip.aeroport_arrivee}</span>
+                )}
               </Cell>
               <Cell className={`w-[150px] border-r ${sep}`}>
                 <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>CALLSIGN</div>
-                <span className={`text-xl font-mono font-black tracking-wide ${txt} leading-tight`}>{strip.numero_vol}</span>
+                {isManual ? (
+                  <InlineEdit value={strip.numero_vol} field="numero_vol" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={10} large />
+                ) : (
+                  <span className={`text-xl font-mono font-black tracking-wide ${txt} leading-tight`}>{strip.numero_vol}</span>
+                )}
               </Cell>
               <Cell className="flex-1">
                 <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>ADEP</div>
                 <div className="flex flex-col gap-0.5">
-                  <span className={`text-base font-mono font-bold ${txt}`}>{strip.aeroport_depart}</span>
+                  {isManual ? (
+                    <InlineEdit value={strip.aeroport_depart} field="aeroport_depart" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={4} large />
+                  ) : (
+                    <span className={`text-base font-mono font-bold ${txt}`}>{strip.aeroport_depart}</span>
+                  )}
                   {strip.intentions_vol && (
                     <span className={`text-[9px] ${txt} opacity-70 leading-tight`} title={strip.intentions_vol}>
                       {strip.intentions_vol.length > 30 ? strip.intentions_vol.slice(0, 30) + '...' : strip.intentions_vol}

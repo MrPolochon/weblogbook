@@ -94,12 +94,14 @@ export default async function AtcPage() {
       strip_note_3: plan.strip_note_3 || null,
       strip_star: plan.strip_star || null,
       strip_route: plan.strip_route || null,
+      strip_pilote_text: plan.strip_pilote_text || null,
       strip_zone: plan.strip_zone || null,
       strip_order: plan.strip_order ?? 0,
       pilote_identifiant: piloteIdentifiant,
       intentions_vol: plan.intentions_vol || null,
       instructions_atc: plan.instructions || null,
       automonitoring: plan.automonitoring ?? false,
+      isManual: !plan.pilote_id && Boolean(plan.created_by_atc),
     } as StripData;
   }));
 
@@ -211,7 +213,7 @@ export default async function AtcPage() {
             </h2>
             <div className="flex items-center gap-3">
               <span className="text-sm text-slate-600">{plansChezMoi?.length || 0} vol(s)</span>
-              <CreateManualStripButton sessionAeroport={session.aeroport} />
+              <CreateManualStripButton />
             </div>
           </div>
           
