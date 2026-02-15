@@ -75,7 +75,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Seul le PDG militaire peut acheter pour l\'armée' }, { status: 403 });
       }
 
-      if (compteMilitaire.solde < avion.prix) {
+      const soldeMilitaire = Number(compteMilitaire.solde);
+      if (soldeMilitaire < avion.prix) {
         return NextResponse.json({ error: 'Solde militaire insuffisant' }, { status: 400 });
       }
 
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
 
       // Débiter
       await admin.from('felitz_comptes')
-        .update({ solde: compteMilitaire.solde - avion.prix })
+        .update({ solde: soldeMilitaire - avion.prix })
         .eq('id', compteId);
 
       // Ajouter à l'inventaire de l'armée
@@ -115,19 +116,55 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Seul le PDG peut acheter pour la compagnie' }, { status: 403 });
       }
 
-      // Récupérer le compte entreprise
-      const { data: compteEntreprise } = await admin.from('felitz_comptes')
+      // Récupérer le compte entreprise (limit 1 pour éviter erreur si doublons)
+      let compteEntreprise = (await admin.from('felitz_comptes')
         .select('id, solde')
         .eq('compagnie_id', pour_compagnie_id)
         .eq('type', 'entreprise')
-        .single();
+        .limit(1)
+        .maybeSingle()).data;
+
+      // Créer le compte entreprise s'il n'existe pas (compagnies créées avant le trigger Felitz)
+      if (!compteEntreprise) {
+        const { data: comp } = await admin.from('compagnies')
+          .select('id, vban')
+          .eq('id', pour_compagnie_id)
+          .single();
+        if (!comp) {
+          return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
+        }
+        let vban = comp.vban;
+        if (!vban) {
+          const prefix = 'ENTERMIXOU';
+          let unique = false;
+          do {
+            vban = prefix + Array.from({ length: 16 }, () =>
+              'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 36)]
+            ).join('');
+            const { data: ex } = await admin.from('felitz_comptes').select('id').eq('vban', vban).maybeSingle();
+            const { data: exComp } = await admin.from('compagnies').select('id').eq('vban', vban).maybeSingle();
+            unique = !ex && !exComp;
+          } while (!unique);
+          await admin.from('compagnies').update({ vban }).eq('id', pour_compagnie_id);
+        }
+        const { data: created } = await admin.from('felitz_comptes').insert({
+          type: 'entreprise',
+          compagnie_id: pour_compagnie_id,
+          vban,
+          solde: 0
+        }).select('id, solde').single();
+        if (created) compteEntreprise = created;
+      }
 
       if (!compteEntreprise) {
         return NextResponse.json({ error: 'Compte entreprise introuvable' }, { status: 404 });
       }
 
-      if (compteEntreprise.solde < avion.prix) {
-        return NextResponse.json({ error: 'Solde entreprise insuffisant' }, { status: 400 });
+      const solde = Number(compteEntreprise.solde);
+      if (solde < avion.prix) {
+        return NextResponse.json({
+          error: `Solde entreprise insuffisant. Solde actuel : ${solde.toLocaleString('fr-FR')} F$, prix : ${avion.prix.toLocaleString('fr-FR')} F$.`
+        }, { status: 400 });
       }
 
       compteId = compteEntreprise.id;
@@ -135,7 +172,7 @@ export async function POST(req: NextRequest) {
 
       // Débiter
       await admin.from('felitz_comptes')
-        .update({ solde: compteEntreprise.solde - avion.prix })
+        .update({ solde: solde - avion.prix })
         .eq('id', compteId);
 
       // Générer une immatriculation unique
@@ -171,26 +208,30 @@ export async function POST(req: NextRequest) {
       });
 
     } else {
-      // Achat personnel
+      // Achat personnel (limit 1 pour éviter erreur si doublons)
       const { data: comptePerso } = await admin.from('felitz_comptes')
         .select('id, solde')
         .eq('proprietaire_id', user.id)
         .eq('type', 'personnel')
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (!comptePerso) {
         return NextResponse.json({ error: 'Compte personnel introuvable' }, { status: 404 });
       }
 
-      if (comptePerso.solde < avion.prix) {
-        return NextResponse.json({ error: 'Solde insuffisant' }, { status: 400 });
+      const soldePerso = Number(comptePerso.solde);
+      if (soldePerso < avion.prix) {
+        return NextResponse.json({
+          error: `Solde insuffisant. Solde actuel : ${soldePerso.toLocaleString('fr-FR')} F$, prix : ${avion.prix.toLocaleString('fr-FR')} F$.`
+        }, { status: 400 });
       }
 
       compteId = comptePerso.id;
 
       // Débiter
       await admin.from('felitz_comptes')
-        .update({ solde: comptePerso.solde - avion.prix })
+        .update({ solde: soldePerso - avion.prix })
         .eq('id', compteId);
 
       // Ajouter à l'inventaire personnel

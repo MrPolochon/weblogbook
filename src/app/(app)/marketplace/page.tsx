@@ -34,18 +34,20 @@ export default async function MarketplacePage() {
         .select('solde')
         .eq('compagnie_id', c.id)
         .eq('type', 'entreprise')
-        .single();
-      return { ...c, solde: compte?.solde || 0 };
+        .limit(1)
+        .maybeSingle();
+      return { ...c, solde: Number(compte?.solde ?? 0) };
     }));
   }
 
-  // Compte militaire (si l'utilisateur est PDG)
+  // Compte militaire (limit 1 pour éviter erreur si doublons)
   const { data: compteMilitaire } = await admin.from('felitz_comptes')
     .select('id, solde, proprietaire_id')
     .eq('type', 'militaire')
-    .single();
+    .limit(1)
+    .maybeSingle();
   const armeeCompte = compteMilitaire?.proprietaire_id === user.id
-    ? { id: compteMilitaire.id, solde: compteMilitaire.solde }
+    ? { id: compteMilitaire.id, solde: Number(compteMilitaire.solde ?? 0) }
     : null;
 
   // Liste des avions à vendre
@@ -66,7 +68,7 @@ export default async function MarketplacePage() {
         <div className="card bg-emerald-500/10 border-emerald-500/30">
           <p className="text-sm text-emerald-400">Mon solde personnel</p>
           <p className="text-2xl font-bold text-emerald-300">
-            {(comptePerso?.solde || 0).toLocaleString('fr-FR')} F$
+            {Number(comptePerso?.solde ?? 0).toLocaleString('fr-FR')} F$
           </p>
         </div>
         {compagniesWithSolde.map((c) => (
@@ -93,7 +95,7 @@ export default async function MarketplacePage() {
       {/* Liste des avions avec recherche */}
       <MarketplaceList 
         avions={avions || []} 
-        soldePerso={comptePerso?.solde || 0} 
+        soldePerso={Number(comptePerso?.solde ?? 0)} 
         compagnies={compagniesWithSolde}
         armeeCompte={armeeCompte}
       />
