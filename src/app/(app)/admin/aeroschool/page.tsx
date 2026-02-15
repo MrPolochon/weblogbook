@@ -166,14 +166,12 @@ export default function AdminAeroSchoolPage() {
                   >
                     Éditer
                   </Link>
-                  {f.delivery_mode === 'review' && (
-                    <Link
-                      href={`/admin/aeroschool/${f.id}/responses`}
-                      className="flex-1 text-center py-1.5 rounded-lg text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium transition-colors"
-                    >
-                      Réponses
-                    </Link>
-                  )}
+                  <Link
+                    href={`/admin/aeroschool/${f.id}/responses`}
+                    className="flex-1 text-center py-1.5 rounded-lg text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium transition-colors"
+                  >
+                    Réponses
+                  </Link>
                   <button
                     onClick={() => deleteForm(f.id)}
                     disabled={deleting === f.id}

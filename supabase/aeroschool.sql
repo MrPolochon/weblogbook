@@ -77,3 +77,57 @@ CREATE POLICY "aeroschool_responses_admin_delete"
   USING (EXISTS (
     SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
   ));
+
+-- ============================================
+-- Seed : Formulaire "Passage Catégorie 3"
+-- ============================================
+INSERT INTO aeroschool_forms (title, description, delivery_mode, is_published, sections)
+VALUES (
+  'FORMULAIRE PASSAGE CATEGORIE 3',
+  'Merci de remplir ce formulaire si vous souhaitez passer votre catégorie 3.',
+  'review',
+  true,
+  '[
+    {
+      "id": "sec-info-personnelles",
+      "title": "Informations personnelles",
+      "description": "Veuillez renseigner vos informations de base.",
+      "questions": [
+        {
+          "id": "q-pseudo-discord",
+          "type": "short_text",
+          "title": "Quel est ton pseudo Discord ?",
+          "description": "",
+          "required": true,
+          "options": [],
+          "is_graded": false,
+          "points": 0,
+          "correct_answers": []
+        },
+        {
+          "id": "q-age",
+          "type": "short_text",
+          "title": "Quel est ton âge ?",
+          "description": "",
+          "required": true,
+          "options": [],
+          "is_graded": false,
+          "points": 0,
+          "correct_answers": []
+        },
+        {
+          "id": "q-heures-ptfs",
+          "type": "short_text",
+          "title": "Combien as-tu d''heures sur PTFS ?",
+          "description": "",
+          "required": false,
+          "options": [],
+          "is_graded": false,
+          "points": 0,
+          "correct_answers": []
+        }
+      ]
+    }
+  ]'::jsonb
+)
+ON CONFLICT DO NOTHING;
