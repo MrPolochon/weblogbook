@@ -35,6 +35,7 @@ export type StripData = {
   strip_zone: string | null;
   strip_order: number;
   strip_pilote_text: string | null;
+  strip_type_wake: string | null;
   pilote_identifiant?: string | null;
   intentions_vol?: string | null;
   instructions_atc?: string | null;
@@ -42,7 +43,7 @@ export type StripData = {
   isManual?: boolean;
 };
 
-type EditableField = 'strip_atd' | 'strip_rwy' | 'strip_fl' | 'strip_fl_unit' | 'strip_sid_atc' | 'strip_note_1' | 'strip_note_2' | 'strip_note_3' | 'strip_star' | 'strip_route' | 'numero_vol' | 'aeroport_depart' | 'aeroport_arrivee' | 'type_vol' | 'strip_pilote_text';
+type EditableField = 'strip_atd' | 'strip_rwy' | 'strip_fl' | 'strip_fl_unit' | 'strip_sid_atc' | 'strip_note_1' | 'strip_note_2' | 'strip_note_3' | 'strip_star' | 'strip_route' | 'numero_vol' | 'aeroport_depart' | 'aeroport_arrivee' | 'type_vol' | 'strip_pilote_text' | 'strip_type_wake';
 
 function getSquawkColor(code: string | null): string | null {
   if (!code) return null;
@@ -466,7 +467,11 @@ export default function FlightStrip({
               </Cell>
               <Cell className={`w-[100px] border-r ${sep}`}>
                 <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>TYPE/W</div>
-                <span className={`text-base font-mono font-bold ${txt}`}>{strip.type_wake}</span>
+                {isManual ? (
+                  <InlineEdit value={strip.strip_type_wake} field="strip_type_wake" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={10} large />
+                ) : (
+                  <span className={`text-base font-mono font-bold ${txt}`}>{strip.type_wake}</span>
+                )}
               </Cell>
               <Cell className={`w-[50px] border-r ${sep} text-center`}>
                 {isManual ? (

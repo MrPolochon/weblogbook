@@ -636,7 +636,7 @@ export async function PATCH(
       if (!canAtc) return NextResponse.json({ error: 'Accès ATC requis.' }, { status: 403 });
 
       const allowedFields = ['strip_atd', 'strip_rwy', 'strip_fl', 'strip_fl_unit', 'strip_sid_atc', 'strip_star', 'strip_route', 'strip_note_1', 'strip_note_2', 'strip_note_3', 'strip_zone', 'strip_order'];
-      const manualOnlyFields = ['numero_vol', 'aeroport_depart', 'aeroport_arrivee', 'type_vol', 'strip_pilote_text'];
+      const manualOnlyFields = ['numero_vol', 'aeroport_depart', 'aeroport_arrivee', 'type_vol', 'strip_pilote_text', 'strip_type_wake'];
 
       const hasManualFields = manualOnlyFields.some((f) => body[f] !== undefined);
       let isManualStrip = false;

@@ -95,6 +95,7 @@ export default async function AtcPage() {
       strip_star: plan.strip_star || null,
       strip_route: plan.strip_route || null,
       strip_pilote_text: plan.strip_pilote_text || null,
+      strip_type_wake: plan.strip_type_wake || null,
       strip_zone: plan.strip_zone || null,
       strip_order: plan.strip_order ?? 0,
       pilote_identifiant: piloteIdentifiant,
