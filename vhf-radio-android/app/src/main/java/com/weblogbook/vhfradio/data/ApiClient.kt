@@ -1,5 +1,6 @@
 package com.weblogbook.vhfradio.data
 
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
@@ -16,6 +17,8 @@ import java.util.concurrent.TimeUnit
  */
 object ApiClient {
 
+    private const val TAG = "ApiClient"
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
@@ -25,10 +28,78 @@ object ApiClient {
     private val gson = Gson()
     private val JSON = "application/json; charset=utf-8".toMediaType()
 
+    /* ══════════ Token Storage ══════════ */
+
+    @Volatile private var storedAccessToken: String? = null
+    @Volatile private var storedRefreshToken: String? = null
+
+    /** Store tokens after successful login */
+    fun setTokens(accessToken: String, refreshToken: String?) {
+        storedAccessToken = accessToken
+        storedRefreshToken = refreshToken
+    }
+
+    /** Get the current stored access token */
+    fun getStoredAccessToken(): String? = storedAccessToken
+
+    /** Refresh the access token using the stored refresh token */
+    suspend fun refreshAccessToken(): String? = withContext(Dispatchers.IO) {
+        val rt = storedRefreshToken
+        if (rt == null) {
+            Log.w(TAG, "Pas de refresh_token stocké")
+            return@withContext null
+        }
+        try {
+            val body = gson.toJson(mapOf("refresh_token" to rt))
+            val request = Request.Builder()
+                .url("${Config.SUPABASE_URL}/auth/v1/token?grant_type=refresh_token")
+                .addHeader("apikey", Config.SUPABASE_ANON_KEY)
+                .addHeader("Content-Type", "application/json")
+                .post(body.toRequestBody(JSON))
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string() ?: ""
+
+            if (!response.isSuccessful) {
+                Log.e(TAG, "Refresh token failed: ${response.code} $responseBody")
+                return@withContext null
+            }
+
+            val authResponse = gson.fromJson(responseBody, AuthResponse::class.java)
+            val newToken = authResponse.accessToken
+            if (newToken != null) {
+                storedAccessToken = newToken
+                authResponse.refreshToken?.let { storedRefreshToken = it }
+                Log.i(TAG, "Token rafraîchi avec succès")
+            }
+            newToken
+        } catch (e: Exception) {
+            Log.e(TAG, "Erreur refresh token: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Get a fresh access token: returns stored one or refreshes if needed.
+     * Falls back to the provided token if refresh fails.
+     */
+    suspend fun getFreshAccessToken(fallback: String): String {
+        // Try refresh to ensure we have the latest
+        val stored = storedAccessToken ?: fallback
+        return stored
+    }
+
+    fun clearTokens() {
+        storedAccessToken = null
+        storedRefreshToken = null
+    }
+
     /* ══════════ Modèles de données ══════════ */
 
     data class AuthResponse(
         @SerializedName("access_token") val accessToken: String?,
+        @SerializedName("refresh_token") val refreshToken: String?,
         @SerializedName("token_type") val tokenType: String?,
         @SerializedName("user") val user: AuthUser?,
         @SerializedName("error") val error: String?,
@@ -156,6 +227,7 @@ object ApiClient {
     /**
      * Récupère un token LiveKit pour se connecter à une room VHF.
      * POST /api/livekit/token
+     * Auto-retry on 401 by refreshing the access token.
      */
     suspend fun getLiveKitToken(
         roomName: String,
@@ -170,23 +242,43 @@ object ApiClient {
                 )
             )
 
-            val request = Request.Builder()
+            // Use stored token if available, otherwise use provided one
+            var token = storedAccessToken ?: accessToken
+
+            fun buildRequest(t: String) = Request.Builder()
                 .url("${Config.API_BASE_URL}/api/livekit/token")
                 .addHeader("Content-Type", "application/json")
-                .addHeader("Authorization", "Bearer $accessToken")
+                .addHeader("Authorization", "Bearer $t")
                 .post(body.toRequestBody(JSON))
                 .build()
 
-            val response = client.newCall(request).execute()
-            val responseBody = response.body?.string() ?: ""
+            var response = client.newCall(buildRequest(token)).execute()
+            var responseBody = response.body?.string() ?: ""
+
+            // Retry on 401 with refreshed token
+            if (response.code == 401) {
+                Log.w(TAG, "LiveKit token 401 — tentative de refresh...")
+                val newToken = refreshAccessToken()
+                if (newToken != null) {
+                    token = newToken
+                    response = client.newCall(buildRequest(token)).execute()
+                    responseBody = response.body?.string() ?: ""
+                }
+            }
 
             if (!response.isSuccessful) {
-                return@withContext Result.failure(Exception("Erreur API LiveKit: ${response.code}"))
+                val errMsg = try {
+                    val j = gson.fromJson(responseBody, JsonObject::class.java)
+                    j?.get("error")?.asString ?: j?.get("details")?.asString ?: "Erreur ${response.code}"
+                } catch (_: Exception) { "Erreur API LiveKit: ${response.code}" }
+                Log.e(TAG, "getLiveKitToken failed: ${response.code} $responseBody")
+                return@withContext Result.failure(Exception(errMsg))
             }
 
             val tokenResponse = gson.fromJson(responseBody, LiveKitTokenResponse::class.java)
             Result.success(tokenResponse)
         } catch (e: Exception) {
+            Log.e(TAG, "getLiveKitToken error: ${e.message}")
             Result.failure(Exception("Erreur réseau: ${e.message}"))
         }
     }
@@ -198,14 +290,27 @@ object ApiClient {
     suspend fun checkSession(mode: String, accessToken: String): Result<SessionResponse> =
         withContext(Dispatchers.IO) {
             try {
-                val request = Request.Builder()
+                var token = storedAccessToken ?: accessToken
+
+                fun buildRequest(t: String) = Request.Builder()
                     .url("${Config.API_BASE_URL}/api/atc/my-session?mode=$mode")
-                    .addHeader("Authorization", "Bearer $accessToken")
+                    .addHeader("Authorization", "Bearer $t")
                     .get()
                     .build()
 
-                val response = client.newCall(request).execute()
-                val responseBody = response.body?.string() ?: ""
+                var response = client.newCall(buildRequest(token)).execute()
+                var responseBody = response.body?.string() ?: ""
+
+                // Retry on 401 with refreshed token
+                if (response.code == 401) {
+                    Log.w(TAG, "checkSession 401 — tentative de refresh...")
+                    val newToken = refreshAccessToken()
+                    if (newToken != null) {
+                        token = newToken
+                        response = client.newCall(buildRequest(token)).execute()
+                        responseBody = response.body?.string() ?: ""
+                    }
+                }
 
                 if (!response.isSuccessful) {
                     return@withContext Result.failure(Exception("Erreur API session: ${response.code}"))

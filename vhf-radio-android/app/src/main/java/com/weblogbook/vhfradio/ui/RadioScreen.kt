@@ -4,6 +4,9 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -61,6 +64,7 @@ fun RadioScreen(
     val isTransmitting by liveKitManager.isTransmitting.collectAsState()
     val participants by liveKitManager.participants.collectAsState()
     val collision by liveKitManager.collision.collectAsState()
+    val connectionError by liveKitManager.connectionError.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
     var isReconnecting by remember { mutableStateOf(false) }
@@ -194,6 +198,7 @@ fun RadioScreen(
                     isConnecting = isConnecting,
                     isTransmitting = isTransmitting,
                     isReconnecting = isReconnecting,
+                    connectionError = connectionError,
                     participants = participants,
                     mhzRange = mhzRange,
                     stbyDecimals = stbyDecimals,
@@ -434,6 +439,7 @@ private fun RadioPanel(
     isConnecting: Boolean,
     isTransmitting: Boolean,
     isReconnecting: Boolean,
+    connectionError: String?,
     participants: List<LiveKitManager.ParticipantInfo>,
     mhzRange: List<Int>,
     stbyDecimals: List<String>,
@@ -457,6 +463,9 @@ private fun RadioPanel(
         label = "border"
     )
 
+    // Frequency change dialog state
+    var showFreqDialog by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -478,6 +487,41 @@ private fun RadioPanel(
                 onReconnect = onReconnect
             )
 
+            // Connection error banner
+            if (connectionError != null && !isConnected) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Red500.copy(alpha = 0.1f))
+                        .border(1.dp, Red500.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ErrorOutline,
+                        contentDescription = null,
+                        tint = Red400,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = connectionError,
+                            fontSize = 11.sp,
+                            color = Red300
+                        )
+                        Text(
+                            text = "Reconnexion auto dans 5s...",
+                            fontSize = 9.sp,
+                            color = Red400.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                }
+            }
+
             // Frequency display
             FrequencyDisplay(
                 radioOn = radioOn,
@@ -485,7 +529,10 @@ private fun RadioPanel(
                 activeFreq = activeFreq,
                 standbyFreq = standbyFreq,
                 isLocked = isLocked,
-                onSwapFrequencies = onSwapFrequencies
+                onSwapFrequencies = onSwapFrequencies,
+                onStandbyClick = if (!isLocked && radioOn) {
+                    { showFreqDialog = true }
+                } else null
             )
 
             // Frequency dials (pilot only)
@@ -515,7 +562,7 @@ private fun RadioPanel(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -523,12 +570,12 @@ private fun RadioPanel(
                         imageVector = Icons.Default.Warning,
                         contentDescription = null,
                         tint = Red400,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "DOUBLE TRANSMISSION",
-                        fontSize = 10.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Red400
                     )
@@ -540,8 +587,24 @@ private fun RadioPanel(
                 ParticipantsList(participants)
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
         }
+    }
+
+    // Frequency change dialog
+    if (showFreqDialog) {
+        FrequencyChangeDialog(
+            mhzRange = mhzRange,
+            currentMhzIndex = stbyMhzIndex,
+            currentDecIndex = safeStbyDecIndex,
+            stbyDecimals = stbyDecimals,
+            onConfirm = { newMhzIndex, newDecIndex ->
+                onStbyMhzChange(newMhzIndex)
+                onStbyDecChange(newDecIndex)
+                showFreqDialog = false
+            },
+            onDismiss = { showFreqDialog = false }
+        )
     }
 }
 
@@ -561,26 +624,26 @@ private fun RadioHeader(
         modifier = Modifier
             .fillMaxWidth()
             .background(headerBg)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Power button
+        // Power button (44dp for comfortable touch)
         IconButton(
             onClick = onToggleRadio,
             modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
                 .background(if (radioOn) Emerald600 else Slate700)
         ) {
             Icon(
                 imageVector = Icons.Default.Power,
                 contentDescription = "Power",
                 tint = if (radioOn) Color.White else Slate500,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(22.dp)
             )
         }
 
-        Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(10.dp))
 
         Icon(
             imageVector = Icons.Default.Radio,
@@ -590,12 +653,12 @@ private fun RadioHeader(
                 collision -> Red400
                 else -> Emerald400
             },
-            modifier = Modifier.size(16.dp)
+            modifier = Modifier.size(20.dp)
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = "VHF COM1",
-            fontSize = 12.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
             color = Slate300,
             letterSpacing = 1.sp
@@ -606,7 +669,7 @@ private fun RadioHeader(
         // Status dot
         Box(
             modifier = Modifier
-                .size(8.dp)
+                .size(10.dp)
                 .clip(CircleShape)
                 .background(
                     when {
@@ -625,7 +688,7 @@ private fun RadioHeader(
                 isConnecting -> "CONNEXION..."
                 else -> "HORS LIGNE"
             },
-            fontSize = 10.sp,
+            fontSize = 12.sp,
             color = Slate500
         )
 
@@ -634,13 +697,13 @@ private fun RadioHeader(
             IconButton(
                 onClick = onReconnect,
                 enabled = !isReconnecting && !isConnecting,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(40.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Refresh,
                     contentDescription = "Reconnexion",
                     tint = if (isReconnecting) Slate600 else Slate500,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
@@ -654,7 +717,8 @@ private fun FrequencyDisplay(
     activeFreq: String,
     standbyFreq: String,
     isLocked: Boolean,
-    onSwapFrequencies: () -> Unit
+    onSwapFrequencies: () -> Unit,
+    onStandbyClick: (() -> Unit)? = null
 ) {
     val freqBg = if (collision) Red500.copy(alpha = 0.08f) else Slate900.copy(alpha = 0.5f)
 
@@ -664,7 +728,7 @@ private fun FrequencyDisplay(
             .padding(horizontal = 16.dp, vertical = 12.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(freqBg)
-            .padding(12.dp),
+            .padding(horizontal = 12.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Active frequency
@@ -674,14 +738,14 @@ private fun FrequencyDisplay(
         ) {
             Text(
                 text = "ACT",
-                fontSize = 9.sp,
+                fontSize = 11.sp,
                 color = Slate500,
                 letterSpacing = 2.sp
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = activeFreq,
-                fontSize = 28.sp,
+                fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
                 letterSpacing = 2.sp,
@@ -693,45 +757,61 @@ private fun FrequencyDisplay(
             )
         }
 
-        // Swap button
+        // Swap button (48dp touch target)
         if (!isLocked) {
             IconButton(
                 onClick = onSwapFrequencies,
                 enabled = radioOn,
                 modifier = Modifier
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
                     .background(Slate700)
             ) {
                 Icon(
                     imageVector = Icons.Default.SwapHoriz,
                     contentDescription = "Swap",
                     tint = if (radioOn) Amber400 else Slate600,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
 
-        // Standby frequency
+        // Standby frequency (tappable to open frequency dialog)
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    if (onStandbyClick != null) {
+                        Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onStandbyClick)
+                    } else Modifier
+                ),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = "STBY",
-                fontSize = 9.sp,
+                fontSize = 11.sp,
                 color = Slate500,
                 letterSpacing = 2.sp
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = standbyFreq,
-                fontSize = 28.sp,
+                fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
                 letterSpacing = 2.sp,
                 color = if (!radioOn) Slate600 else Amber300.copy(alpha = 0.7f)
             )
+            if (onStandbyClick != null) {
+                Text(
+                    text = "Toucher pour changer",
+                    fontSize = 9.sp,
+                    color = Amber400.copy(alpha = 0.4f),
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+            }
         }
     }
 }
@@ -748,16 +828,16 @@ private fun FrequencyDials(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = "REGLAGE STBY",
-            fontSize = 9.sp,
+            fontSize = 11.sp,
             color = Amber400.copy(alpha = 0.6f),
             letterSpacing = 2.sp
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         Row(
             horizontalArrangement = Arrangement.Center,
@@ -773,10 +853,10 @@ private fun FrequencyDials(
 
             Text(
                 text = ".",
-                fontSize = 28.sp,
+                fontSize = 32.sp,
                 fontFamily = FontFamily.Monospace,
                 color = Slate500,
-                modifier = Modifier.padding(horizontal = 4.dp)
+                modifier = Modifier.padding(horizontal = 6.dp)
             )
 
             // kHz selector
@@ -798,45 +878,47 @@ private fun FrequencySelector(
     onChange: (Int) -> Unit
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // Up button
+        // Up button (48dp touch target)
         IconButton(
             onClick = { if (currentIndex > 0) onChange(currentIndex - 1) },
-            modifier = Modifier.size(32.dp)
+            modifier = Modifier.size(48.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.KeyboardArrowUp,
                 contentDescription = "Up",
-                tint = Slate400
+                tint = Slate400,
+                modifier = Modifier.size(32.dp)
             )
         }
 
         // Current value
         Text(
             text = values.getOrElse(currentIndex) { "---" },
-            fontSize = 22.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
             color = Amber300,
             textAlign = TextAlign.Center,
             modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(10.dp))
                 .background(Slate700.copy(alpha = 0.5f))
-                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         )
 
-        // Down button
+        // Down button (48dp touch target)
         IconButton(
             onClick = { if (currentIndex < values.size - 1) onChange(currentIndex + 1) },
-            modifier = Modifier.size(32.dp)
+            modifier = Modifier.size(48.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.KeyboardArrowDown,
                 contentDescription = "Down",
-                tint = Slate400
+                tint = Slate400,
+                modifier = Modifier.size(32.dp)
             )
         }
 
-        Text(text = label, fontSize = 9.sp, color = Slate500)
+        Text(text = label, fontSize = 11.sp, color = Slate500)
     }
 }
 
@@ -856,9 +938,9 @@ private fun PttButton(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .height(56.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .height(80.dp)
+            .clip(RoundedCornerShape(16.dp))
             .background(if (isConnected) pttColor else Slate800)
             .then(
                 if (isConnected) {
@@ -883,13 +965,13 @@ private fun PttButton(
                 imageVector = if (isTransmitting) Icons.Default.Mic else Icons.Default.MicOff,
                 contentDescription = null,
                 tint = if (isTransmitting) Color.White else Slate400,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(28.dp)
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = if (isTransmitting) "TX — Transmission" else "PTT — Appuyer pour parler",
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
                 color = if (isTransmitting) Color.White else Slate300
             )
         }
@@ -927,7 +1009,7 @@ private fun ParticipantsList(participants: List<LiveKitManager.ParticipantInfo>)
         if (participants.isEmpty()) {
             Text(
                 text = "Aucun utilisateur",
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 color = Slate600,
                 fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
             )
@@ -936,21 +1018,21 @@ private fun ParticipantsList(participants: List<LiveKitManager.ParticipantInfo>)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(RoundedCornerShape(6.dp))
                         .background(if (p.isSpeaking) Emerald500.copy(alpha = 0.1f) else Color.Transparent)
-                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(6.dp)
+                            .size(8.dp)
                             .clip(CircleShape)
                             .background(if (p.isSpeaking) Emerald400 else Slate600)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = p.name,
-                        fontSize = 11.sp,
+                        fontSize = 13.sp,
                         fontFamily = FontFamily.Monospace,
                         color = if (p.isSpeaking) Emerald300 else Slate400
                     )
@@ -960,11 +1042,168 @@ private fun ParticipantsList(participants: List<LiveKitManager.ParticipantInfo>)
                             imageVector = Icons.Default.Mic,
                             contentDescription = null,
                             tint = Emerald400,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
             }
         }
     }
+}
+
+/* ══════════════════════════════════════════════════
+   Frequency Change Dialog
+   ══════════════════════════════════════════════════ */
+
+@Composable
+private fun FrequencyChangeDialog(
+    mhzRange: List<Int>,
+    currentMhzIndex: Int,
+    currentDecIndex: Int,
+    stbyDecimals: List<String>,
+    onConfirm: (mhzIndex: Int, decIndex: Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedMhzIndex by remember { mutableIntStateOf(currentMhzIndex) }
+    var selectedDecIndex by remember { mutableIntStateOf(currentDecIndex) }
+
+    // Recompute decimals when MHz changes
+    val selectedMhz = mhzRange.getOrElse(selectedMhzIndex) { 118 }
+    val decimals = remember(selectedMhz) { VhfFrequencies.getDecimalsForMhz(selectedMhz) }
+    val safeDecIndex = selectedDecIndex.coerceAtMost(decimals.size - 1)
+    val previewFreq = VhfFrequencies.format(selectedMhz, decimals.getOrElse(safeDecIndex) { "000" })
+
+    val mhzListState = rememberLazyListState(initialFirstVisibleItemIndex = (selectedMhzIndex - 2).coerceAtLeast(0))
+    val decListState = rememberLazyListState(initialFirstVisibleItemIndex = (safeDecIndex - 2).coerceAtLeast(0))
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Slate800,
+        titleContentColor = Slate200,
+        title = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Changer la fréquence STBY",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Slate200
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = previewFreq,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    color = Amber300,
+                    letterSpacing = 2.sp
+                )
+            }
+        },
+        text = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // MHz column
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("MHz", fontSize = 11.sp, color = Slate500, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LazyColumn(
+                        state = mhzListState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Slate900.copy(alpha = 0.5f))
+                    ) {
+                        itemsIndexed(mhzRange) { index, mhz ->
+                            val isSelected = index == selectedMhzIndex
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) Emerald600.copy(alpha = 0.3f) else Color.Transparent)
+                                    .clickable {
+                                        selectedMhzIndex = index
+                                        // Reset dec index when MHz changes
+                                        selectedDecIndex = 0
+                                    }
+                                    .padding(vertical = 10.dp, horizontal = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = mhz.toString(),
+                                    fontSize = 18.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = if (isSelected) Emerald300 else Slate400
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Decimals column
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("kHz", fontSize = 11.sp, color = Slate500, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LazyColumn(
+                        state = decListState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Slate900.copy(alpha = 0.5f))
+                    ) {
+                        itemsIndexed(decimals) { index, dec ->
+                            val isSelected = index == safeDecIndex
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) Amber400.copy(alpha = 0.2f) else Color.Transparent)
+                                    .clickable { selectedDecIndex = index }
+                                    .padding(vertical = 10.dp, horizontal = 12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = ".$dec",
+                                    fontSize = 18.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = if (isSelected) Amber300 else Slate400
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(selectedMhzIndex, safeDecIndex) },
+                colors = ButtonDefaults.buttonColors(containerColor = Emerald600),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.height(48.dp)
+            ) {
+                Text("Valider", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.height(48.dp)
+            ) {
+                Text("Annuler", color = Slate400, fontSize = 14.sp)
+            }
+        }
+    )
 }

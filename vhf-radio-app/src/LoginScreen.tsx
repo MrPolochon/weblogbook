@@ -90,9 +90,9 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         }
       }
 
-      // Extract the access token, then sign out locally to not interfere with website session
+      // Keep the session alive so the Supabase client can auto-refresh the token.
+      // The Electron app's session is completely separate from the website (different storage).
       const token = data.session?.access_token || '';
-      await supabase.auth.signOut({ scope: 'local' });
 
       onLogin({
         id: data.user.id,

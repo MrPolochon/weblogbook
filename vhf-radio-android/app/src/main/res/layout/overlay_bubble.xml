@@ -24,10 +24,58 @@
             android:layout_height="wrap_content"
             android:text="118.000"
             android:textColor="#10B981"
-            android:textSize="14sp"
+            android:textSize="16sp"
             android:fontFamily="monospace"
             android:textStyle="bold"
             android:gravity="center" />
+
+        <!-- Frequency +/- buttons row -->
+        <LinearLayout
+            android:id="@+id/freq_controls"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="4dp">
+
+            <TextView
+                android:id="@+id/btn_freq_down"
+                android:layout_width="40dp"
+                android:layout_height="36dp"
+                android:text="−"
+                android:textColor="#FBBF24"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:background="@drawable/bg_freq_button"
+                android:clickable="true"
+                android:focusable="true" />
+
+            <TextView
+                android:id="@+id/tv_freq_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="kHz"
+                android:textColor="#6B7280"
+                android:textSize="9sp"
+                android:gravity="center"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp" />
+
+            <TextView
+                android:id="@+id/btn_freq_up"
+                android:layout_width="40dp"
+                android:layout_height="36dp"
+                android:text="+"
+                android:textColor="#FBBF24"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:gravity="center"
+                android:background="@drawable/bg_freq_button"
+                android:clickable="true"
+                android:focusable="true" />
+
+        </LinearLayout>
 
         <!-- Status -->
         <TextView
@@ -38,7 +86,7 @@
             android:textColor="#9CA3AF"
             android:textSize="10sp"
             android:gravity="center"
-            android:layout_marginTop="2dp" />
+            android:layout_marginTop="4dp" />
 
         <!-- Big PTT button -->
         <ImageView

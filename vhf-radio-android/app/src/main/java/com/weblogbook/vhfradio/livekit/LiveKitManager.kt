@@ -44,10 +44,15 @@ class LiveKitManager(private val context: Context) {
     private val _currentFrequency = MutableStateFlow("")
     val currentFrequency: StateFlow<String> = _currentFrequency
 
+    /* ── Error state (visible in UI) ── */
+    private val _connectionError = MutableStateFlow<String?>(null)
+    val connectionError: StateFlow<String?> = _connectionError
+
     /* ── Internal ── */
     private var room: Room? = null
     private var scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var collisionJob: Job? = null
+    private var retryJob: Job? = null
     private var collisionAudioTrack: AudioTrack? = null
     private var pttActive = false
 
@@ -76,18 +81,24 @@ class LiveKitManager(private val context: Context) {
         }
 
         disconnect()
+        _connectionError.value = null
+        retryJob?.cancel()
         _connectionState.value = ConnectionStatus.CONNECTING
         _currentFrequency.value = freq
 
         try {
             val roomName = VhfFrequencies.frequencyToRoomName(freq)
 
-            // Fetch LiveKit token from API
+            // Fetch LiveKit token from API (with auto-retry on 401)
             val result = ApiClient.getLiveKitToken(roomName, participantName, accessToken)
             val tokenResponse = result.getOrNull()
                 ?: run {
-                    Log.e(TAG, "Erreur token: ${result.exceptionOrNull()?.message}")
+                    val errMsg = result.exceptionOrNull()?.message ?: "Erreur inconnue"
+                    Log.e(TAG, "Erreur token: $errMsg")
+                    _connectionError.value = errMsg
                     _connectionState.value = ConnectionStatus.ERROR
+                    // Auto-retry after 5 seconds
+                    scheduleRetry(freq, participantName, accessToken, 5000)
                     return
                 }
 
@@ -95,17 +106,18 @@ class LiveKitManager(private val context: Context) {
             val url = tokenResponse.url
             if (token.isNullOrEmpty() || url.isNullOrEmpty()) {
                 Log.e(TAG, "Token ou URL vide")
+                _connectionError.value = "Réponse serveur invalide"
                 _connectionState.value = ConnectionStatus.ERROR
+                scheduleRetry(freq, participantName, accessToken, 5000)
                 return
             }
 
             // Create and connect room
             val newRoom = LiveKit.create(context)
 
-            // Collect events in background
+            // Collect events in background via the EventListenable.events SharedFlow
             scope.launch {
-                @Suppress("UNCHECKED_CAST")
-                (newRoom.events as Flow<RoomEvent>).collect { event ->
+                newRoom.events.events.collect { event ->
                     handleRoomEvent(event, newRoom)
                 }
             }
@@ -119,6 +131,7 @@ class LiveKitManager(private val context: Context) {
 
             room = newRoom
             _connectionState.value = ConnectionStatus.CONNECTED
+            _connectionError.value = null
             updateParticipants(newRoom)
             startCollisionDetection()
 
@@ -126,11 +139,24 @@ class LiveKitManager(private val context: Context) {
 
         } catch (e: Exception) {
             Log.e(TAG, "Erreur de connexion: ${e.message}", e)
+            _connectionError.value = e.message ?: "Erreur de connexion LiveKit"
             _connectionState.value = ConnectionStatus.ERROR
+            scheduleRetry(freq, participantName, accessToken, 5000)
+        }
+    }
+
+    private fun scheduleRetry(freq: String, participantName: String, accessToken: String, delayMs: Long) {
+        retryJob?.cancel()
+        retryJob = scope.launch {
+            delay(delayMs)
+            Log.i(TAG, "Auto-retry connexion à $freq...")
+            connectToFrequency(freq, participantName, accessToken)
         }
     }
 
     fun disconnect() {
+        retryJob?.cancel()
+        retryJob = null
         stopCollisionDetection()
         stopCollisionSound()
 
@@ -147,6 +173,7 @@ class LiveKitManager(private val context: Context) {
         _isTransmitting.value = false
         _participants.value = emptyList()
         _collision.value = false
+        _connectionError.value = null
         pttActive = false
     }
 

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { LogOut, Settings, Radio, Plane, Flame } from 'lucide-react';
 import VhfRadio from './components/VhfRadio';
 import { API_BASE_URL } from './lib/config';
+import { supabase } from './lib/supabase';
 
 interface UserProfile {
   id: string;
@@ -44,8 +45,15 @@ export default function RadioScreen({ profile, initialMode, accessToken, onLogou
         // Pilot mode: no locked frequency, no session needed
       } else {
         try {
+          // Get fresh token from session (auto-refreshed by Supabase SDK)
+          let freshToken = accessToken;
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.access_token) freshToken = session.access_token;
+          } catch { /* fallback to original token */ }
+
           const res = await fetch(`${API_BASE_URL}/api/atc/my-session?mode=${mode}`, {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
+            headers: { 'Authorization': `Bearer ${freshToken}` },
           });
           if (res.ok) {
             const data = await res.json();

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Radio, Mic, MicOff, Volume2, Settings2, Users, AlertTriangle, Power, ArrowLeftRight, RefreshCw } from 'lucide-react';
+import { Radio, Mic, MicOff, Volume2, Settings2, Users, AlertTriangle, Power, ArrowLeftRight, RefreshCw, AlertCircle } from 'lucide-react';
 import VhfDial from './VhfDial';
 import {
   ALL_VHF_DECIMALS,
@@ -11,6 +11,7 @@ import {
   isValidVhfFrequency,
 } from '../lib/vhf-frequencies';
 import { API_BASE_URL } from '../lib/config';
+import { supabase } from '../lib/supabase';
 
 import {
   Room,
@@ -134,6 +135,11 @@ export default function VhfRadio({
   /* ── Reconnexion ── */
   const [isReconnecting, setIsReconnecting] = useState(false);
 
+  /* ── Erreur connexion ── */
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const radioOnRef = useRef(false);
+
   /* ══════════════════════════════════════════════════
      PTT (must be declared before useEffects that reference them)
      ══════════════════════════════════════════════════ */
@@ -229,50 +235,96 @@ export default function VhfRadio({
     setCollision(false);
   }, []);
 
+  /** Get a fresh Supabase access token (auto-refreshed by the SDK) */
+  const getFreshToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) return session.access_token;
+      // Try explicit refresh
+      const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+      return refreshed?.access_token || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  /** Fetch a LiveKit token from the API, with retry on 401 */
+  const fetchLiveKitToken = useCallback(async (freq: string): Promise<{ token: string; url: string } | null> => {
+    const roomName = frequencyToRoomName(freq);
+    const body = JSON.stringify({ roomName, participantName: participantName || 'Inconnu' });
+
+    // First attempt with a fresh token
+    let freshToken = await getFreshToken();
+    if (!freshToken) freshToken = accessToken;
+
+    if (!freshToken) {
+      setConnectionError('Aucun token d\'authentification — reconnecte-toi');
+      return null;
+    }
+
+    const doFetch = async (token: string) => {
+      return fetch(`${API_BASE_URL}/api/livekit/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body,
+      });
+    };
+
+    let res = await doFetch(freshToken);
+
+    // If 401, try refreshing the session and retry once
+    if (res.status === 401) {
+      console.warn('[VHF] Token expired, refreshing session...');
+      const { data: { session: newSession } } = await supabase.auth.refreshSession();
+      if (newSession?.access_token) {
+        res = await doFetch(newSession.access_token);
+      }
+    }
+
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      let errMsg = `Erreur ${res.status}`;
+      try { const j = JSON.parse(errBody); errMsg = j.error || j.details || errMsg; } catch { /* */ }
+      console.error('[VHF] Token fetch failed:', res.status, errBody);
+      setConnectionError(errMsg);
+      return null;
+    }
+
+    const data = await res.json();
+    if (!data.token || !data.url) {
+      setConnectionError('Réponse serveur invalide (token/url manquant)');
+      return null;
+    }
+
+    return { token: data.token, url: data.url };
+  }, [accessToken, participantName, getFreshToken]);
+
   const connectToFrequency = useCallback(
     async (freq: string) => {
       if (!isValidVhfFrequency(freq)) return;
       cleanupRoom();
+      setConnectionError(null);
+      if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+
       try {
         setConnectionState('connecting');
 
-        if (!accessToken) {
-          console.error('[VHF] No access token');
+        const result = await fetchLiveKitToken(freq);
+        if (!result) {
           setConnectionState('error');
+          // Auto-retry after 5 seconds
+          retryTimerRef.current = setTimeout(() => {
+            if (radioOnRef.current) {
+              console.log('[VHF] Auto-retry connexion...');
+              prevActiveFreqRef.current = '';
+              connectToFrequency(freq);
+            }
+          }, 5000);
           return;
         }
 
-        console.log('[VHF] Fetching token from:', `${API_BASE_URL}/api/livekit/token`);
-        console.log('[VHF] Token length:', accessToken?.length, 'Room:', frequencyToRoomName(freq));
-
-        const res = await fetch(`${API_BASE_URL}/api/livekit/token`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            roomName: frequencyToRoomName(freq),
-            participantName: participantName || 'Inconnu',
-          }),
-        });
-
-        if (!res.ok) {
-          const errBody = await res.text().catch(() => '');
-          console.error('[VHF] Token fetch failed:', res.status, res.statusText, errBody);
-          setConnectionState('error');
-          return;
-        }
-
-        const data = await res.json();
-        const { token, url } = data;
-        console.log('[VHF] Got token:', !!token, 'URL:', url?.substring(0, 30));
-
-        if (!token || !url) {
-          console.error('[VHF] Missing token or url in response:', data);
-          setConnectionState('error');
-          return;
-        }
+        const { token, url } = result;
+        setConnectionError(null);
 
         const room = new Room({
           adaptiveStream: true,
@@ -287,6 +339,16 @@ export default function VhfRadio({
 
         room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
           setConnectionState(state);
+          if (state === 'disconnected') {
+            // Auto-retry on unexpected disconnect
+            retryTimerRef.current = setTimeout(() => {
+              if (radioOnRef.current) {
+                console.log('[VHF] Reconnexion après déconnexion...');
+                prevActiveFreqRef.current = '';
+                connectToFrequency(freq);
+              }
+            }, 3000);
+          }
         });
         room.on(RoomEvent.TrackSubscribed, (track) => {
           if (track.kind !== Track.Kind.Audio) return;
@@ -314,13 +376,22 @@ export default function VhfRadio({
         if (micPub) await micPub.mute();
 
         roomRef.current = room;
+        setConnectionError(null);
         updateParticipants(room);
       } catch (err) {
         console.error('[VHF] Connection error:', err);
+        setConnectionError(err instanceof Error ? err.message : 'Erreur de connexion LiveKit');
         setConnectionState('error');
+        // Auto-retry after 5 seconds
+        retryTimerRef.current = setTimeout(() => {
+          if (radioOnRef.current) {
+            prevActiveFreqRef.current = '';
+            connectToFrequency(freq);
+          }
+        }, 5000);
       }
     },
-    [cleanupRoom, participantName, selectedInput, selectedOutput, accessToken]
+    [cleanupRoom, selectedInput, selectedOutput, fetchLiveKitToken]
   );
 
   function updateParticipants(room: Room) {
@@ -330,6 +401,9 @@ export default function VhfRadio({
     });
     setParticipants(list);
   }
+
+  /* Keep ref in sync */
+  useEffect(() => { radioOnRef.current = radioOn; }, [radioOn]);
 
   /* Connect / disconnect when radio ON/OFF or active freq changes */
   const prevActiveFreqRef = useRef('');
@@ -353,7 +427,10 @@ export default function VhfRadio({
   }, [isLocked, lockedFrequency]);
 
   useEffect(() => {
-    return () => { cleanupRoom(); };
+    return () => {
+      cleanupRoom();
+      if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+    };
   }, []);
 
   /* ── Keyboard PTT ── */
@@ -568,6 +645,17 @@ export default function VhfRadio({
             <div className="flex items-center justify-center gap-1 mt-1.5">
               <AlertTriangle className="h-3 w-3 text-red-400" />
               <span className="text-[10px] text-red-400 font-semibold uppercase">Double transmission</span>
+            </div>
+          )}
+
+          {/* Connection error banner */}
+          {connectionError && connectionState !== 'connected' && (
+            <div className="flex items-start gap-2 mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+              <AlertCircle className="h-3.5 w-3.5 text-red-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-red-300 break-words">{connectionError}</p>
+                <p className="text-[9px] text-red-400/50 mt-0.5">Reconnexion auto dans 5s...</p>
+              </div>
             </div>
           )}
         </div>

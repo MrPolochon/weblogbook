@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus, Store, MapPin, AlertTriangle } from 'lucide-react';
+import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap } from 'lucide-react';
 
 const links = [
   { href: '/admin/plans-vol', label: 'Plans de vol non clôturés', icon: AlertTriangle },
@@ -16,6 +16,7 @@ const links = [
   { href: '/admin/felitz-bank', label: 'Felitz Bank Admin', icon: Landmark },
   { href: '/admin/documents', label: 'Documents', icon: FileText },
   { href: '/admin/licences', label: 'Licences et qualifications', icon: Award },
+  { href: '/admin/aeroschool', label: 'AeroSchool — Questionnaires', icon: GraduationCap },
 ];
 
 export default function AdminPage() {

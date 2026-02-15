@@ -62,6 +62,9 @@ class VhfOverlayService : Service() {
     private var tvStatus: TextView? = null
     private var btnPtt: ImageView? = null
     private var btnMinimize: TextView? = null
+    private var btnFreqUp: TextView? = null
+    private var btnFreqDown: TextView? = null
+    private var freqControls: LinearLayout? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -308,6 +311,12 @@ class VhfOverlayService : Service() {
             tvStatus = view.findViewById(R.id.tv_status)
             btnPtt = view.findViewById(R.id.btn_ptt)
             btnMinimize = view.findViewById(R.id.btn_minimize)
+            btnFreqUp = view.findViewById(R.id.btn_freq_up)
+            btnFreqDown = view.findViewById(R.id.btn_freq_down)
+            freqControls = view.findViewById(R.id.freq_controls)
+
+            // Show/hide frequency controls based on mode
+            freqControls?.visibility = if (sharedIsLocked) View.GONE else View.VISIBLE
 
             // PTT touch handler (hold-to-talk)
             btnPtt?.setOnTouchListener { _, event ->
@@ -321,6 +330,24 @@ class VhfOverlayService : Service() {
                         true
                     }
                     else -> false
+                }
+            }
+
+            // Frequency +/- buttons
+            btnFreqUp?.setOnClickListener {
+                if (!sharedIsLocked) {
+                    val decs = VhfFrequencies.getDecimalsForMhz(sharedStbyMhz)
+                    val newIdx = (sharedStbyDecIndex + 1).coerceAtMost(decs.size - 1)
+                    sharedStbyDecIndex = newIdx
+                    sharedOnStbyDecChange?.invoke(newIdx)
+                }
+            }
+
+            btnFreqDown?.setOnClickListener {
+                if (!sharedIsLocked) {
+                    val newIdx = (sharedStbyDecIndex - 1).coerceAtLeast(0)
+                    sharedStbyDecIndex = newIdx
+                    sharedOnStbyDecChange?.invoke(newIdx)
                 }
             }
 

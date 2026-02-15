@@ -6,8 +6,10 @@ export async function middleware(request: NextRequest) {
   const isSetup = pathname === '/setup';
   const isLogin = pathname === '/login';
   const isDownload = pathname === '/download';
+  const isAeroSchool = pathname.startsWith('/aeroschool');
   const isAuthCallback = pathname.startsWith('/auth/');
   const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin';
+  const isApiAeroSchoolPublic = pathname.startsWith('/api/aeroschool/') && request.method !== 'PUT' && request.method !== 'DELETE';
 
   // CORS preflight : laisser passer sans vérification (requis pour l'app Electron/Android VHF)
   if (request.method === 'OPTIONS') {
@@ -21,7 +23,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Routes publiques : aucune requête Supabase, réponse immédiate
-  if (isAuthCallback || isApiPublic || isSetup || isLogin || isDownload) {
+  if (isAuthCallback || isApiPublic || isApiAeroSchoolPublic || isSetup || isLogin || isDownload || isAeroSchool) {
     return NextResponse.next({ request });
   }
 

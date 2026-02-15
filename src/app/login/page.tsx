@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield, Flame, Download } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap } from 'lucide-react';
 
 // Composant pour les nuages animés
 function AnimatedClouds() {
@@ -327,8 +327,15 @@ export default function LoginPage() {
           Premier accès ? <a href="/setup" className="text-sky-400 hover:text-sky-300 font-medium transition-colors">Créer le premier admin</a>
         </p>
 
-        {/* Lien téléchargement app */}
-        <div className="mt-6 text-center animate-init animate-slide-up delay-800">
+        {/* Boutons secondaires */}
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 animate-init animate-slide-up delay-800">
+          <a
+            href="/aeroschool"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:text-amber-200 hover:bg-amber-500/20 hover:border-amber-500/50 transition-all backdrop-blur-sm group cursor-pointer"
+          >
+            <GraduationCap className="h-5 w-5 text-amber-400 group-hover:scale-110 transition-transform" />
+            <span className="font-semibold">AeroSchool</span>
+          </a>
           <a
             href="/download"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50 text-slate-300 hover:text-white hover:bg-slate-700/60 transition-all backdrop-blur-sm group cursor-pointer"

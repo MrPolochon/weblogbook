@@ -22,13 +22,16 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
 
     if (authHeader?.startsWith('Bearer ')) {
-      // Electron app — authenticate via access token
+      // External app (Electron/Android) — authenticate via access token
       const accessToken = authHeader.substring(7);
       const supabaseAdmin = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       );
-      const { data: { user: tokenUser } } = await supabaseAdmin.auth.getUser(accessToken);
+      const { data: { user: tokenUser }, error: tokenError } = await supabaseAdmin.auth.getUser(accessToken);
+      if (tokenError) {
+        console.error('[LiveKit Token] Bearer auth failed:', tokenError.message, '- Token length:', accessToken.length);
+      }
       user = tokenUser;
     } else {
       // Web — authenticate via cookies

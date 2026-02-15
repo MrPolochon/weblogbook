@@ -307,8 +307,8 @@ fun LoginScreen(
                                 }
                             }
 
-                            // Sign out locally to not interfere with website session
-                            ApiClient.signOutLocal(token)
+                            // Store tokens for auto-refresh (don't sign out — separate session from website)
+                            ApiClient.setTokens(token, authResponse.refreshToken)
 
                             // Callback
                             onLogin(
