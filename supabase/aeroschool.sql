@@ -125,6 +125,126 @@ VALUES (
           "is_graded": false,
           "points": 0,
           "correct_answers": []
+        },
+        {
+          "id": "q-pseudo-roblox",
+          "type": "short_text",
+          "title": "Quel est ton pseudo Roblox ?",
+          "description": "",
+          "required": true,
+          "options": [],
+          "is_graded": false,
+          "points": 0,
+          "correct_answers": []
+        }
+      ]
+    },
+    {
+      "id": "sec-serment",
+      "title": "Serment",
+      "description": "",
+      "questions": [
+        {
+          "id": "q-serment",
+          "type": "paragraph",
+          "title": "Je jure sur l''honneur, la validité de mes réponses.",
+          "description": "Main levé, récitant cette phrase à haute voix.",
+          "required": true,
+          "options": [],
+          "is_graded": false,
+          "points": 0,
+          "correct_answers": []
+        }
+      ]
+    },
+    {
+      "id": "sec-connaissances",
+      "title": "Connaissances aéronautiques",
+      "description": "Questions sur tes connaissances en aviation.",
+      "questions": [
+        {
+          "id": "q-clearance",
+          "type": "paragraph",
+          "title": "Qu''est-ce que c''est qu''une clearance ?",
+          "description": "",
+          "required": true,
+          "options": [],
+          "is_graded": false,
+          "points": 0,
+          "correct_answers": []
+        },
+        {
+          "id": "q-repoussage",
+          "type": "paragraph",
+          "title": "Qu''est-ce qu''un repoussage ?",
+          "description": "",
+          "required": true,
+          "options": [],
+          "is_graded": false,
+          "points": 0,
+          "correct_answers": []
+        },
+        {
+          "id": "q-roulage",
+          "type": "paragraph",
+          "title": "Qu''est-ce qu''un roulage ?",
+          "description": "",
+          "required": true,
+          "options": [],
+          "is_graded": false,
+          "points": 0,
+          "correct_answers": []
+        },
+        {
+          "id": "q-point-attente",
+          "type": "paragraph",
+          "title": "Qu''est-ce qu''un point d''attente ?",
+          "description": "",
+          "required": true,
+          "options": [],
+          "is_graded": false,
+          "points": 0,
+          "correct_answers": []
+        },
+        {
+          "id": "q-rp-hrp",
+          "type": "paragraph",
+          "title": "Qu''est-ce que le RP & le HRP ?",
+          "description": "",
+          "required": true,
+          "options": [],
+          "is_graded": false,
+          "points": 0,
+          "correct_answers": []
+        }
+      ]
+    },
+    {
+      "id": "sec-motivation",
+      "title": "Motivation",
+      "description": "",
+      "questions": [
+        {
+          "id": "q-pourquoi-serveur",
+          "type": "paragraph",
+          "title": "Pourquoi venir sur notre serveur ?",
+          "description": "",
+          "required": true,
+          "options": [],
+          "is_graded": false,
+          "points": 0,
+          "correct_answers": []
+        },
+        {
+          "id": "q-compagnie",
+          "type": "short_text",
+          "title": "Quelle compagnie veux-tu rejoindre ?",
+          "description": "",
+          "required": false,
+          "options": [],
+          "is_graded": false,
+          "points": 0,
+          "correct_answers": []
         }
       ]
     }
