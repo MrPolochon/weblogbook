@@ -47,7 +47,7 @@ export async function PATCH(
 
     const admin = createAdminClient();
     const { data: plan } = await admin.from('plans_vol')
-      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, compagnie_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd')
+      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, compagnie_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, created_by_atc')
       .eq('id', id)
       .single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
@@ -476,18 +476,25 @@ export async function PATCH(
     }
 
     if (action === 'annuler') {
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
       const isAdmin = profile?.role === 'admin';
+      const isManualStrip = Boolean(plan.created_by_atc) && !plan.pilote_id;
+      const isHolder = plan.current_holder_user_id === user.id;
       
-      // Les admins peuvent annuler n'importe quel plan non accepté
-      // Les pilotes ne peuvent annuler que leurs propres plans
+      // Strips manuels : le détenteur ATC ou un admin peut annuler
+      // Plans normaux : le pilote propriétaire ou un admin
       if (!isAdmin) {
-        if (profile?.role === 'atc') return NextResponse.json({ error: 'Annulation reservee au pilote ou admin.' }, { status: 403 });
-        if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
+        if (isManualStrip) {
+          if (!isHolder) return NextResponse.json({ error: 'Seul le détenteur du strip peut l\'annuler.' }, { status: 403 });
+        } else {
+          if (profile?.role === 'atc') return NextResponse.json({ error: 'Annulation reservee au pilote ou admin.' }, { status: 403 });
+          if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
+        }
       }
       
       if (plan.statut === 'cloture') return NextResponse.json({ error: 'Ce plan est deja cloture.' }, { status: 400 });
-      if (['accepte', 'en_cours', 'en_attente_cloture'].includes(plan.statut) || plan.accepted_at) {
+      // Les strips manuels peuvent toujours être annulés (ils naissent "accepte")
+      if (!isManualStrip && (['accepte', 'en_cours', 'en_attente_cloture'].includes(plan.statut) || plan.accepted_at)) {
         return NextResponse.json({ error: 'Impossible d\'annuler un plan deja accepte par l\'ATC.' }, { status: 400 });
       }
 
