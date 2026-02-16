@@ -26,13 +26,16 @@ type PickActions = {
   cancelPick: () => void;
   dropInto: (targetId: string | null) => void;
   justPickedRef: React.MutableRefObject<boolean>;
+  justDroppedRef: React.MutableRefObject<boolean>;
 };
 const dummyRef = { current: false };
+const dummyRef2 = { current: false };
 const PickCtx = createContext<PickState & PickActions>({
   pickedId: null, pickedName: '', cursorPos: { x: 0, y: 0 },
   holdingId: null, holdProgress: 0,
   startHold: () => {}, cancelHold: () => {}, cancelPick: () => {}, dropInto: () => {},
   justPickedRef: dummyRef,
+  justDroppedRef: dummyRef2,
 });
 
 const HOLD_DURATION = 600; // ms to fill the bar
@@ -122,6 +125,7 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
   const holdStartRef = useRef<number>(0);
   const animFrameRef = useRef<number | null>(null);
   const justPickedRef = useRef(false);
+  const justDroppedRef = useRef(false);
 
   // Track cursor when picking
   useEffect(() => {
@@ -200,6 +204,8 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
 
     const movingId = pickedId;
     cancelPick();
+    justDroppedRef.current = true;
+    setTimeout(() => { justDroppedRef.current = false; }, 300);
 
     try {
       const res = await fetch(`/api/documents/sections/${movingId}`, {
@@ -217,8 +223,17 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
     }
   }
 
-  // Click outside folders = drop to root or cancel
+  // mouseUp outside folders = drop to root (drag scenario)
+  function handleBackgroundMouseUp() {
+    if (justPickedRef.current) return;
+    if (pickedId) {
+      dropInto(null);
+    }
+  }
+
+  // Click outside folders = drop to root (click scenario)
   function handleBackgroundClick() {
+    if (justDroppedRef.current) return;
     if (pickedId) {
       dropInto(null);
     }
@@ -245,8 +260,8 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
   const totalFiles = sections.reduce((sum, s) => sum + (s.document_files?.length || 0), 0);
 
   return (
-    <PickCtx.Provider value={{ pickedId, pickedName, cursorPos, holdingId, holdProgress, startHold, cancelHold, cancelPick, dropInto, justPickedRef }}>
-      <div className="space-y-6" onClick={handleBackgroundClick}>
+    <PickCtx.Provider value={{ pickedId, pickedName, cursorPos, holdingId, holdProgress, startHold, cancelHold, cancelPick, dropInto, justPickedRef, justDroppedRef }}>
+      <div className="space-y-6" onClick={handleBackgroundClick} onMouseUp={handleBackgroundMouseUp}>
         {/* Stats */}
         <div className="flex items-center gap-6 text-sm text-slate-400" onClick={(e) => e.stopPropagation()}>
           <span className="flex items-center gap-1.5"><FolderOpen className="h-4 w-4 text-sky-400" /> {sections.length} dossier(s)</span>
@@ -258,7 +273,7 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
           <div className="flex items-center gap-3 px-4 py-3 bg-sky-600 text-white rounded-lg shadow-lg animate-in" onClick={(e) => e.stopPropagation()}>
             <Move className="h-5 w-5 shrink-0" />
             <span className="text-sm font-medium">
-              Dossier <strong className="font-bold">{pickedName}</strong> sélectionné — cliquez sur un dossier pour l&apos;y déplacer, ou cliquez ailleurs pour le mettre à la racine. Clic droit / Échap pour annuler.
+              Dossier <strong className="font-bold">{pickedName}</strong> sélectionné — glissez ou cliquez sur un dossier pour l&apos;y déplacer, relâchez ailleurs pour la racine. Clic droit / Échap pour annuler.
             </span>
             <button type="button" onClick={cancelPick} className="ml-auto p-1.5 hover:bg-white/20 rounded"><X className="h-4 w-4" /></button>
           </div>
@@ -429,6 +444,7 @@ function FolderNode({ node, depth }: { node: TreeNode; depth: number }) {
   function handleFolderClick(e: React.MouseEvent) {
     e.stopPropagation();
     if (pick.justPickedRef.current) return;
+    if (pick.justDroppedRef.current) return;
     if (pick.pickedId) {
       pick.dropInto(node.id);
       return;
@@ -443,10 +459,18 @@ function FolderNode({ node, depth }: { node: TreeNode; depth: number }) {
     pick.startHold(node.id);
   }
 
-  function handleMouseUp() {
-    if (pick.justPickedRef.current) return;
+  function handleMouseUp(e: React.MouseEvent) {
+    e.stopPropagation();
+    // Still holding (bar not full) → cancel hold
     if (pick.holdingId === node.id) {
       pick.cancelHold();
+      return;
+    }
+    // Just finished picking THIS folder → ignore release on source
+    if (pick.justPickedRef.current && pick.pickedId === node.id) return;
+    // A folder is picked and we release on a DIFFERENT folder → drop
+    if (pick.pickedId && pick.pickedId !== node.id) {
+      pick.dropInto(node.id);
     }
   }
 
