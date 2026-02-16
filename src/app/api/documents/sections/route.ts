@@ -10,13 +10,19 @@ export async function POST(request: Request) {
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { nom } = body;
+    const { nom, parent_id } = body;
     if (!nom || typeof nom !== 'string' || !nom.trim()) return NextResponse.json({ error: 'Nom requis' }, { status: 400 });
 
-    const { data: sections } = await supabase.from('document_sections').select('ordre').order('ordre', { ascending: false }).limit(1);
+    const query = supabase.from('document_sections').select('ordre').order('ordre', { ascending: false }).limit(1);
+    if (parent_id) query.eq('parent_id', parent_id);
+    else query.is('parent_id', null);
+    const { data: sections } = await query;
     const ordre = (sections?.[0]?.ordre ?? 0) + 1;
 
-    const { data, error } = await supabase.from('document_sections').insert({ nom: nom.trim(), ordre }).select('id').single();
+    const insert: Record<string, unknown> = { nom: nom.trim(), ordre };
+    if (parent_id) insert.parent_id = parent_id;
+
+    const { data, error } = await supabase.from('document_sections').insert(insert).select('id').single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true, id: data.id });
   } catch (e) {

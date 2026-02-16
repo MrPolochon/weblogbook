@@ -8,7 +8,7 @@ export default async function AdminDocumentsPage() {
   const { data: sections } = await supabase
     .from('document_sections')
     .select(`
-      id, nom, ordre,
+      id, nom, ordre, parent_id,
       document_files(id, nom_original, taille_bytes, created_at)
     `)
     .order('ordre');
@@ -19,11 +19,13 @@ export default async function AdminDocumentsPage() {
         <Link href="/admin" className="text-slate-400 hover:text-slate-200">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="text-2xl font-semibold text-slate-100">Documents</h1>
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-100">Documents</h1>
+          <p className="text-slate-400 text-sm mt-1">
+            Créez des dossiers et sous-dossiers, ajoutez des fichiers. Les pilotes peuvent les consulter et télécharger.
+          </p>
+        </div>
       </div>
-      <p className="text-slate-400 text-sm">
-        Créez des sections, ajoutez des fichiers. Les pilotes peuvent les consulter et les télécharger.
-      </p>
       <DocumentSections sections={sections || []} />
     </div>
   );

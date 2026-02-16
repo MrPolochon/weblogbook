@@ -49,7 +49,15 @@ ALTER TABLE public.plans_vol
 CREATE INDEX IF NOT EXISTS idx_plans_vol_strip_zone ON public.plans_vol (strip_zone, strip_order);
 
 -- ============================================================
--- 4. Vérification: cette requête doit retourner 12 colonnes strip
+-- 4. DOCUMENTS - Dossiers imbriqués (parent_id pour arborescence)
+-- ============================================================
+ALTER TABLE public.document_sections
+  ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES public.document_sections(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_document_sections_parent ON public.document_sections (parent_id);
+
+-- ============================================================
+-- 5. Vérification: cette requête doit retourner 12 colonnes strip
 -- ============================================================
 SELECT column_name 
 FROM information_schema.columns 
