@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import PlansNonClotures from './PlansNonClotures';
+import PlansHistorique from './PlansHistorique';
+import AdminPlansVolTabs from './AdminPlansVolTabs';
 
 export default async function AdminPlansVolPage() {
   const supabase = await createClient();
@@ -29,6 +31,24 @@ export default async function AdminPlansVolPage() {
     .or('created_by_atc.is.null,created_by_atc.eq.false')
     .order('created_at', { ascending: true });
 
+  // Plans clôturés avec historique des ATC
+  const { data: plansClotures } = await admin.from('plans_vol')
+    .select(`
+      id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut,
+      created_at, accepted_at, cloture_at, demande_cloture_at,
+      vol_commercial, vol_ferry, automonitoring, created_by_atc,
+      compagnie_id,
+      pilote:profiles!plans_vol_pilote_id_fkey(identifiant),
+      compagnie:compagnies(nom),
+      atc_plans_controles(user_id, aeroport, position, created_at, profile:profiles(identifiant))
+    `)
+    .in('statut', ['cloture', 'annule'])
+    .order('cloture_at', { ascending: false, nullsFirst: false })
+    .limit(500);
+
+  const openPlans = (plans || []) as any;
+  const closedPlans = (plansClotures || []) as any;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -36,14 +56,19 @@ export default async function AdminPlansVolPage() {
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-2xl font-semibold text-slate-100">Plans de vol non clôturés</h1>
+          <h1 className="text-2xl font-semibold text-slate-100">Plans de vol</h1>
           <p className="text-sm text-slate-400 mt-1">
-            {plans?.length || 0} plan(s) ouvert(s) — Clôture forcée = amende de 50 000 F$
+            {openPlans.length} plan(s) ouvert(s) • {closedPlans.length} dans l&apos;historique
           </p>
         </div>
       </div>
 
-      <PlansNonClotures plans={(plans || []) as any} />
+      <AdminPlansVolTabs
+        openCount={openPlans.length}
+        closedCount={closedPlans.length}
+        childrenOpen={<PlansNonClotures plans={openPlans} />}
+        childrenHistory={<PlansHistorique plans={closedPlans} />}
+      />
     </div>
   );
 }
