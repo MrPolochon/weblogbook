@@ -12,7 +12,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { nom, ordre } = body;
+    const { nom, ordre, parent_id, move } = body;
+
+    // Déplacement de dossier (changer parent_id)
+    if (move === true) {
+      const newParent = parent_id === null || parent_id === undefined ? null : String(parent_id);
+      // Empêcher de déplacer un dossier dans lui-même
+      if (newParent === id) return NextResponse.json({ error: 'Impossible de déplacer un dossier dans lui-même.' }, { status: 400 });
+      const { error: moveErr } = await supabase.from('document_sections').update({ parent_id: newParent }).eq('id', id);
+      if (moveErr) return NextResponse.json({ error: moveErr.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
     if (!nom || typeof nom !== 'string' || !nom.trim()) return NextResponse.json({ error: 'Nom requis' }, { status: 400 });
 
     const update: Record<string, unknown> = { nom: nom.trim() };
