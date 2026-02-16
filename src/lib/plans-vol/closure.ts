@@ -427,8 +427,8 @@ export async function envoyerChequesVol(
         compte_id: compteCompagnie.id,
         type: 'debit',
         montant: taxesTotales,
-        description: `Taxes aéroportuaires (ponctualité 0) - Vol ${numeroVol}`,
-        reference: `TAX-${plan.id.slice(0, 8)}`
+        libelle: `Taxes aéroportuaires (ponctualité 0) - Vol ${numeroVol}`,
+        reference_id: null,
       });
 
       if (compagnie.pdg_id) {
@@ -500,8 +500,6 @@ export async function envoyerChequesVol(
         type: 'debit',
         montant: remboursementPret,
         libelle: libelleRemboursement,
-        description: libelleRemboursement,
-        reference: `LOAN-PAY-${pretActif.id.slice(0, 8)}`,
       });
     }
   }

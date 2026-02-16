@@ -125,7 +125,6 @@ export async function POST(request: Request) {
         type: 'debit',
         montant: coutBase,
         libelle: `Vol ferry ${ad} → ${aa}`,
-        description: `Vol ferry ${ad} → ${aa}`,
       });
 
       // Transaction pour les taxes
@@ -135,7 +134,6 @@ export async function POST(request: Request) {
           type: 'debit',
           montant: taxesFerry,
           libelle: `Taxes aéroportuaires ${aa} (vol ferry)`,
-          description: `Taxes aéroportuaires ${aa} (vol ferry)`,
         });
       }
     }

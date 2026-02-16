@@ -119,9 +119,7 @@ export async function PATCH(
       compte_id: compteCompagnie.id,
       type: 'debit',
       montant: montantEffectif,
-      libelle: `Remboursement prêt bancaire`,
-      description: `Remboursement manuel - ${montantEffectif.toLocaleString('fr-FR')} F$`,
-      reference: `LOAN-REPAY-${pret.id.slice(0, 8)}`,
+      libelle: `Remboursement prêt bancaire — ${montantEffectif.toLocaleString('fr-FR')} F$`,
     });
 
     const nouveauReste = pret.montant_total_du - nouveauMontantRembourse;
@@ -316,8 +314,6 @@ export async function POST(
       type: 'credit',
       montant: optionPret.montant,
       libelle: libellePret,
-      description: libellePret,
-      reference: `LOAN-${nouveauPret.id.slice(0, 8)}`,
     });
 
     const interets = montantTotalDu - optionPret.montant;

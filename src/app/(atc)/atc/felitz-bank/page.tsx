@@ -27,7 +27,7 @@ export default async function FelitzBankAtcPage() {
   let transactionsPerso: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
   if (comptePerso) {
     const { data } = await admin.from('felitz_transactions')
-      .select('id, type, montant, libelle, description, created_at')
+      .select('*')
       .eq('compte_id', comptePerso.id)
       .order('created_at', { ascending: false })
       .limit(20);

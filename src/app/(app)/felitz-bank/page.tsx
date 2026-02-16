@@ -43,23 +43,24 @@ export default async function FelitzBankPage() {
   if (comptesEntreprise.length > 0) {
     const compteIds = comptesEntreprise.map(c => c.id);
     const { data } = await admin.from('felitz_transactions')
-      .select('id, compte_id, type, montant, libelle, description, created_at')
+      .select('*')
       .in('compte_id', compteIds)
       .order('created_at', { ascending: false })
       .limit(200);
 
-    (data || []).forEach((t) => {
-      if (!transactionsEntrepriseByCompte[t.compte_id]) {
-        transactionsEntrepriseByCompte[t.compte_id] = [];
+    (data || []).forEach((t: Record<string, unknown>) => {
+      const cid = t.compte_id as string;
+      if (!transactionsEntrepriseByCompte[cid]) {
+        transactionsEntrepriseByCompte[cid] = [];
       }
-      if (transactionsEntrepriseByCompte[t.compte_id].length < 20) {
-        transactionsEntrepriseByCompte[t.compte_id].push({
-          id: t.id,
-          type: t.type,
-          montant: t.montant,
-          libelle: t.libelle,
-          description: (t as { description?: string | null }).description ?? null,
-          created_at: t.created_at,
+      if (transactionsEntrepriseByCompte[cid].length < 20) {
+        transactionsEntrepriseByCompte[cid].push({
+          id: t.id as string,
+          type: t.type as string,
+          montant: t.montant as number,
+          libelle: t.libelle as string,
+          description: (t.description as string | null) ?? null,
+          created_at: t.created_at as string,
         });
       }
     });
@@ -87,7 +88,7 @@ export default async function FelitzBankPage() {
   let transactionsMilitaire: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
   if (compteMilitaire) {
     const { data } = await admin.from('felitz_transactions')
-      .select('id, type, montant, libelle, description, created_at')
+      .select('*')
       .eq('compte_id', compteMilitaire.id)
       .order('created_at', { ascending: false })
       .limit(20);
