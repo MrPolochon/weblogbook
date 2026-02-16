@@ -27,8 +27,8 @@ async function getAdminCounts(): Promise<Record<string, number>> {
     const results = await Promise.allSettled([
       // Vols en attente de validation
       admin.from('vols').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
-      // Plans de vol non clôturés (tous les pilotes)
-      admin.from('plans_vol').select('*', { count: 'exact', head: true }).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']),
+      // Plans de vol non clôturés (exclut les strips manuels ATC)
+      admin.from('plans_vol').select('*', { count: 'exact', head: true }).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']).or('created_by_atc.is.null,created_by_atc.eq.false'),
       // Réponses AeroSchool en attente d'examen
       admin.from('aeroschool_responses').select('*', { count: 'exact', head: true }).eq('status', 'submitted'),
     ]);

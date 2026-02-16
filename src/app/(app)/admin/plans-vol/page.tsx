@@ -15,7 +15,7 @@ export default async function AdminPlansVolPage() {
 
   const admin = createAdminClient();
 
-  // Plans non clôturés : tous sauf 'cloture' et 'annule'
+  // Plans non clôturés : tous sauf 'cloture', 'annule', 'refuse' — exclut les strips manuels ATC
   const { data: plans } = await admin.from('plans_vol')
     .select(`
       id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, temps_prev_min,
@@ -26,6 +26,7 @@ export default async function AdminPlansVolPage() {
       compagnie:compagnies(nom)
     `)
     .not('statut', 'in', '("cloture","annule","refuse")')
+    .or('created_by_atc.is.null,created_by_atc.eq.false')
     .order('created_at', { ascending: true });
 
   return (
