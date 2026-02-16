@@ -87,7 +87,8 @@ function getAllDescendantIds(node: TreeNode): Set<string> {
   const ids = new Set<string>();
   ids.add(node.id);
   for (const c of node.children) {
-    for (const id of getAllDescendantIds(c)) ids.add(id);
+    const childIds = getAllDescendantIds(c);
+    childIds.forEach((id) => ids.add(id));
   }
   return ids;
 }
