@@ -25,11 +25,14 @@ type PickActions = {
   cancelHold: () => void;
   cancelPick: () => void;
   dropInto: (targetId: string | null) => void;
+  justPickedRef: React.MutableRefObject<boolean>;
 };
+const dummyRef = { current: false };
 const PickCtx = createContext<PickState & PickActions>({
   pickedId: null, pickedName: '', cursorPos: { x: 0, y: 0 },
   holdingId: null, holdProgress: 0,
   startHold: () => {}, cancelHold: () => {}, cancelPick: () => {}, dropInto: () => {},
+  justPickedRef: dummyRef,
 });
 
 const HOLD_DURATION = 600; // ms to fill the bar
@@ -118,6 +121,7 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
   const holdTimerRef = useRef<number | null>(null);
   const holdStartRef = useRef<number>(0);
   const animFrameRef = useRef<number | null>(null);
+  const justPickedRef = useRef(false);
 
   // Track cursor when picking
   useEffect(() => {
@@ -160,6 +164,8 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
         setPickedId(id);
         setPickedName(node.nom);
         setCursorPos({ x: 0, y: 0 });
+        justPickedRef.current = true;
+        setTimeout(() => { justPickedRef.current = false; }, 300);
         return;
       }
       animFrameRef.current = requestAnimationFrame(animate);
@@ -239,7 +245,7 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
   const totalFiles = sections.reduce((sum, s) => sum + (s.document_files?.length || 0), 0);
 
   return (
-    <PickCtx.Provider value={{ pickedId, pickedName, cursorPos, holdingId, holdProgress, startHold, cancelHold, cancelPick, dropInto }}>
+    <PickCtx.Provider value={{ pickedId, pickedName, cursorPos, holdingId, holdProgress, startHold, cancelHold, cancelPick, dropInto, justPickedRef }}>
       <div className="space-y-6" onClick={handleBackgroundClick}>
         {/* Stats */}
         <div className="flex items-center gap-6 text-sm text-slate-400" onClick={(e) => e.stopPropagation()}>
@@ -422,6 +428,7 @@ function FolderNode({ node, depth }: { node: TreeNode; depth: number }) {
 
   function handleFolderClick(e: React.MouseEvent) {
     e.stopPropagation();
+    if (pick.justPickedRef.current) return;
     if (pick.pickedId) {
       pick.dropInto(node.id);
       return;
@@ -437,6 +444,7 @@ function FolderNode({ node, depth }: { node: TreeNode; depth: number }) {
   }
 
   function handleMouseUp() {
+    if (pick.justPickedRef.current) return;
     if (pick.holdingId === node.id) {
       pick.cancelHold();
     }
