@@ -57,7 +57,18 @@ ALTER TABLE public.document_sections
 CREATE INDEX IF NOT EXISTS idx_document_sections_parent ON public.document_sections (parent_id);
 
 -- ============================================================
--- 5. Vérification: cette requête doit retourner 12 colonnes strip
+-- 5. COMPAGNIES - Code OACI et nom radio (callsign téléphonie)
+--    Permet aux PDG de définir AFR = AIRFRANCE, LUF = LUFTHANSA, etc.
+-- ============================================================
+ALTER TABLE public.compagnies
+  ADD COLUMN IF NOT EXISTS code_oaci TEXT,
+  ADD COLUMN IF NOT EXISTS callsign_telephonie TEXT;
+
+COMMENT ON COLUMN public.compagnies.code_oaci IS 'Code OACI 3 lettres de la compagnie (ex: AFR, LUF, BAW)';
+COMMENT ON COLUMN public.compagnies.callsign_telephonie IS 'Nom radio de la compagnie (ex: AIRFRANCE, LUFTHANSA, SPEEDBIRD)';
+
+-- ============================================================
+-- 6. Vérification: cette requête doit retourner 12 colonnes strip
 -- ============================================================
 SELECT column_name 
 FROM information_schema.columns 

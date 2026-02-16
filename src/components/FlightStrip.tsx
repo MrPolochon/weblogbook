@@ -41,6 +41,7 @@ export type StripData = {
   instructions_atc?: string | null;
   automonitoring?: boolean;
   isManual?: boolean;
+  callsign_telephonie?: string | null;
 };
 
 type EditableField = 'strip_atd' | 'strip_rwy' | 'strip_fl' | 'strip_fl_unit' | 'strip_sid_atc' | 'strip_note_1' | 'strip_note_2' | 'strip_note_3' | 'strip_star' | 'strip_route' | 'numero_vol' | 'aeroport_depart' | 'aeroport_arrivee' | 'type_vol' | 'strip_pilote_text' | 'strip_type_wake';
@@ -506,7 +507,12 @@ export default function FlightStrip({
                 {isManual ? (
                   <InlineEdit value={strip.numero_vol} field="numero_vol" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={10} large />
                 ) : (
-                  <span className={`text-xl font-mono font-black tracking-wide ${txt} leading-tight`}>{strip.numero_vol}</span>
+                  <div className="flex flex-col">
+                    <span className={`text-xl font-mono font-black tracking-wide ${txt} leading-tight`}>{strip.numero_vol}</span>
+                    {strip.callsign_telephonie && (
+                      <span className={`text-[9px] font-semibold ${lbl} leading-tight mt-0.5 tracking-wider`}>{strip.callsign_telephonie}</span>
+                    )}
+                  </div>
                 )}
               </Cell>
               <Cell className="flex-1">

@@ -11,7 +11,7 @@ export default async function AdminCompagniesPage() {
   
   const [{ data: compagnies }, { data: pilotes }] = await Promise.all([
     admin.from('compagnies')
-      .select('id, nom, pdg_id, prix_billet_pax, prix_kg_cargo, pourcentage_salaire, vban, profiles!compagnies_pdg_id_fkey(identifiant)')
+      .select('id, nom, pdg_id, prix_billet_pax, prix_kg_cargo, pourcentage_salaire, vban, code_oaci, callsign_telephonie, profiles!compagnies_pdg_id_fkey(identifiant)')
       .order('nom'),
     admin.from('profiles')
       .select('id, identifiant')

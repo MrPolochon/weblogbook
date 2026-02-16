@@ -66,6 +66,30 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
 
+    // ── Normaliser le numéro de vol avec le code OACI de la compagnie ──
+    let numeroVolFinal = String(numero_vol).trim().toUpperCase();
+    if (compagnie_id) {
+      const { data: compagnieData } = await admin.from('compagnies')
+        .select('code_oaci')
+        .eq('id', compagnie_id)
+        .single();
+      const prefix = compagnieData?.code_oaci?.toUpperCase();
+      if (prefix) {
+        // Retirer les séparateurs
+        const cleaned = numeroVolFinal.replace(/[\s\-_./]+/g, '');
+        if (cleaned.startsWith(prefix)) {
+          // Commence déjà par le préfixe (ex: LUF2425) → garder tel quel
+          numeroVolFinal = cleaned;
+        } else if (/^\d+$/.test(cleaned)) {
+          // Purement numérique (ex: 2425) → ajouter le préfixe
+          numeroVolFinal = prefix + cleaned;
+        } else {
+          // Callsign mot/phrase (RAIDER, HAVOC 21, ZENITH...) → ne rien ajouter
+          numeroVolFinal = cleaned;
+        }
+      }
+    }
+
     // Utiliser les valeurs calculées côté client (le formulaire valide déjà le taux de remplissage)
     const cargoGenereFinal = cargo_kg_genere ?? 0;
     const revenuBrutFinal = revenue_brut ?? 0;
@@ -286,7 +310,7 @@ export async function POST(request: Request) {
         pilote_id: user.id,
         aeroport_depart: ad,
         aeroport_arrivee: aa,
-        numero_vol: String(numero_vol).trim(),
+        numero_vol: numeroVolFinal,
         porte: (porte != null && String(porte).trim() !== '') ? String(porte).trim() : null,
         temps_prev_min: t,
         type_vol: String(type_vol),
@@ -417,7 +441,7 @@ export async function POST(request: Request) {
       pilote_id: user.id,
       aeroport_depart: ad,
       aeroport_arrivee: aa,
-      numero_vol: String(numero_vol).trim(),
+      numero_vol: numeroVolFinal,
       porte: (porte != null && String(porte).trim() !== '') ? String(porte).trim() : null,
       temps_prev_min: t,
       type_vol: String(type_vol),

@@ -113,7 +113,7 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { pdg_id, prix_billet_pax, prix_kg_cargo, pourcentage_salaire } = body;
+    const { pdg_id, prix_billet_pax, prix_kg_cargo, pourcentage_salaire, code_oaci, callsign_telephonie } = body;
 
     const updates: Record<string, unknown> = {};
     
@@ -124,6 +124,10 @@ export async function PATCH(
     if (prix_billet_pax !== undefined) updates.prix_billet_pax = prix_billet_pax;
     if (prix_kg_cargo !== undefined) updates.prix_kg_cargo = prix_kg_cargo;
     if (pourcentage_salaire !== undefined) updates.pourcentage_salaire = pourcentage_salaire;
+    
+    // Code OACI et callsign téléphonie (PDG ou admin)
+    if (code_oaci !== undefined) updates.code_oaci = code_oaci ? code_oaci.toUpperCase().trim().slice(0, 4) : null;
+    if (callsign_telephonie !== undefined) updates.callsign_telephonie = callsign_telephonie ? callsign_telephonie.toUpperCase().trim() : null;
 
     const { data, error } = await admin.from('compagnies')
       .update(updates)

@@ -28,6 +28,7 @@ interface Compagnie {
   prix_billet_pax: number;
   prix_kg_cargo: number;
   pourcentage_salaire: number;
+  code_oaci: string | null;
   role: 'employe' | 'pdg';
 }
 
@@ -831,7 +832,26 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="label">Numéro de vol *</label>
-          <input type="text" className="input" value={numero_vol} onChange={(e) => setNumeroVol(e.target.value)} required />
+          {selectedCompagnie?.code_oaci ? (
+            <div className="flex items-stretch">
+              <span className="flex items-center px-3 bg-sky-600/30 text-sky-300 border border-r-0 border-slate-600 rounded-l-lg text-sm font-mono font-bold tracking-wide select-none">
+                {selectedCompagnie.code_oaci}
+              </span>
+              <input
+                type="text"
+                className="input rounded-l-none flex-1"
+                value={numero_vol}
+                onChange={(e) => setNumeroVol(e.target.value)}
+                placeholder="2425"
+                required
+              />
+            </div>
+          ) : (
+            <input type="text" className="input" value={numero_vol} onChange={(e) => setNumeroVol(e.target.value)} placeholder="N° de vol" required />
+          )}
+          {selectedCompagnie?.code_oaci && (
+            <p className="text-xs text-slate-500 mt-1">Entrez le n° (ex: 2425 → {selectedCompagnie.code_oaci}2425) ou un callsign libre (ex: RAIDER)</p>
+          )}
         </div>
         <div>
           <label className="label">Porte</label>

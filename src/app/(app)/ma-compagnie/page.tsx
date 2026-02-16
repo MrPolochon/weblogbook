@@ -164,6 +164,7 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
         id: compagnie?.id || '',
         nom: compagnie?.nom || '',
         code_oaci: compagnie?.code_oaci || null,
+        callsign_telephonie: compagnie?.callsign_telephonie || null,
         vban: compagnie?.vban || null,
         pdg_identifiant: pdgIdentifiant,
         pourcentage_salaire: compagnie?.pourcentage_salaire || 20,

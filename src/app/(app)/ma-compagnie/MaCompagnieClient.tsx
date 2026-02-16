@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart, UserPlus, Send, X, Check, Loader2, Search, ImagePlus, Trash2 } from 'lucide-react';
+import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart, UserPlus, Send, X, Check, Loader2, Search, ImagePlus, Trash2, Radio } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import TarifsLiaisonsClient from './TarifsLiaisonsClient';
@@ -23,6 +23,7 @@ interface Compagnie {
   id: string;
   nom: string;
   code_oaci: string | null;
+  callsign_telephonie: string | null;
   vban: string | null;
   pdg_identifiant: string;
   pourcentage_salaire: number;
@@ -67,6 +68,8 @@ export default function MaCompagnieClient({
   const [pourcentageSalaire, setPourcentageSalaire] = useState(compagnie.pourcentage_salaire.toString());
   const [prixBillet, setPrixBillet] = useState(compagnie.prix_billet_pax.toString());
   const [prixCargo, setPrixCargo] = useState(compagnie.prix_kg_cargo.toString());
+  const [codeOaci, setCodeOaci] = useState(compagnie.code_oaci || '');
+  const [callsignTel, setCallsignTel] = useState(compagnie.callsign_telephonie || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -253,6 +256,8 @@ export default function MaCompagnieClient({
           pourcentage_salaire: parseInt(pourcentageSalaire) || 20,
           prix_billet_pax: parseInt(prixBillet) || 100,
           prix_kg_cargo: parseInt(prixCargo) || 5,
+          code_oaci: codeOaci || null,
+          callsign_telephonie: callsignTel || null,
         })
       });
 
@@ -371,6 +376,42 @@ export default function MaCompagnieClient({
               />
             </div>
           </div>
+
+          <div className="mt-4 pt-4 border-t border-slate-700">
+            <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+              <Radio className="h-4 w-4 text-sky-400" />
+              Identité radio (Callsign)
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">
+              Le code OACI sert de préfixe au numéro de vol (ex: AFR4546). Le nom radio est affiché aux contrôleurs ATC (ex: AIRFRANCE).
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label">Code OACI (3-4 lettres)</label>
+                <input
+                  type="text"
+                  value={codeOaci}
+                  onChange={(e) => setCodeOaci(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
+                  maxLength={4}
+                  placeholder="AFR"
+                  className="input w-full font-mono uppercase"
+                />
+                <p className="text-xs text-slate-500 mt-1">Ex: AFR, LUF, BAW, UAE</p>
+              </div>
+              <div>
+                <label className="label">Nom radio (téléphonie)</label>
+                <input
+                  type="text"
+                  value={callsignTel}
+                  onChange={(e) => setCallsignTel(e.target.value.toUpperCase())}
+                  maxLength={30}
+                  placeholder="AIRFRANCE"
+                  className="input w-full font-mono uppercase"
+                />
+                <p className="text-xs text-slate-500 mt-1">Ex: AIRFRANCE, LUFTHANSA, SPEEDBIRD</p>
+              </div>
+            </div>
+          </div>
           
           <button
             onClick={handleSaveSettings}
@@ -466,10 +507,13 @@ export default function MaCompagnieClient({
                 <p className="text-slate-200 font-medium">{compagnie.nom}</p>
               </div>
             </div>
-            {compagnie.code_oaci && (
+            {(compagnie.code_oaci || compagnie.callsign_telephonie) && (
               <div>
-                <p className="text-sm text-slate-400">Code OACI</p>
-                <p className="text-slate-200 font-mono">{compagnie.code_oaci}</p>
+                <p className="text-sm text-slate-400">Identité radio</p>
+                <p className="text-slate-200 font-mono">
+                  {compagnie.code_oaci && <span className="bg-sky-500/20 text-sky-300 px-1.5 py-0.5 rounded text-sm mr-2">{compagnie.code_oaci}</span>}
+                  {compagnie.callsign_telephonie && <span className="text-slate-300">{compagnie.callsign_telephonie}</span>}
+                </p>
               </div>
             )}
             <div>

@@ -14,6 +14,8 @@ type C = {
   prix_kg_cargo: number;
   pourcentage_salaire: number;
   vban: string | null;
+  code_oaci: string | null;
+  callsign_telephonie: string | null;
   profiles: { identifiant: string }[] | { identifiant: string } | null;
 };
 
@@ -59,6 +61,12 @@ export default function CompagniesList({ compagnies, pilotes }: { compagnies: C[
             <div className="flex items-center justify-between mb-2">
               <div>
                 <span className="text-slate-200 font-medium">{c.nom}</span>
+                {c.code_oaci && (
+                  <span className="ml-2 text-xs font-mono bg-sky-500/20 text-sky-300 px-1.5 py-0.5 rounded">{c.code_oaci}</span>
+                )}
+                {c.callsign_telephonie && (
+                  <span className="ml-1 text-xs text-slate-400">{c.callsign_telephonie}</span>
+                )}
                 {getPdgIdentifiant(c.profiles) && (
                   <span className="ml-2 text-sm text-amber-400 flex items-center gap-1 inline-flex">
                     <Crown className="h-3 w-3" />
@@ -111,6 +119,8 @@ function CompagnieSettings({ compagnie, pilotes, onClose }: { compagnie: C; pilo
   const [prixBillet, setPrixBillet] = useState(compagnie.prix_billet_pax.toString());
   const [prixCargo, setPrixCargo] = useState(compagnie.prix_kg_cargo.toString());
   const [salaire, setSalaire] = useState(compagnie.pourcentage_salaire.toString());
+  const [codeOaci, setCodeOaci] = useState(compagnie.code_oaci || '');
+  const [callsignTel, setCallsignTel] = useState(compagnie.callsign_telephonie || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -126,7 +136,9 @@ function CompagnieSettings({ compagnie, pilotes, onClose }: { compagnie: C; pilo
           pdg_id: pdgId || null,
           prix_billet_pax: parseInt(prixBillet) || 100,
           prix_kg_cargo: parseInt(prixCargo) || 5,
-          pourcentage_salaire: parseInt(salaire) || 20
+          pourcentage_salaire: parseInt(salaire) || 20,
+          code_oaci: codeOaci || null,
+          callsign_telephonie: callsignTel || null,
         })
       });
 
@@ -187,6 +199,28 @@ function CompagnieSettings({ compagnie, pilotes, onClose }: { compagnie: C; pilo
             onChange={(e) => setPrixCargo(e.target.value)}
             min="0"
             className="input w-full text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-400 mb-1">Code OACI (ex: AFR, LUF)</label>
+          <input
+            type="text"
+            value={codeOaci}
+            onChange={(e) => setCodeOaci(e.target.value.toUpperCase())}
+            maxLength={4}
+            placeholder="AFR"
+            className="input w-full text-sm font-mono uppercase"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-400 mb-1">Callsign radio (ex: AIRFRANCE)</label>
+          <input
+            type="text"
+            value={callsignTel}
+            onChange={(e) => setCallsignTel(e.target.value.toUpperCase())}
+            maxLength={30}
+            placeholder="AIRFRANCE"
+            className="input w-full text-sm font-mono uppercase"
           />
         </div>
       </div>

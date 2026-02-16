@@ -37,6 +37,7 @@ export default async function AtcPage() {
     let typeAvionCodeOaci: string | null = null;
     let typeAvionNom: string | null = null;
     let piloteIdentifiant: string | null = null;
+    let callsignTelephonie: string | null = null;
 
     if (plan.compagnie_avion_id) {
       const { data: avionData } = await admin.from('compagnie_avions')
@@ -64,6 +65,20 @@ export default async function AtcPage() {
         .eq('id', plan.pilote_id)
         .single();
       if (piloteData) piloteIdentifiant = piloteData.identifiant;
+    }
+
+    // Récupérer le callsign téléphonie de la compagnie (seulement si le n° de vol utilise le code OACI)
+    if (plan.compagnie_id) {
+      const { data: compData } = await admin.from('compagnies')
+        .select('code_oaci, callsign_telephonie')
+        .eq('id', plan.compagnie_id)
+        .single();
+      if (compData?.callsign_telephonie && compData?.code_oaci) {
+        const nv = (plan.numero_vol || '').toUpperCase();
+        if (nv.startsWith(compData.code_oaci.toUpperCase())) {
+          callsignTelephonie = compData.callsign_telephonie;
+        }
+      }
     }
 
     return {
@@ -103,6 +118,7 @@ export default async function AtcPage() {
       instructions_atc: plan.instructions || null,
       automonitoring: plan.automonitoring ?? false,
       isManual: !plan.pilote_id && Boolean(plan.created_by_atc),
+      callsign_telephonie: callsignTelephonie,
     } as StripData;
   }));
 

@@ -30,22 +30,22 @@ export default async function DepotPlanVolPage() {
 
   // Récupérer TOUTES les compagnies où le pilote est employé
   const { data: emplois } = await admin.from('compagnie_employes')
-    .select('compagnie_id, compagnies(id, nom, prix_billet_pax, prix_kg_cargo, pourcentage_salaire)')
+    .select('compagnie_id, compagnies(id, nom, prix_billet_pax, prix_kg_cargo, pourcentage_salaire, code_oaci)')
     .eq('pilote_id', user.id);
 
   // Récupérer TOUTES les compagnies où le pilote est PDG
   const { data: compagniesPdg } = await admin.from('compagnies')
-    .select('id, nom, prix_billet_pax, prix_kg_cargo, pourcentage_salaire')
+    .select('id, nom, prix_billet_pax, prix_kg_cargo, pourcentage_salaire, code_oaci')
     .eq('pdg_id', user.id);
 
   // Construire la liste de toutes les compagnies disponibles (employé + PDG)
-  type CompagnieOption = { id: string; nom: string; prix_billet_pax: number; prix_kg_cargo: number; pourcentage_salaire: number; role: 'employe' | 'pdg' };
+  type CompagnieOption = { id: string; nom: string; prix_billet_pax: number; prix_kg_cargo: number; pourcentage_salaire: number; code_oaci: string | null; role: 'employe' | 'pdg' };
   const compagniesMap = new Map<string, CompagnieOption>();
 
   // Ajouter les compagnies où il est employé
   (emplois || []).forEach(e => {
     const c = e.compagnies;
-    const cObj = c ? (Array.isArray(c) ? c[0] : c) as { id: string; nom: string; prix_billet_pax: number; prix_kg_cargo: number; pourcentage_salaire: number } : null;
+    const cObj = c ? (Array.isArray(c) ? c[0] : c) as { id: string; nom: string; prix_billet_pax: number; prix_kg_cargo: number; pourcentage_salaire: number; code_oaci: string | null } : null;
     if (cObj && !compagniesMap.has(cObj.id)) {
       compagniesMap.set(cObj.id, { ...cObj, role: 'employe' });
     }
