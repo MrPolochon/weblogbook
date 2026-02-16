@@ -12,10 +12,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { nom } = body;
+    const { nom, ordre } = body;
     if (!nom || typeof nom !== 'string' || !nom.trim()) return NextResponse.json({ error: 'Nom requis' }, { status: 400 });
 
-    const { error } = await supabase.from('document_sections').update({ nom: nom.trim() }).eq('id', id);
+    const update: Record<string, unknown> = { nom: nom.trim() };
+    if (typeof ordre === 'number') update.ordre = ordre;
+
+    const { error } = await supabase.from('document_sections').update(update).eq('id', id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {

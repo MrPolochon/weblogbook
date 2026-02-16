@@ -9,7 +9,7 @@ export default async function AdminDocumentsPage() {
     .from('document_sections')
     .select(`
       id, nom, ordre,
-      document_files(id, nom_original, created_at)
+      document_files(id, nom_original, taille_bytes, created_at)
     `)
     .order('ordre');
 
