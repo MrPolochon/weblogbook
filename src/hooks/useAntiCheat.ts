@@ -300,11 +300,19 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
       attributeFilter: ['class', 'id', 'style', 'data-copilot', 'data-blackbox', 'data-ai'],
     });
 
-    // ── 10. Clic ailleurs que la page (autre fenêtre, barre d’adresse, etc.) = triche ──
+    // ── 10. Clic ailleurs / changement d’application = triche ──
     const handleWindowBlur = () => {
       if (!activeRef.current || cheatingRef.current) return;
       triggerCheat();
     };
+
+    // Vérification périodique du focus : le blur n’est pas toujours envoyé quand on passe à une autre app (Alt+Tab, autre fenêtre)
+    const focusCheckWindowInterval = setInterval(() => {
+      if (cheatingRef.current || !activeRef.current) return;
+      if (typeof document.hasFocus === 'function' && !document.hasFocus()) {
+        triggerCheat();
+      }
+    }, 800);
 
     // Enregistrer les listeners
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -328,7 +336,8 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
       window.removeEventListener('blur', handleWindowBlur);
       if (deepScanInterval) clearInterval(deepScanInterval);
       if (focusCheckInterval) clearInterval(focusCheckInterval);
-      if (observer) observer.disconnect();
+      clearInterval(focusCheckWindowInterval);
+      observer.disconnect();
     };
   }, [enabled, triggerCheat, graceMs, relaxed]);
 
