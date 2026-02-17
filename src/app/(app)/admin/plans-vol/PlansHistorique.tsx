@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Plane, Clock, Building2, Search, ChevronDown, ChevronUp,
-  Users, Radio, CheckCircle, XCircle, AlertTriangle,
+  Users, Radio, CheckCircle, XCircle, AlertTriangle, Flame,
 } from 'lucide-react';
 
 type ATCControl = {
@@ -30,8 +31,10 @@ type PlanCloture = {
   automonitoring: boolean;
   created_by_atc: boolean | null;
   compagnie_id: string | null;
+  compagnie_avion_id: string | null;
   pilote: { identifiant: string } | null;
   compagnie: { nom: string } | null;
+  compagnie_avion: { id: string; immatriculation: string; detruit: boolean } | null;
   atc_plans_controles: ATCControl[];
 };
 
@@ -59,9 +62,34 @@ function duration(start: string, end: string | null): string {
 }
 
 export default function PlansHistorique({ plans }: { plans: PlanCloture[] }) {
+  const router = useRouter();
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const [crashingId, setCrashingId] = useState<string | null>(null);
+  const [crashConfirmId, setCrashConfirmId] = useState<string | null>(null);
+
+  async function handleCrash(avionId: string) {
+    setCrashingId(avionId);
+    try {
+      const res = await fetch('/api/admin/avions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: avionId, detruit: true, detruit_raison: 'Crash' }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Erreur lors du marquage crash');
+        return;
+      }
+      setCrashConfirmId(null);
+      router.refresh();
+    } catch {
+      alert('Erreur réseau');
+    } finally {
+      setCrashingId(null);
+    }
+  }
 
   const filtered = useMemo(() => {
     if (!search.trim()) return plans;
@@ -284,6 +312,52 @@ export default function PlansHistorique({ plans }: { plans: PlanCloture[] }) {
                       </div>
                     )}
                   </div>
+
+                  {/* Crash button */}
+                  {plan.compagnie_avion && (
+                    <div className="border-t border-slate-700/50 pt-4">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm text-slate-400">
+                          Avion : <span className="font-mono font-semibold text-slate-200">{plan.compagnie_avion.immatriculation}</span>
+                          {plan.compagnie_avion.detruit && (
+                            <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/20 border border-red-500/30 text-red-400">
+                              <Flame className="h-3 w-3" /> Détruit
+                            </span>
+                          )}
+                        </div>
+                        {!plan.compagnie_avion.detruit && (
+                          <>
+                            {crashConfirmId === plan.compagnie_avion.id ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-red-400">Confirmer la destruction ?</span>
+                                <button
+                                  onClick={() => handleCrash(plan.compagnie_avion!.id)}
+                                  disabled={crashingId === plan.compagnie_avion.id}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50"
+                                >
+                                  {crashingId === plan.compagnie_avion.id ? 'En cours...' : 'Oui, détruire'}
+                                </button>
+                                <button
+                                  onClick={() => setCrashConfirmId(null)}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+                                >
+                                  Annuler
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setCrashConfirmId(plan.compagnie_avion!.id)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 hover:text-red-300 transition-colors"
+                              >
+                                <Flame className="h-3.5 w-3.5" />
+                                Crash
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -38,9 +38,10 @@ export default async function AdminPlansVolPage() {
       id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut,
       created_at, accepted_at, cloture_at, demande_cloture_at,
       vol_commercial, vol_ferry, automonitoring, created_by_atc,
-      compagnie_id,
+      compagnie_id, compagnie_avion_id,
       pilote:profiles!plans_vol_pilote_id_fkey(identifiant),
       compagnie:compagnies!plans_vol_compagnie_id_fkey(nom),
+      compagnie_avion:compagnie_avions(id, immatriculation, detruit),
       atc_plans_controles(user_id, aeroport, position, created_at, profile:profiles(identifiant))
     `)
     .in('statut', ['cloture', 'annule'])
