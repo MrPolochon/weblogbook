@@ -493,9 +493,21 @@ export default function AdminAvionsClient() {
                           ))}
                         </select>
                       ) : (
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${statut.className}`}>
-                          {statut.text}
-                        </span>
+                        <div>
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${statut.className}`}>
+                            {statut.text}
+                          </span>
+                          {avion.detruit && (
+                            <span className="block text-xs text-red-400/80 mt-0.5">
+                              {avion.detruit_raison || 'Crash'}
+                              {avion.detruit_at && (
+                                <span className="text-red-400/50 ml-1">
+                                  — {new Date(avion.detruit_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="py-2.5">

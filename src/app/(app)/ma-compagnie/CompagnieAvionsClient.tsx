@@ -468,6 +468,16 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                     </td>
                     <td className="py-2.5 pr-4">
                       <span className={statut.className}>{statut.text}</span>
+                      {a.detruit && (
+                        <span className="block text-xs text-red-400/80 mt-0.5">
+                          {a.detruit_raison || 'Crash'}
+                          {a.detruit_at && (
+                            <span className="text-red-400/50 ml-1">
+                              — {new Date(a.detruit_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </span>
+                      )}
                       {isLeasedOut && <span className="block text-xs text-slate-400">En location</span>}
                       {isLeasedIn && <span className="block text-xs text-pink-400">Loué par la compagnie</span>}
                     </td>
