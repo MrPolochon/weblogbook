@@ -146,7 +146,7 @@ export default function FelitzBankAtcClient({ compteId, transactions }: Props) {
       {transactions.length > 0 && (
         <div className="mt-6">
           <h3 className="text-sm font-semibold text-slate-700 mb-3">Dernières transactions</h3>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
+          <div className="space-y-2 max-h-[500px] overflow-y-auto">
             {transactions.map((t) => (
               <div 
                 key={t.id} 

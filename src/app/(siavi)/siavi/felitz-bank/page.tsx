@@ -30,7 +30,7 @@ export default async function FelitzBankSiaviPage() {
       .select('*')
       .eq('compte_id', comptePerso.id)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(100);
     transactionsPerso = data || [];
   }
 

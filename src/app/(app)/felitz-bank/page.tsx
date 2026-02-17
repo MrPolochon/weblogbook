@@ -46,14 +46,14 @@ export default async function FelitzBankPage() {
       .select('*')
       .in('compte_id', compteIds)
       .order('created_at', { ascending: false })
-      .limit(200);
+      .limit(1000);
 
     (data || []).forEach((t: Record<string, unknown>) => {
       const cid = t.compte_id as string;
       if (!transactionsEntrepriseByCompte[cid]) {
         transactionsEntrepriseByCompte[cid] = [];
       }
-      if (transactionsEntrepriseByCompte[cid].length < 20) {
+      if (transactionsEntrepriseByCompte[cid].length < 100) {
         transactionsEntrepriseByCompte[cid].push({
           id: t.id as string,
           type: t.type as string,
@@ -80,7 +80,7 @@ export default async function FelitzBankPage() {
       .select('*')
       .eq('compte_id', comptePerso.id)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(100);
     transactionsPerso = data || [];
   }
 
@@ -91,7 +91,7 @@ export default async function FelitzBankPage() {
       .select('*')
       .eq('compte_id', compteMilitaire.id)
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(100);
     transactionsMilitaire = data || [];
   }
 
@@ -201,7 +201,7 @@ export default async function FelitzBankPage() {
               <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700/50">
                 <h3 className="font-medium text-slate-200 mb-3">Transactions récentes</h3>
                 {transactionsMilitaire.length > 0 ? (
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                  <div className="space-y-2 max-h-[500px] overflow-y-auto">
                     {transactionsMilitaire.map((t) => (
                       <div key={t.id} className="flex items-center justify-between text-sm py-1 border-b border-slate-700/30 last:border-0">
                         <span className="text-slate-400 truncate flex-1">{t.libelle || t.description || '—'}</span>

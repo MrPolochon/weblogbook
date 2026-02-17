@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       .select('*')
       .eq('compte_id', compteId)
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(500);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 

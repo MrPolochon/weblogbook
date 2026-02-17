@@ -180,7 +180,7 @@ export default function AdminFelitzClient({ compte, label, type }: Props) {
           ) : transactions.length > 0 ? (
             <div className="pt-2 border-t border-slate-700/50">
               <p className={`text-xs font-semibold ${accentClass} mb-2`}>Transactions récentes</p>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-2 max-h-[500px] overflow-y-auto">
                 {transactions.map((t) => (
                   <div
                     key={t.id}
