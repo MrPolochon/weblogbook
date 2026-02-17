@@ -18,7 +18,7 @@ export default async function AdminPlansVolPage() {
   const admin = createAdminClient();
 
   // Plans non clôturés : tous sauf 'cloture', 'annule', 'refuse' — exclut les strips manuels ATC
-  const { data: plans } = await admin.from('plans_vol')
+  const { data: plans, error: errOpen } = await admin.from('plans_vol')
     .select(`
       id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, temps_prev_min,
       created_at, accepted_at, vol_commercial, vol_ferry, automonitoring, vol_sans_atc,
@@ -30,9 +30,10 @@ export default async function AdminPlansVolPage() {
     .not('statut', 'in', '("cloture","annule","refuse")')
     .or('created_by_atc.is.null,created_by_atc.eq.false')
     .order('created_at', { ascending: true });
+  if (errOpen) console.error('[AdminPlansVol] Erreur plans ouverts:', errOpen.message, errOpen.details, errOpen.hint);
 
   // Plans clôturés avec historique des ATC
-  const { data: plansClotures } = await admin.from('plans_vol')
+  const { data: plansClotures, error: errClosed } = await admin.from('plans_vol')
     .select(`
       id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut,
       created_at, accepted_at, cloture_at, demande_cloture_at,
@@ -45,9 +46,11 @@ export default async function AdminPlansVolPage() {
     .in('statut', ['cloture', 'annule'])
     .order('cloture_at', { ascending: false, nullsFirst: false })
     .limit(500);
+  if (errClosed) console.error('[AdminPlansVol] Erreur plans clôturés:', errClosed.message, errClosed.details, errClosed.hint);
 
   const openPlans = (plans || []) as any;
   const closedPlans = (plansClotures || []) as any;
+  const hasQueryError = !!(errOpen || errClosed);
 
   return (
     <div className="space-y-6">
@@ -62,6 +65,14 @@ export default async function AdminPlansVolPage() {
           </p>
         </div>
       </div>
+
+      {hasQueryError && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm">
+          <p className="font-semibold text-red-400">Erreur de chargement des plans de vol</p>
+          {errOpen && <p className="text-red-300/80 mt-1">Plans ouverts : {errOpen.message}{errOpen.hint ? ` — ${errOpen.hint}` : ''}</p>}
+          {errClosed && <p className="text-red-300/80 mt-1">Historique : {errClosed.message}{errClosed.hint ? ` — ${errClosed.hint}` : ''}</p>}
+        </div>
+      )}
 
       <AdminPlansVolTabs
         openCount={openPlans.length}
