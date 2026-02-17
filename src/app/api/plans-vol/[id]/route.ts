@@ -549,15 +549,21 @@ export async function PATCH(
     }
 
     // ============================================================
-    // CLÔTURE FORCÉE PAR ADMIN — amende 50 000 F$
+    // CLÔTURE FORCÉE PAR ADMIN
+    // < 24h : clôture + amende 50 000 F$
+    // >= 24h : annulation + amende 100 000 F$
     // ============================================================
     if (action === 'cloture_forcee') {
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
       if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs.' }, { status: 403 });
       if (plan.statut === 'cloture' || plan.statut === 'annule') return NextResponse.json({ error: 'Ce plan est déjà clôturé ou annulé.' }, { status: 400 });
 
-      const AMENDE = 50000;
       const now = new Date();
+      const refDate = plan.accepted_at || plan.created_at;
+      const ageMs = now.getTime() - new Date(refDate).getTime();
+      const isOver24h = ageMs > 24 * 3600000;
+      const AMENDE = isOver24h ? 100000 : 50000;
+      const newStatut = isOver24h ? 'annule' : 'cloture';
       let amendeAppliquee = false;
       let compteDebiteVban = '';
 
@@ -570,7 +576,7 @@ export async function PATCH(
           compteId = compteComp.id;
           compteDebiteVban = compteComp.vban;
           await admin.from('felitz_comptes').update({ solde: compteComp.solde - AMENDE }).eq('id', compteComp.id);
-          await admin.from('felitz_transactions').insert({ compte_id: compteComp.id, type: 'debit', montant: AMENDE, libelle: `Amende clôture forcée — Plan ${plan.numero_vol}` });
+          await admin.from('felitz_transactions').insert({ compte_id: compteComp.id, type: 'debit', montant: AMENDE, libelle: `Amende ${isOver24h ? 'annulation' : 'clôture'} forcée — Plan ${plan.numero_vol}` });
           amendeAppliquee = true;
         }
       }
@@ -581,14 +587,14 @@ export async function PATCH(
           compteId = comptePerso.id;
           compteDebiteVban = comptePerso.vban;
           await admin.from('felitz_comptes').update({ solde: comptePerso.solde - AMENDE }).eq('id', comptePerso.id);
-          await admin.from('felitz_transactions').insert({ compte_id: comptePerso.id, type: 'debit', montant: AMENDE, libelle: `Amende clôture forcée — Plan ${plan.numero_vol}` });
+          await admin.from('felitz_transactions').insert({ compte_id: comptePerso.id, type: 'debit', montant: AMENDE, libelle: `Amende ${isOver24h ? 'annulation' : 'clôture'} forcée — Plan ${plan.numero_vol}` });
           amendeAppliquee = true;
         }
       }
 
-      // 2) Clôturer le plan de vol
+      // 2) Mettre à jour le statut du plan de vol
       await admin.from('plans_vol').update({
-        statut: 'cloture',
+        statut: newStatut,
         cloture_at: now.toISOString(),
         current_holder_user_id: null,
         current_holder_position: null,
@@ -607,7 +613,7 @@ export async function PATCH(
         }).eq('id', plan.compagnie_avion_id);
       }
 
-      // 4) Restituer les passagers/cargo consommés (vol annulé sans complétion)
+      // 4) Restituer les passagers/cargo consommés (vol non complété)
       const aeroportDepart = plan.aeroport_depart || '';
       if (plan.vol_commercial && aeroportDepart) {
         if (plan.nature_transport === 'passagers' && plan.nb_pax_genere && plan.nb_pax_genere > 0) {
@@ -625,15 +631,16 @@ export async function PATCH(
       }
 
       // 5) Envoyer un message au pilote
+      const actionLabel = isOver24h ? 'annulé de force' : 'clôturé de force';
       await admin.from('messages').insert({
         destinataire_id: plan.pilote_id,
-        titre: `⚠️ Plan ${plan.numero_vol} clôturé de force`,
-        contenu: `Votre plan de vol ${plan.numero_vol} (${plan.aeroport_depart} → ${plan.aeroport_arrivee}) a été clôturé de force par un administrateur pour non-clôture.\n\nUne amende de ${AMENDE.toLocaleString('fr-FR')} F$ a été prélevée sur votre compte${plan.vol_commercial ? ' entreprise' : ' personnel'}.\n\nVeuillez clôturer vos plans de vol en temps voulu.`,
+        titre: `⚠️ Plan ${plan.numero_vol} ${actionLabel}`,
+        contenu: `Votre plan de vol ${plan.numero_vol} (${plan.aeroport_depart} → ${plan.aeroport_arrivee}) a été ${actionLabel} par un administrateur.\n\nUne amende de ${AMENDE.toLocaleString('fr-FR')} F$ a été prélevée sur votre compte${plan.vol_commercial ? ' entreprise' : ' personnel'}.\n\nVeuillez clôturer vos plans de vol en temps voulu.`,
         type_message: 'systeme',
         expediteur_id: user.id,
       });
 
-      return NextResponse.json({ ok: true, amende: AMENDE, amendeAppliquee, compteDebite: compteDebiteVban });
+      return NextResponse.json({ ok: true, amende: AMENDE, amendeAppliquee, compteDebite: compteDebiteVban, statut: newStatut, annule: isOver24h });
     }
 
     if (action === 'update_strip') {

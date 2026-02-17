@@ -51,6 +51,21 @@ function timeAgo(dateStr: string): string {
   return `${diffD}j ${diffH % 24}h`;
 }
 
+function isOver24h(dateStr: string): boolean {
+  return (Date.now() - new Date(dateStr).getTime()) > 24 * 3600000;
+}
+
+function getAmende(plan: Plan): number {
+  const ref = plan.accepted_at || plan.created_at;
+  return isOver24h(ref) ? 100000 : 50000;
+}
+
+function getActionLabel(plan: Plan): string {
+  const ref = plan.accepted_at || plan.created_at;
+  const montant = getAmende(plan);
+  return isOver24h(ref) ? `Annuler (-${(montant / 1000)}k F$)` : `Clôturer (-${(montant / 1000)}k F$)`;
+}
+
 export default function PlansNonClotures({ plans: initialPlans }: { plans: Plan[] }) {
   const [plans, setPlans] = useState<Plan[]>(initialPlans);
   const [closing, setClosing] = useState<string | null>(null);
@@ -72,7 +87,8 @@ export default function PlansNonClotures({ plans: initialPlans }: { plans: Plan[
       const data = await res.json();
       if (data.ok) {
         setPlans(prev => prev.filter(p => p.id !== planId));
-        setResults(prev => ({ ...prev, [planId]: { success: true, message: `Clôturé — Amende ${data.amendeAppliquee ? 'prélevée' : 'non appliquée (aucun compte)'}` } }));
+        const label = data.annule ? 'Annulé' : 'Clôturé';
+        setResults(prev => ({ ...prev, [planId]: { success: true, message: `${label} — Amende ${data.amende?.toLocaleString('fr-FR') || ''} F$ ${data.amendeAppliquee ? 'prélevée' : 'non appliquée (aucun compte)'}` } }));
         setSelected(prev => { const n = new Set(prev); n.delete(planId); return n; });
       } else {
         setResults(prev => ({ ...prev, [planId]: { success: false, message: data.error || 'Erreur' } }));
@@ -137,7 +153,7 @@ export default function PlansNonClotures({ plans: initialPlans }: { plans: Plan[
             className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
             <AlertTriangle className="h-4 w-4" />
-            {bulkClosing ? 'Clôture en cours...' : `Clôturer ${selected.size} plan(s) — ${(selected.size * 50000).toLocaleString('fr-FR')} F$ d'amendes`}
+            {bulkClosing ? 'Clôture en cours...' : `Clôturer/Annuler ${selected.size} plan(s) — ${plans.filter(p => selected.has(p.id)).reduce((sum, p) => sum + getAmende(p), 0).toLocaleString('fr-FR')} F$ d'amendes`}
           </button>
         )}
       </div>
@@ -249,7 +265,7 @@ export default function PlansNonClotures({ plans: initialPlans }: { plans: Plan[
                       className="flex items-center gap-1.5 bg-red-600/20 hover:bg-red-600 border border-red-500/30 hover:border-red-500 text-red-400 hover:text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
                     >
                       <AlertTriangle className="h-3.5 w-3.5" />
-                      Clôturer (-50k F$)
+                      {getActionLabel(plan)}
                     </button>
                   )}
                 </div>
