@@ -126,7 +126,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             </button>
             
             {piloteMenuOpen && (
-              <div style={dropdownStyle ?? undefined} className="fixed w-64 rounded-2xl border border-slate-700/40 bg-slate-800/98 backdrop-blur-2xl py-1.5 shadow-2xl shadow-black/40 z-50 animate-fade-in">
+              <div style={dropdownStyle ?? undefined} className="fixed w-64 rounded-2xl border border-slate-700/40 bg-slate-800 backdrop-blur-2xl py-1.5 shadow-2xl shadow-black/40 z-50 animate-fade-in">
                 {piloteMenuItems.map((item, idx) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || (item.href !== '/logbook' && pathname.startsWith(item.href));
