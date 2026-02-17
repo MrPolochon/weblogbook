@@ -84,8 +84,7 @@ export async function POST(
       compte_id: compteCompagnie.id,
       type: 'credit',
       montant: montant,
-      description: `Vente pièces détachées ${avion.immatriculation}${avion.nom_bapteme ? ` "${avion.nom_bapteme}"` : ''}`,
-      reference: `SCRAP-${avion.id.slice(0, 8)}`,
+      libelle: `Vente pièces détachées ${avion.immatriculation}${avion.nom_bapteme ? ` "${avion.nom_bapteme}"` : ''}`,
     });
 
     // Supprimer l'avion de la base de données
