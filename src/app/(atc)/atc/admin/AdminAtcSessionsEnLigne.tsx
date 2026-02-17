@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { X, RefreshCw } from 'lucide-react';
 import { toLocaleTimeStringUTC } from '@/lib/date-utils';
@@ -13,6 +13,7 @@ function formatDepuis(startedAt: string): string {
 
 export default function AdminAtcSessionsEnLigne({ sessions }: { sessions: Session[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +37,7 @@ export default function AdminAtcSessionsEnLigne({ sessions }: { sessions: Sessio
       }
 
       // Rafraîchir la page
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la déconnexion');
     } finally {

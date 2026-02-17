@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText, Mail, Moon, Sun, ChevronDown, Menu, Flame, Landmark } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useTransition } from 'react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
 function AtcSessionCompte({ aeroport, position, startedAt, isDark }: { aeroport: string; position: string; startedAt: string; isDark: boolean }) {
@@ -52,6 +52,7 @@ export default function AtcNavBar({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const { theme, toggleTheme } = useAtcTheme();
   const isDark = theme === 'dark';
   const [atcMenuOpen, setAtcMenuOpen] = useState(false);
@@ -97,7 +98,7 @@ export default function AtcNavBar({
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/login');
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
   const atcMenuItems = [

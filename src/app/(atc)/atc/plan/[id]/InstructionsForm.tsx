@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function InstructionsForm({ planId, initial }: { planId: string; initial: string }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [val, setVal] = useState(initial);
   useEffect(() => { setVal(initial); }, [initial]);
   const [loading, setLoading] = useState(false);
@@ -20,7 +21,7 @@ export default function InstructionsForm({ planId, initial }: { planId: string; 
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {

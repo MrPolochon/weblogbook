@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function PrendrePlanButton({ planId, aeroport, position }: { planId: string; aeroport: string; position: string }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
 
   async function handleTake() {
@@ -17,7 +18,7 @@ export default function PrendrePlanButton({ planId, aeroport, position }: { plan
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {

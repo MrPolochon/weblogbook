@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, RefreshCw, Users, Weight, Coins, Shield, Plane, Ship, RotateCw, Fuel, Package } from 'lucide-react';
 
@@ -35,6 +35,7 @@ const CATEGORIES: Record<string, { label: string; icon: React.ReactNode; color: 
 
 export default function TypesAvionClient({ types }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -61,7 +62,7 @@ export default function TypesAvionClient({ types }: Props) {
 
       setSuccess('Mis à jour');
       setTimeout(() => setSuccess(''), 2000);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAntiCheat } from '@/hooks/useAntiCheat';
 import { ChevronLeft, ChevronRight, Send, Loader2, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 
@@ -38,6 +39,7 @@ interface Props {
 }
 
 export default function FormRenderer({ form }: Props) {
+  const router = useRouter();
   const [currentSection, setCurrentSection] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -147,7 +149,7 @@ export default function FormRenderer({ form }: Props) {
             Votre formulaire a été annulé et mis à la poubelle.
           </p>
           <button
-            onClick={() => window.location.href = '/aeroschool'}
+            onClick={() => router.push('/aeroschool')}
             className="px-8 py-4 bg-white text-red-600 font-bold text-lg rounded-xl shadow-2xl hover:bg-red-50 transition-colors"
           >
             Fermer le formulaire
@@ -176,7 +178,7 @@ export default function FormRenderer({ form }: Props) {
             </div>
           )}
           <button
-            onClick={() => window.location.href = '/aeroschool'}
+            onClick={() => router.push('/aeroschool')}
             className="px-6 py-3 bg-sky-500 text-white font-bold rounded-xl hover:bg-sky-400 transition-colors"
           >
             Retour à AeroSchool

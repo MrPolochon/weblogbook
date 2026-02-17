@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   AlertTriangle, FileSearch, Gavel, Plus, X, Check, Loader2, 
@@ -192,6 +192,7 @@ const PRIORITES = {
 
 export default function IfsaClient({ signalements, enquetes, sanctions, pilotes, compagnies, compagniesAvecPilotes, pilotesChomage, agentsIfsa }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<'signalements' | 'enquetes' | 'sanctions' | 'donnees'>('signalements');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -276,7 +277,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       setSuccess('Sanction émise avec succès');
       setShowSanctionModal(false);
       resetSanctionForm();
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -299,7 +300,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
       setSuccess('Sanction levée');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -337,7 +338,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       setShowEnqueteModal(false);
       setSelectedSignalement(null);
       resetEnqueteForm();
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -359,7 +360,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
 
       setSuccess('Enquête mise à jour');
       setSelectedEnquete(null);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -381,7 +382,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
 
       setSuccess('Signalement mis à jour');
       setSelectedSignalement(null);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -455,7 +456,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       setShowEnqueteDetailModal(false);
       setSelectedEnquete(null);
       setEnqueteEditState(null);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
@@ -9,6 +9,7 @@ const AEROPORTS_SIAVI_EXCLUSIFS = ['IBTH', 'IJAF', 'IBAR', 'IHEN', 'IDCS', 'ILKL
 
 export default function SeMettreEnServiceSiaviForm() {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [aeroport, setAeroport] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,7 +41,7 @@ export default function SeMettreEnServiceSiaviForm() {
         throw new Error(data.error || 'Erreur lors de la mise en service');
       }
 
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: any) {
       setError(err.message);
     } finally {

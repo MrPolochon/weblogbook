@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMinutes, subMinutes } from 'date-fns';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
@@ -28,6 +28,7 @@ export default function AddVolAdminForm({
   admins: P[];
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const [pilote_id, setPiloteId] = useState('');
   const [type_avion_id, setTypeAvionId] = useState('');
@@ -151,7 +152,7 @@ export default function AddVolAdminForm({
       setCommandantBord('');
       setCallsign('');
       setRolePilote('Pilote');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye } from 'lucide-react';
 
 export default function PrendreVolAfisButton({ planId }: { planId: string }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
@@ -25,7 +26,7 @@ export default function PrendreVolAfisButton({ planId }: { planId: string }) {
         throw new Error(data.error || 'Erreur');
       }
 
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: any) {
       alert(err.message);
     } finally {

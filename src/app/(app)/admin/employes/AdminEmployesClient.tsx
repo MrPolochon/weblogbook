@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Trash2, RefreshCw, Building2, User } from 'lucide-react';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
@@ -40,6 +40,7 @@ function getProfileIdentifiant(profiles: Compagnie['profiles']): string | null {
 
 export default function AdminEmployesClient({ compagnies, pilotes, employes }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [selectedCompagnie, setSelectedCompagnie] = useState('');
   const [selectedPilote, setSelectedPilote] = useState('');
   const [loading, setLoading] = useState(false);
@@ -86,7 +87,7 @@ export default function AdminEmployesClient({ compagnies, pilotes, employes }: P
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
       setSelectedPilote('');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -108,7 +109,7 @@ export default function AdminEmployesClient({ compagnies, pilotes, employes }: P
         throw new Error(data.error || 'Erreur');
       }
 
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
 export default function CreateNotamForm({ variant = 'default', embedded, onSuccess }: { variant?: 'default' | 'atc'; embedded?: boolean; onSuccess?: () => void }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [code_aeroport, setCodeAeroport] = useState('');
   const [du_at, setDuAt] = useState('');
   const [du_time, setDuTime] = useState('');
@@ -70,7 +71,7 @@ export default function CreateNotamForm({ variant = 'default', embedded, onSucce
       setPriorite('');
       setReferenceFr('');
       onSuccess?.();
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {

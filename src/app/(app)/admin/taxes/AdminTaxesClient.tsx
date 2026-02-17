@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Trash2, RefreshCw, Save } from 'lucide-react';
 
@@ -17,6 +17,7 @@ interface Props {
 
 export default function AdminTaxesClient({ taxes }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [newCode, setNewCode] = useState('');
   const [newTaxeIfr, setNewTaxeIfr] = useState('2');
   const [newTaxeVfr, setNewTaxeVfr] = useState('5');
@@ -46,7 +47,7 @@ export default function AdminTaxesClient({ taxes }: Props) {
       setNewCode('');
       setNewTaxeIfr('2');
       setNewTaxeVfr('5');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -72,7 +73,7 @@ export default function AdminTaxesClient({ taxes }: Props) {
         throw new Error(data.error || 'Erreur');
       }
 
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -94,7 +95,7 @@ export default function AdminTaxesClient({ taxes }: Props) {
         throw new Error(data.error || 'Erreur');
       }
 
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

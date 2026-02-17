@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Send, Loader2, Check, X, Clock, FileText, CheckCircle2, XCircle, Search } from 'lucide-react';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
@@ -38,6 +38,7 @@ const STATUTS = {
 
 export default function SignalementClient({ mesSignalements, pilotes, compagnies }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<'nouveau' | 'mes'>('nouveau');
   
   // Formulaire
@@ -92,7 +93,7 @@ export default function SignalementClient({ mesSignalements, pilotes, compagnies
       setCompagnieSignaleeId('');
       setPreuves('');
       setSearchPilote('');
-      router.refresh();
+      startTransition(() => router.refresh());
       setTimeout(() => setSuccess(''), 5000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');

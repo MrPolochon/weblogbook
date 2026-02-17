@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, RefreshCw, Percent, User, Building2, ArrowRight } from 'lucide-react';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
@@ -24,6 +24,7 @@ interface Props {
 
 export default function AdminHangarMarketClient({ taxeActuelle, dernieresVentes }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [taxe, setTaxe] = useState(taxeActuelle.toString());
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -43,7 +44,7 @@ export default function AdminHangarMarketClient({ taxeActuelle, dernieresVentes 
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
       setMessage('Taxe mise à jour !');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Erreur');
     } finally {

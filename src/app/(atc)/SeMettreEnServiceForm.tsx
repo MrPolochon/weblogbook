@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
@@ -8,6 +8,7 @@ import { MapPin, Radio, Loader2 } from 'lucide-react';
 
 export default function SeMettreEnServiceForm() {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [aeroport, setAeroport] = useState('');
   const [position, setPosition] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,7 +23,7 @@ export default function SeMettreEnServiceForm() {
       const res = await fetch('/api/atc/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aeroport, position }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Check, X, Ban } from 'lucide-react';
 
@@ -21,6 +21,7 @@ type Compagnie = { id: string; nom: string };
 
 export default function CompagnieLocationsClient({ compagnieId }: { compagnieId: string }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [locations, setLocations] = useState<Location[]>([]);
   const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,7 +58,7 @@ export default function CompagnieLocationsClient({ compagnieId }: { compagnieId:
       body: JSON.stringify({ action })
     });
     if (res.ok) {
-      router.refresh();
+      startTransition(() => router.refresh());
       load();
     }
   }

@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 export default function SetupPage() {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +54,7 @@ export default function SetupPage() {
       });
       if (signInErr) throw new Error('Compte créé. Connectez-vous avec vos identifiants.');
       router.replace('/logbook');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

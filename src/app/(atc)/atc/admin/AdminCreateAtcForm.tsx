@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 type Grade = { id: string; nom: string; ordre: number };
 
 export default function AdminCreateAtcForm({ grades }: { grades: Grade[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
   const [grade_id, setGradeId] = useState('');
@@ -36,7 +37,7 @@ export default function AdminCreateAtcForm({ grades }: { grades: Grade[] }) {
       setGradeId('');
       setAussiPilote(false);
       setTimeout(() => setSuccess(false), 3000);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

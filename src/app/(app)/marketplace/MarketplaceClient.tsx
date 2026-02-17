@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { ShoppingCart, RefreshCw, Building2, User, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -22,6 +22,7 @@ interface Props {
 
 export default function MarketplaceClient({ avionId, avionNom, prix, estMilitaire, soldePerso, compagnies, armeeCompte = null }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [showModal, setShowModal] = useState(false);
   const [pourCompagnie, setPourCompagnie] = useState<string | null>(null);
   const [pourArmee, setPourArmee] = useState(false);
@@ -80,7 +81,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
         setSuccess('');
         setPourCompagnie(null);
         setPourArmee(false);
-        router.refresh();
+        startTransition(() => router.refresh());
       }, 2000);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {

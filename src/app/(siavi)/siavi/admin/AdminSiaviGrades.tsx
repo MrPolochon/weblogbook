@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 
@@ -8,6 +8,7 @@ type Grade = { id: string; nom: string; ordre: number };
 
 export default function AdminSiaviGrades({ grades }: { grades: Grade[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [newGrade, setNewGrade] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +32,7 @@ export default function AdminSiaviGrades({ grades }: { grades: Grade[] }) {
       }
       
       setNewGrade('');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -48,7 +49,7 @@ export default function AdminSiaviGrades({ grades }: { grades: Grade[] }) {
         const data = await res.json();
         throw new Error(data.error || 'Erreur lors de la suppression');
       }
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     }
@@ -65,7 +66,7 @@ export default function AdminSiaviGrades({ grades }: { grades: Grade[] }) {
         const data = await res.json();
         throw new Error(data.error || 'Erreur lors du déplacement');
       }
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     }

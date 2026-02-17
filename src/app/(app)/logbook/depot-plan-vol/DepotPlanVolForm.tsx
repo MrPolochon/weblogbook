@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
 import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio } from 'lucide-react';
@@ -65,6 +65,7 @@ interface Props {
 
 export default function DepotPlanVolForm({ compagniesDisponibles, inventairePersonnel, avionsParCompagnie = {} }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [aeroport_depart, setAeroportDepart] = useState('');
   const [aeroport_arrivee, setAeroportArrivee] = useState('');
   const [numero_vol, setNumeroVol] = useState('');
@@ -473,7 +474,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       }
       
       router.push('/logbook/plans-vol');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -518,7 +519,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       }
       
       router.push('/logbook/plans-vol');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

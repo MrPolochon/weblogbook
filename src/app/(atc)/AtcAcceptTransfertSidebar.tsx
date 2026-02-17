@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useTransition } from 'react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
 type PlanTransfert = { id: string; numero_vol: string };
@@ -104,6 +104,7 @@ export default function AtcAcceptTransfertSidebar({
   plansCloture: PlanCloture[];
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -226,7 +227,7 @@ export default function AtcAcceptTransfertSidebar({
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {

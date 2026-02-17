@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMinutes, subMinutes } from 'date-fns';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
@@ -38,6 +38,7 @@ export default function VolForm({
   onClearPlan?: () => void;
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [type_avion_id, setTypeAvionId] = useState('');
   const [compagnie_id, setCompagnieId] = useState('');
   const [pourMoiMemo, setPourMoiMemo] = useState(false);
@@ -148,7 +149,7 @@ export default function VolForm({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       router.push('/logbook');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

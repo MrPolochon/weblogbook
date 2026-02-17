@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plane, MapPin, Edit2, Trash2, Save, X, RefreshCw, Building2, Plus, Skull, AlertTriangle } from 'lucide-react';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
@@ -28,6 +28,7 @@ const STATUTS = ['ground', 'in_flight', 'maintenance', 'bloque'] as const;
 
 export default function AdminAvionsClient() {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [avions, setAvions] = useState<Avion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +121,7 @@ export default function AdminAvionsClient() {
       setNewAvion({ compagnie_id: '', type_avion_id: '', immatriculation: '', nom_bapteme: '', aeroport_actuel: '' });
       setShowAddForm(false);
       loadAvions();
-      router.refresh();
+      startTransition(() => router.refresh());
       alert(data.message || 'Avion ajouté avec succès');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
@@ -162,7 +163,7 @@ export default function AdminAvionsClient() {
       setEditingId(null);
       setEditData(null);
       loadAvions();
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -178,7 +179,7 @@ export default function AdminAvionsClient() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
       loadAvions();
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     }
@@ -199,7 +200,7 @@ export default function AdminAvionsClient() {
       
       alert(`✈️💥 Avion ${immat} marqué comme DÉTRUIT`);
       loadAvions();
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     }
@@ -219,7 +220,7 @@ export default function AdminAvionsClient() {
       
       alert(`Avion ${immat} restauré`);
       loadAvions();
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     }

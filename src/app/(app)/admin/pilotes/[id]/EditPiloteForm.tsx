@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function EditPiloteForm({
@@ -27,6 +27,7 @@ export default function EditPiloteForm({
   blockReason: string | null;
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [identifiant, setIdentifiant] = useState(identifiantInitial);
   const [role, setRole] = useState(roleInitial);
   const [armee, setArmee] = useState(armeeInitial);
@@ -144,7 +145,7 @@ export default function EditPiloteForm({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       setSuccess('Rôles mis à jour');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -164,7 +165,7 @@ export default function EditPiloteForm({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -187,7 +188,7 @@ export default function EditPiloteForm({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -218,7 +219,7 @@ export default function EditPiloteForm({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       setBlockMinutes('');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -238,7 +239,7 @@ export default function EditPiloteForm({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       setBlockReasonVal('');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

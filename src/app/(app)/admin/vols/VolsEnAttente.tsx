@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatDuree } from '@/lib/utils';
 import { Check, X, Trash2 } from 'lucide-react';
@@ -37,6 +37,7 @@ type Vol = {
 
 export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [refusalReason, setRefusalReason] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<string | null>(null);
 
@@ -49,7 +50,7 @@ export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
         body: JSON.stringify({ statut: 'validé' }),
       });
       if (!res.ok) throw new Error('Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } finally {
       setLoading(null);
     }
@@ -65,7 +66,7 @@ export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
       });
       if (!res.ok) throw new Error('Erreur');
       setRefusalReason((s) => ({ ...s, [id]: '' }));
-      router.refresh();
+      startTransition(() => router.refresh());
     } finally {
       setLoading(null);
     }
@@ -77,7 +78,7 @@ export default function VolsEnAttente({ vols }: { vols: Vol[] }) {
     try {
       const res = await fetch(`/api/vols/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } finally {
       setLoading(null);
     }

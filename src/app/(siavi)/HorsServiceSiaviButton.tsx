@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 
 export default function HorsServiceSiaviButton() {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
@@ -18,7 +19,7 @@ export default function HorsServiceSiaviButton() {
         const data = await res.json();
         throw new Error(data.error || 'Erreur');
       }
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: any) {
       alert(err.message);
     } finally {

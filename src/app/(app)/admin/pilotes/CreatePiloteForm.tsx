@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function CreatePiloteForm() {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'pilote' | 'admin'>('pilote');
@@ -36,7 +37,7 @@ export default function CreatePiloteForm() {
       setArmee(false);
       setAtc(false);
       setTimeout(() => setSuccess(false), 3000);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMinutes, subMinutes } from 'date-fns';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
@@ -72,6 +72,7 @@ export default function VolEditForm({
   isConfirmationInstructeur?: boolean;
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [type_avion_id, setTypeAvionId] = useState(typeAvionId);
   const [compagnie_id, setCompagnieId] = useState(compagnieId || '');
   const [pourMoiMemo, setPourMoiMemo] = useState(compagnieLibelle === 'Pour moi-même');
@@ -106,7 +107,7 @@ export default function VolEditForm({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       router.push(successRedirect || '/logbook');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -126,7 +127,7 @@ export default function VolEditForm({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       router.push(successRedirect || '/logbook');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -146,7 +147,7 @@ export default function VolEditForm({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       router.push(successRedirect || '/logbook');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -229,7 +230,7 @@ export default function VolEditForm({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       router.push(successRedirect || '/logbook');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, Landmark, User, RefreshCw, Plus, Clock, Users } from 'lucide-react';
 import { formatDuree } from '@/lib/utils';
@@ -29,6 +29,7 @@ interface Props {
 
 export default function ArmeeConfigClient({ compteMilitaire, pdgActuel, tousPilotes, pilotesArmee, totalMinutes }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -57,7 +58,7 @@ export default function ArmeeConfigClient({ compteMilitaire, pdgActuel, tousPilo
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
       setSuccess('Compte de l\'armée créé avec succès');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -85,7 +86,7 @@ export default function ArmeeConfigClient({ compteMilitaire, pdgActuel, tousPilo
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
       setSuccess('PDG militaire mis à jour');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

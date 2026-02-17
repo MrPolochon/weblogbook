@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2, Save } from 'lucide-react';
 
@@ -9,6 +9,7 @@ type Grade = { id: string; nom: string; ordre: number };
 
 export default function AdminSiaviComptes({ comptes, grades }: { comptes: Compte[]; grades: Grade[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [editingGrades, setEditingGrades] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export default function AdminSiaviComptes({ comptes, grades }: { comptes: Compte
         delete next[compteId];
         return next;
       });
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -61,7 +62,7 @@ export default function AdminSiaviComptes({ comptes, grades }: { comptes: Compte
         throw new Error(data.error || 'Erreur lors de la suppression');
       }
       
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Plane, AlertTriangle, Loader2 } from 'lucide-react';
 
@@ -18,6 +18,7 @@ export default function AtcLeftSidebar({
   sessionPosition: string;
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [collapsed, setCollapsed] = useState(false);
   const [takingId, setTakingId] = useState<string | null>(null);
 
@@ -33,7 +34,7 @@ export default function AtcLeftSidebar({
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {

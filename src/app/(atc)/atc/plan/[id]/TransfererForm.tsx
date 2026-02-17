@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
 
 export default function TransfererForm({ planId, aeroportSession = '', allowAutomonitoring = true }: { planId: string; aeroportSession?: string; allowAutomonitoring?: boolean }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [aeroport, setAeroport] = useState(aeroportSession);
   const [position, setPosition] = useState('');
   const [confirmSameAirport, setConfirmSameAirport] = useState(false);
@@ -37,7 +38,7 @@ export default function TransfererForm({ planId, aeroportSession = '', allowAuto
       setAeroport(aeroportSession);
       setPosition('');
       setConfirmSameAirport(false);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -56,7 +57,7 @@ export default function TransfererForm({ planId, aeroportSession = '', allowAuto
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {

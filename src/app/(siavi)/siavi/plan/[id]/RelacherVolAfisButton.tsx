@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 
 export default function RelacherVolAfisButton({ planId }: { planId: string }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
@@ -26,7 +27,7 @@ export default function RelacherVolAfisButton({ planId }: { planId: string }) {
       }
 
       router.push('/siavi');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: any) {
       alert(err.message);
     } finally {

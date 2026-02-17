@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Ship, Plus, Clock, Zap, User } from 'lucide-react';
 import { COUT_VOL_FERRY, COUT_VOL_FERRY_AUTO_MIN, COUT_VOL_FERRY_AUTO_MAX, DUREE_VOL_FERRY_AUTO_MIN, DUREE_VOL_FERRY_AUTO_MAX } from '@/lib/compagnie-utils';
@@ -34,6 +34,7 @@ type Hub = { aeroport_code: string };
 
 export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId: string }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [vols, setVols] = useState<VolFerry[]>([]);
   const [avions, setAvions] = useState<Avion[]>([]);
   const [hubs, setHubs] = useState<Hub[]>([]);
@@ -115,7 +116,7 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
       setAvionId('');
       setHubArrivee('');
       setShowCreer(false);
-      router.refresh();
+      startTransition(() => router.refresh());
       loadVols();
       loadAvions();
     } catch (e) {
@@ -136,7 +137,7 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
       alert(`Vol clôturé. Usure appliquée : ${d.usure_appliquee}%`);
-      router.refresh();
+      startTransition(() => router.refresh());
       loadVols();
       loadAvions();
     } catch (e) {
@@ -154,7 +155,7 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
       loadVols();
       loadAvions();
     } catch (e) {

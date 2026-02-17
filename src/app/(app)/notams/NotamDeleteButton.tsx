@@ -1,11 +1,12 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { Trash2 } from 'lucide-react';
 
 export default function NotamDeleteButton({ notamId, variant = 'default' }: { notamId: string; variant?: 'default' | 'atc' }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
 
   async function handleDelete() {
@@ -14,7 +15,7 @@ export default function NotamDeleteButton({ notamId, variant = 'default' }: { no
     try {
       const res = await fetch(`/api/notams/${notamId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch {
       setLoading(false);
       alert('Erreur lors de la suppression.');

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight, UserPlus, Check, XCircle, AlertTriangle, Banknote } from 'lucide-react';
 import ChequeVisuel from '@/components/ChequeVisuel';
@@ -54,6 +54,7 @@ function getIdentifiant(obj: { identifiant: string } | { identifiant: string }[]
 
 export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<'inbox' | 'recrutement' | 'cheques' | 'sanctions' | 'sent' | 'compose'>('inbox');
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [loading, setLoading] = useState(false);
@@ -109,7 +110,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
         });
       }
       
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       setAmendeError(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -150,7 +151,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
         });
       }
       
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       setInvitationError(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -164,7 +165,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'marquer_lu' })
     });
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
   async function handleDelete(id: string) {
@@ -175,7 +176,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSelectedMessage(null);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -197,7 +198,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       setSelectedMessage({ ...selectedMessage, cheque_encaisse: true });
     }
     
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
   async function handleSendMessage(e: React.FormEvent) {
@@ -226,7 +227,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       setComposeTitre('');
       setComposeContenu('');
       setActiveTab('sent');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       setComposeError(e instanceof Error ? e.message : 'Erreur');
     } finally {

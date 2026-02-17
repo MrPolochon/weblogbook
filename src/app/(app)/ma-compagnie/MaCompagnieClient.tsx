@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart, UserPlus, Send, X, Check, Loader2, Search, ImagePlus, Trash2, Radio } from 'lucide-react';
 import Image from 'next/image';
@@ -64,6 +64,7 @@ export default function MaCompagnieClient({
   soldeCompagnie 
 }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [showSettings, setShowSettings] = useState(false);
   const [pourcentageSalaire, setPourcentageSalaire] = useState(compagnie.pourcentage_salaire.toString());
   const [prixBillet, setPrixBillet] = useState(compagnie.prix_billet_pax.toString());
@@ -210,7 +211,7 @@ export default function MaCompagnieClient({
       setLogoUrl(data.logo_url);
       setLogoSuccess(`Logo mis à jour ! ${data.cartes_mises_a_jour} carte(s) mise(s) à jour.`);
       setTimeout(() => setLogoSuccess(''), 5000);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setLogoError(err instanceof Error ? err.message : 'Erreur upload');
     } finally {
@@ -231,7 +232,7 @@ export default function MaCompagnieClient({
       setLogoUrl(null);
       setLogoSuccess('Logo supprimé');
       setTimeout(() => setLogoSuccess(''), 3000);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setLogoError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -266,7 +267,7 @@ export default function MaCompagnieClient({
 
       setSuccess('Paramètres sauvegardés');
       setTimeout(() => setSuccess(''), 3000);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Plus, Search, Plane, ShoppingCart, RefreshCw, Building2, User, 
@@ -66,6 +66,7 @@ export default function HangarMarketClient({
   taxePourcent
 }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<'acheter' | 'vendre'>('acheter');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -125,7 +126,7 @@ export default function HangarMarketClient({
       setSuccess('Annonce créée avec succès !');
       setShowVendreModal(false);
       resetVendreForm();
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -156,7 +157,7 @@ export default function HangarMarketClient({
       setShowAchatModal(false);
       setSelectedAnnonce(null);
       setAcheterPour(null);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -177,7 +178,7 @@ export default function HangarMarketClient({
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
       setSuccess('Annonce annulée');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

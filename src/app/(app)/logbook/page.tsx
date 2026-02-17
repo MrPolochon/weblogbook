@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
-import { formatDuree } from '@/lib/utils';
+import { formatDuree, cn } from '@/lib/utils';
 import { formatDateMediumUTC, formatTimeUTC } from '@/lib/date-utils';
 import { Plus, BookOpen, Plane, FileText, Clock, CheckCircle2, XCircle, Timer, TrendingUp, Calendar, MapPin, ArrowRight } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
@@ -303,81 +303,109 @@ export default async function LogbookPage() {
       )}
 
       <div className="card">
-        <h2 className="text-lg font-medium text-slate-200 mb-4">Vols</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-medium text-slate-200">Vols</h2>
+          {vols && vols.length > 0 && (
+            <span className="text-xs text-slate-500">{vols.length} vol{vols.length > 1 ? 's' : ''}</span>
+          )}
+        </div>
         {!vols || vols.length === 0 ? (
-          <p className="text-slate-500">Aucun vol enregistré.</p>
+          <div className="text-center py-12">
+            <Plane className="h-12 w-12 text-slate-700 mx-auto mb-3" />
+            <p className="text-slate-500">Aucun vol enregistre.</p>
+            <Link href="/logbook/nouveau" className="text-sky-400 text-sm hover:underline mt-2 inline-block">
+              Enregistrer votre premier vol
+            </Link>
+          </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto -mx-5 sm:-mx-6 px-5 sm:px-6">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-600 text-left text-slate-400">
-                  <th className="pb-2 pr-4">Date</th>
-                  <th className="pb-2 pr-4">Départ</th>
-                  <th className="pb-2 pr-4">Arrivée</th>
-                  <th className="pb-2 pr-4">Appareil</th>
-                  <th className="pb-2 pr-4">Compagnie</th>
-                  <th className="pb-2 pr-4">Callsign</th>
-                  <th className="pb-2 pr-4">Durée</th>
-                  <th className="pb-2 pr-4">Type</th>
-                  <th className="pb-2 pr-4">Rôle</th>
-                  <th className="pb-2 pr-4">Statut</th>
-                  <th className="pb-2 w-10"> </th>
+                <tr className="border-b border-slate-600/50">
+                  <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Date</th>
+                  <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Route</th>
+                  <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Appareil</th>
+                  <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Cie / Callsign</th>
+                  <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Duree</th>
+                  <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Type / Role</th>
+                  <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Statut</th>
+                  <th className="pb-3 w-10"> </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-700/30">
                 {vols.map((v) => (
-                  <tr key={v.id} className="border-b border-slate-700/50">
-                    <td className="py-3 pr-4 text-slate-300">
+                  <tr key={v.id} className="group hover:bg-slate-700/20 transition-colors">
+                    <td className="py-3 pr-4">
                       {(v.statut === 'refusé' && (v.refusal_count ?? 0) < 3) || v.statut === 'en_attente' ? (
-                        <Link href={`/logbook/vol/${v.id}`} className="text-sky-400 hover:underline">
+                        <Link href={`/logbook/vol/${v.id}`} className="text-sky-400 hover:text-sky-300 font-medium transition-colors">
                           {formatDateMediumUTC(v.depart_utc)}
                         </Link>
                       ) : (
-                        formatDateMediumUTC(v.depart_utc)
+                        <span className="text-slate-300">{formatDateMediumUTC(v.depart_utc)}</span>
                       )}
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">
-                      {v.aeroport_depart || '—'} {formatTimeUTC(v.depart_utc)}
+                    <td className="py-3 pr-4">
+                      <div className="flex items-center gap-1.5 text-slate-300">
+                        <span className="font-mono text-xs bg-slate-700/50 px-1.5 py-0.5 rounded">{v.aeroport_depart || '—'}</span>
+                        <ArrowRight className="h-3 w-3 text-slate-600 shrink-0" />
+                        <span className="font-mono text-xs bg-slate-700/50 px-1.5 py-0.5 rounded">{v.aeroport_arrivee || '—'}</span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {formatTimeUTC(v.depart_utc)} — {v.arrivee_utc ? formatTimeUTC(v.arrivee_utc) : '—'}
+                      </div>
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">
-                      {v.aeroport_arrivee || '—'} {v.arrivee_utc ? formatTimeUTC(v.arrivee_utc) : '—'}
+                    <td className="py-3 pr-4 text-slate-300 text-xs">
+                      {(() => {
+                        const ta = Array.isArray(v.type_avion) ? v.type_avion[0] : v.type_avion;
+                        return (
+                          <>
+                            {(ta as { nom?: string })?.nom || '—'}
+                            {(ta as { constructeur?: string })?.constructeur && (
+                              <span className="block text-slate-500 text-xs">{(ta as { constructeur?: string }).constructeur}</span>
+                            )}
+                          </>
+                        );
+                      })()}
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">
-                      {(v.type_avion as { nom?: string })?.nom || '—'}
+                    <td className="py-3 pr-4">
+                      <span className="text-slate-300 text-xs">{v.compagnie_libelle || '—'}</span>
+                      {v.callsign && <span className="block text-xs text-sky-400/70 font-mono">{v.callsign}</span>}
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">{v.compagnie_libelle || '—'}</td>
-                    <td className="py-3 pr-4 text-slate-300">{v.callsign || '—'}</td>
-                    <td className="py-3 pr-4 text-slate-300">{formatDuree(v.duree_minutes || 0)}</td>
-                    <td className="py-3 pr-4 text-slate-300">
-                      {v.type_vol}
+                    <td className="py-3 pr-4 text-slate-300 font-mono text-xs">{formatDuree(v.duree_minutes || 0)}</td>
+                    <td className="py-3 pr-4">
+                      <span className="text-slate-300 text-xs">{v.type_vol}</span>
+                      <span className="block text-xs text-slate-500">
+                        {v.instructeur_id === user.id ? 'Instructeur' : (v.copilote_id === user.id || (Array.isArray(v.copilote) ? v.copilote[0] : v.copilote)?.id === user.id) ? 'Co-pilote' : v.role_pilote}
+                      </span>
                       {v.type_vol === 'Instruction' && (v.instructeur || v.instruction_type) && (
-                        <span className="block text-xs text-slate-500 mt-0.5">
-                          par {(Array.isArray(v.instructeur) ? v.instructeur[0] : v.instructeur)?.identifiant ?? '—'}
-                          {v.instruction_type ? ` — ${v.instruction_type}` : ''}
+                        <span className="block text-xs text-slate-600 mt-0.5">
+                          {(Array.isArray(v.instructeur) ? v.instructeur[0] : v.instructeur)?.identifiant ?? ''}
+                          {v.instruction_type ? ` · ${v.instruction_type}` : ''}
                         </span>
                       )}
                       {v.copilote_id && (() => {
                         const estPilote = v.pilote_id === user.id;
                         const autre = estPilote ? (Array.isArray(v.copilote) ? v.copilote[0] : v.copilote) : (Array.isArray(v.pilote) ? v.pilote[0] : v.pilote);
                         return (
-                          <span className="block text-xs text-slate-500 mt-0.5">
-                            {estPilote ? 'Copilote: ' : 'Pilote: '}{autre?.identifiant ?? '—'}
+                          <span className="block text-xs text-slate-600 mt-0.5">
+                            {estPilote ? 'Co: ' : 'PIC: '}{autre?.identifiant ?? '—'}
                           </span>
                         );
                       })()}
                     </td>
-                    <td className="py-3 pr-4 text-slate-300">{v.instructeur_id === user.id ? 'Instructeur' : (v.copilote_id === user.id || (Array.isArray(v.copilote) ? v.copilote[0] : v.copilote)?.id === user.id) ? 'Co-pilote' : v.role_pilote}</td>
                     <td className="py-3 pr-4">
                       <span
-                        className={
+                        className={cn(
+                          'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
                           v.statut === 'validé'
-                            ? 'text-emerald-400'
+                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
                             : v.statut === 'refusé'
-                              ? 'text-red-400'
-                              : 'text-amber-400'
-                        }
+                              ? 'bg-red-500/15 text-red-400 border border-red-500/25'
+                              : 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
+                        )}
                       >
-                        {v.statut === 'validé' ? 'Validé' : v.statut === 'refusé' ? 'Refusé' : 'En attente'}
+                        {v.statut === 'validé' ? <CheckCircle2 className="h-3 w-3" /> : v.statut === 'refusé' ? <XCircle className="h-3 w-3" /> : <Timer className="h-3 w-3" />}
+                        {v.statut === 'validé' ? 'Valide' : v.statut === 'refusé' ? 'Refuse' : 'Attente'}
                       </span>
                     </td>
                     <td className="py-3">

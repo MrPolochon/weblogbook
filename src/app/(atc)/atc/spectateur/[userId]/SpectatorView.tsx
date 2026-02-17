@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -70,6 +70,7 @@ export default function SpectatorView({
   const [isAtcOnline, setIsAtcOnline] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const router = useRouter();
+  const [, startTransition] = useTransition();
 
   // Supabase Realtime pour les mises à jour en temps réel
   useEffect(() => {
@@ -292,7 +293,7 @@ export default function SpectatorView({
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => router.refresh()}
+              onClick={() => startTransition(() => router.refresh())}
               className="p-2 rounded-lg bg-white/50 hover:bg-white transition-colors"
               title="Actualiser"
             >

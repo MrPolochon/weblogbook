@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMinutes, subMinutes } from 'date-fns';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
@@ -26,6 +26,7 @@ const LIB_NATURE: Record<string, string> = { entrainement: 'Entraînement', esco
 
 export default function VolFormMilitaire({ pilotesArmee, inventaireMilitaire = [], missionId = '' }: { pilotesArmee: Profil[]; inventaireMilitaire?: InventaireItem[]; missionId?: string }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [armee_avion_id, setArmeeAvionId] = useState('');
   const [mission_id, setMissionId] = useState(missionId);
   const [escadrille_ou_escadron, setEscadrilleOuEscadron] = useState<'escadrille' | 'escadron' | 'autre'>('escadrille');
@@ -151,7 +152,7 @@ export default function VolFormMilitaire({ pilotesArmee, inventaireMilitaire = [
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       router.push('/militaire');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

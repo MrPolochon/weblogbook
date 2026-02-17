@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import FlightStrip, { type StripData } from './FlightStrip';
 import { X } from 'lucide-react';
@@ -38,6 +38,7 @@ const ZONE_HEADER_DARK: Record<ZoneId, string> = {
 
 export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
   const [transferDialog, setTransferDialog] = useState<string | null>(null);
@@ -148,7 +149,7 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'update_strip', strip_zone: zone, strip_order: maxOrder + 1 }),
     });
-    router.refresh();
+    startTransition(() => router.refresh());
   }, [pickedId, strips, router]);
 
   /* ═══ Place strip before/after another strip ═══ */
@@ -176,7 +177,7 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'reorder_strips', strips: batch }),
     });
-    router.refresh();
+    startTransition(() => router.refresh());
   }, [pickedId, strips, router]);
 
   /* ═══ Click on a strip wrapper → place picked strip there ═══ */
@@ -328,6 +329,7 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 /* ============================================================ */
 function TransferDialog({ planId, onClose }: { planId: string; onClose: () => void }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
   const [aeroport, setAeroport] = useState('');
@@ -344,7 +346,7 @@ function TransferDialog({ planId, onClose }: { planId: string; onClose: () => vo
       const res = await fetch(`/api/plans-vol/${planId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh(); onClose();
+      startTransition(() => router.refresh()); onClose();
     } catch (e) { alert(e instanceof Error ? e.message : 'Erreur'); }
     finally { setLoading(false); }
   };

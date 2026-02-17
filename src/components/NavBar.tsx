@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useTransition } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, Store, AlertTriangle, Flame } from 'lucide-react';
@@ -24,6 +24,7 @@ interface NavBarProps {
 export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, isIfsa = false, pendingVolsCount = 0, adminPlansNonCloturesCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0, invitationsCount = 0, signalementsNouveauxCount = 0 }: NavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [piloteMenuOpen, setPiloteMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -67,23 +68,23 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/login');
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
-  const piloteMenuItems = [
+  const piloteMenuItems: Array<{ href: string; label: string; icon: typeof BookOpen; badge: number; separator?: boolean }> = [
     { href: '/logbook', label: 'Mon logbook', icon: BookOpen, badge: 0 },
     { href: '/logbook/depot-plan-vol', label: 'Déposer un plan de vol', icon: Plane, badge: 0 },
     { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText, badge: 0 },
-    { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0 },
+    { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0, separator: true },
     { href: '/marche-cargo', label: 'Marché cargo', icon: Package, badge: 0 },
-    { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount + invitationsCount },
+    { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount + invitationsCount, separator: true },
     ...(hasCompagnie ? [{ href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 }] : []),
     ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield, badge: 0 }] : []),
-    { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0 },
+    { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0, separator: true },
     { href: '/marketplace', label: 'Marketplace', icon: Package, badge: 0 },
     { href: '/hangar-market', label: 'Hangar Market', icon: Store, badge: 0 },
     { href: '/inventaire', label: 'Mon inventaire', icon: Plane, badge: 0 },
-    { href: '/signalement', label: 'Signalement IFSA', icon: AlertTriangle, badge: 0 },
+    { href: '/signalement', label: 'Signalement IFSA', icon: AlertTriangle, badge: 0, separator: true },
   ];
 
   const isPiloteActive = pathname.startsWith('/logbook') || pathname.startsWith('/militaire') || 
@@ -125,30 +126,34 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             </button>
             
             {piloteMenuOpen && (
-              <div style={dropdownStyle ?? undefined} className="fixed w-60 rounded-2xl border border-slate-700/50 bg-slate-800/95 backdrop-blur-xl py-2 shadow-2xl shadow-slate-900/50 z-50 animate-fade-in">
-                {piloteMenuItems.map((item) => {
+              <div style={dropdownStyle ?? undefined} className="fixed w-64 rounded-2xl border border-slate-700/40 bg-slate-800/98 backdrop-blur-2xl py-1.5 shadow-2xl shadow-black/40 z-50 animate-fade-in">
+                {piloteMenuItems.map((item, idx) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || (item.href !== '/logbook' && pathname.startsWith(item.href));
                   return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setPiloteMenuOpen(false)}
-                      className={cn(
-                        'flex items-center gap-3 px-4 py-2.5 text-sm transition-all duration-200 mx-2 rounded-xl',
-                        isActive
-                          ? 'bg-gradient-to-r from-sky-600/30 to-sky-500/20 text-sky-300 shadow-sm'
-                          : 'text-slate-300 hover:bg-slate-700/40 hover:text-slate-100 hover:translate-x-1'
+                    <div key={item.href}>
+                      {item.separator && idx > 0 && (
+                        <div className="mx-4 my-1 border-t border-slate-700/40" />
                       )}
-                    >
-                      <Icon className={cn("h-4 w-4 transition-colors", isActive && "text-sky-400")} />
-                      {item.label}
-                      {item.badge > 0 && (
-                        <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-gradient-to-r from-red-600 to-red-500 px-1.5 text-xs font-bold text-white shadow-lg shadow-red-500/30">
-                          {item.badge > 99 ? '99+' : item.badge}
-                        </span>
-                      )}
-                    </Link>
+                      <Link
+                        href={item.href}
+                        onClick={() => setPiloteMenuOpen(false)}
+                        className={cn(
+                          'flex items-center gap-3 px-4 py-2 text-sm transition-all duration-150 mx-1.5 rounded-lg',
+                          isActive
+                            ? 'bg-sky-500/15 text-sky-300'
+                            : 'text-slate-300 hover:bg-slate-700/50 hover:text-slate-100'
+                        )}
+                      >
+                        <Icon className={cn("h-4 w-4 shrink-0 transition-colors", isActive ? "text-sky-400" : "text-slate-500")} />
+                        <span className="truncate">{item.label}</span>
+                        {item.badge > 0 && (
+                          <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white">
+                            {item.badge > 99 ? '99+' : item.badge}
+                          </span>
+                        )}
+                      </Link>
+                    </div>
                   );
                 })}
               </div>

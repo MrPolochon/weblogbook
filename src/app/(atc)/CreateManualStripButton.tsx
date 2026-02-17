@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { FilePlus, Loader2 } from 'lucide-react';
 
 export default function CreateManualStripButton() {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
 
   async function handleCreate() {
@@ -14,7 +15,7 @@ export default function CreateManualStripButton() {
       const res = await fetch('/api/atc/creer-strip', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Erreur lors de la création du strip');
     } finally {

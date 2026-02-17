@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useTransition } from 'react';
 import { Users, Plane, TrendingUp, MapPin, RefreshCw, Radio, ZoomIn, ZoomOut, Move, Settings, Copy, Check, X, Eye, EyeOff, Plus, Trash2, Pencil } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -186,6 +186,7 @@ type AdminEditMode = 'airports' | 'islands' | 'fir';
 
 export default function MarchePassagersClient({ aeroports }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [selectedAeroport, setSelectedAeroport] = useState<AeroportData | null>(null);
   const [viewMode, setViewMode] = useState<'carte' | 'liste'>('carte');
   const [refreshing, setRefreshing] = useState(false);
@@ -495,7 +496,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
 
   async function handleRefresh() {
     setRefreshing(true);
-    router.refresh();
+    startTransition(() => router.refresh());
     setTimeout(() => setRefreshing(false), 1000);
   }
 

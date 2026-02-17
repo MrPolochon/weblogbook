@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Minus, RefreshCw, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
@@ -28,6 +28,7 @@ interface Props {
 
 export default function AdminFelitzClient({ compte, label, type }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [expanded, setExpanded] = useState(false);
   const [montant, setMontant] = useState('');
   const [libelle, setLibelle] = useState('');
@@ -88,7 +89,7 @@ export default function AdminFelitzClient({ compte, label, type }: Props) {
       setLibelle('');
       // Recharger les transactions
       setTransactionsLoaded(false);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

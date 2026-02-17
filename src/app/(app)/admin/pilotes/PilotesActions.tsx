@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Settings, Trash2, X, BookOpen } from 'lucide-react';
 import Link from 'next/link';
@@ -17,6 +17,7 @@ export default function PilotesActions({
   role?: string;
 }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [deleting, setDeleting] = useState(false);
   const [superadminModal, setSuperadminModal] = useState<{ identifiant: string; reason?: string } | null>(null);
   const [superadminPwd, setSuperadminPwd] = useState('');
@@ -57,7 +58,7 @@ export default function PilotesActions({
       }
       setSuperadminModal(null);
       setSuperadminPwd('');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : 'Erreur lors de la suppression';
       if (superadminModal) {

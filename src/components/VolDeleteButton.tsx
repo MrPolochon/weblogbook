@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
 
 export default function VolDeleteButton({ volId, canDelete = true }: { volId: string; canDelete?: boolean }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [deleting, setDeleting] = useState(false);
 
   if (!canDelete) return null;
@@ -20,7 +21,7 @@ export default function VolDeleteButton({ volId, canDelete = true }: { volId: st
         alert(data?.error || 'Erreur lors de la suppression.');
         return;
       }
-      router.refresh();
+      startTransition(() => router.refresh());
     } finally {
       setDeleting(false);
     }

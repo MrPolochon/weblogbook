@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
@@ -119,6 +119,7 @@ type LoginMode = 'pilote' | 'atc' | 'siavi';
 
 export default function LoginPage() {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +157,7 @@ export default function LoginPage() {
       const { data: signData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
       if (signInErr) throw new Error(signInErr.message || 'Identifiant ou mot de passe incorrect.');
       const uid = signData?.user?.id;
-      if (!uid) { router.replace('/logbook'); router.refresh(); return; }
+      if (!uid) { router.replace('/logbook'); startTransition(() => router.refresh()); return; }
       const { data: profile } = await supabase.from('profiles').select('role, atc, siavi').eq('id', uid).single();
       
       if (mode === 'siavi') {
@@ -174,7 +175,7 @@ export default function LoginPage() {
         if (profile?.role === 'siavi') throw new Error('Ce compte est uniquement SIAVI. Sélectionnez "SIAVI" pour vous connecter.');
         router.replace('/logbook');
       }
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur de connexion');
     } finally {

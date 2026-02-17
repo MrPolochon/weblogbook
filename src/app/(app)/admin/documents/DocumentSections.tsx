@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, createContext, useContext } from 'react';
+import { useState, useRef, useCallback, useEffect, createContext, useContext, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   FolderOpen, FolderPlus, FileText, Plus, Pencil, Trash2, Upload, X,
@@ -111,6 +111,7 @@ function findNode(nodes: TreeNode[], id: string): TreeNode | null {
 /* ── Main component ──────────────────────────────────── */
 export default function DocumentSections({ sections }: { sections: Section[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const tree = buildTree(sections);
   const [newName, setNewName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -217,7 +218,7 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
         const d = await res.json().catch(() => ({}));
         alert(d.error || 'Erreur de déplacement');
       }
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch {
       alert('Erreur réseau');
     }
@@ -251,7 +252,7 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
       });
       if (!res.ok) throw new Error('Erreur');
       setNewName('');
-      router.refresh();
+      startTransition(() => router.refresh());
     } finally {
       setLoading(false);
     }
@@ -332,6 +333,7 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
 /* ── Recursive folder node ───────────────────────────── */
 function FolderNode({ node, depth }: { node: TreeNode; depth: number }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const pick = useContext(PickCtx);
   const [expanded, setExpanded] = useState(depth < 1);
   const [editingName, setEditingName] = useState(false);
@@ -352,7 +354,7 @@ function FolderNode({ node, depth }: { node: TreeNode; depth: number }) {
   const isPicked = pick.pickedId === node.id;
   const isDropTarget = pick.pickedId && pick.pickedId !== node.id;
 
-  const refresh = useCallback(() => router.refresh(), [router]);
+  const refresh = useCallback(() => startTransition(() => router.refresh()), [router]);
 
   async function handleRename() {
     if (!editName.trim()) return;

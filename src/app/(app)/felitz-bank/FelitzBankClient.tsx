@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { ArrowUpRight, ArrowDownLeft, Send, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
@@ -26,6 +26,7 @@ interface Props {
 
 export default function FelitzBankClient({ compteId, transactions, isAdmin, isEntreprise, isMilitaire }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [showVirement, setShowVirement] = useState(false);
   const [vbanDest, setVbanDest] = useState('');
   const [montant, setMontant] = useState('');
@@ -60,7 +61,7 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
       setMontant('');
       setLibelle('');
       setShowVirement(false);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronUp, ChevronDown, Pencil, Trash2 } from 'lucide-react';
 
@@ -8,6 +8,7 @@ type Grade = { id: string; nom: string; ordre: number };
 
 export default function AdminAtcGrades({ grades }: { grades: Grade[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [nom, setNom] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +27,7 @@ export default function AdminAtcGrades({ grades }: { grades: Grade[] }) {
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
       setNom('');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -41,7 +42,7 @@ export default function AdminAtcGrades({ grades }: { grades: Grade[] }) {
       const res = await fetch(`/api/atc/grades/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ move }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -78,7 +79,7 @@ export default function AdminAtcGrades({ grades }: { grades: Grade[] }) {
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
       cancelEdit();
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -94,7 +95,7 @@ export default function AdminAtcGrades({ grades }: { grades: Grade[] }) {
       const res = await fetch(`/api/atc/grades/${g.id}`, { method: 'DELETE' });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

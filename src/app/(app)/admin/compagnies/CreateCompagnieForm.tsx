@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, RefreshCw } from 'lucide-react';
 
@@ -8,6 +8,7 @@ type Pilote = { id: string; identifiant: string };
 
 export default function CreateCompagnieForm({ pilotes }: { pilotes: Pilote[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [nom, setNom] = useState('');
   const [pdgId, setPdgId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,7 +35,7 @@ export default function CreateCompagnieForm({ pilotes }: { pilotes: Pilote[] }) 
       setNom('');
       setPdgId('');
       setTimeout(() => setSuccess(false), 2000);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

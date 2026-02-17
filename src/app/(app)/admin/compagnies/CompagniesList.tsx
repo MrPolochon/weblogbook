@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Trash2, BookOpen, Crown, Settings, Save, RefreshCw } from 'lucide-react';
@@ -29,6 +29,7 @@ function getPdgIdentifiant(profiles: C['profiles']): string | null {
 
 export default function CompagniesList({ compagnies, pilotes }: { compagnies: C[]; pilotes: Pilote[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [deleting, setDeleting] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -42,7 +43,7 @@ export default function CompagniesList({ compagnies, pilotes }: { compagnies: C[
         alert(data.error || 'Erreur lors de la suppression');
         return;
       }
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur lors de la suppression');
     } finally {
@@ -115,6 +116,7 @@ export default function CompagniesList({ compagnies, pilotes }: { compagnies: C[
 
 function CompagnieSettings({ compagnie, pilotes, onClose }: { compagnie: C; pilotes: Pilote[]; onClose: () => void }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [pdgId, setPdgId] = useState(compagnie.pdg_id || '');
   const [prixBillet, setPrixBillet] = useState(compagnie.prix_billet_pax.toString());
   const [prixCargo, setPrixCargo] = useState(compagnie.prix_kg_cargo.toString());
@@ -145,7 +147,7 @@ function CompagnieSettings({ compagnie, pilotes, onClose }: { compagnie: C; pilo
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
-      router.refresh();
+      startTransition(() => router.refresh());
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');

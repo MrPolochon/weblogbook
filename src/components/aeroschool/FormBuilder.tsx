@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Trash2, Save, Eye, EyeOff, ChevronUp, ChevronDown,
@@ -41,6 +41,7 @@ function createEmptySection(): Section {
 
 export default function FormBuilder({ initial }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -153,7 +154,7 @@ export default function FormBuilder({ initial }: Props) {
       } else {
         router.push('/admin/aeroschool');
       }
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 const STATUTS_ANNULABLES = ['depose', 'en_attente', 'refuse'];
@@ -9,6 +9,7 @@ type Props = { planId: string; statut: string };
 
 export default function PlanVolAnnulerButton({ planId, statut }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
 
   if (!STATUTS_ANNULABLES.includes(statut)) return null;
@@ -24,7 +25,7 @@ export default function PlanVolAnnulerButton({ planId, statut }: Props) {
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {

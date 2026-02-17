@@ -47,29 +47,31 @@ export default async function AdminPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold text-slate-100">Administration</h1>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 stagger-enter">
         {links.map(({ href, label, icon: Icon, countKey }) => {
           const count = countKey ? (counts[countKey] ?? 0) : 0;
           return (
             <Link
               key={href}
               href={href}
-              className={`card flex items-center gap-4 transition-colors relative ${
+              className={`card flex items-center gap-4 transition-all duration-200 relative group ${
                 count > 0
-                  ? 'border-amber-500/40 hover:border-amber-500/60 bg-amber-500/5'
-                  : 'hover:border-sky-500/50'
-              }`}
+                  ? 'border-amber-500/40 hover:border-amber-500/60 bg-amber-500/5 hover:bg-amber-500/10'
+                  : 'hover:border-sky-500/40 hover:bg-slate-800/60'
+              } hover:-translate-y-0.5 hover:shadow-lg`}
             >
               <div className="relative">
-                <Icon className={`h-8 w-8 ${count > 0 ? 'text-amber-400' : 'text-sky-400'}`} />
+                <div className={`p-2.5 rounded-xl transition-colors ${count > 0 ? 'bg-amber-500/10 group-hover:bg-amber-500/20' : 'bg-sky-500/10 group-hover:bg-sky-500/20'}`}>
+                  <Icon className={`h-6 w-6 ${count > 0 ? 'text-amber-400' : 'text-sky-400'}`} />
+                </div>
                 {count > 0 && (
-                  <span className="absolute -top-2 -right-2 min-w-[20px] h-5 flex items-center justify-center px-1 rounded-full bg-red-500 text-white text-xs font-bold shadow-lg shadow-red-500/40 animate-pulse">
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center px-1 rounded-full bg-red-500 text-white text-[10px] font-bold shadow-lg shadow-red-500/40">
                     {count > 99 ? '99+' : count}
                   </span>
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <span className="font-medium text-slate-200">{label}</span>
+                <span className="font-medium text-slate-200 group-hover:text-slate-100 transition-colors">{label}</span>
                 {count > 0 && (
                   <p className="text-xs text-amber-400/80 mt-0.5">
                     {count} en attente

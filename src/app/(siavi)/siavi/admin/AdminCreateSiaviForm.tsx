@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserPlus, User, KeyRound } from 'lucide-react';
 
@@ -10,6 +10,7 @@ type Mode = 'nouveau' | 'existant';
 
 export default function AdminCreateSiaviForm({ grades }: { grades: Grade[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [mode, setMode] = useState<Mode>('nouveau');
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
@@ -60,7 +61,7 @@ export default function AdminCreateSiaviForm({ grades }: { grades: Grade[] }) {
       setPassword('');
       setGradeId('');
       setAussiPilote(false);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

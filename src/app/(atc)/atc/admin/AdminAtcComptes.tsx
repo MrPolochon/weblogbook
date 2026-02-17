@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 type Grade = { id: string; nom: string; ordre: number };
@@ -8,6 +8,7 @@ type Compte = { id: string; identifiant: string; role: string; atc: boolean | nu
 
 export default function AdminAtcComptes({ comptes, grades }: { comptes: Compte[]; grades: Grade[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [accesPiloteLoadingId, setAccesPiloteLoadingId] = useState<string | null>(null);
   const [revoquerLoadingId, setRevoquerLoadingId] = useState<string | null>(null);
@@ -27,7 +28,7 @@ export default function AdminAtcComptes({ comptes, grades }: { comptes: Compte[]
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -45,7 +46,7 @@ export default function AdminAtcComptes({ comptes, grades }: { comptes: Compte[]
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -64,7 +65,7 @@ export default function AdminAtcComptes({ comptes, grades }: { comptes: Compte[]
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { MapPin, Plus, Trash2, Star, X } from 'lucide-react';
 import { calculerPrixHub } from '@/lib/compagnie-utils';
@@ -15,6 +15,7 @@ type Hub = {
 
 export default function CompagnieHubsClient({ compagnieId }: { compagnieId: string }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +62,7 @@ export default function CompagnieHubsClient({ compagnieId }: { compagnieId: stri
       setAeroportCode('');
       setShowAjouter(false);
       setSuccess(`Hub ${aeroportCode.toUpperCase()} ajouté avec succès.`);
-      router.refresh();
+      startTransition(() => router.refresh());
       loadHubs();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
@@ -95,7 +96,7 @@ export default function CompagnieHubsClient({ compagnieId }: { compagnieId: stri
         msg += ` Nouveau hub principal : ${d.nouveau_principal}.`;
       }
       setSuccess(msg);
-      router.refresh();
+      startTransition(() => router.refresh());
       loadHubs();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
@@ -119,7 +120,7 @@ export default function CompagnieHubsClient({ compagnieId }: { compagnieId: stri
       if (!res.ok) throw new Error(d.error || 'Erreur');
 
       setSuccess('Hub principal mis à jour.');
-      router.refresh();
+      startTransition(() => router.refresh());
       loadHubs();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');

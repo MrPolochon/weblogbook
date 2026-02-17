@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plane, Plus, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2, Handshake } from 'lucide-react';
 import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX } from '@/lib/compagnie-utils';
@@ -36,6 +36,7 @@ interface Props {
 
 export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0, isPdg = true }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [avions, setAvions] = useState<Avion[]>([]);
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,7 +101,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       const res = await fetch(`/api/compagnies/avions/${avionId}/reparer`, { method: 'POST' });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
@@ -116,7 +117,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       const res = await fetch(`/api/compagnies/avions/${avionId}/debloquer`, { method: 'POST' });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
@@ -145,7 +146,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       } else {
         alert(d.message || `Techniciens affrétés. L'avion sera réparé dans ${d.temps_attente_min || 60} minutes.`);
       }
-      router.refresh();
+      startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
@@ -162,7 +163,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       const d = await res.json().catch(() => ({}));
       if (d.repare) {
         alert('Avion réparé avec succès ! L\'avion est maintenant opérationnel.');
-        router.refresh();
+        startTransition(() => router.refresh());
         loadAvions();
       } else if (d.temps_restant_min !== undefined) {
         alert(`Maintenance en cours. Temps restant : ${d.temps_restant_min} min.`);
@@ -185,7 +186,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       if (!res.ok) throw new Error(d.error || 'Erreur');
       
       alert(d.message);
-      router.refresh();
+      startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
@@ -205,7 +206,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       if (!res.ok) throw new Error(d.error || 'Erreur');
       
       alert(d.message);
-      router.refresh();
+      startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
@@ -235,7 +236,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
       setEditingId(null);
-      router.refresh();
+      startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
@@ -264,7 +265,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       setShowLocationModal(false);
       setLocationAvionId(null);
       setLocationCompagnieId('');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {

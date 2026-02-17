@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
@@ -20,6 +20,7 @@ type Plan = {
 
 export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [aeroport_depart, setAeroportDepart] = useState(plan.aeroport_depart || '');
   const [aeroport_arrivee, setAeroportArrivee] = useState(plan.aeroport_arrivee || '');
   const [numero_vol, setNumeroVol] = useState(plan.numero_vol || '');
@@ -77,7 +78,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
       }
       if (!res.ok) throw new Error(data.error || 'Erreur');
       router.push('/logbook/plans-vol');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -94,7 +95,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       router.push('/logbook/plans-vol');
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {

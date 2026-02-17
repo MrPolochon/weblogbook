@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plane, Clock, Building2, Search, ChevronDown, ChevronUp,
@@ -63,6 +63,7 @@ function duration(start: string, end: string | null): string {
 
 export default function PlansHistorique({ plans }: { plans: PlanCloture[] }) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -83,7 +84,7 @@ export default function PlansHistorique({ plans }: { plans: PlanCloture[] }) {
         return;
       }
       setCrashConfirmId(null);
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch {
       alert('Erreur réseau');
     } finally {

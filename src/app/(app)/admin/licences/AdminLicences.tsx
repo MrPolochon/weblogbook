@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Award, Plus, Edit2, Trash2, X, Layers } from 'lucide-react';
 import { formatDateMediumUTC } from '@/lib/date-utils';
@@ -43,6 +43,7 @@ type Props = { pilotes: Pilote[]; typesAvion: TypeAvion[] };
 
 export default function AdminLicences({ pilotes, typesAvion }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [selectedPiloteId, setSelectedPiloteId] = useState<string>('');
   const [licences, setLicences] = useState<Licence[]>([]);
   const [loading, setLoading] = useState(false);
@@ -188,7 +189,7 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Erreur');
       setShowForm(false);
-      router.refresh();
+      startTransition(() => router.refresh());
       if (selectedPiloteId) {
         const r = await fetch(`/api/licences?user_id=${selectedPiloteId}`);
         const data = await r.json();
@@ -248,7 +249,7 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
       await Promise.all(promises);
       setShowForm(false);
       setModeMultiple(false);
-      router.refresh();
+      startTransition(() => router.refresh());
       if (selectedPiloteId) {
         const r = await fetch(`/api/licences?user_id=${selectedPiloteId}`);
         const data = await r.json();
@@ -269,7 +270,7 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
       const res = await fetch(`/api/licences/${id}`, { method: 'DELETE' });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      router.refresh();
+      startTransition(() => router.refresh());
       if (selectedPiloteId) {
         const r = await fetch(`/api/licences?user_id=${selectedPiloteId}`);
         const data = await r.json();

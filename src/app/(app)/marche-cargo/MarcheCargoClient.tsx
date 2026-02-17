@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { Package, TrendingUp, MapPin, RefreshCw, Radio, Factory, Plane, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -47,6 +47,7 @@ const CARGO_TYPES = [
 
 export default function MarcheCargoClient({ aeroports }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [selectedAeroport, setSelectedAeroport] = useState<AeroportCargoData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [filterTaille, setFilterTaille] = useState<string>('all');
@@ -54,7 +55,7 @@ export default function MarcheCargoClient({ aeroports }: Props) {
 
   async function handleRefresh() {
     setRefreshing(true);
-    router.refresh();
+    startTransition(() => router.refresh());
     setTimeout(() => setRefreshing(false), 1000);
   }
 

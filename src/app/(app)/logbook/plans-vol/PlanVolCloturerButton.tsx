@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle2, X, Plane } from 'lucide-react';
@@ -11,6 +11,7 @@ type Props = { planId: string; statut: string };
 
 export default function PlanVolCloturerButton({ planId, statut }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [clotureDirecte, setClotureDirecte] = useState(false);
@@ -40,7 +41,7 @@ export default function PlanVolCloturerButton({ planId, statut }: Props) {
         setShowSuccessModal(true);
       } else {
         // En attente de confirmation ATC
-        router.refresh();
+        startTransition(() => router.refresh());
       }
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
@@ -50,7 +51,7 @@ export default function PlanVolCloturerButton({ planId, statut }: Props) {
 
   function handleCloseModal() {
     setShowSuccessModal(false);
-    router.refresh();
+    startTransition(() => router.refresh());
   }
 
   return (

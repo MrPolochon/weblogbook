@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
@@ -17,6 +17,7 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
   const inputClass = isSiavi ? 'block w-full rounded-lg border-2 border-slate-300 bg-slate-700 px-3 py-2 text-white placeholder-slate-400 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500' : 'input';
   const cardClass = isSiavi ? '' : 'card'; // SIAVI n'utilise pas .card car parent a déjà le style
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -65,7 +66,7 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       setMessageArmee({ type: 'ok', text: 'Rôle Armée mis à jour.' });
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (err: unknown) {
       setMessageArmee({ type: 'err', text: err instanceof Error ? err.message : 'Erreur' });
     } finally {

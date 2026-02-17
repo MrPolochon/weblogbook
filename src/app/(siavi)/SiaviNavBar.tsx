@@ -1,5 +1,6 @@
 'use client';
 
+import { useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Flame, Radio, FileText, Mail, LogOut, Clock, Plane, MapPin, User, LayoutDashboard, Landmark } from 'lucide-react';
@@ -18,12 +19,13 @@ interface SiaviNavBarProps {
 export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, messagesNonLusCount }: SiaviNavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [, startTransition] = useTransition();
 
   const handleLogout = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/login');
-    router.refresh();
+    startTransition(() => router.refresh());
   };
 
   const links = [

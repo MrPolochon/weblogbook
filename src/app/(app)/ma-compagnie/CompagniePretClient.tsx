@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Landmark, DollarSign, Percent, Clock, CheckCircle2, AlertTriangle, TrendingDown } from 'lucide-react';
 
@@ -26,6 +26,7 @@ interface Props {
 
 export default function CompagniePretClient({ compagnieId }: Props) {
   const router = useRouter();
+  const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pretActif, setPretActif] = useState<Pret | null>(null);
@@ -90,7 +91,7 @@ export default function CompagniePretClient({ compagnieId }: Props) {
       alert(data.message);
       setSelectedMontant(null);
       loadPret();
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -125,7 +126,7 @@ export default function CompagniePretClient({ compagnieId }: Props) {
       alert(data.message);
       setMontantRemboursement('');
       loadPret();
-      router.refresh();
+      startTransition(() => router.refresh());
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
