@@ -321,7 +321,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
         <button type="button" onClick={() => callAction('transferer', { automonitoring: true })} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 shadow-sm"><Radio className="h-3.5 w-3.5" />{loading === 'transferer' ? '…' : 'Autosurv.'}</button>
       )}
       {strip.type_vol === 'VFR' && strip.intentions_vol && (
-        <div className="relative">
+        <>
           <button
             ref={intentionsBtnRef}
             type="button"
@@ -338,15 +338,28 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
           >
             <MessageSquare className="h-3.5 w-3.5" />Intentions
           </button>
-          {showIntentions && (
-            <div className={`absolute bottom-full left-0 mb-1 z-50 w-[320px] max-w-[90vw] rounded-lg shadow-xl border p-3 ${
-              isDark ? 'bg-slate-800 border-sky-500/50 text-slate-100' : 'bg-white border-sky-300 text-slate-900'
-            }`}>
-              <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>Intentions de vol</div>
-              <p className="text-sm font-mono font-semibold leading-snug break-words whitespace-normal">{strip.intentions_vol}</p>
-            </div>
-          )}
-        </div>
+          {showIntentions && intentionsBtnRef.current && (() => {
+            const rect = intentionsBtnRef.current!.getBoundingClientRect();
+            return (
+              <div
+                className={`fixed rounded-lg shadow-2xl border-2 p-4 ${
+                  isDark ? 'bg-slate-800 border-sky-500 text-slate-100' : 'bg-white border-sky-400 text-slate-900'
+                }`}
+                style={{
+                  zIndex: 99999,
+                  left: rect.left,
+                  top: rect.top - 8,
+                  transform: 'translateY(-100%)',
+                  width: 380,
+                  maxWidth: '90vw',
+                }}
+              >
+                <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>Intentions de vol</div>
+                <p className="text-sm font-mono font-semibold leading-relaxed break-words whitespace-pre-wrap">{strip.intentions_vol}</p>
+              </div>
+            );
+          })()}
+        </>
       )}
       {(statut === 'en_attente' || statut === 'depose' || statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
         <button type="button" onClick={() => setShowCancelConfirm(true)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 shadow-sm"><XCircle className="h-3.5 w-3.5" />Annuler vol</button>
