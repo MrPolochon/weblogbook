@@ -25,7 +25,7 @@ export default async function AdminPlansVolPage() {
       compagnie_id, nature_transport, nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote,
       current_holder_user_id, current_holder_position, current_holder_aeroport,
       pilote:profiles!plans_vol_pilote_id_fkey(identifiant),
-      compagnie:compagnies(nom)
+      compagnie:compagnies!plans_vol_compagnie_id_fkey(nom)
     `)
     .not('statut', 'in', '("cloture","annule","refuse")')
     .or('created_by_atc.is.null,created_by_atc.eq.false')
@@ -40,7 +40,7 @@ export default async function AdminPlansVolPage() {
       vol_commercial, vol_ferry, automonitoring, created_by_atc,
       compagnie_id,
       pilote:profiles!plans_vol_pilote_id_fkey(identifiant),
-      compagnie:compagnies(nom),
+      compagnie:compagnies!plans_vol_compagnie_id_fkey(nom),
       atc_plans_controles(user_id, aeroport, position, created_at, profile:profiles(identifiant))
     `)
     .in('statut', ['cloture', 'annule'])
