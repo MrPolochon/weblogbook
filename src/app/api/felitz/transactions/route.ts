@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const { data: profile } = await supabase.from('profiles').select('role, identifiant').eq('id', user.id).single();
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
 
     const body = await req.json();
@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
     }
 
     const admin = createAdminClient();
+    const adminNom = profile?.identifiant || 'Admin';
 
     // Récupérer le solde actuel
     const { data: compte } = await admin.from('felitz_comptes')
@@ -105,12 +106,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Le solde a été modifié. Réessayez.' }, { status: 409 });
     }
 
-    // Créer la transaction
+    // Créer la transaction avec le nom de l'admin
+    const libelleAvecAdmin = `[Admin: ${adminNom}] ${libelle}`;
     const { data: transaction, error } = await admin.from('felitz_transactions').insert({
       compte_id,
       type,
       montant,
-      libelle
+      libelle: libelleAvecAdmin
     }).select().single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

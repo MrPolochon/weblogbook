@@ -81,13 +81,13 @@ export async function POST(
     }
 
     // Enregistrer la transaction
-    await admin.from('felitz_transactions').insert({
+    const { error: txError } = await admin.from('felitz_transactions').insert({
       compte_id: compteCompagnie.id,
       type: 'debit',
       montant: COUT_TENTATIVE_REPARATION,
-      description: `Tentative de réparation avion détruit ${avion.immatriculation}`,
-      reference: `REPAIR-ATTEMPT-${avion.id.slice(0, 8)}`,
+      libelle: `Tentative de réparation avion détruit ${avion.immatriculation}`,
     });
+    if (txError) console.error('Erreur transaction tentative réparation:', txError);
 
     // Tirer au sort : 0.5% de chance de succès
     const random = Math.random();
