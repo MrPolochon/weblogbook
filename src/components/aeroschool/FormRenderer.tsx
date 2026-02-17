@@ -59,7 +59,12 @@ export default function FormRenderer({ form }: Props) {
     } catch { /* ignore */ }
   }, [form.id, answers]);
 
-  const { cheatingDetected } = useAntiCheat({ enabled: true, onCheatDetected: handleCheat });
+  const { cheatingDetected } = useAntiCheat({
+    enabled: true,
+    onCheatDetected: handleCheat,
+    graceMs: 10000,
+    relaxed: true,
+  });
 
   const section = form.sections[currentSection];
   const isLast = currentSection === form.sections.length - 1;
