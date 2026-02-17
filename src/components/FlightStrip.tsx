@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
@@ -344,23 +345,26 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
           >
             <MessageSquare className="h-3.5 w-3.5" />Intentions
           </button>
-          {intentionsPos && (
+          {intentionsPos && createPortal(
             <div
-              className={`fixed rounded-lg shadow-2xl border-2 p-4 ${
-                isDark ? 'bg-slate-800 border-sky-500 text-slate-100' : 'bg-white border-sky-400 text-slate-900'
-              }`}
               style={{
-                zIndex: 99999,
+                position: 'fixed',
+                zIndex: 2147483647,
                 left: intentionsPos.x,
                 top: intentionsPos.y - 8,
                 transform: 'translateY(-100%)',
                 width: 380,
                 maxWidth: '90vw',
+                pointerEvents: 'none',
               }}
+              className={`rounded-lg shadow-2xl border-2 p-4 ${
+                isDark ? 'bg-slate-800 border-sky-500 text-slate-100' : 'bg-white border-sky-400 text-slate-900'
+              }`}
             >
               <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>Intentions de vol</div>
               <p className="text-sm font-mono font-semibold leading-relaxed break-words whitespace-pre-wrap">{strip.intentions_vol}</p>
-            </div>
+            </div>,
+            document.body,
           )}
         </>
       )}
