@@ -47,7 +47,7 @@ export async function PATCH(
 
     const admin = createAdminClient();
     const { data: plan } = await admin.from('plans_vol')
-      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, compagnie_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, created_by_atc')
+      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, created_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, compagnie_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, created_by_atc')
       .eq('id', id)
       .single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
