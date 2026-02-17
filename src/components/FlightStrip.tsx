@@ -240,8 +240,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
   const [showRefuse, setShowRefuse] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [refuseReason, setRefuseReason] = useState('');
-  const [showIntentions, setShowIntentions] = useState(false);
-  const intentionsBtnRef = useRef<HTMLButtonElement>(null);
+  const [intentionsPos, setIntentionsPos] = useState<{ x: number; y: number } | null>(null);
 
   const callAction = async (action: string, body: Record<string, unknown> = {}) => {
     setLoading(action);
@@ -323,42 +322,46 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
       {strip.type_vol === 'VFR' && strip.intentions_vol && (
         <>
           <button
-            ref={intentionsBtnRef}
             type="button"
-            onMouseDown={(e) => { e.stopPropagation(); setShowIntentions(true); }}
-            onMouseUp={() => setShowIntentions(false)}
-            onMouseLeave={() => setShowIntentions(false)}
-            onTouchStart={(e) => { e.stopPropagation(); setShowIntentions(true); }}
-            onTouchEnd={() => setShowIntentions(false)}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setIntentionsPos({ x: rect.left, y: rect.top });
+            }}
+            onMouseUp={() => setIntentionsPos(null)}
+            onMouseLeave={() => setIntentionsPos(null)}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setIntentionsPos({ x: rect.left, y: rect.top });
+            }}
+            onTouchEnd={() => setIntentionsPos(null)}
             className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded shadow-sm transition-colors ${
-              showIntentions
+              intentionsPos
                 ? (isDark ? 'bg-sky-500 text-white' : 'bg-sky-600 text-white')
                 : (isDark ? 'bg-sky-700 text-white hover:bg-sky-600' : 'bg-sky-500 text-white hover:bg-sky-600')
             }`}
           >
             <MessageSquare className="h-3.5 w-3.5" />Intentions
           </button>
-          {showIntentions && intentionsBtnRef.current && (() => {
-            const rect = intentionsBtnRef.current!.getBoundingClientRect();
-            return (
-              <div
-                className={`fixed rounded-lg shadow-2xl border-2 p-4 ${
-                  isDark ? 'bg-slate-800 border-sky-500 text-slate-100' : 'bg-white border-sky-400 text-slate-900'
-                }`}
-                style={{
-                  zIndex: 99999,
-                  left: rect.left,
-                  top: rect.top - 8,
-                  transform: 'translateY(-100%)',
-                  width: 380,
-                  maxWidth: '90vw',
-                }}
-              >
-                <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>Intentions de vol</div>
-                <p className="text-sm font-mono font-semibold leading-relaxed break-words whitespace-pre-wrap">{strip.intentions_vol}</p>
-              </div>
-            );
-          })()}
+          {intentionsPos && (
+            <div
+              className={`fixed rounded-lg shadow-2xl border-2 p-4 ${
+                isDark ? 'bg-slate-800 border-sky-500 text-slate-100' : 'bg-white border-sky-400 text-slate-900'
+              }`}
+              style={{
+                zIndex: 99999,
+                left: intentionsPos.x,
+                top: intentionsPos.y - 8,
+                transform: 'translateY(-100%)',
+                width: 380,
+                maxWidth: '90vw',
+              }}
+            >
+              <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>Intentions de vol</div>
+              <p className="text-sm font-mono font-semibold leading-relaxed break-words whitespace-pre-wrap">{strip.intentions_vol}</p>
+            </div>
+          )}
         </>
       )}
       {(statut === 'en_attente' || statut === 'depose' || statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
