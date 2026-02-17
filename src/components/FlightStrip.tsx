@@ -524,8 +524,11 @@ export default function FlightStrip({
                     <span className={`text-base font-mono font-bold ${txt}`}>{strip.aeroport_depart}</span>
                   )}
                   {strip.intentions_vol && (
-                    <span className={`text-[9px] ${txt} opacity-70 leading-tight`} title={strip.intentions_vol}>
-                      {strip.intentions_vol.length > 30 ? strip.intentions_vol.slice(0, 30) + '...' : strip.intentions_vol}
+                    <span
+                      className={`text-[11px] font-semibold ${isDark ? 'text-sky-300' : 'text-sky-800'} leading-snug break-words whitespace-normal`}
+                      title={strip.intentions_vol}
+                    >
+                      {strip.intentions_vol}
                     </span>
                   )}
                 </div>
