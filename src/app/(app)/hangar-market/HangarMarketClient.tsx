@@ -24,6 +24,17 @@ interface InventaireItem {
   prixRevente: number;
 }
 
+interface FlotteItem {
+  id: string;
+  immatriculation: string;
+  nom_bapteme: string | null;
+  usure_percent: number;
+  aeroport_actuel: string;
+  compagnie_id: string;
+  compagnie_nom: string;
+  type_avion: { id: string; nom: string; code_oaci: string | null };
+}
+
 interface Annonce {
   id: string;
   titre: string;
@@ -34,6 +45,8 @@ interface Annonce {
   created_at: string;
   vendeur_id: string | null;
   compagnie_vendeur_id: string | null;
+  compagnie_avion_id?: string | null;
+  vente_pdg_seulement?: boolean;
   types_avion: { id: string; nom: string; code_oaci: string; constructeur: string; capacite_pax: number; capacite_cargo_kg: number } | null;
   vendeur: { id: string; identifiant: string } | null;
   compagnie_vendeur: { id: string; nom: string } | null;
@@ -44,7 +57,8 @@ interface Props {
   soldePerso: number;
   compagnies: Compagnie[];
   inventaire: InventaireItem[];
-  flotteCompagnies: never[]; // Obsolète, gardé pour compatibilité
+  flotteDisponible: FlotteItem[];
+  isPdg: boolean;
   annonces: Annonce[];
   taxePourcent: number;
 }
@@ -62,6 +76,8 @@ export default function HangarMarketClient({
   soldePerso,
   compagnies,
   inventaire,
+  flotteDisponible,
+  isPdg,
   annonces,
   taxePourcent
 }: Props) {
@@ -73,9 +89,12 @@ export default function HangarMarketClient({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Modal vente
+  // Modal vente : personnel ou flotte
   const [showVendreModal, setShowVendreModal] = useState(false);
+  const [typeVente, setTypeVente] = useState<'personnel' | 'flotte'>('personnel');
   const [selectedAvion, setSelectedAvion] = useState<string>('');
+  const [selectedFlotteAvionId, setSelectedFlotteAvionId] = useState<string>('');
+  const [ventePdgSeulement, setVentePdgSeulement] = useState(false);
   const [titre, setTitre] = useState('');
   const [description, setDescription] = useState('');
   const [prix, setPrix] = useState('');
@@ -105,14 +124,19 @@ export default function HangarMarketClient({
     setLoading(true);
 
     try {
-      const body = {
+      const body: Record<string, unknown> = {
         action: 'creer',
         titre,
         description: description || null,
         prix: parseInt(prix),
-        etat,
-        inventaire_avion_id: selectedAvion
+        etat
       };
+      if (typeVente === 'flotte' && selectedFlotteAvionId) {
+        body.compagnie_avion_id = selectedFlotteAvionId;
+        body.vente_pdg_seulement = ventePdgSeulement;
+      } else {
+        body.inventaire_avion_id = selectedAvion || undefined;
+      }
 
       const res = await fetch('/api/hangar-market', {
         method: 'POST',
@@ -187,16 +211,36 @@ export default function HangarMarketClient({
   }
 
   function resetVendreForm() {
+    setTypeVente('personnel');
     setSelectedAvion('');
+    setSelectedFlotteAvionId('');
+    setVentePdgSeulement(false);
     setTitre('');
     setDescription('');
     setPrix('');
     setEtat('bon');
   }
 
+  function openVendreModal(mode: 'personnel' | 'flotte', flotteAvionId?: string) {
+    setTypeVente(mode);
+    setSelectedAvion('');
+    const fid = flotteAvionId || '';
+    setSelectedFlotteAvionId(fid);
+    setVentePdgSeulement(false);
+    const av = fid ? flotteDisponible.find(a => a.id === fid) : null;
+    setTitre(av ? `${av.immatriculation} - ${av.type_avion.nom}` : '');
+    setDescription('');
+    setPrix('');
+    setEtat('bon');
+    setShowVendreModal(true);
+  }
+
   function openAchatModal(annonce: Annonce) {
     setSelectedAnnonce(annonce);
-    setAcheterPour(null);
+    // Avion de flotte : achat obligatoire pour une compagnie
+    const isFlotte = !!annonce.compagnie_avion_id;
+    const firstCompagnie = isFlotte && compagnies.length > 0 ? compagnies[0].id : null;
+    setAcheterPour(isFlotte ? firstCompagnie : null);
     setShowAchatModal(true);
   }
 
@@ -283,6 +327,12 @@ export default function HangarMarketClient({
                         <h3 className="font-semibold text-slate-100">{annonce.titre}</h3>
                         <p className="text-sm text-slate-400">
                           {annonce.types_avion?.nom} ({annonce.types_avion?.code_oaci})
+                          {annonce.compagnie_avion_id && (
+                            <span className="ml-2 text-xs text-sky-400">Flotte</span>
+                          )}
+                          {annonce.vente_pdg_seulement && (
+                            <span className="ml-2 text-xs text-amber-400">PDG uniquement</span>
+                          )}
                         </p>
                       </div>
                       <span className={`text-xs font-medium ${etatInfo?.color || 'text-slate-400'}`}>
@@ -347,15 +397,57 @@ export default function HangarMarketClient({
 
       {activeTab === 'vendre' && (
         <div className="space-y-6">
-          <button
-            onClick={() => setShowVendreModal(true)}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-          >
-            <Plus className="h-5 w-5" />
-            Créer une annonce
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => openVendreModal('personnel')}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <Plus className="h-5 w-5" />
+              Vendre un avion personnel
+            </button>
+            {isPdg && flotteDisponible.length > 0 && (
+              <button
+                onClick={() => openVendreModal('flotte')}
+                className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                <Building2 className="h-5 w-5" />
+                Vendre un avion de ma flotte
+              </button>
+            )}
+          </div>
 
-          {/* Mes avions */}
+          {/* Avions de ma flotte (PDG) */}
+          {isPdg && flotteDisponible.length > 0 && (
+            <div className="card border-sky-500/30">
+              <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-sky-400" />
+                Avions de ma flotte (vendables)
+              </h3>
+              <div className="space-y-2">
+                {flotteDisponible.map((av) => (
+                  <div key={av.id} className="flex items-center justify-between p-3 bg-slate-800 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Plane className="h-5 w-5 text-slate-400" />
+                      <div>
+                        <p className="text-slate-200 font-mono">{av.immatriculation}</p>
+                        <p className="text-sm text-slate-500">
+                          {av.type_avion.nom} ({av.type_avion.code_oaci}) — {av.compagnie_nom} · {av.aeroport_actuel} · {av.usure_percent}% usure
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => openVendreModal('flotte', av.id)}
+                      className="text-sm text-sky-400 hover:text-sky-300"
+                    >
+                      Mettre en vente
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Mes avions personnels */}
           <div className="card">
             <h3 className="text-lg font-semibold text-slate-100 mb-4">Mes avions personnels</h3>
             {inventaire.length === 0 ? (
@@ -395,38 +487,87 @@ export default function HangarMarketClient({
       {showVendreModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold text-slate-100 mb-4">Créer une annonce</h3>
+            <h3 className="text-lg font-semibold text-slate-100 mb-4">
+              {typeVente === 'flotte' ? 'Vendre un avion de ma flotte' : 'Créer une annonce (avion personnel)'}
+            </h3>
 
             <div className="space-y-4">
-              {/* Sélection avion */}
-              <select
-                value={selectedAvion}
-                onChange={(e) => {
-                  const avionId = e.target.value;
-                  setSelectedAvion(avionId);
-                  
-                  // Pré-remplir le prix avec le prix de revente suggéré (50% du prix d'achat)
-                  if (avionId) {
-                    const avion = mesAvionsDisponibles.find(a => a.id === avionId);
-                    const prixSuggere = avion?.prixRevente || 0;
-                    // Pré-remplir le titre avec le nom de l'avion
-                    if (avion && !titre) {
-                      setTitre(avion.nom_personnalise || avion.types_avion?.nom || '');
+              {typeVente === 'flotte' ? (
+                <>
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Avion de la flotte</label>
+                    <select
+                      value={selectedFlotteAvionId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setSelectedFlotteAvionId(id);
+                        const av = flotteDisponible.find(a => a.id === id);
+                        if (av && !titre) setTitre(`${av.immatriculation} - ${av.type_avion.nom}`);
+                      }}
+                      className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200"
+                    >
+                      <option value="">Sélectionner un avion</option>
+                      {flotteDisponible.map((av) => (
+                        <option key={av.id} value={av.id}>
+                          {av.immatriculation} — {av.type_avion.nom} ({av.compagnie_nom})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-400 mb-2 block">Visible par</label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={!ventePdgSeulement}
+                          onChange={() => setVentePdgSeulement(false)}
+                          className="rounded border-slate-600 bg-slate-800 text-amber-500"
+                        />
+                        <span className="text-slate-200">Tout le monde</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          checked={ventePdgSeulement}
+                          onChange={() => setVentePdgSeulement(true)}
+                          className="rounded border-slate-600 bg-slate-800 text-amber-500"
+                        />
+                        <span className="text-slate-200">PDG uniquement</span>
+                      </label>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      « PDG uniquement » : seuls les dirigeants de compagnie pourront voir et acheter cette annonce.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <select
+                  value={selectedAvion}
+                  onChange={(e) => {
+                    const avionId = e.target.value;
+                    setSelectedAvion(avionId);
+                    if (avionId) {
+                      const avion = mesAvionsDisponibles.find(a => a.id === avionId);
+                      const prixSuggere = avion?.prixRevente || 0;
+                      if (avion && !titre) {
+                        setTitre(avion.nom_personnalise || avion.types_avion?.nom || '');
+                      }
+                      if (prixSuggere > 0) {
+                        setPrix(prixSuggere.toString());
+                      }
                     }
-                    if (prixSuggere > 0) {
-                      setPrix(prixSuggere.toString());
-                    }
-                  }
-                }}
-                className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200"
-              >
-                <option value="">Sélectionner un avion</option>
-                {mesAvionsDisponibles.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.nom_personnalise || item.types_avion?.nom} ({item.types_avion?.code_oaci}) - Valeur : {item.prixRevente.toLocaleString('fr-FR')} F$
-                  </option>
-                ))}
-              </select>
+                  }}
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200"
+                >
+                  <option value="">Sélectionner un avion</option>
+                  {mesAvionsDisponibles.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.nom_personnalise || item.types_avion?.nom} ({item.types_avion?.code_oaci}) - Valeur : {item.prixRevente.toLocaleString('fr-FR')} F$
+                    </option>
+                  ))}
+                </select>
+              )}
 
               {/* Titre */}
               <input
@@ -457,14 +598,14 @@ export default function HangarMarketClient({
                   onChange={(e) => setPrix(e.target.value)}
                   className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500"
                 />
-                {selectedAvion && (
+                {typeVente === 'personnel' && selectedAvion && (
                   <p className="text-xs text-amber-400 mt-1">
                     💡 Prix suggéré : 50% du prix d&apos;achat initial. Vous pouvez modifier librement.
                   </p>
                 )}
               </div>
 
-              {/* État */}
+              {/* État (surtout pour personnel) */}
               <div>
                 <label className="text-sm text-slate-400 mb-1 block">État de l&apos;avion</label>
                 <select
@@ -484,7 +625,7 @@ export default function HangarMarketClient({
             <div className="flex gap-3 mt-6">
               <button
                 onClick={handleVendre}
-                disabled={loading || !selectedAvion || !titre || !prix}
+                disabled={loading || !titre || !prix || (typeVente === 'personnel' ? !selectedAvion : !selectedFlotteAvionId)}
                 className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
               >
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Tag className="h-4 w-4" />}
@@ -522,7 +663,7 @@ export default function HangarMarketClient({
             </div>
 
             <div className="space-y-3 mb-6">
-              {canBuyPersonal(selectedAnnonce.prix) && (
+              {!selectedAnnonce.compagnie_avion_id && canBuyPersonal(selectedAnnonce.prix) && (
                 <button
                   onClick={() => setAcheterPour(null)}
                   className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
@@ -537,6 +678,10 @@ export default function HangarMarketClient({
                     <p className="text-sm text-slate-400">Solde : {soldePerso.toLocaleString('fr-FR')} F$</p>
                   </div>
                 </button>
+              )}
+
+              {selectedAnnonce.compagnie_avion_id && (
+                <p className="text-sm text-sky-400 mb-2">Cet avion est un avion de flotte : l&apos;achat se fait pour une compagnie dont vous êtes PDG.</p>
               )}
 
               {compagnies.filter(c => canBuyForCompagnie(selectedAnnonce.prix, c)).map((c) => (
@@ -557,8 +702,11 @@ export default function HangarMarketClient({
                 </button>
               ))}
 
-              {!canBuyPersonal(selectedAnnonce.prix) && compagnies.filter(c => canBuyForCompagnie(selectedAnnonce.prix, c)).length === 0 && (
+              {!selectedAnnonce.compagnie_avion_id && !canBuyPersonal(selectedAnnonce.prix) && compagnies.filter(c => canBuyForCompagnie(selectedAnnonce.prix, c)).length === 0 && (
                 <p className="text-red-400 text-center py-4">Solde insuffisant pour cet achat</p>
+              )}
+              {selectedAnnonce.compagnie_avion_id && compagnies.filter(c => canBuyForCompagnie(selectedAnnonce.prix, c)).length === 0 && (
+                <p className="text-red-400 text-center py-4">Aucune de vos compagnies n&apos;a un solde suffisant pour cet achat</p>
               )}
             </div>
 
@@ -567,7 +715,7 @@ export default function HangarMarketClient({
             <div className="flex gap-3">
               <button
                 onClick={handleAcheter}
-                disabled={loading || (!canBuyPersonal(selectedAnnonce.prix) && acheterPour === null)}
+                disabled={loading || (selectedAnnonce.compagnie_avion_id ? !acheterPour : !canBuyPersonal(selectedAnnonce.prix) && acheterPour === null)}
                 className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
               >
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}

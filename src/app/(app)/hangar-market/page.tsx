@@ -78,12 +78,69 @@ export default async function HangarMarketPage() {
     };
   }));
 
-  // Note: La vente d'avions de compagnie via le Hangar Market est obsolète.
-  // Les avions de compagnie sont maintenant gérés individuellement via le Marketplace.
-  // L'ancien système compagnie_flotte a été supprimé.
+  // Avions de flotte que les PDG peuvent mettre en vente (au sol, non loués, non détruits, pas déjà en vente)
+  let flotteDisponible: Array<{
+    id: string;
+    immatriculation: string;
+    nom_bapteme: string | null;
+    usure_percent: number;
+    aeroport_actuel: string;
+    compagnie_id: string;
+    compagnie_nom: string;
+    type_avion: { id: string; nom: string; code_oaci: string | null };
+  }> = [];
+  if (compagniesPdg && compagniesPdg.length > 0) {
+    const compagnieIds = compagniesPdg.map((c) => c.id);
+    const { data: avionsFlotte } = await admin.from('compagnie_avions')
+      .select(`
+        id,
+        immatriculation,
+        nom_bapteme,
+        usure_percent,
+        aeroport_actuel,
+        compagnie_id,
+        compagnies(id, nom),
+        types_avion:type_avion_id(id, nom, code_oaci)
+      `)
+      .in('compagnie_id', compagnieIds)
+      .eq('statut', 'ground')
+      .or('detruit.is.null,detruit.eq.false');
+
+    const avionsAvecCompagnie = (avionsFlotte || []).filter((a) => a.compagnie_id);
+    const idsAvions = avionsAvecCompagnie.map((a) => a.id);
+
+    const { data: dejaEnVente } = await admin.from('hangar_market')
+      .select('compagnie_avion_id')
+      .in('compagnie_avion_id', idsAvions)
+      .eq('statut', 'en_vente');
+    const idsEnVente = new Set((dejaEnVente || []).map((r) => r.compagnie_avion_id).filter(Boolean));
+
+    const { data: locationsActives } = await admin.from('compagnie_locations')
+      .select('avion_id')
+      .in('avion_id', idsAvions)
+      .in('statut', ['active', 'en_attente']);
+    const idsLoues = new Set((locationsActives || []).map((l) => l.avion_id));
+
+    flotteDisponible = avionsAvecCompagnie
+      .filter((a) => !idsEnVente.has(a.id) && !idsLoues.has(a.id))
+      .map((a) => {
+        const comp = Array.isArray(a.compagnies) ? a.compagnies[0] : a.compagnies;
+        const type = Array.isArray(a.types_avion) ? a.types_avion[0] : a.types_avion;
+        return {
+          id: a.id,
+          immatriculation: a.immatriculation,
+          nom_bapteme: a.nom_bapteme,
+          usure_percent: a.usure_percent ?? 100,
+          aeroport_actuel: a.aeroport_actuel,
+          compagnie_id: a.compagnie_id,
+          compagnie_nom: (comp as { nom: string } | null)?.nom || '',
+          type_avion: type ? { id: (type as { id: string }).id, nom: (type as { nom: string }).nom, code_oaci: (type as { code_oaci: string | null }).code_oaci } : { id: '', nom: '', code_oaci: null }
+        };
+      });
+  }
 
   // Annonces en vente
-  const { data: annonces } = await admin.from('hangar_market')
+  const { data: annoncesBrutes } = await admin.from('hangar_market')
     .select(`
       *,
       types_avion:type_avion_id(id, nom, code_oaci, constructeur, capacite_pax, capacite_cargo_kg),
@@ -92,6 +149,12 @@ export default async function HangarMarketPage() {
     `)
     .eq('statut', 'en_vente')
     .order('created_at', { ascending: false });
+
+  // Cacher les annonces "PDG uniquement" aux non-PDG
+  const isPdg = (compagniesPdg?.length ?? 0) > 0;
+  const annonces = (annoncesBrutes || []).filter(
+    (a: { vente_pdg_seulement?: boolean }) => !a.vente_pdg_seulement || isPdg
+  );
 
   // Config taxe
   const { data: config } = await admin.from('hangar_market_config')
@@ -138,8 +201,9 @@ export default async function HangarMarketPage() {
         soldePerso={comptePerso?.solde || 0}
         compagnies={compagniesWithSolde}
         inventaire={inventaireDisponible}
-        flotteCompagnies={[]}
-        annonces={annonces || []}
+        flotteDisponible={flotteDisponible}
+        isPdg={isPdg}
+        annonces={annonces}
         taxePourcent={config?.taxe_vente_pourcent || 5}
       />
     </div>
