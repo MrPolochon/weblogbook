@@ -44,6 +44,7 @@ export default async function AppLayout({
   }
 
   let pendingVolsCount = 0;
+  let adminPlansNonCloturesCount = 0;
   let volsAConfirmerCount = 0;
   let plansNonCloturesCount = 0;
   let messagesNonLusCount = 0;
@@ -52,13 +53,15 @@ export default async function AppLayout({
   if (isAdmin) {
     try {
       const admin = createAdminClient();
-      const { count } = await admin
-        .from('vols')
-        .select('*', { count: 'exact', head: true })
-        .eq('statut', 'en_attente');
-      pendingVolsCount = count ?? 0;
+      const [{ count: volsCount }, { count: plansCount }] = await Promise.all([
+        admin.from('vols').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
+        admin.from('plans_vol').select('*', { count: 'exact', head: true }).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']).or('created_by_atc.is.null,created_by_atc.eq.false'),
+      ]);
+      pendingVolsCount = volsCount ?? 0;
+      adminPlansNonCloturesCount = plansCount ?? 0;
     } catch {
       pendingVolsCount = 0;
+      adminPlansNonCloturesCount = 0;
     }
   }
   try {
@@ -116,7 +119,7 @@ export default async function AppLayout({
     <div className="min-h-screen flex flex-col">
       <AutoRefresh intervalSeconds={20} />
       <AdminModeBg />
-      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} pendingVolsCount={pendingVolsCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} />
+      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} pendingVolsCount={pendingVolsCount} adminPlansNonCloturesCount={adminPlansNonCloturesCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} />
       {plansNonCloturesCount > 0 && (
         <div className="border-b border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-amber-500/10 backdrop-blur-sm">
           <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-center gap-3 flex-wrap">

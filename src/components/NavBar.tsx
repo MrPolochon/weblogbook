@@ -14,13 +14,14 @@ interface NavBarProps {
   hasCompagnie?: boolean;
   isIfsa?: boolean;
   pendingVolsCount?: number;
+  adminPlansNonCloturesCount?: number;
   volsAConfirmerCount?: number;
   messagesNonLusCount?: number;
   invitationsCount?: number;
   signalementsNouveauxCount?: number;
 }
 
-export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, isIfsa = false, pendingVolsCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0, invitationsCount = 0, signalementsNouveauxCount = 0 }: NavBarProps) {
+export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, isIfsa = false, pendingVolsCount = 0, adminPlansNonCloturesCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0, invitationsCount = 0, signalementsNouveauxCount = 0 }: NavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [piloteMenuOpen, setPiloteMenuOpen] = useState(false);
@@ -181,12 +182,12 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             >
               <LayoutDashboard className="h-4 w-4" />
               Admin
-              {pendingVolsCount > 0 && (
+              {(pendingVolsCount + adminPlansNonCloturesCount) > 0 && (
                 <span
                   className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white ring-2 ring-slate-900"
-                  title={`${pendingVolsCount} vol(s) en attente`}
+                  title={`${pendingVolsCount > 0 ? `${pendingVolsCount} vol(s) en attente` : ''}${pendingVolsCount > 0 && adminPlansNonCloturesCount > 0 ? ' + ' : ''}${adminPlansNonCloturesCount > 0 ? `${adminPlansNonCloturesCount} plan(s) non clôturé(s)` : ''}`}
                 >
-                  {pendingVolsCount > 99 ? '99+' : pendingVolsCount}
+                  {(pendingVolsCount + adminPlansNonCloturesCount) > 99 ? '99+' : (pendingVolsCount + adminPlansNonCloturesCount)}
                 </span>
               )}
             </Link>
