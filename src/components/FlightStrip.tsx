@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare } from 'lucide-react';
+import { Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare, AlertTriangle } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
 export type StripData = {
@@ -242,6 +242,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [refuseReason, setRefuseReason] = useState('');
   const [intentionsPos, setIntentionsPos] = useState<{ x: number; y: number } | null>(null);
+  const [noteAtcPos, setNoteAtcPos] = useState<{ x: number; y: number } | null>(null);
 
   const callAction = async (action: string, body: Record<string, unknown> = {}) => {
     setLoading(action);
@@ -363,6 +364,54 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
             >
               <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>Intentions de vol</div>
               <p className="text-sm font-mono font-semibold leading-relaxed break-words whitespace-pre-wrap">{strip.intentions_vol}</p>
+            </div>,
+            document.body,
+          )}
+        </>
+      )}
+      {strip.instructions_atc && (
+        <>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setNoteAtcPos({ x: rect.left, y: rect.top });
+            }}
+            onMouseUp={() => setNoteAtcPos(null)}
+            onMouseLeave={() => setNoteAtcPos(null)}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setNoteAtcPos({ x: rect.left, y: rect.top });
+            }}
+            onTouchEnd={() => setNoteAtcPos(null)}
+            className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded shadow-sm transition-colors ${
+              noteAtcPos
+                ? (isDark ? 'bg-amber-500 text-black' : 'bg-amber-500 text-black')
+                : (isDark ? 'bg-amber-700 text-white hover:bg-amber-600' : 'bg-amber-500 text-white hover:bg-amber-600')
+            }`}
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />Note pilote
+          </button>
+          {noteAtcPos && createPortal(
+            <div
+              style={{
+                position: 'fixed',
+                zIndex: 2147483647,
+                left: noteAtcPos.x,
+                top: noteAtcPos.y - 8,
+                transform: 'translateY(-100%)',
+                width: 380,
+                maxWidth: '90vw',
+                pointerEvents: 'none',
+              }}
+              className={`rounded-lg shadow-2xl border-2 p-4 ${
+                isDark ? 'bg-slate-800 border-amber-500 text-slate-100' : 'bg-white border-amber-400 text-slate-900'
+              }`}
+            >
+              <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>Note d&apos;attention du pilote</div>
+              <p className="text-sm font-semibold leading-relaxed break-words whitespace-pre-wrap">{strip.instructions_atc}</p>
             </div>,
             document.body,
           )}
