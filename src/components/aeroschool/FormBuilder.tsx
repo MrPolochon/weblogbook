@@ -43,6 +43,8 @@ export default function FormBuilder({ initial }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [saving, setSaving] = useState(false);
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [webhookTestResult, setWebhookTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormData>(() => initial || {
@@ -116,6 +118,32 @@ export default function FormBuilder({ initial }: Props) {
           : s
       ),
     }));
+  };
+
+  const handleTestWebhook = async () => {
+    if (!form.webhook_url.trim()) return;
+    setTestingWebhook(true);
+    setWebhookTestResult(null);
+    try {
+      const res = await fetch('/api/aeroschool/test-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          webhook_url: form.webhook_url.trim(),
+          webhook_role_id: form.webhook_role_id?.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setWebhookTestResult({ ok: true, message: 'Message envoyé dans Discord !' });
+      } else {
+        setWebhookTestResult({ ok: false, message: data.error || 'Erreur inconnue' });
+      }
+    } catch {
+      setWebhookTestResult({ ok: false, message: 'Erreur réseau' });
+    } finally {
+      setTestingWebhook(false);
+    }
   };
 
   const handleSave = async () => {
@@ -226,13 +254,29 @@ export default function FormBuilder({ initial }: Props) {
             <>
               <div>
                 <label className="text-slate-400 text-sm mb-2 block">URL du Webhook</label>
-                <input
-                  type="url"
-                  value={form.webhook_url}
-                  onChange={(e) => updateForm({ webhook_url: e.target.value })}
-                  placeholder="https://discord.com/api/webhooks/..."
-                  className="w-full bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm px-3 py-2 outline-none focus:border-purple-500 transition-colors"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={form.webhook_url}
+                    onChange={(e) => { updateForm({ webhook_url: e.target.value }); setWebhookTestResult(null); }}
+                    placeholder="https://discord.com/api/webhooks/..."
+                    className="flex-1 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm px-3 py-2 outline-none focus:border-purple-500 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTestWebhook}
+                    disabled={testingWebhook || !form.webhook_url.trim()}
+                    className="px-3 py-2 rounded-lg bg-purple-500/20 border border-purple-500/50 text-purple-300 text-sm font-medium hover:bg-purple-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 whitespace-nowrap"
+                  >
+                    {testingWebhook ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Webhook className="h-3.5 w-3.5" />}
+                    Tester
+                  </button>
+                </div>
+                {webhookTestResult && (
+                  <p className={`text-xs mt-1.5 ${webhookTestResult.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {webhookTestResult.ok ? '✅' : '❌'} {webhookTestResult.message}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-slate-400 text-sm mb-2 block">ID du rôle Discord à mentionner <span className="text-slate-500">(optionnel)</span></label>
