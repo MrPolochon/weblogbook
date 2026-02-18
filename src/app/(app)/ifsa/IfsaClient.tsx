@@ -227,6 +227,14 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   const [loadingAutorisations, setLoadingAutorisations] = useState(false);
   const [autorisationMotifReponse, setAutorisationMotifReponse] = useState('');
   const [autorisationFilter, setAutorisationFilter] = useState<'en_attente' | 'approuvee' | 'toutes'>('en_attente');
+  const [autorisationsEnAttenteCount, setAutorisationsEnAttenteCount] = useState(0);
+
+  useEffect(() => {
+    fetch('/api/autorisations-exploitation?toutes=true&statut=en_attente')
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setAutorisationsEnAttenteCount(Array.isArray(data) ? data.length : 0))
+      .catch(() => {});
+  }, []);
 
   async function loadAutorisationsExploit(filtre?: string) {
     setLoadingAutorisations(true);
@@ -264,6 +272,10 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       setSuccess(data.message || 'Action effectuée');
       setAutorisationMotifReponse('');
       loadAutorisationsExploit();
+      fetch('/api/autorisations-exploitation?toutes=true&statut=en_attente')
+        .then(res => res.ok ? res.json() : [])
+        .then(d => setAutorisationsEnAttenteCount(Array.isArray(d) ? d.length : 0))
+        .catch(() => {});
       setTimeout(() => setSuccess(''), 5000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -652,6 +664,11 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
         >
           <ShieldCheck className="h-4 w-4 inline mr-2" />
           Autorisations
+          {autorisationsEnAttenteCount > 0 && (
+            <span className="ml-2 px-1.5 py-0.5 bg-amber-500 text-white text-xs rounded-full">
+              {autorisationsEnAttenteCount}
+            </span>
+          )}
         </button>
         <button
           onClick={() => setActiveTab('donnees')}

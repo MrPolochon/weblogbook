@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { Shield, FileSearch, AlertTriangle, Gavel, Users } from 'lucide-react';
+import { Shield, FileSearch, AlertTriangle, Gavel, Users, ShieldCheck } from 'lucide-react';
 import IfsaClient from './IfsaClient';
 
 export default async function IfsaPage() {
@@ -93,6 +93,11 @@ export default async function IfsaPage() {
     .or('ifsa.eq.true,role.eq.admin')
     .order('identifiant');
 
+  // Autorisations en attente
+  const { count: autorisationsEnAttenteCount } = await admin.from('autorisations_exploitation')
+    .select('id', { count: 'exact', head: true })
+    .eq('statut', 'en_attente');
+
   // Stats
   const signalementsNouveaux = (signalements || []).filter(s => s.statut === 'nouveau').length;
   const enquetesOuvertes = (enquetes || []).filter(e => e.statut === 'ouverte' || e.statut === 'en_cours').length;
@@ -115,7 +120,7 @@ export default async function IfsaPage() {
       </div>
 
       {/* Statistiques */}
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-5">
         <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -141,6 +146,19 @@ export default async function IfsaPage() {
               <p className="text-2xl font-bold text-red-400">{sanctionsActives}</p>
             </div>
             <Gavel className="h-8 w-8 text-red-400/30" />
+          </div>
+        </div>
+        <div className={`rounded-xl bg-gradient-to-br p-4 ${
+          (autorisationsEnAttenteCount || 0) > 0
+            ? 'from-amber-500/10 to-amber-600/5 border border-amber-500/20'
+            : 'from-sky-500/10 to-sky-600/5 border border-sky-500/20'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm ${(autorisationsEnAttenteCount || 0) > 0 ? 'text-amber-400/80' : 'text-sky-400/80'}`}>Autorisations en attente</p>
+              <p className={`text-2xl font-bold ${(autorisationsEnAttenteCount || 0) > 0 ? 'text-amber-400' : 'text-sky-400'}`}>{autorisationsEnAttenteCount || 0}</p>
+            </div>
+            <ShieldCheck className={`h-8 w-8 ${(autorisationsEnAttenteCount || 0) > 0 ? 'text-amber-400/30' : 'text-sky-400/30'}`} />
           </div>
         </div>
         <div className="rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 p-4">
