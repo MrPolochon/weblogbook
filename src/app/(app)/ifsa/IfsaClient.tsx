@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   AlertTriangle, FileSearch, Gavel, Plus, X, Check, Loader2, 
