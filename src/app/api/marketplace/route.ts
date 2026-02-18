@@ -116,6 +116,20 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Seul le PDG peut acheter pour la compagnie' }, { status: 403 });
       }
 
+      // Vérifier l'autorisation d'exploitation pour ce type d'avion
+      const { data: autorisationExploit } = await admin.from('autorisations_exploitation')
+        .select('id')
+        .eq('compagnie_id', pour_compagnie_id)
+        .eq('type_avion_id', type_avion_id)
+        .eq('statut', 'approuvee')
+        .maybeSingle();
+
+      if (!autorisationExploit) {
+        return NextResponse.json({
+          error: `Votre compagnie n'a pas d'autorisation d'exploitation approuvée pour le ${avion.nom}. Faites une demande auprès de l'IFSA depuis "Ma compagnie".`
+        }, { status: 403 });
+      }
+
       // Récupérer le compte entreprise (limit 1 pour éviter erreur si doublons)
       let compteEntreprise = (await admin.from('felitz_comptes')
         .select('id, solde')

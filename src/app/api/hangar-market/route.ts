@@ -277,6 +277,23 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Vérifier l'autorisation d'exploitation si achat pour une compagnie
+      if (pour_compagnie_id) {
+        const { data: autorisationExploit } = await admin.from('autorisations_exploitation')
+          .select('id')
+          .eq('compagnie_id', pour_compagnie_id)
+          .eq('type_avion_id', annonce.type_avion_id)
+          .eq('statut', 'approuvee')
+          .maybeSingle();
+
+        if (!autorisationExploit) {
+          const typesAvionCheck = annonce.types_avion as { nom: string } | null;
+          return NextResponse.json({
+            error: `Votre compagnie n'a pas d'autorisation d'exploitation approuvée pour le ${typesAvionCheck?.nom || 'cet avion'}. Faites une demande auprès de l'IFSA depuis "Ma compagnie".`
+          }, { status: 403 });
+        }
+      }
+
       // Récupérer la taxe
       const { data: config } = await admin.from('hangar_market_config')
         .select('taxe_vente_pourcent')

@@ -11,6 +11,7 @@ import CompagnieAvionsClient from './CompagnieAvionsClient';
 import CompagnieVolsFerryClient from './CompagnieVolsFerryClient';
 import CompagniePretClient from './CompagniePretClient';
 import CompagnieLocationsClient from './CompagnieLocationsClient';
+import CompagnieAutorisationsClient from './CompagnieAutorisationsClient';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
 interface CompagnieOption {
@@ -764,6 +765,9 @@ export default function MaCompagnieClient({
 
       {/* Hubs */}
       {isPdg && <CompagnieHubsClient compagnieId={compagnie.id} />}
+
+      {/* Autorisations d'exploitation */}
+      <CompagnieAutorisationsClient compagnieId={compagnie.id} isPdg={isPdg} />
 
       {/* Flotte individuelle */}
       <CompagnieAvionsClient compagnieId={compagnie.id} soldeCompagnie={soldeCompagnie} isPdg={isPdg} />

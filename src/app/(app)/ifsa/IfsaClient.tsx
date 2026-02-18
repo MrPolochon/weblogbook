@@ -4,7 +4,8 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   AlertTriangle, FileSearch, Gavel, Plus, X, Check, Loader2, 
-  Clock, User, Building2, ChevronRight, Search, Eye, CheckCircle2, BookOpen, Landmark
+  Clock, User, Building2, ChevronRight, Search, Eye, CheckCircle2, BookOpen, Landmark,
+  ShieldCheck, XCircle, Ban, Plane
 } from 'lucide-react';
 import { formatDateMediumUTC, formatTimeUTC, toLocaleDateStringUTC, toLocaleStringUTC } from '@/lib/date-utils';
 import { formatDuree } from '@/lib/utils';
@@ -193,7 +194,7 @@ const PRIORITES = {
 export default function IfsaClient({ signalements, enquetes, sanctions, pilotes, compagnies, compagniesAvecPilotes, pilotesChomage, agentsIfsa }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [activeTab, setActiveTab] = useState<'signalements' | 'enquetes' | 'sanctions' | 'donnees'>('signalements');
+  const [activeTab, setActiveTab] = useState<'signalements' | 'enquetes' | 'sanctions' | 'donnees' | 'autorisations'>('signalements');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -207,6 +208,69 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   const [loadingPilote, setLoadingPilote] = useState(false);
   const compagniesPilotesCount = new Map(compagniesAvecPilotes.map((c) => [c.id, c.pilotes.length]));
 
+
+  // Autorisations d'exploitation
+  interface AutorisationExploitation {
+    id: string;
+    numero_document: string;
+    statut: string;
+    motif_demande: string | null;
+    motif_reponse: string | null;
+    created_at: string;
+    traite_at: string | null;
+    compagnie: { id: string; nom: string } | null;
+    type_avion: { id: string; nom: string; code_oaci: string | null; constructeur: string | null } | null;
+    demandeur: { id: string; identifiant: string } | null;
+    traite_par: { id: string; identifiant: string } | null;
+  }
+  const [autorisationsExploit, setAutorisationsExploit] = useState<AutorisationExploitation[]>([]);
+  const [loadingAutorisations, setLoadingAutorisations] = useState(false);
+  const [autorisationMotifReponse, setAutorisationMotifReponse] = useState('');
+  const [autorisationFilter, setAutorisationFilter] = useState<'en_attente' | 'approuvee' | 'toutes'>('en_attente');
+
+  async function loadAutorisationsExploit(filtre?: string) {
+    setLoadingAutorisations(true);
+    try {
+      const statutParam = (filtre || autorisationFilter) === 'toutes' ? '' : `&statut=${filtre || autorisationFilter}`;
+      const res = await fetch(`/api/autorisations-exploitation?toutes=true${statutParam}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAutorisationsExploit(data.map((a: any) => ({
+          ...a,
+          compagnie: Array.isArray(a.compagnie) ? a.compagnie[0] : a.compagnie,
+          type_avion: Array.isArray(a.type_avion) ? a.type_avion[0] : a.type_avion,
+          demandeur: Array.isArray(a.demandeur) ? a.demandeur[0] : a.demandeur,
+          traite_par: Array.isArray(a.traite_par) ? a.traite_par[0] : a.traite_par,
+        })));
+      }
+    } catch {
+      setError('Erreur chargement autorisations');
+    } finally {
+      setLoadingAutorisations(false);
+    }
+  }
+
+  async function handleTraiterAutorisation(id: string, action: 'approuver' | 'refuser' | 'revoquer') {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/autorisations-exploitation', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, action, motif_reponse: autorisationMotifReponse || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setSuccess(data.message || 'Action effectuée');
+      setAutorisationMotifReponse('');
+      loadAutorisationsExploit();
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   // Modals
   const [showSanctionModal, setShowSanctionModal] = useState(false);
@@ -581,6 +645,15 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
           Sanctions
         </button>
         <button
+          onClick={() => { setActiveTab('autorisations'); loadAutorisationsExploit(); }}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            activeTab === 'autorisations' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+          }`}
+        >
+          <ShieldCheck className="h-4 w-4 inline mr-2" />
+          Autorisations
+        </button>
+        <button
           onClick={() => setActiveTab('donnees')}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             activeTab === 'donnees' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -590,7 +663,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
           Données IFSA
         </button>
 
-        {activeTab !== 'donnees' && (
+        {activeTab !== 'donnees' && activeTab !== 'autorisations' && (
           <div className="ml-auto flex gap-2">
             <button
               onClick={() => setShowEnqueteModal(true)}
@@ -1124,6 +1197,154 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'autorisations' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-sky-400" />
+              Autorisations d&apos;exploitation
+            </h2>
+            <div className="flex gap-2">
+              {(['en_attente', 'approuvee', 'toutes'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => { setAutorisationFilter(f); loadAutorisationsExploit(f); }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    autorisationFilter === f ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  {f === 'en_attente' ? 'En attente' : f === 'approuvee' ? 'Approuvées' : 'Toutes'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {loadingAutorisations ? (
+            <div className="flex items-center gap-2 text-slate-400 text-sm py-6 justify-center">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Chargement...
+            </div>
+          ) : autorisationsExploit.length === 0 ? (
+            <p className="text-slate-400 text-center py-6">Aucune demande d&apos;autorisation.</p>
+          ) : (
+            <div className="space-y-3">
+              {autorisationsExploit.map((auth) => {
+                const isEnAttente = auth.statut === 'en_attente';
+                const isApprouvee = auth.statut === 'approuvee';
+                return (
+                  <div
+                    key={auth.id}
+                    className={`p-4 rounded-lg border ${
+                      isEnAttente
+                        ? 'bg-amber-500/5 border-amber-500/30'
+                        : isApprouvee
+                        ? 'bg-emerald-500/5 border-emerald-500/30'
+                        : 'bg-slate-800/50 border-slate-700 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <Plane className="h-4 w-4 text-sky-400 flex-shrink-0" />
+                          <span className="text-sm font-medium text-slate-200">
+                            {auth.type_avion?.nom || 'Type inconnu'}
+                          </span>
+                          {auth.type_avion?.constructeur && (
+                            <span className="text-xs text-slate-500">({auth.type_avion.constructeur})</span>
+                          )}
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                            isEnAttente ? 'bg-amber-500/20 text-amber-400' :
+                            isApprouvee ? 'bg-emerald-500/20 text-emerald-400' :
+                            auth.statut === 'refusee' ? 'bg-red-500/20 text-red-400' :
+                            'bg-slate-500/20 text-slate-400'
+                          }`}>
+                            {isEnAttente && <Clock className="h-3 w-3" />}
+                            {isApprouvee && <CheckCircle2 className="h-3 w-3" />}
+                            {auth.statut === 'refusee' && <XCircle className="h-3 w-3" />}
+                            {auth.statut === 'revoquee' && <Ban className="h-3 w-3" />}
+                            {isEnAttente ? 'En attente' : isApprouvee ? 'Approuvée' : auth.statut === 'refusee' ? 'Refusée' : 'Révoquée'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-500 space-y-0.5 mt-1">
+                          <p>
+                            <span className="font-mono">{auth.numero_document}</span>
+                            {' — '}
+                            Compagnie: <span className="text-slate-300">{auth.compagnie?.nom || '?'}</span>
+                            {' — '}
+                            Demandeur: <span className="text-slate-300">{auth.demandeur?.identifiant || '?'}</span>
+                          </p>
+                          {auth.motif_demande && (
+                            <p className="text-slate-400">Motif: &laquo; {auth.motif_demande} &raquo;</p>
+                          )}
+                          {auth.motif_reponse && (
+                            <p className="text-slate-400 italic">Réponse IFSA: &laquo; {auth.motif_reponse} &raquo;</p>
+                          )}
+                          {auth.traite_par && (
+                            <p>Traité par: {auth.traite_par.identifiant}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Actions IFSA */}
+                      <div className="flex flex-col gap-2">
+                        {isEnAttente && (
+                          <>
+                            <input
+                              type="text"
+                              placeholder="Motif (optionnel)"
+                              value={autorisationMotifReponse}
+                              onChange={e => setAutorisationMotifReponse(e.target.value)}
+                              className="input text-xs px-2 py-1 w-48"
+                            />
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => handleTraiterAutorisation(auth.id, 'approuver')}
+                                disabled={loading}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-medium flex items-center gap-1"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Approuver
+                              </button>
+                              <button
+                                onClick={() => handleTraiterAutorisation(auth.id, 'refuser')}
+                                disabled={loading}
+                                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium flex items-center gap-1"
+                              >
+                                <XCircle className="h-3.5 w-3.5" />
+                                Refuser
+                              </button>
+                            </div>
+                          </>
+                        )}
+                        {isApprouvee && (
+                          <>
+                            <input
+                              type="text"
+                              placeholder="Motif révocation"
+                              value={autorisationMotifReponse}
+                              onChange={e => setAutorisationMotifReponse(e.target.value)}
+                              className="input text-xs px-2 py-1 w-48"
+                            />
+                            <button
+                              onClick={() => handleTraiterAutorisation(auth.id, 'revoquer')}
+                              disabled={loading}
+                              className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded text-xs font-medium flex items-center gap-1"
+                            >
+                              <Ban className="h-3.5 w-3.5" />
+                              Révoquer
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
