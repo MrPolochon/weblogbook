@@ -31,7 +31,8 @@ export async function GET() {
     .in('id', allianceIds);
 
   const { data: params } = await admin.from('alliance_parametres').select('*').in('alliance_id', allianceIds);
-  const paramsByAlliance = (params || []).reduce((acc, p) => ({ ...acc, [p.alliance_id]: p }), {} as Record<string, typeof params[0]>);
+  const paramsList = params ?? [];
+  const paramsByAlliance = paramsList.reduce((acc, p) => ({ ...acc, [p.alliance_id]: p }), {} as Record<string, (typeof paramsList)[number]>);
 
   const result = (alliances || []).map((a) => {
     const ms = membres.filter((m) => m.alliance_id === a.id);
