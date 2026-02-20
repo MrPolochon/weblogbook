@@ -1,0 +1,10 @@
+export const KTS_TO_FPS = 1.68781;
+export const FPS_TO_KTS = 1 / KTS_TO_FPS;
+export const TORA_SAFETY_MARGIN = 1.15;
+export const CLIMBOUT_SPEED_LOSS = 10;
+export const ROTATE_DURATION = 4;
+export const FLARE_DURATION = 7;
+export const LDGDIST_SAFETY_MARGIN = 1.15;
+export const VREF_FACTOR = 1.3;
+export const SECONDS_PER_THRUST_SETTING = 0.03275;
+export const VMCG_VR_FACTOR = 0.65;

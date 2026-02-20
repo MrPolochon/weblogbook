@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useTransition } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, Store, AlertTriangle, Flame } from 'lucide-react';
+import { BookOpen, LayoutDashboard, FileText, User, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, Store, AlertTriangle, Flame, Gauge } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -84,6 +84,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     { href: '/marketplace', label: 'Marketplace', icon: Package, badge: 0 },
     { href: '/hangar-market', label: 'Hangar Market', icon: Store, badge: 0 },
     { href: '/inventaire', label: 'Mon inventaire', icon: Plane, badge: 0 },
+    { href: '/perf-ptfs', label: 'Calculateur perf PTFS', icon: Gauge, badge: 0 },
     { href: '/signalement', label: 'Signalement IFSA', icon: AlertTriangle, badge: 0, separator: true },
   ];
 
@@ -92,7 +93,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     pathname.startsWith('/marketplace') || pathname.startsWith('/hangar-market') ||
     pathname.startsWith('/inventaire') || pathname.startsWith('/messagerie') || 
     pathname.startsWith('/marche-passagers') || pathname.startsWith('/marche-cargo') ||
-    pathname.startsWith('/signalement');
+    pathname.startsWith('/perf-ptfs') || pathname.startsWith('/signalement');
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-700/30 bg-slate-900/80 backdrop-blur-xl shadow-lg shadow-slate-900/50">
