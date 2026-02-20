@@ -19,7 +19,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const body = await req.json().catch(() => ({}));
   const allowed = [
-    'actif_vente_avions_entre_dirigeants', 'actif_don_avions', 'actif_pret_avions', 'actif_avions_membres',
+    'actif_vente_avions_entre_membres', 'actif_don_avions', 'actif_pret_avions', 'actif_avions_membres',
     'actif_codeshare', 'actif_compte_alliance', 'actif_taxes_alliance',
     'codeshare_pourcent', 'taxe_alliance_pourcent',
   ];

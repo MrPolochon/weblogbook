@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Users, Building2, Plus, Crown, Settings, Landmark, Loader2 } from 'lucide-react';
 
 interface Parametres {
-  actif_vente_avions_entre_dirigeants: boolean;
+  actif_vente_avions_entre_membres: boolean;
   actif_don_avions: boolean;
   actif_pret_avions: boolean;
   actif_avions_membres: boolean;
@@ -188,9 +188,9 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
                 <>
                   <h3 className="font-medium text-slate-200 mt-4">Avantages activés</h3>
                   <ul className="flex flex-wrap gap-2 text-sm text-slate-400">
-                    {selectedAlliance.parametres.actif_vente_avions_entre_dirigeants && <li className="px-2 py-1 bg-slate-700/50 rounded">Vente avions entre dirigeants</li>}
-                    {selectedAlliance.parametres.actif_don_avions && <li className="px-2 py-1 bg-slate-700/50 rounded">Don d&apos;avions</li>}
-                    {selectedAlliance.parametres.actif_pret_avions && <li className="px-2 py-1 bg-slate-700/50 rounded">Prêt d&apos;avions</li>}
+                    {selectedAlliance.parametres.actif_vente_avions_entre_membres && <li className="px-2 py-1 bg-slate-700/50 rounded">Vente d&apos;avions entre membres</li>}
+                    {selectedAlliance.parametres.actif_don_avions && <li className="px-2 py-1 bg-slate-700/50 rounded">Don d&apos;avions entre membres</li>}
+                    {selectedAlliance.parametres.actif_pret_avions && <li className="px-2 py-1 bg-slate-700/50 rounded">Prêt d&apos;avions entre membres</li>}
                     {selectedAlliance.parametres.actif_avions_membres && <li className="px-2 py-1 bg-slate-700/50 rounded">Avions pour membres (50% revenus)</li>}
                     {selectedAlliance.parametres.actif_codeshare && <li className="px-2 py-1 bg-slate-700/50 rounded">Codeshare {selectedAlliance.parametres.codeshare_pourcent}%</li>}
                     {selectedAlliance.parametres.actif_compte_alliance && <li className="px-2 py-1 bg-slate-700/50 rounded">Compte Felitz alliance</li>}

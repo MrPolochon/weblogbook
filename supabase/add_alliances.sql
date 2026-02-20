@@ -32,7 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_alliance_membres_compagnie ON public.alliance_mem
 -- ----- 3) Paramètres de l'alliance (toggles + %) -----
 CREATE TABLE IF NOT EXISTS public.alliance_parametres (
   alliance_id UUID PRIMARY KEY REFERENCES public.alliances(id) ON DELETE CASCADE,
-  actif_vente_avions_entre_dirigeants BOOLEAN NOT NULL DEFAULT false,
+  actif_vente_avions_entre_membres BOOLEAN NOT NULL DEFAULT false,
   actif_don_avions BOOLEAN NOT NULL DEFAULT false,
   actif_pret_avions BOOLEAN NOT NULL DEFAULT false,
   actif_avions_membres BOOLEAN NOT NULL DEFAULT false,
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS public.alliance_demandes_fonds (
 CREATE INDEX IF NOT EXISTS idx_alliance_demandes_fonds_alliance ON public.alliance_demandes_fonds(alliance_id);
 CREATE INDEX IF NOT EXISTS idx_alliance_demandes_fonds_demandeur ON public.alliance_demandes_fonds(demandeur_id);
 
--- ----- 8) Transfert d'avion entre dirigeants (vente / don / prêt) -----
+-- ----- 8) Transfert d'avion entre membres de l'alliance (vente / don / prêt) -----
 CREATE TABLE IF NOT EXISTS public.alliance_transferts_avions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   alliance_id UUID NOT NULL REFERENCES public.alliances(id) ON DELETE CASCADE,
@@ -207,8 +207,9 @@ CREATE POLICY "alliance_transferts_select" ON public.alliance_transferts_avions 
     SELECT id FROM public.compagnies WHERE pdg_id = auth.uid()
     UNION SELECT compagnie_id FROM public.compagnie_employes WHERE pilote_id = auth.uid()
   )));
-CREATE POLICY "alliance_transferts_insert_dirigeant" ON public.alliance_transferts_avions FOR INSERT TO authenticated
-  WITH CHECK (from_compagnie_id IN (SELECT id FROM public.compagnies WHERE pdg_id = auth.uid()) AND alliance_id IN (SELECT alliance_id FROM public.alliance_membres WHERE compagnie_id = from_compagnie_id AND role = 'dirigeant'));
+-- Vente / don / prêt d'avions : tout membre de l'alliance (dirigeant ou membre) peut initier
+CREATE POLICY "alliance_transferts_insert_membre" ON public.alliance_transferts_avions FOR INSERT TO authenticated
+  WITH CHECK (from_compagnie_id IN (SELECT id FROM public.compagnies WHERE pdg_id = auth.uid()) AND alliance_id IN (SELECT alliance_id FROM public.alliance_membres WHERE compagnie_id = from_compagnie_id));
 
 -- ----- 10) Compte Felitz alliance : politique SELECT pour dirigeants -----
 DROP POLICY IF EXISTS "fc_select_pdg" ON public.felitz_comptes;
@@ -301,4 +302,4 @@ COMMENT ON TABLE public.alliance_membres IS 'Membres d''une alliance : role diri
 COMMENT ON TABLE public.alliance_parametres IS 'Paramètres et toggles de l''alliance (activables par les dirigeants).';
 COMMENT ON TABLE public.alliance_avions_membres IS 'Avion d''un dirigeant prêté à une compagnie membre : X vols, 50% revenue partagé.';
 COMMENT ON TABLE public.alliance_demandes_fonds IS 'Demandes de versement depuis le compte alliance vers un VBAN.';
-COMMENT ON TABLE public.alliance_transferts_avions IS 'Vente / don / prêt d''avion entre dirigeants de l''alliance.';
+COMMENT ON TABLE public.alliance_transferts_avions IS 'Vente / don / prêt d''avion entre tous les membres de l''alliance.';

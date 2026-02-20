@@ -25,7 +25,7 @@ export async function GET() {
 
   if (!membres?.length) return NextResponse.json([]);
 
-  const allianceIds = [...new Set(membres.map((m) => m.alliance_id))];
+  const allianceIds = Array.from(new Set(membres.map((m) => m.alliance_id)));
   const { data: alliances } = await admin.from('alliances')
     .select('id, nom, created_at, created_by_compagnie_id')
     .in('id', allianceIds);
