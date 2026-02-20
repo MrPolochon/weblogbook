@@ -158,7 +158,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
               <li key={a.id} className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-slate-100">{a.nom}</span>
-                  {a.my_role === 'dirigeant' && <Crown className="h-4 w-4 text-amber-400" title="Dirigeant" />}
+                  {a.my_role === 'dirigeant' && <span title="Dirigeant"><Crown className="h-4 w-4 text-amber-400" aria-hidden /></span>}
                   {a.my_role === 'membre' && <span className="text-xs text-slate-500">membre</span>}
                 </div>
                 <button
