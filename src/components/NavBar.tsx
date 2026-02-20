@@ -78,7 +78,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0, separator: true },
     { href: '/marche-cargo', label: 'Marché cargo', icon: Package, badge: 0 },
     { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount + invitationsCount, separator: true },
-    ...(hasCompagnie ? [{ href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 }] : []),
+    ...(hasCompagnie ? [{ href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 }, { href: '/alliance', label: 'Alliance', icon: Users, badge: 0 }] : []),
     ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield, badge: 0 }] : []),
     { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0, separator: true },
     { href: '/marketplace', label: 'Marketplace', icon: Package, badge: 0 },
@@ -93,7 +93,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     pathname.startsWith('/marketplace') || pathname.startsWith('/hangar-market') ||
     pathname.startsWith('/inventaire') || pathname.startsWith('/messagerie') || 
     pathname.startsWith('/marche-passagers') || pathname.startsWith('/marche-cargo') ||
-    pathname.startsWith('/perf-ptfs') || pathname.startsWith('/signalement');
+    pathname.startsWith('/perf-ptfs') || pathname.startsWith('/alliance') || pathname.startsWith('/signalement');
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-700/30 bg-slate-900/80 backdrop-blur-xl shadow-lg shadow-slate-900/50">

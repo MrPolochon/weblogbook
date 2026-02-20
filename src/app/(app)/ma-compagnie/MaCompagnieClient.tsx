@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart, UserPlus, Send, X, Check, Loader2, Search, ImagePlus, Trash2, Radio } from 'lucide-react';
+import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, ShoppingCart, UserPlus, Send, X, Check, Loader2, Search, ImagePlus, Trash2, Radio, LogOut } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import TarifsLiaisonsClient from './TarifsLiaisonsClient';
@@ -31,6 +31,7 @@ interface Compagnie {
   prix_billet_pax: number;
   prix_kg_cargo: number;
   logo_url: string | null;
+  alliance_id: string | null;
 }
 
 interface Employe {
@@ -91,6 +92,7 @@ export default function MaCompagnieClient({
   const [sendingInvite, setSendingInvite] = useState(false);
   const [invitationsEnvoyees, setInvitationsEnvoyees] = useState<Array<{id: string; pilote: {id: string; identifiant: string}; statut: string; created_at: string}>>([]);
   const [loadingInvitations, setLoadingInvitations] = useState(false);
+  const [quittingAlliance, setQuittingAlliance] = useState(false);
 
   // Charger les invitations envoyées
   const loadInvitations = useCallback(async () => {
@@ -245,6 +247,28 @@ export default function MaCompagnieClient({
     router.push(`/ma-compagnie?c=${e.target.value}`);
   }
 
+  async function handleQuitterAlliance() {
+    if (!compagnie.alliance_id || !confirm('Quitter l\'alliance ? Votre compagnie ne sera plus membre.')) return;
+    setQuittingAlliance(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/alliances/${compagnie.alliance_id}/quitter`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ compagnie_id: compagnie.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setSuccess('Vous avez quitté l\'alliance.');
+      setTimeout(() => setSuccess(''), 3000);
+      startTransition(() => router.refresh());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setQuittingAlliance(false);
+    }
+  }
+
   async function handleSaveSettings() {
     setError('');
     setSuccess('');
@@ -315,6 +339,22 @@ export default function MaCompagnieClient({
                 <Settings className="h-4 w-4" />
                 Paramètres
               </button>
+              {compagnie.alliance_id && (
+                <>
+                  <Link href="/alliance" className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600">
+                    <Users className="h-4 w-4" />
+                    Alliance
+                  </Link>
+                  <button
+                    onClick={handleQuitterAlliance}
+                    disabled={quittingAlliance}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-900/30 text-red-300 hover:bg-red-900/50 disabled:opacity-50"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    {quittingAlliance ? 'En cours…' : 'Quitter l\'alliance'}
+                  </button>
+                </>
+              )}
               <span className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/20 text-amber-300 rounded-full text-sm font-medium">
                 <Crown className="h-4 w-4" />
                 PDG
