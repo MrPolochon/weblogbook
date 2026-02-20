@@ -30,11 +30,10 @@ type PlanPaiement = {
  * Parse l'heure ATD (Actual Time of Departure) saisie par l'ATC dans le strip.
  * L'heure est en UTC/Zulu.
  *
- * Formats acceptés :
- *  - "0305" ou "1424"   → 4 chiffres bruts (HHMM)
- *  - "305"              → 3 chiffres bruts (HMM)
- *  - "14H24" ou "3H05"  → avec séparateur H (insensible à la casse)
- *  - "14:24" ou "3:05"  → avec séparateur :
+ * Formats valides :
+ *  - XXhXX / xxHxx  → ex. 14h24, 14H24 (insensible à la casse)
+ *  - XXXX           → 4 chiffres HHMM, ex. 1424
+ *  - XX:XX          → ex. 14:24
  *
  * Règles :
  *  - Si le champ est vide ou invalide → null (on utilisera accepted_at)
@@ -52,8 +51,8 @@ export function parseStripATD(
   let hours: number | null = null;
   let minutes: number | null = null;
 
-  // Format : "14H24" ou "3H05"
-  const matchH = raw.match(/^(\d{1,2})H(\d{1,2})$/);
+  // Format : XXhXX ou XXHXX (insensible à la casse)
+  const matchH = raw.match(/^(\d{1,2})[hH](\d{1,2})$/);
   if (matchH) {
     hours = parseInt(matchH[1], 10);
     minutes = parseInt(matchH[2], 10);
@@ -68,18 +67,13 @@ export function parseStripATD(
     }
   }
 
-  // Format : "0305" (4 chiffres) ou "305" (3 chiffres)
+  // Format : 4 chiffres HHMM, ex. 1424
   if (hours === null) {
-    const matchDigits = raw.match(/^(\d{3,4})$/);
+    const matchDigits = raw.match(/^(\d{4})$/);
     if (matchDigits) {
       const num = matchDigits[1];
-      if (num.length === 4) {
-        hours = parseInt(num.slice(0, 2), 10);
-        minutes = parseInt(num.slice(2, 4), 10);
-      } else if (num.length === 3) {
-        hours = parseInt(num.slice(0, 1), 10);
-        minutes = parseInt(num.slice(1, 3), 10);
-      }
+      hours = parseInt(num.slice(0, 2), 10);
+      minutes = parseInt(num.slice(2, 4), 10);
     }
   }
 
@@ -110,6 +104,7 @@ export function parseStripATD(
  * Règle business :
  * - 0 à 1 min d'écart => 100%
  * - Au-delà => décroissance exponentielle, peut atteindre 0
+ * (Écart en valeur absolue : pénalise aussi les vols trop rapides pour limiter le rush cash.)
  */
 function calculerCoefficientPonctualite(
   tempsPrevuMin: number,
@@ -126,7 +121,7 @@ function calculerCoefficientPonctualite(
     sensibilite = cargaisonInfo.sensibiliteRetard;
   }
 
-  // Décroissance exponentielle après 1 minute
+  // Décroissance exponentielle après 1 minute d'écart
   const k = 0.07 * sensibilite;
   const coeff = Math.exp(-k * (ecart - 1));
   const coeffArrondi = coeff < 0.01 ? 0 : coeff;
@@ -299,13 +294,19 @@ export async function envoyerChequesVol(
 
   // Calculer le temps réel depuis le départ (ATD) jusqu'à la demande de clôture par le pilote
   // Priorité : heure ATD saisie par l'ATC > heure d'acceptation (accepted_at)
+  // Si l'ATD donne une durée invraisemblable (ex. ATC a saisi l'heure d'arrivée par erreur), on repasse sur accepted_at
   let tempsReelMin = plan.temps_prev_min;
   if (plan.accepted_at) {
     const acceptedAt = new Date(plan.accepted_at);
-    // Utiliser l'heure ATD du strip si valide, sinon accepted_at
     const departureTime = parseStripATD(plan.strip_atd, acceptedAt) || acceptedAt;
     const diffMs = dateFinVol.getTime() - departureTime.getTime();
     tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
+    // Durée invraisemblable (ex. 1 min pour un vol prévu 28 min) = probablement heure d'arrivée saisie dans ATD
+    const seuilMin = Math.max(2, Math.floor(plan.temps_prev_min * 0.2));
+    if (departureTime.getTime() !== acceptedAt.getTime() && tempsReelMin < seuilMin) {
+      const diffMsBase = dateFinVol.getTime() - acceptedAt.getTime();
+      tempsReelMin = Math.max(1, Math.round(diffMsBase / 60000));
+    }
   }
 
   // Pour les vols cargo, utiliser le type de cargaison pour le calcul de ponctualité
@@ -629,9 +630,8 @@ export async function finaliserCloturePlan(
       if (plan.accepted_at && plan.demande_cloture_at) {
         const acceptedAt = new Date(plan.accepted_at);
         const demandeCloture = new Date(plan.demande_cloture_at);
-        // Utiliser l'heure ATD du strip si valide, sinon accepted_at
-        const departureTime = parseStripATD(plan.strip_atd, acceptedAt) || acceptedAt;
-        const diffMs = demandeCloture.getTime() - departureTime.getTime();
+        // L'usure utilise l'heure d'acceptation du plan (pas l'ATD du strip)
+        const diffMs = demandeCloture.getTime() - acceptedAt.getTime();
         tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
       }
 
