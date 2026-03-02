@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { ShoppingCart, RefreshCw, Building2, User, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -42,6 +42,19 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
     setPourCompagnie(null);
     setPourArmee(false);
   }
+
+  // À l'ouverture du modal : présélectionner la seule option si une seule (ex. une seule compagnie)
+  useEffect(() => {
+    if (!showModal) return;
+    if (canBuyPersonal && !pourCompagnie && !pourArmee) return; // déjà bon (perso par défaut)
+    if (canBuyArmee && compagniesAffordable.length === 0 && !canBuyPersonal) {
+      setPourArmee(true);
+      return;
+    }
+    if (compagniesAffordable.length === 1 && !canBuyPersonal && !canBuyArmee) {
+      setPourCompagnie(compagniesAffordable[0].id);
+    }
+  }, [showModal]);
 
   async function handleAchat() {
     setError('');
@@ -106,9 +119,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
   }
 
   // Déterminer si le bouton "Confirmer" doit être actif
-  // L'utilisateur doit avoir sélectionné une source de paiement
   const hasSelection = pourArmee || pourCompagnie !== null || canBuyPersonal;
-  // Si seulement canBuyPersonal et pas de compagnie/armée sélectionnée : achat perso par défaut
   const isPersoDefault = canBuyPersonal && !pourCompagnie && !pourArmee;
   const canConfirm = hasSelection && (pourCompagnie || pourArmee || isPersoDefault);
 
@@ -124,10 +135,10 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
 
       {showModal && (
         <div 
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4"
           onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
         >
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full relative animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full relative z-[101] animate-in fade-in zoom-in-95 duration-200 shadow-2xl">
             {/* Bouton fermer */}
             <button
               onClick={closeModal}

@@ -99,7 +99,7 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
               type="text"
               value={vbanDest}
               onChange={(e) => setVbanDest(e.target.value)}
-              placeholder="MIXOU... ou ENTERMIXOU... ou ARMYMIXOU..."
+              placeholder="MIXOU... ENTERMIXOU... ARMYMIXOU... MIXALLIANCE..."
               className="input w-full font-mono text-sm"
               required
             />

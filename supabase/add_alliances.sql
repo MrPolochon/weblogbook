@@ -257,8 +257,9 @@ BEGIN
   INSERT INTO public.alliance_parametres (alliance_id) VALUES (v_alliance_id);
   UPDATE public.compagnies SET alliance_id = v_alliance_id WHERE id = p_compagnie_id;
 
+  -- VBAN au même format que les autres comptes : MIXALLIANCE + suffixe (comme MIXOU, ENTERMIXOU, ARMYMIXOU)
   LOOP
-    v_vban := 'AL' || substr(md5(random()::text), 1, 6);
+    v_vban := 'MIXALLIANCE' || upper(substr(md5(random()::text || v_alliance_id::text), 1, 16));
     EXIT WHEN NOT EXISTS (SELECT 1 FROM public.felitz_comptes WHERE vban = v_vban) AND NOT EXISTS (SELECT 1 FROM public.compagnies WHERE vban = v_vban);
   END LOOP;
   INSERT INTO public.felitz_comptes (type, alliance_id, vban, solde) VALUES ('alliance', v_alliance_id, v_vban, 0);
