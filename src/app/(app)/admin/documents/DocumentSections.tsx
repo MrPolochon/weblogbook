@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect, createContext, useContext, us
 import { useRouter } from 'next/navigation';
 import {
   FolderOpen, FolderPlus, FileText, Plus, Pencil, Trash2, Upload, X,
-  ChevronRight, ChevronDown as ChevronDownIcon, File, Image, FileSpreadsheet,
+  ChevronRight, ChevronDown as ChevronDownIcon, File, Image as ImageIcon, FileSpreadsheet,
   FileArchive, Loader2, FolderClosed, Move,
 } from 'lucide-react';
 
@@ -50,7 +50,7 @@ function formatSize(bytes: number | null): string {
 
 function getFileIcon(name: string) {
   const ext = name.split('.').pop()?.toLowerCase() || '';
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return <Image className="h-4 w-4 text-pink-400" />;
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return <ImageIcon className="h-4 w-4 text-pink-400" aria-hidden />;
   if (['pdf'].includes(ext)) return <FileText className="h-4 w-4 text-red-400" />;
   if (['xls', 'xlsx', 'csv'].includes(ext)) return <FileSpreadsheet className="h-4 w-4 text-emerald-400" />;
   if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return <FileArchive className="h-4 w-4 text-amber-400" />;
@@ -150,7 +150,7 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
       window.removeEventListener('mousedown', handleRightClick);
       window.removeEventListener('contextmenu', handleContext);
     };
-  }, [pickedId]);
+  }, [pickedId, cancelPick]);
 
   function startHold(id: string) {
     if (pickedId) return;
@@ -178,17 +178,17 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
     animFrameRef.current = requestAnimationFrame(animate);
   }
 
-  function cancelHold() {
+  const cancelHold = useCallback(() => {
     setHoldingId(null);
     setHoldProgress(0);
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-  }
+  }, []);
 
-  function cancelPick() {
+  const cancelPick = useCallback(() => {
     setPickedId(null);
     setPickedName('');
     cancelHold();
-  }
+  }, [cancelHold]);
 
   async function dropInto(targetId: string | null) {
     if (!pickedId) return;

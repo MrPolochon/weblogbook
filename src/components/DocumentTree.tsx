@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import {
-  FolderOpen, FolderClosed, FileText, File, Image, Download,
+  FolderOpen, FolderClosed, FileText, File, Image as ImageIcon, Download,
   FileSpreadsheet, FileArchive, ChevronRight, ChevronDown,
 } from 'lucide-react';
 
@@ -23,7 +23,7 @@ function formatSize(bytes: number | null): string {
 function getFileIcon(name: string, theme: ThemeType) {
   const ext = name.split('.').pop()?.toLowerCase() || '';
   const isDark = theme === 'dark';
-  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return <Image className={`h-5 w-5 ${isDark ? 'text-pink-400' : 'text-pink-500'}`} />;
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return <ImageIcon className={`h-5 w-5 ${isDark ? 'text-pink-400' : 'text-pink-500'}`} aria-hidden />;
   if (['pdf'].includes(ext)) return <FileText className={`h-5 w-5 ${isDark ? 'text-red-400' : 'text-red-500'}`} />;
   if (['xls', 'xlsx', 'csv'].includes(ext)) return <FileSpreadsheet className={`h-5 w-5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />;
   if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return <FileArchive className={`h-5 w-5 ${isDark ? 'text-amber-400' : 'text-amber-500'}`} />;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useEffect } from 'react';
+import { useState, useTransition } from 'react';
 import { ShoppingCart, RefreshCw, Building2, User, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -43,18 +43,19 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
     setPourArmee(false);
   }
 
-  // À l'ouverture du modal : présélectionner la seule option si une seule (ex. une seule compagnie)
-  useEffect(() => {
-    if (!showModal) return;
-    if (canBuyPersonal && !pourCompagnie && !pourArmee) return; // déjà bon (perso par défaut)
-    if (canBuyArmee && compagniesAffordable.length === 0 && !canBuyPersonal) {
+  function openModal() {
+    setShowModal(true);
+    if (!canBuyPersonal && compagniesAffordable.length === 0 && canBuyArmee) {
       setPourArmee(true);
-      return;
-    }
-    if (compagniesAffordable.length === 1 && !canBuyPersonal && !canBuyArmee) {
+      setPourCompagnie(null);
+    } else if (compagniesAffordable.length === 1 && !canBuyPersonal && !canBuyArmee) {
       setPourCompagnie(compagniesAffordable[0].id);
+      setPourArmee(false);
+    } else {
+      setPourCompagnie(null);
+      setPourArmee(false);
     }
-  }, [showModal]);
+  }
 
   async function handleAchat() {
     setError('');
@@ -126,7 +127,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
   return (
     <>
       <button
-        onClick={() => setShowModal(true)}
+        onClick={openModal}
         className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
       >
         <ShoppingCart className="h-4 w-4" />
