@@ -68,7 +68,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (body.is_published !== undefined) updates.is_published = Boolean(body.is_published);
     if (body.time_limit_minutes !== undefined) {
       const v = body.time_limit_minutes;
-      updates.time_limit_minutes = (v === null || v === '' || v === undefined) ? null : Math.max(1, parseInt(String(v), 10) || null);
+      if (v === null || v === '' || v === undefined) {
+        updates.time_limit_minutes = null;
+      } else {
+        const num = parseInt(String(v), 10);
+        updates.time_limit_minutes = Number.isNaN(num) ? null : Math.max(1, num);
+      }
     }
 
     const admin = createAdminClient();
