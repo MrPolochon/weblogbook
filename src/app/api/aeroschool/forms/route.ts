@@ -78,7 +78,11 @@ export async function POST(request: Request) {
       webhook_role_id: delivery_mode === 'webhook' && webhook_role_id ? String(webhook_role_id).trim() : null,
       sections: Array.isArray(sections) ? sections : [],
       is_published: Boolean(is_published),
-      time_limit_minutes: time_limit_minutes != null && time_limit_minutes !== '' ? Math.max(1, parseInt(String(time_limit_minutes), 10) || null) : null,
+      time_limit_minutes: (() => {
+        if (time_limit_minutes == null || time_limit_minutes === '') return null;
+        const num = parseInt(String(time_limit_minutes), 10);
+        return Number.isNaN(num) ? null : Math.max(1, num);
+      })(),
     }).select('id').single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
