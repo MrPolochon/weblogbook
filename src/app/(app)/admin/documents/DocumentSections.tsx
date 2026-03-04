@@ -128,6 +128,18 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
   const justPickedRef = useRef(false);
   const justDroppedRef = useRef(false);
 
+  const cancelHold = useCallback(() => {
+    setHoldingId(null);
+    setHoldProgress(0);
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+  }, []);
+
+  const cancelPick = useCallback(() => {
+    setPickedId(null);
+    setPickedName('');
+    cancelHold();
+  }, [cancelHold]);
+
   // Track cursor when picking
   useEffect(() => {
     if (!pickedId) return;
@@ -177,18 +189,6 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
     };
     animFrameRef.current = requestAnimationFrame(animate);
   }
-
-  const cancelHold = useCallback(() => {
-    setHoldingId(null);
-    setHoldProgress(0);
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-  }, []);
-
-  const cancelPick = useCallback(() => {
-    setPickedId(null);
-    setPickedName('');
-    cancelHold();
-  }, [cancelHold]);
 
   async function dropInto(targetId: string | null) {
     if (!pickedId) return;
