@@ -4,7 +4,7 @@ import React, { useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Trash2, Save, Eye, EyeOff, ChevronUp, ChevronDown,
-  Globe, Webhook, GripVertical, Loader2,
+  Globe, Webhook, GripVertical, Loader2, Clock,
 } from 'lucide-react';
 import QuestionEditor, { createEmptyQuestion, type Question } from './QuestionEditor';
 
@@ -23,6 +23,8 @@ export interface FormData {
   webhook_url: string;
   webhook_role_id: string;
   is_published: boolean;
+  /** Temps limite en minutes (null = pas de limite) */
+  time_limit_minutes: number | null;
   sections: Section[];
 }
 
@@ -54,6 +56,7 @@ export default function FormBuilder({ initial }: Props) {
     webhook_url: '',
     webhook_role_id: '',
     is_published: false,
+    time_limit_minutes: null,
     sections: [createEmptySection()],
   });
 
@@ -161,6 +164,7 @@ export default function FormBuilder({ initial }: Props) {
         webhook_url: form.delivery_mode === 'webhook' ? form.webhook_url.trim() : null,
         webhook_role_id: form.delivery_mode === 'webhook' && form.webhook_role_id?.trim() ? form.webhook_role_id.trim() : null,
         is_published: form.is_published,
+        time_limit_minutes: form.time_limit_minutes ?? null,
         sections: form.sections,
       };
 
@@ -308,6 +312,39 @@ export default function FormBuilder({ initial }: Props) {
                 {form.is_published ? 'Publié — visible par tous' : 'Brouillon — non visible'}
               </span>
             </button>
+          </div>
+
+          {/* Temps limite (chrono) */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-slate-400" />
+              <span className="text-slate-400 text-sm">Temps limite</span>
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.time_limit_minutes == null}
+                onChange={(e) => updateForm({ time_limit_minutes: e.target.checked ? null : 30 })}
+                className="rounded border-slate-600 bg-slate-700/50 text-sky-500 focus:ring-sky-500"
+              />
+              <span className="text-sm text-slate-400">Pas de temps limite</span>
+            </label>
+            {form.time_limit_minutes != null && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={480}
+                  value={form.time_limit_minutes}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    updateForm({ time_limit_minutes: Number.isNaN(v) || v < 1 ? 1 : Math.min(480, v) });
+                  }}
+                  className="w-20 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm px-2 py-1.5 text-center"
+                />
+                <span className="text-sm text-slate-400">minutes</span>
+              </div>
+            )}
           </div>
 
           {/* Barème total */}

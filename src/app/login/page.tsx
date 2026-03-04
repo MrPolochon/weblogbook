@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle } from 'lucide-react';
 
 // Composant pour les nuages animés
 function AnimatedClouds() {
@@ -119,8 +119,11 @@ type LoginMode = 'pilote' | 'atc' | 'siavi';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(true);
+  const messageParam = searchParams.get('message');
+  const showTestEchoue = messageParam === 'test_echoue_temps_termine';
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [identifiant, setIdentifiant] = useState('');
@@ -260,6 +263,13 @@ export default function LoginPage() {
             <span className="hidden sm:inline">SIAVI</span>
           </button>
         </div>
+
+        {showTestEchoue && (
+          <div className="mb-4 p-4 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center gap-3 animate-init animate-reveal-blur">
+            <AlertTriangle className="h-6 w-6 text-amber-400 shrink-0" />
+            <p className="text-amber-200 font-medium">Test échoué : temps terminé.</p>
+          </div>
+        )}
 
         {/* Formulaire */}
         <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur delay-500">

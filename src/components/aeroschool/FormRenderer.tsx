@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAntiCheat } from '@/hooks/useAntiCheat';
-import { ChevronLeft, ChevronRight, Send, Loader2, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Send, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock } from 'lucide-react';
 
 interface Question {
   id: string;
@@ -31,6 +31,8 @@ interface FormData {
   id: string;
   title: string;
   description?: string;
+  /** Temps limite en minutes (null = pas de limite) */
+  time_limit_minutes?: number | null;
   sections: Section[];
 }
 
@@ -48,6 +50,41 @@ export default function FormRenderer({ form }: Props) {
   const [submitted, setSubmitted] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ score?: number; maxScore?: number } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const timeLimitMinutes = form.time_limit_minutes ?? null;
+  const totalSeconds = timeLimitMinutes != null ? timeLimitMinutes * 60 : 0;
+  const [remainingSeconds, setRemainingSeconds] = useState(totalSeconds);
+  const timeExpiredHandled = useRef(false);
+
+  useEffect(() => {
+    if (!testStarted || timeLimitMinutes == null || totalSeconds <= 0) return;
+    setRemainingSeconds(totalSeconds);
+    const interval = setInterval(() => {
+      setRemainingSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [testStarted, timeLimitMinutes, totalSeconds]);
+
+  useEffect(() => {
+    if (remainingSeconds !== 0 || timeExpiredHandled.current || timeLimitMinutes == null) return;
+    timeExpiredHandled.current = true;
+    (async () => {
+      try {
+        await fetch(`/api/aeroschool/forms/${form.id}/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ answers, time_expired: true }),
+        });
+      } catch { /* ignore */ }
+      router.replace('/login?message=test_echoue_temps_termine');
+    })();
+  }, [remainingSeconds, timeLimitMinutes, form.id, answers, router]);
 
   const handleCheat = useCallback(async () => {
     // Soumettre automatiquement avec cheating_detected
@@ -220,8 +257,24 @@ export default function FormRenderer({ form }: Props) {
     );
   }
 
+  const formatTime = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 py-8 px-4">
+      {/* Chrono fixe en haut au centre */}
+      {testStarted && timeLimitMinutes != null && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-slate-800 border border-slate-600 shadow-xl">
+          <Clock className="h-6 w-6 text-amber-400" />
+          <span className={`text-2xl font-mono font-bold tabular-nums ${remainingSeconds <= 60 ? 'text-amber-400' : 'text-slate-200'}`}>
+            {formatTime(Math.max(0, remainingSeconds))}
+          </span>
+        </div>
+      )}
+
       <form className="max-w-3xl mx-auto space-y-6" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
         {/* Barre de progression */}
         <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">

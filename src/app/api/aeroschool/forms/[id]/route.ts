@@ -66,6 +66,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (body.webhook_role_id !== undefined) updates.webhook_role_id = body.webhook_role_id ? String(body.webhook_role_id).trim() : null;
     if (body.sections !== undefined) updates.sections = Array.isArray(body.sections) ? body.sections : [];
     if (body.is_published !== undefined) updates.is_published = Boolean(body.is_published);
+    if (body.time_limit_minutes !== undefined) {
+      const v = body.time_limit_minutes;
+      updates.time_limit_minutes = (v === null || v === '' || v === undefined) ? null : Math.max(1, parseInt(String(v), 10) || null);
+    }
 
     const admin = createAdminClient();
     const { error } = await admin.from('aeroschool_forms').update(updates).eq('id', id);

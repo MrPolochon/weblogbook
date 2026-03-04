@@ -106,7 +106,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const body = await request.json();
-    const { answers, cheating_detected } = body;
+    const { answers, cheating_detected, time_expired } = body;
 
     if (!answers || typeof answers !== 'object') {
       return NextResponse.json({ error: 'Réponses manquantes' }, { status: 400 });
@@ -154,8 +154,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
     }
 
-    // Si triche détectée, marquer comme trashed
-    const cheatingStatus = cheating_detected ? 'trashed' : 'submitted';
+    // Statut : temps dépassé > triche > soumis
+    const status = time_expired ? 'time_expired' : (cheating_detected ? 'trashed' : 'submitted');
 
     const responseRow = {
       form_id: id,
@@ -163,11 +163,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       score: maxScore > 0 ? score : null,
       max_score: maxScore > 0 ? maxScore : null,
       cheating_detected: Boolean(cheating_detected),
-      status: cheatingStatus,
+      status,
     };
 
     // Mode webhook : envoyer un embed Discord puis ne pas stocker (sauf si triche)
-    if (form.delivery_mode === 'webhook' && form.webhook_url && !cheating_detected) {
+    if (form.delivery_mode === 'webhook' && form.webhook_url && !cheating_detected && !time_expired) {
       try {
         const embedPayload = buildDiscordEmbed(
           form.title,

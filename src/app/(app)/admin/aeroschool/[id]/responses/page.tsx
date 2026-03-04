@@ -107,7 +107,7 @@ export default function AdminResponsesPage() {
             <div
               key={resp.id}
               className={`border rounded-xl overflow-hidden transition-colors ${
-                resp.cheating_detected || resp.status === 'trashed'
+                resp.cheating_detected || resp.status === 'trashed' || resp.status === 'time_expired'
                   ? 'border-red-500/50 bg-red-500/5'
                   : 'border-slate-700/50 bg-slate-800/60'
               }`}
