@@ -40,6 +40,7 @@ interface Props {
 
 export default function FormRenderer({ form }: Props) {
   const router = useRouter();
+  const [testStarted, setTestStarted] = useState(false);
   const [currentSection, setCurrentSection] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -60,9 +61,9 @@ export default function FormRenderer({ form }: Props) {
   }, [form.id, answers]);
 
   const { cheatingDetected } = useAntiCheat({
-    enabled: true,
+    enabled: testStarted,
     onCheatDetected: handleCheat,
-    graceMs: 10000,
+    graceMs: 20000,
     relaxed: true,
   });
 
@@ -140,6 +141,32 @@ export default function FormRenderer({ form }: Props) {
       setSubmitting(false);
     }
   };
+
+  // Page d'avertissement avant de commencer le test
+  if (!testStarted) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6">
+        <div className="max-w-lg w-full text-center space-y-8">
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-6 space-y-4">
+            <AlertTriangle className="h-14 w-14 text-amber-400 mx-auto" />
+            <h2 className="text-xl font-bold text-amber-100">Avant de commencer</h2>
+            <p className="text-slate-300 text-left leading-relaxed">
+              Fermez toutes les applications en arrière-plan et tous les autres onglets du navigateur.
+              <br /><br />
+              Pendant le test, ne changez pas d&apos;onglet et ne quittez pas cette page, sous peine de détection de triche.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setTestStarted(true)}
+            className="px-10 py-4 bg-sky-500 hover:bg-sky-400 text-white font-bold text-lg rounded-xl shadow-lg transition-colors"
+          >
+            Commencer
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Écran TRICHERIE DÉTECTÉE
   if (cheatingDetected) {

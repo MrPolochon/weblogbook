@@ -155,6 +155,8 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
   const [cheatingDetected, setCheatingDetected] = useState(false);
   const cheatingRef = useRef(false);
   const activeRef = useRef(false);
+  /** Ne déclencher "perte de focus = triche" que si l'utilisateur a déjà interagi avec la page (évite faux positifs onglet ouvert en arrière-plan). */
+  const userHadFocusRef = useRef(false);
 
   const triggerCheat = useCallback(() => {
     if (cheatingRef.current) return;
@@ -167,8 +169,9 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
   useEffect(() => {
     if (!enabled || cheatingRef.current) return;
 
-    const effectiveGrace = relaxed ? Math.max(graceMs, 8000) : graceMs;
+    const effectiveGrace = relaxed ? Math.max(graceMs, 15000) : graceMs;
     activeRef.current = false;
+    userHadFocusRef.current = false;
     const graceTimeout = setTimeout(() => {
       activeRef.current = true;
     }, effectiveGrace);
@@ -301,20 +304,24 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
     });
 
     // ── 10. Clic ailleurs / changement d’application = triche ──
+    const handleWindowFocus = () => { userHadFocusRef.current = true; };
     const handleWindowBlur = () => {
       if (!activeRef.current || cheatingRef.current) return;
+      if (!userHadFocusRef.current) return; // pas encore eu le focus = onglet en arrière-plan, ne pas sanctionner
       triggerCheat();
     };
 
     // Vérification périodique du focus : le blur n’est pas toujours envoyé quand on passe à une autre app (Alt+Tab, autre fenêtre)
     const focusCheckWindowInterval = setInterval(() => {
       if (cheatingRef.current || !activeRef.current) return;
+      if (!userHadFocusRef.current) return; // ne sanctionner la perte de focus qu’après que l’utilisateur ait interagi
       if (typeof document.hasFocus === 'function' && !document.hasFocus()) {
         triggerCheat();
       }
     }, 800);
 
     // Enregistrer les listeners
+    window.addEventListener('focus', handleWindowFocus);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('keydown', handleKeyDown, true);
@@ -326,6 +333,7 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
 
     return () => {
       clearTimeout(graceTimeout);
+      window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('keydown', handleKeyDown, true);
