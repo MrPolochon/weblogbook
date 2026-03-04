@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Suspense, useEffect, useState, useMemo, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
@@ -345,25 +346,25 @@ function LoginPageContent() {
         </div>
 
         <p className="text-slate-500 text-sm mt-8 text-center animate-init animate-slide-up delay-700">
-          Premier accès ? <a href="/setup" className="text-sky-400 hover:text-sky-300 font-medium transition-colors">Créer le premier admin</a>
+          Premier accès ? <Link href="/setup" className="text-sky-400 hover:text-sky-300 font-medium transition-colors">Créer le premier admin</Link>
         </p>
 
         {/* Boutons secondaires */}
         <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 animate-init animate-slide-up delay-800">
-          <a
+          <Link
             href="/aeroschool"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:text-amber-200 hover:bg-amber-500/20 hover:border-amber-500/50 transition-all backdrop-blur-sm group cursor-pointer"
           >
             <GraduationCap className="h-5 w-5 text-amber-400 group-hover:scale-110 transition-transform" />
             <span className="font-semibold">AeroSchool</span>
-          </a>
-          <a
+          </Link>
+          <Link
             href="/download"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50 text-slate-300 hover:text-white hover:bg-slate-700/60 transition-all backdrop-blur-sm group cursor-pointer"
           >
             <Download className="h-4 w-4 text-sky-400 group-hover:scale-110 transition-transform" />
             <span>Télécharger notre application</span>
-          </a>
+          </Link>
         </div>
       </div>
     </div>

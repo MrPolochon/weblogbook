@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       
       if (rollbackError) {
         console.error('CRITIQUE: Échec du rollback virement:', rollbackError);
-        // TODO: Notifier l'admin d'une incohérence financière
+        // À terme : notifier l'admin (email/webhook) en cas d'incohérence financière
       }
       return NextResponse.json({ error: 'Erreur lors du crédit. Virement annulé.' }, { status: 500 });
     }

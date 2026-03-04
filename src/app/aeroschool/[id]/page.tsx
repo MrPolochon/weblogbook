@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import FormRenderer from '@/components/aeroschool/FormRenderer';
@@ -61,9 +62,9 @@ export default function AeroSchoolFormPage() {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center">
           <p className="text-red-400 text-lg">{error || 'Formulaire introuvable'}</p>
-          <a href="/aeroschool" className="text-sky-400 hover:text-sky-300 mt-4 inline-block">
+          <Link href="/aeroschool" className="text-sky-400 hover:text-sky-300 mt-4 inline-block">
             ← Retour à AeroSchool
-          </a>
+          </Link>
         </div>
       </div>
     );

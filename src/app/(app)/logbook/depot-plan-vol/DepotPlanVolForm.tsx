@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
 import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio } from 'lucide-react';
@@ -798,7 +799,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
             <div className="text-sm text-slate-400 mt-2">
               <p>Vous n&apos;avez aucun appareil dans votre inventaire.</p>
               <p className="text-amber-400 mt-1">
-                Achetez un avion sur le <a href="/marketplace" className="underline hover:text-amber-300">Marketplace</a> pour effectuer des vols personnels.
+                Achetez un avion sur le <Link href="/marketplace" className="underline hover:text-amber-300">Marketplace</Link> pour effectuer des vols personnels.
               </p>
             </div>
           )}

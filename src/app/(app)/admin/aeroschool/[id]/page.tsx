@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import FormBuilder, { type FormData } from '@/components/aeroschool/FormBuilder';
@@ -51,6 +52,9 @@ export default function AdminAeroSchoolEditPage() {
     return (
       <div className="text-center py-20">
         <p className="text-red-400">{error || 'Formulaire introuvable'}</p>
+        <Link href="/admin/aeroschool" className="text-sky-400 hover:text-sky-300 mt-4 inline-block">
+          ← Retour aux formulaires
+        </Link>
       </div>
     );
   }
