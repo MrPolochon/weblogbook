@@ -157,6 +157,10 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
   const activeRef = useRef(false);
   /** Ne déclencher "perte de focus = triche" que si l'utilisateur a déjà interagi avec la page (évite faux positifs onglet ouvert en arrière-plan). */
   const userHadFocusRef = useRef(false);
+  /** Nombre de vérifications consécutives sans focus avant de déclencher (évite faux positifs : notification, menu navigateur, etc.). */
+  const noFocusCountRef = useRef(0);
+  const NO_FOCUS_THRESHOLD = 4;
+  const FOCUS_CHECK_INTERVAL_MS = 1500;
 
   const triggerCheat = useCallback(() => {
     if (cheatingRef.current) return;
@@ -172,6 +176,7 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
     const effectiveGrace = relaxed ? Math.max(graceMs, 15000) : graceMs;
     activeRef.current = false;
     userHadFocusRef.current = false;
+    noFocusCountRef.current = 0;
     const graceTimeout = setTimeout(() => {
       activeRef.current = true;
     }, effectiveGrace);
@@ -304,21 +309,27 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
     });
 
     // ── 10. Clic ailleurs / changement d’application = triche ──
-    const handleWindowFocus = () => { userHadFocusRef.current = true; };
-    const handleWindowBlur = () => {
-      if (!activeRef.current || cheatingRef.current) return;
-      if (!userHadFocusRef.current) return; // pas encore eu le focus = onglet en arrière-plan, ne pas sanctionner
-      triggerCheat();
+    const handleWindowFocus = () => {
+      userHadFocusRef.current = true;
+      noFocusCountRef.current = 0; // reset à chaque retour de focus
     };
+    // Ne plus déclencher sur un seul blur (trop de faux positifs : notification, menu, etc.)
+    const handleWindowBlur = () => { /* on s’appuie sur la vérification périodique avec seuil */ };
 
-    // Vérification périodique du focus : le blur n’est pas toujours envoyé quand on passe à une autre app (Alt+Tab, autre fenêtre)
+    // Vérification périodique : déclencher seulement après N fois consécutives sans focus (évite faux positifs en restant passif)
     const focusCheckWindowInterval = setInterval(() => {
       if (cheatingRef.current || !activeRef.current) return;
-      if (!userHadFocusRef.current) return; // ne sanctionner la perte de focus qu’après que l’utilisateur ait interagi
-      if (typeof document.hasFocus === 'function' && !document.hasFocus()) {
+      if (!userHadFocusRef.current) return;
+      if (typeof document.hasFocus !== 'function') return;
+      if (document.hasFocus()) {
+        noFocusCountRef.current = 0;
+        return;
+      }
+      noFocusCountRef.current += 1;
+      if (noFocusCountRef.current >= NO_FOCUS_THRESHOLD) {
         triggerCheat();
       }
-    }, 800);
+    }, FOCUS_CHECK_INTERVAL_MS);
 
     // Enregistrer les listeners
     window.addEventListener('focus', handleWindowFocus);
