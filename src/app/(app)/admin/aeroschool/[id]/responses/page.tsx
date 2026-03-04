@@ -118,7 +118,7 @@ export default function AdminResponsesPage() {
                 onClick={() => setExpanded(expanded === resp.id ? null : resp.id)}
               >
                 <div className="flex items-center gap-3">
-                  {resp.cheating_detected ? (
+                  {resp.cheating_detected || resp.status === 'time_expired' ? (
                     <XCircle className="h-5 w-5 text-red-400 shrink-0" />
                   ) : (
                     <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
@@ -131,6 +131,11 @@ export default function AdminResponsesPage() {
                       {resp.cheating_detected && (
                         <span className="text-xs font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
                           <AlertTriangle className="h-3 w-3" /> TRICHE
+                        </span>
+                      )}
+                      {!resp.cheating_detected && resp.status === 'time_expired' && (
+                        <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" /> Temps dépassé
                         </span>
                       )}
                     </div>
