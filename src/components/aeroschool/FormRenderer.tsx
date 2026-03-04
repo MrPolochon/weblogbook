@@ -33,6 +33,8 @@ interface FormData {
   description?: string;
   /** Temps limite en minutes (null = pas de limite) */
   time_limit_minutes?: number | null;
+  /** Détection de triche activée (false = désactivée par l'admin) */
+  antitriche_enabled?: boolean;
   sections: Section[];
 }
 
@@ -97,8 +99,9 @@ export default function FormRenderer({ form }: Props) {
     } catch { /* ignore */ }
   }, [form.id, answers]);
 
+  const antitricheEnabled = form.antitriche_enabled !== false;
   const { cheatingDetected } = useAntiCheat({
-    enabled: testStarted,
+    enabled: testStarted && antitricheEnabled,
     onCheatDetected: handleCheat,
     graceMs: 20000,
     relaxed: true,
@@ -188,9 +191,15 @@ export default function FormRenderer({ form }: Props) {
             <AlertTriangle className="h-14 w-14 text-amber-400 mx-auto" />
             <h2 className="text-xl font-bold text-amber-100">Avant de commencer</h2>
             <p className="text-slate-300 text-left leading-relaxed">
-              Fermez toutes les applications en arrière-plan et tous les autres onglets du navigateur.
-              <br /><br />
-              Pendant le test, ne changez pas d&apos;onglet et ne quittez pas cette page, sous peine de détection de triche.
+              {antitricheEnabled ? (
+                <>
+                  Fermez toutes les applications en arrière-plan et tous les autres onglets du navigateur.
+                  <br /><br />
+                  Pendant le test, ne changez pas d&apos;onglet et ne quittez pas cette page, sous peine de détection de triche.
+                </>
+              ) : (
+                <>Vous pouvez remplir le formulaire à votre rythme.</>
+              )}
             </p>
           </div>
           <button
@@ -291,10 +300,12 @@ export default function FormRenderer({ form }: Props) {
             {form.description && (
               <p className="text-slate-400 mt-2">{form.description}</p>
             )}
+            {antitricheEnabled && (
             <div className="mt-4 flex items-center gap-2 text-amber-400 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>Ne changez pas d&apos;onglet et ne quittez pas cette page pendant le questionnaire.</span>
             </div>
+          )}
           </div>
         )}
 

@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
 
     const body = await request.json();
-    const { title, description, delivery_mode, webhook_url, webhook_role_id, sections, is_published, time_limit_minutes } = body;
+    const { title, description, delivery_mode, webhook_url, webhook_role_id, sections, is_published, time_limit_minutes, antitriche_enabled } = body;
 
     if (!title || typeof title !== 'string' || !title.trim()) {
       return NextResponse.json({ error: 'Titre requis' }, { status: 400 });
@@ -78,6 +78,7 @@ export async function POST(request: Request) {
       webhook_role_id: delivery_mode === 'webhook' && webhook_role_id ? String(webhook_role_id).trim() : null,
       sections: Array.isArray(sections) ? sections : [],
       is_published: Boolean(is_published),
+      antitriche_enabled: antitriche_enabled !== false,
       time_limit_minutes: (() => {
         if (time_limit_minutes == null || time_limit_minutes === '') return null;
         const num = parseInt(String(time_limit_minutes), 10);

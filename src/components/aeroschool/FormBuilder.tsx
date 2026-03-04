@@ -4,7 +4,7 @@ import React, { useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Trash2, Save, Eye, EyeOff, ChevronUp, ChevronDown,
-  Globe, Webhook, GripVertical, Loader2, Clock,
+  Globe, Webhook, GripVertical, Loader2, Clock, ShieldCheck, ShieldOff,
 } from 'lucide-react';
 import QuestionEditor, { createEmptyQuestion, type Question } from './QuestionEditor';
 
@@ -25,6 +25,8 @@ export interface FormData {
   is_published: boolean;
   /** Temps limite en minutes (null = pas de limite) */
   time_limit_minutes: number | null;
+  /** Détection de triche activée (changement d'onglet, extensions IA, etc.) */
+  antitriche_enabled: boolean;
   sections: Section[];
 }
 
@@ -57,6 +59,7 @@ export default function FormBuilder({ initial }: Props) {
     webhook_role_id: '',
     is_published: false,
     time_limit_minutes: null,
+    antitriche_enabled: true,
     sections: [createEmptySection()],
   });
 
@@ -165,6 +168,7 @@ export default function FormBuilder({ initial }: Props) {
         webhook_role_id: form.delivery_mode === 'webhook' && form.webhook_role_id?.trim() ? form.webhook_role_id.trim() : null,
         is_published: form.is_published,
         time_limit_minutes: form.time_limit_minutes ?? null,
+        antitriche_enabled: form.antitriche_enabled,
         sections: form.sections,
       };
 
@@ -310,6 +314,24 @@ export default function FormBuilder({ initial }: Props) {
               )}
               <span className={`text-sm font-medium ${form.is_published ? 'text-emerald-400' : 'text-slate-500'}`}>
                 {form.is_published ? 'Publié — visible par tous' : 'Brouillon — non visible'}
+              </span>
+            </button>
+          </div>
+
+          {/* Détection de triche */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => updateForm({ antitriche_enabled: !form.antitriche_enabled })}
+              className="flex items-center gap-2"
+            >
+              {form.antitriche_enabled ? (
+                <ShieldCheck className="h-5 w-5 text-amber-400" />
+              ) : (
+                <ShieldOff className="h-5 w-5 text-slate-500" />
+              )}
+              <span className={`text-sm font-medium ${form.antitriche_enabled ? 'text-amber-400' : 'text-slate-500'}`}>
+                {form.antitriche_enabled ? 'Détection de triche activée' : 'Détection de triche désactivée'}
               </span>
             </button>
           </div>
