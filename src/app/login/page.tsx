@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo, useTransition } from 'react';
+import React, { Suspense, useEffect, useState, useMemo, useTransition } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
@@ -117,7 +117,17 @@ function TwinklingStars() {
 
 type LoginMode = 'pilote' | 'atc' | 'siavi';
 
-export default function LoginPage() {
+function LoginPageFallback() {
+  return (
+    <div className="min-h-screen relative flex items-center justify-center">
+      <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url(/mixou-bg.png)' }} />
+      <div className="absolute inset-0 bg-slate-900/80" />
+      <p className="relative z-10 text-slate-400">Chargement…</p>
+    </div>
+  );
+}
+
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
@@ -357,5 +367,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginPageFallback />}>
+      <LoginPageContent />
+    </Suspense>
   );
 }
