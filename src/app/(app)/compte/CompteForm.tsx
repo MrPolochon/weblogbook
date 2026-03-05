@@ -4,7 +4,7 @@ import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
-export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'default', showArmee = true }: { armee: boolean; isAdmin: boolean; variant?: 'default' | 'atc' | 'siavi'; showArmee?: boolean }) {
+export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'default', showArmee = true, initialEmail = '' }: { armee: boolean; isAdmin: boolean; variant?: 'default' | 'atc' | 'siavi'; showArmee?: boolean; initialEmail?: string }) {
   const isSiavi = variant === 'siavi';
   const isAtc = variant === 'atc';
   const isAtcOrSiavi = isAtc || isSiavi;
@@ -26,7 +26,11 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
   const [armee, setArmee] = useState(armeeInitial);
   const [loadingArmee, setLoadingArmee] = useState(false);
   const [messageArmee, setMessageArmee] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [email, setEmail] = useState(initialEmail);
+  const [loadingEmail, setLoadingEmail] = useState(false);
+  const [messageEmail, setMessageEmail] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   useEffect(() => { setArmee(armeeInitial); }, [armeeInitial]);
+  useEffect(() => { setEmail(initialEmail); }, [initialEmail]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,6 +61,23 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
     }
   }
 
+  async function handleEmailSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMessageEmail(null);
+    setLoadingEmail(true);
+    try {
+      const res = await fetch('/api/compte', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim() }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setMessageEmail({ type: 'ok', text: 'Adresse email enregistrée. Elle sert à recevoir le code de vérification à chaque connexion.' });
+      startTransition(() => router.refresh());
+    } catch (err: unknown) {
+      setMessageEmail({ type: 'err', text: err instanceof Error ? err.message : 'Erreur' });
+    } finally {
+      setLoadingEmail(false);
+    }
+  }
+
   async function handleArmeeSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessageArmee(null);
@@ -76,6 +97,28 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
 
   return (
     <>
+      <div className={cardClass}>
+        <h2 className={`text-lg font-medium mb-4 ${isSiavi ? 'text-slate-800' : textTitle}`}>Adresse email (vérification à chaque connexion)</h2>
+        <p className={`${textMuted} text-sm mb-3`}>Un code à 6 chiffres est envoyé à cette adresse à chaque connexion pour confirmer votre identité.</p>
+        <form onSubmit={handleEmailSubmit} className="space-y-4">
+          <input
+            type="email"
+            className={inputClass}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="vous@exemple.com"
+            required
+          />
+          {messageEmail && (
+            <p className={messageEmail.type === 'ok' ? (isSiavi ? 'text-emerald-600 text-sm font-medium' : 'text-emerald-400 text-sm') : (isSiavi ? 'text-red-600 text-sm font-medium' : 'text-red-400 text-sm')}>
+              {messageEmail.text}
+            </p>
+          )}
+          <button type="submit" className={isSiavi ? 'px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold transition-colors disabled:opacity-50' : 'btn-primary'} disabled={loadingEmail}>
+            {loadingEmail ? 'Enregistrement…' : 'Enregistrer l\'email'}
+          </button>
+        </form>
+      </div>
       {isAdmin && showArmee && (
         <div className={cardClass}>
           <h2 className={`text-lg font-medium mb-4 ${textTitle}`}>Rôle Armée (Espace militaire)</h2>

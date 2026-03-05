@@ -8,7 +8,7 @@ export async function middleware(request: NextRequest) {
   const isDownload = pathname === '/download';
   const isAeroSchool = pathname.startsWith('/aeroschool');
   const isAuthCallback = pathname.startsWith('/auth/');
-  const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin';
+  const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin' || pathname === '/api/site-config';
   const isApiAeroSchoolPublic = pathname.startsWith('/api/aeroschool/') && request.method !== 'PUT' && request.method !== 'DELETE';
 
   // CORS preflight : laisser passer sans vérification (requis pour l'app Electron/Android VHF)
@@ -49,6 +49,32 @@ export async function middleware(request: NextRequest) {
   if (!user) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
+    return NextResponse.redirect(url);
+  }
+
+  // Connexions réservées aux admins (option activable dans Admin > Sécurité)
+  try {
+    const { data: siteConfig } = await supabase.from('site_config').select('login_admin_only').eq('id', 1).single();
+    if (siteConfig?.login_admin_only) {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      if (profile?.role !== 'admin') {
+        await supabase.auth.signOut();
+        const url = request.nextUrl.clone();
+        url.pathname = '/login';
+        url.searchParams.set('message', 'admin_only');
+        return NextResponse.redirect(url);
+      }
+    }
+  } catch {
+    // Table site_config peut ne pas exister (migration non exécutée)
+  }
+
+  // Vérification par email à chaque connexion : si le cookie est présent, rediriger vers la page de saisie du code
+  const pendingVerification = request.cookies.get('pending_login_verification')?.value;
+  if (pendingVerification && pathname !== '/login') {
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    url.searchParams.set('step', 'verify');
     return NextResponse.redirect(url);
   }
 

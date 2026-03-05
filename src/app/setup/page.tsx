@@ -12,6 +12,7 @@ export default function SetupPage() {
   const [error, setError] = useState<string | null>(null);
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -41,19 +42,13 @@ export default function SetupPage() {
       const res = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifiant: identifiant.trim(), password }),
+        body: JSON.stringify({ identifiant: identifiant.trim(), password, email: email.trim() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) {
         throw new Error(data.error || 'Erreur lors de la création');
       }
-      const supabase = createClient();
-      const { error: signInErr } = await supabase.auth.signInWithPassword({
-        email: data.email,
-        password,
-      });
-      if (signInErr) throw new Error('Compte créé. Connectez-vous avec vos identifiants.');
-      router.replace('/logbook');
+      router.replace('/login?message=compte_cree');
       startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -91,6 +86,19 @@ export default function SetupPage() {
               required
               autoComplete="username"
             />
+          </div>
+          <div>
+            <label className="label">Adresse email</label>
+            <input
+              type="email"
+              className="input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="vous@exemple.com"
+              required
+              autoComplete="email"
+            />
+            <p className="text-slate-500 text-xs mt-1">Utilisée pour envoyer le code de vérification à chaque connexion</p>
           </div>
           <div>
             <label className="label">Mot de passe</label>

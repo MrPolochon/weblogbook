@@ -5,7 +5,21 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail } from 'lucide-react';
+
+const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
+
+function setPendingVerificationCookie() {
+  if (typeof document !== 'undefined') {
+    document.cookie = `${PENDING_VERIFICATION_COOKIE}=1; path=/; max-age=600`;
+  }
+}
+
+function clearPendingVerificationCookie() {
+  if (typeof document !== 'undefined') {
+    document.cookie = `${PENDING_VERIFICATION_COOKIE}=; path=/; max-age=0`;
+  }
+}
 
 // Composant pour les nuages animés
 function AnimatedClouds() {
@@ -128,6 +142,8 @@ function LoginPageFallback() {
   );
 }
 
+type LoginStep = 'form' | 'email' | 'code';
+
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -135,21 +151,32 @@ function LoginPageContent() {
   const [loading, setLoading] = useState(true);
   const messageParam = searchParams.get('message');
   const showTestEchoue = messageParam === 'test_echoue_temps_termine';
+  const showCompteCree = messageParam === 'compte_cree';
+  const showAdminOnly = messageParam === 'admin_only';
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
   const [mode, setMode] = useState<LoginMode>('pilote');
+  const [step, setStep] = useState<LoginStep>('form');
+  const [emailMasked, setEmailMasked] = useState<string>('');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [redirectTo, setRedirectTo] = useState<string>('/logbook');
+  const [loginAdminOnly, setLoginAdminOnly] = useState(false);
 
   useEffect(() => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 10000);
-    fetch('/api/has-admin', { cache: 'no-store', signal: ctrl.signal })
-      .then((r) => r.json())
-      .then((d) => {
+    Promise.all([
+      fetch('/api/has-admin', { cache: 'no-store', signal: ctrl.signal }).then((r) => r.json()),
+      fetch('/api/site-config', { cache: 'no-store', signal: ctrl.signal }).then((r) => r.json()),
+    ])
+      .then(([hasAdminData, siteConfigData]) => {
         clearTimeout(t);
-        if (!d.hasAdmin) router.replace('/setup');
+        if (!hasAdminData?.hasAdmin) router.replace('/setup');
         else setLoading(false);
+        setLoginAdminOnly(Boolean(siteConfigData?.login_admin_only));
       })
       .catch(() => {
         clearTimeout(t);
@@ -160,6 +187,26 @@ function LoginPageContent() {
       ctrl.abort();
     };
   }, [router]);
+
+  useEffect(() => {
+    if (loading || step !== 'form') return;
+    if (searchParams.get('step') === 'verify') {
+      setStep('code');
+      fetch('/api/auth/send-login-code', { method: 'POST', credentials: 'include' })
+        .then(async (res) => {
+          const d = await res.json().catch(() => ({}));
+          if (d.emailMasked) setEmailMasked(d.emailMasked);
+          if (res.status === 400) setStep('email');
+        })
+        .catch(() => setStep('email'));
+    }
+  }, [loading, searchParams, step]);
+
+  async function doRedirect() {
+    clearPendingVerificationCookie();
+    router.replace(redirectTo);
+    startTransition(() => router.refresh());
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -172,26 +219,107 @@ function LoginPageContent() {
       if (signInErr) throw new Error(signInErr.message || 'Identifiant ou mot de passe incorrect.');
       const uid = signData?.user?.id;
       if (!uid) { router.replace('/logbook'); startTransition(() => router.refresh()); return; }
+      try {
+        await fetch('/api/auth/register-login', { method: 'POST', credentials: 'include' });
+      } catch { /* ignore */ }
       const { data: profile } = await supabase.from('profiles').select('role, atc, siavi').eq('id', uid).single();
-      
+      if (loginAdminOnly && profile?.role !== 'admin') {
+        await supabase.auth.signOut();
+        throw new Error('Les connexions sont temporairement réservées aux administrateurs.');
+      }
       if (mode === 'siavi') {
-        // Les admins ont toujours accès à SIAVI, sinon vérifier siavi ou role siavi
         const canSiavi = profile?.role === 'admin' || profile?.role === 'siavi' || Boolean(profile?.siavi);
         if (!canSiavi) throw new Error('Ce compte n\'a pas accès à l\'espace SIAVI.');
-        router.replace('/siavi');
+        setRedirectTo('/siavi');
       } else if (mode === 'atc') {
         const canAtc = profile?.role === 'admin' || profile?.role === 'atc' || profile?.atc;
         if (!canAtc) throw new Error('Ce compte n\'a pas accès à l\'espace ATC.');
-        router.replace('/atc');
+        setRedirectTo('/atc');
       } else {
-        // Comptes exclusivement ATC ou SIAVI ne peuvent pas accéder à l'espace pilote
         if (profile?.role === 'atc') throw new Error('Ce compte est uniquement ATC. Sélectionnez "Contrôleur ATC" pour vous connecter.');
         if (profile?.role === 'siavi') throw new Error('Ce compte est uniquement SIAVI. Sélectionnez "SIAVI" pour vous connecter.');
-        router.replace('/logbook');
+        setRedirectTo('/logbook');
       }
-      startTransition(() => router.refresh());
+      setPendingVerificationCookie();
+      const codeRes = await fetch('/api/auth/send-login-code', { method: 'POST', credentials: 'include' });
+      const codeData = await codeRes.json().catch(() => ({}));
+      if (codeRes.status === 400) {
+        setStep('email');
+        setError(null);
+      } else if (!codeRes.ok) {
+        setError(codeData.error || 'Impossible d\'envoyer le code par email.');
+      } else {
+        setEmailMasked(codeData.emailMasked || 'votre adresse');
+        setStep('code');
+        setError(null);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur de connexion');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleEmailSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/auth/send-login-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail.trim() }),
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Impossible d\'envoyer le code.');
+      setEmailMasked(data.emailMasked || 'votre adresse');
+      setStep('code');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleCodeSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/auth/verify-login-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code.replace(/\s/g, '') }),
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Code invalide.');
+      await doRedirect();
+      return;
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Code incorrect ou expiré.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleResendCode() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const body = step === 'code' && loginEmail.trim() ? { email: loginEmail.trim() } : {};
+      const res = await fetch('/api/auth/send-login-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'include',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.emailMasked) setEmailMasked(data.emailMasked);
+      if (!res.ok) setError(data.error || 'Erreur lors de l\'envoi.');
+    } catch {
+      setError('Erreur réseau.');
     } finally {
       setSubmitting(false);
     }
@@ -235,7 +363,8 @@ function LoginPageContent() {
           <p className="text-slate-400 text-sm mt-2 animate-init animate-slide-up delay-300">Système de gestion des vols</p>
         </div>
 
-        {/* Sélecteur de mode */}
+        {/* Sélecteur de mode (masqué lors de l'étape email/code) */}
+        {step === 'form' && (
         <div className="flex gap-2 mb-6 p-1 bg-slate-800/50 rounded-2xl backdrop-blur-sm animate-init animate-reveal-blur delay-400">
           <button
             type="button"
@@ -274,76 +403,172 @@ function LoginPageContent() {
             <span className="hidden sm:inline">SIAVI</span>
           </button>
         </div>
+        )}
 
-        {showTestEchoue && (
+        {showTestEchoue && step === 'form' && (
           <div className="mb-4 p-4 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center gap-3 animate-init animate-reveal-blur">
             <AlertTriangle className="h-6 w-6 text-amber-400 shrink-0" />
             <p className="text-amber-200 font-medium">Test échoué : temps terminé.</p>
           </div>
         )}
+        {showCompteCree && step === 'form' && (
+          <div className="mb-4 p-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center gap-3 animate-init animate-reveal-blur">
+            <p className="text-emerald-200 font-medium">Compte créé. Connectez-vous avec vos identifiants puis saisissez le code envoyé à votre email.</p>
+          </div>
+        )}
+        {showAdminOnly && step === 'form' && (
+          <div className="mb-4 p-4 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center gap-3 animate-init animate-reveal-blur">
+            <AlertTriangle className="h-6 w-6 text-amber-400 shrink-0" />
+            <p className="text-amber-200 font-medium">Les connexions sont temporairement réservées aux administrateurs.</p>
+          </div>
+        )}
 
-        {/* Formulaire */}
-        <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur delay-500">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="label text-slate-200">Identifiant</label>
-              <input
-                type="text"
-                className="input bg-slate-900/50"
-                value={identifiant}
-                onChange={(e) => setIdentifiant(e.target.value)}
-                placeholder="Votre identifiant"
-                required
-                autoComplete="username"
-              />
-            </div>
-            <div>
-              <label className="label text-slate-200">Mot de passe</label>
-              <input
-                type="password"
-                className="input bg-slate-900/50"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                autoComplete="current-password"
-              />
-            </div>
-            
-            {error && (
-              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 backdrop-blur-sm">
-                <p className="text-red-400 text-sm font-medium">{error}</p>
+        {/* Formulaire : identifiant / mot de passe */}
+        {step === 'form' && (
+          <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur delay-500">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label className="label text-slate-200">Identifiant</label>
+                <input
+                  type="text"
+                  className="input bg-slate-900/50"
+                  value={identifiant}
+                  onChange={(e) => setIdentifiant(e.target.value)}
+                  placeholder="Votre identifiant"
+                  required
+                  autoComplete="username"
+                />
               </div>
-            )}
-            
-            <button 
-              type="submit" 
-              className={`w-full py-3.5 rounded-xl font-bold transition-all duration-300 transform active:scale-[0.98] ${
-                mode === 'pilote'
-                  ? 'bg-gradient-to-r from-sky-500 to-sky-400 hover:from-sky-400 hover:to-sky-300 text-white shadow-lg shadow-sky-500/30 hover:shadow-sky-500/50'
-                  : mode === 'atc'
-                    ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50'
-                    : 'bg-gradient-to-r from-red-500 to-red-400 hover:from-red-400 hover:to-red-300 text-white shadow-lg shadow-red-500/30 hover:shadow-red-500/50'
-              }`}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Connexion…
-                </span>
-              ) : (
-                <>
-                  {mode === 'pilote' ? 'Accéder à l\'espace pilote' : mode === 'atc' ? 'Accéder à l\'espace ATC' : 'Accéder à l\'espace SIAVI'}
-                  <span className="ml-2">→</span>
-                </>
+              <div>
+                <label className="label text-slate-200">Mot de passe</label>
+                <input
+                  type="password"
+                  className="input bg-slate-900/50"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  autoComplete="current-password"
+                />
+              </div>
+              {error && (
+                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 backdrop-blur-sm">
+                  <p className="text-red-400 text-sm font-medium">{error}</p>
+                </div>
               )}
-            </button>
-          </form>
-        </div>
+              <button
+                type="submit"
+                className={`w-full py-3.5 rounded-xl font-bold transition-all duration-300 transform active:scale-[0.98] ${
+                  mode === 'pilote'
+                    ? 'bg-gradient-to-r from-sky-500 to-sky-400 hover:from-sky-400 hover:to-sky-300 text-white shadow-lg shadow-sky-500/30 hover:shadow-sky-500/50'
+                    : mode === 'atc'
+                      ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50'
+                      : 'bg-gradient-to-r from-red-500 to-red-400 hover:from-red-400 hover:to-red-300 text-white shadow-lg shadow-red-500/30 hover:shadow-red-500/50'
+                }`}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Connexion…
+                  </span>
+                ) : (
+                  <>
+                    {mode === 'pilote' ? 'Accéder à l\'espace pilote' : mode === 'atc' ? 'Accéder à l\'espace ATC' : 'Accéder à l\'espace SIAVI'}
+                    <span className="ml-2">→</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Étape : renseigner l'email pour recevoir le code */}
+        {step === 'email' && (
+          <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur delay-500">
+            <p className="text-slate-300 text-sm mb-4">
+              Indiquez votre adresse email. Un code de vérification vous sera envoyé ; après l&apos;avoir saisi, votre email sera enregistré et utilisé à chaque connexion.
+            </p>
+            <form onSubmit={handleEmailSubmit} className="space-y-5">
+              <div>
+                <label className="label text-slate-200">Adresse email</label>
+                <input
+                  type="email"
+                  className="input bg-slate-900/50"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder="vous@exemple.com"
+                  required
+                  autoComplete="email"
+                />
+              </div>
+              {error && (
+                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 backdrop-blur-sm">
+                  <p className="text-red-400 text-sm font-medium">{error}</p>
+                </div>
+              )}
+              <button
+                type="submit"
+                className="w-full py-3.5 rounded-xl font-bold bg-gradient-to-r from-sky-500 to-sky-400 hover:from-sky-400 hover:to-sky-300 text-white shadow-lg shadow-sky-500/30 disabled:opacity-50"
+                disabled={submitting}
+              >
+                {submitting ? 'Envoi…' : 'Envoyer le code'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Étape : saisie du code à 6 chiffres */}
+        {step === 'code' && (
+          <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur delay-500">
+            <div className="flex items-center gap-2 text-slate-300 mb-4">
+              <Mail className="h-5 w-5 text-sky-400" />
+              <p className="text-sm">
+                Un code à 6 chiffres a été envoyé à <strong className="text-slate-200">{emailMasked || 'votre email'}</strong>. Saisissez-le ci-dessous.
+              </p>
+            </div>
+            <form onSubmit={handleCodeSubmit} className="space-y-5">
+              <div>
+                <label className="label text-slate-200">Code de vérification</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  className="input bg-slate-900/50 text-center text-2xl tracking-[0.5em] font-mono"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  required
+                  autoComplete="one-time-code"
+                />
+              </div>
+              {error && (
+                <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 backdrop-blur-sm">
+                  <p className="text-red-400 text-sm font-medium">{error}</p>
+                </div>
+              )}
+              <button
+                type="submit"
+                className="w-full py-3.5 rounded-xl font-bold bg-gradient-to-r from-sky-500 to-sky-400 hover:from-sky-400 hover:to-sky-300 text-white shadow-lg shadow-sky-500/30 disabled:opacity-50"
+                disabled={submitting || code.length !== 6}
+              >
+                {submitting ? 'Vérification…' : 'Confirmer la connexion'}
+              </button>
+              <button
+                type="button"
+                onClick={handleResendCode}
+                disabled={submitting}
+                className="w-full py-2 text-slate-400 hover:text-sky-400 text-sm transition-colors"
+              >
+                Renvoyer le code
+              </button>
+            </form>
+          </div>
+        )}
 
         <p className="text-slate-500 text-sm mt-8 text-center animate-init animate-slide-up delay-700">
           Premier accès ? <Link href="/setup" className="text-sky-400 hover:text-sky-300 font-medium transition-colors">Créer le premier admin</Link>
