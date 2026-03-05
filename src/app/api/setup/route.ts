@@ -6,11 +6,11 @@ import { EMAIL_DOMAIN } from '@/lib/constants';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { identifiant, password, email } = body;
+    const { identifiant, password, email: contactEmail } = body;
     if (!identifiant || typeof identifiant !== 'string' || !password || typeof password !== 'string') {
       return NextResponse.json({ error: 'Identifiant et mot de passe requis' }, { status: 400 });
     }
-    const emailStr = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const emailStr = typeof contactEmail === 'string' ? contactEmail.trim().toLowerCase() : '';
     if (!emailStr || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr)) {
       return NextResponse.json({ error: 'Une adresse email valide est requise pour la vérification à chaque connexion.' }, { status: 400 });
     }
