@@ -486,11 +486,11 @@ function LoginPageContent() {
           </div>
         )}
 
-        {/* Étape : renseigner l'email pour recevoir le code */}
+        {/* Étape : aucun email défini → demander d'ajouter un email */}
         {step === 'email' && (
           <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur delay-500">
             <p className="text-slate-300 text-sm mb-4">
-              Indiquez votre adresse email. Un code de vérification vous sera envoyé ; après l&apos;avoir saisi, votre email sera enregistré et utilisé à chaque connexion.
+              Aucune adresse email n&apos;est enregistrée pour ce compte. Indiquez votre email ci-dessous : un code de confirmation vous sera envoyé. Une fois le code saisi, votre email sera enregistré et utilisé à chaque connexion.
             </p>
             <form onSubmit={handleEmailSubmit} className="space-y-5">
               <div>
@@ -521,13 +521,13 @@ function LoginPageContent() {
           </div>
         )}
 
-        {/* Étape : saisie du code à 6 chiffres */}
+        {/* Étape : saisie du code (email déjà défini ou venant d'être saisi) */}
         {step === 'code' && (
           <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur delay-500">
             <div className="flex items-center gap-2 text-slate-300 mb-4">
               <Mail className="h-5 w-5 text-sky-400" />
               <p className="text-sm">
-                Un code à 6 chiffres a été envoyé à <strong className="text-slate-200">{emailMasked || 'votre email'}</strong>. Saisissez-le ci-dessous.
+                Un code de confirmation a été envoyé à <strong className="text-slate-200">{emailMasked || 'votre adresse'}</strong>. Saisissez-le ci-dessous pour valider la connexion.
               </p>
             </div>
             <form onSubmit={handleCodeSubmit} className="space-y-5">

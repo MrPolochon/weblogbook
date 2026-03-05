@@ -82,6 +82,6 @@ export async function POST(req: NextRequest) {
 function maskEmail(email: string): string {
   const [local, domain] = email.split('@');
   if (!domain) return '***';
-  const visible = local.length <= 2 ? local[0] ?? '*' : local.slice(0, 2);
-  return `${visible}***@${domain}`;
+  const first = local[0] ?? '*';
+  return `${first}***...@${domain}`;
 }
