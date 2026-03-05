@@ -10,6 +10,8 @@ export async function middleware(request: NextRequest) {
   const isAuthCallback = pathname.startsWith('/auth/');
   const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin' || pathname === '/api/site-config';
   const isApiAeroSchoolPublic = pathname.startsWith('/api/aeroschool/') && request.method !== 'PUT' && request.method !== 'DELETE';
+  // Routes auth (login, code, etc.) : ne pas rediriger ici, laisser la route vérifier la session (évite 307 après signIn)
+  const isApiAuth = pathname.startsWith('/api/auth/');
 
   // CORS preflight : laisser passer sans vérification (requis pour l'app Electron/Android VHF)
   if (request.method === 'OPTIONS') {
@@ -22,8 +24,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
-  // Routes publiques : aucune requête Supabase, réponse immédiate
-  if (isAuthCallback || isApiPublic || isApiAeroSchoolPublic || isSetup || isLogin || isDownload || isAeroSchool) {
+  // Routes publiques (et API auth : vérification session faite dans la route)
+  if (isAuthCallback || isApiPublic || isApiAeroSchoolPublic || isApiAuth || isSetup || isLogin || isDownload || isAeroSchool) {
     return NextResponse.next({ request });
   }
 
