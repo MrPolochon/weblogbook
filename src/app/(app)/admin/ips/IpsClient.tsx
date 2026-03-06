@@ -64,6 +64,12 @@ function formatDate(d: string | null) {
   return date.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
 }
 
+function formatDateUTC(d: string | null) {
+  if (!d) return '—';
+  const date = new Date(d);
+  return date.toLocaleString('fr-FR', { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'medium' }) + ' UTC';
+}
+
 function deviceType(ua: string | null): string {
   if (!ua) return '—';
   if (/bot|crawler|spider/i.test(ua)) return 'Bot';
@@ -89,8 +95,15 @@ export default function IpsClient() {
   const [approvalView, setApprovalView] = useState<ApprovalViewState | null>(null);
   const [crossCode, setCrossCode] = useState('');
   const [submittingCross, setSubmittingCross] = useState(false);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
 
   const duplicateIpColors = useDuplicateIpColors(profiles);
+  const selectedProfile = selectedProfileId ? profiles.find((p) => p.id === selectedProfileId) : null;
+  const selectedHistory = selectedProfileId
+    ? [...history.filter((h) => h.user_id === selectedProfileId)].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+    : [];
 
   async function fetchStatus() {
     try {
@@ -514,8 +527,8 @@ export default function IpsClient() {
           {error && <p className="text-sm text-red-400">{error}</p>}
 
           <div className="card">
-            <h2 className="text-lg font-medium text-slate-200 mb-4">Dernière IP par compte</h2>
-            <p className="text-slate-500 text-sm mb-3">Les comptes avec la même IP sont marqués par une même couleur (barre à gauche) pour repérer les partages d&apos;adresse.</p>
+            <h2 className="text-lg font-medium text-slate-200 mb-4">Liste des comptes</h2>
+            <p className="text-slate-500 text-sm mb-3">Cliquez sur un identifiant pour voir l&apos;IP active et l&apos;historique des changements d&apos;IP (après vérification du code par mail). Même couleur = même IP partagée.</p>
             {loadingData ? (
               <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-sky-400" /></div>
             ) : profiles.length === 0 ? (
@@ -538,7 +551,11 @@ export default function IpsClient() {
                       return (
                         <tr
                           key={p.id}
-                          className={`border-b border-slate-700/50 ${rowColor ?? ''}`}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setSelectedProfileId(p.id)}
+                          onKeyDown={(e) => e.key === 'Enter' && setSelectedProfileId(p.id)}
+                          className={`border-b border-slate-700/50 cursor-pointer hover:bg-slate-700/30 ${rowColor ?? ''}`}
                         >
                           <td className="py-2 pr-4 font-medium text-slate-200">{p.identifiant}</td>
                           <td className="py-2 pr-4 text-slate-300">{p.role ?? '—'}</td>
@@ -553,39 +570,53 @@ export default function IpsClient() {
             )}
           </div>
 
-          <div className="card">
-            <h2 className="text-lg font-medium text-slate-200 mb-4">Historique des changements d&apos;IP</h2>
-            {loadingData ? (
-              <div className="flex justify-center py-8"><Loader2 className="h-8 w-8 animate-spin text-sky-400" /></div>
-            ) : history.length === 0 ? (
-              <p className="text-slate-500">Aucun historique (table login_ip_history vide ou non créée).</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-600 text-left text-slate-400">
-                      <th className="pb-2 pr-4">Date / heure</th>
-                      <th className="pb-2 pr-4">Compte</th>
-                      <th className="pb-2 pr-4">IP précédente</th>
-                      <th className="pb-2 pr-4">Nouvelle IP</th>
-                      <th className="pb-2">Type appareil</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.map((h) => (
-                      <tr key={h.id} className="border-b border-slate-700/50">
-                        <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{formatDate(h.created_at)}</td>
-                        <td className="py-2 pr-4 font-medium text-slate-200">{h.identifiant}</td>
-                        <td className="py-2 pr-4 text-slate-400 font-mono text-xs">{h.previous_ip ?? '—'}</td>
-                        <td className="py-2 pr-4 text-slate-300 font-mono text-xs">{h.ip}</td>
-                        <td className="py-2 text-slate-400">{deviceType(h.user_agent)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {selectedProfile && (
+            <div className="card border-sky-500/40 bg-sky-500/5">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <h2 className="text-lg font-medium text-slate-200">Détail — {selectedProfile.identifiant}</h2>
+                <button
+                  type="button"
+                  onClick={() => setSelectedProfileId(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-700 text-slate-200 hover:bg-slate-600 text-sm font-medium"
+                >
+                  Retour à la liste
+                </button>
               </div>
-            )}
-          </div>
+              <div className="mb-6 p-4 rounded-xl bg-slate-800/50 border border-slate-600">
+                <p className="text-slate-400 text-sm mb-1">IP active (dernière connexion, après vérification du code)</p>
+                <p className="text-slate-200 font-mono text-sm">{selectedProfile.last_login_ip ?? '—'}</p>
+                <p className="text-slate-500 text-xs mt-1">Dernière connexion : {formatDate(selectedProfile.last_login_at)}</p>
+              </div>
+              <h3 className="text-sm font-medium text-slate-300 mb-2">Historique des changements d&apos;IP (ordre date/heure UTC)</h3>
+              <p className="text-slate-500 text-xs mb-3">Chaque ligne = une connexion depuis une IP différente de la précédente (code email validé). L&apos;IP active a alors changé ; l&apos;ancienne IP reste dans l&apos;historique avec sa date.</p>
+              {selectedHistory.length === 0 ? (
+                <p className="text-slate-500 text-sm">Aucun changement d&apos;IP enregistré pour ce compte.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-600 text-left text-slate-400">
+                        <th className="pb-2 pr-4">Date / heure (UTC)</th>
+                        <th className="pb-2 pr-4">Nouvelle IP (devenue active)</th>
+                        <th className="pb-2 pr-4">IP précédente</th>
+                        <th className="pb-2">Type appareil</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedHistory.map((h) => (
+                        <tr key={h.id} className="border-b border-slate-700/50">
+                          <td className="py-2 pr-4 text-slate-300 whitespace-nowrap">{formatDateUTC(h.created_at)}</td>
+                          <td className="py-2 pr-4 text-slate-200 font-mono text-xs">{h.ip}</td>
+                          <td className="py-2 pr-4 text-slate-400 font-mono text-xs">{h.previous_ip ?? '—'}</td>
+                          <td className="py-2 text-slate-400">{deviceType(h.user_agent)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
     </div>
