@@ -6,6 +6,7 @@ import { Bell } from 'lucide-react';
 import NavBar from '@/components/NavBar';
 import AdminModeBg from '@/components/AdminModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
+import InactivityLogout from '@/components/InactivityLogout';
 
 export default async function AppLayout({
   children,
@@ -117,6 +118,7 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-screen flex flex-col">
+      <InactivityLogout />
       <AutoRefresh intervalSeconds={30} />
       <AdminModeBg />
       <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} pendingVolsCount={pendingVolsCount} adminPlansNonCloturesCount={adminPlansNonCloturesCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} />

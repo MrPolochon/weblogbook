@@ -6,6 +6,7 @@ import SiaviNavBar from './SiaviNavBar';
 import SiaviModeBg from './SiaviModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import SiaviTelephone from './SiaviTelephone';
+import InactivityLogout from '@/components/InactivityLogout';
 
 export default async function SiaviLayout({
   children,
@@ -59,6 +60,7 @@ export default async function SiaviLayout({
 
   return (
     <div className="min-h-screen flex flex-col">
+      <InactivityLogout />
       <AutoRefresh intervalSeconds={15} />
       <SiaviModeBg isAdmin={isAdmin} />
       <SiaviNavBar 

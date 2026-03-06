@@ -153,6 +153,7 @@ function LoginPageContent() {
   const showTestEchoue = messageParam === 'test_echoue_temps_termine';
   const showCompteCree = messageParam === 'compte_cree';
   const showAdminOnly = messageParam === 'admin_only';
+  const showInactivity = messageParam === 'inactivity';
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [identifiant, setIdentifiant] = useState('');
@@ -432,6 +433,12 @@ function LoginPageContent() {
           <div className="mb-4 p-4 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center gap-3 animate-init animate-reveal-blur">
             <AlertTriangle className="h-6 w-6 text-amber-400 shrink-0" />
             <p className="text-amber-200 font-medium">Les connexions sont temporairement réservées aux administrateurs.</p>
+          </div>
+        )}
+        {showInactivity && step === 'form' && (
+          <div className="mb-4 p-4 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center gap-3 animate-init animate-reveal-blur">
+            <AlertTriangle className="h-6 w-6 text-amber-400 shrink-0" />
+            <p className="text-amber-200 font-medium">Vous avez été déconnecté après une heure sans activité. Reconnectez-vous pour continuer.</p>
           </div>
         )}
 

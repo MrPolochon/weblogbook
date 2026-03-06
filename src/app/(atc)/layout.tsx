@@ -8,6 +8,7 @@ import AtcAcceptTransfertSidebar from './AtcAcceptTransfertSidebar';
 import AtcLeftSidebar from './AtcLeftSidebar';
 import { AtcThemeProvider } from '@/contexts/AtcThemeContext';
 import AtcTelephone from '@/components/AtcTelephone';
+import InactivityLogout from '@/components/InactivityLogout';
 
 export default async function AtcLayout({
   children,
@@ -78,6 +79,7 @@ export default async function AtcLayout({
   return (
     <AtcThemeProvider>
       <div className="min-h-screen flex flex-col">
+        <InactivityLogout />
         <AutoRefresh intervalSeconds={15} />
         <AtcModeBg isAdmin={isAdmin} />
         <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
