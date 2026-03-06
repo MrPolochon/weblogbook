@@ -36,9 +36,7 @@ export async function POST(req: NextRequest) {
 
     await admin.from('superadmin_access_codes').delete().eq('user_id', user.id);
 
-    function gen6(): string {
-      return Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0');
-    }
+    const gen6 = (): string => Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0');
     const codeRequester = gen6();
     const codeApprover = gen6();
 
