@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { sendSuperadminAccessCodeEmail } from '@/lib/email';
 
-const CODE_EXPIRY_MINUTES = 10;
+const CODE_EXPIRY_MINUTES = 20;
 
 function generateSixDigitCode(): string {
   const n = Math.floor(Math.random() * 1_000_000);
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const admin = createAdminClient();
-    const { data: profile } = await admin.from('profiles').select('role, email').eq('id', user.id).single();
+    const { data: profile } = await admin.from('profiles').select('role, email, identifiant').eq('id', user.id).single();
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const expectedPassword = process.env.SUPERADMIN_PASSWORD;
@@ -52,7 +52,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error || 'Impossible d\'envoyer l\'email.' }, { status: 502 });
     }
 
-    return NextResponse.json({ ok: true });
+    // Masquer l'email pour l'affichage (ex: "ab***@domain.com")
+    const at = email.indexOf('@');
+    const local = email.slice(0, at);
+    const domain = email.slice(at);
+    const emailMasked = local.length <= 2
+      ? local.slice(0, 1) + '***' + domain
+      : local.slice(0, 2) + '***' + domain;
+
+    return NextResponse.json({
+      ok: true,
+      emailMasked,
+      identifiant: profile?.identifiant ?? '',
+    });
   } catch (e) {
     console.error('[superadmin request-access]', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

@@ -29,6 +29,8 @@ export default function IpsClient() {
   const [step, setStep] = useState<'password' | 'code' | null>(null);
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
+  const [emailMasked, setEmailMasked] = useState<string>('');
+  const [identifiantSent, setIdentifiantSent] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
@@ -94,6 +96,8 @@ export default function IpsClient() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
+      setEmailMasked(data.emailMasked ?? '');
+      setIdentifiantSent(data.identifiant ?? '');
       setStep('code');
       setPassword('');
     } catch (e) {
@@ -237,6 +241,14 @@ export default function IpsClient() {
             <Mail className="h-5 w-5 text-sky-400" />
             Code envoyé à votre email
           </h2>
+          {(emailMasked || identifiantSent) && (
+            <p className="text-slate-400 text-sm mb-4">
+              Code envoyé à <span className="text-sky-300 font-medium">{emailMasked || 'votre adresse'}</span>
+              {identifiantSent && (
+                <> (identifiant : <span className="font-medium text-slate-200">{identifiantSent}</span>)</>
+              )}
+            </p>
+          )}
           <form onSubmit={handleCodeSubmit} className="space-y-4">
             <div>
               <label className="label">Code à 6 chiffres</label>
