@@ -43,6 +43,7 @@ export async function GET() {
       requested_at: r.created_at,
       identifiant: byId.get(r.requested_by)?.identifiant ?? '—',
       approver_identifiant: r.approver_id ? byId.get(r.approver_id)?.identifiant : undefined,
+      canParticipate: r.requested_by !== user.id,
     }));
 
     return NextResponse.json({ requests: list });

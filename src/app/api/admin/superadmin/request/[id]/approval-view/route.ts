@@ -35,12 +35,10 @@ export async function GET(
     }
 
     if (request.requested_by === user.id) {
-      return NextResponse.json({
-        role: 'requester',
-        codeToDisplay: request.code_requester ?? '',
-        requester_validated: request.requester_validated ?? false,
-        approver_validated: request.approver_validated ?? false,
-      });
+      return NextResponse.json(
+        { error: 'Vous ne pouvez pas participer à votre propre demande. Un autre admin doit cliquer sur "Participer à l\'approbation" pour valider avec vous.' },
+        { status: 400 }
+      );
     }
 
     // Autre admin : on l'assigne comme approbateur s'il n'y en a pas encore (un seul peut participer)
