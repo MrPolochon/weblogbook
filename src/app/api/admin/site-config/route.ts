@@ -21,7 +21,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     const admin = createAdminClient();
-    const { error } = await admin.from('site_config').update({ login_admin_only }).eq('id', 1);
+    // Upsert pour créer la ligne si elle n'existe pas (id=1)
+    const { error } = await admin
+      .from('site_config')
+      .upsert({ id: 1, login_admin_only }, { onConflict: 'id' });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
     return NextResponse.json({ ok: true, login_admin_only });

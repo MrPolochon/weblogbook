@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { sendSuperadminAccessCodeEmail } from '@/lib/email';
 
-const CODE_EXPIRY_MINUTES = 20;
+const CODE_EXPIRY_MINUTES = 30;
 
 function generateSixDigitCode(): string {
   const n = Math.floor(Math.random() * 1_000_000);

@@ -22,15 +22,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Code invalide (6 chiffres).' }, { status: 400 });
     }
 
-    // Tolérance 1 min pour décalage d'horloge entre envoi et vérification
-    const now = new Date();
-    const cutoff = new Date(now.getTime() - 60 * 1000).toISOString();
+    // Même logique que verify-login-code : comparaison stricte avec l'heure serveur
     const { data: row } = await admin
       .from('superadmin_access_codes')
       .select('user_id')
       .eq('user_id', user.id)
       .eq('code', code)
-      .gt('expires_at', cutoff)
+      .gt('expires_at', new Date().toISOString())
       .single();
 
     if (!row) {
