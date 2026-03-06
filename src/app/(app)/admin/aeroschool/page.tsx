@@ -26,6 +26,8 @@ export default function AdminAeroSchoolPage() {
   const [forms, setForms] = useState<FormSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
     loadForms();
@@ -46,6 +48,8 @@ export default function AdminAeroSchoolPage() {
   }
 
   async function createNew() {
+    setCreateError(null);
+    setCreating(true);
     try {
       const res = await fetch('/api/aeroschool/forms', {
         method: 'POST',
@@ -55,11 +59,11 @@ export default function AdminAeroSchoolPage() {
           description: '',
           delivery_mode: 'review',
           sections: [{
-            id: crypto.randomUUID(),
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sec-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
             title: 'Section 1',
             description: '',
             questions: [{
-              id: crypto.randomUUID(),
+              id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `q-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
               type: 'short_text',
               title: '',
               description: '',
@@ -72,11 +76,21 @@ export default function AdminAeroSchoolPage() {
           }],
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCreateError(data?.error || `Erreur ${res.status}`);
+        return;
+      }
       if (data.id) {
         router.push(`/admin/aeroschool/${data.id}`);
+        return;
       }
-    } catch { /* ignore */ }
+      setCreateError('Réponse serveur invalide.');
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : 'Impossible de créer le formulaire.');
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function deleteForm(id: string) {
@@ -104,13 +118,24 @@ export default function AdminAeroSchoolPage() {
           <GraduationCap className="h-7 w-7 text-amber-400" />
           <h1 className="text-2xl font-semibold text-slate-100">AeroSchool — Questionnaires</h1>
         </div>
-        <button
-          onClick={createNew}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-sky-400 text-white font-bold text-sm shadow-lg shadow-sky-500/30 hover:shadow-sky-500/50 transition-all"
-        >
-          <Plus className="h-4 w-4" />
-          Nouveau formulaire
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          {createError && (
+            <p className="text-sm text-red-400" role="alert">{createError}</p>
+          )}
+          <button
+            type="button"
+            onClick={createNew}
+            disabled={creating}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-sky-400 text-white font-bold text-sm shadow-lg shadow-sky-500/30 hover:shadow-sky-500/50 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {creating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            {creating ? 'Création…' : 'Nouveau formulaire'}
+          </button>
+        </div>
       </div>
 
       {forms.length === 0 ? (
