@@ -31,27 +31,23 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const admin = createAdminClient();
 
-    const { data: profile, error: profileErr } = await admin
-      .from('profiles')
-      .select('id, last_login_ip')
-      .eq('id', user.id)
-      .single();
+    const { data: tracking } = await admin
+      .from('user_login_tracking')
+      .select('last_login_ip')
+      .eq('user_id', user.id)
+      .maybeSingle();
 
-    if (profileErr || !profile) {
-      return NextResponse.json({ ok: true, requireCode: true });
-    }
-
-    const previousIp = profile.last_login_ip ?? null;
+    const previousIp = tracking?.last_login_ip ?? null;
     const requireCode = !previousIp || (ip != null && ip !== previousIp);
 
     if (!requireCode && ip != null) {
       await admin
-        .from('profiles')
-        .update({
+        .from('user_login_tracking')
+        .upsert({
+          user_id: user.id,
           last_login_ip: ip,
           last_login_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
+        }, { onConflict: 'user_id' });
     }
 
     return NextResponse.json({ ok: true, requireCode });

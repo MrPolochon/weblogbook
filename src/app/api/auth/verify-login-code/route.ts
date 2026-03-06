@@ -47,20 +47,26 @@ export async function POST(req: NextRequest) {
 
     const ip = getClientIp(req);
     const userAgent = req.headers.get('user-agent') ?? null;
-    const { data: profileBefore } = await admin
-      .from('profiles')
+    const { data: trackingBefore } = await admin
+      .from('user_login_tracking')
       .select('last_login_ip')
-      .eq('id', user.id)
-      .single();
-    const previousIp = profileBefore?.last_login_ip ?? null;
+      .eq('user_id', user.id)
+      .maybeSingle();
+    const previousIp = trackingBefore?.last_login_ip ?? null;
 
-    const updates: { email?: string; last_login_ip?: string; last_login_at?: string } = {
-      last_login_at: new Date().toISOString(),
-    };
-    if (ip) updates.last_login_ip = ip;
-    if (row.pending_email) updates.email = row.pending_email;
+    const profileUpdates: { email?: string } = {};
+    if (row.pending_email) profileUpdates.email = row.pending_email;
+    if (Object.keys(profileUpdates).length > 0) {
+      await admin.from('profiles').update(profileUpdates).eq('id', user.id);
+    }
 
-    await admin.from('profiles').update(updates).eq('id', user.id);
+    if (ip != null) {
+      await admin.from('user_login_tracking').upsert({
+        user_id: user.id,
+        last_login_ip: ip,
+        last_login_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+    }
     await admin.from('login_verification_codes').delete().eq('user_id', user.id);
 
     if (ip) {

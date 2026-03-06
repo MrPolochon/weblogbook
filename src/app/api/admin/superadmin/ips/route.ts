@@ -35,24 +35,35 @@ export async function GET() {
       return NextResponse.json({ error: 'Accès expiré ou non autorisé. Refaites une demande et faites-la approuver.' }, { status: 403 });
     }
 
-    const [profilesRes, historyRes] = await Promise.all([
-      admin.from('profiles').select('id, identifiant, role, last_login_ip, last_login_at').order('identifiant'),
+    const [profilesRes, trackingRes, historyRes] = await Promise.all([
+      admin.from('profiles').select('id, identifiant, role').order('identifiant'),
+      admin.from('user_login_tracking').select('user_id, last_login_ip, last_login_at'),
       admin.from('login_ip_history').select('id, user_id, ip, previous_ip, user_agent, created_at').order('created_at', { ascending: false }),
     ]);
 
     const profiles = profilesRes.data ?? [];
+    const tracking = trackingRes.data ?? [];
     const history = historyRes.data ?? [];
+    const trackingByUser = new Map(tracking.map((t) => [t.user_id, t]));
+
+    const profilesWithIp = profiles.map((p) => {
+      const t = trackingByUser.get(p.id);
+      return {
+        id: p.id,
+        identifiant: p.identifiant,
+        role: p.role,
+        last_login_ip: t?.last_login_ip ?? null,
+        last_login_at: t?.last_login_at ?? null,
+      };
+    }).filter((p) => p.last_login_ip != null || p.last_login_at != null);
 
     const historyWithIdentifiant = history.map((h) => {
       const p = profiles.find((x) => x.id === h.user_id);
-      return {
-        ...h,
-        identifiant: p?.identifiant ?? '—',
-      };
+      return { ...h, identifiant: p?.identifiant ?? '—' };
     });
 
     return NextResponse.json({
-      profiles: profiles.filter((p) => p.last_login_ip != null || p.last_login_at != null),
+      profiles: profilesWithIp,
       history: historyWithIdentifiant,
     });
   } catch (e) {
