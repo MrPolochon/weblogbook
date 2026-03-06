@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap, Lock } from 'lucide-react';
+import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap, Lock, Package } from 'lucide-react';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 const links = [
@@ -14,6 +14,7 @@ const links = [
   { href: '/admin/types-avion', label: 'Types d\'avion & Prix', icon: Plane },
   { href: '/admin/avions', label: 'Gestion des avions', icon: MapPin },
   { href: '/admin/taxes', label: 'Taxes aéroportuaires', icon: Receipt },
+  { href: '/admin/inventaire', label: 'Inventaires (tous les pilotes)', icon: Package },
   { href: '/admin/hangar-market', label: 'Hangar Market', icon: Store },
   { href: '/admin/felitz-bank', label: 'Felitz Bank Admin', icon: Landmark },
   { href: '/admin/documents', label: 'Documents', icon: FileText },
