@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import EditPiloteForm from './EditPiloteForm';
 import PiloteCarteSection from './PiloteCarteSection';
+import AdminProfileEmail from './AdminProfileEmail';
 
 export default async function AdminPiloteEditPage({
   params,
@@ -16,7 +17,7 @@ export default async function AdminPiloteEditPage({
 
   const { data: p } = await supabase
     .from('profiles')
-    .select('id, identifiant, role, armee, atc, ifsa, siavi, heures_initiales_minutes, blocked_until, block_reason')
+    .select('id, identifiant, role, armee, atc, ifsa, siavi, heures_initiales_minutes, blocked_until, block_reason, email')
     .eq('id', id)
     .single();
 
@@ -49,7 +50,8 @@ export default async function AdminPiloteEditPage({
 
       <div className="flex flex-col xl:flex-row gap-6">
         {/* Formulaire d'édition - priorité */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 space-y-6">
+          <AdminProfileEmail profileId={p.id} initialEmail={p.email ?? null} />
           <EditPiloteForm
             piloteId={p.id}
             identifiant={p.identifiant ?? ''}
