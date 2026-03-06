@@ -62,14 +62,16 @@ export async function POST(request: Request) {
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
 
     const body = await request.json();
-    const { title, description, delivery_mode, webhook_url, webhook_role_id, sections, is_published, time_limit_minutes, antitriche_enabled } = body;
+    const { title, description, delivery_mode, webhook_url, webhook_role_id, sections, is_published } = body;
 
     if (!title || typeof title !== 'string' || !title.trim()) {
       return NextResponse.json({ error: 'Titre requis' }, { status: 400 });
     }
 
     const admin = createAdminClient();
-    const { data, error } = await admin.from('aeroschool_forms').insert({
+    // Insert avec colonnes du schéma de base (time_limit_minutes et antitriche_enabled
+    // peuvent être absentes si les migrations optionnelles n'ont pas été exécutées)
+    const insertRow: Record<string, unknown> = {
       title: title.trim(),
       description: (description || '').trim(),
       created_by: user.id,
@@ -78,13 +80,8 @@ export async function POST(request: Request) {
       webhook_role_id: delivery_mode === 'webhook' && webhook_role_id ? String(webhook_role_id).trim() : null,
       sections: Array.isArray(sections) ? sections : [],
       is_published: Boolean(is_published),
-      antitriche_enabled: antitriche_enabled !== false,
-      time_limit_minutes: (() => {
-        if (time_limit_minutes == null || time_limit_minutes === '') return null;
-        const num = parseInt(String(time_limit_minutes), 10);
-        return Number.isNaN(num) ? null : Math.max(1, num);
-      })(),
-    }).select('id').single();
+    };
+    const { data, error } = await admin.from('aeroschool_forms').insert(insertRow).select('id').single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, id: data.id });
