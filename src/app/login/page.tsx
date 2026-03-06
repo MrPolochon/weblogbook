@@ -154,6 +154,7 @@ function LoginPageContent() {
   const showCompteCree = messageParam === 'compte_cree';
   const showAdminOnly = messageParam === 'admin_only';
   const showInactivity = messageParam === 'inactivity';
+  const showSecurityLogout = messageParam === 'security_logout';
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [identifiant, setIdentifiant] = useState('');
@@ -439,6 +440,12 @@ function LoginPageContent() {
           <div className="mb-4 p-4 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center gap-3 animate-init animate-reveal-blur">
             <AlertTriangle className="h-6 w-6 text-amber-400 shrink-0" />
             <p className="text-amber-200 font-medium">Vous avez été déconnecté après une heure sans activité. Reconnectez-vous pour continuer.</p>
+          </div>
+        )}
+        {showSecurityLogout && step === 'form' && (
+          <div className="mb-4 p-4 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center gap-3 animate-init animate-reveal-blur">
+            <AlertTriangle className="h-6 w-6 text-red-400 shrink-0" />
+            <p className="text-red-200 font-medium">Déconnexion de sécurité (code d&apos;approbation incorrect). Reconnectez-vous.</p>
           </div>
         )}
 

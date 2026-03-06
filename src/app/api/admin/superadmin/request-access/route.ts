@@ -41,7 +41,8 @@ export async function POST(req: NextRequest) {
     }
 
     const code = generateSixDigitCode();
-    const expiresAt = new Date(Date.now() + CODE_EXPIRY_MINUTES * 60 * 1000);
+    // Pas d'expiration pour la consultation des IP
+    const expiresAt = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000);
     await admin.from('superadmin_access_codes').upsert(
       { user_id: user.id, code, expires_at: expiresAt.toISOString() },
       { onConflict: 'user_id' }

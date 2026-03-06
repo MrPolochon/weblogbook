@@ -22,26 +22,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Code invalide (6 chiffres).' }, { status: 400 });
     }
 
-    // Même logique que verify-login-code : comparaison stricte avec l'heure serveur
+    // Pas d'expiration pour le code de demande de consultation IP
     const { data: row } = await admin
       .from('superadmin_access_codes')
       .select('user_id')
       .eq('user_id', user.id)
       .eq('code', code)
-      .gt('expires_at', new Date().toISOString())
       .single();
 
     if (!row) {
-      return NextResponse.json({ error: 'Code incorrect ou expiré.' }, { status: 400 });
+      return NextResponse.json({ error: 'Code incorrect.' }, { status: 400 });
     }
 
     await admin.from('superadmin_access_codes').delete().eq('user_id', user.id);
+
+    function gen6(): string {
+      return Math.floor(Math.random() * 1_000_000).toString().padStart(6, '0');
+    }
+    const codeRequester = gen6();
+    const codeApprover = gen6();
 
     const { data: request } = await admin
       .from('superadmin_ip_requests')
       .insert({
         requested_by: user.id,
         status: 'pending',
+        code_requester: codeRequester,
+        code_approver: codeApprover,
       })
       .select('id')
       .single();
@@ -69,7 +76,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ ok: true, requestId: request.id });
+    return NextResponse.json({
+      ok: true,
+      requestId: request.id,
+      codeToDisplay: codeRequester,
+    });
   } catch (e) {
     console.error('[superadmin verify-code]', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

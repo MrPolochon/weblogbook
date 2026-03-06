@@ -19,7 +19,7 @@ export async function GET() {
 
     const { data: requests } = await admin
       .from('superadmin_ip_requests')
-      .select('id, requested_by, created_at, status')
+      .select('id, requested_by, approver_id, created_at, status')
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
@@ -28,17 +28,21 @@ export async function GET() {
     }
 
     const requesterIds = Array.from(new Set(requests.map((r) => r.requested_by)));
-    const { data: requesters } = await admin
+    const approverIds = requests.map((r) => r.approver_id).filter(Boolean) as string[];
+    const ids = Array.from(new Set([...requesterIds, ...approverIds]));
+    const { data: profiles } = await admin
       .from('profiles')
       .select('id, identifiant')
-      .in('id', requesterIds);
+      .in('id', ids);
 
-    const byId = new Map((requesters ?? []).map((p) => [p.id, p]));
+    const byId = new Map((profiles ?? []).map((p) => [p.id, p]));
     const list = requests.map((r) => ({
       id: r.id,
       requested_by: r.requested_by,
+      approver_id: r.approver_id ?? undefined,
       requested_at: r.created_at,
       identifiant: byId.get(r.requested_by)?.identifiant ?? '—',
+      approver_identifiant: r.approver_id ? byId.get(r.approver_id)?.identifiant : undefined,
     }));
 
     return NextResponse.json({ requests: list });

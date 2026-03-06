@@ -56,7 +56,7 @@ export async function sendSuperadminAccessCodeEmail(to: string, code: string): P
         <p>Bonjour,</p>
         <p>Vous avez demandé l'accès à la liste des adresses IP. Voici votre code :</p>
         <p style="font-size:24px;font-weight:bold;letter-spacing:4px;margin:20px 0;">${code}</p>
-        <p>Ce code expire dans 30 minutes. Un autre administrateur devra approuver votre demande pour accéder aux données.</p>
+        <p>Ce code n&apos;expire pas. Un autre administrateur devra participer à l&apos;approbation : vous afficherez chacun un code et saisirez le code de l&apos;autre. Code incorrect = demande annulée et déconnexion des deux comptes.</p>
         <p>— PTFS Logbook</p>
       `,
     });

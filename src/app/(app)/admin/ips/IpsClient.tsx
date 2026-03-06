@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, Mail, Loader2, Check, X, RefreshCw } from 'lucide-react';
 
-type AccessStatus = { hasAccess: boolean; requestPending: boolean; requestId?: string };
-type PendingRequest = { id: string; requested_by: string; requested_at: string; identifiant: string };
+type AccessStatus = { hasAccess: boolean; requestPending: boolean; requestId?: string; codeToDisplay?: string };
+type PendingRequest = { id: string; requested_by: string; approver_id?: string; requested_at: string; identifiant: string; approver_identifiant?: string };
 type ProfileRow = { id: string; identifiant: string; role: string | null; last_login_ip: string | null; last_login_at: string | null };
 type HistoryRow = { id: string; user_id: string; identifiant: string; ip: string; previous_ip: string | null; user_agent: string | null; created_at: string };
 
@@ -37,12 +37,20 @@ export default function IpsClient() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [loadingData, setLoadingData] = useState(false);
+  const [approvalView, setApprovalView] = useState<{ requestId: string; codeToDisplay: string; role: 'requester' | 'approver'; requesterIdentifiant?: string } | null>(null);
+  const [crossCode, setCrossCode] = useState('');
+  const [submittingCross, setSubmittingCross] = useState(false);
 
   async function fetchStatus() {
     try {
       const res = await fetch('/api/admin/superadmin/ip-access-status');
       const data = await res.json();
-      setStatus({ hasAccess: data.hasAccess ?? false, requestPending: data.requestPending ?? false, requestId: data.requestId });
+      setStatus({
+        hasAccess: data.hasAccess ?? false,
+        requestPending: data.requestPending ?? false,
+        requestId: data.requestId,
+        codeToDisplay: data.codeToDisplay,
+      });
     } catch {
       setStatus({ hasAccess: false, requestPending: false });
     }
@@ -121,7 +129,7 @@ export default function IpsClient() {
       if (!res.ok) throw new Error(data.error || 'Erreur');
       setStep(null);
       setCode('');
-      await fetchStatus();
+      setStatus((s) => (s ? { ...s, requestPending: true, requestId: data.requestId, codeToDisplay: data.codeToDisplay } : s));
       await fetchPendingRequests();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
@@ -130,36 +138,58 @@ export default function IpsClient() {
     }
   }
 
-  async function handleApprove(requestId: string) {
+  async function openApprovalView(requestId: string) {
     setError(null);
     try {
-      const res = await fetch('/api/admin/superadmin/approve-request', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId }),
-      });
+      const res = await fetch(`/api/admin/superadmin/request/${requestId}/approval-view`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      await fetchPendingRequests();
-      router.refresh();
+      setApprovalView({
+        requestId,
+        codeToDisplay: data.codeToDisplay ?? '',
+        role: data.role ?? 'approver',
+        requesterIdentifiant: data.requesterIdentifiant,
+      });
+      setCrossCode('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
     }
   }
 
-  async function handleReject(requestId: string) {
+  async function handleSubmitCrossCode(e: React.FormEvent, requestId: string) {
+    e.preventDefault();
     setError(null);
+    setSubmittingCross(true);
     try {
-      const res = await fetch('/api/admin/superadmin/reject-request', {
+      const res = await fetch('/api/admin/superadmin/submit-approval-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId }),
+        body: JSON.stringify({ requestId, code: crossCode.replace(/\s/g, '') }),
       });
       const data = await res.json().catch(() => ({}));
+      if (data.forceLogout) {
+        const { createClient } = await import('@/lib/supabase/client');
+        await createClient().auth.signOut();
+        window.location.href = '/login?message=security_logout';
+        return;
+      }
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      await fetchPendingRequests();
+      if (data.approved) {
+        setApprovalView(null);
+        setCrossCode('');
+        await fetchStatus();
+        await fetchPendingRequests();
+        router.refresh();
+      } else {
+        setCrossCode('');
+        setError(null);
+        setApprovalView((av) => (av ? { ...av, codeToDisplay: '' } : null));
+        await fetchPendingRequests();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setSubmittingCross(false);
     }
   }
 
@@ -173,7 +203,7 @@ export default function IpsClient() {
 
   return (
     <div className="space-y-8">
-      {/* Demandes en attente d'approbation (pour les autres admins) */}
+      {/* Demandes en attente : un autre admin doit participer (validation croisée par codes) */}
       {pendingRequests.length > 0 && (
         <div className="card">
           <h2 className="text-lg font-medium text-slate-200 mb-3 flex items-center gap-2">
@@ -181,32 +211,68 @@ export default function IpsClient() {
             Demandes en attente d&apos;approbation
           </h2>
           <p className="text-slate-400 text-sm mb-4">
-            Un administrateur a demandé l&apos;accès à la liste des IP. Approuvez ou refusez.
+            Un admin a demandé l&apos;accès. Un autre admin doit participer : chacun affiche un code et saisit le code de l&apos;autre. Code incorrect = demande annulée et les deux déconnectés.
           </p>
           <ul className="space-y-3">
             {pendingRequests.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50">
                 <span className="text-slate-200 font-medium">{r.identifiant}</span>
                 <span className="text-slate-500 text-sm">{formatDate(r.requested_at)}</span>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleApprove(r.id)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40 text-sm font-medium"
-                  >
-                    <Check className="h-4 w-4" /> Approuver
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleReject(r.id)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 border border-red-500/40 text-sm font-medium"
-                  >
-                    <X className="h-4 w-4" /> Refuser
-                  </button>
-                </div>
+                {r.approver_identifiant && <span className="text-slate-500 text-sm">Approbateur : {r.approver_identifiant}</span>}
+                <button
+                  type="button"
+                  onClick={() => openApprovalView(r.id)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/20 text-sky-300 hover:bg-sky-500/30 border border-sky-500/40 text-sm font-medium"
+                >
+                  Participer à l&apos;approbation
+                </button>
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Vue approbation (autre admin) : afficher son code + saisir le code du demandeur */}
+      {approvalView && (
+        <div className="card border-sky-500/40 bg-sky-500/5">
+          <h2 className="text-lg font-medium text-slate-200 mb-2">
+            {approvalView.role === 'approver' && approvalView.requesterIdentifiant
+              ? `Approbation — demande de ${approvalView.requesterIdentifiant}`
+              : 'Validation croisée'}
+          </h2>
+          <p className="text-slate-400 text-sm mb-4">
+            Montrez votre code à l&apos;autre admin. Puis saisissez le code affiché chez lui.
+          </p>
+          <div className="mb-6 p-6 rounded-2xl bg-slate-900/80 border-2 border-sky-500/50 text-center">
+            <p className="text-slate-400 text-sm mb-2">Votre code à afficher</p>
+            <p className="text-4xl md:text-5xl font-mono font-bold tracking-[0.4em] text-sky-300">
+              {approvalView.codeToDisplay}
+            </p>
+          </div>
+          <form onSubmit={(e) => handleSubmitCrossCode(e, approvalView.requestId)} className="space-y-4">
+            <div>
+              <label className="label">Code affiché chez l&apos;autre admin (6 chiffres)</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                className="input w-full max-w-[10rem] text-center text-xl tracking-widest font-mono"
+                value={crossCode}
+                onChange={(e) => setCrossCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                required
+              />
+            </div>
+            {error && <p className="text-sm text-red-400">{error}</p>}
+            <div className="flex gap-2">
+              <button type="submit" className="btn-primary" disabled={submittingCross}>
+                {submittingCross ? 'Vérification…' : 'Valider'}
+              </button>
+              <button type="button" onClick={() => { setApprovalView(null); setCrossCode(''); setError(null); }} className="px-4 py-2 rounded-xl bg-slate-700 text-slate-200 hover:bg-slate-600 text-sm font-medium">
+                Annuler
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
@@ -271,15 +337,37 @@ export default function IpsClient() {
         </div>
       )}
 
-      {!status.hasAccess && status.requestPending && step === null && (
+      {!status.hasAccess && status.requestPending && step === null && !approvalView && (
         <div className="card border-amber-500/40 bg-amber-500/5">
-          <p className="text-amber-200 font-medium flex items-center gap-2">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            En attente de l&apos;approbation d&apos;un autre administrateur
+          <h2 className="text-lg font-medium text-amber-200 mb-2">Validation croisée avec un autre admin</h2>
+          <p className="text-slate-400 text-sm mb-4">
+            Un autre admin doit participer : il affichera son code, vous affichez le vôtre ci-dessous. Chacun saisit le code de l&apos;autre. <strong className="text-amber-200">Code incorrect = demande annulée et les deux comptes déconnectés.</strong>
           </p>
-          <p className="text-slate-400 text-sm mt-2">
-            Tous les admins ont reçu une notification. Dès qu&apos;un d&apos;entre eux approuve votre demande, vous pourrez consulter les IP ici. Vous pouvez rafraîchir la page.
-          </p>
+          <div className="mb-6 p-6 rounded-2xl bg-slate-900/80 border-2 border-amber-500/50 text-center">
+            <p className="text-slate-400 text-sm mb-2">Votre code à montrer à l&apos;autre admin</p>
+            <p className="text-4xl md:text-5xl font-mono font-bold tracking-[0.4em] text-amber-300">
+              {status.codeToDisplay ?? '—'}
+            </p>
+          </div>
+          <form onSubmit={(e) => status.requestId && handleSubmitCrossCode(e, status.requestId)} className="space-y-4">
+            <div>
+              <label className="label">Code affiché chez l&apos;autre admin (6 chiffres)</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                className="input w-full max-w-[10rem] text-center text-xl tracking-widest font-mono"
+                value={crossCode}
+                onChange={(e) => setCrossCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                required
+              />
+            </div>
+            {error && <p className="text-sm text-red-400">{error}</p>}
+            <button type="submit" className="btn-primary" disabled={submittingCross || !status.requestId}>
+              {submittingCross ? 'Vérification…' : 'Valider'}
+            </button>
+          </form>
           <button
             type="button"
             onClick={() => { fetchStatus(); fetchPendingRequests(); }}

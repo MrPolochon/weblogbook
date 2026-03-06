@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -54,11 +55,29 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Connexions réservées aux admins (option activable dans Admin > Sécurité)
+  // Déconnexion forcée (ex: code approbation IP incorrect)
   try {
-    const { data: siteConfig } = await supabase.from('site_config').select('login_admin_only').eq('id', 1).single();
+    const admin = createAdminClient();
+    const { data: logoutRow } = await admin.from('security_logout').select('user_id').eq('user_id', user.id).maybeSingle();
+    if (logoutRow) {
+      await admin.from('security_logout').delete().eq('user_id', user.id);
+      await supabase.auth.signOut();
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      url.searchParams.set('message', 'security_logout');
+      return NextResponse.redirect(url);
+    }
+  } catch {
+    // Table security_logout peut ne pas exister
+  }
+
+  // Connexions réservées aux admins (option activable dans Admin > Sécurité)
+  // Lecture avec admin client pour être sûr d'avoir la valeur (évite RLS/cache)
+  try {
+    const admin = createAdminClient();
+    const { data: siteConfig } = await admin.from('site_config').select('login_admin_only').eq('id', 1).maybeSingle();
     if (siteConfig?.login_admin_only) {
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single();
       if (profile?.role !== 'admin') {
         await supabase.auth.signOut();
         const url = request.nextUrl.clone();
