@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET - Liste des demandes d'accès IP en attente (pour les admins qui doivent approuver).
  */

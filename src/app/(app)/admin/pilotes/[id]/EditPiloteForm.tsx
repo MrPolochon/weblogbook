@@ -42,6 +42,9 @@ export default function EditPiloteForm({
   const [loadingReset, setLoadingReset] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [superadminStep, setSuperadminStep] = useState<'password' | 'code' | null>(null);
+  const [superadminPassword, setSuperadminPassword] = useState('');
+  const [superadminCode, setSuperadminCode] = useState('');
 
   
   // Sync initial values
@@ -140,12 +143,40 @@ export default function EditPiloteForm({
       const res = await fetch(`/api/pilotes/${piloteId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(superadminStep === 'code' ? { ...body, superadmin_code: superadminCode.replace(/\s/g, '') } : body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403 && data.code === 'SUPERADMIN_REQUIRED') {
+        setError(data.error || 'Mot de passe superadmin et code requis.');
+        setSuperadminStep('password');
+        return;
+      }
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setSuccess('Rôles mis à jour');
+      setSuperadminStep(null);
+      setSuperadminPassword('');
+      setSuperadminCode('');
+      startTransition(() => router.refresh());
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSendSuperadminCode() {
+    if (!superadminPassword.trim()) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/superadmin/request-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: superadminPassword }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      setSuccess('Rôles mis à jour');
-      startTransition(() => router.refresh());
+      setSuperadminStep('code');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -361,6 +392,41 @@ export default function EditPiloteForm({
               ✈️ Ajouter accès pilote (permet d&apos;accéder à l&apos;espace pilote en plus)
             </span>
           </label>
+        )}
+
+        {role === 'admin' && (superadminStep === 'password' || superadminStep === 'code') && (
+          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-3">
+            <p className="text-amber-200 text-sm font-medium">Vérification requise pour le rôle administrateur</p>
+            {superadminStep === 'password' && (
+              <>
+                <input
+                  type="password"
+                  className="input max-w-xs"
+                  value={superadminPassword}
+                  onChange={(e) => setSuperadminPassword(e.target.value)}
+                  placeholder="Mot de passe superadmin"
+                  autoComplete="current-password"
+                />
+                <button type="button" onClick={handleSendSuperadminCode} disabled={loading} className="btn-secondary text-sm">
+                  {loading ? 'Envoi…' : 'Envoyer le code par email'}
+                </button>
+              </>
+            )}
+            {superadminStep === 'code' && (
+              <>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  className="input max-w-[8rem] text-center font-mono text-lg tracking-widest"
+                  value={superadminCode}
+                  onChange={(e) => setSuperadminCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                />
+                <p className="text-slate-400 text-xs">Puis cliquez sur « Enregistrer identifiant / rôles » ci-dessous.</p>
+              </>
+            )}
+          </div>
         )}
 
         {success && <p className="text-emerald-400 text-sm">{success}</p>}

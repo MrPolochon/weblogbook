@@ -16,7 +16,7 @@ export async function PATCH(
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, armee: armeeBody, atc: atcBody, atc_grade_id: atcGradeIdBody, role: roleBody, ifsa: ifsaBody, siavi: siaviBody } = body;
+    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, armee: armeeBody, atc: atcBody, atc_grade_id: atcGradeIdBody, role: roleBody, ifsa: ifsaBody, siavi: siaviBody, superadmin_code: superadminCodeBody } = body;
 
     const updates: Record<string, unknown> = {};
     if (typeof heures_initiales_minutes === 'number' && heures_initiales_minutes >= 0) {
@@ -46,6 +46,31 @@ export async function PATCH(
     if (roleBody && ['pilote', 'atc', 'siavi', 'admin'].includes(roleBody)) {
       const { data: target } = await admin.from('profiles').select('role').eq('id', id).single();
       if (!target) return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
+
+      // Attribuer ou modifier le rôle admin : exiger mot de passe superadmin + code email
+      if (roleBody === 'admin') {
+        const code = typeof superadminCodeBody === 'string' ? superadminCodeBody.trim().replace(/\s/g, '') : '';
+        if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+          return NextResponse.json(
+            { code: 'SUPERADMIN_REQUIRED', error: 'Pour attribuer le rôle administrateur, saisissez le mot de passe superadmin puis le code envoyé à votre email.' },
+            { status: 403 }
+          );
+        }
+        const { data: codeRow } = await admin
+          .from('superadmin_access_codes')
+          .select('user_id')
+          .eq('user_id', user.id)
+          .eq('code', code)
+          .gt('expires_at', new Date().toISOString())
+          .single();
+        if (!codeRow) {
+          return NextResponse.json(
+            { code: 'SUPERADMIN_REQUIRED', error: 'Code incorrect ou expiré. Saisissez le mot de passe superadmin puis demandez un nouveau code par email.' },
+            { status: 403 }
+          );
+        }
+        await admin.from('superadmin_access_codes').delete().eq('user_id', user.id);
+      }
       
       // Si on veut rétrograder un admin, vérifier qu'il reste au moins un admin
       if (target.role === 'admin' && roleBody !== 'admin') {

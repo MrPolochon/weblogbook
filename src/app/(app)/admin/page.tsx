@@ -1,10 +1,9 @@
 import Link from 'next/link';
-import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap, Lock, Globe } from 'lucide-react';
+import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap, Lock } from 'lucide-react';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 const links = [
-  { href: '/admin/securite', label: 'Sécurité (connexions)', icon: Lock },
-  { href: '/admin/ips', label: 'Consultation des IP', icon: Globe },
+  { href: '/admin/securite', label: 'Sécurité (connexions et consultation des IP)', icon: Lock },
   { href: '/admin/plans-vol', label: 'Plans de vol non clôturés', icon: AlertTriangle, countKey: 'plansNonClotures' },
   { href: '/admin/vols', label: 'Vols en attente', icon: Clock, countKey: 'volsEnAttente' },
   { href: '/admin/militaire', label: 'Vols militaires', icon: Shield },
