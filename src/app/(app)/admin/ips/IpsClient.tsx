@@ -29,7 +29,7 @@ function useDuplicateIpColors(profiles: ProfileRow[]): Map<string, string> {
       if (!ip) continue;
       countByIp.set(ip, (countByIp.get(ip) ?? 0) + 1);
     }
-    const duplicateIps = [...countByIp.entries()].filter(([, n]) => n > 1).map(([ip]) => ip);
+    const duplicateIps = Array.from(countByIp.entries()).filter(([, n]) => n > 1).map(([ip]) => ip);
     const ipToColor = new Map<string, string>();
     duplicateIps.forEach((ip, i) => {
       ipToColor.set(ip, DUPLICATE_IP_PALETTE[i % DUPLICATE_IP_PALETTE.length]);
