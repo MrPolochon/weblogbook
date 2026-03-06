@@ -20,6 +20,7 @@ COMMENT ON COLUMN public.login_ip_history.user_agent IS 'En-tête User-Agent de 
 -- RLS : pas d'accès via anon ; lecture possible par service role (requêtes SQL manuelles)
 ALTER TABLE public.login_ip_history ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "login_ip_history_no_anon" ON public.login_ip_history;
 CREATE POLICY "login_ip_history_no_anon"
   ON public.login_ip_history
   FOR ALL
