@@ -38,3 +38,35 @@ export async function sendLoginCodeEmail(to: string, code: string): Promise<{ ok
     return { ok: false, error: e instanceof Error ? e.message : 'Erreur envoi email' };
   }
 }
+
+/**
+ * Envoie le code de vérification pour une demande d'accès à la liste des IP (superadmin).
+ */
+export async function sendSuperadminAccessCodeEmail(to: string, code: string): Promise<{ ok: boolean; error?: string }> {
+  if (!resend) {
+    console.warn('[email] RESEND_API_KEY non configuré');
+    return { ok: false, error: 'Envoi d\'email non configuré' };
+  }
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [to],
+      subject: 'Code d\'accès liste des IP — PTFS Logbook',
+      html: `
+        <p>Bonjour,</p>
+        <p>Vous avez demandé l'accès à la liste des adresses IP. Voici votre code :</p>
+        <p style="font-size:24px;font-weight:bold;letter-spacing:4px;margin:20px 0;">${code}</p>
+        <p>Ce code expire dans 10 minutes. Un autre administrateur devra approuver votre demande pour accéder aux données.</p>
+        <p>— PTFS Logbook</p>
+      `,
+    });
+    if (error) {
+      console.error('[email] Resend error:', error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error('[email] sendSuperadminAccessCodeEmail:', e);
+    return { ok: false, error: e instanceof Error ? e.message : 'Erreur envoi email' };
+  }
+}

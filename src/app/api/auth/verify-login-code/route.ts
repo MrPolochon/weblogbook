@@ -2,9 +2,21 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 
+function getClientIp(request: NextRequest): string | null {
+  const forwarded = request.headers.get('x-forwarded-for');
+  if (forwarded) {
+    const first = forwarded.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
+  return null;
+}
+
 /**
  * Vérifie le code à 6 chiffres saisi par l'utilisateur.
- * Si valide, supprime le code et retourne ok (le client pourra alors retirer le cookie pending_verification).
+ * Si valide : enregistre l'IP de connexion (last_login_ip), supprime le code,
+ * retourne ok (le client retirera le cookie pending_verification).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -33,11 +45,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Code incorrect ou expiré.' }, { status: 400 });
     }
 
-    if (row.pending_email) {
-      await admin.from('profiles').update({ email: row.pending_email }).eq('id', user.id);
-    }
+    const ip = getClientIp(req);
+    const userAgent = req.headers.get('user-agent') ?? null;
+    const { data: profileBefore } = await admin
+      .from('profiles')
+      .select('last_login_ip')
+      .eq('id', user.id)
+      .single();
+    const previousIp = profileBefore?.last_login_ip ?? null;
 
+    const updates: { email?: string; last_login_ip?: string; last_login_at?: string } = {
+      last_login_at: new Date().toISOString(),
+    };
+    if (ip) updates.last_login_ip = ip;
+    if (row.pending_email) updates.email = row.pending_email;
+
+    await admin.from('profiles').update(updates).eq('id', user.id);
     await admin.from('login_verification_codes').delete().eq('user_id', user.id);
+
+    if (ip) {
+      try {
+        await admin.from('login_ip_history').insert({
+          user_id: user.id,
+          ip,
+          previous_ip: previousIp,
+          user_agent: userAgent,
+        });
+      } catch {
+        // Table login_ip_history peut ne pas exister (migration non exécutée)
+      }
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e) {

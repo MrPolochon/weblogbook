@@ -219,26 +219,38 @@ function LoginPageContent() {
       if (signInErr) throw new Error(signInErr.message || 'Identifiant ou mot de passe incorrect.');
       const uid = signData?.user?.id;
       if (!uid) { router.replace('/logbook'); startTransition(() => router.refresh()); return; }
+      let requireCode = true;
       try {
-        await fetch('/api/auth/register-login', { method: 'POST', credentials: 'include' });
+        const regRes = await fetch('/api/auth/register-login', { method: 'POST', credentials: 'include' });
+        const regData = await regRes.json().catch(() => ({}));
+        requireCode = regData.requireCode !== false;
       } catch { /* ignore */ }
       const { data: profile } = await supabase.from('profiles').select('role, atc, siavi').eq('id', uid).single();
       if (loginAdminOnly && profile?.role !== 'admin') {
         await supabase.auth.signOut();
         throw new Error('Les connexions sont temporairement réservées aux administrateurs.');
       }
+      let targetPath = '/logbook';
       if (mode === 'siavi') {
         const canSiavi = profile?.role === 'admin' || profile?.role === 'siavi' || Boolean(profile?.siavi);
         if (!canSiavi) throw new Error('Ce compte n\'a pas accès à l\'espace SIAVI.');
+        targetPath = '/siavi';
         setRedirectTo('/siavi');
       } else if (mode === 'atc') {
         const canAtc = profile?.role === 'admin' || profile?.role === 'atc' || profile?.atc;
         if (!canAtc) throw new Error('Ce compte n\'a pas accès à l\'espace ATC.');
+        targetPath = '/atc';
         setRedirectTo('/atc');
       } else {
         if (profile?.role === 'atc') throw new Error('Ce compte est uniquement ATC. Sélectionnez "Contrôleur ATC" pour vous connecter.');
         if (profile?.role === 'siavi') throw new Error('Ce compte est uniquement SIAVI. Sélectionnez "SIAVI" pour vous connecter.');
         setRedirectTo('/logbook');
+      }
+      if (!requireCode) {
+        clearPendingVerificationCookie();
+        router.replace(targetPath);
+        startTransition(() => router.refresh());
+        return;
       }
       setPendingVerificationCookie();
       const codeRes = await fetch('/api/auth/send-login-code', { method: 'POST', credentials: 'include' });
