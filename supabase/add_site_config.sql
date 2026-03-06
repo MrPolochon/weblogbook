@@ -17,10 +17,12 @@ ON CONFLICT (id) DO NOTHING;
 ALTER TABLE public.site_config ENABLE ROW LEVEL SECURITY;
 
 -- Lecture : tout authentifié (pour le middleware)
+DROP POLICY IF EXISTS "site_config_select" ON public.site_config;
 CREATE POLICY "site_config_select" ON public.site_config
   FOR SELECT TO authenticated USING (true);
 
 -- Mise à jour : admin uniquement (via API avec service_role ou policy)
+DROP POLICY IF EXISTS "site_config_update_admin" ON public.site_config;
 CREATE POLICY "site_config_update_admin" ON public.site_config
   FOR UPDATE TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 
