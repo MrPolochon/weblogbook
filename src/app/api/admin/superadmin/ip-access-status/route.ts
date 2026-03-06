@@ -36,7 +36,7 @@ export async function GET() {
 
     const { data: pendingRequest } = await admin
       .from('superadmin_ip_requests')
-      .select('id, code_requester')
+      .select('id, code_requester, requester_validated, approver_validated')
       .eq('requested_by', user.id)
       .eq('status', 'pending')
       .order('created_at', { ascending: false })
@@ -48,6 +48,8 @@ export async function GET() {
       requestPending: !!pendingRequest,
       requestId: pendingRequest?.id ?? undefined,
       codeToDisplay: pendingRequest?.code_requester ?? undefined,
+      requester_validated: pendingRequest?.requester_validated ?? false,
+      approver_validated: pendingRequest?.approver_validated ?? false,
     });
   } catch (e) {
     console.error('[superadmin ip-access-status]', e);

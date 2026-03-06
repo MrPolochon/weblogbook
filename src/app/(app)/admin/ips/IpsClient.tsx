@@ -4,10 +4,25 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Shield, Mail, Loader2, Check, X, RefreshCw } from 'lucide-react';
 
-type AccessStatus = { hasAccess: boolean; requestPending: boolean; requestId?: string; codeToDisplay?: string };
+type AccessStatus = {
+  hasAccess: boolean;
+  requestPending: boolean;
+  requestId?: string;
+  codeToDisplay?: string;
+  requester_validated?: boolean;
+  approver_validated?: boolean;
+};
 type PendingRequest = { id: string; requested_by: string; approver_id?: string; requested_at: string; identifiant: string; approver_identifiant?: string };
 type ProfileRow = { id: string; identifiant: string; role: string | null; last_login_ip: string | null; last_login_at: string | null };
 type HistoryRow = { id: string; user_id: string; identifiant: string; ip: string; previous_ip: string | null; user_agent: string | null; created_at: string };
+type ApprovalViewState = {
+  requestId: string;
+  codeToDisplay: string;
+  role: 'requester' | 'approver';
+  requesterIdentifiant?: string;
+  requester_validated?: boolean;
+  approver_validated?: boolean;
+};
 
 function formatDate(d: string | null) {
   if (!d) return '—';
@@ -37,7 +52,7 @@ export default function IpsClient() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [loadingData, setLoadingData] = useState(false);
-  const [approvalView, setApprovalView] = useState<{ requestId: string; codeToDisplay: string; role: 'requester' | 'approver'; requesterIdentifiant?: string } | null>(null);
+  const [approvalView, setApprovalView] = useState<ApprovalViewState | null>(null);
   const [crossCode, setCrossCode] = useState('');
   const [submittingCross, setSubmittingCross] = useState(false);
 
@@ -50,6 +65,8 @@ export default function IpsClient() {
         requestPending: data.requestPending ?? false,
         requestId: data.requestId,
         codeToDisplay: data.codeToDisplay,
+        requester_validated: data.requester_validated,
+        approver_validated: data.approver_validated,
       });
     } catch {
       setStatus({ hasAccess: false, requestPending: false });
@@ -149,6 +166,8 @@ export default function IpsClient() {
         codeToDisplay: data.codeToDisplay ?? '',
         role: data.role ?? 'approver',
         requesterIdentifiant: data.requesterIdentifiant,
+        requester_validated: data.requester_validated,
+        approver_validated: data.approver_validated,
       });
       setCrossCode('');
     } catch (e) {
@@ -183,7 +202,25 @@ export default function IpsClient() {
       } else {
         setCrossCode('');
         setError(null);
-        setApprovalView((av) => (av ? { ...av, codeToDisplay: '' } : null));
+        // Garder le code affiché et mettre à jour l'état de validation (les deux doivent valider)
+        setApprovalView((av) =>
+          av
+            ? {
+                ...av,
+                requester_validated: data.requester_validated ?? av.requester_validated,
+                approver_validated: data.approver_validated ?? av.approver_validated,
+              }
+            : null
+        );
+        setStatus((s) =>
+          s?.requestId === requestId
+            ? {
+                ...s,
+                requester_validated: data.requester_validated ?? s.requester_validated,
+                approver_validated: data.approver_validated ?? s.approver_validated,
+              }
+            : s
+        );
         await fetchPendingRequests();
       }
     } catch (e) {

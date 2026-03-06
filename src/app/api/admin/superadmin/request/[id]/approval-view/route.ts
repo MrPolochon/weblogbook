@@ -25,30 +25,32 @@ export async function GET(
 
     const { data: request } = await admin
       .from('superadmin_ip_requests')
-      .select('id, requested_by, status, code_requester, code_approver, approver_id')
+      .select('id, requested_by, status, code_requester, code_approver, approver_id, requester_validated, approver_validated')
       .eq('id', requestId)
       .single();
 
     if (!request) return NextResponse.json({ error: 'Demande introuvable' }, { status: 404 });
     if (request.status !== 'pending') {
-      return NextResponse.json({ error: 'Demande déjà traitée' }, { status: 400 });
+      return NextResponse.json({ error: 'Demande déjà traitée. La session d\'approbation est terminée.' }, { status: 400 });
     }
 
     if (request.requested_by === user.id) {
       return NextResponse.json({
         role: 'requester',
         codeToDisplay: request.code_requester ?? '',
+        requester_validated: request.requester_validated ?? false,
+        approver_validated: request.approver_validated ?? false,
       });
     }
 
-    // Autre admin : on l'assigne comme approbateur s'il n'y en a pas encore
+    // Autre admin : on l'assigne comme approbateur s'il n'y en a pas encore (un seul peut participer)
     if (!request.approver_id) {
       await admin
         .from('superadmin_ip_requests')
         .update({ approver_id: user.id })
         .eq('id', requestId);
     } else if (request.approver_id !== user.id) {
-      return NextResponse.json({ error: 'Un autre admin participe déjà à cette approbation.' }, { status: 400 });
+      return NextResponse.json({ error: 'Un autre admin participe déjà à cette approbation. Une seule personne peut être l\'approbateur.' }, { status: 400 });
     }
 
     const { data: requesterProfile } = await admin
@@ -61,6 +63,8 @@ export async function GET(
       role: 'approver',
       codeToDisplay: request.code_approver ?? '',
       requesterIdentifiant: requesterProfile?.identifiant ?? '—',
+      requester_validated: request.requester_validated ?? false,
+      approver_validated: request.approver_validated ?? false,
     });
   } catch (e) {
     console.error('[superadmin approval-view]', e);

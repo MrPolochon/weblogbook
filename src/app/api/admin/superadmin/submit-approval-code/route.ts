@@ -40,6 +40,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Vous ne participez pas à cette demande.' }, { status: 403 });
     }
 
+    // Déjà validé : retourner l'état sans modifier (évite double soumission)
+    if ((isRequester && request.requester_validated) || (isApprover && request.approver_validated)) {
+      const bothValidated = request.requester_validated && request.approver_validated;
+      return NextResponse.json({
+        ok: true,
+        approved: bothValidated,
+        requester_validated: request.requester_validated,
+        approver_validated: request.approver_validated,
+      });
+    }
+
     const expectedCode = isRequester ? (request.code_approver ?? '') : (request.code_requester ?? '');
     if (code !== expectedCode) {
       await admin.from('superadmin_ip_requests').update({ status: 'rejected' }).eq('id', requestId);
@@ -79,7 +90,12 @@ export async function POST(req: NextRequest) {
         .eq('id', requestId);
     }
 
-    return NextResponse.json({ ok: true, approved: bothValidated });
+    return NextResponse.json({
+      ok: true,
+      approved: bothValidated,
+      requester_validated: updated?.requester_validated ?? false,
+      approver_validated: updated?.approver_validated ?? false,
+    });
   } catch (e) {
     console.error('[superadmin submit-approval-code]', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
