@@ -563,7 +563,7 @@ export const BONUS_INDUSTRIEL_CARGO = 1.15; // +15% de chargement (réduit de 25
 // - Le coefficient de ponctualité (express/périssables = plus sensibles au retard)
 // - Le bonus de revenu (dangereux/surdimensionné = +1% revenu)
 
-export type TypeCargaison = 'general' | 'express' | 'perissable' | 'dangereux' | 'surdimensionne';
+export type TypeCargaison = 'general' | 'express' | 'perissable' | 'dangereux' | 'surdimensionne' | 'marchandise_rare';
 
 export interface CargaisonInfo {
   id: TypeCargaison;
@@ -624,7 +624,39 @@ export const TYPES_CARGAISON: Record<TypeCargaison, CargaisonInfo> = {
     bonusRevenu: 1,          // +1% bonus revenu
     probabilite: 2,          // 2% des vols (très rare)
   },
+  // Cargo complémentaire sur vols passagers uniquement : 1% chance (voir MARCHANDISES_RARES)
+  marchandise_rare: {
+    id: 'marchandise_rare',
+    nom: 'Marchandise rare',
+    icon: '💎',
+    color: 'text-amber-300',
+    sensibiliteRetard: 1.0,
+    bonusRevenu: 30,         // +30% sur la part cargo
+    probabilite: 0,          // jamais tiré dans genererTypeCargaison ; utilisé par genererTypeCargaisonComplementaire
+  },
 };
+
+/** Libellés des marchandises rares (1% sur cargo complémentaire vols passagers) */
+export const MARCHANDISES_RARES = [
+  'Voiture de luxe',
+  'Voiture de collection',
+  'Traineau du père Noël du staff',
+  'Pièce militaire',
+  'Arme militaire',
+  'Char militaire',
+  'Véhicule militaire',
+  'Transfert d\'animaux',
+  'Matériel médical',
+  'Nourriture exotique',
+  'Vaccins',
+] as const;
+
+export type MarchandiseRare = (typeof MARCHANDISES_RARES)[number];
+
+/** Retourne une marchandise rare aléatoire (pour affichage ou tirage). */
+export function getMarchandiseRareAleatoire(): MarchandiseRare {
+  return MARCHANDISES_RARES[Math.floor(Math.random() * MARCHANDISES_RARES.length)];
+}
 
 /**
  * Génère aléatoirement un type de cargaison basé sur les probabilités
@@ -651,6 +683,15 @@ export function genererTypeCargaison(): TypeCargaison {
   
   // Fallback (ne devrait jamais arriver)
   return 'general';
+}
+
+/**
+ * Génère un type de cargaison pour le cargo complémentaire sur vols passagers.
+ * 1 % de chance d'obtenir une marchandise rare (+30 % bonus sur la part cargo).
+ */
+export function genererTypeCargaisonComplementaire(): TypeCargaison {
+  if (Math.random() < 0.01) return 'marchandise_rare';
+  return genererTypeCargaison();
 }
 
 /**

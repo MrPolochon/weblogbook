@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison, MARCHANDISES_RARES } from '@/lib/aeroports-ptfs';
 import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio } from 'lucide-react';
 
 interface TypeAvion {
@@ -339,12 +339,16 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     setLastGeneratedKey(generationKey);
   }, [vol_commercial, vol_ferry, compagnie_avion_id, selectedCompagnie, selectedAvionIndiv, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport]);
 
-  // Calculer les revenus basés sur les valeurs générées et le type de transport sélectionné
+  // Revenus : passagers uniquement, cargo uniquement, ou passagers + cargo complémentaire
   const nbPax = nature_transport === 'passagers' ? generatedPax : 0;
   const cargoKg = nature_transport === 'cargo' ? generatedCargo : 0;
-  const revenuBrut = nature_transport === 'passagers' 
-    ? generatedPax * prixBilletLiaison
-    : generatedCargo * (selectedCompagnie?.prix_kg_cargo || 0);
+  const cargoComplementaire = nature_transport === 'passagers' ? generatedCargo : 0;
+  const revenuPax = generatedPax * prixBilletLiaison;
+  const prixCargo = selectedCompagnie?.prix_kg_cargo || 0;
+  const revenuCargo = (nature_transport === 'cargo' ? generatedCargo : cargoComplementaire) * prixCargo;
+  const revenuBrut = nature_transport === 'passagers'
+    ? revenuPax + revenuCargo
+    : revenuCargo;
   const salairePilote = Math.floor(revenuBrut * (selectedCompagnie?.pourcentage_salaire || 0) / 100);
 
   // Calculer les capacités et taux de remplissage (avion individuel seulement)
@@ -383,7 +387,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       compagnie_avion_id: (vol_commercial || vol_ferry) && compagnie_avion_id ? compagnie_avion_id : undefined,
       vol_ferry,
       nb_pax_genere: vol_commercial ? nbPax : undefined,
-      cargo_kg_genere: vol_commercial ? cargoKg : undefined,
+      cargo_kg_genere: vol_commercial ? (nature_transport === 'cargo' ? cargoKg : (nature_transport === 'passagers' ? cargoComplementaire : 0)) : undefined,
       revenue_brut: vol_commercial ? revenuBrut : undefined,
       salaire_pilote: vol_commercial ? salairePilote : undefined,
       prix_billet_utilise: vol_commercial ? prixBilletLiaison : undefined,
@@ -703,6 +707,12 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
                     <p className={`text-sm ${remplissageValidePax ? 'text-emerald-400' : 'text-red-400'}`}>
                       Remplissage : {nbPax}/{capacitePaxMax} ({Math.round(tauxRemplissagePax * 100)}%)
                     </p>
+                    {cargoComplementaire > 0 && (
+                      <p className="text-slate-300 col-span-2">
+                        + {cargoComplementaire.toLocaleString('fr-FR')} kg cargo complémentaire @ {prixCargo} F$/kg
+                        <span className="text-amber-300/90 text-xs ml-1">(1% chance marchandise rare +30% : {MARCHANDISES_RARES.slice(0, 4).join(', ')}…)</span>
+                      </p>
+                    )}
                   </>
                 ) : (
                   <>

@@ -309,16 +309,16 @@ export async function envoyerChequesVol(
     }
   }
 
-  // Pour les vols cargo, utiliser le type de cargaison pour le calcul de ponctualité
-  const typeCargaison = plan.nature_transport === 'cargo' && plan.type_cargaison
-    ? plan.type_cargaison as TypeCargaison
+  // Type de cargaison : vols cargo ou passagers avec cargo complémentaire (ponctualité + bonus)
+  const typeCargaison = plan.type_cargaison
+    ? (plan.type_cargaison as TypeCargaison)
     : null;
 
   const coefficient = calculerCoefficientPonctualite(plan.temps_prev_min, tempsReelMin, typeCargaison);
 
-  // Calculer le bonus de cargaison (matières dangereuses, surdimensionné = +1%)
+  // Calculer le bonus de cargaison (dangereux/surdimensionné = +1% ; marchandise rare = déjà inclus dans revenue_brut)
   let bonusCargaison = 0;
-  if (typeCargaison) {
+  if (typeCargaison && typeCargaison !== 'marchandise_rare') {
     const cargaisonInfo = getCargaisonInfo(typeCargaison);
     bonusCargaison = cargaisonInfo.bonusRevenu;
   }
