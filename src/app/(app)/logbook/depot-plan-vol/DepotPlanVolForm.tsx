@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison, MARCHANDISES_RARES } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
 import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio } from 'lucide-react';
 
 interface TypeAvion {
@@ -710,7 +710,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
                     {cargoComplementaire > 0 && (
                       <p className="text-slate-300 col-span-2">
                         + {cargoComplementaire.toLocaleString('fr-FR')} kg cargo complémentaire @ {prixCargo} F$/kg
-                        <span className="text-amber-300/90 text-xs ml-1">(1% chance marchandise rare +30% : {MARCHANDISES_RARES.slice(0, 4).join(', ')}…)</span>
+                        <span className="text-amber-300/90 text-xs ml-1">(1% chance marchandise rare +30%)</span>
                       </p>
                     )}
                   </>
