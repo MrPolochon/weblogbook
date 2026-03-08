@@ -46,10 +46,15 @@ export async function PATCH(
     const { action } = body;
 
     const admin = createAdminClient();
-    const { data: plan } = await admin.from('plans_vol')
+    const { data: plan, error: planError } = await admin.from('plans_vol')
       .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, created_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, type_cargaison_libelle, compagnie_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, created_by_atc')
       .eq('id', id)
       .single();
+    if (planError) {
+      if (planError.code === 'PGRST116') return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
+      console.error('[plans-vol PATCH]', planError);
+      return NextResponse.json({ error: planError.message || 'Erreur lors de la récupération du plan.' }, { status: 500 });
+    }
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
 
     if (action === 'cloture') {
@@ -213,57 +218,77 @@ export async function PATCH(
       const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
       const isAdmin = profile?.role === 'admin';
       const isAtc = profile?.role === 'atc' || Boolean(profile?.atc);
-      const canCancel = isAdmin || isAtc;
-      if (!canCancel) return NextResponse.json({ error: 'Seul un ATC ou un admin peut annuler un vol.' }, { status: 403 });
-      
-      // Vérifier que le plan n'est pas déjà clôturé
+      const isManualStrip = Boolean(plan.created_by_atc) && !plan.pilote_id;
+      const isHolder = plan.current_holder_user_id === user.id;
+      const isPiloteOwner = plan.pilote_id === user.id;
+
       if (plan.statut === 'cloture') return NextResponse.json({ error: 'Un plan de vol cloture ne peut pas etre annule.' }, { status: 400 });
 
-      // Remettre l'avion au sol si un avion individuel était assigné
-      if (plan.compagnie_avion_id) {
-        await admin.from('compagnie_avions')
-          .update({ statut: 'ground', aeroport_actuel: plan.aeroport_depart || undefined })
-          .eq('id', plan.compagnie_avion_id);
-      }
-
-      // Rembourser les passagers/cargo consommés
       const aeroportDepart = plan.aeroport_depart || '';
-      if (plan.vol_commercial && aeroportDepart) {
+      const rembourserPaxEtCargo = async () => {
+        if (!plan.vol_commercial || !aeroportDepart) return;
         if (plan.nb_pax_genere && plan.nb_pax_genere > 0) {
-          const { data: currentPax } = await admin
-            .from('aeroport_passagers')
-            .select('passagers_disponibles, passagers_max')
-            .eq('code_oaci', aeroportDepart)
-            .single();
+          const { data: currentPax } = await admin.from('aeroport_passagers').select('passagers_disponibles, passagers_max').eq('code_oaci', aeroportDepart).single();
           if (currentPax) {
             const maxValue = currentPax.passagers_max ?? currentPax.passagers_disponibles;
             const newValue = Math.min(maxValue, currentPax.passagers_disponibles + plan.nb_pax_genere);
-            await admin.from('aeroport_passagers')
-              .update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() })
-              .eq('code_oaci', aeroportDepart);
+            await admin.from('aeroport_passagers').update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() }).eq('code_oaci', aeroportDepart);
           }
         }
-        if (plan.nature_transport === 'cargo' && plan.cargo_kg_genere && plan.cargo_kg_genere > 0) {
-          const { data: currentCargo } = await admin
-            .from('aeroport_cargo')
-            .select('cargo_disponible, cargo_max')
-            .eq('code_oaci', aeroportDepart)
-            .single();
+        const hasCargo = plan.cargo_kg_genere && plan.cargo_kg_genere > 0 && (plan.nature_transport === 'cargo' || plan.nature_transport === 'passagers');
+        if (hasCargo) {
+          const { data: currentCargo } = await admin.from('aeroport_cargo').select('cargo_disponible, cargo_max').eq('code_oaci', aeroportDepart).single();
           if (currentCargo) {
             const maxValue = currentCargo.cargo_max ?? currentCargo.cargo_disponible;
-            const newValue = Math.min(maxValue, currentCargo.cargo_disponible + plan.cargo_kg_genere);
-            await admin.from('aeroport_cargo')
-              .update({ cargo_disponible: newValue, updated_at: new Date().toISOString() })
-              .eq('code_oaci', aeroportDepart);
+            const newValue = Math.min(maxValue, currentCargo.cargo_disponible + (plan.cargo_kg_genere ?? 0));
+            await admin.from('aeroport_cargo').update({ cargo_disponible: newValue, updated_at: new Date().toISOString() }).eq('code_oaci', aeroportDepart);
           }
         }
-      }
+      };
+      const remettreAvionAuSol = () => {
+        if (plan.compagnie_avion_id) {
+          return admin.from('compagnie_avions').update({ statut: 'ground', aeroport_actuel: plan.aeroport_depart || undefined }).eq('id', plan.compagnie_avion_id);
+        }
+      };
 
-      // Supprimer le plan de vol (suppression en cascade des données liées)
-      const { error } = await admin.from('plans_vol').delete().eq('id', id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      
-      return NextResponse.json({ ok: true, deleted: true });
+      if (isAdmin || isAtc) {
+        await rembourserPaxEtCargo();
+        await remettreAvionAuSol();
+        const { error } = await admin.from('plans_vol').delete().eq('id', id);
+        if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+        return NextResponse.json({ ok: true, deleted: true });
+      }
+      if (isManualStrip && (isHolder || isAdmin)) {
+        const { error: err } = await admin.from('plans_vol').update({
+          statut: 'annule',
+          current_holder_user_id: null,
+          current_holder_position: null,
+          current_holder_aeroport: null,
+          automonitoring: false,
+          pending_transfer_aeroport: null,
+          pending_transfer_position: null,
+          pending_transfer_at: null,
+        }).eq('id', id);
+        if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+        return NextResponse.json({ ok: true });
+      }
+      if (isPiloteOwner && ['depose', 'en_attente', 'refuse'].includes(plan.statut)) {
+        await rembourserPaxEtCargo();
+        await remettreAvionAuSol();
+        const { error: err } = await admin.from('plans_vol').update({
+          statut: 'annule',
+          current_holder_user_id: null,
+          current_holder_position: null,
+          current_holder_aeroport: null,
+          automonitoring: false,
+          pending_transfer_aeroport: null,
+          pending_transfer_position: null,
+          pending_transfer_at: null,
+        }).eq('id', id);
+        if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+        return NextResponse.json({ ok: true });
+      }
+      return NextResponse.json({ error: 'Annulation non autorisee (pilote : depose/en attente/refuse uniquement ; ATC/admin : tout plan non cloture).' }, { status: 403 });
     }
 
     if (action === 'modifier_et_renvoyer') {
@@ -472,79 +497,6 @@ export async function PATCH(
         strip_zone: null,
       }).eq('id', id);
       if (err) return NextResponse.json({ error: err.message }, { status: 400 });
-      return NextResponse.json({ ok: true });
-    }
-
-    if (action === 'annuler') {
-      const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
-      const isAdmin = profile?.role === 'admin';
-      const isManualStrip = Boolean(plan.created_by_atc) && !plan.pilote_id;
-      const isHolder = plan.current_holder_user_id === user.id;
-      
-      // Strips manuels : le détenteur ATC ou un admin peut annuler
-      // Plans normaux : le pilote propriétaire ou un admin
-      if (!isAdmin) {
-        if (isManualStrip) {
-          if (!isHolder) return NextResponse.json({ error: 'Seul le détenteur du strip peut l\'annuler.' }, { status: 403 });
-        } else {
-          if (profile?.role === 'atc') return NextResponse.json({ error: 'Annulation reservee au pilote ou admin.' }, { status: 403 });
-          if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
-        }
-      }
-      
-      if (plan.statut === 'cloture') return NextResponse.json({ error: 'Ce plan est deja cloture.' }, { status: 400 });
-      // Les strips manuels peuvent toujours être annulés (ils naissent "accepte")
-      if (!isManualStrip && (['accepte', 'en_cours', 'en_attente_cloture'].includes(plan.statut) || plan.accepted_at)) {
-        return NextResponse.json({ error: 'Impossible d\'annuler un plan deja accepte par l\'ATC.' }, { status: 400 });
-      }
-
-      const { error: err } = await admin.from('plans_vol').update({
-        statut: 'annule',
-        current_holder_user_id: null,
-        current_holder_position: null,
-        current_holder_aeroport: null,
-        automonitoring: false,
-        pending_transfer_aeroport: null,
-        pending_transfer_position: null,
-        pending_transfer_at: null,
-      }).eq('id', id);
-      if (err) return NextResponse.json({ error: err.message }, { status: 400 });
-
-      const aeroportDepart = plan.aeroport_depart || '';
-
-      // Rembourser les passagers/cargo si le plan était commercial
-      if (plan.vol_commercial && aeroportDepart) {
-        if (plan.nb_pax_genere && plan.nb_pax_genere > 0) {
-          const { data: currentPax } = await admin
-            .from('aeroport_passagers')
-            .select('passagers_disponibles, passagers_max')
-            .eq('code_oaci', aeroportDepart)
-            .single();
-          if (currentPax) {
-            const maxValue = currentPax.passagers_max ?? currentPax.passagers_disponibles;
-            const newValue = Math.min(maxValue, currentPax.passagers_disponibles + plan.nb_pax_genere);
-            await admin.from('aeroport_passagers')
-              .update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() })
-              .eq('code_oaci', aeroportDepart);
-          }
-        }
-
-        if (plan.nature_transport === 'cargo' && plan.cargo_kg_genere && plan.cargo_kg_genere > 0) {
-          const { data: currentCargo } = await admin
-            .from('aeroport_cargo')
-            .select('cargo_disponible, cargo_max')
-            .eq('code_oaci', aeroportDepart)
-            .single();
-          if (currentCargo) {
-            const maxValue = currentCargo.cargo_max ?? currentCargo.cargo_disponible;
-            const newValue = Math.min(maxValue, currentCargo.cargo_disponible + plan.cargo_kg_genere);
-            await admin.from('aeroport_cargo')
-              .update({ cargo_disponible: newValue, updated_at: new Date().toISOString() })
-              .eq('code_oaci', aeroportDepart);
-          }
-        }
-      }
-
       return NextResponse.json({ ok: true });
     }
 

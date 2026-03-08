@@ -2,7 +2,7 @@ export type Role = 'admin' | 'pilote' | 'atc' | 'ifsa' | 'siavi';
 export type VolStatut = 'en_attente' | 'validé' | 'refusé';
 export type TypeVol = 'IFR' | 'VFR';
 export type RolePilote = 'Pilote' | 'Co-pilote';
-export type PlanStatut = 'depose' | 'en_attente' | 'accepte' | 'refuse' | 'en_cours' | 'automonitoring' | 'en_attente_cloture' | 'cloture';
+export type PlanStatut = 'depose' | 'en_attente' | 'accepte' | 'refuse' | 'en_cours' | 'automonitoring' | 'en_attente_cloture' | 'cloture' | 'annule';
 export type NatureTransport = 'passagers' | 'cargo' | 'mixte';
 export type TypeCargaison = 'generale' | 'dangereuse' | 'perissable' | 'vivante' | 'urgente';
 
