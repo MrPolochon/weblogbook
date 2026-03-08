@@ -32,6 +32,7 @@ interface Plan {
   vol_ferry?: boolean;
   nature_transport?: string;
   type_cargaison?: string;
+  type_cargaison_libelle?: string | null;
   nb_pax_genere?: number;
   cargo_kg_genere?: number;
   pilote?: { identifiant: string } | null;
@@ -380,15 +381,23 @@ export default function SpectatorView({
                         </span>
                       )}
                       {p.vol_commercial && p.nature_transport === 'passagers' && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 flex items-center gap-1">
-                          <Users className="h-3 w-3" />
-                          {p.nb_pax_genere || '?'} PAX
-                        </span>
+                        <>
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 flex items-center gap-1">
+                            <Users className="h-3 w-3" />
+                            {p.nb_pax_genere || '?'} PAX
+                          </span>
+                          {p.cargo_kg_genere && p.cargo_kg_genere > 0 && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 flex items-center gap-1">
+                              <Package className="h-3 w-3" />
+                              +{p.cargo_kg_genere} kg {p.type_cargaison === 'marchandise_rare' && p.type_cargaison_libelle ? `(${p.type_cargaison_libelle})` : ''}
+                            </span>
+                          )}
+                        </>
                       )}
                       {p.vol_commercial && p.nature_transport === 'cargo' && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 flex items-center gap-1">
                           <Package className="h-3 w-3" />
-                          {p.cargo_kg_genere || '?'} kg {p.type_cargaison ? `(${p.type_cargaison})` : ''}
+                          {p.cargo_kg_genere || '?'} kg {p.type_cargaison ? `(${p.type_cargaison === 'marchandise_rare' && p.type_cargaison_libelle ? p.type_cargaison_libelle : p.type_cargaison})` : ''}
                         </span>
                       )}
                     </div>

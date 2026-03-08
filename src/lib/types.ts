@@ -34,6 +34,7 @@ export interface PlanVol {
   vol_militaire?: boolean;
   nature_transport?: NatureTransport | null;
   type_cargaison?: TypeCargaison | null;
+  type_cargaison_libelle?: string | null;
   nb_pax_genere?: number | null;
   cargo_kg_genere?: number | null;
   

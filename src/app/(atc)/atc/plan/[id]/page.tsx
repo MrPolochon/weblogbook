@@ -240,16 +240,33 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
               </span>
             )}
             {plan.vol_commercial && plan.nature_transport === 'passagers' && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-100 text-sky-700 text-sm font-medium">
-                <Users className="h-4 w-4" />
-                {plan.nb_pax_genere || 0} passagers
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-100 text-sky-700 text-sm font-medium">
+                  <Users className="h-4 w-4" />
+                  {plan.nb_pax_genere || 0} passagers
+                </span>
+                {plan.cargo_kg_genere && plan.cargo_kg_genere > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-100 text-purple-700 text-sm font-medium">
+                    <Package className="h-4 w-4" />
+                    +{plan.cargo_kg_genere} kg cargo
+                    {plan.type_cargaison === 'marchandise_rare' && plan.type_cargaison_libelle && (
+                      <span className="text-purple-500 ml-1">({plan.type_cargaison_libelle})</span>
+                    )}
+                  </span>
+                )}
               </span>
             )}
             {plan.vol_commercial && plan.nature_transport === 'cargo' && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-100 text-purple-700 text-sm font-medium">
                 <Package className="h-4 w-4" />
                 {plan.cargo_kg_genere || 0} kg de cargo
-                {plan.type_cargaison && <span className="text-purple-500 ml-1">({plan.type_cargaison})</span>}
+                {plan.type_cargaison && (
+                  <span className="text-purple-500 ml-1">
+                    ({plan.type_cargaison === 'marchandise_rare' && plan.type_cargaison_libelle
+                      ? plan.type_cargaison_libelle
+                      : plan.type_cargaison})
+                  </span>
+                )}
               </span>
             )}
             {!plan.vol_commercial && !plan.vol_ferry && (

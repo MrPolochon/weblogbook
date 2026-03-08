@@ -19,6 +19,7 @@ type PlanPaiement = {
   type_vol?: string;
   nature_transport?: string | null;
   type_cargaison?: string | null;
+  type_cargaison_libelle?: string | null;
   location_loueur_compagnie_id?: string | null;
   location_pourcentage_revenu_loueur?: number | null;
   compagnie_avion_id?: string | null;
@@ -446,11 +447,15 @@ export async function envoyerChequesVol(
 
   // Chèque salaire pilote
   if (salaireEffectif > 0) {
+    let contenuSalaire = `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min\nCoefficient de ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesTotales.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`;
+    if (plan.type_cargaison === 'marchandise_rare' && plan.type_cargaison_libelle) {
+      contenuSalaire += `\n\n💎 Marchandise rare transportée : ${plan.type_cargaison_libelle}`;
+    }
     await admin.from('messages').insert({
       destinataire_id: plan.pilote_id,
       expediteur_id: null,
       titre: `Salaire vol ${numeroVol}`,
-      contenu: `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min\nCoefficient de ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesTotales.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`,
+      contenu: contenuSalaire,
       type_message: 'cheque_salaire',
       cheque_montant: salaireEffectif,
       cheque_encaisse: false,

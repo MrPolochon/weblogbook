@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import CreatePiloteForm from './CreatePiloteForm';
 import PilotesActions from './PilotesActions';
 import GenerateAllCardsButton from './GenerateAllCardsButton';
+import RefreshAllCardsButton from './RefreshAllCardsButton';
 
 export default async function AdminPilotesPage() {
   const supabase = await createClient();
@@ -66,8 +67,9 @@ export default async function AdminPilotesPage() {
 
       <CreatePiloteForm />
 
-      <div className="card p-4">
+      <div className="card p-4 space-y-4">
         <GenerateAllCardsButton />
+        <RefreshAllCardsButton />
       </div>
 
       <div className="card">

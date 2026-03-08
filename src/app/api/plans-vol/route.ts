@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { CODES_OACI_VALIDES, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo } from '@/lib/aeroports-ptfs';
+import { CODES_OACI_VALIDES, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire } from '@/lib/aeroports-ptfs';
 import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol
@@ -96,6 +96,7 @@ export async function POST(request: Request) {
     let revenuBrutFinal = revenue_brut ?? 0;
     let salaireFinal = salaire_pilote ?? 0;
     let typeCargaisonFinal: string | null = null;
+    let typeCargaisonLibelleFinal: string | null = null;
     // Vol cargo : type de cargaison classique
     if (vol_commercial && nature_transport === 'cargo') {
       typeCargaisonFinal = genererTypeCargaison();
@@ -103,6 +104,9 @@ export async function POST(request: Request) {
     // Vol passagers avec cargo complémentaire : 1% chance marchandise rare (+30% sur part cargo)
     if (vol_commercial && nature_transport === 'passagers' && cargoGenereFinal > 0 && compagnie_id) {
       typeCargaisonFinal = genererTypeCargaisonComplementaire();
+      if (typeCargaisonFinal === 'marchandise_rare') {
+        typeCargaisonLibelleFinal = getMarchandiseRareAleatoire();
+      }
       const { data: comp } = await admin.from('compagnies').select('prix_kg_cargo, pourcentage_salaire').eq('id', compagnie_id).single();
       const prixKgCargo = comp?.prix_kg_cargo ?? 0;
       const nbPax = Math.max(0, parseInt(String(nb_pax_genere || 0), 10) || 0);
@@ -346,6 +350,7 @@ export async function POST(request: Request) {
         nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
         cargo_kg_genere: vol_commercial ? cargoGenereFinal : null,
         type_cargaison: vol_commercial && (nature_transport === 'cargo' || (nature_transport === 'passagers' && cargoGenereFinal > 0)) ? typeCargaisonFinal : null,
+        type_cargaison_libelle: typeCargaisonLibelleFinal,
         revenue_brut: vol_commercial ? revenuBrutFinal : null,
         salaire_pilote: vol_commercial ? salaireFinal : null,
         prix_billet_utilise: vol_commercial ? (prix_billet_utilise || 0) : null,
@@ -477,6 +482,7 @@ export async function POST(request: Request) {
       nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
       cargo_kg_genere: vol_commercial ? cargoGenereFinal : null,
       type_cargaison: vol_commercial && (nature_transport === 'cargo' || (nature_transport === 'passagers' && cargoGenereFinal > 0)) ? typeCargaisonFinal : null,
+      type_cargaison_libelle: typeCargaisonLibelleFinal,
       revenue_brut: vol_commercial ? revenuBrutFinal : null,
       salaire_pilote: vol_commercial ? salaireFinal : null,
       prix_billet_utilise: vol_commercial ? (prix_billet_utilise || 0) : null,
