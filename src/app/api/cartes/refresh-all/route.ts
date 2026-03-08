@@ -5,7 +5,11 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 /**
- * Calcule les infos carte à jour pour un profil (même logique que auto-generate).
+ * Hiérarchie du type de carte (priorité stricte) :
+ * 1. STAFF   si role === 'admin'
+ * 2. ATC     si ATC (même si pilote ou pompier aussi)
+ * 3. POMPIER si SIAVI (même si pilote aussi)
+ * 4. PILOTE  sinon
  * Ne modifie pas : date_delivrance, date_expiration, numero_carte, cases_haut, cases_bas, photo_url.
  */
 async function getInfosCarteForProfile(
@@ -75,8 +79,8 @@ async function getInfosCarteForProfile(
 }
 
 /**
- * POST - Met à jour toutes les cartes avec les dernières infos (profil, rôle, compagnie, logo).
- * Ne modifie pas la date de délivrance ni les cases personnalisées.
+ * POST - Met à jour toutes les cartes : compagnie, logo, type de carte (ATC / Pompier / Pilote / Staff).
+ * Recalcule à partir du profil actuel (rôle, atc, siavi, employeur). Ne modifie pas date_delivrance ni cases.
  * Réservé aux admins.
  */
 export async function POST() {
@@ -132,6 +136,6 @@ export async function POST() {
     ok: true,
     updated,
     total: cartes.length,
-    message: `${updated} carte(s) mise(s) à jour avec les dernières infos.`,
+    message: `${updated} carte(s) mise(s) à jour (compagnie, logo, type ATC/Pompier/Pilote/Staff).`,
   });
 }

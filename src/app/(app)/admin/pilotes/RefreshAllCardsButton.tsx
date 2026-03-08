@@ -8,7 +8,7 @@ export default function RefreshAllCardsButton() {
   const [result, setResult] = useState<{ updated: number; message: string } | null>(null);
 
   async function handleClick() {
-    if (!confirm('Mettre à jour toutes les cartes avec les dernières infos (rôle, compagnie, logo, identifiant) ? La date de délivrance ne sera pas modifiée.')) return;
+    if (!confirm('Mettre à jour toutes les cartes : compagnie, logo et type de carte (ATC / Pompier / Pilote / Staff) selon les profils actuels ? La date de délivrance ne sera pas modifiée.')) return;
 
     setLoading(true);
     setResult(null);
@@ -44,7 +44,7 @@ export default function RefreshAllCardsButton() {
         ) : (
           <>
             <RefreshCw className="h-4 w-4" />
-            Mettre à jour toutes les cartes
+            Mettre à jour cartes (compagnie, logo, type ATC/Pompier/Pilote/Staff)
           </>
         )}
       </button>

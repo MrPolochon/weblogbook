@@ -74,39 +74,33 @@ export async function POST() {
   const cartesToInsert = [];
   const today = new Date().toISOString().split('T')[0];
 
+  // Hiérarchie type de carte (priorité stricte) : STAFF > ATC > POMPIER > PILOTE
   for (const p of profilesToGenerate) {
-    let couleur_fond = '#1E3A8A'; // Bleu par défaut (pilote)
-    let titre = "Carte d'identification de membre d'équipage"; // Pilote par défaut
+    let couleur_fond = '#1E3A8A';
+    let titre = "Carte d'identification de membre d'équipage";
     let organisation = 'IFSA';
     let numero_prefix = 'PIL';
     let sous_titre = "délivré par l'instance de l'IFSA";
 
-    // Admin
     if (p.role === 'admin') {
       couleur_fond = '#1F2937';
       titre = 'STAFF';
       organisation = 'Mixou Airlines';
       numero_prefix = 'STAFF M';
       sous_titre = 'délivré par Mixou Airlines';
-    }
-    // ATC
-    else if (p.role === 'atc' || p.atc) {
+    } else if (p.role === 'atc' || p.atc) {
       couleur_fond = '#EA580C';
       titre = 'Opération de contrôle aérienne';
       organisation = 'Service ATS';
       numero_prefix = 'ATC';
       sous_titre = "délivré par l'instance de l'IFSA";
-    }
-    // SIAVI (Pompier)
-    else if (p.siavi) {
+    } else if (p.siavi) {
       couleur_fond = '#DC2626';
       titre = 'Service incendie';
       organisation = 'Service Incendie Aéroportuaire et Information de Vol';
       numero_prefix = 'SIAVI';
       sous_titre = "délivré par l'instance de l'IFSA";
-    }
-    // Pilote - récupérer la compagnie
-    else {
+    } else {
       const compagnieNom = compagnieByPilote.get(p.id);
       if (compagnieNom) {
         organisation = compagnieNom;

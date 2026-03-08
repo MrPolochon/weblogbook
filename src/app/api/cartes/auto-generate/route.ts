@@ -60,39 +60,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Profil introuvable' }, { status: 404 });
   }
 
-    // Déterminer les valeurs par défaut selon le rôle
-    let couleur_fond = '#1E3A8A'; // Bleu par défaut (pilote)
-    let titre = "Carte d'identification de membre d'équipage"; // Pilote par défaut
+    // Hiérarchie type de carte (priorité stricte) : STAFF > ATC > POMPIER > PILOTE
+    let couleur_fond = '#1E3A8A';
+    let titre = "Carte d'identification de membre d'équipage";
     let organisation = 'IFSA';
     let numero_prefix = 'PIL';
     let sous_titre = "délivré par l'instance de l'IFSA";
 
-    // Admin
     if (profile.role === 'admin') {
-      couleur_fond = '#1F2937'; // Noir/gris foncé
+      couleur_fond = '#1F2937';
       titre = 'STAFF';
       organisation = 'Mixou Airlines';
       numero_prefix = 'STAFF M';
       sous_titre = 'délivré par Mixou Airlines';
-    }
-    // ATC
-    else if (profile.role === 'atc' || profile.atc) {
-      couleur_fond = '#EA580C'; // Orange
+    } else if (profile.role === 'atc' || profile.atc) {
+      couleur_fond = '#EA580C';
       titre = 'Opération de contrôle aérienne';
       organisation = 'Service ATS';
       numero_prefix = 'ATC';
       sous_titre = "délivré par l'instance de l'IFSA";
-    }
-    // SIAVI (Pompier)
-    else if (profile.siavi) {
-      couleur_fond = '#DC2626'; // Rouge
+    } else if (profile.siavi) {
+      couleur_fond = '#DC2626';
       titre = 'Service incendie';
       organisation = 'Service Incendie Aéroportuaire et Information de Vol';
       numero_prefix = 'SIAVI';
       sous_titre = "délivré par l'instance de l'IFSA";
-    }
-    // Pilote - récupérer la compagnie et son logo
-    else {
+    } else {
       // Chercher la compagnie du pilote
       const { data: emploi } = await admin
         .from('compagnie_employes')
