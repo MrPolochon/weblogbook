@@ -45,6 +45,8 @@ export default function EditPiloteForm({
   const [superadminStep, setSuperadminStep] = useState<'password' | 'code' | null>(null);
   const [superadminPassword, setSuperadminPassword] = useState('');
   const [superadminCode, setSuperadminCode] = useState('');
+  const [resetPasswordStep, setResetPasswordStep] = useState<'code' | null>(null);
+  const [resetPasswordCode, setResetPasswordCode] = useState('');
 
   
   // Sync initial values
@@ -184,18 +186,46 @@ export default function EditPiloteForm({
     }
   }
 
-  async function handleResetPassword() {
+  async function handleSendResetCode() {
+    setError(null);
+    setLoadingReset(true);
+    try {
+      const res = await fetch('/api/admin/send-password-reset-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: piloteId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setResetPasswordStep('code');
+      setResetPasswordCode('');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoadingReset(false);
+    }
+  }
+
+  async function handleConfirmResetPassword() {
     if (!confirm('Réinitialiser le mot de passe à 1234567890 ? L\'utilisateur devra se reconnecter.')) return;
+    const code = resetPasswordCode.trim().replace(/\s/g, '');
+    if (code.length !== 6) {
+      setError('Saisissez le code à 6 chiffres envoyé à l\'email du compte.');
+      return;
+    }
     setError(null);
     setLoadingReset(true);
     try {
       const res = await fetch(`/api/pilotes/${piloteId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset_password: true }),
+        body: JSON.stringify({ reset_password: true, verification_code: code }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
+      setResetPasswordStep(null);
+      setResetPasswordCode('');
+      setSuccess('Mot de passe réinitialisé à 1234567890.');
       startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -438,14 +468,45 @@ export default function EditPiloteForm({
 
       <div>
         <h2 className="text-lg font-medium text-slate-200 mb-2">Mot de passe</h2>
-        <button
-          type="button"
-          onClick={handleResetPassword}
-          className="btn-secondary"
-          disabled={loadingReset}
-        >
-          {loadingReset ? 'Envoi…' : 'Réinitialiser le mot de passe (1234567890)'}
-        </button>
+        <p className="text-slate-400 text-sm mb-2">Un code de vérification est envoyé à l&apos;email du compte ; saisissez-le pour confirmer la réinitialisation.</p>
+        {resetPasswordStep !== 'code' ? (
+          <button
+            type="button"
+            onClick={handleSendResetCode}
+            className="btn-secondary"
+            disabled={loadingReset}
+          >
+            {loadingReset ? 'Envoi…' : 'Envoyer le code par email'}
+          </button>
+        ) : (
+          <div className="flex flex-wrap items-end gap-2">
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              className="input max-w-[8rem] text-center font-mono text-lg tracking-widest"
+              value={resetPasswordCode}
+              onChange={(e) => setResetPasswordCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="000000"
+            />
+            <button
+              type="button"
+              onClick={handleConfirmResetPassword}
+              className="btn-primary"
+              disabled={loadingReset || resetPasswordCode.length !== 6}
+            >
+              {loadingReset ? 'Envoi…' : 'Confirmer et réinitialiser (1234567890)'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setResetPasswordStep(null); setResetPasswordCode(''); setError(null); }}
+              className="btn-secondary"
+              disabled={loadingReset}
+            >
+              Annuler
+            </button>
+          </div>
+        )}
       </div>
 
       <hr className="border-slate-700" />

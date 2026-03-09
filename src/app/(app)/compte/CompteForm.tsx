@@ -18,6 +18,7 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
   const cardClass = isSiavi ? '' : 'card'; // SIAVI n'utilise pas .card car parent a déjà le style
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const [currentPassword, setCurrentPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -35,20 +36,35 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessage(null);
+    if (!currentPassword.trim()) {
+      setMessage({ type: 'err', text: 'Saisissez votre mot de passe actuel.' });
+      return;
+    }
     if (password.length < 8) {
-      setMessage({ type: 'err', text: 'Le mot de passe doit faire au moins 8 caractères.' });
+      setMessage({ type: 'err', text: 'Le nouveau mot de passe doit faire au moins 8 caractères.' });
       return;
     }
     if (password !== confirm) {
-      setMessage({ type: 'err', text: 'Les deux mots de passe ne correspondent pas.' });
+      setMessage({ type: 'err', text: 'Les deux nouveaux mots de passe ne correspondent pas.' });
       return;
     }
     setLoading(true);
     try {
       const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.email) {
+        setMessage({ type: 'err', text: 'Session invalide. Reconnectez-vous.' });
+        return;
+      }
+      const { error: signInErr } = await supabase.auth.signInWithPassword({ email: user.email, password: currentPassword });
+      if (signInErr) {
+        setMessage({ type: 'err', text: 'Mot de passe actuel incorrect.' });
+        return;
+      }
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
       setMessage({ type: 'ok', text: 'Mot de passe mis à jour.' });
+      setCurrentPassword('');
       setPassword('');
       setConfirm('');
     } catch (err: unknown) {
@@ -139,7 +155,19 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
       )}
       <div className={cardClass}>
       <h2 className={`text-lg font-bold mb-4 ${isSiavi ? 'text-slate-800' : textTitle}`}>Changer le mot de passe</h2>
+      <p className={`${textMuted} text-sm mb-3`}>Saisissez votre mot de passe actuel, puis le nouveau mot de passe deux fois.</p>
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className={labelClass}>Mot de passe actuel</label>
+          <input
+            type="password"
+            className={inputClass}
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+          />
+        </div>
         <div>
           <label className={labelClass}>Nouveau mot de passe</label>
           <input
@@ -153,7 +181,7 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
           />
         </div>
         <div>
-          <label className={labelClass}>Confirmer</label>
+          <label className={labelClass}>Confirmer le nouveau mot de passe</label>
           <input
             type="password"
             className={inputClass}

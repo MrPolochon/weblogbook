@@ -6,6 +6,17 @@ import { sendLoginCodeEmail } from '@/lib/email';
 const CODE_EXPIRY_MINUTES = 10;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function getClientIp(request: NextRequest): string | null {
+  const forwarded = request.headers.get('x-forwarded-for');
+  if (forwarded) {
+    const first = forwarded.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
+  return null;
+}
+
 function generateSixDigitCode(): string {
   const n = Math.floor(Math.random() * 1_000_000);
   return n.toString().padStart(6, '0');
@@ -13,6 +24,8 @@ function generateSixDigitCode(): string {
 
 /**
  * Génère un code à 6 chiffres, le stocke en base et l'envoie par email.
+ * Envoi du code à l'adresse mail uniquement si l'IP actuelle est différente de
+ * l'IP enregistrée lors de la précédente connexion (sinon retourne skipCode: true).
  * - Si le profil a déjà un email : envoi du code à cet email.
  * - Si le profil n'a pas d'email : le body peut contenir { email }. On envoie le code à cet email
  *   et on stocke pending_email ; après vérification du code, l'email sera enregistré dans le profil.
@@ -26,6 +39,23 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const admin = createAdminClient();
+    const currentIp = getClientIp(req);
+    const { data: tracking } = await admin
+      .from('user_login_tracking')
+      .select('last_login_ip')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    const previousIp = tracking?.last_login_ip ?? null;
+
+    // Même IP que la précédente connexion : pas d'envoi de code par email
+    if (previousIp != null && currentIp != null && previousIp === currentIp) {
+      await admin.from('user_login_tracking').upsert(
+        { user_id: user.id, last_login_ip: currentIp, last_login_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      );
+      return NextResponse.json({ ok: true, skipCode: true });
+    }
+
     const { data: profile } = await admin
       .from('profiles')
       .select('email')

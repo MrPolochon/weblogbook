@@ -1,9 +1,10 @@
 import Link from 'next/link';
-import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap, Lock, Package } from 'lucide-react';
+import { Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark, Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap, Lock, Package, KeyRound } from 'lucide-react';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 const links = [
   { href: '/admin/securite', label: 'Sécurité (connexions et consultation des IP)', icon: Lock },
+  { href: '/admin/password-reset-requests', label: 'Demandes de réinitialisation de mot de passe', icon: KeyRound, countKey: 'passwordResetRequests' },
   { href: '/admin/plans-vol', label: 'Plans de vol non clôturés', icon: AlertTriangle, countKey: 'plansNonClotures' },
   { href: '/admin/vols', label: 'Vols en attente', icon: Clock, countKey: 'volsEnAttente' },
   { href: '/admin/militaire', label: 'Vols militaires', icon: Shield },
@@ -27,6 +28,8 @@ async function getAdminCounts(): Promise<Record<string, number>> {
   try {
     const admin = createAdminClient();
     const results = await Promise.allSettled([
+      // Demandes de réinitialisation MDP en attente
+      admin.from('password_reset_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
       // Vols en attente de validation
       admin.from('vols').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
       // Plans de vol non clôturés (exclut les strips manuels ATC)
@@ -34,9 +37,10 @@ async function getAdminCounts(): Promise<Record<string, number>> {
       // Réponses AeroSchool en attente d'examen
       admin.from('aeroschool_responses').select('*', { count: 'exact', head: true }).eq('status', 'submitted'),
     ]);
-    if (results[0].status === 'fulfilled') counts.volsEnAttente = results[0].value.count ?? 0;
-    if (results[1].status === 'fulfilled') counts.plansNonClotures = results[1].value.count ?? 0;
-    if (results[2].status === 'fulfilled') counts.aeroschoolResponses = results[2].value.count ?? 0;
+    if (results[0].status === 'fulfilled') counts.passwordResetRequests = results[0].value.count ?? 0;
+    if (results[1].status === 'fulfilled') counts.volsEnAttente = results[1].value.count ?? 0;
+    if (results[2].status === 'fulfilled') counts.plansNonClotures = results[2].value.count ?? 0;
+    if (results[3].status === 'fulfilled') counts.aeroschoolResponses = results[3].value.count ?? 0;
   } catch {
     // Tables may not exist yet
   }

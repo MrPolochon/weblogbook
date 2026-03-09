@@ -70,3 +70,68 @@ export async function sendSuperadminAccessCodeEmail(to: string, code: string): P
     return { ok: false, error: e instanceof Error ? e.message : 'Erreur envoi email' };
   }
 }
+
+/**
+ * Envoie le code de vérification quand un admin réinitialise le mot de passe d'un compte.
+ * Le code est envoyé à l'email enregistré sur le compte (profiles.email).
+ */
+export async function sendAdminPasswordResetCodeEmail(to: string, code: string): Promise<{ ok: boolean; error?: string }> {
+  if (!resend) {
+    console.warn('[email] RESEND_API_KEY non configuré');
+    return { ok: false, error: 'Envoi d\'email non configuré' };
+  }
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [to],
+      subject: 'Code de réinitialisation de mot de passe — PTFS Logbook',
+      html: `
+        <p>Bonjour,</p>
+        <p>Un administrateur a demandé la réinitialisation du mot de passe de votre compte. Voici le code de vérification :</p>
+        <p style="font-size:24px;font-weight:bold;letter-spacing:4px;margin:20px 0;">${code}</p>
+        <p>Ce code expire dans 10 minutes. Si vous n'êtes pas à l'origine de cette demande, contactez un administrateur.</p>
+        <p>— PTFS Logbook</p>
+      `,
+    });
+    if (error) {
+      console.error('[email] Resend error:', error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error('[email] sendAdminPasswordResetCodeEmail:', e);
+    return { ok: false, error: e instanceof Error ? e.message : 'Erreur envoi email' };
+  }
+}
+
+/**
+ * Envoie le lien de réinitialisation de mot de passe (mot de passe oublié).
+ */
+export async function sendPasswordResetLinkEmail(to: string, resetUrl: string): Promise<{ ok: boolean; error?: string }> {
+  if (!resend) {
+    console.warn('[email] RESEND_API_KEY non configuré');
+    return { ok: false, error: 'Envoi d\'email non configuré' };
+  }
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: [to],
+      subject: 'Réinitialisation de votre mot de passe — PTFS Logbook',
+      html: `
+        <p>Bonjour,</p>
+        <p>Vous avez demandé la réinitialisation de votre mot de passe. Cliquez sur le lien ci-dessous pour en choisir un nouveau :</p>
+        <p><a href="${resetUrl}" style="color:#0ea5e9;">${resetUrl}</a></p>
+        <p>Ce lien expire dans 1 heure. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+        <p>— PTFS Logbook</p>
+      `,
+    });
+    if (error) {
+      console.error('[email] Resend error:', error);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error('[email] sendPasswordResetLinkEmail:', e);
+    return { ok: false, error: e instanceof Error ? e.message : 'Erreur envoi email' };
+  }
+}

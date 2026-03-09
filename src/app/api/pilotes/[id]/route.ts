@@ -16,7 +16,7 @@ export async function PATCH(
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, armee: armeeBody, atc: atcBody, atc_grade_id: atcGradeIdBody, role: roleBody, ifsa: ifsaBody, siavi: siaviBody, superadmin_code: superadminCodeBody } = body;
+    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, verification_code: verificationCodeBody, armee: armeeBody, atc: atcBody, atc_grade_id: atcGradeIdBody, role: roleBody, ifsa: ifsaBody, siavi: siaviBody, superadmin_code: superadminCodeBody } = body;
 
     const updates: Record<string, unknown> = {};
     if (typeof heures_initiales_minutes === 'number' && heures_initiales_minutes >= 0) {
@@ -115,6 +115,27 @@ export async function PATCH(
     }
 
     if (reset_password === true) {
+      const code = typeof verificationCodeBody === 'string' ? verificationCodeBody.trim().replace(/\s/g, '') : '';
+      if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+        return NextResponse.json(
+          { error: 'Un code de vérification à 6 chiffres est requis. Demandez l\'envoi du code par email (envoyé à l\'adresse du compte).' },
+          { status: 400 }
+        );
+      }
+      const { data: codeRow } = await admin
+        .from('admin_password_reset_codes')
+        .select('user_id')
+        .eq('user_id', id)
+        .eq('code', code)
+        .gt('expires_at', new Date().toISOString())
+        .single();
+      if (!codeRow) {
+        return NextResponse.json(
+          { error: 'Code incorrect ou expiré. Demandez un nouveau code par email.' },
+          { status: 400 }
+        );
+      }
+      await admin.from('admin_password_reset_codes').delete().eq('user_id', id);
       const { error: pwdErr } = await admin.auth.admin.updateUserById(id, { password: '1234567890' });
       if (pwdErr) return NextResponse.json({ error: pwdErr.message || 'Erreur réinitialisation MDP' }, { status: 400 });
     }

@@ -142,7 +142,7 @@ function LoginPageFallback() {
   );
 }
 
-type LoginStep = 'form' | 'email' | 'code';
+type LoginStep = 'form' | 'email' | 'code' | 'forgot' | 'reset';
 
 function LoginPageContent() {
   const router = useRouter();
@@ -155,6 +155,7 @@ function LoginPageContent() {
   const showAdminOnly = messageParam === 'admin_only';
   const showInactivity = messageParam === 'inactivity';
   const showSecurityLogout = messageParam === 'security_logout';
+  const showPasswordReset = messageParam === 'password_reset';
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [identifiant, setIdentifiant] = useState('');
@@ -166,6 +167,11 @@ function LoginPageContent() {
   const [code, setCode] = useState('');
   const [redirectTo, setRedirectTo] = useState<string>('/logbook');
   const [loginAdminOnly, setLoginAdminOnly] = useState(false);
+  const [forgotIdentifiantOrEmail, setForgotIdentifiantOrEmail] = useState('');
+  const [forgotMessage, setForgotMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [resetToken, setResetToken] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -197,12 +203,26 @@ function LoginPageContent() {
       fetch('/api/auth/send-login-code', { method: 'POST', credentials: 'include' })
         .then(async (res) => {
           const d = await res.json().catch(() => ({}));
+          if (res.ok && d.skipCode) {
+            clearPendingVerificationCookie();
+            router.replace(redirectTo);
+            startTransition(() => router.refresh());
+            return;
+          }
           if (d.emailMasked) setEmailMasked(d.emailMasked);
           if (res.status === 400) setStep('email');
         })
         .catch(() => setStep('email'));
     }
-  }, [loading, searchParams, step]);
+  }, [loading, searchParams, step, redirectTo, router]);
+
+  useEffect(() => {
+    const reset = searchParams.get('reset');
+    if (reset && step === 'form') {
+      setResetToken(reset);
+      setStep('reset');
+    }
+  }, [searchParams, step]);
 
   async function doRedirect() {
     clearPendingVerificationCookie();
@@ -257,6 +277,10 @@ function LoginPageContent() {
       setPendingVerificationCookie();
       const codeRes = await fetch('/api/auth/send-login-code', { method: 'POST', credentials: 'include' });
       const codeData = await codeRes.json().catch(() => ({}));
+      if (codeRes.ok && codeData.skipCode) {
+        await doRedirect();
+        return;
+      }
       if (codeRes.status === 400) {
         setStep('email');
         setError(null);
@@ -286,6 +310,10 @@ function LoginPageContent() {
         credentials: 'include',
       });
       const data = await res.json().catch(() => ({}));
+      if (res.ok && data.skipCode) {
+        await doRedirect();
+        return;
+      }
       if (!res.ok) throw new Error(data.error || 'Impossible d\'envoyer le code.');
       setEmailMasked(data.emailMasked || 'votre adresse');
       setStep('code');
@@ -330,6 +358,10 @@ function LoginPageContent() {
         credentials: 'include',
       });
       const data = await res.json().catch(() => ({}));
+      if (res.ok && data.skipCode) {
+        await doRedirect();
+        return;
+      }
       if (res.ok && data.emailMasked) setEmailMasked(data.emailMasked);
       if (!res.ok) setError(data.error || 'Erreur lors de l\'envoi.');
     } catch {
@@ -448,6 +480,11 @@ function LoginPageContent() {
             <p className="text-red-200 font-medium">Déconnexion de sécurité (code d&apos;approbation incorrect). Reconnectez-vous.</p>
           </div>
         )}
+        {showPasswordReset && step === 'form' && (
+          <div className="mb-4 p-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center gap-3 animate-init animate-reveal-blur">
+            <p className="text-emerald-200 font-medium">Mot de passe réinitialisé. Connectez-vous avec votre nouveau mot de passe.</p>
+          </div>
+        )}
 
         {/* Formulaire : identifiant / mot de passe */}
         {step === 'form' && (
@@ -507,6 +544,158 @@ function LoginPageContent() {
                     <span className="ml-2">→</span>
                   </>
                 )}
+              </button>
+              <p className="text-center mt-3">
+                <button
+                  type="button"
+                  onClick={() => { setStep('forgot'); setForgotMessage(null); setForgotIdentifiantOrEmail(''); }}
+                  className="text-slate-400 hover:text-sky-400 text-sm underline"
+                >
+                  Mot de passe oublié ?
+                </button>
+              </p>
+            </form>
+          </div>
+        )}
+
+        {/* Étape : mot de passe oublié */}
+        {step === 'forgot' && (
+          <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur">
+            <h2 className="text-lg font-semibold text-slate-200 mb-2">Mot de passe oublié</h2>
+            <p className="text-slate-400 text-sm mb-4">Indiquez votre identifiant de connexion ou l&apos;adresse email enregistrée sur votre compte.</p>
+            <div className="space-y-4">
+              <input
+                type="text"
+                className="input bg-slate-900/50 w-full"
+                value={forgotIdentifiantOrEmail}
+                onChange={(e) => setForgotIdentifiantOrEmail(e.target.value)}
+                placeholder="Identifiant ou email"
+                autoComplete="username email"
+              />
+              {forgotMessage && (
+                <p className={forgotMessage.type === 'ok' ? 'text-emerald-400 text-sm' : 'text-red-400 text-sm'}>
+                  {forgotMessage.text}
+                </p>
+              )}
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setForgotMessage(null);
+                    setSubmitting(true);
+                    try {
+                      const res = await fetch('/api/auth/forgot-password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ identifiant_or_email: forgotIdentifiantOrEmail.trim(), action: 'send_link' }),
+                      });
+                      const data = await res.json().catch(() => ({}));
+                      if (res.ok) setForgotMessage({ type: 'ok', text: data.message || 'Email envoyé.' });
+                      else setForgotMessage({ type: 'err', text: data.error || 'Erreur' });
+                    } catch {
+                      setForgotMessage({ type: 'err', text: 'Erreur réseau.' });
+                    } finally {
+                      setSubmitting(false);
+                    }
+                  }}
+                  className="btn-primary w-full"
+                  disabled={submitting || !forgotIdentifiantOrEmail.trim()}
+                >
+                  {submitting ? 'Envoi…' : 'Envoyer un lien de réinitialisation'}
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setForgotMessage(null);
+                    setSubmitting(true);
+                    try {
+                      const res = await fetch('/api/auth/forgot-password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ identifiant_or_email: forgotIdentifiantOrEmail.trim(), action: 'request_admin' }),
+                      });
+                      const data = await res.json().catch(() => ({}));
+                      if (res.ok) setForgotMessage({ type: 'ok', text: data.message || 'Demande envoyée.' });
+                      else setForgotMessage({ type: 'err', text: data.error || 'Erreur' });
+                    } catch {
+                      setForgotMessage({ type: 'err', text: 'Erreur réseau.' });
+                    } finally {
+                      setSubmitting(false);
+                    }
+                  }}
+                  className="btn-secondary w-full"
+                  disabled={submitting || !forgotIdentifiantOrEmail.trim()}
+                >
+                  Demander à un administrateur
+                </button>
+                <button type="button" onClick={() => { setStep('form'); setForgotMessage(null); }} className="text-slate-400 hover:text-slate-200 text-sm">
+                  ← Retour à la connexion
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Étape : réinitialisation avec token (lien reçu par email) */}
+        {step === 'reset' && (
+          <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur">
+            <h2 className="text-lg font-semibold text-slate-200 mb-2">Nouveau mot de passe</h2>
+            <p className="text-slate-400 text-sm mb-4">Choisissez un nouveau mot de passe (au moins 8 caractères).</p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (resetPassword.length < 8) { setError('Le mot de passe doit faire au moins 8 caractères.'); return; }
+                if (resetPassword !== resetConfirm) { setError('Les deux mots de passe ne correspondent pas.'); return; }
+                setError(null);
+                setSubmitting(true);
+                try {
+                  const res = await fetch('/api/auth/reset-password-with-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: resetToken, new_password: resetPassword }),
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok) throw new Error(data.error || 'Erreur');
+                  router.replace('/login?message=password_reset');
+                  startTransition(() => router.refresh());
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Erreur');
+                } finally {
+                  setSubmitting(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="label text-slate-200">Nouveau mot de passe</label>
+                <input
+                  type="password"
+                  className="input bg-slate-900/50 w-full"
+                  value={resetPassword}
+                  onChange={(e) => setResetPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+              </div>
+              <div>
+                <label className="label text-slate-200">Confirmer</label>
+                <input
+                  type="password"
+                  className="input bg-slate-900/50 w-full"
+                  value={resetConfirm}
+                  onChange={(e) => setResetConfirm(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+              </div>
+              {error && <p className="text-red-400 text-sm">{error}</p>}
+              <button type="submit" className="btn-primary w-full" disabled={submitting}>
+                {submitting ? 'Enregistrement…' : 'Enregistrer le mot de passe'}
+              </button>
+              <button type="button" onClick={() => router.replace('/login')} className="text-slate-400 hover:text-slate-200 text-sm w-full">
+                Retour à la connexion
               </button>
             </form>
           </div>
