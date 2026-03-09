@@ -25,7 +25,7 @@ export default async function AdminPasswordResetRequestsPage() {
     );
   }
 
-  const userIds = [...new Set((rows || []).map((r) => r.user_id).filter(Boolean))] as string[];
+  const userIds = Array.from(new Set((rows || []).map((r) => r.user_id).filter(Boolean))) as string[];
   let identifiants: Record<string, string> = {};
   if (userIds.length > 0) {
     const { data: profiles } = await admin.from('profiles').select('id, identifiant').in('id', userIds);

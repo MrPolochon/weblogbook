@@ -20,7 +20,7 @@ export async function GET() {
       .order('created_at', { ascending: false });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    const userIds = [...new Set((rows || []).map((r) => r.user_id).filter(Boolean))] as string[];
+    const userIds = Array.from(new Set((rows || []).map((r) => r.user_id).filter(Boolean))) as string[];
     let identifiants: Record<string, string> = {};
     if (userIds.length > 0) {
       const { data: profiles } = await admin.from('profiles').select('id, identifiant').in('id', userIds);
