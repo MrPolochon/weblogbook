@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { sendPasswordResetLinkEmail } from '@/lib/email';
 
-const TOKEN_EXPIRY_HOURS = 1;
+const TOKEN_EXPIRY_HOURS = 24;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function randomToken(): string {

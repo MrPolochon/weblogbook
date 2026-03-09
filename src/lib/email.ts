@@ -121,7 +121,7 @@ export async function sendPasswordResetLinkEmail(to: string, resetUrl: string): 
         <p>Bonjour,</p>
         <p>Vous avez demandé la réinitialisation de votre mot de passe. Cliquez sur le lien ci-dessous pour en choisir un nouveau :</p>
         <p><a href="${resetUrl}" style="color:#0ea5e9;">${resetUrl}</a></p>
-        <p>Ce lien expire dans 1 heure. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
+        <p>Ce lien expire dans 24 heures. Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.</p>
         <p>— PTFS Logbook</p>
       `,
     });

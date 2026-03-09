@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useEffect, useState, useMemo, useTransition } from 'react';
+import React, { Suspense, useEffect, useRef, useState, useMemo, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -172,6 +172,7 @@ function LoginPageContent() {
   const [resetToken, setResetToken] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirm, setResetConfirm] = useState('');
+  const resetSuccessRef = useRef(false);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -219,6 +220,7 @@ function LoginPageContent() {
   useEffect(() => {
     const reset = searchParams.get('reset');
     if (reset && step === 'form') {
+      resetSuccessRef.current = false;
       setResetToken(reset);
       setStep('reset');
     }
@@ -655,10 +657,19 @@ function LoginPageContent() {
                     body: JSON.stringify({ token: resetToken, new_password: resetPassword }),
                   });
                   const data = await res.json().catch(() => ({}));
-                  if (!res.ok) throw new Error(data.error || 'Erreur');
-                  router.replace('/login?message=password_reset');
-                  startTransition(() => router.refresh());
+                  if (res.ok) {
+                    resetSuccessRef.current = true;
+                    router.replace('/login?message=password_reset');
+                    startTransition(() => router.refresh());
+                    return;
+                  }
+                  throw new Error(data.error || 'Erreur');
                 } catch (err) {
+                  if (resetSuccessRef.current) {
+                    router.replace('/login?message=password_reset');
+                    startTransition(() => router.refresh());
+                    return;
+                  }
                   setError(err instanceof Error ? err.message : 'Erreur');
                 } finally {
                   setSubmitting(false);
@@ -690,11 +701,30 @@ function LoginPageContent() {
                   autoComplete="new-password"
                 />
               </div>
-              {error && <p className="text-red-400 text-sm">{error}</p>}
+              {error && (
+                <div className="space-y-1">
+                  <p className="text-red-400 text-sm">{error}</p>
+                  {(error.includes('invalide') || error.includes('expiré')) && (
+                    <p className="text-slate-400 text-sm">
+                      <button
+                        type="button"
+                        onClick={() => { setStep('forgot'); setError(null); setResetPassword(''); setResetConfirm(''); }}
+                        className="text-sky-400 hover:underline"
+                      >
+                        Demander un nouveau lien par email
+                      </button>
+                    </p>
+                  )}
+                </div>
+              )}
               <button type="submit" className="btn-primary w-full" disabled={submitting}>
                 {submitting ? 'Enregistrement…' : 'Enregistrer le mot de passe'}
               </button>
-              <button type="button" onClick={() => router.replace('/login')} className="text-slate-400 hover:text-slate-200 text-sm w-full">
+              <button
+                type="button"
+                onClick={() => { setStep('form'); setError(null); setResetToken(''); setResetPassword(''); setResetConfirm(''); router.replace('/login'); }}
+                className="text-slate-400 hover:text-slate-200 text-sm w-full"
+              >
                 Retour à la connexion
               </button>
             </form>
