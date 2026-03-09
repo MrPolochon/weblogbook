@@ -1,4 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { formatDuree } from '@/lib/utils';
 import { formatDateUTC, formatDateMediumUTC } from '@/lib/date-utils';
@@ -8,22 +10,53 @@ import PilotesActions from './PilotesActions';
 import GenerateAllCardsButton from './GenerateAllCardsButton';
 import RefreshAllCardsButton from './RefreshAllCardsButton';
 
+const UN_MOIS_MS = 30 * 24 * 60 * 60 * 1000;
+
+function isInactif1Mois(createdAt: string, lastLoginAt: string | null): boolean {
+  const now = Date.now();
+  const seuil = now - UN_MOIS_MS;
+  if (lastLoginAt) return new Date(lastLoginAt).getTime() < seuil;
+  return new Date(createdAt).getTime() < seuil;
+}
+
 export default async function AdminPilotesPage() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  if (profile?.role !== 'admin') redirect('/admin');
 
-  const { data: profiles } = await supabase
+  const admin = createAdminClient();
+  const { data: profiles } = await admin
     .from('profiles')
     .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc, ifsa')
     .order('identifiant');
 
-  const pilotes = (profiles || []).filter((p) => p.role !== 'admin');
-  const admins = (profiles || []).filter((p) => p.role === 'admin');
+  let lastLoginByUser: Record<string, string | null> = {};
+  try {
+    const { data: tracking } = await admin.from('user_login_tracking').select('user_id, last_login_at');
+    if (tracking) lastLoginByUser = Object.fromEntries(tracking.map((t) => [t.user_id, t.last_login_at]));
+  } catch {
+    // Table peut ne pas exister
+  }
+
+  const withInactif = (profiles || []).map((p) => ({
+    ...p,
+    last_login_at: lastLoginByUser[p.id] ?? null,
+    inactif1Mois: isInactif1Mois(p.created_at, lastLoginByUser[p.id] ?? null),
+  }));
+
+  const pilotes = withInactif.filter((p) => p.role !== 'admin');
+  const admins = withInactif.filter((p) => p.role === 'admin');
 
   const renderRow = (p: (typeof pilotes)[number] | (typeof admins)[number], isAdminRole: boolean) => {
     const blocked = p.blocked_until ? new Date(p.blocked_until) > new Date() : false;
     const sansEspacePilote = p.role === 'atc';
     return (
-      <tr key={p.id} className="border-b border-slate-700/50">
+      <tr
+        key={p.id}
+        className={`border-b border-slate-700/50 ${p.inactif1Mois ? 'bg-red-500/15' : ''}`}
+      >
         <td className="py-3 pr-4 font-medium text-slate-200">{p.identifiant}</td>
         <td className="py-3 pr-4 text-slate-300">{p.role === 'admin' ? 'admin' : p.role === 'atc' ? 'atc' : 'pilote'}</td>
         <td className="py-3 pr-4 text-slate-300">{p.armee ? 'Oui' : '—'}</td>
