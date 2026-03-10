@@ -79,15 +79,8 @@ export async function PATCH(
       }, { status: 400 });
     }
 
-    // Débiter le compte avec vérification atomique
-    const { data: debitResult, error: debitError } = await admin
-      .from('felitz_comptes')
-      .update({ solde: compteCompagnie.solde - montantEffectif })
-      .eq('id', compteCompagnie.id)
-      .gte('solde', montantEffectif)
-      .select('id');
-
-    if (debitError || !debitResult || debitResult.length === 0) {
+    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: montantEffectif });
+    if (!debitOk) {
       return NextResponse.json({ error: 'Solde insuffisant ou compte modifié' }, { status: 400 });
     }
 
@@ -107,10 +100,7 @@ export async function PATCH(
       .eq('id', pret.id);
 
     if (updateError) {
-      // Rollback: rembourser le compte
-      await admin.from('felitz_comptes')
-        .update({ solde: compteCompagnie.solde })
-        .eq('id', compteCompagnie.id);
+      await admin.rpc('crediter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: montantEffectif });
       return NextResponse.json({ error: 'Erreur lors de la mise à jour du prêt' }, { status: 500 });
     }
 
@@ -296,13 +286,10 @@ export async function POST(
     }
 
     // Créditer le montant emprunté
-    const { error: creditError } = await admin
-      .from('felitz_comptes')
-      .update({ solde: compteCompagnie.solde + optionPret.montant })
-      .eq('id', compteCompagnie.id);
+    const { data: creditOk, error: creditError } = await admin
+      .rpc('crediter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: optionPret.montant });
 
-    if (creditError) {
-      // Rollback
+    if (creditError || !creditOk) {
       await admin.from('prets_bancaires').delete().eq('id', nouveauPret.id);
       return NextResponse.json({ error: 'Erreur lors du crédit' }, { status: 500 });
     }

@@ -16,7 +16,7 @@ const links = [
   { href: '/admin/avions', label: 'Gestion des avions', icon: MapPin },
   { href: '/admin/taxes', label: 'Taxes aéroportuaires', icon: Receipt },
   { href: '/admin/inventaire', label: 'Inventaires (tous les pilotes)', icon: Package },
-  { href: '/admin/hangar-market', label: 'Hangar Market', icon: Store },
+  { href: '/admin/hangar-market', label: 'Hangar Market', icon: Store, countKey: 'demandesRevente' },
   { href: '/admin/felitz-bank', label: 'Felitz Bank Admin', icon: Landmark },
   { href: '/admin/documents', label: 'Documents', icon: FileText },
   { href: '/admin/licences', label: 'Licences et qualifications', icon: Award },
@@ -32,8 +32,9 @@ async function getAdminCounts(): Promise<Record<string, number>> {
       admin.from('vols').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
       admin.from('plans_vol').select('*', { count: 'exact', head: true }).in('statut', ['depose', 'en_attente']).or('created_by_atc.is.null,created_by_atc.eq.false'),
       admin.from('aeroschool_responses').select('*', { count: 'exact', head: true }).eq('status', 'submitted'),
+      admin.from('hangar_market_reventes').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
     ]);
-    const keys: (keyof typeof counts)[] = ['passwordResetRequests', 'volsEnAttente', 'plansNonClotures', 'aeroschoolResponses'];
+    const keys: (keyof typeof counts)[] = ['passwordResetRequests', 'volsEnAttente', 'plansNonClotures', 'aeroschoolResponses', 'demandesRevente'];
     results.forEach((r, i) => {
       if (r.status === 'fulfilled' && r.value && !(r.value as { error?: unknown }).error) {
         counts[keys[i]] = (r.value as { count?: number | null }).count ?? 0;

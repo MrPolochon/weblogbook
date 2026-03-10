@@ -100,15 +100,9 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // Débiter le compte
-    const nouveauSolde = compte.solde - COUT_AFFRETER_TECHNICIENS;
-    const { error: debitErr } = await admin
-      .from('felitz_comptes')
-      .update({ solde: nouveauSolde })
-      .eq('id', compte.id);
-    
-    if (debitErr) {
-      return NextResponse.json({ error: 'Erreur lors du débit.' }, { status: 500 });
+    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compte.id, p_montant: COUT_AFFRETER_TECHNICIENS });
+    if (!debitOk) {
+      return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente).' }, { status: 400 });
     }
 
     // Créer une transaction
@@ -133,8 +127,7 @@ export async function POST(
       .eq('id', id);
 
     if (avionErr) {
-      // Rollback : rembourser
-      await admin.from('felitz_comptes').update({ solde: compte.solde }).eq('id', compte.id);
+      await admin.rpc('crediter_compte_safe', { p_compte_id: compte.id, p_montant: COUT_AFFRETER_TECHNICIENS });
       return NextResponse.json({ error: 'Erreur lors de la mise en maintenance.' }, { status: 500 });
     }
 

@@ -420,10 +420,7 @@ export async function envoyerChequesVol(
       .single();
 
     if (compteSolde) {
-      const nouveauSolde = (compteSolde.solde || 0) - taxesTotales;
-      await admin.from('felitz_comptes')
-        .update({ solde: nouveauSolde })
-        .eq('id', compteCompagnie.id);
+      await admin.rpc('debiter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: taxesTotales });
 
       await admin.from('felitz_transactions').insert({
         compte_id: compteCompagnie.id,

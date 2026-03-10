@@ -69,13 +69,8 @@ export async function POST(
       return NextResponse.json({ error: 'Compte de la compagnie introuvable' }, { status: 404 });
     }
 
-    // Créditer le compte de la compagnie
-    const { error: creditError } = await admin
-      .from('felitz_comptes')
-      .update({ solde: compteCompagnie.solde + montant })
-      .eq('id', compteCompagnie.id);
-
-    if (creditError) {
+    const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: montant });
+    if (!creditOk) {
       return NextResponse.json({ error: 'Erreur lors du crédit' }, { status: 500 });
     }
 
@@ -94,11 +89,7 @@ export async function POST(
       .eq('id', id);
 
     if (deleteError) {
-      // Rollback du crédit si échec de suppression
-      await admin
-        .from('felitz_comptes')
-        .update({ solde: compteCompagnie.solde })
-        .eq('id', compteCompagnie.id);
+      await admin.rpc('debiter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: montant });
       return NextResponse.json({ error: 'Erreur lors de la suppression de l\'avion' }, { status: 500 });
     }
 

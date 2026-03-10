@@ -141,30 +141,10 @@ export async function PATCH(
         return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
       }
 
-      // Créditer le compte avec vérification atomique
-      const { data: creditResult, error: creditError } = await admin.from('felitz_comptes')
-        .update({ solde: compteData.solde + message.cheque_montant })
-        .eq('id', compteId)
-        .eq('solde', compteData.solde) // Vérifier que le solde n'a pas changé
-        .select('id');
-      
-      // Si le solde a changé, on récupère le nouveau et on réessaye une fois
-      if (!creditError && (!creditResult || creditResult.length === 0)) {
-        const { data: compteRetry } = await admin.from('felitz_comptes')
-          .select('solde')
-          .eq('id', compteId)
-          .single();
-        
-        if (compteRetry) {
-          const { error: retryError } = await admin.from('felitz_comptes')
-            .update({ solde: compteRetry.solde + message.cheque_montant })
-            .eq('id', compteId);
-          
-          if (retryError) {
-            await admin.from('messages').update({ cheque_encaisse: false, cheque_encaisse_at: null }).eq('id', id);
-            return NextResponse.json({ error: 'Erreur lors du crédit' }, { status: 500 });
-          }
-        }
+      const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: message.cheque_montant });
+      if (!creditOk) {
+        await admin.from('messages').update({ cheque_encaisse: false, cheque_encaisse_at: null }).eq('id', id);
+        return NextResponse.json({ error: 'Erreur lors du crédit' }, { status: 500 });
       }
 
       if (creditError) {

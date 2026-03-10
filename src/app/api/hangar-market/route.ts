@@ -368,11 +368,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Compte vendeur introuvable' }, { status: 400 });
       }
 
-      // Débiter l'acheteur
-      await admin.rpc('debiter_compte', { p_compte_id: compteAcheteurId, p_montant: prixTotal });
+      const { data: debitOk, error: debitErr } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteAcheteurId, p_montant: prixTotal });
+      if (debitErr || !debitOk) {
+        return NextResponse.json({ error: 'Solde insuffisant ou erreur de débit' }, { status: 400 });
+      }
 
-      // Créditer le vendeur (prix sans taxe)
-      await admin.rpc('crediter_compte', { p_compte_id: compteVendeurId, p_montant: annonce.prix });
+      const { error: creditErr } = await admin.rpc('crediter_compte_safe', { p_compte_id: compteVendeurId, p_montant: annonce.prix });
+      if (creditErr) {
+        await admin.rpc('crediter_compte_safe', { p_compte_id: compteAcheteurId, p_montant: prixTotal });
+        return NextResponse.json({ error: 'Erreur lors du crédit vendeur' }, { status: 500 });
+      }
 
       // Transactions
       const typesAvion = annonce.types_avion as { nom: string } | null;

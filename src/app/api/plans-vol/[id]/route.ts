@@ -173,6 +173,16 @@ export async function PATCH(
       if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui detient le plan ou un admin peut confirmer la cloture.' }, { status: 403 });
       if (plan.statut !== 'en_attente_cloture') return NextResponse.json({ error: 'Aucune demande de cloture en attente.' }, { status: 400 });
 
+      // Verrouillage atomique : passer le statut AVANT le paiement pour éviter les doubles clôtures
+      const { data: locked, error: lockErr } = await admin.from('plans_vol')
+        .update({ statut: 'cloture_en_cours' })
+        .eq('id', id)
+        .eq('statut', 'en_attente_cloture')
+        .select('id');
+      if (lockErr || !locked || locked.length === 0) {
+        return NextResponse.json({ error: 'Clôture déjà en cours ou terminée.' }, { status: 409 });
+      }
+
       const confirmationAt = new Date();
       const clotureResult = await finaliserCloturePlan(admin, plan, confirmationAt);
       if (!clotureResult.success) {
@@ -527,7 +537,7 @@ export async function PATCH(
         if (compteComp) {
           compteId = compteComp.id;
           compteDebiteVban = compteComp.vban;
-          await admin.from('felitz_comptes').update({ solde: compteComp.solde - AMENDE }).eq('id', compteComp.id);
+          await admin.rpc('debiter_compte_safe', { p_compte_id: compteComp.id, p_montant: AMENDE });
           await admin.from('felitz_transactions').insert({ compte_id: compteComp.id, type: 'debit', montant: AMENDE, libelle: `Amende ${isOver24h ? 'annulation' : 'clôture'} forcée — Plan ${plan.numero_vol}` });
           amendeAppliquee = true;
         }
@@ -538,7 +548,7 @@ export async function PATCH(
         if (comptePerso) {
           compteId = comptePerso.id;
           compteDebiteVban = comptePerso.vban;
-          await admin.from('felitz_comptes').update({ solde: comptePerso.solde - AMENDE }).eq('id', comptePerso.id);
+          await admin.rpc('debiter_compte_safe', { p_compte_id: comptePerso.id, p_montant: AMENDE });
           await admin.from('felitz_transactions').insert({ compte_id: comptePerso.id, type: 'debit', montant: AMENDE, libelle: `Amende ${isOver24h ? 'annulation' : 'clôture'} forcée — Plan ${plan.numero_vol}` });
           amendeAppliquee = true;
         }

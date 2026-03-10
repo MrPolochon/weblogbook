@@ -98,30 +98,35 @@ export async function POST(req: NextRequest) {
     // Trouver le compte à débiter
     let compteADebiter = compte_id;
     
-    if (!compteADebiter) {
-      // Chercher le compte par défaut
+    if (compteADebiter) {
+      // Valider que le compte appartient bien à l'utilisateur ou à la compagnie ciblée
+      const { data: compteValid } = await admin.from('felitz_comptes')
+        .select('id, proprietaire_id, compagnie_id')
+        .eq('id', compteADebiter)
+        .single();
+      if (!compteValid) {
+        return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
+      }
+      const ownsCompte = compteValid.proprietaire_id === user.id
+        || (cibleCompagnie && compteValid.compagnie_id === cibleCompagnie.id);
+      if (!ownsCompte) {
+        return NextResponse.json({ error: 'Ce compte ne vous appartient pas' }, { status: 403 });
+      }
+    } else {
       if (cibleCompagnie) {
-        // Compte entreprise de la compagnie
         const { data: compteCompagnie } = await admin.from('felitz_comptes')
-          .select('id, solde')
+          .select('id')
           .eq('compagnie_id', cibleCompagnie.id)
           .eq('type', 'entreprise')
           .single();
-        
-        if (compteCompagnie) {
-          compteADebiter = compteCompagnie.id;
-        }
+        if (compteCompagnie) compteADebiter = compteCompagnie.id;
       } else {
-        // Compte personnel du pilote
         const { data: comptePerso } = await admin.from('felitz_comptes')
-          .select('id, solde')
+          .select('id')
           .eq('proprietaire_id', user.id)
           .eq('type', 'personnel')
           .single();
-        
-        if (comptePerso) {
-          compteADebiter = comptePerso.id;
-        }
+        if (comptePerso) compteADebiter = comptePerso.id;
       }
     }
 
@@ -129,24 +134,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Aucun compte trouvé pour le paiement' }, { status: 400 });
     }
 
-    // Vérifier le solde
-    const { data: compte } = await admin.from('felitz_comptes')
-      .select('id, solde')
-      .eq('id', compteADebiter)
-      .single();
-
-    if (!compte) {
-      return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
+    // Débit atomique
+    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteADebiter, p_montant: montant });
+    if (!debitOk) {
+      return NextResponse.json({ error: 'Solde insuffisant' }, { status: 400 });
     }
-
-    if (compte.solde < montant) {
-      return NextResponse.json({ error: `Solde insuffisant. Vous avez ${compte.solde} F$ mais l'amende est de ${montant} F$` }, { status: 400 });
-    }
-
-    // Débiter le compte du payeur
-    await admin.from('felitz_comptes')
-      .update({ solde: compte.solde - montant })
-      .eq('id', compteADebiter);
 
     // Créer la transaction de débit
     await admin.from('felitz_transactions').insert({
@@ -164,10 +156,7 @@ export async function POST(req: NextRequest) {
         .single();
       
       if (compteDestination) {
-        // Créditer le compte IFSA
-        await admin.from('felitz_comptes')
-          .update({ solde: compteDestination.solde + montant })
-          .eq('id', compteDestination.id);
+        await admin.rpc('crediter_compte_safe', { p_compte_id: compteDestination.id, p_montant: montant });
 
         // Créer la transaction de crédit
         await admin.from('felitz_transactions').insert({

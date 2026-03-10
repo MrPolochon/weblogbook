@@ -161,10 +161,10 @@ export async function POST(request: Request) {
         }, { status: 400 });
       }
 
-      // Débiter
-      await admin.from('felitz_comptes')
-        .update({ solde: compteFerry.solde - ferryCoutTotal })
-        .eq('id', compteFerry.id);
+      const { data: ferryDebitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteFerry.id, p_montant: ferryCoutTotal });
+      if (!ferryDebitOk) {
+        return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente)' }, { status: 400 });
+      }
 
       // Transaction pour le coût de base
       await admin.from('felitz_transactions').insert({
@@ -250,9 +250,10 @@ export async function POST(request: Request) {
             if (compteLocataire.solde < totalDue) {
               return NextResponse.json({ error: 'Solde insuffisant pour payer le loyer journalier.' }, { status: 400 });
             }
-            await admin.from('felitz_comptes')
-              .update({ solde: compteLocataire.solde - totalDue })
-              .eq('id', compteLocataire.id);
+            const { data: loyerDebitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteLocataire.id, p_montant: totalDue });
+            if (!loyerDebitOk) {
+              return NextResponse.json({ error: 'Solde insuffisant pour le loyer (transaction concurrente)' }, { status: 400 });
+            }
             await admin.from('felitz_transactions').insert({
               compte_id: compteLocataire.id,
               type: 'debit',

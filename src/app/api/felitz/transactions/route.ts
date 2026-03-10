@@ -86,24 +86,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
     }
 
-    // Calculer nouveau solde
-    const newSolde = type === 'credit' 
-      ? compte.solde + montant 
-      : compte.solde - montant;
-
-    if (newSolde < 0) {
-      return NextResponse.json({ error: 'Solde insuffisant pour ce débit' }, { status: 400 });
-    }
-
-    // Mettre à jour le solde avec vérification atomique (optimistic locking)
-    const { data: updateResult, error: updateError } = await admin.from('felitz_comptes')
-      .update({ solde: newSolde })
-      .eq('id', compte_id)
-      .eq('solde', compte.solde) // Vérifier que le solde n'a pas changé
-      .select('id');
-
-    if (updateError || !updateResult || updateResult.length === 0) {
-      return NextResponse.json({ error: 'Le solde a été modifié. Réessayez.' }, { status: 409 });
+    if (type === 'debit') {
+      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compte_id, p_montant: montant });
+      if (!debitOk) {
+        return NextResponse.json({ error: 'Solde insuffisant pour ce débit' }, { status: 400 });
+      }
+    } else {
+      const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: compte_id, p_montant: montant });
+      if (!creditOk) {
+        return NextResponse.json({ error: 'Erreur lors du crédit' }, { status: 500 });
+      }
     }
 
     // Créer la transaction avec le nom de l'admin

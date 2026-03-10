@@ -8,20 +8,18 @@ import { finaliserCloturePlan } from '@/lib/plans-vol/closure';
  */
 export async function DELETE(
   request: Request,
-  { params }: { params: { user_id: string } }
+  { params }: { params: Promise<{ user_id: string }> }
 ) {
   try {
+    const { user_id: targetUserId } = await params;
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    // Vérifier que l'utilisateur est admin
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     if (profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Accès admin requis.' }, { status: 403 });
     }
-
-    const targetUserId = params.user_id;
     if (!targetUserId) {
       return NextResponse.json({ error: 'User ID requis.' }, { status: 400 });
     }

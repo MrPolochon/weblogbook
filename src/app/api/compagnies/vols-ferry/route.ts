@@ -266,16 +266,10 @@ export async function POST(request: Request) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    // Débiter le compte
-    const nouveauSolde = compte.solde - coutTotal;
-    const { error: debitErr } = await admin
-      .from('felitz_comptes')
-      .update({ solde: nouveauSolde })
-      .eq('id', compte.id);
-    
-    if (debitErr) {
+    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compte.id, p_montant: coutTotal });
+    if (!debitOk) {
       await admin.from('vols_ferry').delete().eq('id', vol.id);
-      return NextResponse.json({ error: 'Erreur lors du débit.' }, { status: 500 });
+      return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente).' }, { status: 400 });
     }
 
     // Créer une transaction pour le vol ferry

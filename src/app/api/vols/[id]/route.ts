@@ -66,9 +66,7 @@ export async function PATCH(
           return NextResponse.json({ error: 'Compte militaire introuvable (mission non payée).' }, { status: 400 });
         }
 
-        await adminClient.from('felitz_comptes')
-          .update({ solde: compteMilitaire.solde + finalReward })
-          .eq('id', compteMilitaire.id);
+        await adminClient.rpc('crediter_compte_safe', { p_compte_id: compteMilitaire.id, p_montant: finalReward });
 
         await adminClient.from('felitz_transactions').insert({
           compte_id: compteMilitaire.id,

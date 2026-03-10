@@ -82,10 +82,10 @@ export async function POST(req: NextRequest) {
 
       compteId = compteMilitaire.id;
 
-      // Débiter
-      await admin.from('felitz_comptes')
-        .update({ solde: soldeMilitaire - avion.prix })
-        .eq('id', compteId);
+      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
+      if (!debitOk) {
+        return NextResponse.json({ error: 'Solde militaire insuffisant (transaction concurrente)' }, { status: 400 });
+      }
 
       // Ajouter à l'inventaire de l'armée
       await admin.from('armee_avions').insert({
@@ -184,10 +184,10 @@ export async function POST(req: NextRequest) {
       compteId = compteEntreprise.id;
       compagnieNom = compagnie.nom;
 
-      // Débiter
-      await admin.from('felitz_comptes')
-        .update({ solde: solde - avion.prix })
-        .eq('id', compteId);
+      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
+      if (!debitOk) {
+        return NextResponse.json({ error: 'Solde entreprise insuffisant (transaction concurrente)' }, { status: 400 });
+      }
 
       // Générer une immatriculation unique
       const { data: immatData } = await admin.rpc('generer_immatriculation', { prefixe: 'F-' });
@@ -243,10 +243,10 @@ export async function POST(req: NextRequest) {
 
       compteId = comptePerso.id;
 
-      // Débiter
-      await admin.from('felitz_comptes')
-        .update({ solde: soldePerso - avion.prix })
-        .eq('id', compteId);
+      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
+      if (!debitOk) {
+        return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente)' }, { status: 400 });
+      }
 
       // Ajouter à l'inventaire personnel
       await admin.from('inventaire_avions').insert({

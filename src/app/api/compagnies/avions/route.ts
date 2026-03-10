@@ -4,6 +4,10 @@ import { NextResponse } from 'next/server';
 
 export async function GET(request: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
     const { searchParams } = new URL(request.url);
     const compagnie_id = searchParams.get('compagnie_id');
     if (!compagnie_id) return NextResponse.json({ error: 'compagnie_id requis' }, { status: 400 });

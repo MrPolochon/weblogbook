@@ -126,6 +126,18 @@ export async function GET(
       return NextResponse.json({ error: 'Plan de vol non trouvé' }, { status: 404 });
     }
 
+    // Seul le pilote du vol ou un ATC en service peut lire le transpondeur
+    if (plan.pilote_id !== user.id) {
+      const { data: atcSession } = await admin.from('atc_sessions')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      const { data: profile } = await (await createClient()).from('profiles').select('role').eq('id', user.id).single();
+      if (!atcSession && profile?.role !== 'admin') {
+        return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+      }
+    }
+
     return NextResponse.json({
       code_transpondeur: plan.code_transpondeur,
       mode_transpondeur: plan.mode_transpondeur,

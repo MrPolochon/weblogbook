@@ -23,6 +23,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     'actif_codeshare', 'actif_compte_alliance', 'actif_taxes_alliance',
     'codeshare_pourcent', 'taxe_alliance_pourcent',
   ];
+  // Validation des pourcentages
+  if (body.codeshare_pourcent !== undefined) {
+    const v = Number(body.codeshare_pourcent);
+    if (!Number.isFinite(v) || v < 0 || v > 100) {
+      return NextResponse.json({ error: 'codeshare_pourcent doit être entre 0 et 100' }, { status: 400 });
+    }
+  }
+  if (body.taxe_alliance_pourcent !== undefined) {
+    const v = Number(body.taxe_alliance_pourcent);
+    if (!Number.isFinite(v) || v < 0 || v > 100) {
+      return NextResponse.json({ error: 'taxe_alliance_pourcent doit être entre 0 et 100' }, { status: 400 });
+    }
+  }
+
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const key of allowed) {
     if (body[key] !== undefined) updates[key] = body[key];

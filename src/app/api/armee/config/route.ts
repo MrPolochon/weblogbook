@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
-// GET - Récupérer la configuration de l'armée
+// GET - Récupérer la configuration de l'armée (admin ou PDG militaire uniquement)
 export async function GET() {
   try {
     const supabase = await createClient();
@@ -11,11 +11,20 @@ export async function GET() {
 
     const admin = createAdminClient();
 
-    // Récupérer le compte militaire
     const { data: compteMilitaire } = await admin.from('felitz_comptes')
       .select('*, profiles:proprietaire_id(id, identifiant)')
       .eq('type', 'militaire')
       .single();
+
+    if (!compteMilitaire) return NextResponse.json(null);
+
+    // Seuls l'admin et le PDG militaire peuvent voir les détails financiers
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const isAdmin = profile?.role === 'admin';
+    const isPdgMilitaire = compteMilitaire.proprietaire_id === user.id;
+    if (!isAdmin && !isPdgMilitaire) {
+      return NextResponse.json({ error: 'Accès réservé au PDG militaire ou aux administrateurs' }, { status: 403 });
+    }
 
     return NextResponse.json(compteMilitaire);
   } catch (e) {

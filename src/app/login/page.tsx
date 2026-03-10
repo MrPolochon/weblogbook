@@ -11,13 +11,13 @@ const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
 
 function setPendingVerificationCookie() {
   if (typeof document !== 'undefined') {
-    document.cookie = `${PENDING_VERIFICATION_COOKIE}=1; path=/; max-age=600`;
+    document.cookie = `${PENDING_VERIFICATION_COOKIE}=1; path=/; max-age=600; SameSite=Lax`;
   }
 }
 
 function clearPendingVerificationCookie() {
   if (typeof document !== 'undefined') {
-    document.cookie = `${PENDING_VERIFICATION_COOKIE}=; path=/; max-age=0`;
+    document.cookie = `${PENDING_VERIFICATION_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
   }
 }
 

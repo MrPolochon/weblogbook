@@ -58,6 +58,12 @@ export async function POST(req: NextRequest) {
     if (!destinataire_id || !titre || !contenu) {
       return NextResponse.json({ error: 'Destinataire, titre et contenu requis' }, { status: 400 });
     }
+    if (typeof titre !== 'string' || titre.length > 200) {
+      return NextResponse.json({ error: 'Le titre ne doit pas dépasser 200 caractères' }, { status: 400 });
+    }
+    if (typeof contenu !== 'string' || contenu.length > 10_000) {
+      return NextResponse.json({ error: 'Le contenu ne doit pas dépasser 10 000 caractères' }, { status: 400 });
+    }
 
     const admin = createAdminClient();
 

@@ -109,15 +109,9 @@ export async function POST(request: Request) {
         }, { status: 400 });
       }
 
-      // Débiter
-      const nouveauSolde = compte.solde - prix;
-      const { error: debitErr } = await admin
-        .from('felitz_comptes')
-        .update({ solde: nouveauSolde })
-        .eq('id', compte.id);
-      
-      if (debitErr) {
-        return NextResponse.json({ error: 'Erreur lors du débit.' }, { status: 500 });
+      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compte.id, p_montant: prix });
+      if (!debitOk) {
+        return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente).' }, { status: 400 });
       }
 
       // Transaction
@@ -242,10 +236,7 @@ export async function DELETE(request: Request) {
         .single();
 
       if (compte) {
-        const nouveauSolde = compte.solde - totalTaxes;
-        await admin.from('felitz_comptes')
-          .update({ solde: nouveauSolde })
-          .eq('id', compte.id);
+        await admin.rpc('debiter_compte_safe', { p_compte_id: compte.id, p_montant: totalTaxes });
 
         await admin.from('felitz_transactions').insert({
           compte_id: compte.id,

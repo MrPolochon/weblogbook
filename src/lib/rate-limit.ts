@@ -7,9 +7,9 @@ function cleanup() {
   const now = Date.now();
   if (now - lastCleanup < CLEANUP_INTERVAL) return;
   lastCleanup = now;
-  for (const [key, entry] of rateMap) {
+  rateMap.forEach((entry, key) => {
     if (entry.resetAt < now) rateMap.delete(key);
-  }
+  });
 }
 
 /**

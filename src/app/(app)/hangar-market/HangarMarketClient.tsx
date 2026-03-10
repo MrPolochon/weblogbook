@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { 
   Plus, Search, Plane, ShoppingCart, RefreshCw, Building2, User, 
-  Tag, X, AlertCircle, Check, Trash2
+  Tag, X, AlertCircle, Check, Trash2, DollarSign, Send
 } from 'lucide-react';
 
 interface Compagnie {
@@ -105,6 +105,13 @@ export default function HangarMarketClient({
   const [showAchatModal, setShowAchatModal] = useState(false);
   const [selectedAnnonce, setSelectedAnnonce] = useState<Annonce | null>(null);
   const [acheterPour, setAcheterPour] = useState<string | null>(null);
+
+  // Modal revente admin
+  const [showReventeModal, setShowReventeModal] = useState(false);
+  const [reventeType, setReventeType] = useState<'personnel' | 'flotte'>('personnel');
+  const [reventeAvionId, setReventeAvionId] = useState('');
+  const [reventePourcentage, setReventePourcentage] = useState('50');
+  const [reventeRaison, setReventeRaison] = useState('');
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -212,6 +219,56 @@ export default function HangarMarketClient({
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleRevente() {
+    setError('');
+    setLoading(true);
+
+    try {
+      const pct = parseInt(reventePourcentage);
+      const isDemande = pct > 50;
+      const bodyData: Record<string, unknown> = {
+        action: isDemande ? 'demande_revente' : 'revente_directe',
+        pourcentage: pct,
+      };
+      if (reventeType === 'flotte') {
+        bodyData.compagnie_avion_id = reventeAvionId;
+      } else {
+        bodyData.inventaire_avion_id = reventeAvionId;
+      }
+      if (isDemande) {
+        bodyData.raison = reventeRaison;
+      }
+
+      const res = await fetch('/api/hangar-market/revente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyData),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+
+      setSuccess(data.message || 'Opération réussie');
+      setShowReventeModal(false);
+      setReventeAvionId('');
+      setReventePourcentage('50');
+      setReventeRaison('');
+      startTransition(() => router.refresh());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function openReventeModal(type: 'personnel' | 'flotte', avionId?: string) {
+    setReventeType(type);
+    setReventeAvionId(avionId || '');
+    setReventePourcentage('50');
+    setReventeRaison('');
+    setShowReventeModal(true);
   }
 
   function resetVendreForm() {
@@ -418,6 +475,38 @@ export default function HangarMarketClient({
                 Vendre un avion de ma flotte
               </button>
             )}
+          </div>
+
+          {/* Revente rapide (50% du prix initial) */}
+          <div className="card border-emerald-500/30">
+            <h3 className="text-lg font-semibold text-slate-100 mb-2 flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-emerald-400" />
+              Revente rapide
+            </h3>
+            <p className="text-sm text-slate-400 mb-4">
+              Revendez un avion instantanément pour <span className="text-emerald-400 font-bold">50%</span> de son prix d&apos;achat initial.
+              L&apos;avion sera détruit. Pour un pourcentage supérieur, faites une demande aux administrateurs.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {mesAvionsDisponibles.length > 0 && (
+                <button
+                  onClick={() => openReventeModal('personnel')}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  <DollarSign className="h-4 w-4" />
+                  Revendre un avion personnel
+                </button>
+              )}
+              {isPdg && flotteDisponible.length > 0 && (
+                <button
+                  onClick={() => openReventeModal('flotte')}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  <Building2 className="h-4 w-4" />
+                  Revendre un avion de flotte
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Avions de ma flotte (PDG) */}
@@ -637,6 +726,127 @@ export default function HangarMarketClient({
               </button>
               <button
                 onClick={() => { setShowVendreModal(false); resetVendreForm(); setError(''); }}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition-colors"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal Revente */}
+      {showReventeModal && mounted && createPortal(
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-emerald-400" />
+              Revente rapide
+            </h3>
+
+            <div className="space-y-4">
+              {/* Sélection de l'avion */}
+              <div>
+                <label className="text-sm text-slate-400 mb-1 block">Avion à revendre</label>
+                <select
+                  value={reventeAvionId}
+                  onChange={(e) => setReventeAvionId(e.target.value)}
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200"
+                >
+                  <option value="">Sélectionner un avion</option>
+                  {reventeType === 'personnel'
+                    ? mesAvionsDisponibles.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.nom_personnalise || item.types_avion?.nom} — Prix initial : {item.prixAchat.toLocaleString('fr-FR')} F$
+                        </option>
+                      ))
+                    : flotteDisponible.map((av) => (
+                        <option key={av.id} value={av.id}>
+                          {av.immatriculation} — {av.type_avion.nom} ({av.compagnie_nom})
+                        </option>
+                      ))}
+                </select>
+              </div>
+
+              {/* Pourcentage */}
+              <div>
+                <label className="text-sm text-slate-400 mb-1 block">Pourcentage du prix initial</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min="50"
+                    max="100"
+                    value={reventePourcentage}
+                    onChange={(e) => setReventePourcentage(e.target.value)}
+                    className="flex-1"
+                  />
+                  <span className="text-lg font-bold text-emerald-400 w-16 text-right">{reventePourcentage}%</span>
+                </div>
+                {parseInt(reventePourcentage) > 50 && (
+                  <p className="text-xs text-amber-400 mt-1">
+                    Au-dessus de 50%, une demande sera envoyée aux administrateurs pour approbation.
+                  </p>
+                )}
+              </div>
+
+              {/* Prix calculé */}
+              {reventeAvionId && (
+                <div className="p-3 bg-slate-900 rounded-lg">
+                  <p className="text-sm text-slate-400">Montant de la revente :</p>
+                  <p className="text-xl font-bold text-emerald-400">
+                    {(() => {
+                      const pct = parseInt(reventePourcentage);
+                      let prixInit = 0;
+                      if (reventeType === 'personnel') {
+                        const av = mesAvionsDisponibles.find(a => a.id === reventeAvionId);
+                        prixInit = av?.prixAchat || 0;
+                      }
+                      return prixInit > 0
+                        ? `${Math.round(prixInit * pct / 100).toLocaleString('fr-FR')} F$`
+                        : 'Calcul côté serveur';
+                    })()}
+                  </p>
+                </div>
+              )}
+
+              {/* Raison (obligatoire si > 50%) */}
+              {parseInt(reventePourcentage) > 50 && (
+                <div>
+                  <label className="text-sm text-slate-400 mb-1 block">
+                    Raison de la demande <span className="text-red-400">*</span>
+                  </label>
+                  <textarea
+                    placeholder="Expliquez pourquoi vous souhaitez un pourcentage supérieur (min. 10 caractères)..."
+                    value={reventeRaison}
+                    onChange={(e) => setReventeRaison(e.target.value)}
+                    rows={3}
+                    className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 resize-none"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">{reventeRaison.length}/1000 caractères</p>
+                </div>
+              )}
+            </div>
+
+            {error && <p className="text-sm text-red-400 mt-4">{error}</p>}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleRevente}
+                disabled={loading || !reventeAvionId || (parseInt(reventePourcentage) > 50 && reventeRaison.trim().length < 10)}
+                className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : parseInt(reventePourcentage) > 50 ? (
+                  <Send className="h-4 w-4" />
+                ) : (
+                  <DollarSign className="h-4 w-4" />
+                )}
+                {parseInt(reventePourcentage) > 50 ? 'Envoyer la demande' : 'Revendre maintenant'}
+              </button>
+              <button
+                onClick={() => { setShowReventeModal(false); setError(''); }}
                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition-colors"
               >
                 Annuler

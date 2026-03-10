@@ -45,6 +45,23 @@ export default async function AdminHangarMarketPage() {
     .order('vendu_at', { ascending: false })
     .limit(10);
 
+  // Demandes de revente
+  let demandesRevente: unknown[] = [];
+  try {
+    const { data } = await admin.from('hangar_market_reventes')
+      .select(`
+        *,
+        demandeur:demandeur_id(id, identifiant),
+        compagnie:compagnie_id(id, nom),
+        admin_profile:admin_id(id, identifiant)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    demandesRevente = data || [];
+  } catch {
+    // Table peut ne pas exister
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -56,7 +73,7 @@ export default async function AdminHangarMarketPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-4">
         <div className="card bg-slate-700/50">
           <p className="text-sm text-slate-400">Total annonces</p>
           <p className="text-2xl font-bold text-slate-100">{totalAnnonces || 0}</p>
@@ -69,11 +86,16 @@ export default async function AdminHangarMarketPage() {
           <p className="text-sm text-green-400">Vendues</p>
           <p className="text-2xl font-bold text-green-300">{annoncesVendues || 0}</p>
         </div>
+        <div className={`card ${(demandesRevente as { statut: string }[]).filter(d => d.statut === 'en_attente').length > 0 ? 'bg-orange-500/10 border-orange-500/30' : 'bg-slate-700/50'}`}>
+          <p className="text-sm text-orange-400">Demandes revente</p>
+          <p className="text-2xl font-bold text-orange-300">{(demandesRevente as { statut: string }[]).filter(d => d.statut === 'en_attente').length}</p>
+        </div>
       </div>
 
       <AdminHangarMarketClient 
         taxeActuelle={config?.taxe_vente_pourcent || 5}
         dernieresVentes={dernieresVentes || []}
+        demandesRevente={(demandesRevente || []) as never[]}
       />
     </div>
   );

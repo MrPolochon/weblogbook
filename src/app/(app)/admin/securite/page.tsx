@@ -1,19 +1,28 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
 import SecuriteClient from './SecuriteClient';
 import IpsClient from '../ips/IpsClient';
 
 export default async function AdminSecuritePage() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const adminClient = createAdminClient();
+  const { data: profile } = await adminClient.from('profiles').select('role').eq('id', user.id).single();
+  if (profile?.role !== 'admin') redirect('/');
+
   let loginAdminOnly = false;
   try {
-    const admin = createAdminClient();
-    const { data: config } = await admin
+    const { data: config } = await adminClient
       .from('site_config')
       .select('login_admin_only')
       .eq('id', 1)
       .single();
     loginAdminOnly = Boolean(config?.login_admin_only);
   } catch {
-    // Table site_config peut ne pas exister (exécuter supabase/add_site_config.sql)
+    // Table site_config peut ne pas exister
   }
 
   return (

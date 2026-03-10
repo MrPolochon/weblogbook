@@ -67,48 +67,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Virement vers le même compte impossible' }, { status: 400 });
     }
 
-    // Protection contre les race conditions: vérifier le solde au moment du débit
-    // En utilisant un UPDATE conditionnel
-    const { data: debitResult, error: debitError } = await admin.from('felitz_comptes')
-      .update({ solde: compteSource.solde - montant })
-      .eq('id', compte_source_id)
-      .gte('solde', montant) // S'assurer que le solde est toujours suffisant
-      .select('id, solde');
-
-    if (debitError || !debitResult || debitResult.length === 0) {
-      return NextResponse.json({ error: 'Solde insuffisant ou compte modifié' }, { status: 400 });
+    // Débit atomique via RPC (SET solde = solde - montant WHERE solde >= montant)
+    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compte_source_id, p_montant: montant });
+    if (!debitOk) {
+      return NextResponse.json({ error: 'Solde insuffisant' }, { status: 400 });
     }
 
-    // Créditer destination avec mise à jour atomique
-    // On récupère le solde actuel et on l'incrémente
-    const { data: destActuel } = await admin.from('felitz_comptes')
-      .select('solde')
-      .eq('id', compteDest.id)
-      .single();
-    
-    if (!destActuel) {
-      // Rollback
-      await admin.from('felitz_comptes')
-        .update({ solde: debitResult[0].solde + montant })
-        .eq('id', compte_source_id);
-      return NextResponse.json({ error: 'Compte destination introuvable' }, { status: 404 });
-    }
-
-    const { error: creditError } = await admin.from('felitz_comptes')
-      .update({ solde: destActuel.solde + montant })
-      .eq('id', compteDest.id)
-      .eq('solde', destActuel.solde); // Vérifier que le solde n'a pas changé
-
-    if (creditError) {
-      // Rollback: rembourser le compte source (ajouter le montant débité)
-      const { error: rollbackError } = await admin.from('felitz_comptes')
-        .update({ solde: debitResult[0].solde + montant })
-        .eq('id', compte_source_id);
-      
-      if (rollbackError) {
-        console.error('CRITIQUE: Échec du rollback virement:', rollbackError);
-        // À terme : notifier l'admin (email/webhook) en cas d'incohérence financière
-      }
+    // Crédit atomique via RPC (SET solde = solde + montant)
+    const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: compteDest.id, p_montant: montant });
+    if (!creditOk) {
+      // Rollback le débit
+      await admin.rpc('crediter_compte_safe', { p_compte_id: compte_source_id, p_montant: montant });
       return NextResponse.json({ error: 'Erreur lors du crédit. Virement annulé.' }, { status: 500 });
     }
 

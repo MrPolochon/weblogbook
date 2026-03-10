@@ -70,14 +70,9 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // Débiter le compte de la compagnie
-    const { error: debitError } = await admin
-      .from('felitz_comptes')
-      .update({ solde: compteCompagnie.solde - COUT_TENTATIVE_REPARATION })
-      .eq('id', compteCompagnie.id);
-
-    if (debitError) {
-      return NextResponse.json({ error: 'Erreur lors du paiement' }, { status: 500 });
+    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: COUT_TENTATIVE_REPARATION });
+    if (!debitOk) {
+      return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente)' }, { status: 400 });
     }
 
     // Enregistrer la transaction
