@@ -567,31 +567,45 @@ function FinancesTab({ detail, isLeader, onRefresh, flash, api, busy }: {
       )}
 
       {codeshareActif && (
-        <div className="p-4 rounded-lg bg-sky-900/20 border border-sky-700/30 space-y-3">
-          <h4 className="text-sm font-medium text-sky-300 flex items-center gap-2"><ArrowRightLeft className="h-4 w-4" />Codeshare — Partage des revenus</h4>
-          <p className="text-xs text-slate-400">Chaque PDG définit le % de ses revenus de vol reversé aux autres membres de l&apos;alliance.</p>
-          <div className="space-y-1">
-            {detail.membres.map(m => {
-              const isMe = m.compagnie_id === detail.my_compagnie_id;
-              return (
-                <div key={m.id} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-slate-700/20">
-                  <span className="text-sm text-slate-200">{m.compagnie?.nom || m.compagnie_id}</span>
-                  {isMe ? (
-                    <div className="flex items-center gap-2">
-                      <input type="number" min={0} max={100} value={myCodeshare} onChange={e => setMyCodeshare(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
-                        className="w-20 rounded border border-slate-600 bg-slate-800 text-slate-200 px-2 py-1 text-sm text-right" />
-                      <span className="text-xs text-slate-400">%</span>
-                      <button disabled={busy || myCodeshare === (myMember?.codeshare_pourcent ?? 0)} onClick={async () => {
-                        try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'set_codeshare', codeshare_pourcent: myCodeshare }); flash('Codeshare mis à jour'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-                      }} className="px-2 py-1 text-xs rounded bg-sky-600 text-white disabled:opacity-50">OK</button>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-slate-400">{m.codeshare_pourcent}%</span>
-                  )}
-                </div>
-              );
-            })}
+        <div className="p-4 rounded-lg bg-sky-900/20 border border-sky-700/30 space-y-4">
+          <div>
+            <h4 className="text-sm font-medium text-sky-300 flex items-center gap-2"><ArrowRightLeft className="h-4 w-4" />Codeshare — Partage des revenus</h4>
+            <p className="text-xs text-slate-400 mt-1">Chaque PDG définit le % de ses revenus de vol reversé aux autres membres de l&apos;alliance.</p>
           </div>
+
+          <div>
+            <p className="text-xs font-medium text-slate-300 mb-2 uppercase tracking-wide">Mon % de codeshare</p>
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-sky-800/20 border border-sky-700/40">
+              <Building2 className="h-4 w-4 text-sky-400 flex-shrink-0" />
+              <span className="text-sm text-slate-200 flex-1">{myMember ? (detail.membres.find(m => m.compagnie_id === detail.my_compagnie_id)?.compagnie?.nom || 'Ma compagnie') : 'Ma compagnie'}</span>
+              <input type="number" min={0} max={100} value={myCodeshare} onChange={e => setMyCodeshare(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                className="w-20 rounded border border-slate-600 bg-slate-800 text-slate-200 px-2 py-1.5 text-sm text-right" />
+              <span className="text-sm text-slate-400">%</span>
+              <button disabled={busy || myCodeshare === (myMember?.codeshare_pourcent ?? 0)} onClick={async () => {
+                try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'set_codeshare', codeshare_pourcent: myCodeshare }); flash('Codeshare mis à jour'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+              }} className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white font-medium disabled:opacity-50 hover:bg-sky-500 transition">Enregistrer</button>
+            </div>
+          </div>
+
+          {detail.membres.length > 1 && (
+            <div>
+              <p className="text-xs font-medium text-slate-300 mb-2 uppercase tracking-wide">% de partage de chaque compagnie</p>
+              <div className="space-y-1">
+                {detail.membres.map(m => (
+                  <div key={m.id} className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-slate-700/20">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-slate-500" />
+                      <span className="text-sm text-slate-200">{m.compagnie?.nom || m.compagnie_id}</span>
+                      {m.compagnie_id === detail.my_compagnie_id && <span className="text-[10px] bg-sky-600/30 text-sky-300 px-1.5 py-0.5 rounded">vous</span>}
+                    </div>
+                    <span className={`text-sm font-medium ${m.codeshare_pourcent > 0 ? 'text-sky-300' : 'text-slate-500'}`}>
+                      {m.codeshare_pourcent}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -31,14 +31,31 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const myRole = myMember?.role ?? (isAdmin ? 'admin' : null);
 
-  const { data: rawMembres } = await admin.from('alliance_membres')
+  // codeshare_pourcent might not exist yet (migration pending)
+  const { data: rawMembres, error: membresErr } = await admin.from('alliance_membres')
     .select('id, compagnie_id, role, joined_at, codeshare_pourcent, compagnies(id, nom)')
     .eq('alliance_id', id);
 
-  const membres = (rawMembres || []).map(m => {
-    const raw = m.compagnies as unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let membresData: any[] | null = rawMembres;
+  if (membresErr) {
+    const { data: fallback } = await admin.from('alliance_membres')
+      .select('id, compagnie_id, role, joined_at, compagnies(id, nom)')
+      .eq('alliance_id', id);
+    membresData = fallback;
+  }
+
+  const membres = (membresData || []).map(m => {
+    const raw = (m as Record<string, unknown>).compagnies as unknown;
     const comp = Array.isArray(raw) ? raw[0] : raw;
-    return { id: m.id, compagnie_id: m.compagnie_id, role: m.role, joined_at: m.joined_at, codeshare_pourcent: m.codeshare_pourcent ?? 0, compagnie: comp || null };
+    return {
+      id: m.id,
+      compagnie_id: m.compagnie_id,
+      role: m.role,
+      joined_at: m.joined_at,
+      codeshare_pourcent: Number((m as Record<string, unknown>).codeshare_pourcent ?? 0),
+      compagnie: (comp || null) as { id: string; nom: string } | null,
+    };
   });
 
   const { data: parametres } = await admin.from('alliance_parametres').select('*').eq('alliance_id', id).single();
