@@ -16,8 +16,8 @@ export async function GET() {
 
     const admin = createAdminClient();
 
-    // Nettoyer les anciens appels expirés de l'utilisateur (ringing > 30s, connected > 10min)
-    const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
+    // Nettoyer les anciens appels expirés de l'utilisateur (ringing > 60s, connected > 10min)
+    const thirtySecondsAgo = new Date(Date.now() - 60000).toISOString();
     const tenMinutesAgo = new Date(Date.now() - 600000).toISOString();
     
     await admin.from('atc_calls')

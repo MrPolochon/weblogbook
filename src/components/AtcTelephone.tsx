@@ -387,7 +387,24 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       console.log('[LiveKit] Connected, enabling microphone...');
       await room.localParticipant.setMicrophoneEnabled(true);
       
-      console.log('[LiveKit] Audio publishing started, waiting for other participant...');
+      // Vérifier si l'autre participant est DÉJÀ dans la room (rejoint avant nous)
+      const existingParticipants = Array.from(room.remoteParticipants.values());
+      if (existingParticipants.length > 0) {
+        console.log('[LiveKit] Other participant already in room:', existingParticipants[0].identity);
+        setCallState('connected');
+        setConnectionStatus('Connecté');
+        playSound('connected');
+        playMessage('Communications établie');
+        existingParticipants.forEach(p => {
+          p.audioTrackPublications.forEach(pub => {
+            if (pub.track && pub.track.kind === Track.Kind.Audio) {
+              attachRemoteAudioTrack(pub.track, room);
+            }
+          });
+        });
+      } else {
+        console.log('[LiveKit] Audio publishing started, waiting for other participant...');
+      }
       
     } catch (err) {
       console.error('[LiveKit] Error:', err);
@@ -461,8 +478,10 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       
       if (!res.ok) {
         if (data.error === 'offline') playMessage('Votre correspondant est hors ligne');
+        else if (data.error === 'position_offline') playMessage(data.message || 'Position non disponible');
         else if (data.error === 'no_afis') playMessage('Aucun agent AFIS disponible');
         else if (data.error === 'cible_occupee') playMessage('Votre correspondant est déjà en ligne');
+        else if (data.error === 'appel_en_cours') playMessage('Vous avez déjà un appel en cours');
         else playMessage('Erreur lors de l\'appel');
         playSound('end');
         setCallState('idle');

@@ -423,7 +423,38 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       
       console.log('[LiveKit SIAVI] Connected, enabling microphone...');
       await room.localParticipant.setMicrophoneEnabled(true);
-      console.log('[LiveKit SIAVI] Audio publishing started, waiting for other participant...');
+      
+      // Vérifier si l'autre participant est DÉJÀ dans la room (rejoint avant nous)
+      const existingParticipants = Array.from(room.remoteParticipants.values());
+      if (existingParticipants.length > 0) {
+        console.log('[LiveKit SIAVI] Other participant already in room:', existingParticipants[0].identity);
+        stopEmergencyAlarm();
+        setCallState('connected');
+        setConnectionStatus('Connecté');
+        playSound('connected');
+        playMessage('Communications établie');
+        existingParticipants.forEach(p => {
+          p.audioTrackPublications.forEach(pub => {
+            if (pub.track && pub.track.kind === Track.Kind.Audio) {
+              const audioElement = pub.track.attach() as HTMLAudioElement;
+              audioElement.volume = 1.0;
+              audioElement.style.display = 'none';
+              const container = audioContainerRef.current ?? document.body;
+              container.appendChild(audioElement);
+              const trackSid = (pub.track as { sid?: string }).sid ?? `audio-${Date.now()}`;
+              attachedAudioElementsRef.current.set(trackSid, audioElement);
+            }
+          });
+        });
+        if (!audioLevelIntervalRef.current) {
+          audioLevelIntervalRef.current = setInterval(() => {
+            const participants = Array.from(room.remoteParticipants.values());
+            if (participants.length > 0) setAudioLevel(participants[0].audioLevel || 0);
+          }, 100);
+        }
+      } else {
+        console.log('[LiveKit SIAVI] Audio publishing started, waiting for other participant...');
+      }
       
     } catch (err) {
       console.error('[LiveKit SIAVI] Error:', err);
@@ -481,8 +512,10 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       
       if (!res.ok) {
         if (data.error === 'offline') playMessage('Votre correspondant est hors ligne');
+        else if (data.error === 'position_offline') playMessage(data.message || 'Position non disponible');
         else if (data.error === 'no_afis') playMessage('Aucun agent AFIS disponible');
         else if (data.error === 'cible_occupee') playMessage('Votre correspondant est déjà en ligne');
+        else if (data.error === 'appel_en_cours') playMessage('Vous avez déjà un appel en cours');
         else playMessage('Erreur lors de l\'appel');
         playSound('end');
         setCallState('idle');
