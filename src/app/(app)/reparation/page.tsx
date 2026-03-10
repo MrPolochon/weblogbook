@@ -7,5 +7,8 @@ export default async function ReparationPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  return <ReparationClient userId={user.id} />;
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const isAdmin = profile?.role === 'admin';
+
+  return <ReparationClient userId={user.id} isAdmin={isAdmin} />;
 }

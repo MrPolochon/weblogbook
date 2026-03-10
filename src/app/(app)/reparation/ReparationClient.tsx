@@ -87,7 +87,7 @@ const STATUT_LABELS: Record<string, { label: string; color: string }> = {
   annulee: { label: 'Annulée', color: 'text-slate-500' },
 };
 
-export default function ReparationClient({ userId }: { userId: string }) {
+export default function ReparationClient({ userId, isAdmin = false }: { userId: string; isAdmin?: boolean }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [entreprises, setEntreprises] = useState<Entreprise[]>([]);
@@ -99,6 +99,9 @@ export default function ReparationClient({ userId }: { userId: string }) {
 
   const [createNom, setCreateNom] = useState('');
   const [createDesc, setCreateDesc] = useState('');
+  const [createPdgQuery, setCreatePdgQuery] = useState('');
+  const [createPdgId, setCreatePdgId] = useState('');
+  const [pdgSearchResults, setPdgSearchResults] = useState<{ id: string; callsign: string }[]>([]);
 
   useEffect(() => {
     fetch('/api/reparation/entreprises').then(r => r.json()).then(d => setEntreprises(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
@@ -130,34 +133,61 @@ export default function ReparationClient({ userId }: { userId: string }) {
 
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div>;
 
+  async function searchPdg(q: string) {
+    setCreatePdgQuery(q);
+    if (q.length < 2) { setPdgSearchResults([]); return; }
+    try {
+      const res = await fetch(`/api/profiles/search?q=${encodeURIComponent(q)}`);
+      if (res.ok) setPdgSearchResults(await res.json());
+    } catch { setPdgSearchResults([]); }
+  }
+
   if (!detail && entreprises.length === 0) {
     return (
       <div className="space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2"><Wrench className="h-7 w-7 text-orange-400" />Entreprise de Réparation</h1>
-          <p className="text-slate-400 mt-1">Créez votre entreprise de réparation aéronautique.</p>
+          <p className="text-slate-400 mt-1">
+            {isAdmin ? 'Créez une entreprise de réparation aéronautique.' : 'Vous n\'êtes employé dans aucune entreprise de réparation.'}
+          </p>
         </div>
         {error && <p className="text-red-400 text-sm">{error}</p>}
         {success && <p className="text-emerald-400 text-sm">{success}</p>}
-        <section className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-6">
-          <h2 className="text-lg font-semibold text-slate-200 mb-4">Créer une entreprise</h2>
-          <div className="space-y-3">
-            <input type="text" value={createNom} onChange={e => setCreateNom(e.target.value)} placeholder="Nom de l'entreprise" className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2" />
-            <input type="text" value={createDesc} onChange={e => setCreateDesc(e.target.value)} placeholder="Description (optionnel)" className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2" />
-            <button disabled={busy || !createNom.trim()} onClick={async () => {
-              try {
-                const data = await api('/api/reparation/entreprises', 'POST', { nom: createNom.trim(), description: createDesc.trim() || undefined });
-                flash('Entreprise créée !');
-                setCreateNom(''); setCreateDesc('');
-                const list = await fetch('/api/reparation/entreprises').then(r => r.json());
-                setEntreprises(Array.isArray(list) ? list : []);
-                if (data.id) loadDetail(data.id);
-              } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-            }} className="px-4 py-2 rounded-lg bg-orange-600 text-white font-medium disabled:opacity-50 flex items-center gap-2">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Créer
-            </button>
-          </div>
-        </section>
+        {isAdmin ? (
+          <section className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-6">
+            <h2 className="text-lg font-semibold text-slate-200 mb-4">Créer une entreprise (admin)</h2>
+            <div className="space-y-3">
+              <input type="text" value={createNom} onChange={e => setCreateNom(e.target.value)} placeholder="Nom de l'entreprise" className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2" />
+              <input type="text" value={createDesc} onChange={e => setCreateDesc(e.target.value)} placeholder="Description (optionnel)" className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2" />
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">PDG de l&apos;entreprise *</label>
+                <input type="text" value={createPdgQuery} onChange={e => searchPdg(e.target.value)} placeholder="Rechercher par callsign..." className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2" />
+                {pdgSearchResults.length > 0 && (
+                  <div className="max-h-32 overflow-y-auto rounded border border-slate-600 bg-slate-800 mt-1">
+                    {pdgSearchResults.map(u => (
+                      <button key={u.id} onClick={() => { setCreatePdgId(u.id); setCreatePdgQuery(u.callsign); setPdgSearchResults([]); }} className="w-full text-left px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700">{u.callsign}</button>
+                    ))}
+                  </div>
+                )}
+                {createPdgId && <p className="text-xs text-emerald-400 mt-1">PDG sélectionné : {createPdgQuery}</p>}
+              </div>
+              <button disabled={busy || !createNom.trim() || !createPdgId} onClick={async () => {
+                try {
+                  const data = await api('/api/reparation/entreprises', 'POST', { nom: createNom.trim(), description: createDesc.trim() || undefined, pdg_id: createPdgId });
+                  flash('Entreprise créée !');
+                  setCreateNom(''); setCreateDesc(''); setCreatePdgId(''); setCreatePdgQuery('');
+                  const list = await fetch('/api/reparation/entreprises').then(r => r.json());
+                  setEntreprises(Array.isArray(list) ? list : []);
+                  if (data.id) loadDetail(data.id);
+                } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+              }} className="px-4 py-2 rounded-lg bg-orange-600 text-white font-medium disabled:opacity-50 flex items-center gap-2">
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Créer
+              </button>
+            </div>
+          </section>
+        ) : (
+          <p className="text-slate-500">Contactez un administrateur pour créer une entreprise de réparation.</p>
+        )}
       </div>
     );
   }

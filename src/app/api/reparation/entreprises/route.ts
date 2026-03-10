@@ -35,25 +35,28 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-  const body = await req.json().catch(() => ({}));
-  const { nom, description } = body;
-  if (!nom || String(nom).trim().length < 2) return NextResponse.json({ error: 'Nom requis (min 2 caractères)' }, { status: 400 });
-
   const admin = createAdminClient();
+  const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single();
+  if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
-  const { data: existing } = await admin.from('entreprises_reparation').select('id').eq('pdg_id', user.id).limit(1);
-  if (existing?.length) return NextResponse.json({ error: 'Vous avez déjà une entreprise de réparation' }, { status: 400 });
+  const body = await req.json().catch(() => ({}));
+  const { nom, description, pdg_id } = body;
+  if (!nom || String(nom).trim().length < 2) return NextResponse.json({ error: 'Nom requis (min 2 caractères)' }, { status: 400 });
+  if (!pdg_id) return NextResponse.json({ error: 'pdg_id requis' }, { status: 400 });
+
+  const { data: pdgProfile } = await admin.from('profiles').select('id').eq('id', pdg_id).single();
+  if (!pdgProfile) return NextResponse.json({ error: 'Utilisateur PDG introuvable' }, { status: 404 });
 
   const { data: entreprise, error } = await admin.from('entreprises_reparation').insert({
     nom: String(nom).trim(),
-    pdg_id: user.id,
+    pdg_id,
     description: description ? String(description).trim() : null,
   }).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   await admin.from('reparation_employes').insert({
     entreprise_id: entreprise.id,
-    user_id: user.id,
+    user_id: pdg_id,
     role: 'pdg',
   });
 
