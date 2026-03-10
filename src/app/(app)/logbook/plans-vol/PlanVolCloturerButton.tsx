@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -14,6 +14,7 @@ export default function PlanVolCloturerButton({ planId, statut }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
+  const busyRef = useRef(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [clotureDirecte, setClotureDirecte] = useState(false);
 
@@ -29,6 +30,8 @@ export default function PlanVolCloturerButton({ planId, statut }: Props) {
   if (!peutCloturer) return null;
 
   async function handleCloture() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setLoading(true);
     try {
       const res = await fetch(`/api/plans-vol/${planId}`, {

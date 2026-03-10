@@ -243,8 +243,11 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
   const [refuseReason, setRefuseReason] = useState('');
   const [intentionsPos, setIntentionsPos] = useState<{ x: number; y: number } | null>(null);
   const [noteAtcPos, setNoteAtcPos] = useState<{ x: number; y: number } | null>(null);
+  const busyRef = useRef(false);
 
   const callAction = async (action: string, body: Record<string, unknown> = {}) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setLoading(action);
     try {
       const res = await fetch(`/api/plans-vol/${strip.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...body }) });
@@ -252,7 +255,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
       if (!res.ok) throw new Error(d.error || 'Erreur');
       onRefresh?.();
     } catch (e) { alert(e instanceof Error ? e.message : 'Erreur'); }
-    finally { setLoading(null); }
+    finally { setLoading(null); busyRef.current = false; }
   };
 
   const statut = strip.statut;

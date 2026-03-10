@@ -61,7 +61,7 @@ export async function PATCH(
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
       if (profile?.role === 'atc') return NextResponse.json({ error: 'Cloture reservee au pilote.' }, { status: 403 });
       if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
-      if (plan.statut === 'refuse' || plan.statut === 'cloture') return NextResponse.json({ error: 'Ce plan ne peut pas etre cloture.' }, { status: 400 });
+      if (plan.statut === 'refuse' || plan.statut === 'cloture' || plan.statut === 'cloture_en_cours') return NextResponse.json({ error: 'Ce plan ne peut pas etre cloture.' }, { status: 400 });
       if (!STATUTS_OUVERTS.includes(plan.statut)) return NextResponse.json({ error: 'Statut invalide pour cloture.' }, { status: 400 });
 
       // Vérifier que le plan a été accepté avant de permettre la clôture avec paiement
@@ -96,25 +96,29 @@ export async function PATCH(
       const pasAtcAssigne = !plan.current_holder_user_id || !holderActif;
       const closDirect = enAutoSurveillanceActive || (pasAtcAssigne && planAccepte);
       
-      const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
       const demandeClotureAt = new Date();
-      const payload: { statut: string; cloture_at?: string; demande_cloture_at: string } = { 
-        statut: newStatut,
-        demande_cloture_at: demandeClotureAt.toISOString() // Toujours enregistrer quand le pilote demande
-      };
+      const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
+
+      // Verrouillage atomique : update conditionnel sur le statut actuel pour éviter les doubles traitements
+      const lockStatut = closDirect ? 'cloture_en_cours' : 'en_attente_cloture';
+      const { data: locked, error: lockErr } = await admin.from('plans_vol')
+        .update({ statut: lockStatut, demande_cloture_at: demandeClotureAt.toISOString() })
+        .eq('id', id)
+        .eq('statut', plan.statut)
+        .select('id');
+      if (lockErr || !locked || locked.length === 0) {
+        return NextResponse.json({ error: 'Clôture déjà en cours ou statut modifié.' }, { status: 409 });
+      }
       
       let paiementResult = null;
       let usureAppliquee = 0;
       
-      if (newStatut === 'cloture') {
-        payload.cloture_at = demandeClotureAt.toISOString();
-        // Utiliser demande_cloture_at pour le calcul du temps réel
+      if (closDirect) {
         paiementResult = await envoyerChequesVol(admin, { ...plan, demande_cloture_at: demandeClotureAt.toISOString() }, demandeClotureAt);
         if (!paiementResult.success) {
           console.error('Erreur paiement vol:', paiementResult.message);
         }
         
-        // Appliquer l'usure à l'avion individuel si utilisé
         if (plan.compagnie_avion_id) {
           const { data: avion } = await admin
             .from('compagnie_avions')
@@ -123,7 +127,6 @@ export async function PATCH(
             .single();
           
           if (avion) {
-            // Calculer le temps réel de vol — utiliser ATD si valide, sinon accepted_at
             let tempsReelMin = plan.temps_prev_min;
             if (plan.accepted_at) {
               const acceptedAt = new Date(plan.accepted_at);
@@ -132,7 +135,6 @@ export async function PATCH(
               tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
             }
             
-            // Calculer et appliquer l'usure
             usureAppliquee = calculerUsureVol(tempsReelMin);
             const nouvelleUsure = Math.max(0, avion.usure_percent - usureAppliquee);
             const nouveauStatut = nouvelleUsure === 0 ? 'bloque' : 'ground';
@@ -147,10 +149,10 @@ export async function PATCH(
               .eq('id', avion.id);
           }
         }
+
+        await admin.from('plans_vol').update({ statut: 'cloture', cloture_at: demandeClotureAt.toISOString() }).eq('id', id);
       }
 
-      const { error } = await admin.from('plans_vol').update(payload).eq('id', id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ ok: true, statut: newStatut, direct: closDirect, paiement: paiementResult, usure_appliquee: usureAppliquee });
     }
 
@@ -204,8 +206,14 @@ export async function PATCH(
         await enregistrerControleATC(admin, id, plan.current_holder_user_id, plan.current_holder_aeroport, plan.current_holder_position);
       }
 
-      const { error } = await admin.from('plans_vol').update({ statut: 'accepte', accepted_at: new Date().toISOString() }).eq('id', id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      const { data: acceptLocked, error: acceptLockErr } = await admin.from('plans_vol')
+        .update({ statut: 'accepte', accepted_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('statut', plan.statut)
+        .select('id');
+      if (acceptLockErr || !acceptLocked || acceptLocked.length === 0) {
+        return NextResponse.json({ error: 'Plan déjà traité.' }, { status: 409 });
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -219,8 +227,14 @@ export async function PATCH(
       const reason = body.refusal_reason != null ? String(body.refusal_reason).trim() : '';
       if (!reason) return NextResponse.json({ error: 'La raison du refus est obligatoire.' }, { status: 400 });
 
-      const { error } = await admin.from('plans_vol').update({ statut: 'refuse', refusal_reason: reason }).eq('id', id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      const { data: refuseLocked, error: refuseLockErr } = await admin.from('plans_vol')
+        .update({ statut: 'refuse', refusal_reason: reason })
+        .eq('id', id)
+        .eq('statut', plan.statut)
+        .select('id');
+      if (refuseLockErr || !refuseLocked || refuseLocked.length === 0) {
+        return NextResponse.json({ error: 'Plan déjà traité.' }, { status: 409 });
+      }
       return NextResponse.json({ ok: true });
     }
 

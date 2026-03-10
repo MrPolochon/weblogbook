@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useTransition } from 'react';
+import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
@@ -102,6 +102,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const [cargoAeroport, setCargoAeroport] = useState<{ cargo_disponible: number; cargo_max: number } | null>(null);
   
   const [loading, setLoading] = useState(false);
+  const submitBusyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   // Get selected company
@@ -397,6 +398,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitBusyRef.current) return;
     setError(null);
     setShowNoAtcConfirm(false);
     
@@ -439,6 +441,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       return;
     }
     
+    submitBusyRef.current = true;
     setLoading(true);
     try {
       const res = await fetch('/api/plans-vol', {
@@ -487,8 +490,9 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     }
   }
 
-  // Soumettre avec vol sans ATC
   async function handleSubmitSansAtc() {
+    if (submitBusyRef.current) return;
+    submitBusyRef.current = true;
     setError(null);
     setShowNoAtcConfirm(false);
     setLoading(true);

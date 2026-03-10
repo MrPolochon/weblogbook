@@ -543,6 +543,7 @@ function FinancesTab({ detail, isLeader, onRefresh, flash, api, busy }: {
 }) {
   const [contribMontant, setContribMontant] = useState('');
   const [contribLibelle, setContribLibelle] = useState('');
+  const [contribSource, setContribSource] = useState<'compagnie' | 'personnel'>('compagnie');
   const [fondsMontant, setFondsMontant] = useState('');
   const [fondsMotif, setFondsMotif] = useState('');
   const [showContrib, setShowContrib] = useState(false);
@@ -619,13 +620,23 @@ function FinancesTab({ detail, isLeader, onRefresh, flash, api, busy }: {
       </div>
 
       {showContrib && (
-        <div className="p-4 rounded-lg bg-slate-700/20 space-y-2">
+        <div className="p-4 rounded-lg bg-slate-700/20 space-y-3">
           <h4 className="text-sm font-medium text-slate-300">Contribuer au compte alliance</h4>
+          <div className="flex gap-1 p-1 bg-slate-700/50 rounded-lg w-fit">
+            <button type="button" onClick={() => setContribSource('compagnie')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${contribSource === 'compagnie' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+              <Building2 className="h-3 w-3 inline mr-1" />Compte compagnie
+            </button>
+            <button type="button" onClick={() => setContribSource('personnel')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${contribSource === 'personnel' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+              <Wallet className="h-3 w-3 inline mr-1" />Compte personnel
+            </button>
+          </div>
           <div className="flex gap-2 flex-wrap">
             <input type="number" min="1" value={contribMontant} onChange={e => setContribMontant(e.target.value)} placeholder="Montant" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-32 text-sm" />
             <input type="text" value={contribLibelle} onChange={e => setContribLibelle(e.target.value)} placeholder="Libellé (opt.)" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 flex-1 text-sm" />
             <button disabled={busy || !contribMontant || Number(contribMontant) <= 0} onClick={async () => {
-              try { await api(`/api/alliances/${detail.id}/fonds`, 'POST', { action: 'contribuer', montant: Number(contribMontant), libelle: contribLibelle || undefined }); flash(`${Number(contribMontant).toLocaleString('fr-FR')} F$ contribués`); setContribMontant(''); setContribLibelle(''); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+              try { await api(`/api/alliances/${detail.id}/fonds`, 'POST', { action: 'contribuer', montant: Number(contribMontant), libelle: contribLibelle || undefined, source: contribSource }); flash(`${Number(contribMontant).toLocaleString('fr-FR')} F$ contribués depuis le compte ${contribSource === 'personnel' ? 'personnel' : 'compagnie'}`); setContribMontant(''); setContribLibelle(''); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
             }} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium disabled:opacity-50">Contribuer</button>
           </div>
         </div>

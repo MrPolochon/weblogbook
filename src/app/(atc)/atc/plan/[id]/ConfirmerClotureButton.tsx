@@ -1,14 +1,17 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function ConfirmerClotureButton({ planId }: { planId: string }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
+  const busyRef = useRef(false);
 
   async function handleClick() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setLoading(true);
     try {
       const res = await fetch(`/api/plans-vol/${planId}`, {
@@ -23,6 +26,7 @@ export default function ConfirmerClotureButton({ planId }: { planId: string }) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoading(false);
+      busyRef.current = false;
     }
   }
 

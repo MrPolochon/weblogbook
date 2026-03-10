@@ -38,16 +38,40 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   if (action === 'contribuer') {
-    const { montant, libelle } = body;
+    const { montant, libelle, source } = body;
     if (!montant || montant <= 0) return NextResponse.json({ error: 'montant requis' }, { status: 400 });
     const amt = Math.floor(montant);
+    const isPersonnel = source === 'personnel';
 
-    const { data: debit } = await admin.rpc('debiter_compte_safe', {
-      p_compagnie_id: myMember.compagnie_id,
-      p_montant: amt,
-      p_libelle: `Contribution alliance`,
-    });
-    if (!debit?.success) return NextResponse.json({ error: debit?.error || 'Fonds insuffisants' }, { status: 400 });
+    if (isPersonnel) {
+      const { data: comptePerso } = await admin.from('felitz_comptes')
+        .select('id, solde')
+        .eq('proprietaire_id', user.id)
+        .eq('type', 'personnel')
+        .single();
+      if (!comptePerso) return NextResponse.json({ error: 'Compte personnel introuvable' }, { status: 400 });
+      if (comptePerso.solde < amt) return NextResponse.json({ error: 'Fonds personnels insuffisants' }, { status: 400 });
+
+      const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
+        p_compte_id: comptePerso.id,
+        p_montant: amt,
+      });
+      if (!debitOk) return NextResponse.json({ error: 'Fonds personnels insuffisants' }, { status: 400 });
+
+      await admin.from('felitz_transactions').insert({
+        compte_id: comptePerso.id,
+        type: 'debit',
+        montant: amt,
+        libelle: `Contribution alliance (perso)`,
+      });
+    } else {
+      const { data: debit } = await admin.rpc('debiter_compte_safe', {
+        p_compagnie_id: myMember.compagnie_id,
+        p_montant: amt,
+        p_libelle: `Contribution alliance`,
+      });
+      if (!debit?.success) return NextResponse.json({ error: debit?.error || 'Fonds insuffisants' }, { status: 400 });
+    }
 
     const { data: allianceAccount } = await admin.from('felitz_comptes').select('id, solde').eq('alliance_id', allianceId).eq('type', 'alliance').single();
     if (allianceAccount) {
@@ -58,7 +82,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       alliance_id: allianceId,
       compagnie_id: myMember.compagnie_id,
       montant: amt,
-      libelle: libelle ? String(libelle).trim() : 'Contribution',
+      libelle: (libelle ? String(libelle).trim() : 'Contribution') + (isPersonnel ? ' (personnel)' : ''),
     });
 
     return NextResponse.json({ ok: true, message: `${amt.toLocaleString('fr-FR')} F$ contribués` });

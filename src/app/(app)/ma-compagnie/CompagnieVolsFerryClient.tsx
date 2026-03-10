@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useTransition } from 'react';
+import { useState, useEffect, useCallback, useTransition, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Ship, Plus, Clock, Zap, User } from 'lucide-react';
 import { COUT_VOL_FERRY, COUT_VOL_FERRY_AUTO_MIN, COUT_VOL_FERRY_AUTO_MAX, DUREE_VOL_FERRY_AUTO_MIN, DUREE_VOL_FERRY_AUTO_MAX } from '@/lib/compagnie-utils';
@@ -45,7 +45,9 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
   const [avionId, setAvionId] = useState('');
   const [hubArrivee, setHubArrivee] = useState('');
   const [loadingCreer, setLoadingCreer] = useState(false);
-  const [modeAuto, setModeAuto] = useState(true); // Par défaut : automatique
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const actionBusyRef = useRef(false);
+  const [modeAuto, setModeAuto] = useState(true);
 
   const loadVols = useCallback(async () => {
     try {
@@ -128,7 +130,10 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
   }
 
   async function handleCloturer(volId: string) {
+    if (actionBusyRef.current) return;
     if (!confirm('Clôturer ce vol ferry ? L\'usure sera appliquée et l\'avion sera déplacé.')) return;
+    actionBusyRef.current = true;
+    setActionLoading(`cloturer-${volId}`);
     try {
       const res = await fetch(`/api/compagnies/vols-ferry/${volId}`, {
         method: 'PATCH',
@@ -143,11 +148,17 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
       loadAvions();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setActionLoading(null);
+      actionBusyRef.current = false;
     }
   }
 
   async function handleAnnuler(volId: string) {
+    if (actionBusyRef.current) return;
     if (!confirm('Annuler ce vol ferry ?')) return;
+    actionBusyRef.current = true;
+    setActionLoading(`annuler-${volId}`);
     try {
       const res = await fetch(`/api/compagnies/vols-ferry/${volId}`, {
         method: 'PATCH',
@@ -161,6 +172,9 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
       loadAvions();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setActionLoading(null);
+      actionBusyRef.current = false;
     }
   }
 
@@ -358,17 +372,19 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
                           <button
                             type="button"
                             onClick={() => handleCloturer(v.id)}
-                            className="text-xs text-emerald-400 hover:underline"
+                            disabled={actionLoading !== null}
+                            className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
                           >
-                            Clôturer
+                            {actionLoading === `cloturer-${v.id}` ? '…' : 'Clôturer'}
                           </button>
                         )}
                         <button
                           type="button"
                           onClick={() => handleAnnuler(v.id)}
-                          className="text-xs text-red-400 hover:underline"
+                          disabled={actionLoading !== null}
+                          className="text-xs text-red-400 hover:underline disabled:opacity-50"
                         >
-                          Annuler
+                          {actionLoading === `annuler-${v.id}` ? '…' : 'Annuler'}
                         </button>
                       </div>
                     </td>
