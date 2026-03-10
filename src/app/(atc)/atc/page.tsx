@@ -119,6 +119,7 @@ export default async function AtcPage() {
       automonitoring: plan.automonitoring ?? false,
       isManual: !plan.pilote_id && Boolean(plan.created_by_atc),
       callsign_telephonie: callsignTelephonie,
+      bria_conversation: plan.bria_conversation || null,
     } as StripData;
   }));
 

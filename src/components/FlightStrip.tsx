@@ -43,6 +43,7 @@ export type StripData = {
   automonitoring?: boolean;
   isManual?: boolean;
   callsign_telephonie?: string | null;
+  bria_conversation?: { role: string; text: string }[] | null;
 };
 
 type EditableField = 'strip_atd' | 'strip_rwy' | 'strip_fl' | 'strip_fl_unit' | 'strip_sid_atc' | 'strip_note_1' | 'strip_note_2' | 'strip_note_3' | 'strip_star' | 'strip_route' | 'numero_vol' | 'aeroport_depart' | 'aeroport_arrivee' | 'type_vol' | 'strip_pilote_text' | 'strip_type_wake';
@@ -243,6 +244,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
   const [refuseReason, setRefuseReason] = useState('');
   const [intentionsPos, setIntentionsPos] = useState<{ x: number; y: number } | null>(null);
   const [noteAtcPos, setNoteAtcPos] = useState<{ x: number; y: number } | null>(null);
+  const [showBriaLog, setShowBriaLog] = useState(false);
   const busyRef = useRef(false);
 
   const callAction = async (action: string, body: Record<string, unknown> = {}) => {
@@ -415,6 +417,62 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
             >
               <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>Note d&apos;attention du pilote</div>
               <p className="text-sm font-semibold leading-relaxed break-words whitespace-pre-wrap">{strip.instructions_atc}</p>
+            </div>,
+            document.body,
+          )}
+        </>
+      )}
+      {strip.bria_conversation && strip.bria_conversation.length > 0 && (
+        <>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setShowBriaLog(!showBriaLog); }}
+            className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded shadow-sm transition-colors ${
+              showBriaLog
+                ? (isDark ? 'bg-amber-500 text-black' : 'bg-amber-600 text-white')
+                : (isDark ? 'bg-amber-800 text-amber-200 hover:bg-amber-700' : 'bg-amber-600 text-white hover:bg-amber-700')
+            }`}
+          >
+            <Radio className="h-3.5 w-3.5" />BRIA
+          </button>
+          {showBriaLog && createPortal(
+            <div
+              className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/60"
+              onClick={() => setShowBriaLog(false)}
+            >
+              <div
+                className={`rounded-xl shadow-2xl border-2 p-5 w-[480px] max-w-[90vw] max-h-[70vh] overflow-y-auto ${
+                  isDark ? 'bg-slate-800 border-amber-600 text-slate-100' : 'bg-white border-amber-400 text-slate-900'
+                }`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className={`text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                  <Radio className="h-4 w-4" /> Historique BRIA
+                </div>
+                <div className="space-y-2">
+                  {strip.bria_conversation.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === 'bria' ? 'justify-start' : 'justify-end'}`}>
+                      <div className={`max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-line ${
+                        msg.role === 'bria'
+                          ? (isDark ? 'bg-amber-900/50 border border-amber-700/40 text-amber-100' : 'bg-amber-50 border border-amber-200 text-amber-900')
+                          : (isDark ? 'bg-sky-900/50 border border-sky-700/40 text-sky-100' : 'bg-sky-50 border border-sky-200 text-sky-900')
+                      }`}>
+                        <span className={`text-[10px] font-bold block mb-0.5 ${
+                          msg.role === 'bria' ? (isDark ? 'text-amber-400' : 'text-amber-600') : (isDark ? 'text-sky-400' : 'text-sky-600')
+                        }`}>{msg.role === 'bria' ? 'BRIA' : 'Pilote'}</span>
+                        {msg.text}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBriaLog(false)}
+                  className={`mt-4 w-full py-2 text-xs font-bold rounded-lg ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
+                >
+                  Fermer
+                </button>
+              </div>
             </div>,
             document.body,
           )}

@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
-import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio } from 'lucide-react';
+import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio, Phone } from 'lucide-react';
+import BriaDialog from '@/components/BriaDialog';
 
 interface TypeAvion {
   id: string;
@@ -104,6 +105,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const [loading, setLoading] = useState(false);
   const submitBusyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [showBria, setShowBria] = useState(false);
 
   // Get selected company
   const selectedCompagnie = compagniesDisponibles.find(c => c.id === selectedCompagnieId) || null;
@@ -542,6 +544,19 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const avionsPersonnelsDispo = inventairePersonnel.filter(i => i.disponible);
 
   return (
+    <>
+    {showBria && <BriaDialog onClose={() => setShowBria(false)} />}
+    <div className="max-w-2xl mb-4">
+      <button
+        type="button"
+        onClick={() => setShowBria(true)}
+        className="w-full flex items-center justify-center gap-3 px-5 py-4 rounded-xl border-2 border-amber-500/50 bg-gradient-to-r from-amber-900/40 to-amber-800/30 hover:from-amber-900/60 hover:to-amber-800/50 text-amber-100 font-bold text-lg transition-all shadow-lg hover:shadow-amber-900/30"
+      >
+        <Phone className="h-6 w-6 text-amber-400" />
+        Appeler le BRIA
+        <span className="text-sm font-normal text-amber-300/70 ml-2">— Remplissage assisté par conversation</span>
+      </button>
+    </div>
     <form onSubmit={handleSubmit} className="card space-y-4 max-w-2xl">
       {/* Type de vol (commercial ou personnel) */}
       {compagniesDisponibles.length > 0 && (
@@ -987,5 +1002,6 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
         {loading ? 'Envoi…' : 'Déposer le plan de vol'}
       </button>
     </form>
+    </>
   );
 }

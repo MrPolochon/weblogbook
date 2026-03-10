@@ -46,9 +46,9 @@ export async function POST(request: Request) {
       aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, 
       intentions_vol, sid_depart, star_arrivee, route_ifr, note_atc,
       vol_commercial, compagnie_id, nature_transport, inventaire_avion_id,
-      compagnie_avion_id, // Avion individuel avec localisation
+      compagnie_avion_id,
       nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote, prix_billet_utilise,
-      vol_sans_atc, vol_ferry
+      vol_sans_atc, vol_ferry, bria_conversation
     } = body;
     const prixBilletUtilise = typeof prix_billet_utilise === 'number' ? prix_billet_utilise : parseInt(String(prix_billet_utilise || 0), 10) || 0;
     
@@ -370,7 +370,7 @@ export async function POST(request: Request) {
         sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,
         star_arrivee: type_vol === 'IFR' ? String(star_arrivee).trim() : null,
         route_ifr: (type_vol === 'IFR' && route_ifr) ? String(route_ifr).trim() : null,
-        note_atc: null, // Pas de note ATC pour les vols sans ATC
+        note_atc: null,
         vol_commercial: Boolean(vol_commercial) && !vol_ferry,
         compagnie_id: (vol_commercial || vol_ferry) && compagnie_id ? compagnie_id : null,
         nature_transport: vol_commercial && !vol_ferry && nature_transport ? nature_transport : null,
@@ -383,9 +383,9 @@ export async function POST(request: Request) {
         revenue_brut: vol_commercial ? revenuBrutFinal : null,
         salaire_pilote: vol_commercial ? salaireFinal : null,
         prix_billet_utilise: vol_commercial ? (prix_billet_utilise || 0) : null,
-        statut: 'accepte', // Directement accepté
-        accepted_at: new Date().toISOString(), // Accepter automatiquement
-        automonitoring: true, // Directement en autosurveillance
+        statut: 'accepte',
+        accepted_at: new Date().toISOString(),
+        automonitoring: true,
         current_holder_user_id: null,
         current_holder_position: null,
         current_holder_aeroport: null,
@@ -395,16 +395,15 @@ export async function POST(request: Request) {
         location_loueur_compagnie_id: locationFields.data?.loueur_compagnie_id || null,
         location_pourcentage_revenu_loueur: locationFields.data?.pourcentage_revenu_loueur || null,
         location_prix_journalier: locationFields.data?.prix_journalier || null,
+        bria_conversation: bria_conversation || null,
       }).select('id').single();
 
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-      // Consommer les passagers de l'aéroport de départ si vol commercial avec passagers
       if (vol_commercial && nb_pax_genere && nb_pax_genere > 0) {
         try {
           await admin.rpc('consommer_passagers_aeroport', { p_code_oaci: ad, p_passagers: nb_pax_genere });
         } catch (e) {
-          // Si la fonction n'existe pas, faire manuellement
           const { data: current } = await admin.from('aeroport_passagers').select('passagers_disponibles').eq('code_oaci', ad).single();
           if (current) {
             const newValue = Math.max(0, current.passagers_disponibles - nb_pax_genere);
@@ -413,7 +412,6 @@ export async function POST(request: Request) {
         }
       }
 
-      // Consommer le cargo de l'aéroport de départ si vol commercial cargo ou passagers avec cargo complémentaire
       if (vol_commercial && cargoGenereFinal > 0 && (nature_transport === 'cargo' || nature_transport === 'passagers')) {
         try {
           await admin.rpc('consommer_cargo', { p_code_oaci: ad, p_quantite: cargoGenereFinal });
@@ -432,7 +430,6 @@ export async function POST(request: Request) {
         }
       }
 
-      // Mettre l'avion individuel en vol (le trigger ne fonctionne qu'à l'UPDATE, pas INSERT)
       if (compagnie_avion_id) {
         await admin.from('compagnie_avions')
           .update({ statut: 'in_flight' })
@@ -525,6 +522,7 @@ export async function POST(request: Request) {
       location_loueur_compagnie_id: locationFields.data?.loueur_compagnie_id || null,
       location_pourcentage_revenu_loueur: locationFields.data?.pourcentage_revenu_loueur || null,
       location_prix_journalier: locationFields.data?.prix_journalier || null,
+      bria_conversation: bria_conversation || null,
     }).select('id').single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
