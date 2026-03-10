@@ -387,44 +387,54 @@ function MembresTab({ detail, isPresident, isLeader, onRefresh, flash, api, busy
     <div className="space-y-6">
       <h3 className="font-medium text-slate-200">Membres ({detail.membres.length})</h3>
       <div className="space-y-2">
-        {detail.membres.map(m => (
-          <div key={m.id} className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-slate-700/20">
-            <div className="flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-slate-500" />
-              <span className="text-slate-200 font-medium">{m.compagnie?.nom || m.compagnie_id}</span>
-              <span className={`text-xs font-medium ${ROLE_COLORS[m.role] || ''}`}>{ROLE_LABELS[m.role] || m.role}</span>
-            </div>
-            {isPresident && m.role !== 'president' && (
-              <div className="flex gap-1">
-                <select onChange={async (e) => {
-                  if (!e.target.value) return;
-                  try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'changer_role', membre_id: m.id, nouveau_role: e.target.value }); flash('Rôle modifié'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-                  e.target.value = '';
-                }} className="text-xs rounded border border-slate-600 bg-slate-800 text-slate-300 px-1 py-0.5" defaultValue="">
-                  <option value="">Rôle...</option>
-                  {['vice_president', 'secretaire', 'membre'].filter(r => r !== m.role).map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                </select>
-                <button disabled={busy} onClick={async () => {
-                  if (!confirm(`Expulser ${m.compagnie?.nom} ?`)) return;
-                  try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'expulser', membre_id: m.id }); flash('Membre expulsé'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-                }} className="text-xs px-2 py-0.5 rounded bg-red-600/30 text-red-300 hover:bg-red-600/50 disabled:opacity-50" title="Expulser">
-                  <UserMinus className="h-3 w-3" />
-                </button>
+        {detail.membres.map(m => {
+          const roleIcon = m.role === 'president' ? <Crown className="h-3.5 w-3.5 text-amber-400" />
+            : m.role === 'vice_president' ? <ShieldCheck className="h-3.5 w-3.5 text-sky-400" />
+            : null;
+          return (
+            <div key={m.id} className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-slate-700/20">
+              <div className="flex items-center gap-2">
+                {roleIcon || <Building2 className="h-4 w-4 text-slate-500" />}
+                <span className="text-slate-200 font-medium">{m.compagnie?.nom || m.compagnie_id}</span>
+                <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[m.role] || ''} bg-slate-700/50`}>{ROLE_LABELS[m.role] || m.role}</span>
               </div>
-            )}
-          </div>
-        ))}
+              {isPresident && m.role !== 'president' && (
+                <div className="flex gap-1.5 items-center">
+                  <select onChange={async (e) => {
+                    if (!e.target.value) return;
+                    const roleName = ROLE_LABELS[e.target.value] || e.target.value;
+                    if (!confirm(`Nommer ${m.compagnie?.nom} comme ${roleName} ?`)) { e.target.value = ''; return; }
+                    try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'changer_role', membre_id: m.id, nouveau_role: e.target.value }); flash(`${m.compagnie?.nom} est maintenant ${roleName}`); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+                    e.target.value = '';
+                  }} className="text-xs rounded border border-slate-600 bg-slate-800 text-slate-300 px-1.5 py-1" defaultValue="">
+                    <option value="">Changer le rôle...</option>
+                    {['vice_president', 'secretaire', 'membre'].filter(r => r !== m.role).map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  </select>
+                  <button disabled={busy} onClick={async () => {
+                    if (!confirm(`Expulser ${m.compagnie?.nom} de l'alliance ?`)) return;
+                    try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'expulser', membre_id: m.id }); flash('Membre expulsé'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+                  }} className="text-xs px-2 py-1 rounded bg-red-600/30 text-red-300 hover:bg-red-600/50 disabled:opacity-50" title="Expulser">
+                    <UserMinus className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {isPresident && (
-        <div className="pt-4 border-t border-slate-700">
-          <h4 className="text-sm font-medium text-slate-300 mb-2">Transférer la présidence</h4>
+        <div className="pt-4 border-t border-amber-700/30">
+          <h4 className="text-sm font-medium text-amber-300 mb-1 flex items-center gap-1.5">
+            <Crown className="h-4 w-4" /> Transférer la présidence
+          </h4>
+          <p className="text-xs text-slate-500 mb-3">Vous deviendrez Vice-Président après le transfert. Tous les membres de l&apos;alliance seront notifiés.</p>
           <div className="flex gap-2 flex-wrap">
             {detail.membres.filter(m => m.role !== 'president').map(m => (
               <button key={m.id} disabled={busy} onClick={async () => {
-                if (!confirm(`Transférer la présidence à ${m.compagnie?.nom} ?`)) return;
-                try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'transferer_presidence', membre_id: m.id }); flash('Présidence transférée'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-              }} className="px-2 py-1 text-xs rounded bg-amber-600/20 text-amber-300 hover:bg-amber-600/40 disabled:opacity-50">
+                if (!confirm(`⚠️ Transférer la présidence à ${m.compagnie?.nom} ?\n\nVous deviendrez Vice-Président. Cette action est irréversible sans l'accord du nouveau Président.`)) return;
+                try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'transferer_presidence', membre_id: m.id }); flash('Présidence transférée avec succès'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+              }} className="px-3 py-1.5 text-xs rounded-lg bg-amber-600/20 text-amber-300 hover:bg-amber-600/40 disabled:opacity-50 border border-amber-700/30 transition">
                 <Crown className="h-3 w-3 inline mr-1" />{m.compagnie?.nom}
               </button>
             ))}
