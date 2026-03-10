@@ -303,7 +303,8 @@ async function getAvionInfo(
     if (!avion) return { success: false, error: 'Avion introuvable', status: 404 };
     if (avion.proprietaire_id !== userId) return { success: false, error: 'Cet avion ne vous appartient pas', status: 403 };
 
-    const typesAvion = avion.types_avion as { id: string; nom: string; prix: number } | null;
+    const rawType = avion.types_avion as unknown;
+    const typesAvion = (Array.isArray(rawType) ? rawType[0] : rawType) as { id: string; nom: string; prix: number } | null;
     if (!typesAvion || !typesAvion.prix) return { success: false, error: 'Type d\'avion introuvable', status: 404 };
 
     const { data: compte } = await admin.from('felitz_comptes')
@@ -343,7 +344,8 @@ async function getAvionInfo(
       return { success: false, error: 'Impossible de vendre un avion en vol', status: 400 };
     }
 
-    const typesAvion = avion.types_avion as { id: string; nom: string; prix: number } | null;
+    const rawType2 = avion.types_avion as unknown;
+    const typesAvion = (Array.isArray(rawType2) ? rawType2[0] : rawType2) as { id: string; nom: string; prix: number } | null;
     if (!typesAvion || !typesAvion.prix) return { success: false, error: 'Type d\'avion introuvable', status: 404 };
 
     const { data: compte } = await admin.from('felitz_comptes')
