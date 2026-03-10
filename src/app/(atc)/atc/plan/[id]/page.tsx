@@ -113,7 +113,8 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
     holderSessionActive = Boolean(holderSession);
   }
   const planOrphelin = ['depose', 'en_attente'].includes(plan.statut) && (!plan.current_holder_user_id || !holderSessionActive);
-  const showConfirmerCloture = plan.statut === 'en_attente_cloture' && (isHolder || isAdmin);
+  const isAtc = profile?.role === 'atc' || Boolean(profile?.atc);
+  const showConfirmerCloture = plan.statut === 'en_attente_cloture' && (isHolder || isAdmin || (isAtc && !holderSessionActive));
   const showAccepterRefuser = plan.statut === 'en_attente' || plan.statut === 'depose';
   const showInstructionsTransfer = (plan.statut === 'accepte' || plan.statut === 'en_cours') && (isHolder || isAdmin) && !plan.automonitoring && !plan.pending_transfer_aeroport;
 

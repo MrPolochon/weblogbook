@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { createAdminClient } from '@/lib/supabase/admin';
 
+export const dynamic = 'force-dynamic';
+
 interface LinkItem {
   href: string;
   label: string;
