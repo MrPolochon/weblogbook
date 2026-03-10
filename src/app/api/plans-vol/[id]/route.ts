@@ -61,7 +61,7 @@ export async function PATCH(
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
       if (profile?.role === 'atc') return NextResponse.json({ error: 'Cloture reservee au pilote.' }, { status: 403 });
       if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
-      if (plan.statut === 'refuse' || plan.statut === 'cloture' || plan.statut === 'cloture_en_cours') return NextResponse.json({ error: 'Ce plan ne peut pas etre cloture.' }, { status: 400 });
+      if (plan.statut === 'refuse' || plan.statut === 'cloture') return NextResponse.json({ error: 'Ce plan ne peut pas etre cloture.' }, { status: 400 });
       if (!STATUTS_OUVERTS.includes(plan.statut)) return NextResponse.json({ error: 'Statut invalide pour cloture.' }, { status: 400 });
 
       // Vérifier que le plan a été accepté avant de permettre la clôture avec paiement
@@ -100,9 +100,11 @@ export async function PATCH(
       const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
 
       // Verrouillage atomique : update conditionnel sur le statut actuel pour éviter les doubles traitements
-      const lockStatut = closDirect ? 'cloture_en_cours' : 'en_attente_cloture';
+      const lockUpdate = closDirect
+        ? { statut: 'cloture' as const, demande_cloture_at: demandeClotureAt.toISOString(), cloture_at: demandeClotureAt.toISOString() }
+        : { statut: 'en_attente_cloture' as const, demande_cloture_at: demandeClotureAt.toISOString() };
       const { data: locked, error: lockErr } = await admin.from('plans_vol')
-        .update({ statut: lockStatut, demande_cloture_at: demandeClotureAt.toISOString() })
+        .update(lockUpdate)
         .eq('id', id)
         .eq('statut', plan.statut)
         .select('id');
@@ -149,8 +151,6 @@ export async function PATCH(
               .eq('id', avion.id);
           }
         }
-
-        await admin.from('plans_vol').update({ statut: 'cloture', cloture_at: demandeClotureAt.toISOString() }).eq('id', id);
       }
 
       return NextResponse.json({ ok: true, statut: newStatut, direct: closDirect, paiement: paiementResult, usure_appliquee: usureAppliquee });
@@ -175,9 +175,9 @@ export async function PATCH(
       if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui detient le plan ou un admin peut confirmer la cloture.' }, { status: 403 });
       if (plan.statut !== 'en_attente_cloture') return NextResponse.json({ error: 'Aucune demande de cloture en attente.' }, { status: 400 });
 
-      // Verrouillage atomique : passer le statut AVANT le paiement pour éviter les doubles clôtures
+      // Verrouillage atomique : passer directement à 'cloture' pour éviter les doubles clôtures
       const { data: locked, error: lockErr } = await admin.from('plans_vol')
-        .update({ statut: 'cloture_en_cours' })
+        .update({ statut: 'cloture' })
         .eq('id', id)
         .eq('statut', 'en_attente_cloture')
         .select('id');

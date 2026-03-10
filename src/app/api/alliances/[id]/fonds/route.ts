@@ -65,17 +65,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         libelle: `Contribution alliance (perso)`,
       });
     } else {
-      const { data: debit } = await admin.rpc('debiter_compte_safe', {
-        p_compagnie_id: myMember.compagnie_id,
+      const { data: compteComp } = await admin.from('felitz_comptes')
+        .select('id, solde')
+        .eq('compagnie_id', myMember.compagnie_id)
+        .eq('type', 'compagnie')
+        .single();
+      if (!compteComp) return NextResponse.json({ error: 'Compte compagnie introuvable' }, { status: 400 });
+      if (compteComp.solde < amt) return NextResponse.json({ error: 'Fonds compagnie insuffisants' }, { status: 400 });
+
+      const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
+        p_compte_id: compteComp.id,
         p_montant: amt,
-        p_libelle: `Contribution alliance`,
       });
-      if (!debit?.success) return NextResponse.json({ error: debit?.error || 'Fonds insuffisants' }, { status: 400 });
+      if (!debitOk) return NextResponse.json({ error: 'Fonds compagnie insuffisants' }, { status: 400 });
+
+      await admin.from('felitz_transactions').insert({
+        compte_id: compteComp.id,
+        type: 'debit',
+        montant: amt,
+        libelle: `Contribution alliance`,
+      });
     }
 
-    const { data: allianceAccount } = await admin.from('felitz_comptes').select('id, solde').eq('alliance_id', allianceId).eq('type', 'alliance').single();
+    const { data: allianceAccount } = await admin.from('felitz_comptes').select('id').eq('alliance_id', allianceId).eq('type', 'alliance').single();
     if (allianceAccount) {
-      await admin.from('felitz_comptes').update({ solde: allianceAccount.solde + amt }).eq('id', allianceAccount.id);
+      await admin.rpc('crediter_compte_safe', { p_compte_id: allianceAccount.id, p_montant: amt });
+      await admin.from('felitz_transactions').insert({
+        compte_id: allianceAccount.id,
+        type: 'credit',
+        montant: amt,
+        libelle: `Contribution${isPersonnel ? ' (personnel)' : ''} — ${myMember.compagnie_id}`,
+      });
     }
 
     await admin.from('alliance_contributions').insert({
@@ -133,11 +153,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   await admin.from('felitz_comptes').update({ solde: allianceAccount.solde - demande.montant }).eq('id', allianceAccount.id);
-  await admin.rpc('crediter_compte_safe', {
-    p_compagnie_id: demande.compagnie_id,
-    p_montant: demande.montant,
-    p_libelle: `Fonds alliance : ${demande.motif}`,
-  });
+
+  const { data: compteDestComp } = await admin.from('felitz_comptes')
+    .select('id')
+    .eq('compagnie_id', demande.compagnie_id)
+    .eq('type', 'compagnie')
+    .single();
+  if (compteDestComp) {
+    await admin.rpc('crediter_compte_safe', {
+      p_compte_id: compteDestComp.id,
+      p_montant: demande.montant,
+    });
+    await admin.from('felitz_transactions').insert({
+      compte_id: compteDestComp.id,
+      type: 'credit',
+      montant: demande.montant,
+      libelle: `Fonds alliance : ${demande.motif}`,
+    });
+  }
 
   await admin.from('alliance_demandes_fonds').update({
     statut: 'acceptee', traite_par: user.id, traite_at: new Date().toISOString(),
