@@ -22,9 +22,10 @@ interface NavBarProps {
   messagesNonLusCount?: number;
   invitationsCount?: number;
   signalementsNouveauxCount?: number;
+  allianceInvitationsCount?: number;
 }
 
-export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, isIfsa = false, isReparateur = false, pendingVolsCount = 0, adminPlansEnAttenteCount = 0, adminPasswordResetCount = 0, adminAeroschoolCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0, invitationsCount = 0, signalementsNouveauxCount = 0 }: NavBarProps) {
+export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, isIfsa = false, isReparateur = false, pendingVolsCount = 0, adminPlansEnAttenteCount = 0, adminPasswordResetCount = 0, adminAeroschoolCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0, invitationsCount = 0, signalementsNouveauxCount = 0, allianceInvitationsCount = 0 }: NavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -84,7 +85,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0, separator: true },
     { href: '/marche-cargo', label: 'Marché cargo', icon: Package, badge: 0 },
     { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount + invitationsCount, separator: true },
-    ...(hasCompagnie ? [{ href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 }, { href: '/alliance', label: 'Alliance', icon: Users, badge: 0 }] : []),
+    ...(hasCompagnie ? [{ href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 }, { href: '/alliance', label: 'Alliance', icon: Users, badge: allianceInvitationsCount }] : []),
     ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield, badge: 0 }] : []),
     { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0, separator: true },
     { href: '/marketplace', label: 'Marketplace', icon: Package, badge: 0 },

@@ -240,7 +240,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
         {tab === 'dashboard' && <DashboardTab detail={detail} />}
         {tab === 'membres' && <MembresTab detail={detail} isPresident={!!isPresident} isLeader={!!isLeader} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} compagniesSansAlliance={compagniesSansAlliance} />}
         {tab === 'flotte' && <FlotteTab detail={detail} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
-        {tab === 'finances' && <FinancesTab detail={detail} isLeader={!!isLeader} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
+        {tab === 'finances' && <FinancesTab detail={detail} isLeader={!!isLeader} isPdg={pdgCompagnieIds.includes(detail.my_compagnie_id || '')} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
         {tab === 'annonces' && <AnnoncesTab detail={detail} isLeader={!!isLeader} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
         {tab === 'parametres' && <ParametresTab detail={detail} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
       </div>
@@ -286,20 +286,30 @@ function PendingInvitations({ pdgCompagnieIds, onAccepted }: { pdgCompagnieIds: 
   }
 
   return (
-    <section className="rounded-xl border border-amber-700/50 bg-amber-900/10 p-6">
-      <h2 className="text-lg font-semibold text-amber-300 mb-4">Invitations en attente</h2>
-      {invites.map(inv => (
-        <div key={inv.id} className="flex items-center justify-between flex-wrap gap-2 py-2">
-          <div>
-            <span className="text-slate-200 font-medium">{inv.alliance_nom}</span>
-            {inv.message && <span className="text-slate-400 text-sm ml-2">— {inv.message}</span>}
-          </div>
-          <div className="flex gap-2">
-            <button disabled={busy} onClick={() => respond(inv.id, inv.alliance_id, 'accepter')} className="px-3 py-1 rounded bg-emerald-600 text-white text-sm disabled:opacity-50 flex items-center gap-1"><Check className="h-3 w-3" />Accepter</button>
-            <button disabled={busy} onClick={() => respond(inv.id, inv.alliance_id, 'refuser')} className="px-3 py-1 rounded bg-red-600/50 text-red-200 text-sm disabled:opacity-50 flex items-center gap-1"><X className="h-3 w-3" />Refuser</button>
-          </div>
+    <section className="rounded-xl border-2 border-amber-500/60 bg-gradient-to-b from-amber-900/20 to-amber-900/5 p-6 shadow-lg shadow-amber-500/10">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 rounded-full bg-amber-500/20 animate-pulse">
+          <Send className="h-5 w-5 text-amber-400" />
         </div>
-      ))}
+        <div>
+          <h2 className="text-lg font-semibold text-amber-300">Invitations en attente</h2>
+          <p className="text-xs text-slate-400">Vous avez {invites.length} invitation{invites.length > 1 ? 's' : ''} d&apos;alliance</p>
+        </div>
+      </div>
+      <div className="space-y-3">
+        {invites.map(inv => (
+          <div key={inv.id} className="flex items-center justify-between flex-wrap gap-3 py-3 px-4 rounded-lg bg-slate-800/50 border border-slate-700/50">
+            <div>
+              <span className="text-slate-200 font-semibold text-base">{inv.alliance_nom}</span>
+              {inv.message && <p className="text-slate-400 text-sm mt-0.5">{inv.message}</p>}
+            </div>
+            <div className="flex gap-2">
+              <button disabled={busy} onClick={() => respond(inv.id, inv.alliance_id, 'accepter')} className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-50 flex items-center gap-1.5 transition shadow-lg shadow-emerald-600/20"><Check className="h-4 w-4" />Accepter</button>
+              <button disabled={busy} onClick={() => respond(inv.id, inv.alliance_id, 'refuser')} className="px-4 py-2 rounded-lg bg-red-600/40 hover:bg-red-600/60 text-red-200 text-sm font-medium disabled:opacity-50 flex items-center gap-1.5 transition"><X className="h-4 w-4" />Refuser</button>
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
@@ -546,8 +556,8 @@ function FlotteTab({ detail, onRefresh, flash, api, busy }: {
   );
 }
 
-function FinancesTab({ detail, isLeader, onRefresh, flash, api, busy }: {
-  detail: AllianceDetail; isLeader: boolean;
+function FinancesTab({ detail, isLeader, isPdg, onRefresh, flash, api, busy }: {
+  detail: AllianceDetail; isLeader: boolean; isPdg: boolean;
   onRefresh: () => void; flash: (m: string, e?: boolean) => void;
   api: (u: string, m: string, b?: unknown) => Promise<unknown>; busy: boolean;
 }) {
@@ -584,19 +594,21 @@ function FinancesTab({ detail, isLeader, onRefresh, flash, api, busy }: {
             <p className="text-xs text-slate-400 mt-1">Chaque PDG définit le % de ses revenus de vol reversé aux autres membres de l&apos;alliance.</p>
           </div>
 
-          <div>
-            <p className="text-xs font-medium text-slate-300 mb-2 uppercase tracking-wide">Mon % de codeshare</p>
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-sky-800/20 border border-sky-700/40">
-              <Building2 className="h-4 w-4 text-sky-400 flex-shrink-0" />
-              <span className="text-sm text-slate-200 flex-1">{myMember ? (detail.membres.find(m => m.compagnie_id === detail.my_compagnie_id)?.compagnie?.nom || 'Ma compagnie') : 'Ma compagnie'}</span>
-              <input type="number" min={0} max={100} value={myCodeshare} onChange={e => setMyCodeshare(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
-                className="w-20 rounded border border-slate-600 bg-slate-800 text-slate-200 px-2 py-1.5 text-sm text-right" />
-              <span className="text-sm text-slate-400">%</span>
-              <button disabled={busy || myCodeshare === (myMember?.codeshare_pourcent ?? 0)} onClick={async () => {
-                try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'set_codeshare', codeshare_pourcent: myCodeshare }); flash('Codeshare mis à jour'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-              }} className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white font-medium disabled:opacity-50 hover:bg-sky-500 transition">Enregistrer</button>
+          {isPdg && (
+            <div>
+              <p className="text-xs font-medium text-slate-300 mb-2 uppercase tracking-wide">Mon % de codeshare</p>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-sky-800/20 border border-sky-700/40">
+                <Building2 className="h-4 w-4 text-sky-400 flex-shrink-0" />
+                <span className="text-sm text-slate-200 flex-1">{myMember ? (detail.membres.find(m => m.compagnie_id === detail.my_compagnie_id)?.compagnie?.nom || 'Ma compagnie') : 'Ma compagnie'}</span>
+                <input type="number" min={0} max={100} value={myCodeshare} onChange={e => setMyCodeshare(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                  className="w-20 rounded border border-slate-600 bg-slate-800 text-slate-200 px-2 py-1.5 text-sm text-right" />
+                <span className="text-sm text-slate-400">%</span>
+                <button disabled={busy || myCodeshare === (myMember?.codeshare_pourcent ?? 0)} onClick={async () => {
+                  try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'set_codeshare', codeshare_pourcent: myCodeshare }); flash('Codeshare mis à jour'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+                }} className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white font-medium disabled:opacity-50 hover:bg-sky-500 transition">Enregistrer</button>
+              </div>
             </div>
-          </div>
+          )}
 
           {detail.membres.length > 1 && (
             <div>
@@ -620,14 +632,16 @@ function FinancesTab({ detail, isLeader, onRefresh, flash, api, busy }: {
         </div>
       )}
 
-      <div className="flex gap-2 flex-wrap">
-        <button onClick={() => setShowContrib(!showContrib)} className="px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 text-sm flex items-center gap-1">
-          <HandCoins className="h-4 w-4" /> Contribuer {showContrib ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        </button>
-        <button onClick={() => setShowDemande(!showDemande)} className="px-3 py-1.5 rounded-lg bg-amber-600/20 text-amber-300 text-sm flex items-center gap-1">
-          <MessageSquare className="h-4 w-4" /> Demander des fonds {showDemande ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        </button>
-      </div>
+      {isPdg && (
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => setShowContrib(!showContrib)} className="px-3 py-1.5 rounded-lg bg-emerald-600/20 text-emerald-300 text-sm flex items-center gap-1">
+            <HandCoins className="h-4 w-4" /> Contribuer {showContrib ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+          <button onClick={() => setShowDemande(!showDemande)} className="px-3 py-1.5 rounded-lg bg-amber-600/20 text-amber-300 text-sm flex items-center gap-1">
+            <MessageSquare className="h-4 w-4" /> Demander des fonds {showDemande ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
+        </div>
+      )}
 
       {showContrib && (
         <div className="p-4 rounded-lg bg-slate-700/20 space-y-3">

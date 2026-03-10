@@ -120,6 +120,25 @@ export default async function AppLayout({
     isReparateur = false;
   }
 
+  // Compter les invitations alliance en attente
+  let allianceInvitationsCount = 0;
+  if (hasCompagnie) {
+    try {
+      const admin = createAdminClient();
+      const { data: myComps } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
+      const compIds = (myComps || []).map((c: { id: string }) => c.id);
+      if (compIds.length > 0) {
+        const { count } = await admin.from('alliance_invitations')
+          .select('*', { count: 'exact', head: true })
+          .eq('statut', 'en_attente')
+          .in('compagnie_id', compIds);
+        allianceInvitationsCount = count ?? 0;
+      }
+    } catch {
+      allianceInvitationsCount = 0;
+    }
+  }
+
   // Compter les signalements nouveaux pour IFSA (table peut ne pas exister)
   if (isIfsa || isAdmin) {
     try {
@@ -140,7 +159,7 @@ export default async function AppLayout({
       <InactivityLogout />
       <AutoRefresh intervalSeconds={30} />
       <AdminModeBg />
-      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} isReparateur={isReparateur} pendingVolsCount={pendingVolsCount} adminPlansEnAttenteCount={adminPlansEnAttenteCount} adminPasswordResetCount={adminPasswordResetCount} adminAeroschoolCount={adminAeroschoolCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} />
+      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} isReparateur={isReparateur} pendingVolsCount={pendingVolsCount} adminPlansEnAttenteCount={adminPlansEnAttenteCount} adminPasswordResetCount={adminPasswordResetCount} adminAeroschoolCount={adminAeroschoolCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} allianceInvitationsCount={allianceInvitationsCount} />
       {plansNonCloturesCount > 0 && (
         <div className="border-b border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-amber-500/10 backdrop-blur-sm">
           <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-center gap-3 flex-wrap">

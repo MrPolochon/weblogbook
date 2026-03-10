@@ -43,10 +43,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   const { data: alliance } = await admin.from('alliances').select('nom').eq('id', allianceId).single();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
   await admin.from('messages').insert({
     destinataire_id: target.pdg_id,
     titre: `📨 Invitation alliance — ${alliance?.nom || 'Alliance'}`,
-    contenu: `Votre compagnie "${target.nom}" a été invitée à rejoindre l'alliance "${alliance?.nom}".${message ? `\n\nMessage : ${message}` : ''}\n\nRendez-vous dans la section Alliance pour accepter ou refuser.`,
+    contenu: `Votre compagnie "${target.nom}" a été invitée à rejoindre l'alliance "${alliance?.nom}".${message ? `\n\nMessage : ${message}` : ''}\n\n👉 Pour accepter ou refuser, rendez-vous sur la page Alliance : ${appUrl}/alliance\n\nVous y trouverez un encadré "Invitations en attente" avec les boutons Accepter / Refuser.`,
     type_message: 'normal',
   });
 
