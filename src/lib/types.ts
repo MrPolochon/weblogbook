@@ -105,6 +105,16 @@ export interface Compagnie {
   id: string;
   nom: string;
   created_at: string;
+  updated_at?: string;
+  pdg_id?: string | null;
+  prix_billet_pax?: number;
+  prix_kg_cargo?: number;
+  pourcentage_salaire?: number;
+  vban?: string | null;
+  code_oaci?: string | null;
+  callsign_telephonie?: string | null;
+  logo_url?: string | null;
+  alliance_id?: string | null;
 }
 
 export interface TypeAvion {

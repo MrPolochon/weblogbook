@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Plane, AlertTriangle, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 type PlanInfo = { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string };
 
@@ -36,7 +37,7 @@ export default function AtcLeftSidebar({
       if (!res.ok) throw new Error(d.error || 'Erreur');
       startTransition(() => router.refresh());
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setTakingId(null);
     }

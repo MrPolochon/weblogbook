@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Settings, Trash2, X, BookOpen } from 'lucide-react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 
 export default function PilotesActions({
   piloteId,
@@ -22,6 +24,9 @@ export default function PilotesActions({
   const [superadminModal, setSuperadminModal] = useState<{ identifiant: string; reason?: string } | null>(null);
   const [superadminPwd, setSuperadminPwd] = useState('');
   const [superadminError, setSuperadminError] = useState<string | null>(null);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   async function doDelete(superadminPassword?: string) {
     setDeleting(true);
@@ -51,7 +56,7 @@ export default function PilotesActions({
         if (superadminModal) {
           setSuperadminError(errorMsg);
         } else {
-          alert(errorMsg);
+          toast.error(errorMsg);
         }
         setDeleting(false);
         return;
@@ -64,7 +69,7 @@ export default function PilotesActions({
       if (superadminModal) {
         setSuperadminError(errorMsg);
       } else {
-        alert(errorMsg);
+        toast.error(errorMsg);
       }
       setDeleting(false);
     } finally {
@@ -122,14 +127,14 @@ export default function PilotesActions({
         <Trash2 className="h-4 w-4" />
       </button>
 
-      {superadminModal && (
+      {superadminModal && mounted && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={() => !deleting && setSuperadminModal(null)}>
           <div className="card w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-slate-100">
                 {superadminModal.reason ? 'Confirmation requise' : 'Supprimer l\'admin'}
               </h3>
-              <button type="button" onClick={() => !deleting && setSuperadminModal(null)} className="rounded p-1 text-slate-400 hover:bg-slate-700/50 hover:text-slate-200">
+              <button type="button" onClick={() => !deleting && setSuperadminModal(null)} className="rounded p-1 text-slate-400 hover:bg-slate-700/50 hover:text-slate-200" aria-label="Fermer">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -165,7 +170,8 @@ export default function PilotesActions({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

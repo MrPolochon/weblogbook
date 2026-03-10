@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ShoppingCart, RefreshCw, Building2, User, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -29,6 +30,9 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const canBuyPersonal = soldePerso >= prix;
   const compagniesAffordable = compagnies.filter(c => c.solde >= prix);
@@ -124,6 +128,120 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
   const isPersoDefault = canBuyPersonal && !pourCompagnie && !pourArmee;
   const canConfirm = hasSelection && (pourCompagnie || pourArmee || isPersoDefault);
 
+  const modalContent = showModal && mounted ? createPortal(
+    <div 
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
+    >
+      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full relative z-[101] animate-in fade-in zoom-in-95 duration-200 shadow-2xl">
+        <button
+          onClick={closeModal}
+          disabled={loading}
+          aria-label="Fermer"
+          className="absolute top-3 right-3 text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-30"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        <h3 className="text-lg font-semibold text-slate-100 mb-4 pr-8">
+          Acheter {avionNom}
+        </h3>
+        <p className="text-slate-400 mb-4">
+          Prix : <span className="text-purple-300 font-bold">{prix.toLocaleString('fr-FR')} F$</span>
+        </p>
+
+        {success && (
+          <div className="p-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 mb-4">
+            <p className="text-emerald-300 font-medium text-center">{success}</p>
+          </div>
+        )}
+
+        {!success && (
+          <>
+            <p className="text-xs text-slate-500 mb-2">Choisissez le compte à débiter :</p>
+            <div className="space-y-3 mb-6">
+              {canBuyPersonal && (
+                <button
+                  onClick={() => { setPourCompagnie(null); setPourArmee(false); }}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                    pourCompagnie === null && !pourArmee
+                      ? 'border-purple-500 bg-purple-500/20' 
+                      : 'border-slate-600 hover:border-slate-500'
+                  }`}
+                >
+                  <User className="h-5 w-5 text-emerald-400" />
+                  <div className="text-left flex-1">
+                    <p className="text-slate-200 font-medium">Usage personnel</p>
+                    <p className="text-sm text-slate-400">Solde : {soldePerso.toLocaleString('fr-FR')} F$</p>
+                  </div>
+                </button>
+              )}
+
+              {compagniesAffordable.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => { setPourCompagnie(c.id); setPourArmee(false); }}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                    pourCompagnie === c.id && !pourArmee
+                      ? 'border-purple-500 bg-purple-500/20' 
+                      : 'border-slate-600 hover:border-slate-500'
+                  }`}
+                >
+                  <Building2 className="h-5 w-5 text-sky-400" />
+                  <div className="text-left flex-1">
+                    <p className="text-slate-200 font-medium">{c.nom}</p>
+                    <p className="text-sm text-slate-400">Solde : {c.solde.toLocaleString('fr-FR')} F$</p>
+                  </div>
+                </button>
+              ))}
+              {armeeCompte && estMilitaire && (
+                <button
+                  onClick={() => { setPourCompagnie(null); setPourArmee(true); }}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                    pourArmee
+                      ? 'border-red-500 bg-red-500/20'
+                      : 'border-slate-600 hover:border-slate-500'
+                  }`}
+                >
+                  <Building2 className="h-5 w-5 text-red-400" />
+                  <div className="text-left flex-1">
+                    <p className="text-slate-200 font-medium">Armée (PDG)</p>
+                    <p className="text-sm text-slate-400">Solde : {armeeCompte.solde.toLocaleString('fr-FR')} F$</p>
+                  </div>
+                </button>
+              )}
+            </div>
+
+            {error && (
+              <div className="p-4 rounded-xl bg-red-500/20 border border-red-500/40 mb-4">
+                <p className="text-red-300 font-medium text-sm">{error}</p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleAchat}
+                disabled={loading || !canConfirm}
+                className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
+                {loading ? 'Achat en cours…' : 'Confirmer l\'achat'}
+              </button>
+              <button
+                onClick={closeModal}
+                disabled={loading}
+                className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 rounded-lg font-medium transition-colors"
+              >
+                Annuler
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body
+  ) : null;
+
   return (
     <>
       <button
@@ -133,122 +251,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
         <ShoppingCart className="h-4 w-4" />
         Acheter
       </button>
-
-      {showModal && (
-        <div 
-          className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4"
-          onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
-        >
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full relative z-[101] animate-in fade-in zoom-in-95 duration-200 shadow-2xl">
-            {/* Bouton fermer */}
-            <button
-              onClick={closeModal}
-              disabled={loading}
-              className="absolute top-3 right-3 text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-30"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <h3 className="text-lg font-semibold text-slate-100 mb-4 pr-8">
-              Acheter {avionNom}
-            </h3>
-            <p className="text-slate-400 mb-4">
-              Prix : <span className="text-purple-300 font-bold">{prix.toLocaleString('fr-FR')} F$</span>
-            </p>
-
-            {/* Succès */}
-            {success && (
-              <div className="p-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 mb-4">
-                <p className="text-emerald-300 font-medium text-center">{success}</p>
-              </div>
-            )}
-
-            {/* Choix du payeur */}
-            {!success && (
-              <>
-                <p className="text-xs text-slate-500 mb-2">Choisissez le compte à débiter :</p>
-                <div className="space-y-3 mb-6">
-                  {canBuyPersonal && (
-                    <button
-                      onClick={() => { setPourCompagnie(null); setPourArmee(false); }}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                        pourCompagnie === null && !pourArmee
-                          ? 'border-purple-500 bg-purple-500/20' 
-                          : 'border-slate-600 hover:border-slate-500'
-                      }`}
-                    >
-                      <User className="h-5 w-5 text-emerald-400" />
-                      <div className="text-left flex-1">
-                        <p className="text-slate-200 font-medium">Usage personnel</p>
-                        <p className="text-sm text-slate-400">Solde : {soldePerso.toLocaleString('fr-FR')} F$</p>
-                      </div>
-                    </button>
-                  )}
-
-                  {compagniesAffordable.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={() => { setPourCompagnie(c.id); setPourArmee(false); }}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                        pourCompagnie === c.id && !pourArmee
-                          ? 'border-purple-500 bg-purple-500/20' 
-                          : 'border-slate-600 hover:border-slate-500'
-                      }`}
-                    >
-                      <Building2 className="h-5 w-5 text-sky-400" />
-                      <div className="text-left flex-1">
-                        <p className="text-slate-200 font-medium">{c.nom}</p>
-                        <p className="text-sm text-slate-400">Solde : {c.solde.toLocaleString('fr-FR')} F$</p>
-                      </div>
-                    </button>
-                  ))}
-                  {armeeCompte && estMilitaire && (
-                    <button
-                      onClick={() => { setPourCompagnie(null); setPourArmee(true); }}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                        pourArmee
-                          ? 'border-red-500 bg-red-500/20'
-                          : 'border-slate-600 hover:border-slate-500'
-                      }`}
-                    >
-                      <Building2 className="h-5 w-5 text-red-400" />
-                      <div className="text-left flex-1">
-                        <p className="text-slate-200 font-medium">Armée (PDG)</p>
-                        <p className="text-sm text-slate-400">Solde : {armeeCompte.solde.toLocaleString('fr-FR')} F$</p>
-                      </div>
-                    </button>
-                  )}
-                </div>
-
-                {/* Erreur bien visible */}
-                {error && (
-                  <div className="p-4 rounded-xl bg-red-500/20 border border-red-500/40 mb-4">
-                    <p className="text-red-300 font-medium text-sm">{error}</p>
-                  </div>
-                )}
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleAchat}
-                    disabled={loading || !canConfirm}
-                    className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-                  >
-                    {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
-                    {loading ? 'Achat en cours…' : 'Confirmer l\'achat'}
-                  </button>
-                  <button
-                    onClick={closeModal}
-                    disabled={loading}
-                    className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-200 rounded-lg font-medium transition-colors"
-                  >
-                    Annuler
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      {modalContent}
     </>
   );
 }

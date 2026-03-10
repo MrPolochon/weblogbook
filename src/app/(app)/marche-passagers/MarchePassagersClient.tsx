@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { Users, Plane, TrendingUp, MapPin, RefreshCw, Radio, ZoomIn, ZoomOut, Move, Settings, Copy, Check, X, Eye, EyeOff, Plus, Trash2, Pencil } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -220,6 +221,9 @@ export default function MarchePassagersClient({ aeroports }: Props) {
   const [copied, setCopied] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [showNewItemModal, setShowNewItemModal] = useState(false);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const handleZoomIn = useCallback(() => {
     setZoom(z => Math.min(z + 0.25, 4));
@@ -524,12 +528,12 @@ export default function MarchePassagersClient({ aeroports }: Props) {
   return (
     <div className="space-y-4">
       {/* Modal Admin */}
-      {showAdminModal && (
+      {showAdminModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-slate-800 rounded-xl p-6 max-w-sm w-full mx-4 border border-slate-700">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-slate-100">Mode Éditeur</h3>
-              <button onClick={() => { setShowAdminModal(false); setAdminError(null); }} className="text-slate-400 hover:text-slate-200" disabled={adminLoading}>
+              <button onClick={() => { setShowAdminModal(false); setAdminError(null); }} className="text-slate-400 hover:text-slate-200" disabled={adminLoading} aria-label="Fermer">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -555,11 +559,12 @@ export default function MarchePassagersClient({ aeroports }: Props) {
               {adminLoading ? 'Vérification...' : 'Activer le mode éditeur'}
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Nouvel élément */}
-      {showNewItemModal && (
+      {showNewItemModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-slate-800 rounded-xl p-6 max-w-sm w-full mx-4 border border-slate-700">
             <h3 className="text-lg font-bold text-slate-100 mb-4">
@@ -586,7 +591,8 @@ export default function MarchePassagersClient({ aeroports }: Props) {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Contrôles */}

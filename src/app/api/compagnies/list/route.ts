@@ -13,7 +13,7 @@ export async function GET() {
     const admin = createAdminClient();
     const { data, error } = await admin
       .from('compagnies')
-      .select('id, nom, pdg_id')
+      .select('id, nom, pdg_id, code_oaci, callsign_telephonie')
       .order('nom');
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

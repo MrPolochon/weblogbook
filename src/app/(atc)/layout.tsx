@@ -38,13 +38,17 @@ export default async function AtcLayout({
   const { data: session } = await supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single();
   const enService = !!session;
 
-  const admin = createAdminClient();
-  
-  // Récupérer le nombre de messages non lus
-  const { count: messagesNonLusCount } = await admin.from('messages')
-    .select('id', { count: 'exact', head: true })
-    .eq('destinataire_id', user.id)
-    .eq('lu', false);
+  let messagesNonLusCount = 0;
+  try {
+    const admin = createAdminClient();
+    const { count, error } = await admin.from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('destinataire_id', user.id)
+      .eq('lu', false);
+    if (!error) messagesNonLusCount = count ?? 0;
+  } catch {
+    // Env admin manquant ou table messages absente
+  }
 
   let plansAuto: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansOrphelins: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
@@ -52,9 +56,10 @@ export default async function AtcLayout({
   let plansAccepter: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansCloture: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   if (enService && session) {
-    // Nettoyer les transferts expirés (plus d'1 minute)
-    const oneMinAgo = new Date(Date.now() - 60000).toISOString();
-    await admin.from('plans_vol').update({ pending_transfer_aeroport: null, pending_transfer_position: null, pending_transfer_at: null }).lt('pending_transfer_at', oneMinAgo);
+    try {
+      const admin = createAdminClient();
+      const oneMinAgo = new Date(Date.now() - 60000).toISOString();
+      await admin.from('plans_vol').update({ pending_transfer_aeroport: null, pending_transfer_position: null, pending_transfer_at: null }).lt('pending_transfer_at', oneMinAgo);
 
     // Note: On ne réassigne PAS les plans orphelins aux autres ATC.
     // Si un plan n'a pas d'ATC assigné, le pilote peut le clôturer seul.
@@ -74,6 +79,9 @@ export default async function AtcLayout({
     plansCloture = dataCloture ?? [];
     const sessionsActives = new Set((sessionsActive ?? []).map((s) => s.user_id));
     plansOrphelins = (dataOrphelinsRaw ?? []).filter((p) => !p.current_holder_user_id || !sessionsActives.has(p.current_holder_user_id));
+    } catch {
+      // createAdminClient ou tables manquantes
+    }
   }
 
   return (

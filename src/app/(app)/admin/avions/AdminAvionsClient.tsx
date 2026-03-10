@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plane, MapPin, Edit2, Trash2, Save, X, RefreshCw, Building2, Plus, Skull, AlertTriangle } from 'lucide-react';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { toast } from 'sonner';
 
 type Avion = {
   id: string;
@@ -122,7 +123,7 @@ export default function AdminAvionsClient() {
       setShowAddForm(false);
       loadAvions();
       startTransition(() => router.refresh());
-      alert(data.message || 'Avion ajouté avec succès');
+      toast.success(data.message || 'Avion ajouté avec succès');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -181,7 +182,7 @@ export default function AdminAvionsClient() {
       loadAvions();
       startTransition(() => router.refresh());
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     }
   }
 
@@ -198,11 +199,11 @@ export default function AdminAvionsClient() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
       
-      alert(`✈️💥 Avion ${immat} marqué comme DÉTRUIT`);
+      toast.success(`✈️💥 Avion ${immat} marqué comme DÉTRUIT`);
       loadAvions();
       startTransition(() => router.refresh());
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     }
   }
 
@@ -218,11 +219,11 @@ export default function AdminAvionsClient() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
       
-      alert(`Avion ${immat} restauré`);
+      toast.success(`Avion ${immat} restauré`);
       loadAvions();
       startTransition(() => router.refresh());
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     }
   }
 

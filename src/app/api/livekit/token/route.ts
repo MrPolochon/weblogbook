@@ -5,8 +5,9 @@ import { createClient as createBrowserClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
+const allowedOrigin = process.env.NEXT_PUBLIC_APP_URL || '';
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': allowedOrigin || '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
@@ -57,15 +58,7 @@ export async function POST(request: NextRequest) {
     const apiSecret = process.env.LIVEKIT_API_SECRET;
     const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
 
-    console.log('[LiveKit Token] Config check:', {
-      hasApiKey: !!apiKey,
-      hasApiSecret: !!apiSecret,
-      hasUrl: !!livekitUrl,
-      url: livekitUrl?.substring(0, 20) + '...',
-    });
-
     if (!apiKey || !apiSecret) {
-      console.error('[LiveKit Token] Credentials manquants - apiKey:', !!apiKey, 'apiSecret:', !!apiSecret);
       return NextResponse.json({ 
         error: 'Service non configuré',
         details: 'Variables d\'environnement LiveKit manquantes'
@@ -97,8 +90,6 @@ export async function POST(request: NextRequest) {
     });
 
     const token = await at.toJwt();
-
-    console.log('[LiveKit Token] Token généré pour room:', roomName, 'user:', user.id.substring(0, 8));
 
     return NextResponse.json({ 
       token,

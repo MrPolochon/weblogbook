@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Ship, Plus, Clock, Zap, User } from 'lucide-react';
 import { COUT_VOL_FERRY, COUT_VOL_FERRY_AUTO_MIN, COUT_VOL_FERRY_AUTO_MAX, DUREE_VOL_FERRY_AUTO_MIN, DUREE_VOL_FERRY_AUTO_MAX } from '@/lib/compagnie-utils';
+import { toast } from 'sonner';
 
 type VolFerry = {
   id: string;
@@ -110,7 +111,7 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
       if (!res.ok) throw new Error(d.error || 'Erreur');
 
       if (d.message) {
-        alert(d.message);
+        toast.success(d.message);
       }
 
       setAvionId('');
@@ -136,12 +137,12 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      alert(`Vol clôturé. Usure appliquée : ${d.usure_appliquee}%`);
+      toast.success(`Vol clôturé. Usure appliquée : ${d.usure_appliquee}%`);
       startTransition(() => router.refresh());
       loadVols();
       loadAvions();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     }
   }
 
@@ -159,7 +160,7 @@ export default function CompagnieVolsFerryClient({ compagnieId }: { compagnieId:
       loadVols();
       loadAvions();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     }
   }
 

@@ -10,10 +10,18 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const body = await req.json();
-    const { compte_source_id, vban_destination, montant, libelle } = body;
+    const { compte_source_id, vban_destination, montant: rawMontant, libelle } = body;
 
-    if (!compte_source_id || !vban_destination || !montant || montant <= 0) {
-      return NextResponse.json({ error: 'Paramètres invalides' }, { status: 400 });
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!compte_source_id || !UUID_REGEX.test(String(compte_source_id))) {
+      return NextResponse.json({ error: 'compte_source_id invalide' }, { status: 400 });
+    }
+    if (!vban_destination || typeof vban_destination !== 'string' || vban_destination.length > 30) {
+      return NextResponse.json({ error: 'vban_destination invalide' }, { status: 400 });
+    }
+    const montant = Number(rawMontant);
+    if (!Number.isFinite(montant) || montant <= 0 || montant > 999_999_999 || Math.floor(montant) !== montant) {
+      return NextResponse.json({ error: 'Montant invalide (entier positif requis)' }, { status: 400 });
     }
 
     const admin = createAdminClient();

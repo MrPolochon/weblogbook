@@ -493,6 +493,25 @@ hr {
   .badge-danger {
     @apply badge bg-red-500/20 text-red-300 border border-red-500/30;
   }
+  .btn-warning {
+    @apply btn bg-gradient-to-r from-amber-600 to-amber-500 text-white hover:from-amber-500 hover:to-amber-400 focus:ring-amber-500 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40;
+  }
+  .btn-sm {
+    @apply px-3 py-1.5 text-xs rounded-lg;
+  }
+  .btn-icon {
+    @apply btn p-2 rounded-xl;
+  }
+  /* Modal overlay */
+  .modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm;
+  }
+  .modal-content {
+    @apply relative w-full max-w-lg mx-4 rounded-2xl border border-slate-700/40 bg-slate-800 shadow-2xl shadow-black/40 p-6;
+  }
+  .modal-close {
+    @apply absolute top-4 right-4 p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700/50 transition-colors;
+  }
 }
 
 /* ========== VIEW TRANSITIONS & PAGE SMOOTHNESS ========== */
@@ -583,6 +602,24 @@ button:active:not(:disabled), [role="button"]:active:not(:disabled) {
 @keyframes nav-progress-move {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* Sonner toast theme integration */
+[data-sonner-toaster] [data-sonner-toast] {
+  --normal-bg: #1e293b;
+  --normal-border: rgba(51, 65, 85, 0.5);
+  --normal-text: #f1f5f9;
+  font-family: inherit;
+}
+[data-sonner-toaster] [data-sonner-toast][data-type="success"] {
+  --success-bg: #064e3b;
+  --success-border: rgba(16, 185, 129, 0.3);
+  --success-text: #d1fae5;
+}
+[data-sonner-toaster] [data-sonner-toast][data-type="error"] {
+  --error-bg: #7f1d1d;
+  --error-border: rgba(239, 68, 68, 0.3);
+  --error-text: #fecaca;
 }
 
 @media (max-width: 640px) {

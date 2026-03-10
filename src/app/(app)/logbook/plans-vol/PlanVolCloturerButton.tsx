@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle2, X, Plane } from 'lucide-react';
@@ -15,6 +16,9 @@ export default function PlanVolCloturerButton({ planId, statut }: Props) {
   const [loading, setLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [clotureDirecte, setClotureDirecte] = useState(false);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const peutCloturer = STATUTS_OUVERTS.includes(statut);
   const enAttenteConfirmation = statut === 'en_attente_cloture';
@@ -61,7 +65,7 @@ export default function PlanVolCloturerButton({ planId, statut }: Props) {
       </button>
 
       {/* Modal de succès */}
-      {showSuccessModal && (
+      {showSuccessModal && mounted && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-slate-700 shadow-2xl">
             <div className="flex items-start gap-4">
@@ -99,12 +103,14 @@ export default function PlanVolCloturerButton({ planId, statut }: Props) {
               <button
                 onClick={handleCloseModal}
                 className="text-slate-400 hover:text-slate-200"
+                aria-label="Fermer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

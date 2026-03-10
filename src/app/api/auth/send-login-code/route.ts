@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { sendLoginCodeEmail } from '@/lib/email';
+import { rateLimit } from '@/lib/rate-limit';
 
 const CODE_EXPIRY_MINUTES = 10;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -37,6 +38,11 @@ export async function POST(req: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+    const { allowed } = rateLimit(`send-code:${user.id}`, 5, 10 * 60 * 1000);
+    if (!allowed) {
+      return NextResponse.json({ error: 'Trop de demandes de code. Réessayez dans quelques minutes.' }, { status: 429 });
+    }
 
     const admin = createAdminClient();
     const currentIp = getClientIp(req);

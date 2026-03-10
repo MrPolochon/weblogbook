@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Trash2, BookOpen, Crown, Settings, Save, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner';
 
 type Pilote = { id: string; identifiant: string };
 type C = { 
@@ -40,12 +41,12 @@ export default function CompagniesList({ compagnies, pilotes }: { compagnies: C[
       const res = await fetch(`/api/compagnies/${id}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(data.error || 'Erreur lors de la suppression');
+        toast.error(data.error || 'Erreur lors de la suppression');
         return;
       }
       startTransition(() => router.refresh());
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur lors de la suppression');
+      toast.error(e instanceof Error ? e.message : 'Erreur lors de la suppression');
     } finally {
       setDeleting(null);
     }

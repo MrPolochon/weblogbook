@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { 
   AlertTriangle, FileSearch, Gavel, Plus, X, Check, Loader2, 
@@ -199,6 +200,9 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [dataError, setDataError] = useState('');
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const [selectedCompagnieId, setSelectedCompagnieId] = useState('');
   const [selectedPiloteId, setSelectedPiloteId] = useState('');
@@ -1431,7 +1435,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       )}
 
       {/* Modal Nouvelle Sanction */}
-      {showSanctionModal && (
+      {showSanctionModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
@@ -1614,11 +1618,12 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Nouvelle Enquête */}
-      {showEnqueteModal && (
+      {showEnqueteModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
@@ -1715,11 +1720,12 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Détails Signalement */}
-      {selectedSignalement && !showEnqueteModal && (
+      {selectedSignalement && !showEnqueteModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between mb-4">
@@ -1727,7 +1733,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                 <span className="text-xs font-mono text-slate-500">{selectedSignalement.numero_signalement}</span>
                 <h3 className="text-lg font-semibold text-slate-100">{selectedSignalement.titre}</h3>
               </div>
-              <button onClick={() => setSelectedSignalement(null)} className="text-slate-400 hover:text-slate-200">
+              <button onClick={() => setSelectedSignalement(null)} className="text-slate-400 hover:text-slate-200" aria-label="Fermer">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -1773,11 +1779,12 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Détail/Édition Enquête */}
-      {showEnqueteDetailModal && selectedEnquete && enqueteEditState && (
+      {showEnqueteDetailModal && selectedEnquete && enqueteEditState && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between mb-4">
@@ -1788,6 +1795,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
               <button 
                 onClick={() => { setShowEnqueteDetailModal(false); setSelectedEnquete(null); setEnqueteEditState(null); }}
                 className="text-slate-400 hover:text-slate-200"
+                aria-label="Fermer"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1916,7 +1924,8 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

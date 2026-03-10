@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
+import { rateLimit } from '@/lib/rate-limit';
 
 function getClientIp(request: NextRequest): string | null {
   const forwarded = request.headers.get('x-forwarded-for');
@@ -25,6 +26,11 @@ export async function POST(req: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+    const { allowed } = rateLimit(`verify-code:${user.id}`, 10, 15 * 60 * 1000);
+    if (!allowed) {
+      return NextResponse.json({ error: 'Trop de tentatives. Réessayez dans quelques minutes.' }, { status: 429 });
+    }
 
     const body = await req.json().catch(() => ({}));
     const code = typeof body.code === 'string' ? body.code.trim().replace(/\s/g, '') : '';

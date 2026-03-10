@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback, useTransition } from 'react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
+import { toast } from 'sonner';
 
 type PlanTransfert = { id: string; numero_vol: string };
 type PlanAccepter = { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string };
@@ -229,7 +230,7 @@ export default function AtcAcceptTransfertSidebar({
       if (!res.ok) throw new Error(d.error || 'Erreur');
       startTransition(() => router.refresh());
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoadingId(null);
     }

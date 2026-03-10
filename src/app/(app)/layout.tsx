@@ -45,7 +45,9 @@ export default async function AppLayout({
   }
 
   let pendingVolsCount = 0;
-  let adminPlansNonCloturesCount = 0;
+  let adminPlansEnAttenteCount = 0; // plans depose/en_attente uniquement (badge = actions à faire)
+  let adminPasswordResetCount = 0;
+  let adminAeroschoolCount = 0;
   let volsAConfirmerCount = 0;
   let plansNonCloturesCount = 0;
   let messagesNonLusCount = 0;
@@ -54,15 +56,21 @@ export default async function AppLayout({
   if (isAdmin) {
     try {
       const admin = createAdminClient();
-      const [{ count: volsCount }, { count: plansCount }] = await Promise.all([
+      const results = await Promise.allSettled([
         admin.from('vols').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
-        admin.from('plans_vol').select('*', { count: 'exact', head: true }).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']).or('created_by_atc.is.null,created_by_atc.eq.false'),
+        admin.from('plans_vol').select('*', { count: 'exact', head: true }).in('statut', ['depose', 'en_attente']).or('created_by_atc.is.null,created_by_atc.eq.false'),
+        admin.from('password_reset_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        admin.from('aeroschool_responses').select('*', { count: 'exact', head: true }).eq('status', 'submitted'),
       ]);
-      pendingVolsCount = volsCount ?? 0;
-      adminPlansNonCloturesCount = plansCount ?? 0;
+      pendingVolsCount = (results[0].status === 'fulfilled' && !(results[0].value as { error?: unknown })?.error) ? ((results[0].value as { count?: number })?.count ?? 0) : 0;
+      adminPlansEnAttenteCount = (results[1].status === 'fulfilled' && !(results[1].value as { error?: unknown })?.error) ? ((results[1].value as { count?: number })?.count ?? 0) : 0;
+      adminPasswordResetCount = (results[2].status === 'fulfilled' && !(results[2].value as { error?: unknown })?.error) ? ((results[2].value as { count?: number })?.count ?? 0) : 0;
+      adminAeroschoolCount = (results[3].status === 'fulfilled' && !(results[3].value as { error?: unknown })?.error) ? ((results[3].value as { count?: number })?.count ?? 0) : 0;
     } catch {
       pendingVolsCount = 0;
-      adminPlansNonCloturesCount = 0;
+      adminPlansEnAttenteCount = 0;
+      adminPasswordResetCount = 0;
+      adminAeroschoolCount = 0;
     }
   }
   try {
@@ -121,7 +129,7 @@ export default async function AppLayout({
       <InactivityLogout />
       <AutoRefresh intervalSeconds={30} />
       <AdminModeBg />
-      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} pendingVolsCount={pendingVolsCount} adminPlansNonCloturesCount={adminPlansNonCloturesCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} />
+      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} pendingVolsCount={pendingVolsCount} adminPlansEnAttenteCount={adminPlansEnAttenteCount} adminPasswordResetCount={adminPasswordResetCount} adminAeroschoolCount={adminAeroschoolCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} />
       {plansNonCloturesCount > 0 && (
         <div className="border-b border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-amber-500/10 backdrop-blur-sm">
           <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-center gap-3 flex-wrap">

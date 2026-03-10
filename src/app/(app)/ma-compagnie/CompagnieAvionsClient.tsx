@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Plane, Plus, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2, Handshake } from 'lucide-react';
 import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX } from '@/lib/compagnie-utils';
 import Link from 'next/link';
+import { toast } from 'sonner';
 
 type TypeAvion = { id: string; nom: string; constructeur: string };
 type Hub = { aeroport_code: string };
@@ -55,6 +57,9 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
   const [editImmat, setEditImmat] = useState('');
   const [editNom, setEditNom] = useState('');
 
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   const loadAvions = useCallback(async () => {
     try {
       const res = await fetch(`/api/compagnies/avions?compagnie_id=${compagnieId}`);
@@ -104,7 +109,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setActionId(null);
     }
@@ -120,7 +125,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setActionId(null);
     }
@@ -135,21 +140,21 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (d.temps_restant_min !== undefined) {
-          alert(`Techniciens en cours de travail. Temps restant : ${d.temps_restant_min} min.`);
+          toast.info(`Techniciens en cours de travail. Temps restant : ${d.temps_restant_min} min.`);
         } else {
           throw new Error(d.error || 'Erreur');
         }
         return;
       }
       if (d.repare) {
-        alert('Avion réparé avec succès ! L\'avion est maintenant opérationnel.');
+        toast.success('Avion réparé avec succès ! L\'avion est maintenant opérationnel.');
       } else {
-        alert(d.message || `Techniciens affrétés. L'avion sera réparé dans ${d.temps_attente_min || 60} minutes.`);
+        toast.info(d.message || `Techniciens affrétés. L'avion sera réparé dans ${d.temps_attente_min || 60} minutes.`);
       }
       startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setActionId(null);
     }
@@ -162,14 +167,14 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       const res = await fetch(`/api/compagnies/avions/${avionId}/affreter-techniciens`, { method: 'POST' });
       const d = await res.json().catch(() => ({}));
       if (d.repare) {
-        alert('Avion réparé avec succès ! L\'avion est maintenant opérationnel.');
+        toast.success('Avion réparé avec succès ! L\'avion est maintenant opérationnel.');
         startTransition(() => router.refresh());
         loadAvions();
       } else if (d.temps_restant_min !== undefined) {
-        alert(`Maintenance en cours. Temps restant : ${d.temps_restant_min} min.`);
+        toast.info(`Maintenance en cours. Temps restant : ${d.temps_restant_min} min.`);
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setActionId(null);
     }
@@ -185,11 +190,11 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
       
-      alert(d.message);
+      toast.info(d.message);
       startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setActionId(null);
     }
@@ -205,11 +210,11 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
       
-      alert(d.message);
+      toast.success(d.message);
       startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setActionId(null);
     }
@@ -239,7 +244,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setActionId(null);
     }
@@ -267,7 +272,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       setLocationCompagnieId('');
       startTransition(() => router.refresh());
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setActionId(null);
     }
@@ -686,7 +691,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
         </div>
       )}
 
-      {showLocationModal && (
+      {showLocationModal && mounted && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-slate-700">
             <h3 className="text-lg font-semibold text-slate-100 mb-4">Mettre en location</h3>
@@ -722,7 +727,8 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
               <button className="btn-secondary" onClick={() => setShowLocationModal(false)}>Annuler</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

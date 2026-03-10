@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
+import { rateLimit } from '@/lib/rate-limit';
 
 /**
  * POST body: { token: string, new_password: string }
@@ -7,6 +8,12 @@ import { NextResponse, NextRequest } from 'next/server';
  */
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown';
+    const { allowed } = rateLimit(`reset-pwd:${ip}`, 5, 15 * 60 * 1000);
+    if (!allowed) {
+      return NextResponse.json({ error: 'Trop de tentatives. Réessayez dans quelques minutes.' }, { status: 429 });
+    }
+
     const body = await req.json().catch(() => ({}));
     const token = typeof body.token === 'string' ? body.token.trim() : '';
     const newPassword = typeof body.new_password === 'string' ? body.new_password : '';

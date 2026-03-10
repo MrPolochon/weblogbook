@@ -12,17 +12,23 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const { nom, pdg_id } = body;
-    if (!nom || typeof nom !== 'string' || !nom.trim()) {
+    const nomTrim = typeof nom === 'string' ? nom.trim() : '';
+    if (!nomTrim) {
       return NextResponse.json({ error: 'Nom requis' }, { status: 400 });
     }
 
     const admin = createAdminClient();
-    const { data, error } = await admin.from('compagnies').insert({ 
-      nom: nom.trim(),
+    const { data, error } = await admin.from('compagnies').insert({
+      nom: nomTrim,
       pdg_id: pdg_id || null
     }).select('id').single();
-    
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    if (error) {
+      if (error.code === '23505' || /unique|duplicate/i.test(error.message ?? '')) {
+        return NextResponse.json({ error: 'Une compagnie avec ce nom existe déjà' }, { status: 409 });
+      }
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ ok: true, id: data.id });
   } catch (e) {
     console.error('Compagnie create error:', e);

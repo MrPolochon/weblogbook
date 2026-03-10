@@ -14,14 +14,16 @@ interface NavBarProps {
   hasCompagnie?: boolean;
   isIfsa?: boolean;
   pendingVolsCount?: number;
-  adminPlansNonCloturesCount?: number;
+  adminPlansEnAttenteCount?: number;
+  adminPasswordResetCount?: number;
+  adminAeroschoolCount?: number;
   volsAConfirmerCount?: number;
   messagesNonLusCount?: number;
   invitationsCount?: number;
   signalementsNouveauxCount?: number;
 }
 
-export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, isIfsa = false, pendingVolsCount = 0, adminPlansNonCloturesCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0, invitationsCount = 0, signalementsNouveauxCount = 0 }: NavBarProps) {
+export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, isIfsa = false, pendingVolsCount = 0, adminPlansEnAttenteCount = 0, adminPasswordResetCount = 0, adminAeroschoolCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0, invitationsCount = 0, signalementsNouveauxCount = 0 }: NavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -30,13 +32,16 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const targetNode = event.target as Node | null;
-      const containsTarget = menuRef.current ? !!targetNode && menuRef.current.contains(targetNode) : false;
-      if (menuRef.current && !containsTarget) {
+      if (menuRef.current && targetNode && !menuRef.current.contains(targetNode)) {
         setPiloteMenuOpen(false);
+      }
+      if (accountMenuRef.current && targetNode && !accountMenuRef.current.contains(targetNode)) {
+        setAccountMenuOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -103,6 +108,8 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
           <div className="relative" ref={menuRef}>
             <button
               ref={triggerRef}
+              aria-label="Ouvrir le menu Espace Pilote"
+              aria-expanded={piloteMenuOpen}
               onPointerDown={() => {
                 setPiloteMenuOpen((prev) => !prev);
               }}
@@ -188,12 +195,17 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             >
               <LayoutDashboard className="h-4 w-4" />
               Admin
-              {(pendingVolsCount + adminPlansNonCloturesCount) > 0 && (
+              {(pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount) > 0 && (
                 <span
                   className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white ring-2 ring-slate-900"
-                  title={`${pendingVolsCount > 0 ? `${pendingVolsCount} vol(s) en attente` : ''}${pendingVolsCount > 0 && adminPlansNonCloturesCount > 0 ? ' + ' : ''}${adminPlansNonCloturesCount > 0 ? `${adminPlansNonCloturesCount} plan(s) non clôturé(s)` : ''}`}
+                  title={[
+                    pendingVolsCount > 0 && `${pendingVolsCount} vol(s) en attente`,
+                    adminPlansEnAttenteCount > 0 && `${adminPlansEnAttenteCount} plan(s) en attente`,
+                    adminPasswordResetCount > 0 && `${adminPasswordResetCount} demande(s) MDP`,
+                    adminAeroschoolCount > 0 && `${adminAeroschoolCount} AeroSchool`,
+                  ].filter(Boolean).join(' · ')}
                 >
-                  {(pendingVolsCount + adminPlansNonCloturesCount) > 99 ? '99+' : (pendingVolsCount + adminPlansNonCloturesCount)}
+                  {(pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount) > 99 ? '99+' : (pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount)}
                 </span>
               )}
             </Link>
@@ -281,6 +293,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             </Link>
             <button
               onClick={handleLogout}
+              aria-label="Se déconnecter"
               className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-red-400"
             >
               <LogOut className="h-4 w-4" />
@@ -288,7 +301,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             </button>
           </div>
 
-          <div className="sm:hidden">
+          <div className="sm:hidden" ref={accountMenuRef}>
             <button
               type="button"
               onClick={() => setAccountMenuOpen((prev) => !prev)}
@@ -334,6 +347,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
                 </Link>
                 <button
                   onClick={handleLogout}
+                  aria-label="Se déconnecter"
                   className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800/50 hover:bg-slate-800 hover:text-red-300"
                 >
                   <LogOut className="h-4 w-4" />

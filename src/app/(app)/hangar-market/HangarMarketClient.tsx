@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { 
   Plus, Search, Plane, ShoppingCart, RefreshCw, Building2, User, 
@@ -104,6 +105,9 @@ export default function HangarMarketClient({
   const [showAchatModal, setShowAchatModal] = useState(false);
   const [selectedAnnonce, setSelectedAnnonce] = useState<Annonce | null>(null);
   const [acheterPour, setAcheterPour] = useState<string | null>(null);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   // Filtrer les annonces
   const annoncesFiltrees = annonces.filter(a => {
@@ -484,7 +488,7 @@ export default function HangarMarketClient({
       )}
 
       {/* Modal Vendre */}
-      {showVendreModal && (
+      {showVendreModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-4">
@@ -639,11 +643,12 @@ export default function HangarMarketClient({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modal Achat */}
-      {showAchatModal && selectedAnnonce && (
+      {showAchatModal && selectedAnnonce && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
             <h3 className="text-lg font-semibold text-slate-100 mb-4">
@@ -729,7 +734,8 @@ export default function HangarMarketClient({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

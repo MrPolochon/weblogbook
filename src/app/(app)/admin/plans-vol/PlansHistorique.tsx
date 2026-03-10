@@ -6,6 +6,7 @@ import {
   Plane, Clock, Building2, Search, ChevronDown, ChevronUp,
   Users, Radio, CheckCircle, XCircle, AlertTriangle, Flame,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 type ATCControl = {
   user_id: string;
@@ -80,13 +81,13 @@ export default function PlansHistorique({ plans }: { plans: PlanCloture[] }) {
       });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || 'Erreur lors du marquage crash');
+        toast.error(data.error || 'Erreur lors du marquage crash');
         return;
       }
       setCrashConfirmId(null);
       startTransition(() => router.refresh());
     } catch {
-      alert('Erreur réseau');
+      toast.error('Erreur réseau');
     } finally {
       setCrashingId(null);
     }

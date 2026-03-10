@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function VolDeleteButton({ volId, canDelete = true }: { volId: string; canDelete?: boolean }) {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function VolDeleteButton({ volId, canDelete = true }: { volId: st
       const res = await fetch(`/api/vols/${volId}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(data?.error || 'Erreur lors de la suppression.');
+        toast.error(data?.error || 'Erreur lors de la suppression.');
         return;
       }
       startTransition(() => router.refresh());

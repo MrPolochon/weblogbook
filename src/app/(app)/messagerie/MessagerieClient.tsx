@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight, UserPlus, Check, XCircle, AlertTriangle, Banknote } from 'lucide-react';
 import ChequeVisuel from '@/components/ChequeVisuel';
 import { formatDateShortUTC, formatDateTimeUTC } from '@/lib/date-utils';
+import { toast } from 'sonner';
 
 interface Message {
   id: string;
@@ -178,7 +179,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       setSelectedMessage(null);
       startTransition(() => router.refresh());
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoading(false);
     }

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Landmark, DollarSign, Percent, Clock, CheckCircle2, AlertTriangle, TrendingDown } from 'lucide-react';
+import { toast } from 'sonner';
 
 type OptionPret = {
   montant: number;
@@ -88,7 +89,7 @@ export default function CompagniePretClient({ compagnieId }: Props) {
       
       if (!res.ok) throw new Error(data.error || 'Erreur');
       
-      alert(data.message);
+      toast.success(data.message);
       setSelectedMontant(null);
       loadPret();
       startTransition(() => router.refresh());
@@ -123,7 +124,7 @@ export default function CompagniePretClient({ compagnieId }: Props) {
       
       if (!res.ok) throw new Error(data.error || 'Erreur');
       
-      alert(data.message);
+      toast.success(data.message);
       setMontantRemboursement('');
       loadPret();
       startTransition(() => router.refresh());

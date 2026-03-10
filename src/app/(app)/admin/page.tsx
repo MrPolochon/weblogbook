@@ -28,21 +28,21 @@ async function getAdminCounts(): Promise<Record<string, number>> {
   try {
     const admin = createAdminClient();
     const results = await Promise.allSettled([
-      // Demandes de réinitialisation MDP en attente
       admin.from('password_reset_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      // Vols en attente de validation
       admin.from('vols').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
-      // Plans de vol non clôturés (exclut les strips manuels ATC)
-      admin.from('plans_vol').select('*', { count: 'exact', head: true }).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']).or('created_by_atc.is.null,created_by_atc.eq.false'),
-      // Réponses AeroSchool en attente d'examen
+      admin.from('plans_vol').select('*', { count: 'exact', head: true }).in('statut', ['depose', 'en_attente']).or('created_by_atc.is.null,created_by_atc.eq.false'),
       admin.from('aeroschool_responses').select('*', { count: 'exact', head: true }).eq('status', 'submitted'),
     ]);
-    if (results[0].status === 'fulfilled') counts.passwordResetRequests = results[0].value.count ?? 0;
-    if (results[1].status === 'fulfilled') counts.volsEnAttente = results[1].value.count ?? 0;
-    if (results[2].status === 'fulfilled') counts.plansNonClotures = results[2].value.count ?? 0;
-    if (results[3].status === 'fulfilled') counts.aeroschoolResponses = results[3].value.count ?? 0;
+    const keys: (keyof typeof counts)[] = ['passwordResetRequests', 'volsEnAttente', 'plansNonClotures', 'aeroschoolResponses'];
+    results.forEach((r, i) => {
+      if (r.status === 'fulfilled' && r.value && !(r.value as { error?: unknown }).error) {
+        counts[keys[i]] = (r.value as { count?: number | null }).count ?? 0;
+      } else {
+        counts[keys[i]] = 0;
+      }
+    });
   } catch {
-    // Tables may not exist yet
+    // createAdminClient() peut lever si env manquant ; tables peuvent ne pas exister
   }
   return counts;
 }

@@ -31,6 +31,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Fichier, user_id et type requis' }, { status: 400 });
     }
 
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(userId)) {
+      return NextResponse.json({ error: 'user_id invalide' }, { status: 400 });
+    }
+    if (!['logo', 'photo'].includes(type)) {
+      return NextResponse.json({ error: 'type invalide' }, { status: 400 });
+    }
+
     // Vérifier le type de fichier
     if (!file.type.startsWith('image/')) {
       return NextResponse.json({ error: 'Le fichier doit être une image' }, { status: 400 });

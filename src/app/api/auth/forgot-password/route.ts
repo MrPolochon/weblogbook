@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { sendPasswordResetLinkEmail } from '@/lib/email';
+import { rateLimit } from '@/lib/rate-limit';
 
 const TOKEN_EXPIRY_HOURS = 24;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -23,6 +24,12 @@ function randomToken(): string {
  */
 export async function POST(req: NextRequest) {
   try {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown';
+    const { allowed } = rateLimit(`forgot-password:${ip}`, 5, 15 * 60 * 1000);
+    if (!allowed) {
+      return NextResponse.json({ error: 'Trop de tentatives. Réessayez dans quelques minutes.' }, { status: 429 });
+    }
+
     const body = await req.json().catch(() => ({}));
     const identifiantOrEmail = typeof body.identifiant_or_email === 'string' ? body.identifiant_or_email.trim() : '';
     const action = body.action === 'request_admin' ? 'request_admin' : 'send_link';
@@ -53,33 +60,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Aucun compte trouvé avec cet identifiant ou cette adresse email.' },
-        { status: 404 }
-      );
-    }
-
     if (action === 'request_admin') {
-      await admin.from('password_reset_requests').insert({
-        identifiant_or_email: identifiantOrEmail,
-        user_id: userId,
-        status: 'pending',
-      });
+      if (userId) {
+        await admin.from('password_reset_requests').insert({
+          identifiant_or_email: identifiantOrEmail,
+          user_id: userId,
+          status: 'pending',
+        });
+      }
       return NextResponse.json({
         ok: true,
-        message: 'Votre demande a été envoyée aux administrateurs. Vous serez contacté ou pourrez vous reconnecter une fois le mot de passe réinitialisé.',
+        message: 'Si un compte correspondant existe, votre demande a été envoyée aux administrateurs.',
       });
     }
 
-    if (!profileEmail) {
-      return NextResponse.json(
-        {
-          error: 'Aucun email enregistré sur ce compte. Vous pouvez faire une demande aux administrateurs (bouton ci-dessous).',
-          suggest_admin: true,
-        },
-        { status: 400 }
-      );
+    if (!userId || !profileEmail) {
+      return NextResponse.json({
+        ok: true,
+        message: 'Si un compte avec un email enregistré correspond, un lien de réinitialisation a été envoyé.',
+        suggest_admin: !userId ? false : true,
+      });
     }
 
     const token = randomToken();
@@ -93,11 +93,11 @@ export async function POST(req: NextRequest) {
 
     const { ok, error } = await sendPasswordResetLinkEmail(profileEmail, resetUrl);
     if (!ok) {
-      return NextResponse.json({ error: error || 'Impossible d\'envoyer l\'email.' }, { status: 502 });
+      console.error('[forgot-password] Email send error:', error);
     }
     return NextResponse.json({
       ok: true,
-      message: 'Un lien de réinitialisation a été envoyé à l\'adresse enregistrée sur votre compte.',
+      message: 'Si un compte avec un email enregistré correspond, un lien de réinitialisation a été envoyé.',
     });
   } catch (e) {
     console.error('[forgot-password]', e);
