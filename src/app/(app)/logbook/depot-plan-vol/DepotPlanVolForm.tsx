@@ -453,6 +453,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       
       // Si pas d'ATC disponible, proposer le vol sans ATC
       if (!res.ok && data.error && data.error.includes('Aucune fréquence ATC')) {
+        submitBusyRef.current = false;
         setShowNoAtcConfirm(true);
         setLoading(false);
         return;
@@ -486,6 +487,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
+      submitBusyRef.current = false;
       setLoading(false);
     }
   }
@@ -532,6 +534,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
+      submitBusyRef.current = false;
       setLoading(false);
     }
   }

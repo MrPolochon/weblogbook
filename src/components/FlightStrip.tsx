@@ -449,12 +449,11 @@ function Cell({ children, className = '' }: { children: React.ReactNode; classNa
   ⠿ drag handle on the left
 */
 export default function FlightStrip({
-  strip, onRefresh, onContextMenu, dragHandleProps,
+  strip, onRefresh, onContextMenu,
 }: {
   strip: StripData;
   onRefresh?: () => void;
   onContextMenu?: (e: React.MouseEvent, stripId: string) => void;
-  dragHandleProps?: { draggable: true; onDragStart: (e: React.DragEvent) => void; onDragEnd: (e: React.DragEvent) => void; };
 }) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
@@ -553,7 +552,6 @@ export default function FlightStrip({
         {/* ═══ DRAG HANDLE ═══ */}
         <div
           className={`w-5 flex items-center justify-center cursor-grab active:cursor-grabbing ${topBg} border-r ${sep} shrink-0`}
-          {...dragHandleProps}
         >
           <GripVertical className={`h-3.5 w-3.5 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
         </div>
