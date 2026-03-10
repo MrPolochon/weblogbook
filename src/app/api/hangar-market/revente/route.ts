@@ -145,24 +145,9 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: insertErr.message }, { status: 400 });
       }
 
-      // Notifier les admins
-      const { data: admins } = await admin.from('profiles')
-        .select('id')
-        .eq('role', 'admin');
-
-      for (const adm of admins || []) {
-        await admin.from('messages').insert({
-          destinataire_id: adm.id,
-          expediteur_id: user.id,
-          titre: `📋 Demande de revente à ${pct}%`,
-          contenu: `Demande de revente d'un ${avionInfo.typeAvionNom} à ${pct}% du prix initial (${montant.toLocaleString('fr-FR')} F$ au lieu de ${Math.round(avionInfo.prixInitial! * POURCENTAGE_BASE / 100).toLocaleString('fr-FR')} F$).\n\nRaison : ${raison.trim()}`,
-          type_message: 'normal',
-        });
-      }
-
       return NextResponse.json({
         ok: true,
-        message: `Demande de revente à ${pct}% envoyée aux administrateurs.`,
+        message: `Demande de revente à ${pct}% envoyée. Elle apparaîtra dans la section admin.`,
       });
     }
 
@@ -205,17 +190,10 @@ export async function POST(req: NextRequest) {
       });
 
       if (!result.success) {
-        // Si l'exécution échoue, notifier le demandeur
-        await admin.from('messages').insert({
-          destinataire_id: demande.demandeur_id,
-          titre: '❌ Revente impossible',
-          contenu: `Votre demande de revente a été approuvée mais n'a pas pu être exécutée : ${result.error}`,
-          type_message: 'normal',
-        });
         return NextResponse.json({ error: result.error }, { status: 400 });
       }
 
-      // Notifier le demandeur
+      // Notifier le demandeur de l'approbation
       await admin.from('messages').insert({
         destinataire_id: demande.demandeur_id,
         titre: `✅ Revente approuvée — ${result.montant?.toLocaleString('fr-FR')} F$`,
