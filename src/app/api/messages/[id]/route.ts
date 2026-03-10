@@ -147,12 +147,6 @@ export async function PATCH(
         return NextResponse.json({ error: 'Erreur lors du crédit' }, { status: 500 });
       }
 
-      if (creditError) {
-        // Rollback: remettre le chèque comme non encaissé
-        await admin.from('messages').update({ cheque_encaisse: false, cheque_encaisse_at: null }).eq('id', id);
-        return NextResponse.json({ error: 'Erreur lors du crédit' }, { status: 500 });
-      }
-
       // Créer la transaction
       const { error: txError } = await admin.from('felitz_transactions').insert({
         compte_id: compteId,
