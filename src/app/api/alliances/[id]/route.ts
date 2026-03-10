@@ -36,13 +36,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .select('id, compagnie_id, role, joined_at, codeshare_pourcent, compagnies(id, nom)')
     .eq('alliance_id', id);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let membresData: any[] | null = rawMembres;
+  let membresData: Record<string, unknown>[] | null = rawMembres as Record<string, unknown>[] | null;
   if (membresErr) {
     const { data: fallback } = await admin.from('alliance_membres')
       .select('id, compagnie_id, role, joined_at, compagnies(id, nom)')
       .eq('alliance_id', id);
-    membresData = fallback;
+    membresData = fallback as Record<string, unknown>[] | null;
   }
 
   const membres = (membresData || []).map(m => {
