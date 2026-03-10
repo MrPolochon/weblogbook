@@ -676,6 +676,16 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   Réparer
                                 </button>
                               )}
+                              {a.statut === 'ground' && a.usure_percent > 0 && !a.detruit && !isLeasedOut && isPdg && (
+                                <Link
+                                  href={`/reparation?demander=1&avion_id=${a.id}&compagnie_id=${compagnieId}`}
+                                  className="text-xs text-orange-400 hover:underline inline-flex items-center gap-1"
+                                  title="Envoyer chez une entreprise de réparation"
+                                >
+                                  <Wrench className="h-3 w-3" />
+                                  Réparation pro
+                                </Link>
+                              )}
                                 </>
                               )}
                             </>

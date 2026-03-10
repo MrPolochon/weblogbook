@@ -109,6 +109,17 @@ export default async function AppLayout({
     invitationsCount = 0;
   }
   
+  // Vérifier si l'utilisateur est employé d'une entreprise de réparation
+  let isReparateur = false;
+  try {
+    const admin = createAdminClient();
+    const { data: repEmp } = await admin.from('reparation_employes').select('id').eq('user_id', user.id).limit(1);
+    const { data: repPdg } = await admin.from('entreprises_reparation').select('id').eq('pdg_id', user.id).limit(1);
+    isReparateur = (repEmp?.length ?? 0) > 0 || (repPdg?.length ?? 0) > 0;
+  } catch {
+    isReparateur = false;
+  }
+
   // Compter les signalements nouveaux pour IFSA (table peut ne pas exister)
   if (isIfsa || isAdmin) {
     try {
@@ -129,7 +140,7 @@ export default async function AppLayout({
       <InactivityLogout />
       <AutoRefresh intervalSeconds={30} />
       <AdminModeBg />
-      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} pendingVolsCount={pendingVolsCount} adminPlansEnAttenteCount={adminPlansEnAttenteCount} adminPasswordResetCount={adminPasswordResetCount} adminAeroschoolCount={adminAeroschoolCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} />
+      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} isReparateur={isReparateur} pendingVolsCount={pendingVolsCount} adminPlansEnAttenteCount={adminPlansEnAttenteCount} adminPasswordResetCount={adminPasswordResetCount} adminAeroschoolCount={adminAeroschoolCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} />
       {plansNonCloturesCount > 0 && (
         <div className="border-b border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-amber-500/10 backdrop-blur-sm">
           <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-center gap-3 flex-wrap">

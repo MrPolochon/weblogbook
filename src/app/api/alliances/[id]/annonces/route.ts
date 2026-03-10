@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: allianceId } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -18,21 +18,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .in('compagnie_id', (myComps || []).map(c => c.id))
     .limit(1).single();
 
-  if (!myMember || !['president', 'vice_president'].includes(myMember.role)) {
+  if (!myMember || !['president', 'vice_president', 'secretaire'].includes(myMember.role)) {
     return NextResponse.json({ error: 'Droits insuffisants' }, { status: 403 });
   }
 
   const body = await req.json().catch(() => ({}));
-  const allowed = [
-    'codeshare_actif', 'codeshare_pourcent', 'taxe_alliance_actif', 'taxe_alliance_pourcent',
-    'transfert_avions_actif', 'pret_avions_actif', 'don_avions_actif', 'partage_hubs_actif',
-  ];
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  for (const key of allowed) {
-    if (body[key] !== undefined) updates[key] = body[key];
-  }
+  const { titre, contenu, important } = body;
+  if (!titre || !contenu) return NextResponse.json({ error: 'titre et contenu requis' }, { status: 400 });
 
-  const { error } = await admin.from('alliance_parametres').update(updates).eq('alliance_id', allianceId);
+  const { error } = await admin.from('alliance_annonces').insert({
+    alliance_id: allianceId,
+    auteur_id: user.id,
+    titre: String(titre).trim(),
+    contenu: String(contenu).trim(),
+    important: !!important,
+  });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ ok: true });
 }

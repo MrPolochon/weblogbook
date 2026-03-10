@@ -1,0 +1,133 @@
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+
+export const dynamic = 'force-dynamic';
+
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: allianceId } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+  const admin = createAdminClient();
+  const { data: myComps } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
+  const myCompIds = (myComps || []).map(c => c.id);
+  const { data: myMember } = await admin.from('alliance_membres')
+    .select('role, compagnie_id')
+    .eq('alliance_id', allianceId)
+    .in('compagnie_id', myCompIds)
+    .limit(1).single();
+  if (!myMember) return NextResponse.json({ error: 'Pas membre' }, { status: 403 });
+
+  const body = await req.json().catch(() => ({}));
+  const { action } = body;
+
+  if (action === 'demande_fonds') {
+    const { montant, motif } = body;
+    if (!montant || montant <= 0 || !motif) return NextResponse.json({ error: 'montant et motif requis' }, { status: 400 });
+
+    const { error } = await admin.from('alliance_demandes_fonds').insert({
+      alliance_id: allianceId,
+      compagnie_id: myMember.compagnie_id,
+      montant: Math.floor(montant),
+      motif: String(motif).trim(),
+    });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, message: 'Demande de fonds soumise' });
+  }
+
+  if (action === 'contribuer') {
+    const { montant, libelle } = body;
+    if (!montant || montant <= 0) return NextResponse.json({ error: 'montant requis' }, { status: 400 });
+    const amt = Math.floor(montant);
+
+    const { data: debit } = await admin.rpc('debiter_compte_safe', {
+      p_compagnie_id: myMember.compagnie_id,
+      p_montant: amt,
+      p_libelle: `Contribution alliance`,
+    });
+    if (!debit?.success) return NextResponse.json({ error: debit?.error || 'Fonds insuffisants' }, { status: 400 });
+
+    const { data: allianceAccount } = await admin.from('felitz_comptes').select('id, solde').eq('alliance_id', allianceId).eq('type', 'alliance').single();
+    if (allianceAccount) {
+      await admin.from('felitz_comptes').update({ solde: allianceAccount.solde + amt }).eq('id', allianceAccount.id);
+    }
+
+    await admin.from('alliance_contributions').insert({
+      alliance_id: allianceId,
+      compagnie_id: myMember.compagnie_id,
+      montant: amt,
+      libelle: libelle ? String(libelle).trim() : 'Contribution',
+    });
+
+    return NextResponse.json({ ok: true, message: `${amt.toLocaleString('fr-FR')} F$ contribués` });
+  }
+
+  return NextResponse.json({ error: 'Action invalide (demande_fonds ou contribuer)' }, { status: 400 });
+}
+
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: allianceId } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+  const admin = createAdminClient();
+  const { data: myComps } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
+  const { data: myMember } = await admin.from('alliance_membres')
+    .select('role')
+    .eq('alliance_id', allianceId)
+    .in('compagnie_id', (myComps || []).map(c => c.id))
+    .limit(1).single();
+
+  if (!myMember || !['president', 'vice_president'].includes(myMember.role)) {
+    return NextResponse.json({ error: 'Droits insuffisants' }, { status: 403 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const { demande_id, decision } = body;
+  if (!demande_id || !['accepter', 'refuser'].includes(decision)) {
+    return NextResponse.json({ error: 'demande_id et decision requis' }, { status: 400 });
+  }
+
+  const { data: demande } = await admin.from('alliance_demandes_fonds')
+    .select('*').eq('id', demande_id).eq('alliance_id', allianceId).single();
+  if (!demande || demande.statut !== 'en_attente') return NextResponse.json({ error: 'Demande introuvable ou déjà traitée' }, { status: 404 });
+
+  if (decision === 'refuser') {
+    await admin.from('alliance_demandes_fonds').update({
+      statut: 'refusee', traite_par: user.id, traite_at: new Date().toISOString(),
+    }).eq('id', demande_id);
+    return NextResponse.json({ ok: true });
+  }
+
+  const { data: allianceAccount } = await admin.from('felitz_comptes')
+    .select('id, solde').eq('alliance_id', allianceId).eq('type', 'alliance').single();
+  if (!allianceAccount || allianceAccount.solde < demande.montant) {
+    return NextResponse.json({ error: 'Fonds alliance insuffisants' }, { status: 400 });
+  }
+
+  await admin.from('felitz_comptes').update({ solde: allianceAccount.solde - demande.montant }).eq('id', allianceAccount.id);
+  await admin.rpc('crediter_compte_safe', {
+    p_compagnie_id: demande.compagnie_id,
+    p_montant: demande.montant,
+    p_libelle: `Fonds alliance : ${demande.motif}`,
+  });
+
+  await admin.from('alliance_demandes_fonds').update({
+    statut: 'acceptee', traite_par: user.id, traite_at: new Date().toISOString(),
+  }).eq('id', demande_id);
+
+  const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', demande.compagnie_id).single();
+  if (comp) {
+    await admin.from('messages').insert({
+      destinataire_id: comp.pdg_id,
+      titre: `💰 Fonds alliance approuvés`,
+      contenu: `Votre demande de ${demande.montant.toLocaleString('fr-FR')} F$ a été approuvée.\nMotif : ${demande.motif}`,
+      type_message: 'normal',
+    });
+  }
+
+  return NextResponse.json({ ok: true });
+}

@@ -4,7 +4,6 @@ import { createAdminClient } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
 
-/** GET: détail d'une alliance (si ma compagnie est membre) */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -13,40 +12,144 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const admin = createAdminClient();
   const compagnieIds: string[] = [];
-  const { data: pdgRows } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
-  (pdgRows || []).forEach((r) => compagnieIds.push(r.id));
-  const { data: empRows } = await admin.from('compagnie_employes').select('compagnie_id').eq('pilote_id', user.id);
-  (empRows || []).forEach((r) => { if (r.compagnie_id && !compagnieIds.includes(r.compagnie_id)) compagnieIds.push(r.compagnie_id); });
+  const { data: pdg } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
+  (pdg || []).forEach(r => compagnieIds.push(r.id));
+  const { data: emp } = await admin.from('compagnie_employes').select('compagnie_id').eq('pilote_id', user.id);
+  (emp || []).forEach(r => { if (r.compagnie_id && !compagnieIds.includes(r.compagnie_id)) compagnieIds.push(r.compagnie_id); });
 
   const { data: alliance } = await admin.from('alliances').select('*').eq('id', id).single();
   if (!alliance) return NextResponse.json({ error: 'Alliance introuvable' }, { status: 404 });
 
-  const { data: myMember } = await admin.from('alliance_membres').select('role, compagnie_id').eq('alliance_id', id).in('compagnie_id', compagnieIds).limit(1).single();
-  if (!myMember) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+  const { data: myMember } = await admin.from('alliance_membres')
+    .select('role, compagnie_id')
+    .eq('alliance_id', id)
+    .in('compagnie_id', compagnieIds)
+    .limit(1).single();
 
-  const { data: membres } = await admin.from('alliance_membres')
+  const isAdmin = (await admin.from('profiles').select('role').eq('id', user.id).single()).data?.role === 'admin';
+  if (!myMember && !isAdmin) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+
+  const myRole = myMember?.role ?? (isAdmin ? 'admin' : null);
+
+  const { data: rawMembres } = await admin.from('alliance_membres')
     .select('id, compagnie_id, role, joined_at, compagnies(id, nom)')
     .eq('alliance_id', id);
+
+  const membres = (rawMembres || []).map(m => {
+    const raw = m.compagnies as unknown;
+    const comp = Array.isArray(raw) ? raw[0] : raw;
+    return { id: m.id, compagnie_id: m.compagnie_id, role: m.role, joined_at: m.joined_at, compagnie: comp || null };
+  });
+
   const { data: parametres } = await admin.from('alliance_parametres').select('*').eq('alliance_id', id).single();
+
   let compte = null;
-  if (myMember.role === 'dirigeant') {
+  if (myRole === 'president' || myRole === 'vice_president' || myRole === 'admin') {
     const { data: fc } = await admin.from('felitz_comptes').select('id, vban, solde').eq('alliance_id', id).eq('type', 'alliance').single();
     compte = fc;
   }
 
-  const rawMembres = (membres || []) as Array<{ id: string; compagnie_id: string; role: string; joined_at: string; compagnies?: { id: string; nom: string } | { id: string; nom: string }[] }>;
-  const membresNorm = rawMembres.map((m) => {
-    const comp = m.compagnies;
-    const compagnie = comp ? (Array.isArray(comp) ? comp[0] : comp) : null;
-    return { id: m.id, compagnie_id: m.compagnie_id, role: m.role, joined_at: m.joined_at, compagnie };
+  const { data: annonces } = await admin.from('alliance_annonces')
+    .select('id, titre, contenu, important, created_at, auteur_id')
+    .eq('alliance_id', id)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  const { data: invitations } = await admin.from('alliance_invitations')
+    .select('id, compagnie_id, invite_par_id, statut, message, created_at, compagnies(id, nom)')
+    .eq('alliance_id', id)
+    .eq('statut', 'en_attente');
+
+  const invitationsNorm = (invitations || []).map(inv => {
+    const raw = inv.compagnies as unknown;
+    const comp = Array.isArray(raw) ? raw[0] : raw;
+    return { ...inv, compagnie: comp || null };
   });
+
+  const { data: transferts } = await admin.from('alliance_transferts_avions')
+    .select('*')
+    .eq('alliance_id', id)
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  const { data: demandes_fonds } = await admin.from('alliance_demandes_fonds')
+    .select('*')
+    .eq('alliance_id', id)
+    .order('created_at', { ascending: false })
+    .limit(30);
+
+  const { data: contributions } = await admin.from('alliance_contributions')
+    .select('*')
+    .eq('alliance_id', id)
+    .order('created_at', { ascending: false })
+    .limit(30);
 
   return NextResponse.json({
     ...alliance,
     parametres: parametres || null,
-    membres: membresNorm,
+    membres,
     compte_alliance: compte,
-    my_role: myMember.role,
-    my_compagnie_id: myMember.compagnie_id,
+    annonces: annonces || [],
+    invitations_en_attente: invitationsNorm,
+    transferts: transferts || [],
+    demandes_fonds: demandes_fonds || [],
+    contributions: contributions || [],
+    my_role: myRole,
+    my_compagnie_id: myMember?.compagnie_id ?? null,
   });
+}
+
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+  const admin = createAdminClient();
+  const { data: myMember } = await admin.from('alliance_membres')
+    .select('role, compagnie_id')
+    .eq('alliance_id', id)
+    .in('compagnie_id', (await admin.from('compagnies').select('id').eq('pdg_id', user.id)).data?.map(c => c.id) || [])
+    .limit(1).single();
+
+  if (!myMember || !['president', 'vice_president'].includes(myMember.role)) {
+    return NextResponse.json({ error: 'Seul le président ou VP peut modifier l\'alliance' }, { status: 403 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const updates: Record<string, unknown> = {};
+  if (body.nom !== undefined) updates.nom = String(body.nom).trim();
+  if (body.description !== undefined) updates.description = body.description ? String(body.description).trim() : null;
+  if (body.logo_url !== undefined) updates.logo_url = body.logo_url || null;
+  if (body.devise !== undefined) updates.devise = body.devise ? String(body.devise).trim() : null;
+
+  if (Object.keys(updates).length === 0) return NextResponse.json({ error: 'Rien à modifier' }, { status: 400 });
+
+  const { error } = await admin.from('alliances').update(updates).eq('id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+  const admin = createAdminClient();
+  const { data: myMember } = await admin.from('alliance_membres')
+    .select('role, compagnie_id')
+    .eq('alliance_id', id)
+    .in('compagnie_id', (await admin.from('compagnies').select('id').eq('pdg_id', user.id)).data?.map(c => c.id) || [])
+    .limit(1).single();
+
+  const isAdmin = (await admin.from('profiles').select('role').eq('id', user.id).single()).data?.role === 'admin';
+  if ((!myMember || myMember.role !== 'president') && !isAdmin) {
+    return NextResponse.json({ error: 'Seul le président peut dissoudre l\'alliance' }, { status: 403 });
+  }
+
+  await admin.from('compagnies').update({ alliance_id: null }).eq('alliance_id', id);
+  const { error } = await admin.from('alliances').delete().eq('id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  return NextResponse.json({ ok: true });
 }
