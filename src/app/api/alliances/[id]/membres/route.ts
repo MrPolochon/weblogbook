@@ -74,5 +74,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ ok: true });
   }
 
+  if (action === 'set_codeshare') {
+    const pourcent = Number(body.codeshare_pourcent);
+    if (isNaN(pourcent) || pourcent < 0 || pourcent > 100) {
+      return NextResponse.json({ error: 'Pourcentage invalide (0-100)' }, { status: 400 });
+    }
+    await admin.from('alliance_membres')
+      .update({ codeshare_pourcent: pourcent })
+      .eq('alliance_id', allianceId)
+      .eq('compagnie_id', myMember.compagnie_id);
+    return NextResponse.json({ ok: true });
+  }
+
   return NextResponse.json({ error: 'Action invalide' }, { status: 400 });
 }

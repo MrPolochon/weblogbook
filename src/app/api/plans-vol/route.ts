@@ -231,35 +231,63 @@ export async function POST(request: Request) {
 
       // Si location active, débiter le loyer journalier dû
       if (locationActive) {
-        const lastBilledAt = locationActive.last_billed_at || locationActive.start_at;
-        const last = lastBilledAt ? new Date(lastBilledAt).getTime() : new Date().getTime();
-        const now = new Date().getTime();
-        const daysDue = Math.floor((now - last) / (24 * 60 * 60 * 1000));
-        if (daysDue > 0) {
-          const totalDue = daysDue * (locationActive.prix_journalier || 0);
-          if (totalDue > 0) {
-            const { data: compteLocataire } = await admin
-              .from('felitz_comptes')
-              .select('id, solde')
-              .eq('compagnie_id', compagnie_id)
-              .eq('type', 'entreprise')
-              .single();
-            if (!compteLocataire) {
-              return NextResponse.json({ error: 'Compte entreprise locataire introuvable.' }, { status: 400 });
+        // Vérifier si les deux compagnies sont dans la même alliance avec prêt gratuit
+        let loyerGratuit = false;
+        const { data: locataireComp } = await admin.from('compagnies')
+          .select('alliance_id').eq('id', compagnie_id).single();
+        const { data: loueurComp } = await admin.from('compagnies')
+          .select('alliance_id').eq('id', locationActive.loueur_compagnie_id).single();
+
+        if (locataireComp?.alliance_id && loueurComp?.alliance_id
+            && locataireComp.alliance_id === loueurComp.alliance_id) {
+          const { data: allianceParams } = await admin.from('alliance_parametres')
+            .select('pret_avions_actif')
+            .eq('alliance_id', locataireComp.alliance_id).single();
+          if (allianceParams?.pret_avions_actif) loyerGratuit = true;
+        }
+
+        if (!loyerGratuit) {
+          const lastBilledAt = locationActive.last_billed_at || locationActive.start_at;
+          const last = lastBilledAt ? new Date(lastBilledAt).getTime() : new Date().getTime();
+          const now = new Date().getTime();
+          const daysDue = Math.floor((now - last) / (24 * 60 * 60 * 1000));
+          if (daysDue > 0) {
+            const totalDue = daysDue * (locationActive.prix_journalier || 0);
+            if (totalDue > 0) {
+              const { data: compteLocataire } = await admin
+                .from('felitz_comptes')
+                .select('id, solde')
+                .eq('compagnie_id', compagnie_id)
+                .eq('type', 'entreprise')
+                .single();
+              if (!compteLocataire) {
+                return NextResponse.json({ error: 'Compte entreprise locataire introuvable.' }, { status: 400 });
+              }
+              if (compteLocataire.solde < totalDue) {
+                return NextResponse.json({ error: 'Solde insuffisant pour payer le loyer journalier.' }, { status: 400 });
+              }
+              const { data: loyerDebitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteLocataire.id, p_montant: totalDue });
+              if (!loyerDebitOk) {
+                return NextResponse.json({ error: 'Solde insuffisant pour le loyer (transaction concurrente)' }, { status: 400 });
+              }
+              await admin.from('felitz_transactions').insert({
+                compte_id: compteLocataire.id,
+                type: 'debit',
+                montant: totalDue,
+                libelle: `Loyer avion (${daysDue}j)`
+              });
+              await admin.from('compagnie_locations')
+                .update({ last_billed_at: new Date(last + daysDue * 24 * 60 * 60 * 1000).toISOString() })
+                .eq('id', locationActive.id);
             }
-            if (compteLocataire.solde < totalDue) {
-              return NextResponse.json({ error: 'Solde insuffisant pour payer le loyer journalier.' }, { status: 400 });
-            }
-            const { data: loyerDebitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteLocataire.id, p_montant: totalDue });
-            if (!loyerDebitOk) {
-              return NextResponse.json({ error: 'Solde insuffisant pour le loyer (transaction concurrente)' }, { status: 400 });
-            }
-            await admin.from('felitz_transactions').insert({
-              compte_id: compteLocataire.id,
-              type: 'debit',
-              montant: totalDue,
-              libelle: `Loyer avion (${daysDue}j)`
-            });
+          }
+        } else {
+          // Alliance : prêt gratuit, juste mettre à jour last_billed_at
+          const lastBilledAt = locationActive.last_billed_at || locationActive.start_at;
+          const last = lastBilledAt ? new Date(lastBilledAt).getTime() : new Date().getTime();
+          const now = new Date().getTime();
+          const daysDue = Math.floor((now - last) / (24 * 60 * 60 * 1000));
+          if (daysDue > 0) {
             await admin.from('compagnie_locations')
               .update({ last_billed_at: new Date(last + daysDue * 24 * 60 * 60 * 1000).toISOString() })
               .eq('id', locationActive.id);

@@ -33,6 +33,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { data: dest } = await admin.from('alliance_membres').select('id').eq('alliance_id', allianceId).eq('compagnie_id', compagnie_dest_id).single();
   if (!dest) return NextResponse.json({ error: 'Destination pas dans l\'alliance' }, { status: 400 });
 
+  const { data: allianceParams } = await admin.from('alliance_parametres')
+    .select('transfert_avions_actif, pret_avions_actif, don_avions_actif')
+    .eq('alliance_id', allianceId).single();
+
+  if (type_transfert === 'vente' && !allianceParams?.transfert_avions_actif) {
+    return NextResponse.json({ error: 'La vente d\'avions entre membres n\'est pas activée dans les paramètres de l\'alliance.' }, { status: 400 });
+  }
+  if (type_transfert === 'pret' && !allianceParams?.pret_avions_actif) {
+    return NextResponse.json({ error: 'Le prêt d\'avions entre membres n\'est pas activé dans les paramètres de l\'alliance.' }, { status: 400 });
+  }
+  if (type_transfert === 'don' && !allianceParams?.don_avions_actif) {
+    return NextResponse.json({ error: 'Le don d\'avions entre membres n\'est pas activé dans les paramètres de l\'alliance.' }, { status: 400 });
+  }
+
   const { error } = await admin.from('alliance_transferts_avions').insert({
     alliance_id: allianceId,
     type_transfert,

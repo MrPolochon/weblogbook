@@ -283,7 +283,7 @@ export async function envoyerChequesVol(
   admin: AdminClient,
   plan: PlanPaiement,
   dateFinVol: Date // Date de fin du vol pour le calcul (demande_cloture_at, pas confirmation ATC)
-): Promise<{ success: boolean; message?: string; revenus?: { brut: number; net: number; salaire: number; taxes: number; coefficient: number; tempsReel: number; bonusCargaison?: number; remboursementPret?: number } }> {
+): Promise<{ success: boolean; message?: string; revenus?: { brut: number; net: number; salaire: number; taxes: number; coefficient: number; tempsReel: number; bonusCargaison?: number; remboursementPret?: number; taxeAlliance?: number; codeshare?: number } }> {
   if (!plan.vol_commercial || !plan.compagnie_id || !plan.revenue_brut || plan.revenue_brut <= 0) {
     return { success: true, message: 'Vol non commercial ou sans revenus' };
   }
@@ -523,6 +523,89 @@ export async function envoyerChequesVol(
     loueurInfo = loueur || null;
   }
 
+  // Alliance : taxe + codeshare
+  let taxeAlliance = 0;
+  let codeshareTotal = 0;
+  let taxeAlliancePct = 0;
+  let codesharePct = 0;
+  let codeshareNbMembres = 0;
+
+  if (revenuLocataire > 0 && plan.compagnie_id) {
+    const { data: compAlliance } = await admin.from('compagnies')
+      .select('alliance_id')
+      .eq('id', plan.compagnie_id)
+      .single();
+
+    if (compAlliance?.alliance_id) {
+      const { data: allianceParams } = await admin.from('alliance_parametres')
+        .select('codeshare_actif, taxe_alliance_actif, taxe_alliance_pourcent')
+        .eq('alliance_id', compAlliance.alliance_id)
+        .single();
+
+      if (allianceParams) {
+        // Taxe alliance : prélèvement automatique vers le compte alliance
+        if (allianceParams.taxe_alliance_actif && allianceParams.taxe_alliance_pourcent > 0) {
+          taxeAlliancePct = Number(allianceParams.taxe_alliance_pourcent);
+          taxeAlliance = Math.round(revenuLocataire * taxeAlliancePct / 100);
+          if (taxeAlliance > 0) {
+            const { data: allianceAccount } = await admin.from('felitz_comptes')
+              .select('id, solde')
+              .eq('alliance_id', compAlliance.alliance_id)
+              .eq('type', 'alliance')
+              .single();
+            if (allianceAccount) {
+              await admin.from('felitz_comptes')
+                .update({ solde: allianceAccount.solde + taxeAlliance })
+                .eq('id', allianceAccount.id);
+              await admin.from('felitz_transactions').insert({
+                compte_id: allianceAccount.id,
+                type: 'credit',
+                montant: taxeAlliance,
+                libelle: `Taxe alliance - Vol ${numeroVol}`,
+              });
+            }
+          }
+        }
+
+        // Codeshare : partage des revenus vers les autres membres
+        const revenuApresAlliance = revenuLocataire - taxeAlliance;
+        if (allianceParams.codeshare_actif && revenuApresAlliance > 0) {
+          const { data: myMember } = await admin.from('alliance_membres')
+            .select('codeshare_pourcent')
+            .eq('alliance_id', compAlliance.alliance_id)
+            .eq('compagnie_id', plan.compagnie_id)
+            .single();
+
+          if (myMember && Number(myMember.codeshare_pourcent) > 0) {
+            codesharePct = Number(myMember.codeshare_pourcent);
+            const { data: otherMembers } = await admin.from('alliance_membres')
+              .select('compagnie_id')
+              .eq('alliance_id', compAlliance.alliance_id)
+              .neq('compagnie_id', plan.compagnie_id);
+
+            if (otherMembers && otherMembers.length > 0) {
+              codeshareTotal = Math.round(revenuApresAlliance * codesharePct / 100);
+              codeshareNbMembres = otherMembers.length;
+              const partParMembre = Math.floor(codeshareTotal / otherMembers.length);
+
+              if (partParMembre > 0) {
+                for (const member of otherMembers) {
+                  await admin.rpc('crediter_compte_safe', {
+                    p_compagnie_id: member.compagnie_id,
+                    p_montant: partParMembre,
+                    p_libelle: `Codeshare alliance - Vol ${numeroVol}`,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  revenuLocataire = Math.max(0, revenuLocataire - taxeAlliance - codeshareTotal);
+
   // Chèque revenu compagnie
   if (revenuLocataire > 0 && compagnie.pdg_id) {
     let contenuMessage = `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$\nCoefficient ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesTotales.toLocaleString('fr-FR')} F$\nSalaire pilote: ${salaireEffectif.toLocaleString('fr-FR')} F$`;
@@ -540,6 +623,14 @@ export async function envoyerChequesVol(
     if (revenuLoueur > 0 && loueurInfo) {
       contenuMessage += `\n\nPart loueur (${plan.location_pourcentage_revenu_loueur}%): -${revenuLoueur.toLocaleString('fr-FR')} F$ (${loueurInfo.nom})`;
     }
+
+    if (taxeAlliance > 0) {
+      contenuMessage += `\n\nTaxe alliance (${taxeAlliancePct}%): -${taxeAlliance.toLocaleString('fr-FR')} F$`;
+    }
+    if (codeshareTotal > 0) {
+      contenuMessage += `\nCodeshare (${codesharePct}%): -${codeshareTotal.toLocaleString('fr-FR')} F$ → ${codeshareNbMembres} membre${codeshareNbMembres > 1 ? 's' : ''}`;
+    }
+
     contenuMessage += `\n\nRevenu net: ${revenuLocataire.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser le chèque ci-dessous.`;
 
     await admin.from('messages').insert({
@@ -596,13 +687,15 @@ export async function envoyerChequesVol(
     success: true,
     revenus: {
       brut: plan.revenue_brut,
-      net: revenuCompagnieNet,
+      net: revenuLocataire,
       salaire: salaireEffectif,
       taxes: taxesTotales,
       coefficient,
       tempsReel: tempsReelMin,
       bonusCargaison: montantBonus > 0 ? montantBonus : undefined,
-      remboursementPret: remboursementPret > 0 ? remboursementPret : undefined
+      remboursementPret: remboursementPret > 0 ? remboursementPret : undefined,
+      taxeAlliance: taxeAlliance > 0 ? taxeAlliance : undefined,
+      codeshare: codeshareTotal > 0 ? codeshareTotal : undefined
     }
   };
 }

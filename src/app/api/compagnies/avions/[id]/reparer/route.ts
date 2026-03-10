@@ -45,7 +45,7 @@ export async function POST(
       return NextResponse.json({ error: 'Seul le PDG peut réparer les avions.' }, { status: 403 });
     }
 
-    // Vérifier que l'avion est à un hub
+    // Vérifier que l'avion est à un hub (propre ou alliance si partage activé)
     const { data: hub } = await admin
       .from('compagnie_hubs')
       .select('id')
@@ -54,7 +54,37 @@ export async function POST(
       .maybeSingle();
     
     if (!hub) {
-      return NextResponse.json({ error: 'L\'avion doit être à un hub pour être réparé.' }, { status: 400 });
+      let hubAlliance = false;
+      const { data: compAllianceData } = await admin.from('compagnies')
+        .select('alliance_id').eq('id', compagnieCibleId).single();
+
+      if (compAllianceData?.alliance_id) {
+        const { data: allianceParams } = await admin.from('alliance_parametres')
+          .select('partage_hubs_actif')
+          .eq('alliance_id', compAllianceData.alliance_id).single();
+
+        if (allianceParams?.partage_hubs_actif) {
+          const { data: allianceMembres } = await admin.from('alliance_membres')
+            .select('compagnie_id')
+            .eq('alliance_id', compAllianceData.alliance_id)
+            .neq('compagnie_id', compagnieCibleId);
+
+          if (allianceMembres && allianceMembres.length > 0) {
+            const memberIds = allianceMembres.map(m => m.compagnie_id);
+            const { data: hubMembre } = await admin.from('compagnie_hubs')
+              .select('id')
+              .in('compagnie_id', memberIds)
+              .eq('aeroport_code', avion.aeroport_actuel)
+              .limit(1)
+              .maybeSingle();
+            if (hubMembre) hubAlliance = true;
+          }
+        }
+      }
+
+      if (!hubAlliance) {
+        return NextResponse.json({ error: 'L\'avion doit être à un hub pour être réparé.' }, { status: 400 });
+      }
     }
 
     if (avion.statut === 'in_flight') {

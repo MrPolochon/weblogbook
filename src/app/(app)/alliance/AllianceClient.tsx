@@ -23,6 +23,7 @@ interface Membre {
   compagnie_id: string;
   role: string;
   joined_at: string;
+  codeshare_pourcent: number;
   compagnie: { id: string; nom: string } | null;
 }
 
@@ -547,7 +548,11 @@ function FinancesTab({ detail, isLeader, onRefresh, flash, api, busy }: {
   const [showContrib, setShowContrib] = useState(false);
   const [showDemande, setShowDemande] = useState(false);
 
+  const myMember = detail.membres.find(m => m.compagnie_id === detail.my_compagnie_id);
+  const [myCodeshare, setMyCodeshare] = useState(myMember?.codeshare_pourcent ?? 0);
+
   const pendingDemandes = detail.demandes_fonds.filter(d => d.statut === 'en_attente');
+  const codeshareActif = detail.parametres?.codeshare_actif ?? false;
 
   return (
     <div className="space-y-6">
@@ -557,6 +562,35 @@ function FinancesTab({ detail, isLeader, onRefresh, flash, api, busy }: {
           <div>
             <p className="text-slate-200 font-semibold">{detail.compte_alliance.solde.toLocaleString('fr-FR')} F$</p>
             <p className="text-slate-400 text-xs">VBAN : {detail.compte_alliance.vban}</p>
+          </div>
+        </div>
+      )}
+
+      {codeshareActif && (
+        <div className="p-4 rounded-lg bg-sky-900/20 border border-sky-700/30 space-y-3">
+          <h4 className="text-sm font-medium text-sky-300 flex items-center gap-2"><ArrowRightLeft className="h-4 w-4" />Codeshare — Partage des revenus</h4>
+          <p className="text-xs text-slate-400">Chaque PDG définit le % de ses revenus de vol reversé aux autres membres de l&apos;alliance.</p>
+          <div className="space-y-1">
+            {detail.membres.map(m => {
+              const isMe = m.compagnie_id === detail.my_compagnie_id;
+              return (
+                <div key={m.id} className="flex items-center justify-between gap-2 py-1.5 px-2 rounded bg-slate-700/20">
+                  <span className="text-sm text-slate-200">{m.compagnie?.nom || m.compagnie_id}</span>
+                  {isMe ? (
+                    <div className="flex items-center gap-2">
+                      <input type="number" min={0} max={100} value={myCodeshare} onChange={e => setMyCodeshare(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                        className="w-20 rounded border border-slate-600 bg-slate-800 text-slate-200 px-2 py-1 text-sm text-right" />
+                      <span className="text-xs text-slate-400">%</span>
+                      <button disabled={busy || myCodeshare === (myMember?.codeshare_pourcent ?? 0)} onClick={async () => {
+                        try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'set_codeshare', codeshare_pourcent: myCodeshare }); flash('Codeshare mis à jour'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+                      }} className="px-2 py-1 text-xs rounded bg-sky-600 text-white disabled:opacity-50">OK</button>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-slate-400">{m.codeshare_pourcent}%</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -712,13 +746,13 @@ function ParametresTab({ detail, onRefresh, flash, api, busy }: {
     setForm(f => ({ ...f, [key]: Math.min(100, Math.max(0, v)) }));
   }
 
-  const items: { key: keyof typeof form; label: string; sub?: 'codeshare_pourcent' | 'taxe_alliance_pourcent'; subLabel?: string }[] = [
-    { key: 'codeshare_actif', label: 'Codeshare', sub: 'codeshare_pourcent', subLabel: '% codeshare' },
-    { key: 'taxe_alliance_actif', label: 'Taxe alliance', sub: 'taxe_alliance_pourcent', subLabel: '% taxe' },
-    { key: 'transfert_avions_actif', label: 'Vente d\'avions entre membres' },
-    { key: 'pret_avions_actif', label: 'Prêt d\'avions entre membres' },
-    { key: 'don_avions_actif', label: 'Don d\'avions entre membres' },
-    { key: 'partage_hubs_actif', label: 'Partage de hubs' },
+  const items: { key: keyof typeof form; label: string; desc: string; sub?: 'codeshare_pourcent' | 'taxe_alliance_pourcent'; subLabel?: string }[] = [
+    { key: 'codeshare_actif', label: 'Codeshare', desc: 'Chaque PDG définit un % de ses revenus de vol qui sera redistribué aux autres membres de l\'alliance. Le % se configure dans l\'onglet Finances.' },
+    { key: 'taxe_alliance_actif', label: 'Taxe alliance', desc: 'Prélève automatiquement un % des revenus de chaque vol pour alimenter le compte de l\'alliance.', sub: 'taxe_alliance_pourcent', subLabel: '% taxe' },
+    { key: 'transfert_avions_actif', label: 'Vente d\'avions entre membres', desc: 'Permet aux compagnies membres de se vendre des avions entre elles contre des F$.' },
+    { key: 'pret_avions_actif', label: 'Prêt d\'avions entre membres', desc: 'Les locations d\'avions entre membres de l\'alliance deviennent gratuites (pas de loyer journalier).' },
+    { key: 'don_avions_actif', label: 'Don d\'avions entre membres', desc: 'Permet aux compagnies membres de donner gratuitement des avions à d\'autres membres.' },
+    { key: 'partage_hubs_actif', label: 'Partage de hubs', desc: 'Les compagnies peuvent réparer leurs avions dans les hubs des autres membres de l\'alliance.' },
   ];
 
   return (
@@ -747,15 +781,16 @@ function ParametresTab({ detail, onRefresh, flash, api, busy }: {
       <div className="pt-4 border-t border-slate-700 space-y-3">
         <h3 className="font-medium text-slate-200">Options de l&apos;alliance</h3>
         {items.map(item => (
-          <div key={item.key}>
-            <div className="flex items-center justify-between py-1">
-              <span className="text-sm text-slate-300">{item.label}</span>
-              <button onClick={() => toggle(item.key)} className={`w-10 h-5 rounded-full transition ${form[item.key] ? 'bg-violet-500' : 'bg-slate-600'} relative`}>
+          <div key={item.key} className="rounded-lg bg-slate-700/20 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-slate-200">{item.label}</span>
+              <button onClick={() => toggle(item.key)} className={`w-10 h-5 rounded-full transition flex-shrink-0 ${form[item.key] ? 'bg-violet-500' : 'bg-slate-600'} relative`}>
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition ${form[item.key] ? 'left-5' : 'left-0.5'}`} />
               </button>
             </div>
+            <p className="text-xs text-slate-500 mt-1">{item.desc}</p>
             {item.sub && form[item.key] && (
-              <div className="flex items-center gap-2 pl-4 py-1">
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-700/50">
                 <span className="text-xs text-slate-400">{item.subLabel}</span>
                 <input type="number" min={0} max={100} value={form[item.sub]} onChange={e => setNum(item.sub!, Number(e.target.value) || 0)} className="w-20 rounded border border-slate-600 bg-slate-800 text-slate-200 px-2 py-1 text-sm text-right" />
               </div>
