@@ -58,14 +58,17 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
+  const admin = createAdminClient();
+  const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single();
+  if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
+
   const body = await req.json().catch(() => ({}));
   const { nom, compagnie_id, description, devise } = body;
   if (!nom || !compagnie_id) return NextResponse.json({ error: 'nom et compagnie_id requis' }, { status: 400 });
   if (String(nom).trim().length < 2) return NextResponse.json({ error: 'Nom trop court (min 2 caractères)' }, { status: 400 });
 
-  const admin = createAdminClient();
   const { data: compagnie } = await admin.from('compagnies').select('id, pdg_id').eq('id', compagnie_id).single();
-  if (!compagnie || compagnie.pdg_id !== user.id) return NextResponse.json({ error: 'Seul le PDG peut créer une alliance' }, { status: 403 });
+  if (!compagnie) return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
 
   const { data: already } = await admin.from('alliance_membres').select('id').eq('compagnie_id', compagnie_id).limit(1);
   if (already?.length) return NextResponse.json({ error: 'Cette compagnie fait déjà partie d\'une alliance' }, { status: 400 });

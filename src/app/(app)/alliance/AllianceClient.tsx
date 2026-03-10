@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Users, Building2, Plus, Crown, Settings, Landmark, Loader2,
+  Users, Building2, Crown, Settings, Landmark, Loader2,
   Megaphone, Plane, Wallet, ShieldCheck, UserMinus, ArrowRightLeft,
   Send, HandCoins, Star, Check, X, ChevronDown, ChevronUp, MessageSquare
 } from 'lucide-react';
@@ -133,12 +133,6 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
   const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const [createNom, setCreateNom] = useState('');
-  const [createDesc, setCreateDesc] = useState('');
-  const [createDevise, setCreateDevise] = useState('');
-  const [createCompagnieId, setCreateCompagnieId] = useState('');
-
-  const canCreate = pdgCompagnieIds.length > 0 && compagniesSansAlliance.some(c => pdgCompagnieIds.includes(c.id));
   const isLeader = detail?.my_role === 'president' || detail?.my_role === 'vice_president';
   const isPresident = detail?.my_role === 'president';
 
@@ -177,23 +171,6 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
     } finally { setBusy(false); }
   }
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!createNom.trim() || !createCompagnieId) return;
-    try {
-      const data = await api('/api/alliances', 'POST', {
-        nom: createNom.trim(), compagnie_id: createCompagnieId,
-        description: createDesc.trim() || undefined,
-        devise: createDevise.trim() || undefined,
-      });
-      flash('Alliance créée !');
-      setCreateNom(''); setCreateDesc(''); setCreateDevise(''); setCreateCompagnieId('');
-      const list = await fetch('/api/alliances').then(r => r.json());
-      setAlliances(Array.isArray(list) ? list : []);
-      if (data.id) loadDetail(data.id);
-    } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-  }
-
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div>;
 
   if (!detail && alliances.length === 0) {
@@ -202,18 +179,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
         <Header />
         {error && <Alert type="error">{error}</Alert>}
         {success && <Alert type="success">{success}</Alert>}
-        {canCreate ? (
-          <CreateForm
-            nom={createNom} setNom={setCreateNom}
-            desc={createDesc} setDesc={setCreateDesc}
-            devise={createDevise} setDevise={setCreateDevise}
-            compagnieId={createCompagnieId} setCompagnieId={setCreateCompagnieId}
-            compagnies={compagniesSansAlliance.filter(c => pdgCompagnieIds.includes(c.id))}
-            onSubmit={handleCreate} busy={busy}
-          />
-        ) : (
-          <p className="text-slate-500">Vous n&apos;êtes dans aucune alliance. Un président doit vous inviter.</p>
-        )}
+        <p className="text-slate-500">Vous n&apos;êtes dans aucune alliance. Un administrateur peut en créer une, ou un président peut vous inviter.</p>
         <PendingInvitations pdgCompagnieIds={pdgCompagnieIds} onAccepted={() => { fetch('/api/alliances').then(r => r.json()).then(d => { setAlliances(Array.isArray(d) ? d : []); }); }} />
       </div>
     );
@@ -292,47 +258,6 @@ function Header() {
 
 function Alert({ type, children }: { type: 'error' | 'success'; children: React.ReactNode }) {
   return <p className={`text-sm ${type === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>{children}</p>;
-}
-
-function CreateForm({ nom, setNom, desc, setDesc, devise, setDevise, compagnieId, setCompagnieId, compagnies, onSubmit, busy }: {
-  nom: string; setNom: (v: string) => void;
-  desc: string; setDesc: (v: string) => void;
-  devise: string; setDevise: (v: string) => void;
-  compagnieId: string; setCompagnieId: (v: string) => void;
-  compagnies: { id: string; nom: string }[];
-  onSubmit: (e: React.FormEvent) => void; busy: boolean;
-}) {
-  return (
-    <section className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-6">
-      <h2 className="text-lg font-semibold text-slate-200 mb-4">Créer une alliance</h2>
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Nom de l&apos;alliance *</label>
-            <input type="text" value={nom} onChange={e => setNom(e.target.value)} placeholder="Ex: Star Alliance" className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2" />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Compagnie fondatrice *</label>
-            <select value={compagnieId} onChange={e => setCompagnieId(e.target.value)} className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2">
-              <option value="">Choisir</option>
-              {compagnies.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Description</label>
-            <input type="text" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Objectif de l'alliance" className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2" />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Devise / Slogan</label>
-            <input type="text" value={devise} onChange={e => setDevise(e.target.value)} placeholder="Unis pour voler plus haut" className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2" />
-          </div>
-        </div>
-        <button type="submit" disabled={busy || !nom.trim() || !compagnieId} className="px-4 py-2 rounded-lg bg-violet-600 text-white font-medium disabled:opacity-50 flex items-center gap-2">
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Créer
-        </button>
-      </form>
-    </section>
-  );
 }
 
 function PendingInvitations({ pdgCompagnieIds, onAccepted }: { pdgCompagnieIds: string[]; onAccepted: () => void }) {
