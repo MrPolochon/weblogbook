@@ -78,11 +78,17 @@ const INITIAL_STATE: BriaState = {
 
 // ─── TTS helper ───
 
+/** Remplace F$ par Félitz Dollards pour une lecture naturelle */
+function textePourTTS(text: string): string {
+  return text.replace(/F\$/g, 'Félitz Dollards').replace(/F\$\/kg/g, 'Félitz Dollards par kg');
+}
+
 function speakAndWait(text: string): Promise<void> {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return Promise.resolve();
   speechSynthesis.cancel();
+  const toSpeak = textePourTTS(text);
   return new Promise((resolve) => {
-    const u = new SpeechSynthesisUtterance(text);
+    const u = new SpeechSynthesisUtterance(toSpeak);
     u.lang = 'fr-FR';
     u.rate = 0.9;
     u.volume = 0.8;
@@ -94,6 +100,63 @@ function speakAndWait(text: string): Promise<void> {
 
 function getAeroportNom(code: string) {
   return AEROPORTS_PTFS.find(a => a.code === code)?.nom || code;
+}
+
+// ─── Sons réalistes (Web Audio API) ───
+
+/** BZZZZ d'appel téléphonique (sonnerie) */
+function playRingSound(): Promise<void> {
+  if (typeof window === 'undefined') return Promise.resolve();
+  const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  if (!AC) return Promise.resolve();
+  try {
+    const ctx = new AC();
+    if (ctx.state === 'suspended') ctx.resume();
+    const duration = 2; // 2 secondes de sonnerie
+    const playTone = (freq: number, start: number, len: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'square';
+      gain.gain.setValueAtTime(0.15, start);
+      gain.gain.exponentialRampToValueAtTime(0.01, start + len);
+      osc.start(start);
+      osc.stop(start + len);
+    };
+    // Sonnerie type téléphone : 2 tons alternés (440 Hz / 480 Hz)
+    for (let i = 0; i < 4; i++) {
+      playTone(440, i * 0.5, 0.2);
+      playTone(480, i * 0.5 + 0.25, 0.2);
+    }
+    return new Promise((r) => setTimeout(r, duration * 1000));
+  } catch {
+    return Promise.resolve();
+  }
+}
+
+/** Brut de raccrochement (coupure ligne) */
+function playHangupSound(): void {
+  if (typeof window === 'undefined') return;
+  const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  if (!AC) return;
+  try {
+    const ctx = new AC();
+    const bufferSize = ctx.sampleRate * 0.15; // 150 ms de bruit
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3)); // bruit qui s'atténue
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.4;
+    noise.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start(0);
+  } catch { /* ignore */ }
 }
 
 // ─── Cooldown BRIA (export pour vérification avant ouverture) ───
@@ -225,11 +288,21 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     }
   }, [onClose]);
 
-  // ─── Greeting on mount ───
+  // Fermer avec brut de raccrochement
+  const handleClose = useCallback(() => {
+    playHangupSound();
+    speechSynthesis.cancel();
+    onClose();
+  }, [onClose]);
+
+  // ─── Greeting on mount : BZZZZ d'appel + timer 0-10s avant que le BRIA réponde ───
   useEffect(() => {
     if (hasGreeted.current) return;
     hasGreeted.current = true;
     (async () => {
+      await playRingSound();
+      const delayMs = Math.floor(Math.random() * 11) * 1000; // 0 à 10 secondes
+      await new Promise((r) => setTimeout(r, delayMs));
       await addBria('B. R. I. A, bonjour.', 500);
       await addBria("C'est pour quoi ?", 1000);
       setStep('choice');
@@ -257,8 +330,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       if (elapsed >= nextInterval) {
         if (relaunchCountRef.current > 0 && nextInterval <= RELANCE_MIN_MS) {
           // Déjà à 5s, on raccroche
-          speechSynthesis.cancel();
-          onClose();
+          handleClose();
         } else {
           relaunchAtRef.current = now;
           relaunchCountRef.current += 1;
@@ -268,7 +340,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       }
     }, 2000); // Vérifier toutes les 2 s
     return () => clearInterval(interval);
-  }, [step, isTyping, onClose]);
+  }, [step, isTyping, handleClose]);
 
   // ─── Aircraft lookup ───
   const lookupAircraft = useCallback(async (immat: string): Promise<AircraftInfo | null> => {
@@ -363,8 +435,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
 
           if (idx === WRONG_HEURE_MESSAGES.length - 1) {
             setBriaCooldown();
-            speechSynthesis.cancel();
-            onClose();
+            handleClose();
             return;
           }
           setStep('heure_depart');
@@ -401,8 +472,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
 
           if (idx === WRONG_AIRPORT_MESSAGES.length - 1) {
             setBriaCooldown();
-            speechSynthesis.cancel();
-            onClose();
+            handleClose();
             return;
           }
           setStep('aeroport_depart');
@@ -618,7 +688,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, ctx, isTyping, lookupLoading, addBria, addPilote, lookupAircraft, onClose]);
+  }, [step, ctx, isTyping, lookupLoading, addBria, addPilote, lookupAircraft, handleClose]);
 
   // ─── Show summary ───
   const showResume = useCallback(async () => {
@@ -891,7 +961,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
               className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition-colors">
               Affirm, déposer
             </button>
-            <button type="button" onClick={onClose}
+            <button type="button" onClick={handleClose}
               className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold transition-colors">
               Annuler
             </button>
@@ -900,7 +970,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
 
       case 'error':
         return (
-          <button type="button" onClick={onClose}
+          <button type="button" onClick={handleClose}
             className="w-full px-4 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-semibold transition-colors">
             Fermer
           </button>
@@ -950,7 +1020,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
           </div>
           <button
             type="button"
-            onClick={() => { speechSynthesis.cancel(); onClose(); }}
+            onClick={handleClose}
             className="flex items-center gap-2 px-3 py-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-colors"
             title="Raccrocher"
           >
