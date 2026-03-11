@@ -833,14 +833,23 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         await addBria("Aucun ATC disponible. Votre plan a été accepté en autosurveillance. Bon vol !");
       } else if (!res.ok) {
         throw new Error(data.error || 'Erreur');
+      } else if (data.statut === 'en_attente') {
+        const ac = data.atc_contact as { nom: string; position: string; frequence: string } | undefined;
+        let msg = "Votre plan de vol a été déposé. Il est en attente de validation par l'ATC.";
+        if (ac?.nom && ac?.position) {
+          msg += ac.frequence
+            ? ` Contactez ${ac.nom} ${ac.position} sur ${ac.frequence}. Bon vol !`
+            : ` Contactez ${ac.nom} ${ac.position}. Bon vol !`;
+        } else {
+          msg += " Bon vol !";
+        }
+        await addBria(msg);
       } else {
         await addBria("Votre plan de vol a été déposé avec succès. Bon vol !");
       }
       setStep('done');
-      setTimeout(() => {
-        router.push('/logbook/plans-vol');
-        router.refresh();
-      }, 2000);
+      router.push('/logbook/plans-vol');
+      router.refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erreur inconnue';
       await addBria(`Erreur lors du dépôt : ${msg}`);

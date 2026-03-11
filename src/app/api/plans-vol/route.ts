@@ -507,7 +507,7 @@ export async function POST(request: Request) {
           .eq('id', compagnie_avion_id);
       }
 
-      return NextResponse.json({ ok: true, id: data.id, vol_sans_atc: true });
+      return NextResponse.json({ ok: true, id: data.id, statut: 'accepte', vol_sans_atc: true });
     }
     
     // Sinon, chercher un ATC pour recevoir le plan
@@ -660,7 +660,26 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ ok: true, id: data.id });
+    // Infos pour le BRIA : nom ATC, position, fréquence (ex: "Contactez Jean-Marie ITKO Tour sur 118 décimal 750")
+    const { data: holderProfile } = await admin.from('profiles').select('identifiant').eq('id', holder.user_id).single();
+    const { data: vhfFreq } = await admin.from('vhf_position_frequencies')
+      .select('frequency')
+      .eq('aeroport', holder.aeroport)
+      .eq('position', holder.position)
+      .maybeSingle();
+    const POSITION_LABELS: Record<string, string> = {
+      Delivery: 'Livraison', Clairance: 'Clairance', Ground: 'Sol', Tower: 'Tour',
+      DEP: 'Départs', APP: 'Approche', Center: 'Centre', AFIS: 'AFIS',
+    };
+    const posLabel = POSITION_LABELS[holder.position] || holder.position;
+    const atcContact = {
+      nom: holderProfile?.identifiant || 'Contrôleur',
+      position: `${holder.aeroport} ${posLabel}`,
+      aeroport: holder.aeroport,
+      frequence: vhfFreq?.frequency ? String(vhfFreq.frequency).replace('.', ' décimal ') : '',
+    };
+
+    return NextResponse.json({ ok: true, id: data.id, statut: 'en_attente', atc_contact: atcContact });
   } catch (e) {
     console.error('plans-vol POST:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
