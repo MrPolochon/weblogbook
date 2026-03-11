@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { CODES_OACI_VALIDES, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire } from '@/lib/aeroports-ptfs';
+import { CODES_OACI_VALIDES, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire, calculerCoefficientRemplissage, calculerCoefficientChargementCargo } from '@/lib/aeroports-ptfs';
 import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol
@@ -91,35 +91,97 @@ export async function POST(request: Request) {
       }
     }
 
-    // Utiliser les valeurs calculées côté client (le formulaire valide déjà le taux de remplissage)
-    const cargoGenereFinal = cargo_kg_genere ?? 0;
+    // Variables mutables pour les revenus
+    let cargoGenereFinal = cargo_kg_genere ?? 0;
+    let nbPaxFinal = nb_pax_genere ?? 0;
     let revenuBrutFinal = revenue_brut ?? 0;
     let salaireFinal = salaire_pilote ?? 0;
+    let prixBilletFinal = prixBilletUtilise;
     let typeCargaisonFinal: string | null = null;
     let typeCargaisonLibelleFinal: string | null = null;
-    // Vol cargo : type de cargaison classique
-    if (vol_commercial && nature_transport === 'cargo') {
-      typeCargaisonFinal = genererTypeCargaison();
-    }
-    // Vol passagers avec cargo complémentaire : 1% chance marchandise rare (+30% sur part cargo)
-    if (vol_commercial && nature_transport === 'passagers' && cargoGenereFinal > 0 && compagnie_id) {
-      typeCargaisonFinal = genererTypeCargaisonComplementaire();
-      if (typeCargaisonFinal === 'marchandise_rare') {
-        typeCargaisonLibelleFinal = getMarchandiseRareAleatoire();
-      }
-      const { data: comp } = await admin.from('compagnies').select('prix_kg_cargo, pourcentage_salaire').eq('id', compagnie_id).single();
+
+    // ── BRIA : auto-calcul des revenus pour vols commerciaux ──
+    if (bria_conversation && vol_commercial && compagnie_id && revenuBrutFinal === 0) {
+      const { data: comp } = await admin.from('compagnies')
+        .select('prix_billet, prix_kg_cargo, pourcentage_salaire')
+        .eq('id', compagnie_id)
+        .single();
+
+      const prixBillet = comp?.prix_billet ?? 0;
       const prixKgCargo = comp?.prix_kg_cargo ?? 0;
-      const nbPax = Math.max(0, parseInt(String(nb_pax_genere || 0), 10) || 0);
-      let revenuPax = nbPax * prixBilletUtilise;
-      let revenuCargo = cargoGenereFinal * prixKgCargo;
-      if (typeCargaisonFinal === 'marchandise_rare') {
-        const bonus = getCargaisonInfo('marchandise_rare').bonusRevenu;
-        revenuCargo = Math.round(revenuCargo * (1 + bonus / 100));
+      const pourcentageSalaire = comp?.pourcentage_salaire ?? 0;
+
+      let capacitePax = 0;
+      let capaciteCargo = 0;
+      if (compagnie_avion_id) {
+        const { data: avionData } = await admin.from('compagnie_avions')
+          .select('types_avion:type_avion_id(capacite_pax, capacite_cargo_kg)')
+          .eq('id', compagnie_avion_id)
+          .single();
+        const ta = Array.isArray(avionData?.types_avion) ? avionData.types_avion[0] : avionData?.types_avion;
+        capacitePax = ta?.capacite_pax ?? 0;
+        capaciteCargo = ta?.capacite_cargo_kg ?? 0;
       }
-      revenuBrutFinal = revenuPax + revenuCargo;
-      salaireFinal = Math.floor(revenuBrutFinal * ((comp?.pourcentage_salaire ?? 0) / 100));
+
+      const natureT = nature_transport || 'passagers';
+
+      if (natureT === 'passagers' && capacitePax > 0) {
+        const coef = calculerCoefficientRemplissage(ad, aa, prixBillet);
+        nbPaxFinal = Math.min(Math.floor(capacitePax * Math.min(coef, 1.0)), capacitePax);
+        const revPax = nbPaxFinal * prixBillet;
+        const coefCargo = calculerCoefficientChargementCargo(ad, aa, prixKgCargo);
+        const cargoComp = Math.min(Math.floor(capaciteCargo * Math.min(coefCargo, 1.0)), capaciteCargo);
+        cargoGenereFinal = cargoComp;
+        let revCargoComp = cargoComp * prixKgCargo;
+        typeCargaisonFinal = genererTypeCargaisonComplementaire();
+        if (typeCargaisonFinal === 'marchandise_rare') {
+          typeCargaisonLibelleFinal = getMarchandiseRareAleatoire();
+          const bonus = getCargaisonInfo('marchandise_rare').bonusRevenu;
+          revCargoComp = Math.round(revCargoComp * (1 + bonus / 100));
+        }
+        revenuBrutFinal = revPax + revCargoComp;
+        prixBilletFinal = prixBillet;
+      } else if (natureT === 'cargo' && capaciteCargo > 0) {
+        const coefCargo = calculerCoefficientChargementCargo(ad, aa, prixKgCargo);
+        cargoGenereFinal = Math.min(Math.floor(capaciteCargo * Math.min(coefCargo, 1.0)), capaciteCargo);
+        let revCargo = cargoGenereFinal * prixKgCargo;
+        typeCargaisonFinal = genererTypeCargaison();
+        if (typeCargaisonFinal === 'marchandise_rare') {
+          typeCargaisonLibelleFinal = getMarchandiseRareAleatoire();
+          const bonus = getCargaisonInfo('marchandise_rare').bonusRevenu;
+          revCargo = Math.round(revCargo * (1 + bonus / 100));
+        }
+        revenuBrutFinal = revCargo;
+        prixBilletFinal = prixKgCargo;
+      }
+
+      salaireFinal = Math.floor(revenuBrutFinal * (pourcentageSalaire / 100));
+    } else {
+      // Formulaire classique : valeurs déjà calculées côté client
+      // Vol cargo : type de cargaison classique
+      if (vol_commercial && nature_transport === 'cargo') {
+        typeCargaisonFinal = genererTypeCargaison();
+      }
+      // Vol passagers avec cargo complémentaire
+      if (vol_commercial && nature_transport === 'passagers' && cargoGenereFinal > 0 && compagnie_id) {
+        typeCargaisonFinal = genererTypeCargaisonComplementaire();
+        if (typeCargaisonFinal === 'marchandise_rare') {
+          typeCargaisonLibelleFinal = getMarchandiseRareAleatoire();
+        }
+        const { data: comp } = await admin.from('compagnies').select('prix_kg_cargo, pourcentage_salaire').eq('id', compagnie_id).single();
+        const prixKgCargo = comp?.prix_kg_cargo ?? 0;
+        const nbPax = Math.max(0, parseInt(String(nb_pax_genere || 0), 10) || 0);
+        const revenuPax = nbPax * prixBilletUtilise;
+        let revenuCargo = cargoGenereFinal * prixKgCargo;
+        if (typeCargaisonFinal === 'marchandise_rare') {
+          const bonus = getCargaisonInfo('marchandise_rare').bonusRevenu;
+          revenuCargo = Math.round(revenuCargo * (1 + bonus / 100));
+        }
+        revenuBrutFinal = revenuPax + revenuCargo;
+        salaireFinal = Math.floor(revenuBrutFinal * ((comp?.pourcentage_salaire ?? 0) / 100));
+      }
     }
-    
+
     // Validation vol ferry
     if (vol_ferry) {
       if (!compagnie_avion_id) {
@@ -376,13 +438,13 @@ export async function POST(request: Request) {
         nature_transport: vol_commercial && !vol_ferry && nature_transport ? nature_transport : null,
         inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
         compagnie_avion_id: compagnie_avion_id || null,
-        nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
+        nb_pax_genere: vol_commercial ? nbPaxFinal : null,
         cargo_kg_genere: vol_commercial ? cargoGenereFinal : null,
         type_cargaison: vol_commercial && (nature_transport === 'cargo' || (nature_transport === 'passagers' && cargoGenereFinal > 0)) ? typeCargaisonFinal : null,
         type_cargaison_libelle: typeCargaisonLibelleFinal,
         revenue_brut: vol_commercial ? revenuBrutFinal : null,
         salaire_pilote: vol_commercial ? salaireFinal : null,
-        prix_billet_utilise: vol_commercial ? (prix_billet_utilise || 0) : null,
+        prix_billet_utilise: vol_commercial ? prixBilletFinal : null,
         statut: 'accepte',
         accepted_at: new Date().toISOString(),
         automonitoring: true,
@@ -400,13 +462,13 @@ export async function POST(request: Request) {
 
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-      if (vol_commercial && nb_pax_genere && nb_pax_genere > 0) {
+      if (vol_commercial && nbPaxFinal > 0) {
         try {
-          await admin.rpc('consommer_passagers_aeroport', { p_code_oaci: ad, p_passagers: nb_pax_genere });
+          await admin.rpc('consommer_passagers_aeroport', { p_code_oaci: ad, p_passagers: nbPaxFinal });
         } catch (e) {
           const { data: current } = await admin.from('aeroport_passagers').select('passagers_disponibles').eq('code_oaci', ad).single();
           if (current) {
-            const newValue = Math.max(0, current.passagers_disponibles - nb_pax_genere);
+            const newValue = Math.max(0, current.passagers_disponibles - nbPaxFinal);
             await admin.from('aeroport_passagers').update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() }).eq('code_oaci', ad);
           }
         }
@@ -505,13 +567,13 @@ export async function POST(request: Request) {
       nature_transport: vol_commercial && !vol_ferry && nature_transport ? nature_transport : null,
       inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
       compagnie_avion_id: compagnie_avion_id || null,
-      nb_pax_genere: vol_commercial ? (nb_pax_genere || 0) : null,
+      nb_pax_genere: vol_commercial ? nbPaxFinal : null,
       cargo_kg_genere: vol_commercial ? cargoGenereFinal : null,
       type_cargaison: vol_commercial && (nature_transport === 'cargo' || (nature_transport === 'passagers' && cargoGenereFinal > 0)) ? typeCargaisonFinal : null,
       type_cargaison_libelle: typeCargaisonLibelleFinal,
       revenue_brut: vol_commercial ? revenuBrutFinal : null,
       salaire_pilote: vol_commercial ? salaireFinal : null,
-      prix_billet_utilise: vol_commercial ? (prix_billet_utilise || 0) : null,
+      prix_billet_utilise: vol_commercial ? prixBilletFinal : null,
       statut: 'en_attente',
       current_holder_user_id: holder.user_id,
       current_holder_position: holder.position,
@@ -558,14 +620,13 @@ export async function POST(request: Request) {
     }
 
     // Consommer les passagers de l'aéroport de départ si vol commercial avec passagers
-    if (vol_commercial && nb_pax_genere && nb_pax_genere > 0) {
+    if (vol_commercial && nbPaxFinal > 0) {
       try {
-        await admin.rpc('consommer_passagers_aeroport', { p_code_oaci: ad, p_passagers: nb_pax_genere });
+        await admin.rpc('consommer_passagers_aeroport', { p_code_oaci: ad, p_passagers: nbPaxFinal });
       } catch (e) {
-        // Si la fonction n'existe pas, faire manuellement
         const { data: current } = await admin.from('aeroport_passagers').select('passagers_disponibles').eq('code_oaci', ad).single();
         if (current) {
-          const newValue = Math.max(0, current.passagers_disponibles - nb_pax_genere);
+          const newValue = Math.max(0, current.passagers_disponibles - nbPaxFinal);
           await admin.from('aeroport_passagers').update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() }).eq('code_oaci', ad);
         }
       }

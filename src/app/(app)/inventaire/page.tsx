@@ -99,6 +99,9 @@ export default async function InventairePage() {
                       <h3 className="font-semibold text-slate-200">
                         {item.nom_personnalise || avion?.nom || 'Avion'}
                       </h3>
+                      {item.immatriculation && (
+                        <p className="text-sm font-mono font-bold text-sky-400 mt-0.5">{item.immatriculation}</p>
+                      )}
                       <div className="flex items-center gap-2 mt-1">
                         {avion?.code_oaci && (
                           <span className="text-xs text-slate-500 font-mono">{avion.code_oaci}</span>

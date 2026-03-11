@@ -40,7 +40,7 @@ export default async function HangarMarketPage() {
 
   // Inventaire personnel (avions pouvant être vendus)
   const { data: inventaire } = await admin.from('inventaire_avions')
-    .select('id, nom_personnalise, types_avion:type_avion_id(id, nom, code_oaci, prix)')
+    .select('id, nom_personnalise, immatriculation, types_avion:type_avion_id(id, nom, code_oaci, prix)')
     .eq('proprietaire_id', user.id);
 
   // Vérifier quels avions sont en vol ou déjà en vente
@@ -69,6 +69,7 @@ export default async function HangarMarketPage() {
     return {
       id: item.id,
       nom_personnalise: item.nom_personnalise,
+      immatriculation: item.immatriculation || null,
       types_avion: typesAvion ? { id: typesAvion.id, nom: typesAvion.nom, code_oaci: typesAvion.code_oaci } : null,
       en_vol: (enVol || 0) > 0,
       en_vente: !!enVente,

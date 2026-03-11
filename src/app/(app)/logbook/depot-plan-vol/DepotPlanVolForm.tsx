@@ -20,6 +20,7 @@ interface InventaireItem {
   id: string;
   type_avion_id: string;
   nom_personnalise: string | null;
+  immatriculation: string | null;
   disponible: boolean;
   types_avion: TypeAvion | null;
 }
@@ -811,6 +812,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
                   return (
                     <option key={inv.id} value={inv.id}>
                       {estMilitaire ? '🛡️ ' : ''}
+                      {inv.immatriculation ? `${inv.immatriculation} — ` : ''}
                       {inv.nom_personnalise || inv.types_avion?.nom || 'Avion'}
                       {inv.types_avion?.code_oaci && ` (${inv.types_avion.code_oaci})`}
                       {estMilitaire && ' [MILITAIRE]'}

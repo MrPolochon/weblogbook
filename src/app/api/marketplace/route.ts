@@ -248,11 +248,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente)' }, { status: 400 });
       }
 
+      // Générer une immatriculation unique
+      const { data: immatPerso } = await admin.rpc('generer_immatriculation', { prefixe: 'F-' });
+      const immatPersonnel = immatPerso || `F-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
       // Ajouter à l'inventaire personnel
       await admin.from('inventaire_avions').insert({
         proprietaire_id: user.id,
         type_avion_id,
-        nom_personnalise
+        nom_personnalise,
+        immatriculation: immatPersonnel,
       });
 
       // Transaction

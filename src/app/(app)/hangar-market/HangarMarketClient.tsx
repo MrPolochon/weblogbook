@@ -17,6 +17,7 @@ interface Compagnie {
 interface InventaireItem {
   id: string;
   nom_personnalise: string | null;
+  immatriculation: string | null;
   types_avion: { id: string; nom: string; code_oaci: string } | null;
   en_vol: boolean;
   en_vente: boolean;
@@ -553,7 +554,10 @@ export default function HangarMarketClient({
                       <Plane className="h-5 w-5 text-slate-400" />
                       <div>
                         <p className="text-slate-200">{item.nom_personnalise || item.types_avion?.nom}</p>
-                        <p className="text-sm text-slate-500">{item.types_avion?.code_oaci}</p>
+                        <div className="flex items-center gap-2">
+                          {item.immatriculation && <span className="text-sm font-mono font-bold text-sky-400">{item.immatriculation}</span>}
+                          <span className="text-sm text-slate-500">{item.types_avion?.code_oaci}</span>
+                        </div>
                       </div>
                     </div>
                     <div className="text-right">

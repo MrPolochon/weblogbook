@@ -37,7 +37,7 @@ type StepId =
   | 'temps_vol' | 'confirm_temps'
   | 'autonomie' | 'confirm_autonomie'
   | 'nb_personnes' | 'confirm_personnes'
-  | 'vol_type' | 'confirm_vol_type'
+  | 'vol_type' | 'nature_transport' | 'confirm_vol_type'
   | 'sid' | 'confirm_sid' | 'star' | 'confirm_star'
   | 'altitude' | 'confirm_altitude'
   | 'numero_vol' | 'confirm_numero'
@@ -56,6 +56,7 @@ interface BriaState {
   nb_personnes: string;
   vol_commercial: boolean;
   vol_ferry: boolean;
+  nature_transport: 'passagers' | 'cargo';
   sid_depart: string;
   star_arrivee: string;
   altitude_croisiere: string;
@@ -66,7 +67,7 @@ const INITIAL_STATE: BriaState = {
   mode: null, immatriculation: '', aircraft: null,
   type_vol: 'VFR', heure_depart: '', aeroport_depart: '', aeroport_arrivee: '',
   temps_prev_min: '', autonomie: '', nb_personnes: '',
-  vol_commercial: false, vol_ferry: false,
+  vol_commercial: false, vol_ferry: false, nature_transport: 'passagers',
   sid_depart: '', star_arrivee: '', altitude_croisiere: '', numero_vol: '',
 };
 
@@ -315,6 +316,24 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
           vol_commercial: v === 'commercial',
           vol_ferry: v === 'ferry',
         }));
+        if (v === 'commercial') {
+          await addBria("S'agit-il d'un transport de passagers ou de cargo ?");
+          setStep('nature_transport');
+        } else if (ctx.type_vol === 'IFR') {
+          await addBria(`Quelle est la SID de départ depuis ${getAeroportNom(ctx.aeroport_depart)} ?`);
+          setStep('sid');
+        } else {
+          await addBria("Quelle est votre altitude de croisière ?");
+          setStep('altitude');
+        }
+        break;
+      }
+
+      case 'nature_transport': {
+        const nature = v as 'passagers' | 'cargo';
+        addPilote(nature === 'passagers' ? 'Transport de passagers' : 'Transport de cargo');
+        setCtx(prev => ({ ...prev, nature_transport: nature }));
+        await addBria(`Transport de ${nature}, bien reçu.`);
         if (ctx.type_vol === 'IFR') {
           await addBria(`Quelle est la SID de départ depuis ${getAeroportNom(ctx.aeroport_depart)} ?`);
           setStep('sid');
@@ -397,6 +416,8 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     lines.push(`Temps prévu : ${ctx.temps_prev_min} min`);
     if (ctx.heure_depart) lines.push(`Départ : ${ctx.heure_depart} UTC`);
     if (ctx.mode === 'plan') {
+      if (ctx.vol_commercial) lines.push(`Vol commercial — ${ctx.nature_transport}`);
+      if (ctx.vol_ferry) lines.push('Vol ferry');
       if (ctx.sid_depart) lines.push(`SID : ${ctx.sid_depart}`);
       if (ctx.star_arrivee) lines.push(`STAR : ${ctx.star_arrivee}`);
       if (ctx.altitude_croisiere) lines.push(`Altitude : ${ctx.altitude_croisiere}`);
@@ -463,6 +484,9 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       payload.compagnie_id = ctx.aircraft.compagnie_id;
       payload.vol_commercial = ctx.vol_commercial;
       payload.vol_ferry = ctx.vol_ferry;
+      if (ctx.vol_commercial) {
+        payload.nature_transport = ctx.nature_transport;
+      }
     } else if (ctx.aircraft?.source === 'personnel') {
       payload.inventaire_avion_id = ctx.aircraft.inventaire_avion_id;
     }
@@ -581,6 +605,20 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
             <button type="button" onClick={() => handleAnswer('prive')}
               className="flex-1 px-4 py-2.5 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-semibold text-sm transition-colors">
               Privé
+            </button>
+          </div>
+        );
+
+      case 'nature_transport':
+        return (
+          <div className="flex gap-3">
+            <button type="button" onClick={() => handleAnswer('passagers')}
+              className="flex-1 px-4 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-semibold transition-colors">
+              Passagers
+            </button>
+            <button type="button" onClick={() => handleAnswer('cargo')}
+              className="flex-1 px-4 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition-colors">
+              Cargo
             </button>
           </div>
         );
