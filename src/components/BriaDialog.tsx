@@ -105,18 +105,21 @@ function getAeroportNom(code: string) {
 
 // ─── Sons téléphone (réutilise ATC/SIAVI via lib/phone-sounds) ───
 
-/** Sonnerie BRIA : même son que téléphone ATC/SIAVI, répété pendant 2 s */
-function playRingSound(): Promise<void> {
+/** Sonnerie BRIA : même son que téléphone ATC/SIAVI, répété pendant 2 s. Retourne cancel() pour arrêter immédiatement. */
+function playRingSound(): { promise: Promise<void>; cancel: () => void } {
+  let interval: ReturnType<typeof setInterval> | null = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((r) => { resolve = r; });
+  const cancel = () => {
+    if (interval) { clearInterval(interval); interval = null; }
+    if (timeout) { clearTimeout(timeout); timeout = null; }
+    resolve();
+  };
   playPhoneRing();
-  return new Promise((r) => {
-    const interval = setInterval(() => {
-      playPhoneRing();
-    }, 600);
-    setTimeout(() => {
-      clearInterval(interval);
-      r();
-    }, 2000);
-  });
+  interval = setInterval(() => { playPhoneRing(); }, 600);
+  timeout = setTimeout(() => { cancel(); }, 2000);
+  return { promise, cancel };
 }
 
 // ─── Cooldown BRIA (export pour vérification avant ouverture) ───
@@ -217,6 +220,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   const wrongHeureCountRef = useRef(0);
   const relaunchCountRef = useRef(0);
   const closedRef = useRef(false);
+  const ringCancelRef = useRef<(() => void) | null>(null);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
@@ -261,18 +265,23 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   // Fermer avec son raccrochage (même que téléphone ATC/SIAVI) — met fin à tout
   const handleClose = useCallback(() => {
     closedRef.current = true;
+    ringCancelRef.current?.();
+    ringCancelRef.current = null;
     speechSynthesis.cancel();
     playPhoneEnd();
     onClose();
   }, [onClose]);
 
-  // ─── Greeting on mount : BZZZZ d'appel + timer 0-10s avant que le BRIA réponde ───
+  // ─── Greeting on mount : sonnerie + timer 0-10s avant que le BRIA réponde ───
   useEffect(() => {
     if (hasGreeted.current) return;
     hasGreeted.current = true;
     (async () => {
       if (closedRef.current) return;
-      await playRingSound();
+      const { promise, cancel } = playRingSound();
+      ringCancelRef.current = cancel;
+      await promise;
+      ringCancelRef.current = null;
       if (closedRef.current) return;
       const delayMs = Math.floor(Math.random() * 11) * 1000; // 0 à 10 secondes
       await new Promise((r) => setTimeout(r, delayMs));
@@ -285,6 +294,8 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     })();
     return () => {
       closedRef.current = true;
+      ringCancelRef.current?.();
+      ringCancelRef.current = null;
       speechSynthesis.cancel();
     };
   }, [addBria]);
