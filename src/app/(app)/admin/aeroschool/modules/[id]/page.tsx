@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
@@ -29,11 +29,7 @@ export default function AdminAeroSchoolModuleEditPage() {
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState(false);
 
-  useEffect(() => {
-    loadModule();
-  }, [id]);
-
-  async function loadModule() {
+  const loadModule = useCallback(async () => {
     try {
       const res = await fetch(`/api/aeroschool/modules/${id}`);
       if (!res.ok) throw new Error('Module introuvable');
@@ -44,7 +40,11 @@ export default function AdminAeroSchoolModuleEditPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
+
+  useEffect(() => {
+    loadModule();
+  }, [loadModule]);
 
   async function save() {
     if (!module) return;

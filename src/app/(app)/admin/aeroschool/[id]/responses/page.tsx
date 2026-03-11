@@ -78,7 +78,7 @@ export default function AdminResponsesPage() {
           }
         }
         const loaded: Record<string, ModuleQuestion[]> = {};
-        for (const mid of moduleIds) {
+        for (const mid of Array.from(moduleIds)) {
           try {
             const mRes = await fetch(`/api/aeroschool/modules/${mid}`);
             if (mRes.ok) {
