@@ -130,7 +130,7 @@ export async function GET() {
       .select(`
         id, immatriculation, nom_personnalise, aeroport_actuel, statut, usure_percent, created_at,
         types_avion:type_avion_id(id, nom, constructeur),
-        profiles:proprietaire_id(id, pseudo)
+        profiles:proprietaire_id(id, identifiant)
       `)
       .order('created_at', { ascending: false });
     if (persoError) console.error('Admin avions GET perso:', persoError.message);
@@ -149,7 +149,7 @@ export async function GET() {
         detruit_at: null,
         detruit_raison: null,
         types_avion: a.types_avion,
-        compagnies: { id: 'personnel', nom: prof?.pseudo ? `👤 ${prof.pseudo}` : '👤 Utilisateur' },
+        compagnies: { id: 'personnel', nom: prof?.identifiant ? `👤 ${prof.identifiant}` : '👤 Utilisateur' },
         source: 'personnel',
         proprietaire_id: prof?.id || null,
       };

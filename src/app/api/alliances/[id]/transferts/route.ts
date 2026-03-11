@@ -101,18 +101,43 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   if (t.type_transfert === 'vente' && t.prix && t.prix > 0) {
-    const { data: debit } = await admin.rpc('debiter_compte_safe', {
-      p_compagnie_id: t.compagnie_dest_id,
-      p_montant: t.prix,
-      p_libelle: `Achat avion alliance`,
-    });
-    if (!debit?.success) return NextResponse.json({ error: debit?.error || 'Fonds insuffisants' }, { status: 400 });
+    const { data: compteDest } = await admin.from('felitz_comptes')
+      .select('id, solde')
+      .eq('compagnie_id', t.compagnie_dest_id)
+      .eq('type', 'entreprise')
+      .single();
+    if (!compteDest) return NextResponse.json({ error: 'Compte compagnie acheteur introuvable' }, { status: 400 });
 
-    await admin.rpc('crediter_compte_safe', {
-      p_compagnie_id: t.compagnie_source_id,
+    const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
+      p_compte_id: compteDest.id,
       p_montant: t.prix,
-      p_libelle: `Vente avion alliance`,
     });
+    if (!debitOk) return NextResponse.json({ error: 'Fonds insuffisants' }, { status: 400 });
+
+    await admin.from('felitz_transactions').insert({
+      compte_id: compteDest.id,
+      type: 'debit',
+      montant: t.prix,
+      libelle: 'Achat avion alliance',
+    });
+
+    const { data: compteSource } = await admin.from('felitz_comptes')
+      .select('id')
+      .eq('compagnie_id', t.compagnie_source_id)
+      .eq('type', 'entreprise')
+      .single();
+    if (compteSource) {
+      await admin.rpc('crediter_compte_safe', {
+        p_compte_id: compteSource.id,
+        p_montant: t.prix,
+      });
+      await admin.from('felitz_transactions').insert({
+        compte_id: compteSource.id,
+        type: 'credit',
+        montant: t.prix,
+        libelle: 'Vente avion alliance',
+      });
+    }
   }
 
   await admin.from('compagnie_avions').update({ compagnie_id: t.compagnie_dest_id }).eq('id', t.compagnie_avion_id);

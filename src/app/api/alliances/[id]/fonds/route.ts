@@ -68,7 +68,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const { data: compteComp } = await admin.from('felitz_comptes')
         .select('id, solde')
         .eq('compagnie_id', myMember.compagnie_id)
-        .eq('type', 'compagnie')
+        .eq('type', 'entreprise')
         .single();
       if (!compteComp) return NextResponse.json({ error: 'Compte compagnie introuvable' }, { status: 400 });
       if (compteComp.solde < amt) return NextResponse.json({ error: 'Fonds compagnie insuffisants' }, { status: 400 });
@@ -147,17 +147,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const { data: allianceAccount } = await admin.from('felitz_comptes')
-    .select('id, solde').eq('alliance_id', allianceId).eq('type', 'alliance').single();
-  if (!allianceAccount || allianceAccount.solde < demande.montant) {
-    return NextResponse.json({ error: 'Fonds alliance insuffisants' }, { status: 400 });
-  }
+    .select('id').eq('alliance_id', allianceId).eq('type', 'alliance').single();
+  if (!allianceAccount) return NextResponse.json({ error: 'Compte alliance introuvable' }, { status: 400 });
 
-  await admin.from('felitz_comptes').update({ solde: allianceAccount.solde - demande.montant }).eq('id', allianceAccount.id);
+  const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
+    p_compte_id: allianceAccount.id,
+    p_montant: demande.montant,
+  });
+  if (!debitOk) return NextResponse.json({ error: 'Fonds alliance insuffisants' }, { status: 400 });
+
+  await admin.from('felitz_transactions').insert({
+    compte_id: allianceAccount.id,
+    type: 'debit',
+    montant: demande.montant,
+    libelle: `Demande fonds : ${demande.motif}`,
+  });
 
   const { data: compteDestComp } = await admin.from('felitz_comptes')
     .select('id')
     .eq('compagnie_id', demande.compagnie_id)
-    .eq('type', 'compagnie')
+    .eq('type', 'entreprise')
     .single();
   if (compteDestComp) {
     await admin.rpc('crediter_compte_safe', {

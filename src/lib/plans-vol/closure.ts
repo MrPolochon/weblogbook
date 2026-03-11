@@ -590,11 +590,23 @@ export async function envoyerChequesVol(
 
               if (partParMembre > 0) {
                 for (const member of otherMembers) {
-                  await admin.rpc('crediter_compte_safe', {
-                    p_compagnie_id: member.compagnie_id,
-                    p_montant: partParMembre,
-                    p_libelle: `Codeshare alliance - Vol ${numeroVol}`,
-                  });
+                  const { data: compteMembre } = await admin.from('felitz_comptes')
+                    .select('id')
+                    .eq('compagnie_id', member.compagnie_id)
+                    .eq('type', 'entreprise')
+                    .single();
+                  if (compteMembre) {
+                    await admin.rpc('crediter_compte_safe', {
+                      p_compte_id: compteMembre.id,
+                      p_montant: partParMembre,
+                    });
+                    await admin.from('felitz_transactions').insert({
+                      compte_id: compteMembre.id,
+                      type: 'credit',
+                      montant: partParMembre,
+                      libelle: `Codeshare alliance - Vol ${numeroVol}`,
+                    });
+                  }
                 }
               }
             }
