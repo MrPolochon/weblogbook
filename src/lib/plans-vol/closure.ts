@@ -659,19 +659,26 @@ export async function envoyerChequesVol(
 
     contenuMessage += `\n\nRevenu net: ${revenuLocataire.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser le chèque ci-dessous.`;
 
+    const montantCheque = revenuLocataire + taxeAlliance + codeshareTotal;
+    const metadataCheque: { taxe_alliance?: number; codeshare?: number; numero_vol?: string } = {};
+    if (taxeAlliance > 0) metadataCheque.taxe_alliance = taxeAlliance;
+    if (codeshareTotal > 0) metadataCheque.codeshare = codeshareTotal;
+    if (numeroVol) metadataCheque.numero_vol = numeroVol;
+
     await admin.from('messages').insert({
       destinataire_id: compagnie.pdg_id,
       expediteur_id: null,
       titre: `Revenu vol ${numeroVol} - ${compagnie.nom}`,
       contenu: contenuMessage,
       type_message: 'cheque_revenu_compagnie',
-      cheque_montant: revenuLocataire,
+      cheque_montant: montantCheque,
       cheque_encaisse: false,
       cheque_destinataire_compte_id: compteCompagnie.id,
       cheque_libelle: `Revenu vol ${numeroVol} (coef. ${coeffPct}%)${remboursementPret > 0 ? ' - après prêt' : ''}`,
       cheque_numero_vol: numeroVol,
       cheque_compagnie_nom: compagnie.nom,
-      cheque_pour_compagnie: true
+      cheque_pour_compagnie: true,
+      metadata: Object.keys(metadataCheque).length > 0 ? metadataCheque : undefined,
     });
   }
 

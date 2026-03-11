@@ -210,6 +210,22 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   const [piloteData, setPiloteData] = useState<IfsaPiloteData | null>(null);
   const [loadingCompagnie, setLoadingCompagnie] = useState(false);
   const [loadingPilote, setLoadingPilote] = useState(false);
+  const [verificationLoading, setVerificationLoading] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<{
+    soldeCalculee: number;
+    soldeCompte: number;
+    conforme: boolean;
+    virements: Array<{
+      id: string;
+      type: string;
+      montant: number;
+      libelle: string;
+      created_at: string;
+      autre_partie: { vban: string; label: string } | null;
+    }>;
+    context?: { type: 'compagnie' | 'pilote'; id: string };
+  } | null>(null);
+  const [showVirementsModal, setShowVirementsModal] = useState(false);
   const compagniesPilotesCount = new Map(compagniesAvecPilotes.map((c) => [c.id, c.pilotes.length]));
 
 
@@ -688,6 +704,39 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
     void loadPiloteData(piloteId);
   }
 
+  async function verifierSolde(type: 'compagnie' | 'pilote', id: string) {
+    if (!id) return;
+    setVerificationLoading(true);
+    setVerificationResult(null);
+    try {
+      const res = await fetch(`/api/ifsa/controle/verification?type=${type}&id=${encodeURIComponent(id)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setVerificationResult({ ...data, context: { type, id } });
+    } catch (err) {
+      setDataError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setVerificationLoading(false);
+    }
+  }
+
+  async function verifierOrigineVirements(type: 'compagnie' | 'pilote', id: string) {
+    if (!id) return;
+    setVerificationLoading(true);
+    setVerificationResult(null);
+    try {
+      const res = await fetch(`/api/ifsa/controle/verification?type=${type}&id=${encodeURIComponent(id)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setVerificationResult({ ...data, context: { type, id } });
+      setShowVirementsModal(true);
+    } catch (err) {
+      setDataError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setVerificationLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Messages */}
@@ -1068,6 +1117,33 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                             <p className="text-xs text-slate-500">Aucune transaction</p>
                           )}
                         </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => verifierSolde('compagnie', selectedCompagnieId)}
+                            disabled={verificationLoading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 disabled:opacity-50"
+                          >
+                            {verificationLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                            Vérifier la solde
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => verifierOrigineVirements('compagnie', selectedCompagnieId)}
+                            disabled={verificationLoading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 disabled:opacity-50"
+                          >
+                            {verificationLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                            Vérifier l&apos;origine des virements
+                          </button>
+                        </div>
+                        {verificationResult?.context?.type === 'compagnie' && verificationResult.context.id === selectedCompagnieId && (
+                          <div className={`mt-2 px-3 py-2 rounded-lg text-xs ${verificationResult.conforme ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                            {verificationResult.conforme
+                              ? 'Tout est normal : la solde calculée correspond au solde du compte.'
+                              : `Solde anormale : calculée ${verificationResult.soldeCalculee.toLocaleString('fr-FR')} F$, compte ${verificationResult.soldeCompte.toLocaleString('fr-FR')} F$.`}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <p className="text-sm text-slate-500">Aucun compte entreprise.</p>
@@ -1234,6 +1310,33 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                             <p className="text-xs text-slate-500">Aucune transaction</p>
                           )}
                         </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => verifierSolde('pilote', selectedPiloteId)}
+                            disabled={verificationLoading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 disabled:opacity-50"
+                          >
+                            {verificationLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                            Vérifier la solde
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => verifierOrigineVirements('pilote', selectedPiloteId)}
+                            disabled={verificationLoading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 disabled:opacity-50"
+                          >
+                            {verificationLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                            Vérifier l&apos;origine des virements
+                          </button>
+                        </div>
+                        {verificationResult?.context?.type === 'pilote' && verificationResult.context.id === selectedPiloteId && (
+                          <div className={`mt-2 px-3 py-2 rounded-lg text-xs ${verificationResult.conforme ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                            {verificationResult.conforme
+                              ? 'Tout est normal : la solde calculée correspond au solde du compte.'
+                              : `Solde anormale : calculée ${verificationResult.soldeCalculee.toLocaleString('fr-FR')} F$, compte ${verificationResult.soldeCompte.toLocaleString('fr-FR')} F$.`}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <p className="text-sm text-slate-500">Aucun compte personnel.</p>
@@ -2287,6 +2390,52 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
               >
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                 Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {showVirementsModal && verificationResult && mounted && createPortal(
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+              <Search className="h-5 w-5 text-sky-400" />
+              Origine des virements
+            </h3>
+            {verificationResult.virements.length === 0 ? (
+              <p className="text-slate-400 text-sm">Aucun virement dans l&apos;historique.</p>
+            ) : (
+              <div className="space-y-3">
+                {verificationResult.virements.map((v) => (
+                  <div
+                    key={v.id}
+                    className="p-3 rounded-lg border border-slate-700/50 bg-slate-900/40 flex flex-wrap items-center justify-between gap-2"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-300 truncate">{v.libelle}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {v.type === 'credit' ? 'Reçu de' : 'Envoyé à'}: {v.autre_partie?.label ?? v.autre_partie?.vban ?? '—'}
+                        {v.autre_partie?.vban && v.autre_partie.vban !== v.autre_partie.label && (
+                          <span className="text-slate-600 ml-1">({v.autre_partie.vban})</span>
+                        )}
+                      </p>
+                      <p className="text-xs text-slate-500">{formatDateMediumUTC(v.created_at)}</p>
+                    </div>
+                    <span className={`font-semibold ${v.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {v.type === 'credit' ? '+' : '-'}{v.montant.toLocaleString('fr-FR')} F$
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowVirementsModal(false)}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium"
+              >
+                Fermer
               </button>
             </div>
           </div>

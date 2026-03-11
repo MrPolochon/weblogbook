@@ -141,26 +141,51 @@ export async function PATCH(
         return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
       }
 
+      const metadata = (message.metadata || {}) as { taxe_alliance?: number; codeshare?: number; numero_vol?: string };
+      const taxeAlliance = metadata.taxe_alliance ?? 0;
+      const codeshare = metadata.codeshare ?? 0;
+      const numeroVol = metadata.numero_vol || message.cheque_numero_vol || '';
+
       const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: message.cheque_montant });
       if (!creditOk) {
         await admin.from('messages').update({ cheque_encaisse: false, cheque_encaisse_at: null }).eq('id', id);
         return NextResponse.json({ error: 'Erreur lors du crédit' }, { status: 500 });
       }
 
-      // Créer la transaction
-      const { error: txError } = await admin.from('felitz_transactions').insert({
+      // Transaction crédit (revenu brut)
+      await admin.from('felitz_transactions').insert({
         compte_id: compteId,
         type: 'credit',
         montant: message.cheque_montant,
-        libelle: message.cheque_libelle || `Encaissement chèque vol ${message.cheque_numero_vol || ''}`
+        libelle: message.cheque_libelle || `Encaissement chèque vol ${numeroVol}`
       });
 
-      if (txError) {
-        console.error('Erreur création transaction chèque:', txError);
-        // Ne pas rollback car le compte a été crédité
+      // Débits taxe alliance et codeshare + transactions pour l'historique
+      if (taxeAlliance > 0) {
+        const debitTaxe = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: taxeAlliance });
+        if (debitTaxe) {
+          await admin.from('felitz_transactions').insert({
+            compte_id: compteId,
+            type: 'debit',
+            montant: taxeAlliance,
+            libelle: `Taxe alliance - Vol ${numeroVol}`,
+          });
+        }
+      }
+      if (codeshare > 0) {
+        const debitCodeshare = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: codeshare });
+        if (debitCodeshare) {
+          await admin.from('felitz_transactions').insert({
+            compte_id: compteId,
+            type: 'debit',
+            montant: codeshare,
+            libelle: `Codeshare alliance - Vol ${numeroVol}`,
+          });
+        }
       }
 
-      return NextResponse.json({ ok: true, montant: message.cheque_montant });
+      const montantNet = message.cheque_montant - taxeAlliance - codeshare;
+      return NextResponse.json({ ok: true, montant: montantNet });
     }
 
     return NextResponse.json({ error: 'Action inconnue' }, { status: 400 });
