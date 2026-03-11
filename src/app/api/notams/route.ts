@@ -34,8 +34,8 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
+    const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
+    if (profile?.role !== 'admin' && !profile?.ifsa) return NextResponse.json({ error: 'Réservé aux admins et agents IFSA' }, { status: 403 });
 
     const body = await request.json();
     const { code_aeroport, du_at, au_at, champ_a, champ_e, champ_d, champ_q, priorite, reference_fr } = body;

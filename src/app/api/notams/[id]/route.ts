@@ -11,8 +11,8 @@ export async function DELETE(
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
+    const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
+    if (profile?.role !== 'admin' && !profile?.ifsa) return NextResponse.json({ error: 'Réservé aux admins et agents IFSA' }, { status: 403 });
 
     const admin = createAdminClient();
     const { error } = await admin.from('notams').delete().eq('id', id);

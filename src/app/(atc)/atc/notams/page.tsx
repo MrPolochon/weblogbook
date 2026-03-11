@@ -18,10 +18,10 @@ export default async function AtcNotamsPage() {
 
   const [{ data: notams }, { data: profile }] = await Promise.all([
     supabase.from('notams').select('id, identifiant, code_aeroport, du_at, au_at, champ_a, champ_e, champ_d, champ_q, priorite, reference_fr, annule').eq('annule', false).gte('au_at', threeDaysAgo).order('au_at', { ascending: false }),
-    supabase.from('profiles').select('role').eq('id', user.id).single(),
+    supabase.from('profiles').select('role, ifsa').eq('id', user.id).single(),
   ]);
 
-  const isAdmin = profile?.role === 'admin';
+  const canManageNotams = profile?.role === 'admin' || profile?.ifsa === true;
 
   return (
     <div className="space-y-6">
@@ -31,7 +31,7 @@ export default async function AtcNotamsPage() {
         <a href="https://umvie.com/guide-pratique-pour-lire-les-notam-et-rester-informe/" target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:underline">guide pour lire les NOTAM</a>.
       </p>
 
-      <NotamsSection notams={notams} isAdmin={isAdmin} variant="atc" />
+      <NotamsSection notams={notams} canManageNotams={canManageNotams} variant="atc" />
     </div>
   );
 }

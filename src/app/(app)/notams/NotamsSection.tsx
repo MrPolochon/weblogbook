@@ -23,11 +23,11 @@ type Notam = {
 
 export default function NotamsSection({
   notams,
-  isAdmin,
+  canManageNotams,
   variant = 'default',
 }: {
   notams: Notam[] | null;
-  isAdmin: boolean;
+  canManageNotams: boolean;
   variant?: 'default' | 'atc';
 }) {
   const [showForm, setShowForm] = useState(false);
@@ -43,7 +43,7 @@ export default function NotamsSection({
     <div className="card">
       <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
         <h2 className={`text-lg font-medium ${titleClass}`}>NOTAMs publiés</h2>
-        {isAdmin && (
+        {canManageNotams && (
           <button
             type="button"
             onClick={() => setShowForm((s) => !s)}
@@ -55,7 +55,7 @@ export default function NotamsSection({
         )}
       </div>
 
-      {showForm && isAdmin && (
+      {showForm && canManageNotams && (
         <CreateNotamForm
           variant={variant}
           embedded
@@ -72,7 +72,7 @@ export default function NotamsSection({
               key={n.id}
               n={n}
               variant={variant}
-              adminDeleteButton={isAdmin ? <NotamDeleteButton notamId={n.id} variant={variant} /> : undefined}
+              adminDeleteButton={canManageNotams ? <NotamDeleteButton notamId={n.id} variant={variant} /> : undefined}
             />
           ))}
         </div>
