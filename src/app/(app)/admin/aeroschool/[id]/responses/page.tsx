@@ -6,6 +6,13 @@ import {
   ArrowLeft, Loader2, Trash2, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
+interface ModuleQuestion {
+  id: string;
+  title: string;
+  options: string[];
+  correct_answers: string[];
+}
+
 interface Question {
   id: string;
   title: string;
@@ -13,6 +20,8 @@ interface Question {
   is_graded?: boolean;
   points?: number;
   correct_answers?: string[];
+  module_id?: string;
+  module_count?: number;
 }
 
 interface Section {
@@ -44,6 +53,7 @@ export default function AdminResponsesPage() {
   const formId = params.id as string;
   const [form, setForm] = useState<FormInfo | null>(null);
   const [responses, setResponses] = useState<Response[]>([]);
+  const [moduleData, setModuleData] = useState<Record<string, ModuleQuestion[]>>({});
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -57,6 +67,27 @@ export default function AdminResponsesPage() {
       if (formRes.ok) {
         const fd = await formRes.json();
         setForm({ id: fd.id, title: fd.title, sections: fd.sections || [] });
+
+        // Charger les modules référencés par les blocs question_module
+        const moduleIds = new Set<string>();
+        for (const sec of fd.sections || []) {
+          for (const q of sec.questions || []) {
+            if (q.type === 'question_module' && q.module_id?.trim()) {
+              moduleIds.add(q.module_id.trim());
+            }
+          }
+        }
+        const loaded: Record<string, ModuleQuestion[]> = {};
+        for (const mid of moduleIds) {
+          try {
+            const mRes = await fetch(`/api/aeroschool/modules/${mid}`);
+            if (mRes.ok) {
+              const m = await mRes.json();
+              loaded[mid] = Array.isArray(m.questions) ? m.questions : [];
+            }
+          } catch { /* ignore */ }
+        }
+        setModuleData(loaded);
       }
       if (respRes.ok) {
         setResponses(await respRes.json());
@@ -167,10 +198,69 @@ export default function AdminResponsesPage() {
                     <div key={section.id} className="space-y-3">
                       <h4 className="text-slate-300 font-semibold text-sm border-b border-slate-700/50 pb-1">{section.title}</h4>
                       {section.questions.map((q) => {
+                        if (q.type === 'question_module' && q.module_id) {
+                          const prefix = `module_${q.module_id}_`;
+                          const moduleQuestions = moduleData[q.module_id] || [];
+                          const byId = new Map(moduleQuestions.map((mq) => [mq.id, mq]));
+                          const moduleAnswers = Object.entries(resp.answers).filter(
+                            (entry): entry is [string, string | string[]] =>
+                              typeof entry[0] === 'string' && entry[0].startsWith(prefix)
+                          );
+                          if (moduleAnswers.length === 0) {
+                            return (
+                              <div key={q.id} className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
+                                <span className="text-orange-300 text-sm font-medium">{q.title || 'Module à questions'}</span>
+                                <p className="text-slate-500 text-sm mt-1">Aucune réponse enregistrée</p>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div key={q.id} className="space-y-2">
+                              {(q.title || 'Module à questions') && (
+                                <h5 className="text-orange-300 font-medium text-sm">{q.title || 'Module à questions'}</h5>
+                              )}
+                              {moduleAnswers.map(([key, answer]) => {
+                                const questionId = key.slice(prefix.length);
+                                const mq = byId.get(questionId);
+                                const displayAnswer = Array.isArray(answer) ? answer.join(', ') : (answer || '—');
+                                const correct = mq?.correct_answers || [];
+                                const isCorrect = correct.length > 0
+                                  ? (Array.isArray(answer)
+                                    ? correct.length === 1 && correct.includes(String(answer?.[0] || ''))
+                                    : correct.includes(String(answer || '')))
+                                  : null;
+
+                                return (
+                                  <div key={key} className="bg-slate-700/20 rounded-lg p-3 space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-slate-300 text-sm font-medium">{mq?.title || 'Question'}</span>
+                                      {correct.length > 0 && (
+                                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                                          isCorrect === true ? 'bg-emerald-500/10 text-emerald-400'
+                                            : isCorrect === false ? 'bg-red-500/10 text-red-400'
+                                              : 'bg-slate-600/30 text-slate-400'
+                                        }`}>
+                                          {isCorrect ? '1' : '0'} / 1 pt
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className={`text-sm ${
+                                      isCorrect === false ? 'text-red-300' : isCorrect === true ? 'text-emerald-300' : 'text-slate-400'
+                                    }`}>
+                                      {displayAnswer}
+                                    </p>
+                                    {isCorrect === false && correct.length > 0 && (
+                                      <p className="text-xs text-emerald-400/70">Réponse attendue : {correct.join(', ')}</p>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        }
+
                         const answer = resp.answers[q.id];
                         const displayAnswer = Array.isArray(answer) ? answer.join(', ') : (answer || '—');
-                        
-                        // Vérifier si la réponse est correcte pour les questions notées
                         let isCorrect: boolean | null = null;
                         if (q.is_graded && q.correct_answers && q.correct_answers.length > 0) {
                           if (Array.isArray(answer)) {
@@ -188,10 +278,8 @@ export default function AdminResponsesPage() {
                               <span className="text-slate-300 text-sm font-medium">{q.title}</span>
                               {q.is_graded && q.points && (
                                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                                  isCorrect === true
-                                    ? 'bg-emerald-500/10 text-emerald-400'
-                                    : isCorrect === false
-                                      ? 'bg-red-500/10 text-red-400'
+                                  isCorrect === true ? 'bg-emerald-500/10 text-emerald-400'
+                                    : isCorrect === false ? 'bg-red-500/10 text-red-400'
                                       : 'bg-slate-600/30 text-slate-400'
                                 }`}>
                                   {isCorrect ? q.points : 0} / {q.points} pts
