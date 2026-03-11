@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Phone, PhoneOff, Radio, Send, ChevronRight } from 'lucide-react';
-import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_PTFS, calculerCoefficientRemplissage, calculerCoefficientChargementCargo } from '@/lib/aeroports-ptfs';
 
 // ─── Types ───
 
@@ -27,6 +28,9 @@ type AircraftInfo = {
   type_avion_constructeur?: string;
   capacite_pax: number;
   capacite_cargo_kg: number;
+  prix_billet?: number;
+  prix_kg_cargo?: number;
+  pourcentage_salaire?: number;
 };
 
 type StepId =
@@ -283,26 +287,10 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       }
 
       case 'confirm_autonomie': {
-        await addBria("Combien de personnes à bord ?");
-        setStep('nb_personnes');
-        break;
-      }
-
-      case 'nb_personnes': {
-        addPilote(`${v} personne${parseInt(v) > 1 ? 's' : ''}`);
-        setCtx(prev => ({ ...prev, nb_personnes: v }));
-        await addBria(`${v} personne${parseInt(v) > 1 ? 's' : ''} à bord, bien reçu.`);
-        setStep('confirm_personnes');
-        break;
-      }
-
-      case 'confirm_personnes': {
         if (ctx.mode === 'intention') {
-          // Intention de vol => résumé
-          setStep('resume');
-          await showResume();
+          await addBria("Combien de personnes à bord ?");
+          setStep('nb_personnes');
         } else {
-          // Plan de vol => questions supplémentaires
           await addBria("Est-ce un vol commercial, un vol ferry, ou un vol privé ?");
           setStep('vol_type');
         }
@@ -319,7 +307,64 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         if (v === 'commercial') {
           await addBria("S'agit-il d'un transport de passagers ou de cargo ?");
           setStep('nature_transport');
-        } else if (ctx.type_vol === 'IFR') {
+        } else {
+          await addBria("Combien de personnes à bord ?");
+          setStep('nb_personnes');
+        }
+        break;
+      }
+
+      case 'nature_transport': {
+        const nature = v as 'passagers' | 'cargo';
+        addPilote(nature === 'passagers' ? 'Transport de passagers' : 'Transport de cargo');
+        setCtx(prev => ({ ...prev, nature_transport: nature }));
+
+        const ac = ctx.aircraft;
+        const ad = ctx.aeroport_depart;
+        const aa = ctx.aeroport_arrivee;
+        if (ac?.source === 'compagnie' && ad && aa) {
+          const prixBillet = ac.prix_billet ?? 0;
+          const prixKgCargo = ac.prix_kg_cargo ?? 0;
+          const salairePct = ac.pourcentage_salaire ?? 0;
+          const capPax = ac.capacite_pax;
+          const capCargo = ac.capacite_cargo_kg;
+
+          const estimLines: string[] = [];
+          estimLines.push('── Estimation revenus ──');
+          let revenuBrut = 0;
+
+          if (nature === 'passagers' && capPax > 0) {
+            const coef = calculerCoefficientRemplissage(ad, aa, prixBillet);
+            const nbPax = Math.min(Math.floor(capPax * Math.min(coef, 1.0)), capPax);
+            const taux = Math.round((nbPax / capPax) * 100);
+            const revPax = nbPax * prixBillet;
+            estimLines.push(`${nbPax} passagers @ ${prixBillet} F$  —  Remplissage : ${nbPax}/${capPax} (${taux}%)`);
+            revenuBrut += revPax;
+            if (capCargo > 0) {
+              const coefC = calculerCoefficientChargementCargo(ad, aa, prixKgCargo);
+              const cargo = Math.min(Math.floor(capCargo * Math.min(coefC, 1.0)), capCargo);
+              const revCargo = cargo * prixKgCargo;
+              estimLines.push(`+ ${cargo} kg cargo complémentaire @ ${prixKgCargo} F$/kg`);
+              revenuBrut += revCargo;
+            }
+          } else if (nature === 'cargo' && capCargo > 0) {
+            const coefC = calculerCoefficientChargementCargo(ad, aa, prixKgCargo);
+            const cargo = Math.min(Math.floor(capCargo * Math.min(coefC, 1.0)), capCargo);
+            const taux = Math.round((cargo / capCargo) * 100);
+            const revCargo = cargo * prixKgCargo;
+            estimLines.push(`${cargo} kg cargo @ ${prixKgCargo} F$/kg  —  Chargement : ${cargo}/${capCargo} (${taux}%)`);
+            revenuBrut += revCargo;
+          }
+
+          const salaire = Math.floor(revenuBrut * (salairePct / 100));
+          estimLines.push(`Revenu brut : ${revenuBrut.toLocaleString('fr-FR')} F$`);
+          estimLines.push(`Votre salaire (${salairePct}%) : ${salaire.toLocaleString('fr-FR')} F$`);
+          await addBria(estimLines.join('\n'));
+        } else {
+          await addBria(`Transport de ${nature}, bien reçu.`);
+        }
+
+        if (ctx.type_vol === 'IFR') {
           await addBria(`Quelle est la SID de départ depuis ${getAeroportNom(ctx.aeroport_depart)} ?`);
           setStep('sid');
         } else {
@@ -329,17 +374,26 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         break;
       }
 
-      case 'nature_transport': {
-        const nature = v as 'passagers' | 'cargo';
-        addPilote(nature === 'passagers' ? 'Transport de passagers' : 'Transport de cargo');
-        setCtx(prev => ({ ...prev, nature_transport: nature }));
-        await addBria(`Transport de ${nature}, bien reçu.`);
-        if (ctx.type_vol === 'IFR') {
-          await addBria(`Quelle est la SID de départ depuis ${getAeroportNom(ctx.aeroport_depart)} ?`);
-          setStep('sid');
+      case 'nb_personnes': {
+        addPilote(`${v} personne${parseInt(v) > 1 ? 's' : ''}`);
+        setCtx(prev => ({ ...prev, nb_personnes: v }));
+        await addBria(`${v} personne${parseInt(v) > 1 ? 's' : ''} à bord, bien reçu.`);
+        setStep('confirm_personnes');
+        break;
+      }
+
+      case 'confirm_personnes': {
+        if (ctx.mode === 'intention') {
+          setStep('resume');
+          await showResume();
         } else {
-          await addBria("Quelle est votre altitude de croisière ?");
-          setStep('altitude');
+          if (ctx.type_vol === 'IFR') {
+            await addBria(`Quelle est la SID de départ depuis ${getAeroportNom(ctx.aeroport_depart)} ?`);
+            setStep('sid');
+          } else {
+            await addBria("Quelle est votre altitude de croisière ?");
+            setStep('altitude');
+          }
         }
         break;
       }
@@ -423,7 +477,33 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       if (ctx.altitude_croisiere) lines.push(`Altitude : ${ctx.altitude_croisiere}`);
       lines.push(`Indicatif : ${ctx.numero_vol}`);
     }
-    lines.push(`Autonomie : ${ctx.autonomie} min — ${ctx.nb_personnes} pers. à bord`);
+    if (ctx.nb_personnes) {
+      lines.push(`Autonomie : ${ctx.autonomie} min — ${ctx.nb_personnes} pers. à bord`);
+    } else {
+      lines.push(`Autonomie : ${ctx.autonomie} min`);
+    }
+
+    if (ctx.vol_commercial && ctx.aircraft?.source === 'compagnie') {
+      const ac = ctx.aircraft;
+      const prixBillet = ac.prix_billet ?? 0;
+      const prixKgCargo = ac.prix_kg_cargo ?? 0;
+      const salairePct = ac.pourcentage_salaire ?? 0;
+      let revenu = 0;
+      if (ctx.nature_transport === 'passagers' && ac.capacite_pax > 0) {
+        const coef = calculerCoefficientRemplissage(ctx.aeroport_depart, ctx.aeroport_arrivee, prixBillet);
+        const nbPax = Math.min(Math.floor(ac.capacite_pax * Math.min(coef, 1.0)), ac.capacite_pax);
+        revenu += nbPax * prixBillet;
+        if (ac.capacite_cargo_kg > 0) {
+          const coefC = calculerCoefficientChargementCargo(ctx.aeroport_depart, ctx.aeroport_arrivee, prixKgCargo);
+          revenu += Math.min(Math.floor(ac.capacite_cargo_kg * Math.min(coefC, 1.0)), ac.capacite_cargo_kg) * prixKgCargo;
+        }
+      } else if (ctx.nature_transport === 'cargo' && ac.capacite_cargo_kg > 0) {
+        const coefC = calculerCoefficientChargementCargo(ctx.aeroport_depart, ctx.aeroport_arrivee, prixKgCargo);
+        revenu += Math.min(Math.floor(ac.capacite_cargo_kg * Math.min(coefC, 1.0)), ac.capacite_cargo_kg) * prixKgCargo;
+      }
+      const salaire = Math.floor(revenu * (salairePct / 100));
+      lines.push(`Revenu estimé : ${revenu.toLocaleString('fr-FR')} F$ — Salaire : ${salaire.toLocaleString('fr-FR')} F$`);
+    }
 
     await addBria(lines.join('\n'));
     await addBria("Souhaitez-vous déposer ce plan ?");
@@ -685,8 +765,8 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+  return createPortal(
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center" style={{ zIndex: 99999 }}>
       <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl h-[85vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-amber-900/80 to-amber-800/80 border-b border-amber-700/50 px-5 py-4 flex items-center justify-between shrink-0">
@@ -751,7 +831,8 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
           {renderInput()}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
