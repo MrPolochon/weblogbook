@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Phone, PhoneOff, Radio, Send } from 'lucide-react';
+import { toast } from 'sonner';
 import { AEROPORTS_PTFS, calculerCoefficientRemplissage, calculerCoefficientChargementCargo } from '@/lib/aeroports-ptfs';
 
 // ─── Types ───
@@ -95,6 +96,31 @@ function getAeroportNom(code: string) {
   return AEROPORTS_PTFS.find(a => a.code === code)?.nom || code;
 }
 
+// ─── Cooldown BRIA (export pour vérification avant ouverture) ───
+export const BRIA_COOLDOWN_KEY = 'bria_cooldown_until';
+export function getBriaCooldownRemaining(): number {
+  if (typeof window === 'undefined') return 0;
+  const until = parseInt(localStorage.getItem(BRIA_COOLDOWN_KEY) || '0', 10);
+  return Math.max(0, until - Date.now());
+}
+
+function setBriaCooldown() {
+  if (typeof window === 'undefined') return;
+  const minMs = 60 * 1000;
+  const maxMs = 5 * 60 * 1000;
+  const duration = minMs + Math.floor(Math.random() * (maxMs - minMs));
+  localStorage.setItem(BRIA_COOLDOWN_KEY, String(Date.now() + duration));
+}
+
+// Messages d'escalade quand mauvais aéroport de départ (avion compagnie)
+const WRONG_AIRPORT_MESSAGES = [
+  "Tu me prends pour une truite ? L'avion est à {pos}, pas à {sel}. Quel est votre aéroport de départ ?",
+  "Tu es débile ou quoi ? L'avion est à {pos}. Quel est votre aéroport de départ ?",
+  "C'est pas compliqué : l'avion est à {pos}. Répondez correctement.",
+  "Dernière chance. Aéroport de départ ? L'avion est à {pos}.",
+  "Je vais te reporter au staff Mixou Airlines. Au revoir.",
+];
+
 // ─── Component ───
 
 interface BriaDialogProps {
@@ -114,6 +140,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   const hasGreeted = useRef(false);
   const lastActivityRef = useRef(Date.now());
   const relaunchAtRef = useRef<number | null>(null);
+  const wrongAirportCountRef = useRef(0);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
@@ -138,6 +165,16 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     setMessages(prev => [...prev, { role: 'pilote', text }]);
     scrollToBottom();
   }, [scrollToBottom]);
+
+  // Vérifier cooldown au montage (sécurité si ouverture directe)
+  useEffect(() => {
+    const remaining = getBriaCooldownRemaining();
+    if (remaining > 0) {
+      const mins = Math.ceil(remaining / 60000);
+      toast.error(`Vous ne pouvez pas appeler le BRIA avant ${mins} minute${mins > 1 ? 's' : ''}.`);
+      onClose();
+    }
+  }, [onClose]);
 
   // ─── Greeting on mount ───
   useEffect(() => {
@@ -266,11 +303,35 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       }
 
       case 'aeroport_depart': {
-        addPilote(`${v} — ${getAeroportNom(v)}`);
-        setCtx(prev => ({ ...prev, aeroport_depart: v }));
-        await addBria(`Aéroport de départ ${getAeroportNom(v)}, bien reçu.`);
-        await addBria("Quel est votre aéroport de destination ?");
-        setStep('aeroport_arrivee');
+        const ac = ctx.aircraft;
+        const avionPos = ac?.aeroport_actuel?.trim().toUpperCase();
+        const selCode = v.trim().toUpperCase();
+        const isWrongAirport = ac?.source === 'compagnie' && avionPos && selCode !== avionPos;
+
+        if (isWrongAirport) {
+          wrongAirportCountRef.current += 1;
+          const idx = Math.min(wrongAirportCountRef.current - 1, WRONG_AIRPORT_MESSAGES.length - 1);
+          const msg = WRONG_AIRPORT_MESSAGES[idx]
+            .replace('{pos}', getAeroportNom(avionPos) || avionPos)
+            .replace('{sel}', getAeroportNom(selCode) || selCode);
+          addPilote(`${v} — ${getAeroportNom(v)}`);
+          await addBria(msg);
+
+          if (idx === WRONG_AIRPORT_MESSAGES.length - 1) {
+            setBriaCooldown();
+            speechSynthesis.cancel();
+            onClose();
+            return;
+          }
+          setStep('aeroport_depart');
+        } else {
+          wrongAirportCountRef.current = 0;
+          addPilote(`${v} — ${getAeroportNom(v)}`);
+          setCtx(prev => ({ ...prev, aeroport_depart: v }));
+          await addBria(`Aéroport de départ ${getAeroportNom(v)}, bien reçu.`);
+          await addBria("Quel est votre aéroport de destination ?");
+          setStep('aeroport_arrivee');
+        }
         break;
       }
 
@@ -457,7 +518,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, ctx, isTyping, lookupLoading, addBria, addPilote, lookupAircraft]);
+  }, [step, ctx, isTyping, lookupLoading, addBria, addPilote, lookupAircraft, onClose]);
 
   // ─── Show summary ───
   const showResume = useCallback(async () => {
