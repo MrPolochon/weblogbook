@@ -633,7 +633,7 @@ export default function FlightStrip({
             <div className={`flex ${topBg} border-b ${sep}`}>
               <Cell className={`w-[70px] border-r ${sep}`}>
                 <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>ATD</div>
-                <InlineEdit value={strip.strip_atd} field="strip_atd" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
+                <InlineEdit value={strip.strip_atd} field="strip_atd" planId={strip.id} placeholder="14h24 ou 1424" onSaved={onRefresh} maxLength={5} large />
               </Cell>
               <Cell className={`w-[100px] border-r ${sep}`}>
                 <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>TYPE/W</div>

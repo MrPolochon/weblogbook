@@ -647,6 +647,18 @@ export async function PATCH(
       }
       if (Object.keys(update).length === 0) return NextResponse.json({ error: 'Aucun champ strip à mettre à jour.' }, { status: 400 });
 
+      // Quand strip_atd est modifié, mettre à jour heure_depart_reelle pour cohérence (IFSA, stats avion)
+      if (update.strip_atd !== undefined) {
+        const stripAtd = update.strip_atd as string | null;
+        if (stripAtd && String(stripAtd).trim()) {
+          const refDate = plan.accepted_at ? new Date(plan.accepted_at) : new Date(plan.created_at);
+          const depTime = parseStripATD(stripAtd, refDate);
+          update.heure_depart_reelle = depTime ? depTime.toISOString() : null;
+        } else {
+          update.heure_depart_reelle = null;
+        }
+      }
+
       const { error: err } = await admin.from('plans_vol').update(update).eq('id', id);
       if (err) return NextResponse.json({ error: err.message }, { status: 400 });
       return NextResponse.json({ ok: true });

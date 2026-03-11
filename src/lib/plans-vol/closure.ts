@@ -78,6 +78,15 @@ export function parseStripATD(
     }
   }
 
+  // Format : 3 chiffres HMM, ex. 930 → 09:30 (ATC sans zéro initial)
+  if (hours === null) {
+    const match3 = raw.match(/^(\d)(\d{2})$/);
+    if (match3) {
+      hours = parseInt(match3[1], 10);
+      minutes = parseInt(match3[2], 10);
+    }
+  }
+
   // Validation
   if (hours === null || minutes === null) return null;
   if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
@@ -295,16 +304,21 @@ export async function envoyerChequesVol(
 
   // Calculer le temps réel depuis le départ (ATD) jusqu'à la demande de clôture par le pilote
   // Priorité : heure ATD saisie par l'ATC > heure d'acceptation (accepted_at)
-  // Si l'ATD donne une durée invraisemblable (ex. ATC a saisi l'heure d'arrivée par erreur), on repasse sur accepted_at
+  // Garde-fous si ATD invalide : durée négative, trop courte (heure d'arrivée saisie par erreur), trop longue (mauvaise date)
   let tempsReelMin = plan.temps_prev_min;
   if (plan.accepted_at) {
     const acceptedAt = new Date(plan.accepted_at);
     const departureTime = parseStripATD(plan.strip_atd, acceptedAt) || acceptedAt;
     const diffMs = dateFinVol.getTime() - departureTime.getTime();
     tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
-    // Durée invraisemblable (ex. 1 min pour un vol prévu 28 min) = probablement heure d'arrivée saisie dans ATD
+    const usedAtd = departureTime.getTime() !== acceptedAt.getTime();
     const seuilMin = Math.max(2, Math.floor(plan.temps_prev_min * 0.2));
-    if (departureTime.getTime() !== acceptedAt.getTime() && tempsReelMin < seuilMin) {
+    const seuilMax = Math.min(1440, plan.temps_prev_min * 4); // max 24h ou 4× temps prévu
+    const dureeInvalide =
+      diffMs < 0 || // ATD après clôture (erreur de saisie)
+      (usedAtd && tempsReelMin < seuilMin) || // trop courte = probablement heure d'arrivée dans ATD
+      (usedAtd && tempsReelMin > seuilMax); // trop longue = mauvaise date ou erreur
+    if (dureeInvalide) {
       const diffMsBase = dateFinVol.getTime() - acceptedAt.getTime();
       tempsReelMin = Math.max(1, Math.round(diffMsBase / 60000));
     }
