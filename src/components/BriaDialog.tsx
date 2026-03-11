@@ -1057,7 +1057,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
           <button
             type="button"
             onClick={handleClose}
-            disabled={step === 'submitting'}
+            disabled={step === 'submitting' || step === 'done'}
             className="flex items-center gap-2 px-3 py-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600/80"
             title="Raccrocher"
           >
@@ -1066,7 +1066,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
           </button>
         </div>
 
-        {step === 'submitting' && (
+        {(step === 'submitting' || step === 'done') && (
           <div className="px-5 py-3 bg-amber-500/20 border-b border-amber-500/40">
             <p className="text-sm font-medium text-amber-400 text-center">
               Attendez la fin du processus, ne quittez pas, ne changez pas de page.

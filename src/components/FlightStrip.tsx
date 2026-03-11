@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare, AlertTriangle, Route as RouteIcon } from 'lucide-react';
+import { Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare, AlertTriangle } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
 export type StripData = {
@@ -199,104 +199,6 @@ function InlineEdit({
           <Trash2 className="h-2.5 w-2.5" />
         </button>
       )}
-    </div>
-  );
-}
-
-/* ============================================================ */
-/*  Bouton ajouter route (sous le panel transpondeur)             */
-/*  Saisie unique + double confirmation                            */
-/* ============================================================ */
-function RouteAddButton({ planId, onSaved, isDark, sep }: { planId: string; onSaved?: () => void; isDark: boolean; sep: string }) {
-  const [step, setStep] = useState<'idle' | 'entering' | 'confirming'>('idle');
-  const [route, setRoute] = useState('');
-  const [saving, setSaving] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (step === 'entering' && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
-    }
-  }, [step]);
-
-  const save = async () => {
-    const trimmed = route.trim();
-    if (!trimmed) return;
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/plans-vol/${planId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_strip', strip_route: trimmed }),
-      });
-      if (res.ok) {
-        setStep('idle');
-        setRoute('');
-        onSaved?.();
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const reset = () => {
-    setStep('idle');
-    setRoute('');
-  };
-
-  if (step === 'confirming') {
-    return (
-      <div className={`flex flex-col gap-2 px-2 py-2 border-b ${sep} ${isDark ? 'bg-amber-950/40' : 'bg-amber-50'}`} onClick={(e) => e.stopPropagation()}>
-        <p className={`text-xs font-semibold ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
-          Route : <span className="font-mono font-bold">{route.trim()}</span>
-        </p>
-        <p className={`text-[11px] ${isDark ? 'text-amber-300/90' : 'text-amber-700'}`}>
-          Cette route ne pourra plus être modifiée. Confirmez-vous ?
-        </p>
-        <div className="flex gap-2">
-          <button type="button" onClick={save} disabled={saving} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-emerald-600 text-white hover:bg-emerald-500' : 'bg-emerald-500 text-white hover:bg-emerald-600'} disabled:opacity-50`}>
-            {saving ? '…' : 'Oui, confirmer'}
-          </button>
-          <button type="button" onClick={reset} disabled={saving} className={`px-3 py-1.5 text-xs font-semibold ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-800'}`}>
-            Non, annuler
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === 'entering') {
-    return (
-      <div className={`flex items-center gap-1 px-2 py-1 border-b ${sep} ${isDark ? 'bg-slate-800/80' : 'bg-slate-100/80'}`} onClick={(e) => e.stopPropagation()}>
-        <input
-          ref={inputRef}
-          type="text"
-          value={route}
-          onChange={(e) => setRoute(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (route.trim()) setStep('confirming'); } if (e.key === 'Escape') reset(); }}
-          placeholder="Ex: DCT LEMG"
-          maxLength={40}
-          className={`flex-1 text-sm font-mono px-2 py-1 rounded border ${isDark ? 'bg-slate-900 border-slate-600 text-slate-100' : 'bg-white border-slate-300 text-slate-900'}`}
-        />
-        <button type="button" onClick={() => route.trim() && setStep('confirming')} disabled={!route.trim()} className={`px-2 py-1 text-xs font-bold rounded ${isDark ? 'bg-sky-600 text-white hover:bg-sky-500' : 'bg-sky-500 text-white hover:bg-sky-600'} disabled:opacity-50`}>
-          Confirmer
-        </button>
-        <button type="button" onClick={reset} className={`px-2 py-1 text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Annuler</button>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`flex border-b ${sep} ${isDark ? 'bg-slate-800/50' : 'bg-slate-100/50'}`}>
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); setStep('entering'); }}
-        className={`w-full flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-semibold rounded m-1 transition-colors ${isDark ? 'text-sky-400 hover:bg-sky-900/50 hover:text-sky-300' : 'text-sky-600 hover:bg-sky-100 hover:text-sky-700'}`}
-      >
-        <RouteIcon className="h-3.5 w-3.5" />
-        Ajouter route
-      </button>
     </div>
   );
 }
@@ -832,15 +734,6 @@ export default function FlightStrip({
                 <InlineEdit value={strip.strip_note_3} field="strip_note_3" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={30} />
               </Cell>
             </div>
-            {/* Sous le transpondeur : bouton ajouter route OU affichage de la route (synchronisé avec la cellule ROUTE) */}
-            {!(strip.strip_route?.trim() || strip.route_ifr?.trim()) ? (
-              <RouteAddButton planId={strip.id} onSaved={onRefresh} isDark={isDark} sep={sep} />
-            ) : (
-              <div className={`flex items-center gap-1 px-2 py-1 border-b ${sep} ${isDark ? 'bg-slate-800/50' : 'bg-slate-100/50'}`}>
-                <span className={`text-[10px] ${lbl} font-semibold shrink-0`}>Route :</span>
-                <span className={`text-sm font-mono font-semibold ${txt} truncate`}>{strip.strip_route || strip.route_ifr}</span>
-              </div>
-            )}
             {/* ROW 2 */}
             <div className={`flex border-b ${sep}`}>
               <Cell className={`w-[90px] border-r ${sep}`}>
