@@ -198,6 +198,11 @@ const CORRECT_HEURE_AFTER_WRONG = [
   "Enfin une heure qui tient la route.",
 ];
 
+// Relances inactivité : 30s au début, -0.5s à chaque fois jusqu'à 5s
+const RELANCE_INITIALE_MS = 30 * 1000;
+const RELANCE_DECREMENT_MS = 500;
+const RELANCE_MIN_MS = 5 * 1000;
+
 // Messages d'escalade quand heure de départ dans le passé
 const WRONG_HEURE_MESSAGES = [
   "Alors toi tu veux partir dans le passé, c'est ça ? Quelle est votre heure de départ souhaitée en UTC ?",
@@ -314,10 +319,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     if (!isTyping) inputRef.current?.focus();
   }, [step, isTyping]);
 
-  // Relances en cas d'inactivité : 30s au début, -0.5s à chaque fois jusqu'à 5s, puis raccroche
-  const RELANCE_INITIALE_MS = 30 * 1000;
-  const RELANCE_DECREMENT_MS = 500;
-  const RELANCE_MIN_MS = 5 * 1000;
+  // Relances en cas d'inactivité
   useEffect(() => {
     const interval = setInterval(() => {
       if (step === 'done' || step === 'error' || step === 'submitting') return;
