@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Phone, PhoneOff, Radio, Send } from 'lucide-react';
 import { toast } from 'sonner';
-import { AEROPORTS_PTFS, calculerCoefficientRemplissage, calculerCoefficientChargementCargo } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_PTFS, calculerCoefficientRemplissage, calculerCoefficientChargementCargo, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire } from '@/lib/aeroports-ptfs';
 
 // ─── Types ───
 
@@ -187,19 +187,22 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   const relaunchAtRef = useRef<number | null>(null);
   const wrongAirportCountRef = useRef(0);
   const wrongHeureCountRef = useRef(0);
+  const relaunchCountRef = useRef(0);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
   }, []);
 
   // Add BRIA message with typing delay + TTS (attend la fin de la lecture pour enchaîner)
-  const addBria = useCallback((text: string, delay = 600) => {
+  // Si speakText est fourni, le BRIA lit ça au lieu du texte affiché
+  const addBria = useCallback((text: string, delay = 600, speakText?: string) => {
     setIsTyping(true);
+    const toSpeak = speakText ?? text;
     return new Promise<void>((resolve) => {
       setTimeout(() => {
         setMessages(prev => [...prev, { role: 'bria', text }]);
         scrollToBottom();
-        speakAndWait(text).finally(() => {
+        speakAndWait(toSpeak).finally(() => {
           setIsTyping(false);
           resolve();
         });
@@ -238,24 +241,32 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     if (!isTyping) inputRef.current?.focus();
   }, [step, isTyping]);
 
-  // Inactivité 2 min : relancer, puis annuler si pas de réponse
-  const INACTIVITY_MS = 2 * 60 * 1000; // 2 minutes
+  // Relances en cas d'inactivité : 30s au début, -0.5s à chaque fois jusqu'à 5s, puis raccroche
+  const RELANCE_INITIALE_MS = 30 * 1000;
+  const RELANCE_DECREMENT_MS = 500;
+  const RELANCE_MIN_MS = 5 * 1000;
   useEffect(() => {
     const interval = setInterval(() => {
       if (step === 'done' || step === 'error' || step === 'submitting') return;
       if (isTyping) return; // Ne pas compter quand BRIA parle
       const now = Date.now();
-      if (relaunchAtRef.current !== null) {
-        if (now - relaunchAtRef.current >= INACTIVITY_MS) {
+      const refTime = relaunchAtRef.current ?? lastActivityRef.current;
+      const elapsed = now - refTime;
+      const nextInterval = Math.max(RELANCE_MIN_MS, RELANCE_INITIALE_MS - relaunchCountRef.current * RELANCE_DECREMENT_MS);
+
+      if (elapsed >= nextInterval) {
+        if (relaunchCountRef.current > 0 && nextInterval <= RELANCE_MIN_MS) {
+          // Déjà à 5s, on raccroche
           speechSynthesis.cancel();
           onClose();
+        } else {
+          relaunchAtRef.current = now;
+          relaunchCountRef.current += 1;
+          setMessages(prev => [...prev, { role: 'bria', text: "Êtes-vous toujours là ?" }]);
+          speakAndWait("Êtes-vous toujours là ?");
         }
-      } else if (now - lastActivityRef.current >= INACTIVITY_MS) {
-        relaunchAtRef.current = now;
-        setMessages(prev => [...prev, { role: 'bria', text: "Êtes-vous toujours là ?" }]);
-        speakAndWait("Êtes-vous toujours là ?");
       }
-    }, 30000); // Vérifier toutes les 30 s
+    }, 2000); // Vérifier toutes les 2 s
     return () => clearInterval(interval);
   }, [step, isTyping, onClose]);
 
@@ -285,7 +296,8 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     if (!v) return;
     lastActivityRef.current = Date.now();
     if (relaunchAtRef.current !== null) {
-      relaunchAtRef.current = null; // Utilisateur a répondu au "Êtes-vous toujours là ?"
+      relaunchAtRef.current = null;
+      relaunchCountRef.current = 0; // Utilisateur a répondu, on repart de zéro
       setInputValue('');
       return; // On ignore l'input, on reprend la conversation
     }
@@ -492,6 +504,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
           const estimLines: string[] = [];
           estimLines.push('── Estimation revenus ──');
           let revenuBrut = 0;
+          let cargoKg = 0;
 
           if (nature === 'passagers' && capPax > 0) {
             const coef = calculerCoefficientRemplissage(ad, aa, prixBillet);
@@ -502,24 +515,36 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
             revenuBrut += revPax;
             if (capCargo > 0) {
               const coefC = calculerCoefficientChargementCargo(ad, aa, prixKgCargo);
-              const cargo = Math.min(Math.floor(capCargo * Math.min(coefC, 1.0)), capCargo);
-              const revCargo = cargo * prixKgCargo;
-              estimLines.push(`+ ${cargo} kg cargo complémentaire @ ${prixKgCargo} F$/kg`);
+              cargoKg = Math.min(Math.floor(capCargo * Math.min(coefC, 1.0)), capCargo);
+              const revCargo = cargoKg * prixKgCargo;
+              estimLines.push(`+ ${cargoKg} kg cargo complémentaire @ ${prixKgCargo} F$/kg`);
               revenuBrut += revCargo;
             }
           } else if (nature === 'cargo' && capCargo > 0) {
             const coefC = calculerCoefficientChargementCargo(ad, aa, prixKgCargo);
-            const cargo = Math.min(Math.floor(capCargo * Math.min(coefC, 1.0)), capCargo);
-            const taux = Math.round((cargo / capCargo) * 100);
-            const revCargo = cargo * prixKgCargo;
-            estimLines.push(`${cargo} kg cargo @ ${prixKgCargo} F$/kg  —  Chargement : ${cargo}/${capCargo} (${taux}%)`);
+            cargoKg = Math.min(Math.floor(capCargo * Math.min(coefC, 1.0)), capCargo);
+            const taux = Math.round((cargoKg / capCargo) * 100);
+            const revCargo = cargoKg * prixKgCargo;
+            estimLines.push(`${cargoKg} kg cargo @ ${prixKgCargo} F$/kg  —  Chargement : ${cargoKg}/${capCargo} (${taux}%)`);
             revenuBrut += revCargo;
           }
 
           const salaire = Math.floor(revenuBrut * (salairePct / 100));
           estimLines.push(`Revenu brut : ${revenuBrut.toLocaleString('fr-FR')} F$`);
           estimLines.push(`Votre salaire (${salairePct}%) : ${salaire.toLocaleString('fr-FR')} F$`);
-          await addBria(estimLines.join('\n'));
+
+          // Texte lu par le BRIA : uniquement revenu brut, salaire, et cargaison spéciale si applicable
+          let speakText = `Estimation revenus. Revenu brut : ${revenuBrut.toLocaleString('fr-FR')} F$. Votre salaire : ${salaire.toLocaleString('fr-FR')} F$.`;
+          if (cargoKg > 0) {
+            const typeCargo = nature === 'passagers' ? genererTypeCargaisonComplementaire() : genererTypeCargaison();
+            if (typeCargo === 'marchandise_rare') {
+              speakText += ` Avec ${getMarchandiseRareAleatoire().toLowerCase()}.`;
+            } else if (typeCargo !== 'general') {
+              const info = getCargaisonInfo(typeCargo);
+              speakText += ` Avec ${info.nom.toLowerCase()}.`;
+            }
+          }
+          await addBria(estimLines.join('\n'), 600, speakText);
         } else {
           await addBria(`Transport de ${nature}, bien reçu.`);
         }
