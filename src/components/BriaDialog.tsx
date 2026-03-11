@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Phone, PhoneOff, Radio, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { AEROPORTS_PTFS, calculerCoefficientRemplissage, calculerCoefficientChargementCargo, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire } from '@/lib/aeroports-ptfs';
+import { playPhoneRing, playPhoneEnd } from '@/lib/phone-sounds';
 
 // ─── Types ───
 
@@ -102,61 +103,20 @@ function getAeroportNom(code: string) {
   return AEROPORTS_PTFS.find(a => a.code === code)?.nom || code;
 }
 
-// ─── Sons réalistes (Web Audio API) ───
+// ─── Sons téléphone (réutilise ATC/SIAVI via lib/phone-sounds) ───
 
-/** BZZZZ d'appel téléphonique (sonnerie) */
+/** Sonnerie BRIA : même son que téléphone ATC/SIAVI, répété pendant 2 s */
 function playRingSound(): Promise<void> {
-  if (typeof window === 'undefined') return Promise.resolve();
-  const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  if (!AC) return Promise.resolve();
-  try {
-    const ctx = new AC();
-    if (ctx.state === 'suspended') ctx.resume();
-    const duration = 2; // 2 secondes de sonnerie
-    const playTone = (freq: number, start: number, len: number) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = freq;
-      osc.type = 'square';
-      gain.gain.setValueAtTime(0.15, start);
-      gain.gain.exponentialRampToValueAtTime(0.01, start + len);
-      osc.start(start);
-      osc.stop(start + len);
-    };
-    // Sonnerie type téléphone : 2 tons alternés (440 Hz / 480 Hz)
-    for (let i = 0; i < 4; i++) {
-      playTone(440, i * 0.5, 0.2);
-      playTone(480, i * 0.5 + 0.25, 0.2);
-    }
-    return new Promise((r) => setTimeout(r, duration * 1000));
-  } catch {
-    return Promise.resolve();
-  }
-}
-
-/** Brut de raccrochement (coupure ligne) */
-function playHangupSound(): void {
-  if (typeof window === 'undefined') return;
-  const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  if (!AC) return;
-  try {
-    const ctx = new AC();
-    const bufferSize = ctx.sampleRate * 0.15; // 150 ms de bruit
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.3)); // bruit qui s'atténue
-    }
-    const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
-    const gain = ctx.createGain();
-    gain.gain.value = 0.4;
-    noise.connect(gain);
-    gain.connect(ctx.destination);
-    noise.start(0);
-  } catch { /* ignore */ }
+  playPhoneRing();
+  return new Promise((r) => {
+    const interval = setInterval(() => {
+      playPhoneRing();
+    }, 600);
+    setTimeout(() => {
+      clearInterval(interval);
+      r();
+    }, 2000);
+  });
 }
 
 // ─── Cooldown BRIA (export pour vérification avant ouverture) ───
@@ -256,22 +216,27 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   const wrongAirportCountRef = useRef(0);
   const wrongHeureCountRef = useRef(0);
   const relaunchCountRef = useRef(0);
+  const closedRef = useRef(false);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
   }, []);
 
-  // Add BRIA message with typing delay + TTS (attend la fin de la lecture pour enchaîner)
-  // Si speakText est fourni, le BRIA lit ça au lieu du texte affiché
+  // Add BRIA message avec annulation si raccroché
   const addBria = useCallback((text: string, delay = 600, speakText?: string) => {
+    if (closedRef.current) return Promise.resolve();
     setIsTyping(true);
     const toSpeak = speakText ?? text;
     return new Promise<void>((resolve) => {
       setTimeout(() => {
+        if (closedRef.current) {
+          setIsTyping(false);
+          return resolve();
+        }
         setMessages(prev => [...prev, { role: 'bria', text }]);
         scrollToBottom();
         speakAndWait(toSpeak).finally(() => {
-          setIsTyping(false);
+          if (!closedRef.current) setIsTyping(false);
           resolve();
         });
       }, delay);
@@ -293,10 +258,11 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     }
   }, [onClose]);
 
-  // Fermer avec brut de raccrochement
+  // Fermer avec son raccrochage (même que téléphone ATC/SIAVI) — met fin à tout
   const handleClose = useCallback(() => {
-    playHangupSound();
+    closedRef.current = true;
     speechSynthesis.cancel();
+    playPhoneEnd();
     onClose();
   }, [onClose]);
 
@@ -305,13 +271,22 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     if (hasGreeted.current) return;
     hasGreeted.current = true;
     (async () => {
+      if (closedRef.current) return;
       await playRingSound();
+      if (closedRef.current) return;
       const delayMs = Math.floor(Math.random() * 11) * 1000; // 0 à 10 secondes
       await new Promise((r) => setTimeout(r, delayMs));
+      if (closedRef.current) return;
       await addBria('B. R. I. A, bonjour.', 500);
+      if (closedRef.current) return;
       await addBria("C'est pour quoi ?", 1000);
+      if (closedRef.current) return;
       setStep('choice');
     })();
+    return () => {
+      closedRef.current = true;
+      speechSynthesis.cancel();
+    };
   }, [addBria]);
 
   // Focus input when step changes
