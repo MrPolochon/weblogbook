@@ -17,15 +17,15 @@ export default async function AdminReparationPage() {
     .order('created_at', { ascending: false });
 
   const pdgIds = Array.from(new Set((entreprises || []).map(e => e.pdg_id).filter(Boolean)));
-  let pdgProfiles: { id: string; callsign: string }[] = [];
+  let pdgProfiles: { id: string; identifiant: string }[] = [];
   if (pdgIds.length > 0) {
-    const { data } = await admin.from('profiles').select('id, callsign').in('id', pdgIds);
-    pdgProfiles = (data || []) as { id: string; callsign: string }[];
+    const { data } = await admin.from('profiles').select('id, identifiant').in('id', pdgIds);
+    pdgProfiles = (data || []) as { id: string; identifiant: string }[];
   }
 
   const { data: allProfiles } = await admin.from('profiles')
-    .select('id, callsign')
-    .order('callsign')
+    .select('id, identifiant')
+    .order('identifiant')
     .limit(500);
 
   const { data: employes } = await admin.from('reparation_employes').select('entreprise_id');
@@ -40,11 +40,11 @@ export default async function AdminReparationPage() {
     <AdminReparationClient
       entreprises={(entreprises || []).map(e => ({
         ...e,
-        pdg_callsign: pdgProfiles.find(p => p.id === e.pdg_id)?.callsign || '?',
+        pdg_callsign: pdgProfiles.find(p => p.id === e.pdg_id)?.identifiant || '?',
         nb_employes: countByEntreprise[e.id] || 0,
         nb_hangars: hangarsByEntreprise[e.id] || 0,
       }))}
-      users={(allProfiles || []) as { id: string; callsign: string }[]}
+      users={(allProfiles || []) as { id: string; identifiant: string }[]}
     />
   );
 }

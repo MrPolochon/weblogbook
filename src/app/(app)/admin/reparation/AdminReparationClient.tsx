@@ -18,7 +18,7 @@ interface Entreprise {
 
 interface User {
   id: string;
-  callsign: string;
+  identifiant: string;
 }
 
 export default function AdminReparationClient({ entreprises: initial, users }: { entreprises: Entreprise[]; users: User[] }) {
@@ -34,7 +34,7 @@ export default function AdminReparationClient({ entreprises: initial, users }: {
   const [pdgFilter, setPdgFilter] = useState('');
 
   const filteredUsers = pdgFilter.length >= 1
-    ? users.filter(u => u.callsign.toLowerCase().includes(pdgFilter.toLowerCase())).slice(0, 15)
+    ? users.filter(u => (u.identifiant || '').toLowerCase().includes(pdgFilter.toLowerCase())).slice(0, 15)
     : [];
 
   function flash(msg: string, isError = false) {
@@ -105,14 +105,14 @@ export default function AdminReparationClient({ entreprises: initial, users }: {
               <label className="block text-xs text-slate-500 mb-1">PDG (utilisateur) *</label>
               <div className="relative">
                 <input type="text" value={pdgFilter} onChange={e => { setPdgFilter(e.target.value); if (!e.target.value) setPdgId(''); }}
-                  placeholder="Rechercher par callsign..."
+                  placeholder="Rechercher par identifiant..."
                   className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2" />
                 {filteredUsers.length > 0 && !pdgId && (
                   <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800 shadow-xl">
                     {filteredUsers.map(u => (
-                      <button key={u.id} type="button" onClick={() => { setPdgId(u.id); setPdgFilter(u.callsign); }}
+                      <button key={u.id} type="button" onClick={() => { setPdgId(u.id); setPdgFilter(u.identifiant); }}
                         className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 flex items-center justify-between">
-                        <span className="font-medium">{u.callsign}</span>
+                        <span className="font-medium">{u.identifiant}</span>
                         <span className="text-xs text-slate-500 font-mono">{u.id.slice(0, 8)}...</span>
                       </button>
                     ))}
@@ -121,7 +121,7 @@ export default function AdminReparationClient({ entreprises: initial, users }: {
               </div>
               {selectedUser && (
                 <p className="text-xs text-emerald-400 mt-1">
-                  PDG sélectionné : <strong>{selectedUser.callsign}</strong>
+                  PDG sélectionné : <strong>{selectedUser.identifiant}</strong>
                   <span className="text-slate-500 ml-2 font-mono">{selectedUser.id.slice(0, 8)}...</span>
                 </p>
               )}
