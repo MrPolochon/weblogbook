@@ -643,6 +643,8 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       lines.push(`Autonomie : ${ctx.autonomie} min`);
     }
 
+    let nbPax = 0;
+    let cargoKg = 0;
     if (ctx.vol_commercial && ctx.aircraft?.source === 'compagnie') {
       const ac = ctx.aircraft;
       const prixBillet = ac.prix_billet_pax ?? 0;
@@ -651,21 +653,37 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       let revenu = 0;
       if (ctx.nature_transport === 'passagers' && ac.capacite_pax > 0) {
         const coef = calculerCoefficientRemplissage(ctx.aeroport_depart, ctx.aeroport_arrivee, prixBillet);
-        const nbPax = Math.min(Math.floor(ac.capacite_pax * Math.min(coef, 1.0)), ac.capacite_pax);
+        nbPax = Math.min(Math.floor(ac.capacite_pax * Math.min(coef, 1.0)), ac.capacite_pax);
         revenu += nbPax * prixBillet;
         if (ac.capacite_cargo_kg > 0) {
           const coefC = calculerCoefficientChargementCargo(ctx.aeroport_depart, ctx.aeroport_arrivee, prixKgCargo);
-          revenu += Math.min(Math.floor(ac.capacite_cargo_kg * Math.min(coefC, 1.0)), ac.capacite_cargo_kg) * prixKgCargo;
+          cargoKg = Math.min(Math.floor(ac.capacite_cargo_kg * Math.min(coefC, 1.0)), ac.capacite_cargo_kg);
+          revenu += cargoKg * prixKgCargo;
         }
       } else if (ctx.nature_transport === 'cargo' && ac.capacite_cargo_kg > 0) {
         const coefC = calculerCoefficientChargementCargo(ctx.aeroport_depart, ctx.aeroport_arrivee, prixKgCargo);
-        revenu += Math.min(Math.floor(ac.capacite_cargo_kg * Math.min(coefC, 1.0)), ac.capacite_cargo_kg) * prixKgCargo;
+        cargoKg = Math.min(Math.floor(ac.capacite_cargo_kg * Math.min(coefC, 1.0)), ac.capacite_cargo_kg);
+        revenu += cargoKg * prixKgCargo;
       }
       const salaire = Math.floor(revenu * (salairePct / 100));
       lines.push(`Revenu estimé : ${revenu.toLocaleString('fr-FR')} F$ — Salaire : ${salaire.toLocaleString('fr-FR')} F$`);
     }
 
-    await addBria(lines.join('\n'));
+    // Texte lu par le BRIA : résumé court type "C'est copié pour un vol avec F-NUUU de Mellor à Greater Rockford..."
+    const dep = getAeroportNom(ctx.aeroport_depart);
+    const arr = getAeroportNom(ctx.aeroport_arrivee);
+    let speakText: string;
+    if (ctx.mode === 'intention') {
+      const pers = ctx.nb_personnes ? ` avec ${ctx.nb_personnes} personne${parseInt(ctx.nb_personnes) > 1 ? 's' : ''} à bord` : '';
+      speakText = `C'est copié pour une intention de vol avec ${ctx.immatriculation} de ${dep} à ${arr}${pers}.`;
+    } else if (ctx.vol_ferry) {
+      speakText = `C'est copié pour un vol ferry avec ${ctx.immatriculation} de ${dep} à ${arr}.`;
+    } else if (ctx.vol_commercial) {
+      speakText = `C'est copié pour un vol avec ${ctx.immatriculation} de ${dep} à ${arr}, un vol commercial avec ${nbPax} passager${nbPax > 1 ? 's' : ''} et ${cargoKg} kg de cargo.`;
+    } else {
+      speakText = `C'est copié pour un vol avec ${ctx.immatriculation} de ${dep} à ${arr}.`;
+    }
+    await addBria(lines.join('\n'), 600, speakText);
     await addBria("Souhaitez-vous déposer ce plan ?");
     setStep('resume');
   }, [ctx, addBria]);
