@@ -5,28 +5,44 @@ import { createAdminClient } from '@/lib/supabase/admin';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-  const admin = createAdminClient();
-  const { data: myComps } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
-  const compIds = (myComps || []).map(c => c.id);
-  if (compIds.length === 0) return NextResponse.json([]);
+    const admin = createAdminClient();
+    const { data: myComps } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
+    const compIds = (myComps || []).map(c => c.id);
+    if (compIds.length === 0) return NextResponse.json([]);
 
-  const { data: invitations } = await admin.from('alliance_invitations')
-    .select('id, alliance_id, compagnie_id, message, alliances(nom)')
-    .eq('statut', 'en_attente')
-    .in('compagnie_id', compIds);
+    // Récupérer les invitations en attente
+    const { data: invitations, error: invError } = await admin.from('alliance_invitations')
+      .select('id, alliance_id, compagnie_id, message')
+      .eq('statut', 'en_attente')
+      .in('compagnie_id', compIds);
 
-  return NextResponse.json((invitations || []).map(inv => {
-    const raw = inv.alliances as unknown;
-    const alliance = Array.isArray(raw) ? raw[0] : raw;
-    return {
+    if (invError) {
+      console.error('invitations-pending query error:', invError.message);
+      return NextResponse.json([]);
+    }
+
+    if (!invitations?.length) return NextResponse.json([]);
+
+    // Récupérer les noms des alliances séparément (évite les problèmes de FK join)
+    const allianceIds = Array.from(new Set(invitations.map(inv => inv.alliance_id)));
+    const { data: alliancesData } = await admin.from('alliances')
+      .select('id, nom')
+      .in('id', allianceIds);
+    const allianceMap = Object.fromEntries((alliancesData || []).map(a => [a.id, a.nom]));
+
+    return NextResponse.json(invitations.map(inv => ({
       id: inv.id,
       alliance_id: inv.alliance_id,
-      alliance_nom: (alliance as { nom?: string })?.nom || 'Alliance',
+      alliance_nom: allianceMap[inv.alliance_id] || 'Alliance',
       message: inv.message,
-    };
-  }));
+    })));
+  } catch (e) {
+    console.error('invitations-pending error:', e);
+    return NextResponse.json([]);
+  }
 }

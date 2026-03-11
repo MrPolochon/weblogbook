@@ -181,7 +181,17 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
         {error && <Alert type="error">{error}</Alert>}
         {success && <Alert type="success">{success}</Alert>}
         <p className="text-slate-500">Vous n&apos;êtes dans aucune alliance. Un administrateur peut en créer une, ou un président peut vous inviter.</p>
-        <PendingInvitations pdgCompagnieIds={pdgCompagnieIds} onAccepted={() => { fetch('/api/alliances').then(r => r.json()).then(d => { setAlliances(Array.isArray(d) ? d : []); }); }} />
+        <PendingInvitations pdgCompagnieIds={pdgCompagnieIds} onAccepted={async (allianceId) => {
+          const res = await fetch('/api/alliances');
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : [];
+          setAlliances(list);
+          if (allianceId) {
+            await loadDetail(allianceId);
+          } else if (list.length === 1) {
+            await loadDetail(list[0].id);
+          }
+        }} />
       </div>
     );
   }
@@ -190,6 +200,13 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
     return (
       <div className="space-y-8">
         <Header />
+        <PendingInvitations pdgCompagnieIds={pdgCompagnieIds} onAccepted={async (allianceId) => {
+          const res = await fetch('/api/alliances');
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : [];
+          setAlliances(list);
+          if (allianceId) await loadDetail(allianceId);
+        }} />
         {alliances.map(a => (
           <button key={a.id} onClick={() => loadDetail(a.id)} className="w-full text-left rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 hover:bg-slate-800/50 transition flex items-center justify-between">
             <div>
@@ -261,28 +278,44 @@ function Alert({ type, children }: { type: 'error' | 'success'; children: React.
   return <p className={`text-sm ${type === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>{children}</p>;
 }
 
-function PendingInvitations({ pdgCompagnieIds, onAccepted }: { pdgCompagnieIds: string[]; onAccepted: () => void }) {
+function PendingInvitations({ pdgCompagnieIds, onAccepted }: { pdgCompagnieIds: string[]; onAccepted: (allianceId: string) => void }) {
   const [invites, setInvites] = useState<Array<{ id: string; alliance_id: string; alliance_nom: string; message: string | null }>>([]);
+  const [loadingInvites, setLoadingInvites] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [respondError, setRespondError] = useState('');
 
   useEffect(() => {
-    if (pdgCompagnieIds.length === 0) return;
-    fetch('/api/alliances/invitations-pending').then(r => r.ok ? r.json() : []).then(d => setInvites(Array.isArray(d) ? d : [])).catch(() => {});
+    if (pdgCompagnieIds.length === 0) { setLoadingInvites(false); return; }
+    setLoadingInvites(true);
+    fetch('/api/alliances/invitations-pending')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setInvites(Array.isArray(d) ? d : []))
+      .catch(() => setInvites([]))
+      .finally(() => setLoadingInvites(false));
   }, [pdgCompagnieIds]);
 
+  if (loadingInvites) return null;
   if (invites.length === 0) return null;
 
   async function respond(invId: string, allianceId: string, action: string) {
     setBusy(true);
+    setRespondError('');
     try {
-      await fetch(`/api/alliances/${allianceId}/invitations`, {
+      const res = await fetch(`/api/alliances/${allianceId}/invitations`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invitation_id: invId, action }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRespondError(data.error || 'Erreur lors du traitement');
+        return;
+      }
       setInvites(prev => prev.filter(i => i.id !== invId));
-      if (action === 'accepter') onAccepted();
-    } catch {} finally { setBusy(false); }
+      if (action === 'accepter') onAccepted(allianceId);
+    } catch {
+      setRespondError('Erreur de connexion');
+    } finally { setBusy(false); }
   }
 
   return (
@@ -296,6 +329,7 @@ function PendingInvitations({ pdgCompagnieIds, onAccepted }: { pdgCompagnieIds: 
           <p className="text-xs text-slate-400">Vous avez {invites.length} invitation{invites.length > 1 ? 's' : ''} d&apos;alliance</p>
         </div>
       </div>
+      {respondError && <p className="text-red-400 text-sm mb-2">{respondError}</p>}
       <div className="space-y-3">
         {invites.map(inv => (
           <div key={inv.id} className="flex items-center justify-between flex-wrap gap-3 py-3 px-4 rounded-lg bg-slate-800/50 border border-slate-700/50">

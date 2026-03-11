@@ -123,7 +123,39 @@ export async function GET() {
     }));
 
     const compagnieMapped = (data || []).map((a) => ({ ...a, source: 'compagnie' }));
-    return NextResponse.json([...armeeMapped, ...compagnieMapped]);
+
+    // Avions personnels (inventaire)
+    const { data: persoAvions, error: persoError } = await admin
+      .from('inventaire_avions')
+      .select(`
+        id, immatriculation, nom_personnalise, aeroport_actuel, statut, usure_percent, created_at,
+        types_avion:type_avion_id(id, nom, constructeur),
+        profiles:proprietaire_id(id, pseudo)
+      `)
+      .order('created_at', { ascending: false });
+    if (persoError) console.error('Admin avions GET perso:', persoError.message);
+
+    const persoMapped = (persoAvions || []).map((a) => {
+      const prof = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
+      return {
+        id: a.id,
+        immatriculation: a.immatriculation || '—',
+        nom_bapteme: a.nom_personnalise || null,
+        usure_percent: a.usure_percent ?? 100,
+        aeroport_actuel: a.aeroport_actuel || '—',
+        statut: a.statut || 'ground',
+        created_at: a.created_at,
+        detruit: false,
+        detruit_at: null,
+        detruit_raison: null,
+        types_avion: a.types_avion,
+        compagnies: { id: 'personnel', nom: prof?.pseudo ? `👤 ${prof.pseudo}` : '👤 Utilisateur' },
+        source: 'personnel',
+        proprietaire_id: prof?.id || null,
+      };
+    });
+
+    return NextResponse.json([...armeeMapped, ...compagnieMapped, ...persoMapped]);
   } catch (e) {
     console.error('Admin avions GET:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
@@ -169,6 +201,26 @@ export async function PATCH(request: Request) {
       }
       const { data, error } = await admin
         .from('armee_avions')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json(data);
+    }
+
+    if (source === 'personnel') {
+      const updates: Record<string, unknown> = {};
+      if (aeroport_actuel !== undefined) updates.aeroport_actuel = aeroport_actuel.toUpperCase();
+      if (statut !== undefined) updates.statut = statut;
+      if (usure_percent !== undefined) updates.usure_percent = Math.max(0, Math.min(100, usure_percent));
+      if (immatriculation !== undefined) updates.immatriculation = immatriculation.toUpperCase();
+      if (nom_bapteme !== undefined) updates.nom_personnalise = nom_bapteme || null;
+      if (Object.keys(updates).length === 0) {
+        return NextResponse.json({ error: 'Aucune modification' }, { status: 400 });
+      }
+      const { data, error } = await admin
+        .from('inventaire_avions')
         .update(updates)
         .eq('id', id)
         .select()
@@ -241,7 +293,7 @@ export async function DELETE(request: Request) {
     }
 
     const admin = createAdminClient();
-    const targetTable = source === 'armee' ? 'armee_avions' : 'compagnie_avions';
+    const targetTable = source === 'armee' ? 'armee_avions' : source === 'personnel' ? 'inventaire_avions' : 'compagnie_avions';
     const { error } = await admin.from(targetTable).delete().eq('id', id);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

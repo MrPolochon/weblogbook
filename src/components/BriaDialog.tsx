@@ -28,7 +28,7 @@ type AircraftInfo = {
   type_avion_constructeur?: string;
   capacite_pax: number;
   capacite_cargo_kg: number;
-  prix_billet?: number;
+  prix_billet_pax?: number;
   prix_kg_cargo?: number;
   pourcentage_salaire?: number;
 };
@@ -322,12 +322,27 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         const ac = ctx.aircraft;
         const ad = ctx.aeroport_depart;
         const aa = ctx.aeroport_arrivee;
-        if (ac?.source === 'compagnie' && ad && aa) {
-          const prixBillet = ac.prix_billet ?? 0;
+        if (ac?.source === 'compagnie' && ac.compagnie_id && ad && aa) {
+          let prixBillet = ac.prix_billet_pax ?? 0;
           const prixKgCargo = ac.prix_kg_cargo ?? 0;
           const salairePct = ac.pourcentage_salaire ?? 0;
           const capPax = ac.capacite_pax;
           const capCargo = ac.capacite_cargo_kg;
+
+          // Vérifier s'il existe un tarif spécifique pour cette liaison
+          try {
+            const tarifRes = await fetch(`/api/tarifs-liaisons?compagnie_id=${ac.compagnie_id}`);
+            if (tarifRes.ok) {
+              const tarifs = await tarifRes.json();
+              if (Array.isArray(tarifs)) {
+                const tarifSpec = tarifs.find(
+                  (t: { aeroport_depart: string; aeroport_arrivee: string; prix_billet: number }) =>
+                    t.aeroport_depart === ad && t.aeroport_arrivee === aa
+                );
+                if (tarifSpec) prixBillet = tarifSpec.prix_billet;
+              }
+            }
+          } catch { /* fallback au prix par défaut */ }
 
           const estimLines: string[] = [];
           estimLines.push('── Estimation revenus ──');
@@ -485,7 +500,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
 
     if (ctx.vol_commercial && ctx.aircraft?.source === 'compagnie') {
       const ac = ctx.aircraft;
-      const prixBillet = ac.prix_billet ?? 0;
+      const prixBillet = ac.prix_billet_pax ?? 0;
       const prixKgCargo = ac.prix_kg_cargo ?? 0;
       const salairePct = ac.pourcentage_salaire ?? 0;
       let revenu = 0;

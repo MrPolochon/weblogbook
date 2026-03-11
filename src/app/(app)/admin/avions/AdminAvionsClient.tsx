@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plane, MapPin, Edit2, Trash2, Save, X, RefreshCw, Building2, Plus, Skull, AlertTriangle } from 'lucide-react';
+import { Plane, MapPin, Edit2, Trash2, Save, X, RefreshCw, Building2, Plus, Skull, AlertTriangle, User } from 'lucide-react';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { toast } from 'sonner';
 
@@ -19,7 +19,7 @@ type Avion = {
   detruit_raison?: string | null;
   types_avion: { id: string; nom: string; constructeur: string } | { id: string; nom: string; constructeur: string }[] | null;
   compagnies: { id: string; nom: string } | { id: string; nom: string }[] | null;
-  source?: 'compagnie' | 'armee';
+  source?: 'compagnie' | 'armee' | 'personnel';
 };
 
 type Compagnie = { id: string; nom: string };
@@ -34,6 +34,7 @@ export default function AdminAvionsClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingSource, setEditingSource] = useState<string | undefined>(undefined);
   const [editData, setEditData] = useState<{
     aeroport_actuel: string;
     statut: string;
@@ -133,6 +134,7 @@ export default function AdminAvionsClient() {
 
   function startEdit(avion: Avion) {
     setEditingId(avion.id);
+    setEditingSource(avion.source);
     setEditData({
       aeroport_actuel: avion.aeroport_actuel,
       statut: avion.statut,
@@ -144,6 +146,7 @@ export default function AdminAvionsClient() {
 
   function cancelEdit() {
     setEditingId(null);
+    setEditingSource(undefined);
     setEditData(null);
   }
 
@@ -156,12 +159,13 @@ export default function AdminAvionsClient() {
       const res = await fetch('/api/admin/avions', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editingId, ...editData }),
+        body: JSON.stringify({ id: editingId, source: editingSource, ...editData }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
       
       setEditingId(null);
+      setEditingSource(undefined);
       setEditData(null);
       loadAvions();
       startTransition(() => router.refresh());
@@ -392,7 +396,7 @@ export default function AdminAvionsClient() {
               <tr className="border-b border-slate-700 text-left text-slate-400">
                 <th className="pb-2 pr-4">Immatriculation</th>
                 <th className="pb-2 pr-4">Nom</th>
-                <th className="pb-2 pr-4">Compagnie</th>
+                <th className="pb-2 pr-4">Propriétaire</th>
                 <th className="pb-2 pr-4">Type</th>
                 <th className="pb-2 pr-4">Position</th>
                 <th className="pb-2 pr-4">Usure</th>
@@ -404,6 +408,7 @@ export default function AdminAvionsClient() {
               {filteredAvions.map((avion) => {
                 const isEditing = editingId === avion.id;
                 const isArmee = avion.source === 'armee' || (Array.isArray(avion.compagnies) ? avion.compagnies[0]?.nom : avion.compagnies?.nom) === 'Armée';
+                const isPerso = avion.source === 'personnel';
                 const compagnieNom = Array.isArray(avion.compagnies) ? avion.compagnies[0]?.nom : avion.compagnies?.nom;
                 const typeNom = Array.isArray(avion.types_avion) ? avion.types_avion[0]?.nom : avion.types_avion?.nom;
                 const statut = getStatutLabel(avion.statut, avion.detruit);
@@ -441,8 +446,8 @@ export default function AdminAvionsClient() {
                       )}
                     </td>
                     <td className="py-2.5 pr-4">
-                      <span className="text-slate-300 flex items-center gap-1">
-                        <Building2 className="h-3 w-3 text-sky-400" />
+                      <span className={`flex items-center gap-1 ${isPerso ? 'text-purple-300' : 'text-slate-300'}`}>
+                        {isPerso ? <User className="h-3 w-3 text-purple-400" /> : <Building2 className="h-3 w-3 text-sky-400" />}
                         {compagnieNom || '—'}
                       </span>
                     </td>
@@ -571,7 +576,7 @@ export default function AdminAvionsClient() {
                               </button>
                               {avion.detruit ? (
                                 <button
-                                  onClick={() => restaurerAvion(avion.id, avion.immatriculation)}
+                                  onClick={() => restaurerAvion(avion.id, avion.immatriculation, avion.source)}
                                   className="text-emerald-400 hover:text-emerald-300"
                                   title="Restaurer (annuler destruction)"
                                 >

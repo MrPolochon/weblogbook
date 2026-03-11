@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
     if (compAvion) {
       const { data: comp, error: compErr } = await admin.from('compagnies')
-        .select('id, nom, code_oaci, pdg_id, prix_billet, prix_kg_cargo, pourcentage_salaire')
+        .select('id, nom, code_oaci, pdg_id, prix_billet_pax, prix_kg_cargo, pourcentage_salaire')
         .eq('id', compAvion.compagnie_id)
         .maybeSingle();
 
@@ -101,7 +101,7 @@ export async function GET(request: Request) {
         type_avion_constructeur: ta?.constructeur || null,
         capacite_pax: ta?.capacite_pax || 0,
         capacite_cargo_kg: ta?.capacite_cargo_kg || 0,
-        prix_billet: comp?.prix_billet ?? 0,
+        prix_billet_pax: comp?.prix_billet_pax ?? 0,
         prix_kg_cargo: comp?.prix_kg_cargo ?? 0,
         pourcentage_salaire: comp?.pourcentage_salaire ?? 0,
       });

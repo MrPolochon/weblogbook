@@ -103,13 +103,22 @@ export async function POST(request: Request) {
     // ── BRIA : auto-calcul des revenus pour vols commerciaux ──
     if (bria_conversation && vol_commercial && compagnie_id && revenuBrutFinal === 0) {
       const { data: comp } = await admin.from('compagnies')
-        .select('prix_billet, prix_kg_cargo, pourcentage_salaire')
+        .select('prix_billet_pax, prix_kg_cargo, pourcentage_salaire')
         .eq('id', compagnie_id)
         .single();
 
-      const prixBillet = comp?.prix_billet ?? 0;
+      let prixBillet = comp?.prix_billet_pax ?? 0;
       const prixKgCargo = comp?.prix_kg_cargo ?? 0;
       const pourcentageSalaire = comp?.pourcentage_salaire ?? 0;
+
+      // Vérifier s'il existe un tarif spécifique pour cette liaison
+      const { data: tarifSpec } = await admin.from('tarifs_liaisons')
+        .select('prix_billet')
+        .eq('compagnie_id', compagnie_id)
+        .eq('aeroport_depart', ad)
+        .eq('aeroport_arrivee', aa)
+        .maybeSingle();
+      if (tarifSpec?.prix_billet) prixBillet = tarifSpec.prix_billet;
 
       let capacitePax = 0;
       let capaciteCargo = 0;
