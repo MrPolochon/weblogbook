@@ -44,6 +44,7 @@ export default function AdminAvionsClient() {
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('');
+  const [viewMode, setViewMode] = useState<'compagnie' | 'personnel'>('compagnie');
 
   // États pour le formulaire d'ajout
   const [showAddForm, setShowAddForm] = useState(false);
@@ -245,6 +246,10 @@ export default function AdminAvionsClient() {
   }
 
   const filteredAvions = avions.filter(a => {
+    // Filtrer par mode d'affichage
+    if (viewMode === 'personnel' && a.source !== 'personnel') return false;
+    if (viewMode === 'compagnie' && a.source === 'personnel') return false;
+
     if (!filter) return true;
     const f = filter.toLowerCase();
     const compagnieNom = Array.isArray(a.compagnies) ? a.compagnies[0]?.nom : a.compagnies?.nom;
@@ -258,26 +263,59 @@ export default function AdminAvionsClient() {
     );
   });
 
+  const nbCompagnie = avions.filter(a => a.source !== 'personnel').length;
+  const nbPerso = avions.filter(a => a.source === 'personnel').length;
+
   return (
     <div className="space-y-4">
+      {/* Onglets compagnie / personnel */}
+      <div className="flex items-center gap-1 bg-slate-800/50 p-1 rounded-xl w-fit">
+        <button
+          onClick={() => setViewMode('compagnie')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            viewMode === 'compagnie'
+              ? 'bg-sky-600 text-white shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+          }`}
+        >
+          <Building2 className="h-4 w-4" />
+          Compagnies / Armée
+          <span className={`text-xs px-1.5 py-0.5 rounded-full ${viewMode === 'compagnie' ? 'bg-sky-500/40' : 'bg-slate-700'}`}>{nbCompagnie}</span>
+        </button>
+        <button
+          onClick={() => setViewMode('personnel')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            viewMode === 'personnel'
+              ? 'bg-purple-600 text-white shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+          }`}
+        >
+          <User className="h-4 w-4" />
+          Inventaire personnel
+          <span className={`text-xs px-1.5 py-0.5 rounded-full ${viewMode === 'personnel' ? 'bg-purple-500/40' : 'bg-slate-700'}`}>{nbPerso}</span>
+        </button>
+      </div>
+
       {/* Filtres et bouton d'ajout */}
       <div className="flex items-center gap-4">
         <input
           type="text"
-          placeholder="Rechercher (immat, compagnie, aéroport...)"
+          placeholder={viewMode === 'personnel' ? "Rechercher (immat, propriétaire, aéroport...)" : "Rechercher (immat, compagnie, aéroport...)"}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           className="input flex-1"
         />
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-            showAddForm ? 'bg-emerald-600 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-          }`}
-        >
-          <Plus className="h-4 w-4" />
-          Ajouter un avion
-        </button>
+        {viewMode === 'compagnie' && (
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+              showAddForm ? 'bg-emerald-600 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+            }`}
+          >
+            <Plus className="h-4 w-4" />
+            Ajouter un avion
+          </button>
+        )}
         <button
           onClick={loadAvions}
           className="btn-secondary flex items-center gap-2"
@@ -396,7 +434,7 @@ export default function AdminAvionsClient() {
               <tr className="border-b border-slate-700 text-left text-slate-400">
                 <th className="pb-2 pr-4">Immatriculation</th>
                 <th className="pb-2 pr-4">Nom</th>
-                <th className="pb-2 pr-4">Propriétaire</th>
+                <th className="pb-2 pr-4">{viewMode === 'personnel' ? 'Propriétaire' : 'Compagnie'}</th>
                 <th className="pb-2 pr-4">Type</th>
                 <th className="pb-2 pr-4">Position</th>
                 <th className="pb-2 pr-4">Usure</th>
@@ -610,7 +648,7 @@ export default function AdminAvionsClient() {
           </table>
           
           <p className="text-slate-500 text-xs mt-4">
-            {filteredAvions.length} avion(s) affiché(s) sur {avions.length}
+            {filteredAvions.length} avion(s) affiché(s) sur {viewMode === 'personnel' ? nbPerso : nbCompagnie}
           </p>
         </div>
       )}
