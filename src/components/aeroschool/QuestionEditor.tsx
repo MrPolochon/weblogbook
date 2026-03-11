@@ -3,12 +3,12 @@
 import React from 'react';
 import {
   GripVertical, Trash2, Plus, ToggleLeft, ToggleRight,
-  Type, AlignLeft, CircleDot, CheckSquare, List, Sliders,
+  Type, AlignLeft, CircleDot, CheckSquare, List, Sliders, FolderOpen,
 } from 'lucide-react';
 
 export interface Question {
   id: string;
-  type: 'short_text' | 'paragraph' | 'radio' | 'checkbox' | 'dropdown' | 'linear_scale';
+  type: 'short_text' | 'paragraph' | 'radio' | 'checkbox' | 'dropdown' | 'linear_scale' | 'question_module';
   title: string;
   description: string;
   required: boolean;
@@ -21,6 +21,9 @@ export interface Question {
   scale_max?: number;
   scale_min_label?: string;
   scale_max_label?: string;
+  // Pour question_module (bloc qui tire N questions aléatoires d'un module)
+  module_id?: string;
+  module_count?: number;
 }
 
 const QUESTION_TYPES: { value: Question['type']; label: string; icon: React.ElementType }[] = [
@@ -30,7 +33,10 @@ const QUESTION_TYPES: { value: Question['type']; label: string; icon: React.Elem
   { value: 'checkbox', label: 'Cases à cocher', icon: CheckSquare },
   { value: 'dropdown', label: 'Liste déroulante', icon: List },
   { value: 'linear_scale', label: 'Échelle linéaire', icon: Sliders },
+  { value: 'question_module', label: 'Module à questions', icon: FolderOpen },
 ];
+
+const MODULE_COUNT_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
 interface Props {
   question: Question;
@@ -41,6 +47,7 @@ interface Props {
 export default function QuestionEditor({ question, onChange, onDelete }: Props) {
   const hasOptions = ['radio', 'checkbox', 'dropdown'].includes(question.type);
   const isScale = question.type === 'linear_scale';
+  const isModule = question.type === 'question_module';
 
   const update = (partial: Partial<Question>) => onChange({ ...question, ...partial });
 
@@ -69,6 +76,57 @@ export default function QuestionEditor({ question, onChange, onDelete }: Props) 
       });
     }
   };
+
+  // Bloc Module à questions
+  if (isModule) {
+    return (
+      <div className="bg-orange-500/10 border-2 border-orange-500/50 rounded-xl p-5 space-y-4">
+        <div className="flex items-start gap-3">
+          <GripVertical className="h-5 w-5 text-orange-500/70 mt-2 cursor-grab shrink-0" />
+          <div className="flex-1 space-y-3">
+            <div className="flex items-center gap-2 text-orange-400 font-semibold">
+              <FolderOpen className="h-5 w-5" />
+              Module à questions
+            </div>
+            <input
+              type="text"
+              value={question.title || ''}
+              onChange={(e) => update({ title: e.target.value })}
+              placeholder="Titre du bloc (ex: QCM ATC, Module météo…)"
+              className="w-full bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm px-3 py-2 outline-none focus:border-orange-500 placeholder:text-slate-500"
+            />
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-slate-400 text-sm mb-1 block">ID du module</label>
+                <input
+                  type="text"
+                  value={question.module_id || ''}
+                  onChange={(e) => update({ module_id: e.target.value.trim() })}
+                  placeholder="ex: abc123-def456-..."
+                  className="w-full bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm px-3 py-2 font-mono outline-none focus:border-orange-500"
+                />
+              </div>
+              <div>
+                <label className="text-slate-400 text-sm mb-1 block">Test sur</label>
+                <select
+                  value={question.module_count ?? 10}
+                  onChange={(e) => update({ module_count: parseInt(e.target.value, 10) })}
+                  className="w-full bg-slate-700/50 border border-slate-600 rounded-lg text-slate-200 text-sm px-3 py-2 outline-none focus:border-orange-500"
+                >
+                  {MODULE_COUNT_OPTIONS.map((n) => (
+                    <option key={n} value={n}>{n} questions</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+          <button type="button" onClick={onDelete} className="text-slate-500 hover:text-red-400 p-1">
+            <Trash2 className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-4">
@@ -99,10 +157,13 @@ export default function QuestionEditor({ question, onChange, onDelete }: Props) 
           onChange={(e) => {
             const newType = e.target.value as Question['type'];
             const needsOptions = ['radio', 'checkbox', 'dropdown'].includes(newType);
+            const isModule = newType === 'question_module';
             update({
               type: newType,
               options: needsOptions && question.options.length === 0 ? ['Option 1'] : question.options,
               correct_answers: [],
+              module_id: isModule ? (question.module_id || '') : undefined,
+              module_count: isModule ? (question.module_count ?? 10) : undefined,
             });
           }}
           className="bg-slate-700 border border-slate-600 rounded-lg text-slate-200 text-sm px-3 py-2 outline-none"

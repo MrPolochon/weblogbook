@@ -117,6 +117,12 @@ export default function AdminAeroSchoolPage() {
         <div className="flex items-center gap-3">
           <GraduationCap className="h-7 w-7 text-amber-400" />
           <h1 className="text-2xl font-semibold text-slate-100">AeroSchool — Questionnaires</h1>
+          <Link
+            href="/admin/aeroschool/modules"
+            className="px-3 py-1.5 rounded-lg border border-orange-500/50 text-orange-400 hover:bg-orange-500/10 text-sm font-medium transition-colors"
+          >
+            Modules à questions
+          </Link>
         </div>
         <div className="flex flex-col items-end gap-1">
           {createError && (

@@ -4,9 +4,25 @@ import React, { useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Trash2, Save, Eye, EyeOff, ChevronUp, ChevronDown,
-  Globe, Webhook, GripVertical, Loader2, Clock, ShieldCheck, ShieldOff,
+  Globe, Webhook, GripVertical, Loader2, Clock, ShieldCheck, ShieldOff, FolderOpen,
 } from 'lucide-react';
 import QuestionEditor, { createEmptyQuestion, type Question } from './QuestionEditor';
+
+function createQuestionModuleBlock(): Question {
+  return {
+    id: crypto.randomUUID(),
+    type: 'question_module',
+    title: '',
+    description: '',
+    required: false,
+    options: [],
+    is_graded: true,
+    points: 0,
+    correct_answers: [],
+    module_id: '',
+    module_count: 10,
+  };
+}
 
 export interface Section {
   id: string;
@@ -430,15 +446,32 @@ export default function FormBuilder({ initial }: Props) {
             />
           ))}
 
-          {/* Ajouter une question */}
-          <button
-            type="button"
-            onClick={() => addQuestion(section.id)}
-            className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-slate-700 rounded-xl text-slate-400 hover:text-sky-400 hover:border-sky-500/50 transition-all"
-          >
-            <Plus className="h-5 w-5" />
-            Ajouter une question
-          </button>
+          {/* Ajouter une question ou un module */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => addQuestion(section.id)}
+              className="flex-1 flex items-center justify-center gap-2 py-3 border-2 border-dashed border-slate-700 rounded-xl text-slate-400 hover:text-sky-400 hover:border-sky-500/50 transition-all"
+            >
+              <Plus className="h-5 w-5" />
+              Ajouter une question
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setForm((f) => ({
+                  ...f,
+                  sections: f.sections.map((s) =>
+                    s.id === section.id ? { ...s, questions: [...s.questions, createQuestionModuleBlock()] } : s
+                  ),
+                }));
+              }}
+              className="flex-1 flex items-center justify-center gap-2 py-3 border-2 border-dashed border-orange-500/50 rounded-xl text-orange-400 hover:bg-orange-500/10 transition-all"
+            >
+              <FolderOpen className="h-5 w-5" />
+              Module à questions
+            </button>
+          </div>
         </div>
       ))}
 

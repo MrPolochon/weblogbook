@@ -5,9 +5,16 @@ import { useRouter } from 'next/navigation';
 import { useAntiCheat } from '@/hooks/useAntiCheat';
 import { ChevronLeft, ChevronRight, Send, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock } from 'lucide-react';
 
+interface ModuleQuestion {
+  id: string;
+  title: string;
+  options: string[];
+  correct_answers: string[];
+}
+
 interface Question {
   id: string;
-  type: 'short_text' | 'paragraph' | 'radio' | 'checkbox' | 'dropdown' | 'linear_scale';
+  type: 'short_text' | 'paragraph' | 'radio' | 'checkbox' | 'dropdown' | 'linear_scale' | 'question_module';
   title: string;
   description?: string;
   required?: boolean;
@@ -18,6 +25,8 @@ interface Question {
   scale_max?: number;
   scale_min_label?: string;
   scale_max_label?: string;
+  module_id?: string;
+  module_count?: number;
 }
 
 interface Section {
@@ -52,6 +61,8 @@ export default function FormRenderer({ form }: Props) {
   const [submitted, setSubmitted] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ score?: number; maxScore?: number } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [moduleQuestions, setModuleQuestions] = useState<Record<string, ModuleQuestion[]>>({});
+  const [moduleLoading, setModuleLoading] = useState(true);
 
   const timeLimitMinutes = form.time_limit_minutes ?? null;
   const totalSeconds = timeLimitMinutes != null ? timeLimitMinutes * 60 : 0;
@@ -99,6 +110,51 @@ export default function FormRenderer({ form }: Props) {
     } catch { /* ignore */ }
   }, [form.id, answers]);
 
+  // Charger les questions des blocs question_module au démarrage du test
+  useEffect(() => {
+    if (!testStarted) return;
+    const blocks: { blockId: string; moduleId: string; count: number }[] = [];
+    for (const sec of form.sections || []) {
+      for (const q of sec.questions || []) {
+        if (q.type === 'question_module' && q.module_id?.trim()) {
+          blocks.push({
+            blockId: q.id,
+            moduleId: q.module_id.trim(),
+            count: Math.max(1, q.module_count ?? 10),
+          });
+        }
+      }
+    }
+    if (blocks.length === 0) {
+      setModuleLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.all(
+        blocks.map(async ({ blockId, moduleId, count }) => {
+          try {
+            const res = await fetch(`/api/aeroschool/modules/${moduleId}/random?count=${count}`);
+            if (res.ok) {
+              const data = await res.json();
+              return { blockId, questions: data.questions || [] };
+            }
+          } catch { /* ignore */ }
+          return { blockId, questions: [] };
+        })
+      );
+      if (!cancelled) {
+        const loaded: Record<string, ModuleQuestion[]> = {};
+        for (const { blockId, questions } of results) {
+          loaded[blockId] = questions;
+        }
+        setModuleQuestions(loaded);
+      }
+      setModuleLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [testStarted, form.sections]);
+
   const antitricheEnabled = form.antitriche_enabled !== false;
   const { cheatingDetected } = useAntiCheat({
     enabled: testStarted && antitricheEnabled,
@@ -141,7 +197,16 @@ export default function FormRenderer({ form }: Props) {
   const validateSection = (): boolean => {
     const newErrors: Record<string, string> = {};
     for (const q of section.questions) {
-      if (q.required) {
+      if (q.type === 'question_module') {
+        const mqs = moduleQuestions[q.id] || [];
+        for (const mq of mqs) {
+          const key = `module_${q.module_id}_${mq.id}`;
+          const ans = answers[key];
+          if (!ans || (typeof ans === 'string' && !ans.trim())) {
+            newErrors[key] = 'Cette question est obligatoire';
+          }
+        }
+      } else if (q.required) {
         const ans = answers[q.id];
         if (!ans || (typeof ans === 'string' && !ans.trim()) || (Array.isArray(ans) && ans.length === 0)) {
           newErrors[q.id] = 'Cette question est obligatoire';
@@ -320,7 +385,65 @@ export default function FormRenderer({ form }: Props) {
           )}
 
           {/* Questions */}
-          {section.questions.map((q) => (
+          {section.questions.map((q) => {
+            if (q.type === 'question_module') {
+              const mqs = moduleQuestions[q.id];
+              if (moduleLoading && !mqs) {
+                return (
+                  <div key={q.id} className="bg-orange-500/10 border-2 border-orange-500/30 rounded-xl p-6 flex items-center justify-center gap-2">
+                    <Loader2 className="h-6 w-6 text-orange-400 animate-spin" />
+                    <span className="text-orange-400">Chargement des questions…</span>
+                  </div>
+                );
+              }
+              const questionsToShow = mqs || [];
+              if (questionsToShow.length === 0 && q.module_id) {
+                return (
+                  <div key={q.id} className="bg-orange-500/10 border-2 border-orange-500/30 rounded-xl p-6 text-orange-400 text-center">
+                    Module introuvable ou vide.
+                  </div>
+                );
+              }
+              return (
+                <div key={q.id} className="space-y-4">
+                  {q.title && (
+                    <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-2">
+                      <h3 className="text-orange-300 font-semibold">{q.title}</h3>
+                    </div>
+                  )}
+                  {questionsToShow.map((mq) => {
+                    const answerKey = `module_${q.module_id}_${mq.id}`;
+                    return (
+                      <div key={mq.id} className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-3">
+                        <h3 className="text-slate-100 font-medium">{mq.title}</h3>
+                        <div className="space-y-2">
+                          {(mq.options || []).map((opt) => (
+                            <label key={opt} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-700/30 cursor-pointer transition-colors">
+                              <input
+                                type="radio"
+                                name={answerKey}
+                                checked={(answers[answerKey] as string) === opt}
+                                onChange={() => updateAnswer(answerKey, opt)}
+                                className="w-4 h-4 text-sky-500 accent-sky-500"
+                              />
+                              <span className="text-slate-200">{opt}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {errors[answerKey] && (
+                          <p className="text-red-400 text-sm flex items-center gap-1">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            {errors[answerKey]}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            }
+
+            return (
             <div key={q.id} className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-3">
               <div className="flex items-start gap-1">
                 <h3 className="text-slate-100 font-medium">{q.title}</h3>
@@ -446,7 +569,8 @@ export default function FormRenderer({ form }: Props) {
                 </p>
               )}
             </div>
-          ))}
+          );
+          })}
         </div>
 
         {/* Erreur soumission */}

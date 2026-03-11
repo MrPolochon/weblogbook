@@ -1,6 +1,13 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
+interface ModuleQuestion {
+  id: string;
+  title: string;
+  options: string[];
+  correct_answers: string[];
+}
+
 interface Question {
   id: string;
   title: string;
@@ -9,6 +16,8 @@ interface Question {
   points?: number;
   correct_answers?: string[];
   required?: boolean;
+  module_id?: string;
+  module_count?: number;
 }
 
 interface Section {
@@ -23,16 +32,13 @@ function buildDiscordEmbed(
   answers: Record<string, unknown>,
   score: number,
   maxScore: number,
+  moduleQuestionTitles?: Record<string, string>,
 ) {
-  // Couleur dorée/ambre pour AeroSchool
   const EMBED_COLOR = 0xF59E0B;
-
-  // Construire les fields de l'embed à partir des sections/questions
   const fields: { name: string; value: string; inline: boolean }[] = [];
 
   for (const section of sections) {
     const questions = Array.isArray(section.questions) ? section.questions : [];
-    // Séparateur de section si plusieurs sections
     if (sections.length > 1 && section.title) {
       fields.push({
         name: `\u200B`,
@@ -42,6 +48,24 @@ function buildDiscordEmbed(
     }
 
     for (const q of questions) {
+      if (q.type === 'question_module') {
+        const prefix = `module_${q.module_id}_`;
+        for (const [key, answer] of Object.entries(answers)) {
+          if (typeof key === 'string' && key.startsWith(prefix)) {
+            const questionId = key.slice(prefix.length);
+            const title = moduleQuestionTitles?.[key] || `Question ${questionId.slice(0, 8)}`;
+            const displayAnswer = answer === undefined || answer === null || answer === ''
+              ? '*Non répondu*'
+              : Array.isArray(answer) ? (answer.length > 0 ? answer.join(', ') : '*Non répondu*') : String(answer);
+            fields.push({
+              name: title.length > 256 ? title.slice(0, 253) + '...' : title,
+              value: displayAnswer.length > 1024 ? displayAnswer.slice(0, 1021) + '...' : displayAnswer,
+              inline: false,
+            });
+          }
+        }
+        continue;
+      }
       const answer = answers[q.id];
       let displayAnswer: string;
 
@@ -53,7 +77,6 @@ function buildDiscordEmbed(
         displayAnswer = String(answer);
       }
 
-      // Discord field value max 1024 chars
       if (displayAnswer.length > 1024) {
         displayAnswer = displayAnswer.slice(0, 1021) + '...';
       }
@@ -134,6 +157,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     for (const section of sections) {
       const questions = Array.isArray(section.questions) ? section.questions : [];
       for (const q of questions) {
+        if (q.type === 'question_module' && q.module_id?.trim()) {
+          const prefix = `module_${q.module_id}_`;
+          const moduleAnswers = Object.entries(answers).filter(
+            (entry): entry is [string, string | string[]] =>
+              typeof entry[0] === 'string' && entry[0].startsWith(prefix)
+          );
+          if (moduleAnswers.length === 0) continue;
+
+          const { data: mod } = await admin
+            .from('aeroschool_question_modules')
+            .select('questions')
+            .eq('id', q.module_id.trim())
+            .single();
+
+          const modQuestions: ModuleQuestion[] = Array.isArray(mod?.questions) ? mod.questions : [];
+          const byId = new Map(modQuestions.map((mq) => [mq.id, mq]));
+
+          for (const [key, answer] of moduleAnswers) {
+            const questionId = key.slice(prefix.length);
+            const mq = byId.get(questionId);
+            if (!mq) continue;
+            maxScore += 1;
+            const correct = mq.correct_answers || [];
+            if (correct.length > 0 && answer) {
+              const ans = String(Array.isArray(answer) ? answer[0] : answer);
+              if (correct.includes(ans)) score += 1;
+            }
+          }
+          continue;
+        }
         if (q.is_graded && q.points) {
           maxScore += q.points;
           const answer = answers[q.id];
@@ -166,6 +219,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       status,
     };
 
+    // Récupérer les titres des questions module pour l'embed Discord
+    let moduleQuestionTitles: Record<string, string> | undefined;
+    for (const section of sections) {
+      for (const q of section.questions || []) {
+        if (q.type === 'question_module' && q.module_id?.trim()) {
+          const { data: mod } = await admin
+            .from('aeroschool_question_modules')
+            .select('questions')
+            .eq('id', q.module_id.trim())
+            .single();
+          const modQuestions: ModuleQuestion[] = Array.isArray(mod?.questions) ? mod.questions : [];
+          moduleQuestionTitles = moduleQuestionTitles || {};
+          for (const mq of modQuestions) {
+            moduleQuestionTitles[`module_${q.module_id}_${mq.id}`] = mq.title || 'Question';
+          }
+        }
+      }
+    }
+
     // Mode webhook : envoyer un embed Discord puis ne pas stocker (sauf si triche)
     if (form.delivery_mode === 'webhook' && form.webhook_url && !cheating_detected && !time_expired) {
       try {
@@ -175,6 +247,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           answers as Record<string, unknown>,
           score,
           maxScore,
+          moduleQuestionTitles,
         );
 
         const payload = buildWebhookPayload(embedPayload, form.webhook_role_id);
