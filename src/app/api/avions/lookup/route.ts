@@ -15,19 +15,39 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
 
     // Chercher dans les avions de compagnie
-    const { data: compAvion } = await admin.from('compagnie_avions')
-      .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion(id, nom, constructeur, code_oaci, capacite_pax, capacite_cargo_kg)')
+    const { data: compAvion, error: compAvionErr } = await admin.from('compagnie_avions')
+      .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion:type_avion_id(id, nom, constructeur, code_oaci, capacite_pax, capacite_cargo_kg)')
       .ilike('immatriculation', immat)
       .maybeSingle();
 
+    if (compAvionErr) console.error('avions/lookup compAvion error:', compAvionErr.message);
+
     if (compAvion) {
-      // Vérifier que l'user est PDG ou employé de la compagnie
-      const { data: comp } = await admin.from('compagnies')
+      const { data: comp, error: compErr } = await admin.from('compagnies')
         .select('id, nom, code_oaci, pdg_id, prix_billet, prix_kg_cargo, pourcentage_salaire')
         .eq('id', compAvion.compagnie_id)
-        .single();
+        .maybeSingle();
 
-      let authorized = comp?.pdg_id === user.id;
+      if (compErr) console.error('avions/lookup compagnies error:', compErr.message);
+
+      let authorized = false;
+
+      // 1. PDG de la compagnie propriétaire
+      if (comp?.pdg_id === user.id) {
+        authorized = true;
+      }
+
+      // 2. PDG d'une autre compagnie de l'utilisateur (vérification inversée)
+      if (!authorized) {
+        const { data: userComps } = await admin.from('compagnies')
+          .select('id')
+          .eq('pdg_id', user.id);
+        if (userComps?.some(c => c.id === compAvion.compagnie_id)) {
+          authorized = true;
+        }
+      }
+
+      // 3. Employé de la compagnie
       if (!authorized) {
         const { data: emploi } = await admin.from('compagnie_employes')
           .select('id')
@@ -37,7 +57,7 @@ export async function GET(request: Request) {
         authorized = Boolean(emploi);
       }
 
-      // Vérifier aussi les locations actives
+      // 4. Locations actives
       if (!authorized) {
         const nowIso = new Date().toISOString();
         const { data: loc } = await admin.from('compagnie_locations')
@@ -50,7 +70,7 @@ export async function GET(request: Request) {
         if (loc && loc.length > 0) {
           for (const l of loc) {
             const { data: locComp } = await admin.from('compagnies')
-              .select('pdg_id').eq('id', l.locataire_compagnie_id).single();
+              .select('pdg_id').eq('id', l.locataire_compagnie_id).maybeSingle();
             if (locComp?.pdg_id === user.id) { authorized = true; break; }
             const { data: locEmploi } = await admin.from('compagnie_employes')
               .select('id').eq('pilote_id', user.id).eq('compagnie_id', l.locataire_compagnie_id).maybeSingle();
@@ -59,7 +79,10 @@ export async function GET(request: Request) {
         }
       }
 
-      if (!authorized) return NextResponse.json({ error: 'Cet avion ne vous appartient pas.' }, { status: 403 });
+      if (!authorized) {
+        console.error('avions/lookup 403:', { userId: user.id, compagnieId: compAvion.compagnie_id, pdgId: comp?.pdg_id });
+        return NextResponse.json({ error: 'Cet avion ne vous appartient pas.' }, { status: 403 });
+      }
 
       const ta = Array.isArray(compAvion.types_avion) ? compAvion.types_avion[0] : compAvion.types_avion;
       return NextResponse.json({
@@ -86,7 +109,7 @@ export async function GET(request: Request) {
 
     // Chercher dans l'inventaire personnel
     const { data: persoAvion } = await admin.from('inventaire_avions')
-      .select('id, proprietaire_id, immatriculation, nom_personnalise, aeroport_actuel, statut, usure_percent, types_avion(id, nom, constructeur, code_oaci, capacite_pax, capacite_cargo_kg)')
+      .select('id, proprietaire_id, immatriculation, nom_personnalise, aeroport_actuel, statut, usure_percent, types_avion:type_avion_id(id, nom, constructeur, code_oaci, capacite_pax, capacite_cargo_kg)')
       .ilike('immatriculation', immat)
       .maybeSingle();
 
