@@ -26,9 +26,9 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient();
 
-    // Vérifier que l'utilisateur a accès au compte source
+    // Vérifier que l'utilisateur a accès au compte source (sans join pour éviter les soucis avec compagnie_id null sur comptes personnels)
     const { data: compteSource } = await admin.from('felitz_comptes')
-      .select('*, compagnies(pdg_id)')
+      .select('id, solde, vban, type, proprietaire_id, compagnie_id')
       .eq('id', compte_source_id)
       .single();
 
@@ -39,10 +39,14 @@ export async function POST(req: NextRequest) {
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     const isAdmin = profile?.role === 'admin';
 
-    // Vérifier autorisation
+    // Vérifier autorisation : propriétaire (personnel) ou PDG (entreprise)
     const isOwner = compteSource.proprietaire_id === user.id;
-    const isPdg = compteSource.compagnies?.pdg_id === user.id;
-    
+    let isPdg = false;
+    if (compteSource.compagnie_id) {
+      const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', compteSource.compagnie_id).single();
+      isPdg = comp?.pdg_id === user.id;
+    }
+
     if (!isAdmin && !isOwner && !isPdg) {
       return NextResponse.json({ error: 'Non autorisé pour ce compte' }, { status: 403 });
     }

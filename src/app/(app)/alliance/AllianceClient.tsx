@@ -95,6 +95,7 @@ interface AllianceDetail extends Alliance {
   transferts: Transfert[];
   demandes_fonds: DemandeFonds[];
   contributions: Contribution[];
+  my_compagnie_ids?: string[];
 }
 
 interface Props {
@@ -257,7 +258,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
         {tab === 'dashboard' && <DashboardTab detail={detail} />}
         {tab === 'membres' && <MembresTab detail={detail} isPresident={!!isPresident} isLeader={!!isLeader} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} compagniesSansAlliance={compagniesSansAlliance} />}
         {tab === 'flotte' && <FlotteTab detail={detail} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
-        {tab === 'finances' && <FinancesTab detail={detail} isLeader={!!isLeader} isPdg={pdgCompagnieIds.includes(detail.my_compagnie_id || '')} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
+        {tab === 'finances' && <FinancesTab detail={detail} isLeader={!!isLeader} isPdg={pdgCompagnieIds.some(id => detail.membres.some(m => m.compagnie_id === id))} pdgCompagnieIds={pdgCompagnieIds} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
         {tab === 'annonces' && <AnnoncesTab detail={detail} isLeader={!!isLeader} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
         {tab === 'parametres' && <ParametresTab detail={detail} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
       </div>
@@ -590,8 +591,9 @@ function FlotteTab({ detail, onRefresh, flash, api, busy }: {
   );
 }
 
-function FinancesTab({ detail, isLeader, isPdg, onRefresh, flash, api, busy }: {
+function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flash, api, busy }: {
   detail: AllianceDetail; isLeader: boolean; isPdg: boolean;
+  pdgCompagnieIds: string[];
   onRefresh: () => void; flash: (m: string, e?: boolean) => void;
   api: (u: string, m: string, b?: unknown) => Promise<unknown>; busy: boolean;
 }) {
@@ -603,8 +605,24 @@ function FinancesTab({ detail, isLeader, isPdg, onRefresh, flash, api, busy }: {
   const [showContrib, setShowContrib] = useState(false);
   const [showDemande, setShowDemande] = useState(false);
 
-  const myMember = detail.membres.find(m => m.compagnie_id === detail.my_compagnie_id);
-  const [myCodeshare, setMyCodeshare] = useState(myMember?.codeshare_pourcent ?? 0);
+  const myCompagniesInAlliance = detail.membres.filter(m => pdgCompagnieIds.includes(m.compagnie_id));
+  const [selectedCodeshareCompagnieId, setSelectedCodeshareCompagnieId] = useState(
+    detail.my_compagnie_ids?.[0] ?? detail.my_compagnie_id ?? myCompagniesInAlliance[0]?.compagnie_id ?? ''
+  );
+  const selectedMember = detail.membres.find(m => m.compagnie_id === selectedCodeshareCompagnieId);
+  const [myCodeshare, setMyCodeshare] = useState(selectedMember?.codeshare_pourcent ?? 0);
+
+  useEffect(() => {
+    const m = detail.membres.find(x => x.compagnie_id === selectedCodeshareCompagnieId);
+    setMyCodeshare(m?.codeshare_pourcent ?? 0);
+  }, [selectedCodeshareCompagnieId, detail.membres]);
+
+  useEffect(() => {
+    const mine = detail.membres.filter(m => pdgCompagnieIds.includes(m.compagnie_id));
+    if (mine.length > 0 && !mine.some(m => m.compagnie_id === selectedCodeshareCompagnieId)) {
+      setSelectedCodeshareCompagnieId(mine[0].compagnie_id);
+    }
+  }, [detail.id]);
 
   const pendingDemandes = detail.demandes_fonds.filter(d => d.statut === 'en_attente');
   const codeshareActif = detail.parametres?.codeshare_actif ?? false;
@@ -631,14 +649,30 @@ function FinancesTab({ detail, isLeader, isPdg, onRefresh, flash, api, busy }: {
           {isPdg && (
             <div>
               <p className="text-xs font-medium text-slate-300 mb-2 uppercase tracking-wide">Mon % de codeshare</p>
+              {myCompagniesInAlliance.length > 1 && (
+                <div className="mb-2">
+                  <label className="block text-xs text-slate-500 mb-1">Compagnie à modifier</label>
+                  <select
+                    value={selectedCodeshareCompagnieId}
+                    onChange={e => setSelectedCodeshareCompagnieId(e.target.value)}
+                    className="w-full rounded border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm"
+                  >
+                    {myCompagniesInAlliance.map(m => (
+                      <option key={m.compagnie_id} value={m.compagnie_id}>
+                        {m.compagnie?.nom || m.compagnie_id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="flex items-center gap-3 p-3 rounded-lg bg-sky-800/20 border border-sky-700/40">
                 <Building2 className="h-4 w-4 text-sky-400 flex-shrink-0" />
-                <span className="text-sm text-slate-200 flex-1">{myMember ? (detail.membres.find(m => m.compagnie_id === detail.my_compagnie_id)?.compagnie?.nom || 'Ma compagnie') : 'Ma compagnie'}</span>
+                <span className="text-sm text-slate-200 flex-1">{selectedMember?.compagnie?.nom || 'Ma compagnie'}</span>
                 <input type="number" min={0} max={100} value={myCodeshare} onChange={e => setMyCodeshare(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
                   className="w-20 rounded border border-slate-600 bg-slate-800 text-slate-200 px-2 py-1.5 text-sm text-right" />
                 <span className="text-sm text-slate-400">%</span>
-                <button disabled={busy || myCodeshare === (myMember?.codeshare_pourcent ?? 0)} onClick={async () => {
-                  try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'set_codeshare', codeshare_pourcent: myCodeshare }); flash('Codeshare mis à jour'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+                <button disabled={busy || myCodeshare === (selectedMember?.codeshare_pourcent ?? 0)} onClick={async () => {
+                  try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'set_codeshare', codeshare_pourcent: myCodeshare, compagnie_id: selectedCodeshareCompagnieId || undefined }); flash('Codeshare mis à jour'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
                 }} className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white font-medium disabled:opacity-50 hover:bg-sky-500 transition">Enregistrer</button>
               </div>
             </div>
@@ -653,7 +687,7 @@ function FinancesTab({ detail, isLeader, isPdg, onRefresh, flash, api, busy }: {
                     <div className="flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-slate-500" />
                       <span className="text-sm text-slate-200">{m.compagnie?.nom || m.compagnie_id}</span>
-                      {m.compagnie_id === detail.my_compagnie_id && <span className="text-[10px] bg-sky-600/30 text-sky-300 px-1.5 py-0.5 rounded">vous</span>}
+                      {pdgCompagnieIds.includes(m.compagnie_id) && <span className="text-[10px] bg-sky-600/30 text-sky-300 px-1.5 py-0.5 rounded">vous</span>}
                     </div>
                     <span className={`text-sm font-medium ${m.codeshare_pourcent > 0 ? 'text-sky-300' : 'text-slate-500'}`}>
                       {m.codeshare_pourcent}%

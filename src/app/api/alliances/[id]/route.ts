@@ -20,15 +20,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { data: alliance } = await admin.from('alliances').select('*').eq('id', id).single();
   if (!alliance) return NextResponse.json({ error: 'Alliance introuvable' }, { status: 404 });
 
-  const { data: myMember } = await admin.from('alliance_membres')
+  const { data: myMembers } = await admin.from('alliance_membres')
     .select('role, compagnie_id')
     .eq('alliance_id', id)
-    .in('compagnie_id', compagnieIds)
-    .limit(1).single();
+    .in('compagnie_id', compagnieIds);
 
   const isAdmin = (await admin.from('profiles').select('role').eq('id', user.id).single()).data?.role === 'admin';
-  if (!myMember && !isAdmin) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+  if ((!myMembers || myMembers.length === 0) && !isAdmin) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
 
+  const pdgCompagnieIds = (pdg || []).map(r => r.id);
+  const myMember = myMembers?.[0] ?? null;
+  const myCompagnieIds = (myMembers || []).map(m => m.compagnie_id).filter(id => pdgCompagnieIds.includes(id));
   const myRole = myMember?.role ?? (isAdmin ? 'admin' : null);
 
   // codeshare_pourcent might not exist yet (migration pending)
@@ -112,6 +114,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     contributions: contributions || [],
     my_role: myRole,
     my_compagnie_id: myMember?.compagnie_id ?? null,
+    my_compagnie_ids: myCompagnieIds,
   });
 }
 

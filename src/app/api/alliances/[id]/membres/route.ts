@@ -13,12 +13,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const admin = createAdminClient();
   const { data: myComps } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
   const myCompIds = (myComps || []).map(c => c.id);
-  const { data: myMember } = await admin.from('alliance_membres')
+  const { data: myMembers } = await admin.from('alliance_membres')
     .select('role, compagnie_id')
     .eq('alliance_id', allianceId)
-    .in('compagnie_id', myCompIds)
-    .limit(1).single();
+    .in('compagnie_id', myCompIds);
 
+  const myMember = myMembers?.[0] ?? null;
   if (!myMember) return NextResponse.json({ error: 'Pas membre' }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
@@ -128,10 +128,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (isNaN(pourcent) || pourcent < 0 || pourcent > 100) {
       return NextResponse.json({ error: 'Pourcentage invalide (0-100)' }, { status: 400 });
     }
-    await admin.from('alliance_membres')
+    const targetCompagnieId = body.compagnie_id && myCompIds.includes(body.compagnie_id)
+      ? body.compagnie_id
+      : myMember.compagnie_id;
+    const { error: updErr } = await admin.from('alliance_membres')
       .update({ codeshare_pourcent: pourcent })
       .eq('alliance_id', allianceId)
-      .eq('compagnie_id', myMember.compagnie_id);
+      .eq('compagnie_id', targetCompagnieId);
+    if (updErr) return NextResponse.json({ error: updErr.message }, { status: 400 });
     return NextResponse.json({ ok: true });
   }
 
