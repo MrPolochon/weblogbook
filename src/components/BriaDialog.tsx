@@ -43,7 +43,7 @@ type StepId =
   | 'temps_vol' | 'confirm_temps'
   | 'autonomie' | 'confirm_autonomie'
   | 'nb_personnes' | 'confirm_personnes'
-  | 'vol_type' | 'nature_transport' | 'confirm_vol_type'
+  | 'vol_type' | 'vol_prive_confirm' | 'nature_transport' | 'confirm_vol_type'
   | 'sid' | 'confirm_sid' | 'star' | 'confirm_star'
   | 'altitude' | 'confirm_altitude'
   | 'numero_vol' | 'confirm_numero'
@@ -337,7 +337,10 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       const res = await fetch(`/api/avions/lookup?immatriculation=${encodeURIComponent(immat)}`);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        await addBria(d.error || "Je ne trouve pas cet avion. Vérifiez l'immatriculation.", 600);
+        const msg = res.status === 403 && d.error_detail
+          ? d.error_detail
+          : (d.error || "Je ne trouve pas cet avion. Vérifiez l'immatriculation.");
+        await addBria(msg, 600);
         return null;
       }
       return await res.json();
@@ -505,9 +508,27 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         if (ctx.mode === 'intention') {
           await addBria("Combien de personnes à bord ?");
           setStep('nb_personnes');
-        } else {
-          await addBria("Est-ce un vol commercial, un vol ferry, ou un vol privé ?");
+        } else if (ctx.aircraft?.source === 'compagnie') {
+          await addBria("Est-ce un vol commercial ou un vol ferry ?");
           setStep('vol_type');
+        } else {
+          await addBria("Est-ce un vol privé ?");
+          setStep('vol_prive_confirm');
+        }
+        break;
+      }
+
+      case 'vol_prive_confirm': {
+        const isPrive = /^(oui|affirm|yes)$/i.test(v);
+        addPilote(isPrive ? 'Affirm' : 'Négatif');
+        if (isPrive) {
+          setCtx(prev => ({ ...prev, vol_commercial: false, vol_ferry: false }));
+          await addBria("Vol privé, bien reçu.");
+          await addBria("Combien de personnes à bord ?");
+          setStep('nb_personnes');
+        } else {
+          await addBria("Cet avion n'est pas habilité aux vols commerciaux. J'annule votre demande. Au revoir !");
+          handleClose();
         }
         break;
       }
@@ -757,17 +778,25 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       { role: 'pilote', text: 'Affirm, déposer le plan.' },
     ];
 
-    // Build extra notes for non-mappable fields
+    // Build extra notes for non-mappable fields (format lisible, une info par ligne)
     const extraNotes: string[] = [];
-    if (ctx.heure_depart) extraNotes.push(`Heure départ: ${ctx.heure_depart} UTC`);
-    if (ctx.autonomie) extraNotes.push(`Autonomie: ${ctx.autonomie} min`);
-    if (ctx.nb_personnes) extraNotes.push(`Personnes à bord: ${ctx.nb_personnes}`);
-    if (ctx.altitude_croisiere) extraNotes.push(`Altitude croisière: ${ctx.altitude_croisiere}`);
+    if (ctx.heure_depart) {
+      const h = ctx.heure_depart.replace(/(\d{1,2})h(\d{1,2})/i, (_, a, b) => `${a.padStart(2, '0')}:${b.padStart(2, '0')}`);
+      extraNotes.push(`Heure départ : ${h} UTC`);
+    }
+    if (ctx.autonomie) extraNotes.push(`Autonomie : ${ctx.autonomie} min`);
+    if (ctx.nb_personnes) extraNotes.push(`Personnes à bord : ${ctx.nb_personnes}`);
+    if (ctx.altitude_croisiere) {
+      const raw = String(ctx.altitude_croisiere).trim();
+      const alt = /^FL\s*/i.test(raw) ? `FL ${raw.replace(/^FL\s*/i, '').trim()}` : `FL ${raw}`;
+      extraNotes.push(`Altitude croisière : ${alt}`);
+    }
 
+    const sep = '\n';
     const intentionsVol = ctx.type_vol === 'VFR'
-      ? `[BRIA] ${extraNotes.join(' | ')}`
+      ? `[BRIA]\n${extraNotes.join(sep)}`
       : undefined;
-    const noteAtc = extraNotes.length > 0 ? `[BRIA] ${extraNotes.join(' | ')}` : undefined;
+    const noteAtc = extraNotes.length > 0 ? `[BRIA]\n${extraNotes.join(sep)}` : undefined;
 
     const numero = ctx.mode === 'intention'
       ? ctx.immatriculation
@@ -904,6 +933,20 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
           </div>
         );
 
+      case 'vol_prive_confirm':
+        return (
+          <div className="flex gap-3">
+            <button type="button" onClick={() => handleAnswer('affirm')}
+              className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-sm transition-colors">
+              Affirm
+            </button>
+            <button type="button" onClick={() => handleAnswer('negatif')}
+              className="flex-1 px-4 py-2.5 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-semibold text-sm transition-colors">
+              Négatif
+            </button>
+          </div>
+        );
+
       case 'vol_type':
         return (
           <div className="flex gap-3">
@@ -914,10 +957,6 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
             <button type="button" onClick={() => handleAnswer('ferry')}
               className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-sm transition-colors">
               Ferry
-            </button>
-            <button type="button" onClick={() => handleAnswer('prive')}
-              className="flex-1 px-4 py-2.5 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-semibold text-sm transition-colors">
-              Privé
             </button>
           </div>
         );
@@ -1018,13 +1057,22 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
           <button
             type="button"
             onClick={handleClose}
-            className="flex items-center gap-2 px-3 py-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-colors"
+            disabled={step === 'submitting'}
+            className="flex items-center gap-2 px-3 py-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600/80"
             title="Raccrocher"
           >
             <PhoneOff className="h-4 w-4" />
             Raccrocher
           </button>
         </div>
+
+        {step === 'submitting' && (
+          <div className="px-5 py-3 bg-amber-500/20 border-b border-amber-500/40">
+            <p className="text-sm font-medium text-amber-400 text-center">
+              Attendez la fin du processus, ne quittez pas, ne changez pas de page.
+            </p>
+          </div>
+        )}
 
         {/* Chat area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">

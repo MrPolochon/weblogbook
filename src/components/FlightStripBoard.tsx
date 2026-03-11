@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useTransition } from 'react';
+import { useState, useRef, useCallback, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import FlightStrip, { type StripData } from './FlightStrip';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
@@ -48,10 +48,13 @@ const ZONE_DROP_DARK: Record<ZoneId, string> = {
 
 export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
   const [transferDialog, setTransferDialog] = useState<string | null>(null);
+
+  // État local pour mises à jour optimistes (déplacement immédiat au drop)
+  const [localStrips, setLocalStrips] = useState<StripData[]>(strips);
+  useEffect(() => { setLocalStrips(strips); }, [strips]);
 
   // ═══════════════════════════════════════════════
   //  DRAG & DROP
@@ -61,8 +64,8 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
   const dragCounters = useRef<Map<string, number>>(new Map());
 
   const getZone = useCallback((zone: ZoneOrNull) =>
-    strips.filter((s) => s.strip_zone === zone).sort((a, b) => a.strip_order - b.strip_order),
-  [strips]);
+    localStrips.filter((s) => s.strip_zone === zone).sort((a, b) => a.strip_order - b.strip_order),
+  [localStrips]);
 
   const unassigned = getZone(null);
   const solStrips = getZone('sol');
@@ -98,24 +101,35 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
     dragCounters.current.clear();
   }, []);
 
-  // ─── Drop: place strip in zone (at end) ───
+  // ─── Drop: place strip in zone (at end) — mise à jour optimiste ───
   const dropInZone = useCallback(async (stripId: string, zone: ZoneOrNull) => {
-    const zoneStrips = strips.filter((s) => s.strip_zone === zone);
+    const zoneStrips = localStrips.filter((s) => s.strip_zone === zone);
     const maxOrder = zoneStrips.reduce((max, s) => Math.max(max, s.strip_order), -1);
-    await fetch(`/api/plans-vol/${stripId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update_strip', strip_zone: zone, strip_order: maxOrder + 1 }),
-    });
-    startTransition(() => router.refresh());
-  }, [strips, router, startTransition]);
+    const srcStrip = localStrips.find((s) => s.id === stripId);
+    if (!srcStrip) return;
+    const prevStrips = localStrips;
+    setLocalStrips((prev) =>
+      prev.map((s) => s.id === stripId ? { ...s, strip_zone: zone, strip_order: maxOrder + 1 } : s)
+    );
+    try {
+      const res = await fetch(`/api/plans-vol/${stripId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_strip', strip_zone: zone, strip_order: maxOrder + 1 }),
+      });
+      if (!res.ok) throw new Error('Erreur API');
+    } catch {
+      setLocalStrips(prevStrips);
+      router.refresh();
+    }
+  }, [localStrips, router]);
 
-  // ─── Drop: place strip before/after another ───
+  // ─── Drop: place strip before/after another — mise à jour optimiste ───
   const dropNearStrip = useCallback(async (stripId: string, targetId: string, zone: ZoneOrNull, position: 'before' | 'after') => {
     if (stripId === targetId) return;
-    const zoneStrips = strips.filter((s) => s.strip_zone === zone).sort((a, b) => a.strip_order - b.strip_order);
+    const zoneStrips = localStrips.filter((s) => s.strip_zone === zone).sort((a, b) => a.strip_order - b.strip_order);
     const reordered = zoneStrips.filter((s) => s.id !== stripId);
-    const srcStrip = strips.find((s) => s.id === stripId);
+    const srcStrip = localStrips.find((s) => s.id === stripId);
     if (!srcStrip) return;
     const targetIdx = reordered.findIndex((s) => s.id === targetId);
     const insertIdx = position === 'before'
@@ -123,13 +137,25 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
       : (targetIdx >= 0 ? targetIdx + 1 : reordered.length);
     reordered.splice(insertIdx, 0, { ...srcStrip, strip_zone: zone, strip_order: 0 });
     const batch = reordered.map((s, i) => ({ id: s.id, strip_zone: zone, strip_order: i }));
-    await fetch(`/api/plans-vol/${stripId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'reorder_strips', strips: batch }),
+    const prevStrips = localStrips;
+    const newStrips = localStrips.map((s) => {
+      const idx = reordered.findIndex((r) => r.id === s.id);
+      if (idx >= 0) return { ...s, strip_zone: zone, strip_order: idx };
+      return s;
     });
-    startTransition(() => router.refresh());
-  }, [strips, router, startTransition]);
+    setLocalStrips(newStrips);
+    try {
+      const res = await fetch(`/api/plans-vol/${stripId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reorder_strips', strips: batch }),
+      });
+      if (!res.ok) throw new Error('Erreur API');
+    } catch {
+      setLocalStrips(prevStrips);
+      router.refresh();
+    }
+  }, [localStrips, router]);
 
   // ─── Handle drop event ───
   const handleDrop = useCallback(async (e: React.DragEvent, zone: ZoneOrNull, targetStripId?: string, position?: 'before' | 'after') => {

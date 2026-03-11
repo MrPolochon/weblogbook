@@ -81,7 +81,11 @@ export async function GET(request: Request) {
 
       if (!authorized) {
         console.error('avions/lookup 403:', { userId: user.id, compagnieId: compAvion.compagnie_id, pdgId: comp?.pdg_id });
-        return NextResponse.json({ error: 'Cet avion ne vous appartient pas.' }, { status: 403 });
+        const compNom = comp?.nom || 'cette compagnie';
+        return NextResponse.json({
+          error: 'Cet avion ne vous appartient pas.',
+          error_detail: `Cet avion appartient à ${compNom}. Vous n'êtes ni employé ni PDG chez eux.`,
+        }, { status: 403 });
       }
 
       const ta = Array.isArray(compAvion.types_avion) ? compAvion.types_avion[0] : compAvion.types_avion;

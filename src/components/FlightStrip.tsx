@@ -400,14 +400,23 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
             <AlertTriangle className="h-3.5 w-3.5" />Note pilote
           </button>
           {noteAtcPos && createPortal(
+            (() => {
+              const pw = 380;
+              const margin = 12;
+              const vw = typeof window !== 'undefined' ? window.innerWidth : 800;
+              const left = Math.max(margin, Math.min(noteAtcPos.x, vw - pw - margin));
+              const placeAbove = noteAtcPos.y > 280;
+              const top = placeAbove ? noteAtcPos.y - 8 : noteAtcPos.y + 28;
+              const transform = placeAbove ? 'translateY(-100%)' : 'none';
+              return (
             <div
               style={{
                 position: 'fixed',
                 zIndex: 2147483647,
-                left: noteAtcPos.x,
-                top: noteAtcPos.y - 8,
-                transform: 'translateY(-100%)',
-                width: 380,
+                left,
+                top,
+                transform,
+                width: pw,
                 maxWidth: '90vw',
                 pointerEvents: 'none',
               }}
@@ -416,10 +425,12 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
               }`}
             >
               <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>Note d&apos;attention du pilote</div>
-              <p className="text-sm font-semibold leading-relaxed break-words whitespace-pre-wrap">{strip.instructions_atc}</p>
-            </div>,
-            document.body,
-          )}
+              <p className="text-base font-medium leading-relaxed break-words whitespace-pre-wrap">{strip.instructions_atc}</p>
+            </div>
+          );
+        })(),
+        document.body,
+      )}
         </>
       )}
       {strip.bria_conversation && strip.bria_conversation.length > 0 && (
