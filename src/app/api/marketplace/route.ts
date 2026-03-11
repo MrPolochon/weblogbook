@@ -252,12 +252,13 @@ export async function POST(req: NextRequest) {
       const { data: immatPerso } = await admin.rpc('generer_immatriculation', { prefixe: 'F-' });
       const immatPersonnel = immatPerso || `F-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
-      // Ajouter à l'inventaire personnel
+      // Ajouter à l'inventaire personnel (sans position : pas de revenus, pas de frais)
       await admin.from('inventaire_avions').insert({
         proprietaire_id: user.id,
         type_avion_id,
         nom_personnalise,
         immatriculation: immatPersonnel,
+        aeroport_actuel: null,
       });
 
       // Transaction

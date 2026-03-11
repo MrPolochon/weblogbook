@@ -491,7 +491,9 @@ export default function AdminAvionsClient() {
                     </td>
                     <td className="py-2.5 pr-4 text-slate-300">{typeNom || '—'}</td>
                     <td className="py-2.5 pr-4">
-                      {isEditing && editData ? (
+                      {isPerso ? (
+                        <span className="text-slate-500">—</span>
+                      ) : isEditing && editData ? (
                         <select
                           value={editData.aeroport_actuel}
                           onChange={(e) => setEditData({ ...editData, aeroport_actuel: e.target.value })}

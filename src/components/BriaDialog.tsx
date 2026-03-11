@@ -192,7 +192,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         if (!ac) { setStep('immat'); break; }
         setCtx(prev => ({ ...prev, aircraft: ac }));
 
-        const locStr = ac.aeroport_actuel ? ` au parking sur ${getAeroportNom(ac.aeroport_actuel)}` : '';
+        const locStr = (ac.source !== 'personnel' && ac.aeroport_actuel) ? ` au parking sur ${getAeroportNom(ac.aeroport_actuel)}` : '';
         const compStr = ac.source === 'compagnie' && ac.compagnie_nom ? `, appartenant à ${ac.compagnie_nom}` : '';
         const label = ac.type_avion_nom || 'avion';
         await addBria(`Il s'agit bien d'un ${label} immatriculé ${ac.immatriculation}${locStr}${compStr} ?`);
