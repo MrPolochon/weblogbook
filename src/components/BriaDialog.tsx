@@ -121,6 +121,51 @@ const WRONG_AIRPORT_MESSAGES = [
   "Je vais te reporter au staff Mixou Airlines. Au revoir.",
 ];
 
+// Commentaires quand l'aéroport est enfin correct après 2, 3 ou 4 erreurs
+const CORRECT_AIRPORT_AFTER_WRONG = [
+  "Ah bah tu vois, c'est pas compliqué !",
+  "Voilà, enfin. L'avion était bien à cet endroit.",
+  "Bon, on y est arrivé. Bravo.",
+];
+
+// Commentaires quand l'heure est enfin correcte après 2, 3 ou 4 erreurs
+const CORRECT_HEURE_AFTER_WRONG = [
+  "Ah bah tu vois, quand même !",
+  "Et voilà. Une heure dans le futur, c'est pas sorcier.",
+  "Enfin une heure qui tient la route.",
+];
+
+// Messages d'escalade quand heure de départ dans le passé
+const WRONG_HEURE_MESSAGES = [
+  "Alors toi tu veux partir dans le passé, c'est ça ? Quelle est votre heure de départ souhaitée en UTC ?",
+  "Si le vol se passe demain, rappelle-moi demain. Quelle est votre heure de départ en UTC ?",
+  "L'heure c'est maintenant ou plus tard, pas avant. Répondez correctement.",
+  "Dernière chance. Heure de départ UTC ?",
+  "Je vais te reporter au staff Mixou Airlines. Au revoir.",
+];
+
+function parseHeureUtc(input: string): { h: number; m: number } | null {
+  const s = input.trim().replace(/\s/g, '');
+  const matchH = s.match(/^(\d{1,2})[hH](\d{1,2})$/);
+  if (matchH) return { h: parseInt(matchH[1], 10), m: parseInt(matchH[2], 10) };
+  const matchColon = s.match(/^(\d{1,2}):(\d{1,2})$/);
+  if (matchColon) return { h: parseInt(matchColon[1], 10), m: parseInt(matchColon[2], 10) };
+  const match4 = s.match(/^(\d{4})$/);
+  if (match4) return { h: parseInt(match4[1].slice(0, 2), 10), m: parseInt(match4[1].slice(2, 4), 10) };
+  const match2 = s.match(/^(\d{1,2})$/);
+  if (match2) return { h: parseInt(match2[1], 10), m: 0 };
+  return null;
+}
+
+function isHeureDansLePasse(heureStr: string): boolean {
+  const parsed = parseHeureUtc(heureStr);
+  if (!parsed || parsed.h < 0 || parsed.h > 23 || parsed.m < 0 || parsed.m > 59) return false;
+  const now = new Date();
+  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const selMin = parsed.h * 60 + parsed.m;
+  return selMin < nowMin;
+}
+
 // ─── Component ───
 
 interface BriaDialogProps {
@@ -141,6 +186,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   const lastActivityRef = useRef(Date.now());
   const relaunchAtRef = useRef<number | null>(null);
   const wrongAirportCountRef = useRef(0);
+  const wrongHeureCountRef = useRef(0);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
@@ -294,11 +340,35 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       }
 
       case 'heure_depart': {
-        addPilote(v);
-        setCtx(prev => ({ ...prev, heure_depart: v }));
-        await addBria(`Heure de départ ${v} UTC, bien reçu.`);
-        await addBria("Quel est votre aéroport de départ ?");
-        setStep('aeroport_depart');
+        const heureDansLePasse = isHeureDansLePasse(v);
+
+        if (heureDansLePasse) {
+          wrongHeureCountRef.current += 1;
+          const idx = Math.min(wrongHeureCountRef.current - 1, WRONG_HEURE_MESSAGES.length - 1);
+          const msg = WRONG_HEURE_MESSAGES[idx];
+          addPilote(v);
+          await addBria(msg);
+
+          if (idx === WRONG_HEURE_MESSAGES.length - 1) {
+            setBriaCooldown();
+            speechSynthesis.cancel();
+            onClose();
+            return;
+          }
+          setStep('heure_depart');
+        } else {
+          const n = wrongHeureCountRef.current;
+          wrongHeureCountRef.current = 0;
+          addPilote(v);
+          setCtx(prev => ({ ...prev, heure_depart: v }));
+          if (n >= 2 && n <= 4) {
+            const msg = CORRECT_HEURE_AFTER_WRONG[Math.min(n - 2, CORRECT_HEURE_AFTER_WRONG.length - 1)];
+            await addBria(msg);
+          }
+          await addBria(`Heure de départ ${v} UTC, bien reçu.`);
+          await addBria("Quel est votre aéroport de départ ?");
+          setStep('aeroport_depart');
+        }
         break;
       }
 
@@ -325,9 +395,14 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
           }
           setStep('aeroport_depart');
         } else {
+          const n = wrongAirportCountRef.current;
           wrongAirportCountRef.current = 0;
           addPilote(`${v} — ${getAeroportNom(v)}`);
           setCtx(prev => ({ ...prev, aeroport_depart: v }));
+          if (n >= 2 && n <= 4) {
+            const msg = CORRECT_AIRPORT_AFTER_WRONG[Math.min(n - 2, CORRECT_AIRPORT_AFTER_WRONG.length - 1)];
+            await addBria(msg);
+          }
           await addBria(`Aéroport de départ ${getAeroportNom(v)}, bien reçu.`);
           await addBria("Quel est votre aéroport de destination ?");
           setStep('aeroport_arrivee');
