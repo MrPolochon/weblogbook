@@ -513,7 +513,9 @@ export default function AdminAvionsClient() {
                       )}
                     </td>
                     <td className="py-2.5 pr-4">
-                      {isEditing && editData ? (
+                      {isPerso ? (
+                        <span className="text-slate-500">—</span>
+                      ) : isEditing && editData ? (
                         <input
                           type="number"
                           min="0"

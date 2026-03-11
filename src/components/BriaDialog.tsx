@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Phone, PhoneOff, Radio, Send, ChevronRight } from 'lucide-react';
+import { Phone, PhoneOff, Radio, Send } from 'lucide-react';
 import { AEROPORTS_PTFS, calculerCoefficientRemplissage, calculerCoefficientChargementCargo } from '@/lib/aeroports-ptfs';
 
 // ─── Types ───
@@ -77,14 +77,18 @@ const INITIAL_STATE: BriaState = {
 
 // ─── TTS helper ───
 
-function speak(text: string) {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+function speakAndWait(text: string): Promise<void> {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return Promise.resolve();
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'fr-FR';
-  u.rate = 0.9;
-  u.volume = 0.8;
-  speechSynthesis.speak(u);
+  return new Promise((resolve) => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'fr-FR';
+    u.rate = 0.9;
+    u.volume = 0.8;
+    u.onend = () => resolve();
+    u.onerror = () => resolve();
+    speechSynthesis.speak(u);
+  });
 }
 
 function getAeroportNom(code: string) {
@@ -108,21 +112,24 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const hasGreeted = useRef(false);
+  const lastActivityRef = useRef(Date.now());
+  const relaunchAtRef = useRef<number | null>(null);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
   }, []);
 
-  // Add BRIA message with typing delay + TTS
-  const addBria = useCallback((text: string, delay = 800) => {
+  // Add BRIA message with typing delay + TTS (attend la fin de la lecture pour enchaîner)
+  const addBria = useCallback((text: string, delay = 600) => {
     setIsTyping(true);
     return new Promise<void>((resolve) => {
       setTimeout(() => {
         setMessages(prev => [...prev, { role: 'bria', text }]);
-        setIsTyping(false);
-        speak(text);
         scrollToBottom();
-        resolve();
+        speakAndWait(text).finally(() => {
+          setIsTyping(false);
+          resolve();
+        });
       }, delay);
     });
   }, [scrollToBottom]);
@@ -148,6 +155,27 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     if (!isTyping) inputRef.current?.focus();
   }, [step, isTyping]);
 
+  // Inactivité 2 min : relancer, puis annuler si pas de réponse
+  const INACTIVITY_MS = 2 * 60 * 1000; // 2 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (step === 'done' || step === 'error' || step === 'submitting') return;
+      if (isTyping) return; // Ne pas compter quand BRIA parle
+      const now = Date.now();
+      if (relaunchAtRef.current !== null) {
+        if (now - relaunchAtRef.current >= INACTIVITY_MS) {
+          speechSynthesis.cancel();
+          onClose();
+        }
+      } else if (now - lastActivityRef.current >= INACTIVITY_MS) {
+        relaunchAtRef.current = now;
+        setMessages(prev => [...prev, { role: 'bria', text: "Êtes-vous toujours là ?" }]);
+        speakAndWait("Êtes-vous toujours là ?");
+      }
+    }, 30000); // Vérifier toutes les 30 s
+    return () => clearInterval(interval);
+  }, [step, isTyping, onClose]);
+
   // ─── Aircraft lookup ───
   const lookupAircraft = useCallback(async (immat: string): Promise<AircraftInfo | null> => {
     setLookupLoading(true);
@@ -172,6 +200,12 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     if (isTyping || lookupLoading) return;
     const v = value.trim();
     if (!v) return;
+    lastActivityRef.current = Date.now();
+    if (relaunchAtRef.current !== null) {
+      relaunchAtRef.current = null; // Utilisateur a répondu au "Êtes-vous toujours là ?"
+      setInputValue('');
+      return; // On ignore l'input, on reprend la conversation
+    }
     setInputValue('');
 
     switch (step) {
@@ -226,11 +260,6 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         addPilote(v);
         setCtx(prev => ({ ...prev, heure_depart: v }));
         await addBria(`Heure de départ ${v} UTC, bien reçu.`);
-        setStep('confirm_heure');
-        break;
-      }
-
-      case 'confirm_heure': {
         await addBria("Quel est votre aéroport de départ ?");
         setStep('aeroport_depart');
         break;
@@ -240,11 +269,6 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         addPilote(`${v} — ${getAeroportNom(v)}`);
         setCtx(prev => ({ ...prev, aeroport_depart: v }));
         await addBria(`Aéroport de départ ${getAeroportNom(v)}, bien reçu.`);
-        setStep('confirm_dep');
-        break;
-      }
-
-      case 'confirm_dep': {
         await addBria("Quel est votre aéroport de destination ?");
         setStep('aeroport_arrivee');
         break;
@@ -254,11 +278,6 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         addPilote(`${v} — ${getAeroportNom(v)}`);
         setCtx(prev => ({ ...prev, aeroport_arrivee: v }));
         await addBria(`Destination ${getAeroportNom(v)}, bien reçu.`);
-        setStep('confirm_arr');
-        break;
-      }
-
-      case 'confirm_arr': {
         await addBria("Quel est votre temps de vol prévu en minutes ?");
         setStep('temps_vol');
         break;
@@ -268,11 +287,6 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         addPilote(`${v} minutes`);
         setCtx(prev => ({ ...prev, temps_prev_min: v }));
         await addBria(`${v} minutes de vol prévu, bien reçu.`);
-        setStep('confirm_temps');
-        break;
-      }
-
-      case 'confirm_temps': {
         await addBria("Quelle est votre autonomie totale en minutes ?");
         setStep('autonomie');
         break;
@@ -282,11 +296,6 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         addPilote(`${v} minutes`);
         setCtx(prev => ({ ...prev, autonomie: v }));
         await addBria(`${v} minutes d'autonomie, bien reçu.`);
-        setStep('confirm_autonomie');
-        break;
-      }
-
-      case 'confirm_autonomie': {
         if (ctx.mode === 'intention') {
           await addBria("Combien de personnes à bord ?");
           setStep('nb_personnes');
@@ -393,11 +402,6 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         addPilote(`${v} personne${parseInt(v) > 1 ? 's' : ''}`);
         setCtx(prev => ({ ...prev, nb_personnes: v }));
         await addBria(`${v} personne${parseInt(v) > 1 ? 's' : ''} à bord, bien reçu.`);
-        setStep('confirm_personnes');
-        break;
-      }
-
-      case 'confirm_personnes': {
         if (ctx.mode === 'intention') {
           setStep('resume');
           await showResume();
@@ -417,11 +421,6 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         addPilote(v);
         setCtx(prev => ({ ...prev, sid_depart: v.toUpperCase() }));
         await addBria(`SID ${v.toUpperCase()}, bien reçu.`);
-        setStep('confirm_sid');
-        break;
-      }
-
-      case 'confirm_sid': {
         await addBria(`Quelle est la STAR d'arrivée à ${getAeroportNom(ctx.aeroport_arrivee)} ?`);
         setStep('star');
         break;
@@ -431,11 +430,6 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         addPilote(v);
         setCtx(prev => ({ ...prev, star_arrivee: v.toUpperCase() }));
         await addBria(`STAR ${v.toUpperCase()}, bien reçu.`);
-        setStep('confirm_star');
-        break;
-      }
-
-      case 'confirm_star': {
         await addBria("Quelle est votre altitude de croisière ?");
         setStep('altitude');
         break;
@@ -445,11 +439,6 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         addPilote(v);
         setCtx(prev => ({ ...prev, altitude_croisiere: v }));
         await addBria(`Altitude ${v}, bien reçu.`);
-        setStep('confirm_altitude');
-        break;
-      }
-
-      case 'confirm_altitude': {
         await addBria("Quel est votre numéro de vol ou indicatif d'appel ?");
         setStep('numero_vol');
         break;
@@ -459,11 +448,6 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         addPilote(v);
         setCtx(prev => ({ ...prev, numero_vol: v.toUpperCase() }));
         await addBria(`Indicatif ${v.toUpperCase()}, bien reçu.`);
-        setStep('confirm_numero');
-        break;
-      }
-
-      case 'confirm_numero': {
         setStep('resume');
         await showResume();
         break;
@@ -527,6 +511,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
 
   // ─── Submit flight plan ───
   const submitPlan = useCallback(async () => {
+    lastActivityRef.current = Date.now();
     setStep('submitting');
     addPilote('Affirm, déposer le plan.');
 
@@ -629,19 +614,6 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   // ─── Render input zone based on step ───
   const renderInput = () => {
     if (isTyping || step === 'submitting' || step === 'done') return null;
-
-    // Auto-advance "confirm" steps
-    if (step.startsWith('confirm_') && step !== 'confirm_aircraft') {
-      return (
-        <button
-          type="button"
-          onClick={() => handleAnswer('ok')}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition-colors"
-        >
-          <ChevronRight className="h-4 w-4" /> Continuer
-        </button>
-      );
-    }
 
     switch (step) {
       case 'choice':
@@ -762,7 +734,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
               ref={inputRef}
               type="text"
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              onChange={(e) => { setInputValue(e.target.value); lastActivityRef.current = Date.now(); }}
               placeholder={getPlaceholder(step)}
               disabled={lookupLoading}
               className="flex-1 bg-slate-800 border border-slate-600 text-white rounded-lg px-4 py-3 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"

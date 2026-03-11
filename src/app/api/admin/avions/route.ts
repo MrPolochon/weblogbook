@@ -213,7 +213,7 @@ export async function PATCH(request: Request) {
       const updates: Record<string, unknown> = {};
       if (aeroport_actuel !== undefined) updates.aeroport_actuel = aeroport_actuel.toUpperCase();
       if (statut !== undefined) updates.statut = statut;
-      if (usure_percent !== undefined) updates.usure_percent = Math.max(0, Math.min(100, usure_percent));
+      // Pas d'usure pour les avions personnels — on ignore usure_percent
       if (immatriculation !== undefined) updates.immatriculation = immatriculation.toUpperCase();
       if (nom_bapteme !== undefined) updates.nom_personnalise = nom_bapteme || null;
       if (Object.keys(updates).length === 0) {
