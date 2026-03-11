@@ -135,9 +135,18 @@ export default async function AdminPage() {
           <p className="text-slate-400 mt-1">Panneau de gestion centralisé</p>
         </div>
         {totalPending > 0 && (
-          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
-            <Activity className="h-5 w-5 text-amber-400" />
-            <span className="text-amber-300 font-medium">{totalPending} action{totalPending > 1 ? 's' : ''} en attente</span>
+          <div className="flex flex-col gap-1.5 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+            <div className="flex items-center gap-2">
+              <Activity className="h-5 w-5 text-amber-400 shrink-0" />
+              <span className="text-amber-300 font-medium">{totalPending} action{totalPending > 1 ? 's' : ''} en attente</span>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-amber-400/90">
+              {(counts.plansNonClotures ?? 0) > 0 && <span>Plans de vol : {counts.plansNonClotures}</span>}
+              {(counts.volsEnAttente ?? 0) > 0 && <span>Vols : {counts.volsEnAttente}</span>}
+              {(counts.aeroschoolResponses ?? 0) > 0 && <span>AeroSchool : {counts.aeroschoolResponses}</span>}
+              {(counts.passwordResetRequests ?? 0) > 0 && <span>Mots de passe : {counts.passwordResetRequests}</span>}
+              {(counts.demandesRevente ?? 0) > 0 && <span>Hangar Market : {counts.demandesRevente}</span>}
+            </div>
           </div>
         )}
       </div>
@@ -159,7 +168,13 @@ export default async function AdminPage() {
               )}
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {section.links.map(link => {
+              {[...section.links]
+                .sort((a, b) => {
+                  const ca = a.countKey ? (counts[a.countKey] ?? 0) : 0;
+                  const cb = b.countKey ? (counts[b.countKey] ?? 0) : 0;
+                  return cb - ca;
+                })
+                .map(link => {
                 const Icon = link.icon;
                 const count = link.countKey ? (counts[link.countKey] ?? 0) : 0;
                 const hasBadge = count > 0;
