@@ -26,8 +26,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
+    const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
+    if (!profile?.ifsa && profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins et agents IFSA' }, { status: 403 });
 
     const body = await request.json();
     const { type, type_avion_id, langue, date_delivrance, date_expiration, a_vie, note } = body;
@@ -109,8 +109,8 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
+    const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
+    if (!profile?.ifsa && profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins et agents IFSA' }, { status: 403 });
 
     const admin = createAdminClient();
     const { error } = await admin.from('licences_qualifications').delete().eq('id', params.id);

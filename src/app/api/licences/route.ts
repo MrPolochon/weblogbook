@@ -29,17 +29,19 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('user_id');
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    const isAdmin = profile?.role === 'admin';
+    const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
+    const canManageLicences = profile?.role === 'admin' || profile?.ifsa;
 
     let targetUserId = user.id;
-    if (userId && isAdmin) {
+    if (userId && canManageLicences) {
       targetUserId = userId;
     } else if (userId && userId !== user.id) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
-    const { data, error } = await supabase
+    // Admin/IFSA : admin client pour contourner RLS ; sinon supabase
+    const client = canManageLicences ? createAdminClient() : supabase;
+    const { data, error } = await client
       .from('licences_qualifications')
       .select('id, type, type_avion_id, langue, date_delivrance, date_expiration, a_vie, note, created_at, types_avion(nom, constructeur)')
       .eq('user_id', targetUserId)
@@ -59,8 +61,8 @@ export async function POST(request: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
+    const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
+    if (!profile?.ifsa && profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins et agents IFSA' }, { status: 403 });
 
     const body = await request.json();
     const { user_id, type, type_avion_id, langue, date_delivrance, date_expiration, a_vie, note } = body;

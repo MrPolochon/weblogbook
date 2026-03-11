@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { Shield, FileSearch, AlertTriangle, Gavel, Users, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
+import { Shield, FileSearch, AlertTriangle, Gavel, Users, ShieldCheck, Award } from 'lucide-react';
 import IfsaClient from './IfsaClient';
 
 export default async function IfsaPage() {
@@ -120,7 +121,7 @@ export default async function IfsaPage() {
       </div>
 
       {/* Statistiques */}
-      <div className="grid gap-4 sm:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-6">
         <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -170,6 +171,15 @@ export default async function IfsaPage() {
             <Users className="h-8 w-8 text-emerald-400/30" />
           </div>
         </div>
+        <Link href="/ifsa/licences" className="rounded-xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 p-4 hover:border-amber-500/40 hover:from-amber-500/15 transition-colors">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-amber-400/80 text-sm">Licences</p>
+              <p className="text-sm font-medium text-amber-400 mt-1">Ajouter des licences aux utilisateurs</p>
+            </div>
+            <Award className="h-8 w-8 text-amber-400/30" />
+          </div>
+        </Link>
       </div>
 
       <IfsaClient
