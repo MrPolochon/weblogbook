@@ -39,6 +39,8 @@ interface Alliance {
   nb_membres?: number;
   my_compagnie_id: string | null;
   my_compagnie_nom?: string | null;
+  my_compagnie_ids?: string[];
+  my_compagnie_noms?: string[];
   my_role: string | null;
 }
 
@@ -215,7 +217,9 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
             <div>
               <span className="font-semibold text-slate-100">{a.nom}</span>
               <span className="ml-2 text-xs text-slate-500">{a.nb_membres} membre{(a.nb_membres || 0) > 1 ? 's' : ''}</span>
-              {a.my_compagnie_nom && <span className="block text-xs text-slate-500 mt-0.5">via {a.my_compagnie_nom}</span>}
+              {(a.my_compagnie_noms?.length ?? 0) > 0 && (
+                <span className="block text-xs text-slate-500 mt-0.5">via {a.my_compagnie_noms?.join(', ') ?? a.my_compagnie_nom}</span>
+              )}
             </div>
             <span className={`text-sm ${ROLE_COLORS[a.my_role || ''] || 'text-slate-400'}`}>{ROLE_LABELS[a.my_role || ''] || a.my_role}</span>
           </button>
@@ -226,8 +230,29 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
 
   if (!detail) return null;
 
+  const mesCompagniesDansAlliance = (detail.my_compagnie_ids?.length ?? 0) > 0
+    ? detail.membres.filter(m => detail.my_compagnie_ids!.includes(m.compagnie_id))
+    : [];
+
   return (
     <div className="space-y-6">
+      {alliances.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-slate-500">Alliance :</span>
+          <select
+            value={detail.id}
+            onChange={(e) => loadDetail(e.target.value)}
+            className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm font-medium"
+          >
+            {alliances.map(a => (
+              <option key={a.id} value={a.id}>
+                {a.nom}
+                {(a.my_compagnie_noms?.length ?? 0) > 0 ? ` (via ${a.my_compagnie_noms?.join(', ')})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
@@ -236,6 +261,9 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
           </h1>
           {detail.description && <p className="text-slate-400 mt-1">{detail.description}</p>}
           {detail.devise && <p className="text-slate-500 text-sm italic">&laquo; {detail.devise} &raquo;</p>}
+          {mesCompagniesDansAlliance.length > 1 && (
+            <p className="text-xs text-sky-400/90 mt-1 flex items-center gap-1">Vos compagnies : {mesCompagniesDansAlliance.map(m => m.compagnie?.nom).join(', ')}</p>
+          )}
         </div>
         <span className={`px-3 py-1 rounded-full text-sm font-medium ${ROLE_COLORS[detail.my_role || ''] || ''} bg-slate-800`}>
           {ROLE_LABELS[detail.my_role || ''] || detail.my_role}
@@ -764,11 +792,29 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
       {showDemande && (
         <div className="p-4 rounded-lg bg-slate-700/20 space-y-2">
           <h4 className="text-sm font-medium text-slate-300">Demander des fonds</h4>
+          {myCompagniesInAlliance.length > 1 && (
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Compagnie demanderesse</label>
+              <select
+                value={selectedCodeshareCompagnieId}
+                onChange={e => setSelectedCodeshareCompagnieId(e.target.value)}
+                className="w-full max-w-xs rounded border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm"
+              >
+                {myCompagniesInAlliance.map(m => (
+                  <option key={m.compagnie_id} value={m.compagnie_id}>
+                    {m.compagnie?.nom || m.compagnie_id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex gap-2 flex-wrap">
             <input type="number" min="1" value={fondsMontant} onChange={e => setFondsMontant(e.target.value)} placeholder="Montant" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-32 text-sm" />
             <input type="text" value={fondsMotif} onChange={e => setFondsMotif(e.target.value)} placeholder="Motif *" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 flex-1 text-sm" />
             <button disabled={busy || !fondsMontant || Number(fondsMontant) <= 0 || !fondsMotif.trim()} onClick={async () => {
-              try { await api(`/api/alliances/${detail.id}/fonds`, 'POST', { action: 'demande_fonds', montant: Number(fondsMontant), motif: fondsMotif }); flash('Demande soumise'); setFondsMontant(''); setFondsMotif(''); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+              const payload: Record<string, unknown> = { action: 'demande_fonds', montant: Number(fondsMontant), motif: fondsMotif };
+              if (myCompagniesInAlliance.length > 1 && selectedCodeshareCompagnieId) payload.compagnie_id = selectedCodeshareCompagnieId;
+              try { await api(`/api/alliances/${detail.id}/fonds`, 'POST', payload); flash('Demande soumise'); setFondsMontant(''); setFondsMotif(''); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
             }} className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium disabled:opacity-50">Envoyer</button>
           </div>
         </div>

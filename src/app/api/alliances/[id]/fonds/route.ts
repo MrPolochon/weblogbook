@@ -24,12 +24,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { action } = body;
 
   if (action === 'demande_fonds') {
-    const { montant, motif } = body;
+    const { montant, motif, compagnie_id: bodyCompagnieId } = body;
     if (!montant || montant <= 0 || !motif) return NextResponse.json({ error: 'montant et motif requis' }, { status: 400 });
+
+    const demandeCompagnieId = bodyCompagnieId && myCompIds.includes(bodyCompagnieId)
+      ? bodyCompagnieId
+      : myMember.compagnie_id;
+
+    const { data: membreDemande } = await admin.from('alliance_membres')
+      .select('id')
+      .eq('alliance_id', allianceId)
+      .eq('compagnie_id', demandeCompagnieId)
+      .single();
+    if (!membreDemande) return NextResponse.json({ error: 'Cette compagnie n\'est pas membre de l\'alliance' }, { status: 400 });
 
     const { error } = await admin.from('alliance_demandes_fonds').insert({
       alliance_id: allianceId,
-      compagnie_id: myMember.compagnie_id,
+      compagnie_id: demandeCompagnieId,
       montant: Math.floor(montant),
       motif: String(motif).trim(),
     });

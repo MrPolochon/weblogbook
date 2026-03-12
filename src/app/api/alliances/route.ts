@@ -46,14 +46,19 @@ export async function GET() {
   const compNomMap = Object.fromEntries((compagniesData || []).map(c => [c.id, c.nom]));
 
   return NextResponse.json((alliances || []).map(a => {
-    const myMembership = membres.find(m => m.alliance_id === a.id && compagnieIds.includes(m.compagnie_id));
+    const myMemberships = membres.filter(m => m.alliance_id === a.id && compagnieIds.includes(m.compagnie_id));
+    const myCompagnieIds = myMemberships.map(m => m.compagnie_id);
+    const myCompagnieNoms = myCompagnieIds.map(id => compNomMap[id] ?? id);
+    const firstMembership = myMemberships[0] ?? null;
     return {
       ...a,
       parametres: paramMap[a.id] || null,
       nb_membres: countMap[a.id] || 0,
-      my_compagnie_id: myMembership?.compagnie_id ?? null,
-      my_compagnie_nom: myMembership?.compagnie_id ? (compNomMap[myMembership.compagnie_id] ?? null) : null,
-      my_role: myMembership?.role ?? null,
+      my_compagnie_id: firstMembership?.compagnie_id ?? null,
+      my_compagnie_nom: firstMembership?.compagnie_id ? (compNomMap[firstMembership.compagnie_id] ?? null) : null,
+      my_compagnie_ids: myCompagnieIds,
+      my_compagnie_noms: myCompagnieNoms,
+      my_role: firstMembership?.role ?? null,
     };
   }));
 }
