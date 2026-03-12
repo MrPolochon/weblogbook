@@ -84,11 +84,31 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return { ...inv, compagnie: comp || null };
   });
 
-  const { data: transferts } = await admin.from('alliance_transferts_avions')
+  const { data: transfertsRaw } = await admin.from('alliance_transferts_avions')
     .select('*')
     .eq('alliance_id', id)
     .order('created_at', { ascending: false })
     .limit(30);
+
+  const avionIds = [...new Set((transfertsRaw || []).map((t: { compagnie_avion_id?: string }) => t.compagnie_avion_id).filter(Boolean))];
+  let avionsMap: Record<string, { immatriculation?: string; nom_bapteme?: string | null; type_nom?: string }> = {};
+  if (avionIds.length > 0) {
+    const { data: avions } = await admin.from('compagnie_avions')
+      .select('id, immatriculation, nom_bapteme, type_avion_id, types_avion:type_avion_id(nom, code_oaci)')
+      .in('id', avionIds);
+    avionsMap = {};
+    (avions || []).forEach((a: Record<string, unknown>) => {
+      const typeAv = a.types_avion as { nom?: string; code_oaci?: string } | { nom?: string; code_oaci?: string }[] | null;
+      const typeNom = typeAv ? (Array.isArray(typeAv) ? typeAv[0]?.nom || typeAv[0]?.code_oaci : typeAv.nom || typeAv.code_oaci) : null;
+      avionsMap[a.id as string] = { immatriculation: a.immatriculation as string, nom_bapteme: a.nom_bapteme as string | null, type_nom: typeNom as string };
+    });
+  }
+
+  const transferts = (transfertsRaw || []).map((t: Record<string, unknown>) => {
+    const av = avionsMap[t.compagnie_avion_id as string];
+    const avionLabel = av ? `${av.immatriculation || '?'} — ${av.type_nom || '?'}` : null;
+    return { ...t, avion_label: avionLabel, avion_immat: av?.immatriculation, avion_type: av?.type_nom };
+  });
 
   const { data: demandes_fonds } = await admin.from('alliance_demandes_fonds')
     .select('*')

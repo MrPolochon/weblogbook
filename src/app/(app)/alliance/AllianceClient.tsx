@@ -58,11 +58,14 @@ interface Transfert {
   type_transfert: string;
   compagnie_avion_id: string;
   compagnie_source_id: string;
-  compagnie_dest_id: string;
+  compagnie_dest_id: string | null;
   prix: number | null;
   duree_jours: number | null;
   statut: string;
   created_at: string;
+  avion_label?: string | null;
+  avion_immat?: string;
+  avion_type?: string;
 }
 
 interface DemandeFonds {
@@ -587,6 +590,7 @@ function FlotteTab({ detail, pdgCompagnieIds, onRefresh, flash, api, busy }: {
                 <div className="text-sm text-slate-300">
                   <span className="font-medium text-slate-200">{t.type_transfert.toUpperCase()}</span>
                   {' '}{source?.compagnie?.nom || '?'} → {dest?.compagnie?.nom || (isDestSpecifique ? '?' : 'Tout le monde')}
+                  {t.avion_label && <span className="block text-xs text-slate-400 mt-0.5">✈️ {t.avion_label}</span>}
                   {t.prix ? ` — ${t.prix.toLocaleString('fr-FR')} F$` : ''}
                   {t.duree_jours ? ` — ${t.duree_jours}j` : ''}
                 </div>
@@ -635,7 +639,9 @@ function FlotteTab({ detail, pdgCompagnieIds, onRefresh, flash, api, busy }: {
           <div className="max-h-64 overflow-y-auto space-y-1">
             {completed.map(t => (
               <div key={t.id} className="text-sm text-slate-400 py-1">
-                {t.type_transfert} — {t.statut} — {new Date(t.created_at).toLocaleDateString('fr-FR')}
+                {t.type_transfert}
+                {t.avion_label ? ` — ${t.avion_label}` : ''}
+                {' '}— {t.statut} — {new Date(t.created_at).toLocaleDateString('fr-FR')}
                 {t.prix ? ` — ${t.prix.toLocaleString('fr-FR')} F$` : ''}
               </div>
             ))}

@@ -254,11 +254,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Annonce introuvable ou déjà vendue' }, { status: 404 });
       }
 
-      // Vérifier que l'acheteur n'est pas le vendeur
-      if (annonce.vendeur_id === user.id) {
-        return NextResponse.json({ error: 'Vous ne pouvez pas acheter votre propre annonce' }, { status: 400 });
-      }
-
       // Annonce avion de flotte : achat obligatoire pour une compagnie par un PDG
       const isAnnonceFlotte = !!annonce.compagnie_avion_id;
       if (isAnnonceFlotte) {
@@ -272,8 +267,14 @@ export async function POST(req: NextRequest) {
         if (!compAcheteur || compAcheteur.pdg_id !== user.id) {
           return NextResponse.json({ error: 'Seul le PDG de la compagnie peut acheter cet avion pour la compagnie' }, { status: 403 });
         }
-        if (annonce.vente_pdg_seulement) {
-          // Déjà vérifié qu'il achète pour une compagnie dont il est PDG
+        // Bloquer uniquement si on achète pour la même compagnie vendeuse (éviter d'acheter "à soi-même")
+        if (annonce.compagnie_vendeur_id === pour_compagnie_id) {
+          return NextResponse.json({ error: 'Vous ne pouvez pas acheter cet avion pour la même compagnie qui le vend. Choisissez une autre compagnie.' }, { status: 400 });
+        }
+      } else {
+        // Vente personnelle (inventaire) : bloquer si c'est le vendeur
+        if (annonce.vendeur_id === user.id) {
+          return NextResponse.json({ error: 'Vous ne pouvez pas acheter votre propre annonce' }, { status: 400 });
         }
       }
 

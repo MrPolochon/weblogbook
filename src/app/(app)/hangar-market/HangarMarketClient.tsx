@@ -377,8 +377,11 @@ export default function HangarMarketClient({
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {annoncesFiltrees.map((annonce) => {
-                const isMyAnnonce = annonce.vendeur_id === userId || 
-                  compagnies.some(c => c.id === annonce.compagnie_vendeur_id);
+                const canAnnuler = annonce.compagnie_vendeur_id
+                  ? compagnies.some(c => c.id === annonce.compagnie_vendeur_id)
+                  : annonce.vendeur_id === userId;
+                const canAcheterPourAutre = annonce.compagnie_avion_id && annonce.compagnie_vendeur_id &&
+                  compagnies.some(c => c.id !== annonce.compagnie_vendeur_id);
                 const prixTotal = Math.round(annonce.prix * (1 + taxePourcent / 100));
                 const etatInfo = ETATS.find(e => e.value === annonce.etat);
 
@@ -430,15 +433,28 @@ export default function HangarMarketClient({
                         </p>
                       </div>
 
-                      {isMyAnnonce ? (
-                        <button
-                          onClick={() => handleAnnuler(annonce.id)}
-                          disabled={loading}
-                          className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          Annuler
-                        </button>
+                      {canAnnuler || canAcheterPourAutre ? (
+                        <div className="flex gap-2">
+                          {canAcheterPourAutre && (
+                            <button
+                              onClick={() => openAchatModal(annonce)}
+                              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+                            >
+                              <ShoppingCart className="h-4 w-4" />
+                              Acheter
+                            </button>
+                          )}
+                          {canAnnuler && (
+                            <button
+                              onClick={() => handleAnnuler(annonce.id)}
+                              disabled={loading}
+                              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Annuler
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <button
                           onClick={() => openAchatModal(annonce)}
@@ -903,7 +919,10 @@ export default function HangarMarketClient({
                 <p className="text-sm text-sky-400 mb-2">Cet avion est un avion de flotte : l&apos;achat se fait pour une compagnie dont vous êtes PDG.</p>
               )}
 
-              {compagnies.filter(c => canBuyForCompagnie(selectedAnnonce.prix, c)).map((c) => (
+              {compagnies
+                .filter(c => canBuyForCompagnie(selectedAnnonce.prix, c))
+                .filter(c => c.id !== selectedAnnonce.compagnie_vendeur_id)
+                .map((c) => (
                 <button
                   key={c.id}
                   onClick={() => setAcheterPour(c.id)}
