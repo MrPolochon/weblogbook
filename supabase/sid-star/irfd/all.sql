@@ -1,4 +1,4 @@
--- Toutes les SID IRFD (Rockford) — LOGAN4, KENED2, DARRK3, OSHNN1, RFD6
+-- Toutes les SID IRFD (Rockford) — LOGAN4, KENED2, DARRK3, OSHNN1, TRN1, WNNDY3, RFD6
 -- À exécuter après ../../add_sid_star.sql
 
 -- LOGAN 4
@@ -56,6 +56,38 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'OSHNN1.ARCUS VIA FABRA', 'fabra dct shaef dct pevee dct holtz dct oshnn dct zoomm dct sebby dct atpev dct arcus'),
   ('IRFD', 'SID', 'OSHNN1.JAMSI VIA HIIPR', 'hiipr dct shaef dct pevee dct holtz dct oshnn dct jamsi'),
   ('IRFD', 'SID', 'OSHNN1.JAMSI VIA FABRA', 'fabra dct shaef dct pevee dct holtz dct oshnn dct jamsi')
+ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
+
+-- TRAINING 1
+INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
+  ('IRFD', 'SID', 'TRN1', 'trn'),
+  ('IRFD', 'SID', 'TRN1 VIA DOCKR', 'dockr dct weilr dct trn'),
+  ('IRFD', 'SID', 'TRN1 VIA DLREY', 'dlrey dct pepul dct haynk dct trn'),
+  ('IRFD', 'SID', 'TRN1.MDWST', 'trn dct mdwst'),
+  ('IRFD', 'SID', 'TRN1.GODLU', 'trn dct godlu'),
+  ('IRFD', 'SID', 'TRN1.GRASS', 'trn dct atpev dct jamsi dct grass'),
+  ('IRFD', 'SID', 'TRN1.SILVA', 'trn dct atpev dct oceen dct silva'),
+  ('IRFD', 'SID', 'TRN1.CYRIL', 'trn dct atpev dct oceen dct silva dct cyril'),
+  ('IRFD', 'SID', 'TRN1.MDWST VIA DOCKR', 'dockr dct weilr dct trn dct mdwst'),
+  ('IRFD', 'SID', 'TRN1.MDWST VIA DLREY', 'dlrey dct pepul dct haynk dct trn dct mdwst'),
+  ('IRFD', 'SID', 'TRN1.GODLU VIA DOCKR', 'dockr dct weilr dct trn dct godlu'),
+  ('IRFD', 'SID', 'TRN1.GODLU VIA DLREY', 'dlrey dct pepul dct haynk dct trn dct godlu'),
+  ('IRFD', 'SID', 'TRN1.GRASS VIA DOCKR', 'dockr dct weilr dct trn dct atpev dct jamsi dct grass'),
+  ('IRFD', 'SID', 'TRN1.GRASS VIA DLREY', 'dlrey dct pepul dct haynk dct trn dct atpev dct jamsi dct grass'),
+  ('IRFD', 'SID', 'TRN1.SILVA VIA DOCKR', 'dockr dct weilr dct trn dct atpev dct oceen dct silva'),
+  ('IRFD', 'SID', 'TRN1.SILVA VIA DLREY', 'dlrey dct pepul dct haynk dct trn dct atpev dct oceen dct silva'),
+  ('IRFD', 'SID', 'TRN1.CYRIL VIA DOCKR', 'dockr dct weilr dct trn dct atpev dct oceen dct silva dct cyril'),
+  ('IRFD', 'SID', 'TRN1.CYRIL VIA DLREY', 'dlrey dct pepul dct haynk dct trn dct atpev dct oceen dct silva dct cyril')
+ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
+
+-- WNNDY 3
+INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
+  ('IRFD', 'SID', 'WNNDY3', 'wnndy'),
+  ('IRFD', 'SID', 'WNNDY3 VIA MJSTY', 'mjsty dct wnndy'),
+  ('IRFD', 'SID', 'WNNDY3.SILVA', 'wnndy dct oceen dct silva'),
+  ('IRFD', 'SID', 'WNNDY3.NARXX', 'wnndy dct greek dct narxx'),
+  ('IRFD', 'SID', 'WNNDY3.SILVA VIA MJSTY', 'mjsty dct wnndy dct oceen dct silva'),
+  ('IRFD', 'SID', 'WNNDY3.NARXX VIA MJSTY', 'mjsty dct wnndy dct greek dct narxx')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- ROCKKFORD 6 (départ omnidirectionnel)
