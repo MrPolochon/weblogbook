@@ -90,7 +90,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .order('created_at', { ascending: false })
     .limit(30);
 
-  const avionIds = [...new Set((transfertsRaw || []).map((t: { compagnie_avion_id?: string }) => t.compagnie_avion_id).filter(Boolean))];
+  const avionIds = Array.from(new Set((transfertsRaw || []).map((t: { compagnie_avion_id?: string }) => t.compagnie_avion_id).filter(Boolean) as string[]));
   let avionsMap: Record<string, { immatriculation?: string; nom_bapteme?: string | null; type_nom?: string }> = {};
   if (avionIds.length > 0) {
     const { data: avions } = await admin.from('compagnie_avions')
