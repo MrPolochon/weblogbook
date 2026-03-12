@@ -96,11 +96,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .order('created_at', { ascending: false })
     .limit(30);
 
-  const { data: contributions } = await admin.from('alliance_contributions')
-    .select('*')
+  let contributions: Array<Record<string, unknown> & { compagnie_nom?: string | null }>;
+  const { data: contributionsRaw, error: contribErr } = await admin.from('alliance_contributions')
+    .select('*, compagnies(id, nom)')
     .eq('alliance_id', id)
     .order('created_at', { ascending: false })
     .limit(30);
+
+  if (contribErr || !contributionsRaw) {
+    const { data: contribFallback } = await admin.from('alliance_contributions')
+      .select('*')
+      .eq('alliance_id', id)
+      .order('created_at', { ascending: false })
+      .limit(30);
+    contributions = (contribFallback || []).map(c => ({ ...c, compagnie_nom: null }));
+  } else {
+    contributions = contributionsRaw.map((c: Record<string, unknown>) => {
+      const raw = c.compagnies as unknown;
+      const comp = Array.isArray(raw) ? raw[0] : raw;
+      const { compagnies: _r, ...rest } = c;
+      return { ...rest, compagnie_nom: (comp as { nom?: string })?.nom ?? null };
+    });
+  }
 
   return NextResponse.json({
     ...alliance,
@@ -111,7 +128,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     invitations_en_attente: invitationsNorm,
     transferts: transferts || [],
     demandes_fonds: demandes_fonds || [],
-    contributions: contributions || [],
+    contributions,
     my_role: myRole,
     my_compagnie_id: myMember?.compagnie_id ?? null,
     my_compagnie_ids: myCompagnieIds,

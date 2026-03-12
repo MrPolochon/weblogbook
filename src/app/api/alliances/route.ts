@@ -41,6 +41,10 @@ export async function GET() {
   const countMap: Record<string, number> = {};
   (allMembres || []).forEach(m => { countMap[m.alliance_id] = (countMap[m.alliance_id] || 0) + 1; });
 
+  const compagnieIdsForNames = Array.from(new Set(membres.map(m => m.compagnie_id)));
+  const { data: compagniesData } = await admin.from('compagnies').select('id, nom').in('id', compagnieIdsForNames);
+  const compNomMap = Object.fromEntries((compagniesData || []).map(c => [c.id, c.nom]));
+
   return NextResponse.json((alliances || []).map(a => {
     const myMembership = membres.find(m => m.alliance_id === a.id && compagnieIds.includes(m.compagnie_id));
     return {
@@ -48,6 +52,7 @@ export async function GET() {
       parametres: paramMap[a.id] || null,
       nb_membres: countMap[a.id] || 0,
       my_compagnie_id: myMembership?.compagnie_id ?? null,
+      my_compagnie_nom: myMembership?.compagnie_id ? (compNomMap[myMembership.compagnie_id] ?? null) : null,
       my_role: myMembership?.role ?? null,
     };
   }));

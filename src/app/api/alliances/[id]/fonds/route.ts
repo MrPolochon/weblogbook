@@ -38,10 +38,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   if (action === 'contribuer') {
-    const { montant, libelle, source } = body;
+    const { montant, libelle, source, compagnie_id: bodyCompagnieId } = body;
     if (!montant || montant <= 0) return NextResponse.json({ error: 'montant requis' }, { status: 400 });
     const amt = Math.floor(montant);
     const isPersonnel = source === 'personnel';
+    const contribCompagnieId = !isPersonnel && bodyCompagnieId && myCompIds.includes(bodyCompagnieId)
+      ? bodyCompagnieId
+      : myMember.compagnie_id;
 
     if (isPersonnel) {
       const { data: comptePerso } = await admin.from('felitz_comptes')
@@ -67,7 +70,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     } else {
       const { data: compteComp } = await admin.from('felitz_comptes')
         .select('id, solde')
-        .eq('compagnie_id', myMember.compagnie_id)
+        .eq('compagnie_id', contribCompagnieId)
         .eq('type', 'entreprise')
         .single();
       if (!compteComp) return NextResponse.json({ error: 'Compte compagnie introuvable' }, { status: 400 });
@@ -94,13 +97,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         compte_id: allianceAccount.id,
         type: 'credit',
         montant: amt,
-        libelle: `Contribution${isPersonnel ? ' (personnel)' : ''} — ${myMember.compagnie_id}`,
+        libelle: `Contribution${isPersonnel ? ' (personnel)' : ''} — ${contribCompagnieId}`,
       });
     }
 
     await admin.from('alliance_contributions').insert({
       alliance_id: allianceId,
-      compagnie_id: myMember.compagnie_id,
+      compagnie_id: contribCompagnieId,
       montant: amt,
       libelle: (libelle ? String(libelle).trim() : 'Contribution') + (isPersonnel ? ' (personnel)' : ''),
     });

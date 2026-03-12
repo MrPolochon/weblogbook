@@ -38,6 +38,7 @@ interface Alliance {
   parametres: Parametres | null;
   nb_membres?: number;
   my_compagnie_id: string | null;
+  my_compagnie_nom?: string | null;
   my_role: string | null;
 }
 
@@ -77,6 +78,7 @@ interface Contribution {
   montant: number;
   libelle: string;
   created_at: string;
+  compagnie_nom?: string | null;
 }
 
 interface Invitation {
@@ -213,6 +215,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
             <div>
               <span className="font-semibold text-slate-100">{a.nom}</span>
               <span className="ml-2 text-xs text-slate-500">{a.nb_membres} membre{(a.nb_membres || 0) > 1 ? 's' : ''}</span>
+              {a.my_compagnie_nom && <span className="block text-xs text-slate-500 mt-0.5">via {a.my_compagnie_nom}</span>}
             </div>
             <span className={`text-sm ${ROLE_COLORS[a.my_role || ''] || 'text-slate-400'}`}>{ROLE_LABELS[a.my_role || ''] || a.my_role}</span>
           </button>
@@ -607,7 +610,7 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
 
   const myCompagniesInAlliance = detail.membres.filter(m => pdgCompagnieIds.includes(m.compagnie_id));
   const [selectedCodeshareCompagnieId, setSelectedCodeshareCompagnieId] = useState(
-    detail.my_compagnie_ids?.[0] ?? detail.my_compagnie_id ?? myCompagniesInAlliance[0]?.compagnie_id ?? ''
+    detail.my_compagnie_ids?.[0] ?? myCompagniesInAlliance[0]?.compagnie_id ?? ''
   );
   const selectedMember = detail.membres.find(m => m.compagnie_id === selectedCodeshareCompagnieId);
   const [myCodeshare, setMyCodeshare] = useState(selectedMember?.codeshare_pourcent ?? 0);
@@ -622,7 +625,7 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
     if (mine.length > 0 && !mine.some(m => m.compagnie_id === selectedCodeshareCompagnieId)) {
       setSelectedCodeshareCompagnieId(mine[0].compagnie_id);
     }
-  }, [detail.id]);
+  }, [detail.id, detail.membres, pdgCompagnieIds, selectedCodeshareCompagnieId]);
 
   const pendingDemandes = detail.demandes_fonds.filter(d => d.statut === 'en_attente');
   const codeshareActif = detail.parametres?.codeshare_actif ?? false;
@@ -639,6 +642,9 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
         </div>
       )}
 
+      {!codeshareActif && (
+        <p className="text-sm text-slate-500">Le codeshare n&apos;est pas activé pour cette alliance. Le président peut l&apos;activer dans les paramètres.</p>
+      )}
       {codeshareActif && (
         <div className="p-4 rounded-lg bg-sky-900/20 border border-sky-700/30 space-y-4">
           <div>
@@ -646,6 +652,9 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
             <p className="text-xs text-slate-400 mt-1">Chaque PDG définit le % de ses revenus de vol reversé aux autres membres de l&apos;alliance.</p>
           </div>
 
+          {!isPdg && (
+            <p className="text-sm text-slate-500">Seuls les PDG de compagnies membres peuvent définir leur % codeshare. Si vous êtes PDG d&apos;une autre compagnie dans une autre alliance, sélectionnez-la dans la liste des alliances.</p>
+          )}
           {isPdg && (
             <div>
               <p className="text-xs font-medium text-slate-300 mb-2 uppercase tracking-wide">Mon % de codeshare</p>
@@ -724,11 +733,29 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
               <Wallet className="h-3 w-3 inline mr-1" />Compte personnel
             </button>
           </div>
+          {contribSource === 'compagnie' && myCompagniesInAlliance.length > 1 && (
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Compagnie contributrice</label>
+              <select
+                value={selectedCodeshareCompagnieId}
+                onChange={e => setSelectedCodeshareCompagnieId(e.target.value)}
+                className="w-full max-w-xs rounded border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm"
+              >
+                {myCompagniesInAlliance.map(m => (
+                  <option key={m.compagnie_id} value={m.compagnie_id}>
+                    {m.compagnie?.nom || m.compagnie_id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex gap-2 flex-wrap">
             <input type="number" min="1" value={contribMontant} onChange={e => setContribMontant(e.target.value)} placeholder="Montant" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-32 text-sm" />
             <input type="text" value={contribLibelle} onChange={e => setContribLibelle(e.target.value)} placeholder="Libellé (opt.)" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 flex-1 text-sm" />
             <button disabled={busy || !contribMontant || Number(contribMontant) <= 0} onClick={async () => {
-              try { await api(`/api/alliances/${detail.id}/fonds`, 'POST', { action: 'contribuer', montant: Number(contribMontant), libelle: contribLibelle || undefined, source: contribSource }); flash(`${Number(contribMontant).toLocaleString('fr-FR')} F$ contribués depuis le compte ${contribSource === 'personnel' ? 'personnel' : 'compagnie'}`); setContribMontant(''); setContribLibelle(''); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+              const payload: Record<string, unknown> = { action: 'contribuer', montant: Number(contribMontant), libelle: contribLibelle || undefined, source: contribSource };
+              if (contribSource === 'compagnie' && selectedCodeshareCompagnieId) payload.compagnie_id = selectedCodeshareCompagnieId;
+              try { await api(`/api/alliances/${detail.id}/fonds`, 'POST', payload); flash(`${Number(contribMontant).toLocaleString('fr-FR')} F$ contribués depuis le compte ${contribSource === 'personnel' ? 'personnel' : 'compagnie'}`); setContribMontant(''); setContribLibelle(''); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
             }} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium disabled:opacity-50">Contribuer</button>
           </div>
         </div>
@@ -777,8 +804,8 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
           <h3 className="font-medium text-slate-200 mb-2">Historique contributions</h3>
           <div className="max-h-48 overflow-y-auto space-y-1">
             {detail.contributions.map(c => {
-              const comp = detail.membres.find(m => m.compagnie_id === c.compagnie_id);
-              return <div key={c.id} className="text-sm text-slate-400">{comp?.compagnie?.nom || '?'} — +{c.montant.toLocaleString('fr-FR')} F$ — {c.libelle} — {new Date(c.created_at).toLocaleDateString('fr-FR')}</div>;
+              const nom = c.compagnie_nom ?? detail.membres.find(m => m.compagnie_id === c.compagnie_id)?.compagnie?.nom ?? '?';
+              return <div key={c.id} className="text-sm text-slate-400">{nom} — +{c.montant.toLocaleString('fr-FR')} F$ — {c.libelle} — {new Date(c.created_at).toLocaleDateString('fr-FR')}</div>;
             })}
           </div>
         </div>
