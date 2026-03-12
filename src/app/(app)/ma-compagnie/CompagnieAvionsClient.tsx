@@ -843,7 +843,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                 disabled={
                   transferLoading ||
                   !transferDestId ||
-                  (allianceParams && !allianceParams.don_avions_actif && !allianceParams.transfert_avions_actif && !allianceParams.pret_avions_actif)
+                  Boolean(allianceParams && !allianceParams.don_avions_actif && !allianceParams.transfert_avions_actif && !allianceParams.pret_avions_actif)
                 }
               >
                 {transferLoading ? '…' : 'Envoyer la proposition'}
