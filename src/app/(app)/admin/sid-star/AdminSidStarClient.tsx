@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Route, Plus, Trash2, Save } from 'lucide-react';
+import { ArrowLeft, Route, Plus, Trash2, Save, ChevronDown, ChevronRight } from 'lucide-react';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { toast } from 'sonner';
 
@@ -97,6 +97,36 @@ export default function AdminSidStarClient() {
   }
 
   const filtered = procedures;
+
+  // Grouper par "famille" : base du nom (ex: LOGAN4 pour LOGAN4, LOGAN4 VIA DOCKR, LOGAN4.RENDR...)
+  function getFamily(nom: string): string {
+    const beforeVia = nom.split(' VIA ')[0].trim();
+    const beforeDot = beforeVia.split('.')[0].trim();
+    return beforeDot || nom;
+  }
+
+  const grouped = filtered.reduce<Record<string, SidStar[]>>((acc, p) => {
+    const key = `${p.aeroport}|${p.type_procedure}|${getFamily(p.nom)}`;
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(p);
+    return acc;
+  }, {});
+
+  const groupEntries = Object.entries(grouped).map(([key, items]) => {
+    const [aeroport, typeProc, family] = key.split('|');
+    return { key, aeroport, typeProc, family, items };
+  });
+
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set(groupEntries.map(g => g.key)));
+
+  function toggleFamily(key: string) {
+    setExpandedFamilies(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -216,43 +246,71 @@ export default function AdminSidStarClient() {
             Aucune procédure. Créez-en une pour qu&apos;elles apparaissent dans le dépôt de plan de vol.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-800/80 text-slate-300">
-                  <th className="text-left px-4 py-3 font-medium">Aéroport</th>
-                  <th className="text-left px-4 py-3 font-medium">Type</th>
-                  <th className="text-left px-4 py-3 font-medium">Nom</th>
-                  <th className="text-left px-4 py-3 font-medium">Route</th>
-                  <th className="w-12 px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p) => (
-                  <tr key={p.id} className="border-t border-slate-700 hover:bg-slate-800/30">
-                    <td className="px-4 py-3 font-mono font-bold text-sky-400">{p.aeroport}</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${p.type_procedure === 'SID' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
-                        {p.type_procedure}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-slate-200">{p.nom}</td>
-                    <td className="px-4 py-3 font-mono text-slate-400 text-xs max-w-md truncate" title={p.route}>{p.route}</td>
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(p.id)}
-                        disabled={deleting === p.id}
-                        className="p-1.5 text-red-400 hover:bg-red-500/20 rounded disabled:opacity-50"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="divide-y divide-slate-700">
+            {groupEntries.map(({ key, aeroport, typeProc, family, items }) => {
+              const isExpanded = expandedFamilies.has(key);
+              return (
+                <div key={key} className="border-b border-slate-700 last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => toggleFamily(key)}
+                    className="w-full flex items-center gap-2 px-4 py-3 bg-slate-800/50 hover:bg-slate-800/70 text-left transition-colors"
+                  >
+                    {isExpanded ? (
+                      <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />
+                    )}
+                    <span className="font-mono font-bold text-slate-200">{family}</span>
+                    <span className="text-slate-500 text-sm">({items.length} variante{items.length > 1 ? 's' : ''})</span>
+                    <span className="text-slate-500 text-xs">— {aeroport}</span>
+                    <span className={`ml-auto px-2 py-0.5 rounded text-xs font-medium ${typeProc === 'SID' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                      {typeProc}
+                    </span>
+                  </button>
+                  {isExpanded && (
+                    <div className="overflow-x-auto bg-slate-900/30">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-800/60 text-slate-400 text-xs">
+                            <th className="text-left px-4 py-2 font-medium">Aéroport</th>
+                            <th className="text-left px-4 py-2 font-medium">Type</th>
+                            <th className="text-left px-4 py-2 font-medium">Nom</th>
+                            <th className="text-left px-4 py-2 font-medium">Route</th>
+                            <th className="w-12 px-4 py-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((p) => (
+                            <tr key={p.id} className="border-t border-slate-700/50 hover:bg-slate-800/20">
+                              <td className="px-4 py-2 font-mono font-bold text-sky-400">{p.aeroport}</td>
+                              <td className="px-4 py-2">
+                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${p.type_procedure === 'SID' ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                                  {p.type_procedure}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 font-mono text-slate-200">{p.nom}</td>
+                              <td className="px-4 py-2 font-mono text-slate-400 text-xs max-w-md truncate" title={p.route}>{p.route}</td>
+                              <td className="px-4 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(p.id)}
+                                  disabled={deleting === p.id}
+                                  className="p-1.5 text-red-400 hover:bg-red-500/20 rounded disabled:opacity-50"
+                                  title="Supprimer"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
