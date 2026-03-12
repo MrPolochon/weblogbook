@@ -1,8 +1,7 @@
--- Seed toutes les SID/STAR de tous les aéroports
--- À exécuter après supabase/add_sid_star.sql
--- Compatible Supabase SQL Editor (pas de \i)
+-- Mise à jour des routes SID/STAR IRFD
+-- Exécuter dans Supabase SQL Editor pour corriger toutes les routes
+-- (MDWAY DCT DINNER, PEVEE dans OSHNN1, etc.)
 
--- ========== IRFD (Rockford) ==========
 -- LOGAN 4
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'LOGAN4', 'logan DCT IMLR DCT BUCFA DCT SKYDV DCT WELSH'),
@@ -38,7 +37,7 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'DARRK3.SPACE VIA DLREY', 'dlrey dct aloha dct darrk DCT DINTY DCT BEANS DCT RIZIN DCT SPACE')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- OSHNN 1
+-- OSHNN 1 (avec PEVEE)
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'OSHNN1', 'oshnn'),
   ('IRFD', 'SID', 'OSHNN1 VIA HIIPR', 'hiipr dct shaef dct pevee dct holtz dct oshnn'),
@@ -64,6 +63,3 @@ ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'RFD6', 'RADAR VECTORS DCT')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
-
--- ========== Autres aéroports (KORD, KLAX, etc.) ==========
--- Ajouter ici les blocs pour chaque nouvel aéroport

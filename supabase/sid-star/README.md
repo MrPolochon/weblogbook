@@ -12,6 +12,8 @@ sid-star/
 │   ├── logan4.sql
 │   ├── kened2.sql
 │   ├── darrk3.sql
+│   ├── oshnn1.sql
+│   ├── rfd6.sql
 │   └── ...
 └── [aeroport]/        # Autres aéroports (KORD, KLAX, etc.)
     └── all.sql       # Toutes les SID de l'aéroport
