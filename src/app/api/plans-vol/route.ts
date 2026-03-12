@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { 
       aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, 
-      intentions_vol, sid_depart, star_arrivee, route_ifr, note_atc,
+      intentions_vol, sid_depart, star_arrivee, route_ifr, strip_route, note_atc,
       vol_commercial, compagnie_id, nature_transport, inventaire_avion_id,
       compagnie_avion_id,
       nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote, prix_billet_utilise,
@@ -441,6 +441,7 @@ export async function POST(request: Request) {
         sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,
         star_arrivee: type_vol === 'IFR' ? String(star_arrivee).trim() : null,
         route_ifr: (type_vol === 'IFR' && route_ifr) ? String(route_ifr).trim() : null,
+        strip_route: strip_route && String(strip_route).trim() ? String(strip_route).trim() : null,
         note_atc: null,
         vol_commercial: Boolean(vol_commercial) && !vol_ferry,
         compagnie_id: (vol_commercial || vol_ferry) && compagnie_id ? compagnie_id : null,
@@ -570,6 +571,7 @@ export async function POST(request: Request) {
       sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,
       star_arrivee: type_vol === 'IFR' ? String(star_arrivee).trim() : null,
       route_ifr: (type_vol === 'IFR' && route_ifr) ? String(route_ifr).trim() : null,
+      strip_route: strip_route && String(strip_route).trim() ? String(strip_route).trim() : null,
       note_atc: note_atc ? String(note_atc).trim() : null,
       vol_commercial: Boolean(vol_commercial) && !vol_ferry,
       compagnie_id: (vol_commercial || vol_ferry) && compagnie_id ? compagnie_id : null,

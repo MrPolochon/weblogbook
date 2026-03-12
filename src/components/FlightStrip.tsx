@@ -352,15 +352,30 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
             <MessageSquare className="h-3.5 w-3.5" />Intentions
           </button>
           {intentionsPos && createPortal(
+            (() => {
+              const pw = 380;
+              const margin = 12;
+              const estHeight = 120;
+              const vw = typeof window !== 'undefined' ? window.innerWidth : 800;
+              const vh = typeof window !== 'undefined' ? window.innerHeight : 600;
+              const left = Math.max(margin, Math.min(intentionsPos.x, vw - pw - margin));
+              const placeAbove = intentionsPos.y > vh / 2;
+              let top = placeAbove ? intentionsPos.y - 8 : intentionsPos.y + 28;
+              const transform = placeAbove ? 'translateY(-100%)' : 'none';
+              if (placeAbove && top - estHeight < margin) top = margin + estHeight;
+              else if (!placeAbove && top + estHeight > vh - margin) top = vh - margin - estHeight;
+              return (
             <div
               style={{
                 position: 'fixed',
                 zIndex: 2147483647,
-                left: intentionsPos.x,
-                top: intentionsPos.y - 8,
-                transform: 'translateY(-100%)',
-                width: 380,
+                left,
+                top,
+                transform,
+                width: pw,
                 maxWidth: '90vw',
+                maxHeight: `${Math.min(vh - margin * 2, 400)}px`,
+                overflow: 'auto',
                 pointerEvents: 'none',
               }}
               className={`rounded-lg shadow-2xl border-2 p-4 ${
@@ -369,7 +384,9 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
             >
               <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>Intentions de vol</div>
               <p className="text-sm font-mono font-semibold leading-relaxed break-words whitespace-pre-wrap">{strip.intentions_vol}</p>
-            </div>,
+            </div>
+          );
+        })(),
             document.body,
           )}
         </>
@@ -403,11 +420,15 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
             (() => {
               const pw = 380;
               const margin = 12;
+              const estHeight = 80;
               const vw = typeof window !== 'undefined' ? window.innerWidth : 800;
+              const vh = typeof window !== 'undefined' ? window.innerHeight : 600;
               const left = Math.max(margin, Math.min(noteAtcPos.x, vw - pw - margin));
-              const placeAbove = noteAtcPos.y > 280;
-              const top = placeAbove ? noteAtcPos.y - 8 : noteAtcPos.y + 28;
+              const placeAbove = noteAtcPos.y > vh / 2;
+              let top = placeAbove ? noteAtcPos.y - 8 : noteAtcPos.y + 28;
               const transform = placeAbove ? 'translateY(-100%)' : 'none';
+              if (placeAbove && top - estHeight < margin) top = margin + estHeight;
+              else if (!placeAbove && top + estHeight > vh - margin) top = vh - margin - estHeight;
               return (
             <div
               style={{
@@ -418,6 +439,8 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
                 transform,
                 width: pw,
                 maxWidth: '90vw',
+                maxHeight: `${vh - margin * 2}px`,
+                overflow: 'auto',
                 pointerEvents: 'none',
               }}
               className={`rounded-lg shadow-2xl border-2 p-4 ${

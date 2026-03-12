@@ -80,6 +80,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const [sid_depart, setSidDepart] = useState('');
   const [star_arrivee, setStarArrivee] = useState('');
   const [route_ifr, setRouteIfr] = useState('');
+  const [quoi_ciel, setQuoiCiel] = useState('');
   const [note_atc, setNoteAtc] = useState('');
   
   // Commercial flight options
@@ -384,6 +385,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       sid_depart: type_vol === 'IFR' ? sid_depart.trim() : undefined,
       star_arrivee: type_vol === 'IFR' ? star_arrivee.trim() : undefined,
       route_ifr: type_vol === 'IFR' && route_ifr.trim() ? route_ifr.trim() : undefined,
+      strip_route: quoi_ciel.trim() ? quoi_ciel.trim() : undefined,
       note_atc: !volSansAtc && note_atc.trim() ? note_atc.trim() : undefined,
       vol_commercial: vol_commercial && !vol_ferry,
       compagnie_id: (vol_commercial || vol_ferry) && selectedCompagnieId ? selectedCompagnieId : undefined,
@@ -920,6 +922,18 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           </label>
         </div>
       </div>
+      <div>
+        <label className="label">Vous allez faire quoi dans le ciel ?</label>
+        <input
+          type="text"
+          className="input"
+          value={quoi_ciel}
+          onChange={(e) => setQuoiCiel(e.target.value)}
+          placeholder="Ex: Vol local, transit TFFJ–TNCM, entraînement..."
+          maxLength={80}
+        />
+        <p className="text-xs text-slate-500 mt-1">Cette réponse sera affichée dans la case route du strip ATC.</p>
+      </div>
       {type_vol === 'VFR' && (
         <div>
           <label className="label">Intentions de vol *</label>
@@ -958,7 +972,9 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           value={note_atc} 
           onChange={(e) => setNoteAtc(e.target.value)} 
           placeholder="Ex: Premier vol, demande assistance..."
+          autoComplete="off"
         />
+        <p className="text-xs text-slate-500 mt-1">Instructions ou remarques pour le vol uniquement (pas d&apos;email).</p>
       </div>
 
       {/* Confirmation vol sans ATC */}
