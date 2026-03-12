@@ -1,9 +1,11 @@
--- Mise à jour des routes SID/STAR IRFD
--- Exécuter dans Supabase SQL Editor pour corriger toutes les routes
--- (MDWAY DCT DINNER, PEVEE dans OSHNN 1, etc.)
+-- ============================================================
+-- GRAND FICHIER IRFD — Toutes les SID Rockford
+-- ============================================================
+-- Exécuter dans Supabase SQL Editor
+-- Prérequis : add_sid_star.sql (création table)
+-- ============================================================
 
--- LOGAN 4
-INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
+-- LOGAN 4INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'LOGAN 4', 'logan DCT IMLR DCT BUCFA DCT SKYDV DCT WELSH'),
   ('IRFD', 'SID', 'LOGAN 4 VIA DOCKR', 'dockr dct quran dct exmor dct logan DCT IMLR DCT BUCFA DCT SKYDV DCT WELSH'),
   ('IRFD', 'SID', 'LOGAN 4 VIA DLREY', 'dlrey dct daale dct logan DCT IMLR DCT BUCFA DCT SKYDV DCT WELSH'),
@@ -15,8 +17,7 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'LOGAN 4.DINNER VIA DLREY', 'dlrey dct daale dct logan DCT IMLR DCT BUCFA DCT SKYDV DCT WELSH DCT MDWAY DCT DINNER')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- KENED 2
-INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
+-- KENED 2INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'KENED 2', 'VECTORS FOR KENED2 KUNAV DCT KENED'),
   ('IRFD', 'SID', 'KENED 2.RENDR', 'VECTORS FOR KENED2 KUNAV DCT KENED DCT WELSH DCT PROBE DCT RENDR'),
   ('IRFD', 'SID', 'KENED 2.JOOPY', 'VECTORS FOR KENED2 KUNAV DCT KENED DCT WELSH DCT PROBE DCT JOOPY'),
@@ -24,8 +25,7 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'KENED 2.INDEX', 'VECTORS FOR KENED2 KUNAV DCT KENED DCT INDEX')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- DARRK 3
-INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
+-- DARRK 3INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'DARRK 3', 'darrk DCT DINTY'),
   ('IRFD', 'SID', 'DARRK 3 VIA DOCKR', 'dockr dct quran dct exmor dct darrk DCT DINTY'),
   ('IRFD', 'SID', 'DARRK 3 VIA DLREY', 'dlrey dct aloha dct darrk DCT DINTY'),
@@ -37,8 +37,7 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'DARRK 3.SPACE VIA DLREY', 'dlrey dct aloha dct darrk DCT DINTY DCT BEANS DCT RIZIN DCT SPACE')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- OSHNN 1 (avec PEVEE)
-INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
+-- OSHNN 1INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'OSHNN 1', 'oshnn'),
   ('IRFD', 'SID', 'OSHNN 1 VIA HIIPR', 'hiipr dct shaef dct pevee dct holtz dct oshnn'),
   ('IRFD', 'SID', 'OSHNN 1 VIA FABRA', 'fabra dct shaef dct pevee dct holtz dct oshnn'),
@@ -59,8 +58,7 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'OSHNN 1.JAMSI VIA FABRA', 'fabra dct shaef dct pevee dct holtz dct oshnn dct jamsi')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- TRAINING 1
-INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
+-- TRAINING 1INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'TRAINING 1', 'trn'),
   ('IRFD', 'SID', 'TRAINING 1 VIA DOCKR', 'dockr dct weilr dct trn'),
   ('IRFD', 'SID', 'TRAINING 1 VIA DLREY', 'dlrey dct pepul dct haynk dct trn'),
@@ -81,8 +79,7 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'TRAINING 1.CYRIL VIA DLREY', 'dlrey dct pepul dct haynk dct trn dct atpev dct oceen dct silva dct cyril')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- WNNDY 3
-INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
+-- WNNDY 3INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'WNNDY 3', 'wnndy'),
   ('IRFD', 'SID', 'WNNDY 3 VIA MJSTY', 'mjsty dct wnndy'),
   ('IRFD', 'SID', 'WNNDY 3.SILVA', 'wnndy dct oceen dct silva'),
@@ -91,7 +88,7 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'WNNDY 3.NARXX VIA MJSTY', 'mjsty dct wnndy dct greek dct narxx')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- ROCKKFORD 6 (départ omnidirectionnel)
+-- ROCKKFORD 6 (omnidirectionnel)
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IRFD', 'SID', 'ROCKKFORD 6', 'RADAR VECTORS DCT')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;

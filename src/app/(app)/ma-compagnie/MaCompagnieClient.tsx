@@ -810,7 +810,7 @@ export default function MaCompagnieClient({
       <CompagnieAutorisationsClient compagnieId={compagnie.id} isPdg={isPdg} />
 
       {/* Flotte individuelle */}
-      <CompagnieAvionsClient compagnieId={compagnie.id} soldeCompagnie={soldeCompagnie} isPdg={isPdg} />
+      <CompagnieAvionsClient compagnieId={compagnie.id} soldeCompagnie={soldeCompagnie} isPdg={isPdg} allianceId={compagnie.alliance_id} />
 
       {/* Vols Ferry (PDG uniquement) */}
       {isPdg && <CompagnieVolsFerryClient compagnieId={compagnie.id} />}

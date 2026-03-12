@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Plane, Plus, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2, Handshake } from 'lucide-react';
+import { Plane, Plus, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2, Handshake, Gift } from 'lucide-react';
 import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX } from '@/lib/compagnie-utils';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -34,9 +34,10 @@ interface Props {
   compagnieId: string;
   soldeCompagnie?: number;
   isPdg?: boolean;
+  allianceId?: string | null;
 }
 
-export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0, isPdg = true }: Props) {
+export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0, isPdg = true, allianceId }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [avions, setAvions] = useState<Avion[]>([]);
@@ -51,7 +52,18 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
   const [locationPrixJour, setLocationPrixJour] = useState('10000');
   const [locationPct, setLocationPct] = useState('20');
   const [locationDuree, setLocationDuree] = useState('3');
-  
+
+  // Transfert alliance (don / vente / prêt)
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferAvionId, setTransferAvionId] = useState<string | null>(null);
+  const [transferType, setTransferType] = useState<'don' | 'vente' | 'pret'>('don');
+  const [transferDestId, setTransferDestId] = useState('');
+  const [transferPrix, setTransferPrix] = useState('');
+  const [transferDuree, setTransferDuree] = useState('7');
+  const [allianceMembres, setAllianceMembres] = useState<Array<{ compagnie_id: string; compagnie: { id: string; nom: string } | null }>>([]);
+  const [allianceParams, setAllianceParams] = useState<{ don_avions_actif?: boolean; transfert_avions_actif?: boolean; pret_avions_actif?: boolean } | null>(null);
+  const [transferLoading, setTransferLoading] = useState(false);
+
   // Édition
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editImmat, setEditImmat] = useState('');
@@ -247,6 +259,71 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setActionId(null);
+    }
+  }
+
+  function openTransferModal(avionId: string) {
+    if (!allianceId) return;
+    setTransferAvionId(avionId);
+    setTransferDestId('');
+    setTransferPrix('');
+    setTransferDuree('7');
+    setShowTransferModal(true);
+    setAllianceMembres([]);
+    setAllianceParams(null);
+    fetch(`/api/alliances/${allianceId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.membres) setAllianceMembres(d.membres.filter((m: { compagnie_id: string }) => m.compagnie_id !== compagnieId));
+        if (d.parametres) {
+          setAllianceParams(d.parametres);
+          const p = d.parametres;
+          if (p.don_avions_actif) setTransferType('don');
+          else if (p.transfert_avions_actif) setTransferType('vente');
+          else if (p.pret_avions_actif) setTransferType('pret');
+        }
+      })
+      .catch(() => {});
+  }
+
+  async function handleTransferAlliance() {
+    if (!allianceId || !transferAvionId || !transferDestId) return;
+    const typesDisponibles: Array<'don' | 'vente' | 'pret'> = [];
+    if (allianceParams?.don_avions_actif) typesDisponibles.push('don');
+    if (allianceParams?.transfert_avions_actif) typesDisponibles.push('vente');
+    if (allianceParams?.pret_avions_actif) typesDisponibles.push('pret');
+    if (!typesDisponibles.includes(transferType)) {
+      toast.error('Ce type de transfert n\'est pas activé dans l\'alliance.');
+      return;
+    }
+    if (transferType === 'vente' && (!transferPrix || parseInt(transferPrix, 10) < 0)) {
+      toast.error('Indiquez un prix pour la vente.');
+      return;
+    }
+    setTransferLoading(true);
+    try {
+      const body: Record<string, unknown> = {
+        type_transfert: transferType,
+        compagnie_avion_id: transferAvionId,
+        compagnie_dest_id: transferDestId,
+      };
+      if (transferType === 'vente') body.prix = parseInt(transferPrix, 10) || 0;
+      if (transferType === 'pret') body.duree_jours = parseInt(transferDuree, 10) || 7;
+      const res = await fetch(`/api/alliances/${allianceId}/transferts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      toast.success('Proposition envoyée. Le PDG de la compagnie destinataire doit accepter dans Alliance > Flotte.');
+      setShowTransferModal(false);
+      setTransferAvionId(null);
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setTransferLoading(false);
     }
   }
 
@@ -553,17 +630,29 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                 </button>
                               )}
                               {a.statut === 'ground' && !a.detruit && !isLeasedOut && !isLeasedIn && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setLocationAvionId(a.id);
-                                    setShowLocationModal(true);
-                                  }}
-                                  className="text-xs text-sky-400 hover:underline"
-                                  title="Mettre en location"
-                                >
-                                  <Handshake className="h-3.5 w-3.5" />
-                                </button>
+                                <>
+                                  {allianceId && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openTransferModal(a.id)}
+                                      className="text-xs text-emerald-400 hover:underline"
+                                      title="Donner / transférer à un membre de l'alliance"
+                                    >
+                                      <Gift className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setLocationAvionId(a.id);
+                                      setShowLocationModal(true);
+                                    }}
+                                    className="text-xs text-sky-400 hover:underline"
+                                    title="Mettre en location"
+                                  >
+                                    <Handshake className="h-3.5 w-3.5" />
+                                  </button>
+                                </>
                               )}
                               {isLeasedOut && (
                                 <span className="text-xs text-slate-400">Géré par locataire</span>
@@ -699,6 +788,71 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
             </tbody>
           </table>
         </div>
+      )}
+
+      {showTransferModal && allianceId && mounted && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-slate-700">
+            <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+              <Gift className="h-5 w-5 text-emerald-400" />
+              Transférer à un membre de l&apos;alliance
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <label className="label">Type</label>
+                <select className="input w-full" value={transferType} onChange={(e) => setTransferType(e.target.value as 'don' | 'vente' | 'pret')}>
+                  {allianceParams?.don_avions_actif && <option value="don">Don (gratuit)</option>}
+                  {allianceParams?.transfert_avions_actif && <option value="vente">Vente</option>}
+                  {allianceParams?.pret_avions_actif && <option value="pret">Prêt</option>}
+                  {allianceParams && !allianceParams.don_avions_actif && !allianceParams.transfert_avions_actif && !allianceParams.pret_avions_actif && (
+                    <option value="">Aucun type activé par l&apos;alliance</option>
+                  )}
+                </select>
+                {allianceParams && !allianceParams.don_avions_actif && !allianceParams.transfert_avions_actif && !allianceParams.pret_avions_actif && (
+                  <p className="text-xs text-amber-400 mt-1">Le Président ou Vice-Président doit activer les transferts dans Alliance &gt; Paramètres.</p>
+                )}
+              </div>
+              <div>
+                <label className="label">Compagnie destinataire</label>
+                <select className="input w-full" value={transferDestId} onChange={(e) => setTransferDestId(e.target.value)}>
+                  <option value="">— Choisir —</option>
+                  {allianceMembres.map((m) => (
+                    <option key={m.compagnie_id} value={m.compagnie_id}>
+                      {m.compagnie?.nom || m.compagnie_id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {transferType === 'vente' && (
+                <div>
+                  <label className="label">Prix (F$)</label>
+                  <input className="input w-full" type="number" min="0" value={transferPrix} onChange={(e) => setTransferPrix(e.target.value)} placeholder="0" />
+                </div>
+              )}
+              {transferType === 'pret' && (
+                <div>
+                  <label className="label">Durée (jours)</label>
+                  <input className="input w-full" type="number" min="1" value={transferDuree} onChange={(e) => setTransferDuree(e.target.value)} />
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button
+                className="btn-primary flex-1"
+                onClick={handleTransferAlliance}
+                disabled={
+                  transferLoading ||
+                  !transferDestId ||
+                  (allianceParams && !allianceParams.don_avions_actif && !allianceParams.transfert_avions_actif && !allianceParams.pret_avions_actif)
+                }
+              >
+                {transferLoading ? '…' : 'Envoyer la proposition'}
+              </button>
+              <button className="btn-secondary" onClick={() => setShowTransferModal(false)} disabled={transferLoading}>Annuler</button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {showLocationModal && mounted && createPortal(
