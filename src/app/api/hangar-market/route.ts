@@ -422,6 +422,14 @@ export async function POST(req: NextRequest) {
         })
         .eq('id', annonce_id);
 
+      // Annuler les transferts alliance en attente pour cet avion (vendu ailleurs)
+      if (annonce.compagnie_avion_id) {
+        await admin.from('alliance_transferts_avions')
+          .update({ statut: 'annule', traite_at: new Date().toISOString() })
+          .eq('compagnie_avion_id', annonce.compagnie_avion_id)
+          .eq('statut', 'en_attente');
+      }
+
       return NextResponse.json({ 
         ok: true, 
         message: `${avionNom} acheté pour ${prixTotal.toLocaleString('fr-FR')} F$ (dont ${taxe.toLocaleString('fr-FR')} F$ de taxe)` 

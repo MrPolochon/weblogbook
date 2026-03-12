@@ -288,7 +288,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
       <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-6">
         {tab === 'dashboard' && <DashboardTab detail={detail} />}
         {tab === 'membres' && <MembresTab detail={detail} isPresident={!!isPresident} isLeader={!!isLeader} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} compagniesSansAlliance={compagniesSansAlliance} />}
-        {tab === 'flotte' && <FlotteTab detail={detail} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
+        {tab === 'flotte' && <FlotteTab detail={detail} pdgCompagnieIds={pdgCompagnieIds} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
         {tab === 'finances' && <FinancesTab detail={detail} isLeader={!!isLeader} isPdg={pdgCompagnieIds.some(id => detail.membres.some(m => m.compagnie_id === id))} pdgCompagnieIds={pdgCompagnieIds} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
         {tab === 'annonces' && <AnnoncesTab detail={detail} isLeader={!!isLeader} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
         {tab === 'parametres' && <ParametresTab detail={detail} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
@@ -561,13 +561,15 @@ function MembresTab({ detail, isPresident, isLeader, onRefresh, flash, api, busy
   );
 }
 
-function FlotteTab({ detail, onRefresh, flash, api, busy }: {
-  detail: AllianceDetail; onRefresh: () => void;
+function FlotteTab({ detail, pdgCompagnieIds, onRefresh, flash, api, busy }: {
+  detail: AllianceDetail; pdgCompagnieIds: string[];
+  onRefresh: () => void;
   flash: (m: string, e?: boolean) => void;
   api: (u: string, m: string, b?: unknown) => Promise<unknown>; busy: boolean;
 }) {
   const pending = detail.transferts.filter(t => t.statut === 'en_attente');
-  const completed = detail.transferts.filter(t => t.statut !== 'en_attente');
+  const completed = detail.transferts.filter(t => t.statut !== 'en_attente' && t.statut !== 'annule');
+  const myCompagniesInAlliance = detail.membres.filter(m => pdgCompagnieIds.includes(m.compagnie_id));
 
   return (
     <div className="space-y-6">
@@ -576,24 +578,49 @@ function FlotteTab({ detail, onRefresh, flash, api, busy }: {
           <h3 className="font-medium text-slate-200 mb-2 flex items-center gap-2"><ArrowRightLeft className="h-4 w-4 text-sky-400" />Transferts en attente</h3>
           {pending.map(t => {
             const source = detail.membres.find(m => m.compagnie_id === t.compagnie_source_id);
-            const dest = detail.membres.find(m => m.compagnie_id === t.compagnie_dest_id);
-            const isMeDest = t.compagnie_dest_id === detail.my_compagnie_id;
+            const dest = t.compagnie_dest_id ? detail.membres.find(m => m.compagnie_id === t.compagnie_dest_id) : null;
+            const isDestSpecifique = !!t.compagnie_dest_id;
+            const isMeDest = isDestSpecifique && t.compagnie_dest_id === detail.my_compagnie_id;
+            const canClaim = !isDestSpecifique && myCompagniesInAlliance.length > 0;
             return (
               <div key={t.id} className="p-3 rounded-lg bg-slate-700/20 mb-2 flex items-center justify-between flex-wrap gap-2">
                 <div className="text-sm text-slate-300">
                   <span className="font-medium text-slate-200">{t.type_transfert.toUpperCase()}</span>
-                  {' '}{source?.compagnie?.nom || '?'} → {dest?.compagnie?.nom || '?'}
+                  {' '}{source?.compagnie?.nom || '?'} → {dest?.compagnie?.nom || (isDestSpecifique ? '?' : 'Tout le monde')}
                   {t.prix ? ` — ${t.prix.toLocaleString('fr-FR')} F$` : ''}
                   {t.duree_jours ? ` — ${t.duree_jours}j` : ''}
                 </div>
-                {isMeDest && (
-                  <div className="flex gap-2">
+                {(isMeDest || canClaim) && (
+                  <div className="flex gap-2 items-center flex-wrap">
+                    {canClaim && myCompagniesInAlliance.length > 1 && (
+                      <select className="input py-1 px-2 text-xs w-36" id={`claim-${t.id}`}>
+                        {myCompagniesInAlliance.map(m => (
+                          <option key={m.compagnie_id} value={m.compagnie_id}>{m.compagnie?.nom || m.compagnie_id}</option>
+                        ))}
+                      </select>
+                    )}
                     <button disabled={busy} onClick={async () => {
-                      try { await api(`/api/alliances/${detail.id}/transferts`, 'PATCH', { transfert_id: t.id, action: 'accepter' }); flash('Transfert accepté'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-                    }} className="px-2 py-1 text-xs rounded bg-emerald-600 text-white disabled:opacity-50"><Check className="h-3 w-3 inline" /> Accepter</button>
-                    <button disabled={busy} onClick={async () => {
-                      try { await api(`/api/alliances/${detail.id}/transferts`, 'PATCH', { transfert_id: t.id, action: 'refuser' }); flash('Transfert refusé'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-                    }} className="px-2 py-1 text-xs rounded bg-red-600/50 text-red-200 disabled:opacity-50"><X className="h-3 w-3 inline" /> Refuser</button>
+                      const compId = canClaim
+                        ? (myCompagniesInAlliance.length === 1 ? myCompagniesInAlliance[0].compagnie_id : (document.getElementById(`claim-${t.id}`) as HTMLSelectElement)?.value)
+                        : undefined;
+                      if (canClaim && !compId) return;
+                      try {
+                        await api(`/api/alliances/${detail.id}/transferts`, 'PATCH', {
+                          transfert_id: t.id,
+                          action: 'accepter',
+                          ...(canClaim && compId && { compagnie_dest_id: compId }),
+                        });
+                        flash(t.type_transfert === 'vente' ? 'Achat effectué' : 'Transfert accepté');
+                        onRefresh();
+                      } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+                    }} className="px-2 py-1 text-xs rounded bg-emerald-600 text-white disabled:opacity-50">
+                      <Check className="h-3 w-3 inline" /> {t.type_transfert === 'vente' ? 'Acheter' : 'Récupérer'}
+                    </button>
+                    {isMeDest && (
+                      <button disabled={busy} onClick={async () => {
+                        try { await api(`/api/alliances/${detail.id}/transferts`, 'PATCH', { transfert_id: t.id, action: 'refuser' }); flash('Transfert refusé'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+                      }} className="px-2 py-1 text-xs rounded bg-red-600/50 text-red-200 disabled:opacity-50"><X className="h-3 w-3 inline" /> Refuser</button>
+                    )}
                   </div>
                 )}
               </div>

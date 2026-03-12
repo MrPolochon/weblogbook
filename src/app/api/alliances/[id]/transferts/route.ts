@@ -22,16 +22,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const body = await req.json().catch(() => ({}));
   const { type_transfert, compagnie_avion_id, compagnie_dest_id, prix, duree_jours } = body;
-  if (!type_transfert || !compagnie_avion_id || !compagnie_dest_id) {
-    return NextResponse.json({ error: 'type_transfert, compagnie_avion_id et compagnie_dest_id requis' }, { status: 400 });
+  if (!type_transfert || !compagnie_avion_id) {
+    return NextResponse.json({ error: 'type_transfert et compagnie_avion_id requis' }, { status: 400 });
   }
   if (!['vente', 'don', 'pret'].includes(type_transfert)) return NextResponse.json({ error: 'Type invalide' }, { status: 400 });
 
   const { data: avion } = await admin.from('compagnie_avions').select('id, compagnie_id').eq('id', compagnie_avion_id).single();
   if (!avion || !myCompIds.includes(avion.compagnie_id)) return NextResponse.json({ error: 'Avion non trouvé ou pas à vous' }, { status: 404 });
 
-  const { data: dest } = await admin.from('alliance_membres').select('id').eq('alliance_id', allianceId).eq('compagnie_id', compagnie_dest_id).single();
-  if (!dest) return NextResponse.json({ error: 'Destination pas dans l\'alliance' }, { status: 400 });
+  // Prêt : destinataire obligatoire. Don et vente : destinataire optionnel (tout le monde peut claim/acheter)
+  if (type_transfert === 'pret' && !compagnie_dest_id) {
+    return NextResponse.json({ error: 'Le prêt nécessite un destinataire' }, { status: 400 });
+  }
+  if (compagnie_dest_id) {
+    const { data: dest } = await admin.from('alliance_membres').select('id').eq('alliance_id', allianceId).eq('compagnie_id', compagnie_dest_id).single();
+    if (!dest) return NextResponse.json({ error: 'Destination pas dans l\'alliance' }, { status: 400 });
+  }
 
   const { data: allianceParams } = await admin.from('alliance_parametres')
     .select('transfert_avions_actif, pret_avions_actif, don_avions_actif')
@@ -47,26 +53,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Le don d\'avions entre membres n\'est pas activé dans les paramètres de l\'alliance.' }, { status: 400 });
   }
 
+  if (type_transfert === 'vente' && (!prix || prix < 0)) {
+    return NextResponse.json({ error: 'Prix requis pour une vente' }, { status: 400 });
+  }
+
   const { error } = await admin.from('alliance_transferts_avions').insert({
     alliance_id: allianceId,
     type_transfert,
     compagnie_avion_id,
     compagnie_source_id: avion.compagnie_id,
-    compagnie_dest_id,
+    compagnie_dest_id: compagnie_dest_id || null,
     prix: type_transfert === 'vente' ? (prix || 0) : null,
     duree_jours: type_transfert === 'pret' ? (duree_jours || 7) : null,
     created_by: user.id,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  const { data: destComp } = await admin.from('compagnies').select('pdg_id, nom').eq('id', compagnie_dest_id).single();
-  if (destComp) {
-    await admin.from('messages').insert({
-      destinataire_id: destComp.pdg_id,
-      titre: `✈️ Proposition de ${type_transfert} d'avion`,
-      contenu: `Un membre de l'alliance vous propose un ${type_transfert} d'avion. Consultez la section Alliance > Flotte.`,
-      type_message: 'normal',
-    });
+  // Notification uniquement si destinataire spécifique
+  if (compagnie_dest_id) {
+    const { data: destComp } = await admin.from('compagnies').select('pdg_id, nom').eq('id', compagnie_dest_id).single();
+    if (destComp) {
+      await admin.from('messages').insert({
+        destinataire_id: destComp.pdg_id,
+        titre: `✈️ Proposition de ${type_transfert} d'avion`,
+        contenu: `Un membre de l'alliance vous propose un ${type_transfert} d'avion. Consultez la section Alliance > Flotte.`,
+        type_message: 'normal',
+      });
+    }
   }
 
   return NextResponse.json({ ok: true });
@@ -83,7 +96,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const myCompIds = (myComps || []).map(c => c.id);
 
   const body = await req.json().catch(() => ({}));
-  const { transfert_id, action } = body;
+  const { transfert_id, action, compagnie_dest_id: claimCompagnieId } = body;
   if (!transfert_id || !['accepter', 'refuser'].includes(action)) {
     return NextResponse.json({ error: 'transfert_id et action requis' }, { status: 400 });
   }
@@ -93,7 +106,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .eq('id', transfert_id).eq('alliance_id', allianceId).single();
   if (!t || t.statut !== 'en_attente') return NextResponse.json({ error: 'Transfert introuvable ou déjà traité' }, { status: 404 });
 
-  if (!myCompIds.includes(t.compagnie_dest_id)) return NextResponse.json({ error: 'Seul le destinataire peut répondre' }, { status: 403 });
+  const destId = t.compagnie_dest_id ?? claimCompagnieId;
+  if (!destId) return NextResponse.json({ error: 'Indiquez la compagnie qui récupère l\'avion (claim)' }, { status: 400 });
+
+  const { data: destMember } = await admin.from('alliance_membres')
+    .select('id').eq('alliance_id', allianceId).eq('compagnie_id', destId).single();
+  if (!destMember) return NextResponse.json({ error: 'Compagnie pas dans l\'alliance' }, { status: 400 });
+
+  if (!myCompIds.includes(destId)) return NextResponse.json({ error: 'Seul le PDG de la compagnie destinataire peut accepter' }, { status: 403 });
 
   if (action === 'refuser') {
     await admin.from('alliance_transferts_avions').update({ statut: 'refuse', traite_at: new Date().toISOString() }).eq('id', transfert_id);
@@ -103,7 +123,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (t.type_transfert === 'vente' && t.prix && t.prix > 0) {
     const { data: compteDest } = await admin.from('felitz_comptes')
       .select('id, solde')
-      .eq('compagnie_id', t.compagnie_dest_id)
+      .eq('compagnie_id', destId)
       .eq('type', 'entreprise')
       .single();
     if (!compteDest) return NextResponse.json({ error: 'Compte compagnie acheteur introuvable' }, { status: 400 });
@@ -140,8 +160,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  await admin.from('compagnie_avions').update({ compagnie_id: t.compagnie_dest_id }).eq('id', t.compagnie_avion_id);
-  await admin.from('alliance_transferts_avions').update({ statut: 'complete', traite_at: new Date().toISOString() }).eq('id', transfert_id);
+  await admin.from('compagnie_avions').update({ compagnie_id: destId }).eq('id', t.compagnie_avion_id);
+  await admin.from('alliance_transferts_avions').update({ statut: 'complete', compagnie_dest_id: destId, traite_at: new Date().toISOString() }).eq('id', transfert_id);
+
+  // Annuler les annonces Hangar Market pour cet avion (même avion vendu ailleurs)
+  await admin.from('hangar_market')
+    .update({ statut: 'annulé' })
+    .eq('compagnie_avion_id', t.compagnie_avion_id)
+    .eq('statut', 'en_vente');
 
   return NextResponse.json({ ok: true });
 }

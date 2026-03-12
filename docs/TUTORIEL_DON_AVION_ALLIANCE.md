@@ -76,6 +76,18 @@ Chaque type doit être activé séparément dans **Alliance** > **Paramètres** 
 
 ---
 
+## Don sans destinataire
+
+Pour un **don**, vous pouvez cocher **« Sans destinataire »** : tout membre de l'alliance peut alors récupérer l'avion (premier arrivé, premier servi). Allez dans **Alliance** > **Flotte** et cliquez sur **Récupérer**.
+
+---
+
+## Vente : marketplace alliance
+
+La **vente** fonctionne comme le Hangar Market, mais réservée aux membres de l'alliance. Vous mettez un prix, tout membre peut acheter. **Un même avion peut être en vente sur le Hangar Market ET dans l'alliance** à des prix différents. Dès qu'il est vendu à un endroit, l'autre annonce est automatiquement annulée.
+
+---
+
 ## Résumé du flux
 
 ```
