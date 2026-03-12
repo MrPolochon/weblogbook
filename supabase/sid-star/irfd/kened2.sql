@@ -1,6 +1,6 @@
 -- SID KENED 2 et toutes les variantes pour IRFD (Rockford)
 -- Vecteurs radar initiaux vers KUNAV, puis route publiée
--- À exécuter après add_sid_star.sql
+-- À exécuter après ../../add_sid_star.sql
 
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   -- Base (termine à KENED)

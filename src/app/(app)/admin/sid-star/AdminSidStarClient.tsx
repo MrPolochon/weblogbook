@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Route, Plus, Trash2, Save, ChevronDown, ChevronRight } from 'lucide-react';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
@@ -25,7 +25,7 @@ export default function AdminSidStarClient() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  async function fetchProcedures() {
+  const fetchProcedures = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -41,11 +41,11 @@ export default function AdminSidStarClient() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [filterAeroport, filterType]);
 
   useEffect(() => {
     fetchProcedures();
-  }, [filterAeroport, filterType]);
+  }, [fetchProcedures]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -126,14 +126,16 @@ export default function AdminSidStarClient() {
       setExpandedFamilies((prev) => {
         const keys = new Set(groupEntries.map((g) => g.key));
         if (prev.size === 0) return keys;
-        return new Set([...prev, ...keys]);
+        return new Set(Array.from(prev).concat(Array.from(keys)));
       });
     }
+  // groupKeysStr = représentation stable des clés (groupEntries recréé à chaque rendu)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupKeysStr]);
 
   function toggleFamily(key: string) {
-    setExpandedFamilies(prev => {
-      const next = new Set(prev);
+    setExpandedFamilies((prev) => {
+      const next = new Set(Array.from(prev));
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;

@@ -1,5 +1,5 @@
 -- SID LOGAN 4 et toutes les variantes pour IRFD (Greater Rockford)
--- À exécuter après add_sid_star.sql
+-- À exécuter après ../../add_sid_star.sql
 
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   -- Base
