@@ -6,14 +6,19 @@ Procédures SID et STAR par aéroport.
 
 ```
 sid-star/
-├── irfd/          # Rockford (IRFD)
+├── seed-all.sql       # Tout en un (IRFD + futurs aéroports)
+├── irfd/              # Rockford (IRFD)
+│   ├── all.sql        # Toutes les SID IRFD
 │   ├── logan4.sql
 │   ├── kened2.sql
+│   ├── darrk3.sql
 │   └── ...
-└── [aeroport]/    # Autres aéroports (ex: kord/, kord/, etc.)
+└── [aeroport]/        # Autres aéroports (KORD, KLAX, etc.)
+    └── all.sql       # Toutes les SID de l'aéroport
 ```
 
 ## Exécution
 
 1. Créer la table : `supabase/add_sid_star.sql`
-2. Charger les procédures : exécuter les `.sql` dans chaque dossier aéroport
+2. Option A — Tout charger : `supabase/sid-star/seed-all.sql`
+3. Option B — Par aéroport : `sid-star/irfd/all.sql`, etc.
