@@ -659,7 +659,13 @@ export async function PATCH(
         }
       }
 
-      const { error: err } = await admin.from('plans_vol').update(update).eq('id', id);
+      let { error: err } = await admin.from('plans_vol').update(update).eq('id', id);
+      // Si la colonne heure_depart_reelle n'existe pas, réessayer sans elle (strip_atd doit être sauvegardé)
+      if (err && update.heure_depart_reelle !== undefined && err.message?.toLowerCase().includes('does not exist')) {
+        delete update.heure_depart_reelle;
+        const res = await admin.from('plans_vol').update(update).eq('id', id);
+        err = res.error;
+      }
       if (err) return NextResponse.json({ error: err.message }, { status: 400 });
       return NextResponse.json({ ok: true });
     }

@@ -80,7 +80,7 @@ function formatCtot(createdAt: string): string {
 const NOT_SET = Symbol('NOT_SET');
 
 function InlineEdit({
-  value, field, planId, placeholder, maxLength, large,
+  value, field, planId, placeholder, maxLength, large, onSaved,
 }: {
   value: string | null; field: EditableField; planId: string;
   placeholder: string; maxLength?: number; onSaved?: () => void; large?: boolean;
@@ -135,7 +135,9 @@ function InlineEdit({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update_strip', [field]: trimmed || '' }),
       });
-      if (!res.ok) {
+      if (res.ok) {
+        onSaved?.();
+      } else {
         const d = await res.json().catch(() => ({}));
         console.error('Strip save error:', d.error || res.statusText);
         setError(true);
@@ -148,7 +150,7 @@ function InlineEdit({
     }
     setSaving(false);
     setEditing(false);
-  }, [planId, field]);
+  }, [planId, field, onSaved]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') { e.preventDefault(); save(text); }
@@ -165,7 +167,7 @@ function InlineEdit({
     return (
       <input
         ref={inputRef}
-        className={`bg-white text-slate-900 border-2 border-sky-500 rounded outline-none w-full font-mono z-10 font-bold ${large ? 'text-base px-1 py-1' : 'text-sm px-1 py-0.5'}`}
+        className={`bg-white text-slate-900 border-2 border-sky-500 rounded outline-none w-full font-mono z-10 font-bold ${large ? 'text-lg px-1.5 py-1' : 'text-base px-1 py-0.5'}`}
         value={text}
         maxLength={maxLength || 20}
         onChange={(e) => setText(e.target.value)}
@@ -190,7 +192,7 @@ function InlineEdit({
       }}
       title={error ? 'Erreur de sauvegarde — cliquer pour réessayer' : undefined}
     >
-      <span className={`font-mono leading-snug ${large ? 'text-base font-bold' : 'text-sm font-semibold'}`}>
+      <span className={`font-mono leading-snug ${large ? 'text-lg font-bold' : 'text-base font-semibold'}`}>
         {displayValue || placeholder}
       </span>
       {error && <span className="text-[8px] text-red-500 ml-0.5">!</span>}
@@ -206,7 +208,7 @@ function InlineEdit({
 /* ============================================================ */
 /*  FL / ft toggle                                                */
 /* ============================================================ */
-function FlUnitToggle({ planId, unit }: { planId: string; unit: string | null; onSaved?: () => void }) {
+function FlUnitToggle({ planId, unit, onSaved }: { planId: string; unit: string | null; onSaved?: () => void }) {
   const [current, setCurrent] = useState(unit || 'FL');
   const toggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -217,7 +219,9 @@ function FlUnitToggle({ planId, unit }: { planId: string; unit: string | null; o
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update_strip', strip_fl_unit: next }),
       });
-      if (!res.ok) {
+      if (res.ok) {
+        onSaved?.();
+      } else {
         console.error('FlUnitToggle save error');
         setCurrent(current); // Revert on error
       }
@@ -382,7 +386,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
                 isDark ? 'bg-slate-800 border-sky-500 text-slate-100' : 'bg-white border-sky-400 text-slate-900'
               }`}
             >
-              <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>Intentions de vol</div>
+              <div className={`text-xs font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>Intentions de vol</div>
               <p className="text-sm font-mono font-semibold leading-relaxed break-words whitespace-pre-wrap">{strip.intentions_vol}</p>
             </div>
           );
@@ -447,7 +451,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
                 isDark ? 'bg-slate-800 border-amber-500 text-slate-100' : 'bg-white border-amber-400 text-slate-900'
               }`}
             >
-              <div className={`text-[10px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>Note d&apos;attention du pilote</div>
+              <div className={`text-xs font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>Note d&apos;attention du pilote</div>
               <p className="text-base font-medium leading-relaxed break-words whitespace-pre-wrap">{strip.instructions_atc}</p>
             </div>
           );
@@ -491,7 +495,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
                           ? (isDark ? 'bg-amber-900/50 border border-amber-700/40 text-amber-100' : 'bg-amber-50 border border-amber-200 text-amber-900')
                           : (isDark ? 'bg-sky-900/50 border border-sky-700/40 text-sky-100' : 'bg-sky-50 border border-sky-200 text-sky-900')
                       }`}>
-                        <span className={`text-[10px] font-bold block mb-0.5 ${
+                        <span className={`text-xs font-bold block mb-0.5 ${
                           msg.role === 'bria' ? (isDark ? 'text-amber-400' : 'text-amber-600') : (isDark ? 'text-sky-400' : 'text-sky-600')
                         }`}>{msg.role === 'bria' ? 'BRIA' : 'Pilote'}</span>
                         {msg.text}
@@ -520,10 +524,10 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
 }
 
 /* ============================================================ */
-/*  Cellule du strip (wrapper simplifié)                          */
+/*  Cellule du strip (wrapper simplifié) — padding augmenté pour lisibilité */
 /* ============================================================ */
 function Cell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`px-1.5 py-1 ${className}`}>{children}</div>;
+  return <div className={`px-2 py-1.5 ${className}`}>{children}</div>;
 }
 
 /* ============================================================ */
@@ -601,11 +605,11 @@ export default function FlightStrip({
   // Color scheme - Mode sombre (couleurs inversées avec meilleur contraste)
   const darkBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-500' : sqColor === 'radio' ? 'border-amber-500' : 'border-red-500') : isClotureRequested ? 'border-red-500' : isManual ? 'border-indigo-600' : 'border-emerald-600';
   const darkLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-950' : sqColor === 'radio' ? 'bg-amber-950' : 'bg-red-950') : isClotureRequested ? 'bg-red-950' : isManual ? 'bg-indigo-950' : 'bg-emerald-950';
-  const darkRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : isClotureRequested ? 'bg-red-900' : isManual ? 'bg-violet-950' : 'bg-yellow-950';
+  const darkRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : isClotureRequested ? 'bg-red-900' : isManual ? 'bg-indigo-800' : 'bg-amber-900';
   const darkTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : isClotureRequested ? 'bg-red-900' : isManual ? 'bg-indigo-900' : 'bg-emerald-900';
   const darkSep = isEmergency ? 'border-red-700' : isClotureRequested ? 'border-red-700' : isManual ? 'border-indigo-700' : 'border-emerald-700';
   const darkTxt = 'text-slate-100';
-  const darkLbl = 'text-slate-300';
+  const darkLbl = 'text-slate-200';
 
   // Appliquer le bon thème
   const border = isDark ? darkBorder : lightBorder;
@@ -655,11 +659,11 @@ export default function FlightStrip({
             {/* ROW 1 */}
             <div className={`flex ${topBg} border-b ${sep}`}>
               <Cell className={`w-[70px] border-r ${sep}`}>
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>ATD</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>ATD</div>
                 <InlineEdit value={strip.strip_atd} field="strip_atd" planId={strip.id} placeholder="14h24 ou 1424" onSaved={onRefresh} maxLength={5} large />
               </Cell>
               <Cell className={`w-[100px] border-r ${sep}`}>
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>TYPE/W</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>TYPE/W</div>
                 {isManual ? (
                   <InlineEdit value={strip.strip_type_wake} field="strip_type_wake" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={10} large />
                 ) : (
@@ -669,25 +673,25 @@ export default function FlightStrip({
               <Cell className={`w-[50px] border-r ${sep} text-center`}>
                 {isManual ? (
                   <>
-                    <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>TYPE</div>
+                    <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>TYPE</div>
                     <InlineEdit value={strip.type_vol} field="type_vol" planId={strip.id} placeholder="VFR" onSaved={onRefresh} maxLength={3} />
                   </>
                 ) : (
                   <>
-                    <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>{strip.type_vol}</div>
+                    <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>{strip.type_vol}</div>
                     <span className={`text-sm font-mono font-bold ${txt}`}>1</span>
                   </>
                 )}
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>NOTE</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>NOTE</div>
                 <InlineEdit value={strip.strip_note_1} field="strip_note_1" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={20} />
               </Cell>
             </div>
             {/* ROW 2 */}
             <div className={`flex ${leftBg} border-b ${sep}`}>
               <Cell className={`w-[70px] border-r ${sep}`}>
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>ADES</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>ADES</div>
                 {isManual ? (
                   <InlineEdit value={strip.aeroport_arrivee} field="aeroport_arrivee" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={4} large />
                 ) : (
@@ -695,20 +699,20 @@ export default function FlightStrip({
                 )}
               </Cell>
               <Cell className={`w-[150px] border-r ${sep}`}>
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>CALLSIGN</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>CALLSIGN</div>
                 {isManual ? (
                   <InlineEdit value={strip.numero_vol} field="numero_vol" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={10} large />
                 ) : (
                   <div className="flex flex-col">
                     <span className={`text-xl font-mono font-black tracking-wide ${txt} leading-tight`}>{strip.numero_vol}</span>
                     {strip.callsign_telephonie && (
-                      <span className={`text-[9px] font-semibold ${lbl} leading-tight mt-0.5 tracking-wider`}>{strip.callsign_telephonie}</span>
+                      <span className={`text-[11px] font-semibold ${lbl} leading-tight mt-0.5 tracking-wider`}>{strip.callsign_telephonie}</span>
                     )}
                   </div>
                 )}
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>ADEP</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>ADEP</div>
                 <div className="flex flex-col gap-0.5">
                   {isManual ? (
                     <InlineEdit value={strip.aeroport_depart} field="aeroport_depart" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={4} large />
@@ -722,15 +726,15 @@ export default function FlightStrip({
             {/* ROW 3 */}
             <div className={`flex ${leftBg}`}>
               <Cell className={`w-[70px] border-r ${sep}`}>
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>RWY</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>RWY</div>
                 <InlineEdit value={strip.strip_rwy} field="strip_rwy" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
               </Cell>
               <Cell className={`w-[100px] border-r ${sep}`}>
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>CTOT</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>CTOT</div>
                 <span className={`text-base font-mono font-bold ${txt}`}>{formatCtot(strip.created_at)}</span>
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>TAIL</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>TAIL</div>
                 <span className={`text-base font-mono font-bold ${txt}`}>{strip.immatriculation || '—'}</span>
               </Cell>
             </div>
@@ -745,29 +749,29 @@ export default function FlightStrip({
             {/* ROW 1 */}
             <div className={`flex border-b ${sep}`}>
               <Cell className={`w-[90px] border-r ${sep}`}>
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>SQUAWK</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>SQUAWK</div>
                 <span className={`text-base font-mono font-black ${txt}`}>{strip.code_transpondeur || '—'}</span>
               </Cell>
               <Cell className={`w-[90px] border-r ${sep}`}>
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>CLR REV</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>CLR REV</div>
                 <InlineEdit value={strip.strip_note_2} field="strip_note_2" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={20} />
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>INFO</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>INFO</div>
                 <InlineEdit value={strip.strip_note_3} field="strip_note_3" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={30} />
               </Cell>
             </div>
             {/* ROW 2 */}
             <div className={`flex border-b ${sep}`}>
               <Cell className={`w-[90px] border-r ${sep}`}>
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>SID/STAR</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>SID/STAR</div>
                 <div className="flex flex-col gap-0.5">
                   <InlineEdit value={strip.strip_sid_atc || strip.sid_depart} field="strip_sid_atc" planId={strip.id} placeholder="SID" onSaved={onRefresh} maxLength={15} large />
                   <InlineEdit value={strip.strip_star || strip.star_arrivee} field="strip_star" planId={strip.id} placeholder="STAR" onSaved={onRefresh} maxLength={15} large />
                 </div>
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>ROUTE</div>
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>ROUTE</div>
                 <InlineEdit value={strip.strip_route || strip.route_ifr} field="strip_route" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={40} large />
               </Cell>
             </div>
@@ -776,18 +780,18 @@ export default function FlightStrip({
               <Cell className={`w-[90px] border-r ${sep}`}>
                 <div className="flex items-center gap-1 mb-0.5">
                   <FlUnitToggle planId={strip.id} unit={strip.strip_fl_unit} onSaved={onRefresh} />
-                  <span className={`text-[10px] ${lbl} font-semibold`}>ALT</span>
+                  <span className={`text-xs ${lbl} font-semibold`}>ALT</span>
                 </div>
                 <InlineEdit value={strip.strip_fl} field="strip_fl" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-[10px] ${lbl} leading-none font-semibold mb-0.5`}>STATUT</div>
-                <span className={`text-xs font-bold uppercase ${
-                  strip.statut === 'en_cours' ? 'text-sky-700' :
-                  strip.statut === 'en_attente_cloture' ? 'text-orange-700' :
-                  strip.statut === 'accepte' ? 'text-emerald-700' :
-                  (strip.statut === 'depose' || strip.statut === 'en_attente') ? 'text-amber-700' : 
-                  strip.statut === 'automonitoring' ? 'text-purple-700' : txt
+                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>STATUT</div>
+                <span className={`text-sm font-bold uppercase ${
+                  strip.statut === 'en_cours' ? (isDark ? 'text-sky-300' : 'text-sky-700') :
+                  strip.statut === 'en_attente_cloture' ? (isDark ? 'text-orange-300' : 'text-orange-700') :
+                  strip.statut === 'accepte' ? (isDark ? 'text-emerald-300' : 'text-emerald-700') :
+                  (strip.statut === 'depose' || strip.statut === 'en_attente') ? (isDark ? 'text-amber-300' : 'text-amber-700') : 
+                  strip.statut === 'automonitoring' ? (isDark ? 'text-purple-300' : 'text-purple-700') : txt
                 }`}>
                   {strip.statut === 'en_cours' ? 'EN VOL' :
                    strip.statut === 'en_attente_cloture' ? 'CLÔTURE' :
