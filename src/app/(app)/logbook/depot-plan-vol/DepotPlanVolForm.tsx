@@ -110,6 +110,14 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const [error, setError] = useState<string | null>(null);
   const [showBria, setShowBria] = useState(false);
 
+  // SID/STAR depuis la base admin (pour remplir strip_route)
+  const [sidList, setSidList] = useState<{ id: string; nom: string; route: string }[]>([]);
+  const [starList, setStarList] = useState<{ id: string; nom: string; route: string }[]>([]);
+  const [selectedSidRoute, setSelectedSidRoute] = useState<string | null>(null);
+  const [selectedStarRoute, setSelectedStarRoute] = useState<string | null>(null);
+  const [sidCustomMode, setSidCustomMode] = useState(false);
+  const [starCustomMode, setStarCustomMode] = useState(false);
+
   // Get selected company
   const selectedCompagnie = compagniesDisponibles.find(c => c.id === selectedCompagnieId) || null;
   
@@ -161,6 +169,44 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       setCompagnieAvionId('');
     }
   }, [aeroport_depart, avionsCompagnie, compagnie_avion_id]);
+
+  // Charger les SID quand aéroport de départ change (IFR)
+  useEffect(() => {
+    if (!aeroport_depart || type_vol !== 'IFR') {
+      setSidList([]);
+      setSelectedSidRoute(null);
+      return;
+    }
+    fetch(`/api/sid-star?aeroport=${encodeURIComponent(aeroport_depart)}&type=SID`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setSidList(data);
+        else setSidList([]);
+      })
+      .catch(() => setSidList([]));
+    setSidDepart('');
+    setSelectedSidRoute(null);
+    setSidCustomMode(false);
+  }, [aeroport_depart, type_vol]);
+
+  // Charger les STAR quand aéroport d'arrivée change (IFR)
+  useEffect(() => {
+    if (!aeroport_arrivee || type_vol !== 'IFR') {
+      setStarList([]);
+      setSelectedStarRoute(null);
+      return;
+    }
+    fetch(`/api/sid-star?aeroport=${encodeURIComponent(aeroport_arrivee)}&type=STAR`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setStarList(data);
+        else setStarList([]);
+      })
+      .catch(() => setStarList([]));
+    setStarArrivee('');
+    setSelectedStarRoute(null);
+    setStarCustomMode(false);
+  }, [aeroport_arrivee, type_vol]);
 
   // Charger les tarifs par liaison quand la compagnie change
   useEffect(() => {
@@ -385,7 +431,11 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       sid_depart: type_vol === 'IFR' ? sid_depart.trim() : undefined,
       star_arrivee: type_vol === 'IFR' ? star_arrivee.trim() : undefined,
       route_ifr: type_vol === 'IFR' && route_ifr.trim() ? route_ifr.trim() : undefined,
-      strip_route: quoi_ciel.trim() ? quoi_ciel.trim() : undefined,
+      strip_route: type_vol === 'IFR' && (selectedSidRoute || selectedStarRoute)
+        ? [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' ')
+        : quoi_ciel.trim()
+          ? quoi_ciel.trim()
+          : undefined,
       note_atc: !volSansAtc && note_atc.trim() ? note_atc.trim() : undefined,
       vol_commercial: vol_commercial && !vol_ferry,
       compagnie_id: (vol_commercial || vol_ferry) && selectedCompagnieId ? selectedCompagnieId : undefined,
@@ -922,18 +972,20 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           </label>
         </div>
       </div>
-      <div>
-        <label className="label">Vous allez faire quoi dans le ciel ?</label>
-        <input
-          type="text"
-          className="input"
-          value={quoi_ciel}
-          onChange={(e) => setQuoiCiel(e.target.value)}
-          placeholder="Ex: Vol local, transit TFFJ–TNCM, entraînement..."
-          maxLength={80}
-        />
-        <p className="text-xs text-slate-500 mt-1">Cette réponse sera affichée dans la case route du strip ATC.</p>
-      </div>
+      {type_vol === 'VFR' && (
+        <div>
+          <label className="label">Vous allez faire quoi dans le ciel ?</label>
+          <input
+            type="text"
+            className="input"
+            value={quoi_ciel}
+            onChange={(e) => setQuoiCiel(e.target.value)}
+            placeholder="Ex: Vol local, transit TFFJ–TNCM, entraînement..."
+            maxLength={80}
+          />
+          <p className="text-xs text-slate-500 mt-1">Cette réponse sera affichée dans la case route du strip ATC.</p>
+        </div>
+      )}
       {type_vol === 'VFR' && (
         <div>
           <label className="label">Intentions de vol *</label>
@@ -945,11 +997,103 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">SID de départ *</label>
-              <input type="text" className="input" value={sid_depart} onChange={(e) => setSidDepart(e.target.value)} required />
+              {sidList.length > 0 ? (
+                <>
+                  <select
+                    className="input"
+                    value={sidCustomMode ? '__custom__' : (sidList.some((s) => s.nom === sid_depart) ? sid_depart : '')}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '__custom__') {
+                        setSidDepart('');
+                        setSelectedSidRoute(null);
+                        setSidCustomMode(true);
+                      } else if (v) {
+                        const proc = sidList.find((s) => s.nom === v);
+                        setSidDepart(v);
+                        setSelectedSidRoute(proc?.route ?? null);
+                        setSidCustomMode(false);
+                      } else {
+                        setSidDepart('');
+                        setSelectedSidRoute(null);
+                        setSidCustomMode(false);
+                      }
+                    }}
+                    required={!sidCustomMode}
+                  >
+                    <option value="">— Choisir —</option>
+                    {sidList.map((s) => (
+                      <option key={s.id} value={s.nom}>{s.nom}</option>
+                    ))}
+                    <option value="__custom__">Autre (saisie libre)</option>
+                  </select>
+                  {sidCustomMode && (
+                    <input
+                      type="text"
+                      className="input mt-2"
+                      value={sid_depart}
+                      onChange={(e) => { setSidDepart(e.target.value); setSelectedSidRoute(null); }}
+                      placeholder="Nom de la SID"
+                      required
+                    />
+                  )}
+                  {!sidCustomMode && sidList.some((s) => s.nom === sid_depart) && selectedSidRoute && (
+                    <p className="text-xs text-emerald-400/80 mt-1">Route : {selectedSidRoute}</p>
+                  )}
+                </>
+              ) : (
+                <input type="text" className="input" value={sid_depart} onChange={(e) => { setSidDepart(e.target.value); setSelectedSidRoute(null); }} required />
+              )}
             </div>
             <div>
               <label className="label">STAR d&apos;arrivée *</label>
-              <input type="text" className="input" value={star_arrivee} onChange={(e) => setStarArrivee(e.target.value)} required />
+              {starList.length > 0 ? (
+                <>
+                  <select
+                    className="input"
+                    value={starCustomMode ? '__custom__' : (starList.some((s) => s.nom === star_arrivee) ? star_arrivee : '')}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '__custom__') {
+                        setStarArrivee('');
+                        setSelectedStarRoute(null);
+                        setStarCustomMode(true);
+                      } else if (v) {
+                        const proc = starList.find((s) => s.nom === v);
+                        setStarArrivee(v);
+                        setSelectedStarRoute(proc?.route ?? null);
+                        setStarCustomMode(false);
+                      } else {
+                        setStarArrivee('');
+                        setSelectedStarRoute(null);
+                        setStarCustomMode(false);
+                      }
+                    }}
+                    required={!starCustomMode}
+                  >
+                    <option value="">— Choisir —</option>
+                    {starList.map((s) => (
+                      <option key={s.id} value={s.nom}>{s.nom}</option>
+                    ))}
+                    <option value="__custom__">Autre (saisie libre)</option>
+                  </select>
+                  {starCustomMode && (
+                    <input
+                      type="text"
+                      className="input mt-2"
+                      value={star_arrivee}
+                      onChange={(e) => { setStarArrivee(e.target.value); setSelectedStarRoute(null); }}
+                      placeholder="Nom de la STAR"
+                      required
+                    />
+                  )}
+                  {!starCustomMode && starList.some((s) => s.nom === star_arrivee) && selectedStarRoute && (
+                    <p className="text-xs text-emerald-400/80 mt-1">Route : {selectedStarRoute}</p>
+                  )}
+                </>
+              ) : (
+                <input type="text" className="input" value={star_arrivee} onChange={(e) => { setStarArrivee(e.target.value); setSelectedStarRoute(null); }} required />
+              )}
             </div>
           </div>
           <div>
@@ -960,6 +1104,9 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
               onChange={(e) => setRouteIfr(e.target.value)} 
               placeholder="DCT PUNTO DCT MARUK DCT..."
             />
+            <p className="text-xs text-slate-500 mt-1">
+              {(selectedSidRoute || selectedStarRoute) ? 'La case route du strip sera remplie automatiquement avec les points SID/STAR sélectionnés.' : 'Si SID/STAR sont choisis dans la liste, la route du strip est remplie automatiquement.'}
+            </p>
           </div>
         </>
       )}

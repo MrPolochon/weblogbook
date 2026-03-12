@@ -838,7 +838,25 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       payload.note_atc = noteAtc;
     }
 
-    if (ctx.quoi_ciel?.trim()) {
+    // strip_route : si IFR, chercher SID/STAR en base. Si trouvé → utiliser la route ; sinon → garder le texte entré
+    if (ctx.type_vol === 'IFR' && ctx.sid_depart && ctx.star_arrivee && ctx.aeroport_depart && ctx.aeroport_arrivee) {
+      try {
+        const [sidRes, starRes] = await Promise.all([
+          fetch(`/api/sid-star?aeroport=${encodeURIComponent(ctx.aeroport_depart)}&type=SID`),
+          fetch(`/api/sid-star?aeroport=${encodeURIComponent(ctx.aeroport_arrivee)}&type=STAR`),
+        ]);
+        const sidList = await sidRes.json();
+        const starList = await starRes.json();
+        const sidProc = Array.isArray(sidList) && sidList.find((s: { nom: string }) => String(s.nom).toUpperCase() === String(ctx.sid_depart).toUpperCase());
+        const starProc = Array.isArray(starList) && starList.find((s: { nom: string }) => String(s.nom).toUpperCase() === String(ctx.star_arrivee).toUpperCase());
+        const sidPart = sidProc?.route ? sidProc.route : ctx.sid_depart.trim();
+        const starPart = starProc?.route ? starProc.route : ctx.star_arrivee.trim();
+        payload.strip_route = [sidPart, starPart].filter(Boolean).join(' ');
+      } catch {
+        payload.strip_route = [ctx.sid_depart.trim(), ctx.star_arrivee.trim()].filter(Boolean).join(' ');
+      }
+    }
+    if (!payload.strip_route && ctx.quoi_ciel?.trim()) {
       payload.strip_route = ctx.quoi_ciel.trim();
     }
 
