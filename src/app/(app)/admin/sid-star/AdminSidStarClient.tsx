@@ -117,7 +117,19 @@ export default function AdminSidStarClient() {
     return { key, aeroport, typeProc, family, items };
   });
 
-  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set(groupEntries.map(g => g.key)));
+  const [expandedFamilies, setExpandedFamilies] = useState<Set<string>>(new Set());
+
+  // Ouvrir toutes les familles quand les données sont chargées (sinon restent fermées car procedures vide au 1er rendu)
+  const groupKeysStr = groupEntries.map((g) => g.key).sort().join(',');
+  useEffect(() => {
+    if (groupEntries.length > 0) {
+      setExpandedFamilies((prev) => {
+        const keys = new Set(groupEntries.map((g) => g.key));
+        if (prev.size === 0) return keys;
+        return new Set([...prev, ...keys]);
+      });
+    }
+  }, [groupKeysStr]);
 
   function toggleFamily(key: string) {
     setExpandedFamilies(prev => {
