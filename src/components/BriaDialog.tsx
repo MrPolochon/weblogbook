@@ -47,6 +47,7 @@ type StepId =
   | 'sid' | 'confirm_sid' | 'star' | 'confirm_star'
   | 'altitude' | 'confirm_altitude'
   | 'numero_vol' | 'confirm_numero'
+  | 'quoi_ciel'
   | 'resume' | 'submitting' | 'done' | 'error';
 
 interface BriaState {
@@ -67,6 +68,7 @@ interface BriaState {
   star_arrivee: string;
   altitude_croisiere: string;
   numero_vol: string;
+  quoi_ciel: string;
 }
 
 const INITIAL_STATE: BriaState = {
@@ -75,6 +77,7 @@ const INITIAL_STATE: BriaState = {
   temps_prev_min: '', autonomie: '', nb_personnes: '',
   vol_commercial: false, vol_ferry: false, nature_transport: 'passagers',
   sid_depart: '', star_arrivee: '', altitude_croisiere: '', numero_vol: '',
+  quoi_ciel: '',
 };
 
 // ─── TTS helper ───
@@ -643,8 +646,8 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         setCtx(prev => ({ ...prev, nb_personnes: v }));
         await addBria(`${v} personne${parseInt(v) > 1 ? 's' : ''} à bord, bien reçu.`);
         if (ctx.mode === 'intention') {
-          setStep('resume');
-          await showResume();
+          await addBria("Vous allez faire quoi dans le ciel ?");
+          setStep('quoi_ciel');
         } else {
           if (ctx.type_vol === 'IFR') {
             await addBria(`Quelle est la SID de départ depuis ${getAeroportNom(ctx.aeroport_depart)} ?`);
@@ -688,6 +691,15 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         addPilote(v);
         setCtx(prev => ({ ...prev, numero_vol: v.toUpperCase() }));
         await addBria(`Indicatif ${v.toUpperCase()}, bien reçu.`);
+        await addBria("Vous allez faire quoi dans le ciel ?");
+        setStep('quoi_ciel');
+        break;
+      }
+
+      case 'quoi_ciel': {
+        addPilote(v);
+        setCtx(prev => ({ ...prev, quoi_ciel: v.trim() }));
+        await addBria(`${v.trim()}, bien reçu.`);
         setStep('resume');
         await showResume();
         break;
@@ -721,6 +733,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     } else {
       lines.push(`Autonomie : ${ctx.autonomie} min`);
     }
+    if (ctx.quoi_ciel) lines.push(`Route (strip) : ${ctx.quoi_ciel}`);
 
     let nbPax = 0;
     let cargoKg = 0;
@@ -823,6 +836,10 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     }
     if (ctx.type_vol === 'VFR' && ctx.aircraft?.source === 'compagnie') {
       payload.note_atc = noteAtc;
+    }
+
+    if (ctx.quoi_ciel?.trim()) {
+      payload.strip_route = ctx.quoi_ciel.trim();
     }
 
     if (ctx.aircraft?.source === 'compagnie') {
@@ -1128,6 +1145,7 @@ function getPlaceholder(step: StepId): string {
     case 'star': return 'Ex: ARRIVA2B';
     case 'altitude': return 'Ex: FL350 ou 3500ft';
     case 'numero_vol': return 'Ex: AFR1234';
+    case 'quoi_ciel': return 'Ex: Vol local, transit TFFJ–TNCM...';
     default: return '';
   }
 }
