@@ -102,6 +102,9 @@ export async function POST(request: Request) {
       sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,
       star_arrivee: type_vol === 'IFR' ? String(star_arrivee).trim() : null,
       route_ifr: (type_vol === 'IFR' && route_ifr) ? String(route_ifr).trim() : null,
+      strip_sid_atc: type_vol === 'IFR' && sid_depart ? String(sid_depart).trim() : null,
+      strip_star: type_vol === 'IFR' && star_arrivee ? String(star_arrivee).trim() : null,
+      strip_route: (type_vol === 'IFR' && route_ifr) ? String(route_ifr).trim() : null,
       note_atc: note_atc ? String(note_atc).trim() : null,
       statut: 'accepte', // Directement accepté car créé par l'ATC
       accepted_at: new Date().toISOString(),
