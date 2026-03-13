@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { ArrowLeft, Landmark, User, Building2, Shield } from 'lucide-react';
+import { ArrowLeft, Landmark, User, Building2, Shield, Users, Wrench } from 'lucide-react';
 import Link from 'next/link';
 import AdminFelitzClient from './AdminFelitzClient';
 
@@ -21,10 +21,22 @@ export default async function AdminFelitzBankPage() {
     .eq('type', 'personnel')
     .order('solde', { ascending: false });
 
-  // Comptes entreprises
+  // Comptes entreprises (compagnies aériennes)
   const { data: comptesEntreprise } = await admin.from('felitz_comptes')
     .select('*, compagnies(nom)')
     .eq('type', 'entreprise')
+    .order('solde', { ascending: false });
+
+  // Comptes alliances
+  const { data: comptesAlliance } = await admin.from('felitz_comptes')
+    .select('*, alliances(nom)')
+    .eq('type', 'alliance')
+    .order('solde', { ascending: false });
+
+  // Comptes entreprises de réparation
+  const { data: comptesReparation } = await admin.from('felitz_comptes')
+    .select('*, entreprises_reparation(nom)')
+    .eq('type', 'reparation')
     .order('solde', { ascending: false });
 
   // Compte militaire
@@ -113,6 +125,52 @@ export default async function AdminFelitzBankPage() {
                   compte={compte}
                   label={(compagnieObj as { nom: string } | null)?.nom || 'Compagnie'}
                   type="entreprise"
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Comptes alliances */}
+        <div className="card border-violet-500/30">
+          <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+            <Users className="h-5 w-5 text-violet-400" />
+            Comptes alliances ({comptesAlliance?.length || 0})
+          </h2>
+          
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {(comptesAlliance || []).map((compte) => {
+              const alliancesData = compte.alliances;
+              const allianceObj = alliancesData ? (Array.isArray(alliancesData) ? alliancesData[0] : alliancesData) : null;
+              return (
+                <AdminFelitzClient 
+                  key={compte.id}
+                  compte={compte}
+                  label={(allianceObj as { nom: string } | null)?.nom || 'Alliance'}
+                  type="alliance"
+                />
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Comptes entreprises de réparation */}
+        <div className="card border-orange-500/30">
+          <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+            <Wrench className="h-5 w-5 text-orange-400" />
+            Comptes réparation ({comptesReparation?.length || 0})
+          </h2>
+          
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {(comptesReparation || []).map((compte) => {
+              const reparData = compte.entreprises_reparation;
+              const reparObj = reparData ? (Array.isArray(reparData) ? reparData[0] : reparData) : null;
+              return (
+                <AdminFelitzClient 
+                  key={compte.id}
+                  compte={compte}
+                  label={(reparObj as { nom: string } | null)?.nom || 'Réparation'}
+                  type="reparation"
                 />
               );
             })}

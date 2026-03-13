@@ -23,7 +23,7 @@ interface Transaction {
 interface Props {
   compte: Compte;
   label: string;
-  type: 'personnel' | 'entreprise' | 'militaire';
+  type: 'personnel' | 'entreprise' | 'militaire' | 'alliance' | 'reparation';
 }
 
 export default function AdminFelitzClient({ compte, label, type }: Props) {
@@ -97,8 +97,8 @@ export default function AdminFelitzClient({ compte, label, type }: Props) {
     }
   }
 
-  const borderColor = type === 'militaire' ? 'border-red-500/30' : type === 'entreprise' ? 'border-sky-500/30' : 'border-emerald-500/30';
-  const accentClass = type === 'militaire' ? 'text-red-300' : type === 'entreprise' ? 'text-sky-300' : 'text-emerald-300';
+  const borderColor = type === 'militaire' ? 'border-red-500/30' : type === 'entreprise' ? 'border-sky-500/30' : type === 'alliance' ? 'border-violet-500/30' : type === 'reparation' ? 'border-orange-500/30' : 'border-emerald-500/30';
+  const accentClass = type === 'militaire' ? 'text-red-300' : type === 'entreprise' ? 'text-sky-300' : type === 'alliance' ? 'text-violet-300' : type === 'reparation' ? 'text-orange-300' : 'text-emerald-300';
 
   function formatDate(dateStr: string) {
     return toLocaleDateStringUTC(dateStr, {
