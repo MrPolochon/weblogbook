@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       const { data: ent } = await admin.from('entreprises_reparation')
         .select('pdg_id')
         .eq('id', compte.entreprise_reparation_id).single();
-      isReparationPdg = ent && String(ent.pdg_id) === String(user.id);
+      isReparationPdg = !!(ent && String(ent.pdg_id) === String(user.id));
     }
 
     if (!isAdmin && !isOwner && !isPdg && !isAllianceLeader && !isReparationPdg) {
