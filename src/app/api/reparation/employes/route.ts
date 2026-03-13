@@ -20,8 +20,8 @@ export async function POST(req: Request) {
   const isPdg = ent && String(ent.pdg_id) === String(user.id);
   if (!ent || (!isPdg && !isAdmin)) return NextResponse.json({ error: 'Seul le PDG peut embaucher' }, { status: 403 });
 
-  const { data: profile } = await admin.from('profiles').select('id').eq('id', user_id).single();
-  if (!profile) return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 });
+  const { data: targetProfile } = await admin.from('profiles').select('id').eq('id', user_id).single();
+  if (!targetProfile) return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 });
 
   const { error } = await admin.from('reparation_employes').insert({
     entreprise_id,
