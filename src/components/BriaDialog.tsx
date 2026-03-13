@@ -87,18 +87,33 @@ function textePourTTS(text: string): string {
   return text.replace(/F\$/g, 'Félitz Dollards').replace(/F\$\/kg/g, 'Félitz Dollards par kg');
 }
 
+const SPEECH_TIMEOUT_MS = 12000; // Timeout si la synthèse vocale ne répond pas (mobile Safari, etc.)
+
 function speakAndWait(text: string): Promise<void> {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return Promise.resolve();
   speechSynthesis.cancel();
   const toSpeak = textePourTTS(text);
   return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timeout);
+      speechSynthesis.cancel();
+      resolve();
+    };
+    const timeout = setTimeout(finish, SPEECH_TIMEOUT_MS);
     const u = new SpeechSynthesisUtterance(toSpeak);
     u.lang = 'fr-FR';
     u.rate = 0.9;
     u.volume = 0.8;
-    u.onend = () => resolve();
-    u.onerror = () => resolve();
-    speechSynthesis.speak(u);
+    u.onend = finish;
+    u.onerror = finish;
+    try {
+      speechSynthesis.speak(u);
+    } catch {
+      finish();
+    }
   });
 }
 
