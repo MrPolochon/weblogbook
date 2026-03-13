@@ -89,13 +89,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
           (rows || []).forEach((r: Record<string, string>) => { if (r[col]) vbanByUuid[r[col]] = r.vban; });
         }
       }
-      transactions_alliance = raw.map((t: { libelle?: string | null; [k: string]: unknown }) => {
+      transactions_alliance = raw.map((t: { id: string; type: string; montant: number; libelle?: string | null; created_at: string }) => {
         let libelle = t.libelle || '';
         for (const [uuid, vban] of Object.entries(vbanByUuid)) {
           const escaped = uuid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           libelle = libelle.replace(new RegExp(escaped, 'gi'), vban);
         }
-        return { ...t, libelle };
+        return { id: t.id, type: t.type, montant: t.montant, libelle, created_at: t.created_at };
       });
     }
   }
