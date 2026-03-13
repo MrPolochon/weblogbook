@@ -14,6 +14,7 @@ interface Entreprise {
   created_at: string;
   nb_employes: number;
   nb_hangars: number;
+  vban?: string | null;
 }
 
 interface User {
@@ -151,6 +152,7 @@ export default function AdminReparationClient({ entreprises: initial, users }: {
                     <span className="flex items-center gap-1"><Users className="h-3 w-3" />PDG : {e.pdg_callsign}</span>
                     <span>{e.nb_employes} employé{e.nb_employes > 1 ? 's' : ''}</span>
                     <span className="flex items-center gap-1"><Warehouse className="h-3 w-3" />{e.nb_hangars} hangar{e.nb_hangars > 1 ? 's' : ''}</span>
+                    {e.vban && <span className="font-mono">VBAN: {e.vban}</span>}
                     {e.description && <span>— {e.description}</span>}
                     <span>{new Date(e.created_at).toLocaleDateString('fr-FR')}</span>
                   </div>

@@ -72,7 +72,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         .eq('compte_id', fc.id)
         .order('created_at', { ascending: false })
         .limit(50);
-      transactions_alliance = tx || [];
+      const raw = tx || [];
+      const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+      const toResolve = new Set<string>();
+      raw.forEach((t: { libelle?: string | null }) => {
+        (t.libelle || '').match(UUID_REGEX)?.forEach(u => toResolve.add(u));
+      });
+      const vbanByUuid: Record<string, string> = {};
+      if (toResolve.size > 0) {
+        const ids = [...toResolve];
+        const { data: byId } = await admin.from('felitz_comptes').select('id, vban').in('id', ids);
+        (byId || []).forEach((r: Record<string, string>) => { if (r.id) vbanByUuid[r.id] = r.vban; });
+        const cols = ['compagnie_id', 'proprietaire_id', 'alliance_id', 'entreprise_reparation_id'] as const;
+        for (const col of cols) {
+          const { data: rows } = await admin.from('felitz_comptes').select(`${col}, vban`).in(col, ids);
+          (rows || []).forEach((r: Record<string, string>) => { if (r[col]) vbanByUuid[r[col]] = r.vban; });
+        }
+      }
+      transactions_alliance = raw.map((t: { libelle?: string | null; [k: string]: unknown }) => {
+        let libelle = t.libelle || '';
+        for (const [uuid, vban] of Object.entries(vbanByUuid)) libelle = libelle.split(uuid).join(vban);
+        return { ...t, libelle };
+      });
     }
   }
 

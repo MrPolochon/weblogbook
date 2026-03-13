@@ -321,7 +321,7 @@ export default function ReparationClient({ userId }: { userId: string }) {
         {detail.compte && (
           <div className="text-right">
             <p className="text-lg font-bold text-emerald-400">{detail.compte.solde.toLocaleString('fr-FR')} F$</p>
-            <p className="text-xs text-slate-500">{detail.compte.vban}</p>
+            <p className="text-xs text-slate-500 font-mono">VBAN: {detail.compte.vban}</p>
           </div>
         )}
       </div>

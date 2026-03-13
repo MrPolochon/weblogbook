@@ -4,6 +4,37 @@ import { redirect } from 'next/navigation';
 import { Landmark, Building2, Shield } from 'lucide-react';
 import FelitzBankClient from './FelitzBankClient';
 
+type TxRow = { libelle?: string | null; [k: string]: unknown };
+
+async function enrichTransactionsWithVban<T extends TxRow>(
+  admin: ReturnType<typeof createAdminClient>,
+  raw: T[]
+): Promise<T[]> {
+  const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+  const toResolve = new Set<string>();
+  raw.forEach((t) => {
+    (t.libelle || '').match(UUID_REGEX)?.forEach((u) => toResolve.add(u));
+  });
+  const vbanByUuid: Record<string, string> = {};
+  if (toResolve.size > 0) {
+    const ids = [...toResolve];
+    const { data: byId } = await admin.from('felitz_comptes').select('id, vban').in('id', ids);
+    (byId || []).forEach((r: Record<string, string>) => { if (r.id) vbanByUuid[r.id] = r.vban; });
+    const cols = ['compagnie_id', 'proprietaire_id', 'alliance_id', 'entreprise_reparation_id'] as const;
+    for (const col of cols) {
+      const { data: rows } = await admin.from('felitz_comptes').select(`${col}, vban`).in(col, ids);
+      (rows || []).forEach((r: Record<string, string>) => {
+        if (r[col]) vbanByUuid[r[col]] = r.vban;
+      });
+    }
+  }
+  return raw.map((t) => {
+    let libelle = t.libelle || '';
+    for (const [uuid, vban] of Object.entries(vbanByUuid)) libelle = libelle.split(uuid).join(vban);
+    return { ...t, libelle };
+  });
+}
+
 export default async function FelitzBankPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -48,19 +79,27 @@ export default async function FelitzBankPage() {
       .order('created_at', { ascending: false })
       .limit(1000);
 
-    (data || []).forEach((t: Record<string, unknown>) => {
+    const allTx = (data || []).map((t: Record<string, unknown>) => ({
+      id: t.id as string,
+      type: t.type as string,
+      montant: t.montant as number,
+      libelle: t.libelle as string,
+      description: (t.description as string | null) ?? null,
+      created_at: t.created_at as string,
+      compte_id: t.compte_id as string,
+    }));
+    const enriched = await enrichTransactionsWithVban(admin, allTx);
+    enriched.forEach((t) => {
       const cid = t.compte_id as string;
-      if (!transactionsEntrepriseByCompte[cid]) {
-        transactionsEntrepriseByCompte[cid] = [];
-      }
+      if (!transactionsEntrepriseByCompte[cid]) transactionsEntrepriseByCompte[cid] = [];
       if (transactionsEntrepriseByCompte[cid].length < 100) {
         transactionsEntrepriseByCompte[cid].push({
-          id: t.id as string,
-          type: t.type as string,
-          montant: t.montant as number,
-          libelle: t.libelle as string,
-          description: (t.description as string | null) ?? null,
-          created_at: t.created_at as string,
+          id: t.id,
+          type: t.type,
+          montant: t.montant,
+          libelle: t.libelle,
+          description: t.description,
+          created_at: t.created_at,
         });
       }
     });
@@ -81,7 +120,7 @@ export default async function FelitzBankPage() {
       .eq('compte_id', comptePerso.id)
       .order('created_at', { ascending: false })
       .limit(100);
-    transactionsPerso = data || [];
+    transactionsPerso = await enrichTransactionsWithVban(admin, data || []);
   }
 
   // Transactions pour le compte militaire
@@ -92,7 +131,7 @@ export default async function FelitzBankPage() {
       .eq('compte_id', compteMilitaire.id)
       .order('created_at', { ascending: false })
       .limit(100);
-    transactionsMilitaire = data || [];
+    transactionsMilitaire = await enrichTransactionsWithVban(admin, data || []);
   }
 
   return (

@@ -36,6 +36,16 @@ export default async function AdminReparationPage() {
   const hangarsByEntreprise: Record<string, number> = {};
   (hangars || []).forEach(h => { hangarsByEntreprise[h.entreprise_id] = (hangarsByEntreprise[h.entreprise_id] || 0) + 1; });
 
+  const entIds = (entreprises || []).map(e => e.id);
+  const { data: comptes } = await admin.from('felitz_comptes')
+    .select('entreprise_reparation_id, vban')
+    .eq('type', 'reparation')
+    .in('entreprise_reparation_id', entIds);
+  const vbanByEnt: Record<string, string> = {};
+  (comptes || []).forEach((c: { entreprise_reparation_id: string; vban: string }) => {
+    if (c.entreprise_reparation_id) vbanByEnt[c.entreprise_reparation_id] = c.vban || '';
+  });
+
   return (
     <AdminReparationClient
       entreprises={(entreprises || []).map(e => ({
@@ -43,6 +53,7 @@ export default async function AdminReparationPage() {
         pdg_callsign: pdgProfiles.find(p => p.id === e.pdg_id)?.identifiant || '?',
         nb_employes: countByEntreprise[e.id] || 0,
         nb_hangars: hangarsByEntreprise[e.id] || 0,
+        vban: vbanByEnt[e.id] ?? null,
       }))}
       users={(allProfiles || []) as { id: string; identifiant: string }[]}
     />

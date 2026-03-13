@@ -116,9 +116,11 @@ export default function AdminFelitzClient({ compte, label, type }: Props) {
         onClick={() => setExpanded(!expanded)}
         className="w-full p-3 flex items-center justify-between text-left"
       >
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="font-medium text-slate-200">{label}</p>
-          <p className="text-xs text-slate-500 font-mono truncate max-w-[200px]">{compte.vban}</p>
+          <p className="text-xs text-slate-400 font-mono break-all" title="VBAN">
+            VBAN: {compte.vban}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <span className={`font-bold ${compte.solde >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
