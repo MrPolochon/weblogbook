@@ -293,6 +293,26 @@ export default function ReparationClient({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-6">
+      {entreprises.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-slate-500">Entreprise :</span>
+          <select
+            value={detail.id}
+            onChange={(e) => loadDetail(e.target.value)}
+            className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm font-medium"
+          >
+            {entreprises.map(e => (
+              <option key={e.id} value={e.id}>{e.nom}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setDetail(null)}
+            className="text-sm text-slate-400 hover:text-slate-300"
+          >
+            ← Voir la liste
+          </button>
+        </div>
+      )}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2"><Wrench className="h-7 w-7 text-orange-400" />{detail.nom}</h1>
