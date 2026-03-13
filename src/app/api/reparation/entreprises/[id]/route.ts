@@ -81,6 +81,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (body.nom !== undefined) updates.nom = String(body.nom).trim();
   if (body.description !== undefined) updates.description = body.description ? String(body.description).trim() : null;
+  if (body.prix_hangar_base !== undefined) updates.prix_hangar_base = Math.max(0, Number(body.prix_hangar_base) || 500000);
+  if (body.prix_hangar_multiplicateur !== undefined) updates.prix_hangar_multiplicateur = Math.max(1, Math.min(10, Number(body.prix_hangar_multiplicateur) || 2));
+  if (body.alliance_reparation_actif !== undefined) updates.alliance_reparation_actif = Boolean(body.alliance_reparation_actif);
+  if (body.alliance_id !== undefined) updates.alliance_id = body.alliance_id ? String(body.alliance_id) : null;
+  if (body.prix_alliance_pourcent !== undefined) updates.prix_alliance_pourcent = Math.max(0, Math.min(100, Number(body.prix_alliance_pourcent) ?? 80));
 
   const { error } = await admin.from('entreprises_reparation').update(updates).eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

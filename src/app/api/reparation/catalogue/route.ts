@@ -14,7 +14,7 @@ export async function GET() {
   if (!entreprises?.length) return NextResponse.json([]);
 
   const ids = entreprises.map(e => e.id);
-  const { data: hangars } = await admin.from('reparation_hangars').select('entreprise_id, aeroport_code, nom, capacite').in('entreprise_id', ids);
+  const { data: hangars } = await admin.from('reparation_hangars').select('id, entreprise_id, aeroport_code, nom, capacite').in('entreprise_id', ids);
   const { data: tarifs } = await admin.from('reparation_tarifs').select('entreprise_id, type_avion_id, prix_par_point, types_avion(id, nom)').in('entreprise_id', ids);
 
   return NextResponse.json(entreprises.map(e => ({

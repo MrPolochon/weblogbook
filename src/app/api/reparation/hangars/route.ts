@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { calculerPrixHangar } from '@/lib/compagnie-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,20 +29,61 @@ export async function POST(req: Request) {
   if (!entreprise_id || !aeroport_code) return NextResponse.json({ error: 'entreprise_id et aeroport_code requis' }, { status: 400 });
 
   const admin = createAdminClient();
-  const { data: ent } = await admin.from('entreprises_reparation').select('pdg_id').eq('id', entreprise_id).single();
+  const { data: ent } = await admin.from('entreprises_reparation')
+    .select('pdg_id, prix_hangar_base, prix_hangar_multiplicateur')
+    .eq('id', entreprise_id).single();
   if (!ent || ent.pdg_id !== user.id) return NextResponse.json({ error: 'Seul le PDG' }, { status: 403 });
 
-  const { error } = await admin.from('reparation_hangars').insert({
+  const ac = String(aeroport_code).toUpperCase().trim();
+
+  const { count } = await admin.from('reparation_hangars')
+    .select('*', { count: 'exact', head: true })
+    .eq('entreprise_id', entreprise_id);
+  const numHangar = (count ?? 0) + 1;
+  const base = ent.prix_hangar_base ?? 500000;
+  const mult = ent.prix_hangar_multiplicateur ?? 2;
+  const prix = calculerPrixHangar(numHangar, base, mult);
+
+  if (prix > 0) {
+    const { data: compte } = await admin.from('felitz_comptes')
+      .select('id, solde')
+      .eq('entreprise_reparation_id', entreprise_id)
+      .eq('type', 'reparation')
+      .single();
+
+    if (!compte || compte.solde < prix) {
+      return NextResponse.json({
+        error: `Solde insuffisant. Prix : ${prix.toLocaleString('fr-FR')} F$.`
+      }, { status: 400 });
+    }
+
+    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compte.id, p_montant: prix });
+    if (!debitOk) {
+      return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente).' }, { status: 400 });
+    }
+
+    await admin.from('felitz_transactions').insert({
+      compte_id: compte.id,
+      type: 'debit',
+      montant: prix,
+      libelle: `Achat hangar ${ac}`,
+    });
+  }
+
+  const { data: hangar, error } = await admin.from('reparation_hangars').insert({
     entreprise_id,
-    aeroport_code: String(aeroport_code).toUpperCase().trim(),
+    aeroport_code: ac,
     nom: nom ? String(nom).trim() : null,
     capacite: Math.max(1, Math.min(20, Number(capacite) || 2)),
-  });
+    prix_achat: prix,
+    achat_le: prix > 0 ? new Date().toISOString() : null,
+  }).select('id').single();
+
   if (error) {
     if (error.code === '23505') return NextResponse.json({ error: 'Hangar déjà existant pour cet aéroport' }, { status: 409 });
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, id: hangar?.id, prix });
 }
 
 export async function DELETE(req: Request) {

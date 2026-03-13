@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { calculerPrixHangar } from '@/lib/compagnie-utils';
 import {
   Wrench, Building2, Users, Warehouse, Tags, ClipboardList,
   Loader2, Plus, Trash2, Check, X, Play, FileText, CreditCard,
-  Truck, ParkingSquare, Search
+  Truck, ParkingSquare, Search, Settings
 } from 'lucide-react';
 
 interface Entreprise {
@@ -68,9 +71,14 @@ interface Detail {
   demandes: Demande[];
   compte: { id: string; vban: string; solde: number } | null;
   my_role: string | null;
+  prix_hangar_base?: number;
+  prix_hangar_multiplicateur?: number;
+  alliance_reparation_actif?: boolean;
+  alliance_id?: string | null;
+  prix_alliance_pourcent?: number;
 }
 
-type Tab = 'dashboard' | 'demandes' | 'hangars' | 'tarifs' | 'employes';
+type Tab = 'dashboard' | 'demandes' | 'hangars' | 'tarifs' | 'employes' | 'parametres';
 
 const STATUT_LABELS: Record<string, { label: string; color: string }> = {
   demandee: { label: 'Demandée', color: 'text-amber-400' },
@@ -87,8 +95,21 @@ const STATUT_LABELS: Record<string, { label: string; color: string }> = {
   annulee: { label: 'Annulée', color: 'text-slate-500' },
 };
 
+interface CatalogueEntreprise {
+  id: string;
+  nom: string;
+  description: string | null;
+  hangars: { id: string; entreprise_id: string; aeroport_code: string; nom: string | null; capacite: number }[];
+  tarifs: unknown[];
+}
+
 export default function ReparationClient({ userId }: { userId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const demander = searchParams.get('demander') === '1';
+  const avionId = searchParams.get('avion_id') || '';
+  const compagnieId = searchParams.get('compagnie_id') || '';
+
   const [loading, setLoading] = useState(true);
   const [entreprises, setEntreprises] = useState<Entreprise[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -97,10 +118,19 @@ export default function ReparationClient({ userId }: { userId: string }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Mode "demander réparation" (client)
+  const [catalogue, setCatalogue] = useState<CatalogueEntreprise[]>([]);
+  const [selectedEntId, setSelectedEntId] = useState<string | null>(null);
+  const [selectedHangarId, setSelectedHangarId] = useState<string | null>(null);
+  const [commentaire, setCommentaire] = useState('');
 
   useEffect(() => {
-    fetch('/api/reparation/entreprises').then(r => r.json()).then(d => setEntreprises(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+    if (demander && avionId && compagnieId) {
+      fetch('/api/reparation/catalogue').then(r => r.json()).then(d => setCatalogue(Array.isArray(d) ? d : [])).catch(() => setCatalogue([])).finally(() => setLoading(false));
+    } else {
+      fetch('/api/reparation/entreprises').then(r => r.json()).then(d => setEntreprises(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
+    }
+  }, [demander, avionId, compagnieId]);
 
   const loadDetail = useCallback(async (id: string) => {
     const res = await fetch(`/api/reparation/entreprises/${id}`);
@@ -108,8 +138,8 @@ export default function ReparationClient({ userId }: { userId: string }) {
   }, []);
 
   useEffect(() => {
-    if (entreprises.length === 1 && !detail) loadDetail(entreprises[0].id);
-  }, [entreprises, detail, loadDetail]);
+    if (!demander && entreprises.length === 1 && !detail) loadDetail(entreprises[0].id);
+  }, [demander, entreprises, detail, loadDetail]);
 
   function flash(msg: string, isError = false) {
     if (isError) { setError(msg); setSuccess(''); } else { setSuccess(msg); setError(''); }
@@ -127,6 +157,101 @@ export default function ReparationClient({ userId }: { userId: string }) {
   }
 
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div>;
+
+  // Mode "demander réparation" (client) : catalogue -> sélection hangar -> envoi demande
+  if (demander && avionId && compagnieId) {
+    const selectedEnt = selectedEntId ? catalogue.find(e => e.id === selectedEntId) : null;
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2"><Wrench className="h-7 w-7 text-orange-400" />Demander une réparation</h1>
+          <p className="text-slate-400 mt-1">Choisissez une entreprise et un hangar pour envoyer votre avion en réparation.</p>
+        </div>
+        {error && <p className="text-red-400 text-sm">{error}</p>}
+        {success && <p className="text-emerald-400 text-sm">{success}</p>}
+
+        {!selectedEntId ? (
+          <div className="space-y-3">
+            <h2 className="text-lg font-medium text-slate-200">Sélectionner une entreprise</h2>
+            {catalogue.length === 0 ? (
+              <p className="text-slate-500">Aucune entreprise de réparation disponible.</p>
+            ) : (
+              <div className="grid gap-3">
+                {catalogue.map(e => (
+                  <button
+                    key={e.id}
+                    onClick={() => { setSelectedEntId(e.id); setSelectedHangarId(null); }}
+                    className="w-full text-left rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 hover:bg-slate-800/50 transition"
+                  >
+                    <span className="font-semibold text-slate-100">{e.nom}</span>
+                    {e.description && <p className="text-slate-400 text-sm mt-1">{e.description}</p>}
+                    <p className="text-xs text-slate-500 mt-1">{e.hangars.length} hangar(s)</p>
+                  </button>
+                ))}
+              </div>
+            )}
+            <Link href={`/ma-compagnie?c=${compagnieId}`} className="text-sm text-slate-400 hover:text-slate-300">← Retour à ma flotte</Link>
+          </div>
+        ) : selectedEnt ? (
+          <div className="space-y-4">
+            <button onClick={() => { setSelectedEntId(null); setSelectedHangarId(null); }} className="text-sm text-slate-400 hover:text-slate-300">← Changer d&apos;entreprise</button>
+            <h2 className="text-lg font-medium text-slate-200">Choisir un hangar — {selectedEnt.nom}</h2>
+            {selectedEnt.hangars.length === 0 ? (
+              <p className="text-slate-500">Aucun hangar disponible.</p>
+            ) : (
+              <div className="space-y-3">
+                {selectedEnt.hangars.map(h => (
+                  <div key={h.id} className="flex items-center justify-between rounded-lg border border-slate-700/50 bg-slate-800/30 p-4">
+                    <div>
+                      <span className="font-mono text-slate-200">{h.aeroport_code}</span>
+                      {h.nom && <span className="text-slate-400 ml-2">— {h.nom}</span>}
+                      <span className="text-xs text-slate-500 ml-2">Cap: {h.capacite}</span>
+                    </div>
+                    <button
+                      onClick={() => setSelectedHangarId(selectedHangarId === h.id ? null : h.id)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium ${selectedHangarId === h.id ? 'bg-orange-600 text-white' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+                    >
+                      {selectedHangarId === h.id ? 'Sélectionné' : 'Choisir'}
+                    </button>
+                  </div>
+                ))}
+                {selectedHangarId && (
+                  <div className="pt-4 border-t border-slate-700 space-y-3">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Message (optionnel)</label>
+                      <textarea value={commentaire} onChange={e => setCommentaire(e.target.value)} placeholder="Instructions ou remarques..." className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm" rows={2} />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={busy}
+                        onClick={async () => {
+                          try {
+                            await api('/api/reparation/demandes', 'POST', {
+                              entreprise_id: selectedEnt.id,
+                              compagnie_id: compagnieId,
+                              avion_id: avionId,
+                              hangar_id: selectedHangarId,
+                              commentaire: commentaire.trim() || undefined,
+                            });
+                            flash('Demande envoyée !');
+                            setTimeout(() => router.push(`/ma-compagnie?c=${compagnieId}`), 1500);
+                          } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+                        }}
+                        className="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm disabled:opacity-50"
+                      >
+                        Envoyer la demande
+                      </button>
+                      <button onClick={() => { setSelectedHangarId(null); setCommentaire(''); }} className="px-4 py-2 rounded-lg bg-slate-700 text-slate-200 text-sm">Annuler</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   if (!detail && entreprises.length === 0) {
     return (
@@ -163,6 +288,7 @@ export default function ReparationClient({ userId }: { userId: string }) {
     { key: 'hangars', label: 'Hangars', icon: Warehouse },
     { key: 'tarifs', label: 'Tarifs', icon: Tags },
     { key: 'employes', label: 'Employés', icon: Users },
+    ...(isPdg ? [{ key: 'parametres' as Tab, label: 'Paramètres', icon: Settings }] : []),
   ];
 
   return (
@@ -203,6 +329,7 @@ export default function ReparationClient({ userId }: { userId: string }) {
         {tab === 'hangars' && <HangarsTab detail={detail} isPdg={isPdg} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
         {tab === 'tarifs' && <TarifsTab detail={detail} isPdg={isPdg} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
         {tab === 'employes' && <EmployesTab detail={detail} isPdg={isPdg} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
+        {tab === 'parametres' && isPdg && <ParametresTab detail={detail} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
       </div>
     </div>
   );
@@ -330,6 +457,8 @@ function DemandesTab({ detail, api, flash, busy, onRefresh, router }: {
   );
 }
 
+const AEROPORTS_TRIES = [...AEROPORTS_PTFS].sort((a, b) => a.code.localeCompare(b.code));
+
 function HangarsTab({ detail, isPdg, api, flash, busy, onRefresh }: {
   detail: Detail; isPdg: boolean; api: (u: string, m: string, b?: unknown) => Promise<unknown>;
   flash: (m: string, e?: boolean) => void; busy: boolean; onRefresh: () => void;
@@ -337,6 +466,15 @@ function HangarsTab({ detail, isPdg, api, flash, busy, onRefresh }: {
   const [code, setCode] = useState('');
   const [nom, setNom] = useState('');
   const [capacite, setCapacite] = useState('2');
+
+  const aeroportsDisponibles = useMemo(() => {
+    const codesExistants = new Set(detail.hangars.map(h => h.aeroport_code));
+    return AEROPORTS_TRIES.filter(a => !codesExistants.has(a.code));
+  }, [detail.hangars]);
+
+  const base = detail.prix_hangar_base ?? 500000;
+  const mult = detail.prix_hangar_multiplicateur ?? 2;
+  const prixProchain = calculerPrixHangar(detail.hangars.length + 1, base, mult);
 
   return (
     <div className="space-y-4">
@@ -359,12 +497,35 @@ function HangarsTab({ detail, isPdg, api, flash, busy, onRefresh }: {
       {isPdg && (
         <div className="pt-4 border-t border-slate-700 space-y-2">
           <h4 className="text-sm font-medium text-slate-300">Ajouter un hangar</h4>
+          <p className="text-slate-400 text-sm">
+            Prix : <span className="text-emerald-400 font-medium">
+              {prixProchain === 0 ? 'Gratuit' : `${prixProchain.toLocaleString('fr-FR')} F$`}
+            </span>
+          </p>
           <div className="flex gap-2 flex-wrap">
-            <input type="text" value={code} onChange={e => setCode(e.target.value)} placeholder="Code OACI (ex: LFPG)" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-32 text-sm" />
+            <select
+              value={code}
+              onChange={e => setCode(e.target.value)}
+              disabled={aeroportsDisponibles.length === 0}
+              className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 min-w-[200px] text-sm disabled:opacity-50"
+            >
+              <option value="">
+                {aeroportsDisponibles.length === 0 ? 'Tous les aéroports ont déjà un hangar' : 'Sélectionner un aéroport'}
+              </option>
+              {aeroportsDisponibles.map(a => (
+                <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>
+              ))}
+            </select>
             <input type="text" value={nom} onChange={e => setNom(e.target.value)} placeholder="Nom (opt.)" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 flex-1 text-sm" />
             <input type="number" min="1" max="20" value={capacite} onChange={e => setCapacite(e.target.value)} placeholder="Cap." className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-20 text-sm" />
             <button disabled={busy || !code.trim()} onClick={async () => {
-              try { await api('/api/reparation/hangars', 'POST', { entreprise_id: detail.id, aeroport_code: code.trim(), nom: nom.trim() || undefined, capacite: Number(capacite) || 2 }); flash('Hangar ajouté'); setCode(''); setNom(''); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+              try {
+                const res = await api('/api/reparation/hangars', 'POST', { entreprise_id: detail.id, aeroport_code: code.trim(), nom: nom.trim() || undefined, capacite: Number(capacite) || 2 }) as { ok?: boolean; prix?: number };
+                flash(prixProchain > 0 ? `Hangar ajouté (${(res?.prix ?? prixProchain).toLocaleString('fr-FR')} F$)` : 'Hangar ajouté');
+                setCode('');
+                setNom('');
+                onRefresh();
+              } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
             }} className="px-3 py-2 rounded-lg bg-orange-600 text-white text-sm disabled:opacity-50 flex items-center gap-1"><Plus className="h-4 w-4" />Ajouter</button>
           </div>
         </div>
@@ -413,6 +574,93 @@ function TarifsTab({ detail, isPdg, api, flash, busy, onRefresh }: {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ParametresTab({ detail, api, flash, busy, onRefresh }: {
+  detail: Detail; api: (u: string, m: string, b?: unknown) => Promise<unknown>;
+  flash: (m: string, e?: boolean) => void; busy: boolean; onRefresh: () => void;
+}) {
+  const [prixBase, setPrixBase] = useState(String(detail.prix_hangar_base ?? 500000));
+  const [prixMult, setPrixMult] = useState(String(detail.prix_hangar_multiplicateur ?? 2));
+  const [allianceActif, setAllianceActif] = useState(detail.alliance_reparation_actif ?? false);
+  const [allianceId, setAllianceId] = useState(detail.alliance_id ?? '');
+  const [prixAlliancePct, setPrixAlliancePct] = useState(String(detail.prix_alliance_pourcent ?? 80));
+  const [alliances, setAlliances] = useState<{ id: string; nom: string }[]>([]);
+
+  useEffect(() => {
+    setPrixBase(String(detail.prix_hangar_base ?? 500000));
+    setPrixMult(String(detail.prix_hangar_multiplicateur ?? 2));
+    setAllianceActif(detail.alliance_reparation_actif ?? false);
+    setAllianceId(detail.alliance_id ?? '');
+    setPrixAlliancePct(String(detail.prix_alliance_pourcent ?? 80));
+  }, [detail.id, detail.prix_hangar_base, detail.prix_hangar_multiplicateur, detail.alliance_reparation_actif, detail.alliance_id, detail.prix_alliance_pourcent]);
+
+  useEffect(() => {
+    fetch('/api/alliances?list=1').then(r => r.json()).then(d => setAlliances(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
+
+  return (
+    <div className="space-y-6">
+      <h3 className="text-lg font-medium text-slate-200">Prix des hangars</h3>
+      <p className="text-sm text-slate-400">Même logique que les hubs : 1er gratuit, 2e au prix de base, puis multiplication.</p>
+      <div className="flex gap-4 flex-wrap">
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Prix de base (2e hangar) F$</label>
+          <input type="number" min="0" value={prixBase} onChange={e => setPrixBase(e.target.value)} className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-36 text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-slate-500 mb-1">Multiplicateur</label>
+          <input type="number" min="1" max="10" step="0.5" value={prixMult} onChange={e => setPrixMult(e.target.value)} className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-24 text-sm" />
+        </div>
+      </div>
+
+      <hr className="border-slate-700" />
+
+      <h3 className="text-lg font-medium text-slate-200">Tarif alliance</h3>
+      <p className="text-sm text-slate-400">Offrir un prix réduit aux membres d&apos;une alliance sélectionnée.</p>
+      <div className="space-y-3">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" checked={allianceActif} onChange={e => setAllianceActif(e.target.checked)} className="rounded" />
+          <span className="text-slate-200">Activer le tarif alliance</span>
+        </label>
+        {allianceActif && (
+          <>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Alliance (une seule)</label>
+              <select value={allianceId} onChange={e => setAllianceId(e.target.value)} className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 min-w-[200px] text-sm">
+                <option value="">Sélectionner une alliance</option>
+                {alliances.map(a => (
+                  <option key={a.id} value={a.id}>{a.nom}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Pourcentage du tarif normal (80 = 20% de réduction)</label>
+              <input type="number" min="0" max="100" value={prixAlliancePct} onChange={e => setPrixAlliancePct(e.target.value)} className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-24 text-sm" />
+            </div>
+          </>
+        )}
+      </div>
+
+      <button disabled={busy} onClick={async () => {
+        try {
+          await api(`/api/reparation/entreprises/${detail.id}`, 'PATCH', {
+            prix_hangar_base: Number(prixBase) || 500000,
+            prix_hangar_multiplicateur: Number(prixMult) || 2,
+            alliance_reparation_actif: allianceActif,
+            alliance_id: allianceActif && allianceId ? allianceId : null,
+            prix_alliance_pourcent: Number(prixAlliancePct) || 80,
+          });
+          flash('Paramètres enregistrés');
+          onRefresh();
+        } catch (err) {
+          flash(err instanceof Error ? err.message : 'Erreur', true);
+        }
+      }} className="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm disabled:opacity-50">
+        Enregistrer les paramètres
+      </button>
     </div>
   );
 }

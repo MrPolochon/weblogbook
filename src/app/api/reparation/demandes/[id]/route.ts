@@ -130,11 +130,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     else if (scoresMoyenne >= 50) usureApres = Math.round((demande.usure_avant || 0) * 0.3);
     else usureApres = Math.round((demande.usure_avant || 0) * 0.5);
 
+    const { data: ent } = await admin.from('entreprises_reparation')
+      .select('alliance_reparation_actif, alliance_id, prix_alliance_pourcent')
+      .eq('id', demande.entreprise_id).single();
     const { data: tarif } = await admin.from('reparation_tarifs')
       .select('prix_par_point')
       .eq('entreprise_id', demande.entreprise_id)
       .limit(1).single();
-    const prixParPoint = tarif?.prix_par_point || 1000;
+    let prixParPoint = tarif?.prix_par_point || 1000;
+    if (ent?.alliance_reparation_actif && ent.alliance_id && ent.prix_alliance_pourcent != null) {
+      const { data: membre } = await admin.from('alliance_membres')
+        .select('id').eq('alliance_id', ent.alliance_id).eq('compagnie_id', demande.compagnie_id).limit(1);
+      if (membre?.length) {
+        prixParPoint = Math.round(prixParPoint * (ent.prix_alliance_pourcent / 100));
+      }
+    }
     const pointsRepares = Math.max(0, (demande.usure_avant || 0) - usureApres);
     const prixTotal = pointsRepares * prixParPoint;
 

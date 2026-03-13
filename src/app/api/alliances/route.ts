@@ -13,12 +13,20 @@ async function getUserCompagnies(admin: ReturnType<typeof createAdminClient>, us
   return ids;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const admin = createAdminClient();
+  const { searchParams } = new URL(req.url);
+  const listAll = searchParams.get('list') === '1';
+
+  if (listAll) {
+    const { data: alliances } = await admin.from('alliances').select('id, nom').order('nom');
+    return NextResponse.json(alliances || []);
+  }
+
   const compagnieIds = await getUserCompagnies(admin, user.id);
   if (compagnieIds.length === 0) return NextResponse.json([]);
 
