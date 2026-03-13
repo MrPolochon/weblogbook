@@ -474,7 +474,8 @@ function HangarsTab({ detail, isPdg, api, flash, busy, onRefresh }: {
 
   const base = detail.prix_hangar_base ?? 500000;
   const mult = detail.prix_hangar_multiplicateur ?? 2;
-  const prixProchain = calculerPrixHangar(detail.hangars.length + 1, base, mult);
+  const cap = Math.max(1, Math.min(20, Number(capacite) || 2));
+  const prixProchain = calculerPrixHangar(detail.hangars.length + 1, cap, base, mult);
 
   return (
     <div className="space-y-4">

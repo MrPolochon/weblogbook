@@ -62,9 +62,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { data: parametres } = await admin.from('alliance_parametres').select('*').eq('alliance_id', id).single();
 
   let compte = null;
+  let transactions_alliance: Array<{ id: string; type: string; montant: number; libelle: string | null; created_at: string }> = [];
   if (myRole === 'president' || myRole === 'vice_president' || myRole === 'admin') {
     const { data: fc } = await admin.from('felitz_comptes').select('id, vban, solde').eq('alliance_id', id).eq('type', 'alliance').single();
     compte = fc;
+    if (fc) {
+      const { data: tx } = await admin.from('felitz_transactions')
+        .select('id, type, montant, libelle, created_at')
+        .eq('compte_id', fc.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      transactions_alliance = tx || [];
+    }
   }
 
   const { data: annonces } = await admin.from('alliance_annonces')
@@ -149,6 +158,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     transferts: transferts || [],
     demandes_fonds: demandes_fonds || [],
     contributions,
+    transactions_alliance: transactions_alliance || [],
     my_role: myRole,
     my_compagnie_id: myMember?.compagnie_id ?? null,
     my_compagnie_ids: myCompagnieIds,

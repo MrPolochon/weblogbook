@@ -94,6 +94,14 @@ interface Invitation {
   compagnie: { id: string; nom: string } | null;
 }
 
+interface AllianceTransaction {
+  id: string;
+  type: string;
+  montant: number;
+  libelle: string | null;
+  created_at: string;
+}
+
 interface AllianceDetail extends Alliance {
   membres: Membre[];
   compte_alliance: { id: string; vban: string; solde: number } | null;
@@ -102,6 +110,7 @@ interface AllianceDetail extends Alliance {
   transferts: Transfert[];
   demandes_fonds: DemandeFonds[];
   contributions: Contribution[];
+  transactions_alliance?: AllianceTransaction[];
   my_compagnie_ids?: string[];
 }
 
@@ -886,6 +895,25 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
               const nom = c.compagnie_nom ?? detail.membres.find(m => m.compagnie_id === c.compagnie_id)?.compagnie?.nom ?? '?';
               return <div key={c.id} className="text-sm text-slate-400">{nom} — +{c.montant.toLocaleString('fr-FR')} F$ — {c.libelle} — {new Date(c.created_at).toLocaleDateString('fr-FR')}</div>;
             })}
+          </div>
+        </div>
+      )}
+
+      {isLeader && (detail.transactions_alliance?.length ?? 0) > 0 && (
+        <div>
+          <h3 className="font-medium text-slate-200 mb-2 flex items-center gap-2">
+            <ArrowRightLeft className="h-4 w-4 text-violet-400" /> Historique des virements et opérations
+          </h3>
+          <div className="max-h-64 overflow-y-auto space-y-1">
+            {(detail.transactions_alliance || []).map(t => (
+              <div key={t.id} className="flex items-center justify-between text-sm py-1.5 px-2 rounded bg-slate-700/20">
+                <span className="text-slate-300 truncate flex-1">{t.libelle || '—'}</span>
+                <span className={`font-medium whitespace-nowrap ml-2 ${t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {t.type === 'credit' ? '+' : '-'}{t.montant.toLocaleString('fr-FR')} F$
+                </span>
+                <span className="text-xs text-slate-500 ml-2">{new Date(t.created_at).toLocaleDateString('fr-FR')}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}

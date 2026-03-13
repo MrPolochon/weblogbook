@@ -7,21 +7,24 @@
  * 1er hub = gratuit, 2e = 500k, puis x2 à chaque fois
  */
 export function calculerPrixHub(numHub: number): number {
-  return calculerPrixHangar(numHub, 500000, 2);
+  return calculerPrixHangar(numHub, 1, 500000, 2);
 }
 
 /**
- * Calcule le prix d'un hangar (même logique que hub, paramètres configurables)
- * 1er = gratuit, 2e = base, puis base * mult^(n-2)
+ * Calcule le prix d'un hangar (prix × capacité)
+ * - 1er hangar : 50 000 F$ × capacité
+ * - 2e+ : base × mult^(n-2) × capacité
  */
 export function calculerPrixHangar(
   numHangar: number,
+  capacite: number,
   base = 500000,
   mult = 2
 ): number {
-  if (numHangar === 1) return 0;
-  if (numHangar === 2) return base;
-  return Math.round(base * Math.pow(mult, numHangar - 2));
+  const cap = Math.max(1, Math.min(20, capacite));
+  if (numHangar === 1) return 50000 * cap;
+  if (numHangar === 2) return Math.round(base * cap);
+  return Math.round(base * Math.pow(mult, numHangar - 2) * cap);
 }
 
 /**

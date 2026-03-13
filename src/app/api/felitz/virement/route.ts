@@ -140,6 +140,24 @@ export async function GET(req: NextRequest) {
     const compteId = searchParams.get('compte_id');
 
     const admin = createAdminClient();
+    if (compteId) {
+      const { data: compte } = await admin.from('felitz_comptes')
+        .select('id, proprietaire_id, compagnie_id')
+        .eq('id', compteId).single();
+      if (!compte) return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      const isAdmin = profile?.role === 'admin';
+      const isOwner = compte.proprietaire_id === user.id;
+      let isPdg = false;
+      if (compte.compagnie_id) {
+        const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', compte.compagnie_id).single();
+        isPdg = comp?.pdg_id === user.id;
+      }
+      if (!isAdmin && !isOwner && !isPdg) {
+        return NextResponse.json({ error: 'Non autorisé pour ce compte' }, { status: 403 });
+      }
+    }
+
     let query = admin.from('felitz_virements')
       .select('*')
       .order('created_at', { ascending: false });

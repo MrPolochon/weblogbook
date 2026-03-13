@@ -35,6 +35,7 @@ export async function POST(req: Request) {
   if (!ent || ent.pdg_id !== user.id) return NextResponse.json({ error: 'Seul le PDG' }, { status: 403 });
 
   const ac = String(aeroport_code).toUpperCase().trim();
+  const cap = Math.max(1, Math.min(20, Number(capacite) || 2));
 
   const { count } = await admin.from('reparation_hangars')
     .select('*', { count: 'exact', head: true })
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
   const numHangar = (count ?? 0) + 1;
   const base = ent.prix_hangar_base ?? 500000;
   const mult = ent.prix_hangar_multiplicateur ?? 2;
-  const prix = calculerPrixHangar(numHangar, base, mult);
+  const prix = calculerPrixHangar(numHangar, cap, base, mult);
 
   if (prix > 0) {
     const { data: compte } = await admin.from('felitz_comptes')
@@ -74,7 +75,7 @@ export async function POST(req: Request) {
     entreprise_id,
     aeroport_code: ac,
     nom: nom ? String(nom).trim() : null,
-    capacite: Math.max(1, Math.min(20, Number(capacite) || 2)),
+    capacite: cap,
     prix_achat: prix,
     achat_le: prix > 0 ? new Date().toISOString() : null,
   }).select('id').single();

@@ -12,7 +12,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const admin = createAdminClient();
   const { data: demande } = await admin.from('reparation_demandes')
-    .select('id, entreprise_id, statut')
+    .select('id, entreprise_id, compagnie_id, statut')
     .eq('id', demandeId).single();
   if (!demande) return NextResponse.json({ error: 'Demande introuvable' }, { status: 404 });
   if (!['en_reparation', 'mini_jeux'].includes(demande.statut)) {
@@ -21,7 +21,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const { data: emp } = await admin.from('reparation_employes')
     .select('id').eq('entreprise_id', demande.entreprise_id).eq('user_id', user.id).limit(1);
-  if (!emp?.length) return NextResponse.json({ error: 'Non employé' }, { status: 403 });
+  const { data: comp } = await admin.from('compagnies')
+    .select('pdg_id').eq('id', demande.compagnie_id).single();
+  const { data: empComp } = await admin.from('compagnie_employes')
+    .select('id').eq('compagnie_id', demande.compagnie_id).eq('pilote_id', user.id).limit(1);
+  const isEmployeReparation = (emp?.length ?? 0) > 0;
+  const isClientPdg = comp?.pdg_id === user.id;
+  const isClientEmploye = (empComp?.length ?? 0) > 0;
+  if (!isEmployeReparation && !isClientPdg && !isClientEmploye) {
+    return NextResponse.json({ error: 'Accès réservé aux employés de l\'entreprise de réparation ou au PDG/employés de la compagnie cliente' }, { status: 403 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const { type_jeu, score, duree_secondes } = body;

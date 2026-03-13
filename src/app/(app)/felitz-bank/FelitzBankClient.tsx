@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { ArrowUpRight, ArrowDownLeft, Send, RefreshCw } from 'lucide-react';
+import { useState, useTransition, useEffect } from 'react';
+import { ArrowUpRight, ArrowDownLeft, Send, RefreshCw, History } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
 
@@ -11,6 +11,15 @@ interface Transaction {
   montant: number;
   libelle: string;
   description?: string | null;
+  created_at: string;
+}
+
+interface Virement {
+  id: string;
+  compte_source_id: string;
+  compte_dest_vban: string;
+  montant: number;
+  libelle?: string | null;
   created_at: string;
 }
 
@@ -34,6 +43,14 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [virements, setVirements] = useState<Virement[]>([]);
+
+  useEffect(() => {
+    fetch(`/api/felitz/virement?compte_id=${compteId}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setVirements(Array.isArray(d) ? d : []))
+      .catch(() => setVirements([]));
+  }, [compteId]);
 
   async function handleVirement(e: React.FormEvent) {
     e.preventDefault();
@@ -61,6 +78,7 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
       setMontant('');
       setLibelle('');
       setShowVirement(false);
+      setVirements(prev => [data.virement, ...prev].filter(Boolean).slice(0, 50));
       startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -145,6 +163,31 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
             </button>
           </div>
         </form>
+      )}
+
+      {/* Historique des virements */}
+      {!isMilitaire && virements.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
+            <History className="h-4 w-4" /> Historique des virements
+          </h3>
+          <div className="space-y-2 max-h-[300px] overflow-y-auto mb-6">
+            {virements.map((v) => (
+              <div key={v.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-800/30 rounded-lg p-3 border border-slate-700/30">
+                <div className="min-w-0">
+                  <p className="text-sm text-slate-200">
+                    → <span className="font-mono text-sky-400">{v.compte_dest_vban}</span>
+                    {v.libelle && <span className="text-slate-400 ml-1">— {v.libelle}</span>}
+                  </p>
+                  <p className="text-xs text-slate-500">{formatDate(v.created_at)}</p>
+                </div>
+                <span className="font-semibold text-red-400 sm:whitespace-nowrap">
+                  -{v.montant.toLocaleString('fr-FR')} F$
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Historique des transactions */}

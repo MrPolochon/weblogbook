@@ -50,12 +50,27 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
   const { data: comp } = await admin.from('compagnies').select('id, pdg_id, nom').eq('id', compagnie_id).single();
-  if (!comp || comp.pdg_id !== user.id) return NextResponse.json({ error: 'Seul le PDG' }, { status: 403 });
+  if (!comp) return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
+  const { data: empCheck } = await admin.from('compagnie_employes').select('id').eq('compagnie_id', compagnie_id).eq('pilote_id', user.id).limit(1);
+  if (comp.pdg_id !== user.id && !empCheck?.length) return NextResponse.json({ error: 'Seul le PDG ou un employé peut demander une réparation' }, { status: 403 });
 
   const { data: avion } = await admin.from('compagnie_avions')
     .select('id, immatriculation, nom, usure, compagnie_id')
     .eq('id', avion_id).single();
-  if (!avion || avion.compagnie_id !== compagnie_id) return NextResponse.json({ error: 'Avion introuvable' }, { status: 404 });
+  if (!avion) return NextResponse.json({ error: 'Avion introuvable' }, { status: 404 });
+
+  const avionAppartient = avion.compagnie_id === compagnie_id;
+  const nowIso = new Date().toISOString();
+  const { data: location } = await admin.from('compagnie_locations')
+    .select('id')
+    .eq('avion_id', avion_id)
+    .eq('locataire_compagnie_id', compagnie_id)
+    .eq('statut', 'active')
+    .lte('start_at', nowIso)
+    .gte('end_at', nowIso)
+    .limit(1);
+  const avionLoue = (location?.length ?? 0) > 0;
+  if (!avionAppartient && !avionLoue) return NextResponse.json({ error: 'Avion introuvable ou n\'appartient pas à cette compagnie' }, { status: 404 });
 
   const { data: hangar } = await admin.from('reparation_hangars')
     .select('id, entreprise_id').eq('id', hangar_id).single();
