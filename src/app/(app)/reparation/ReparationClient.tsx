@@ -682,6 +682,94 @@ function ParametresTab({ detail, api, flash, busy, onRefresh }: {
       }} className="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm disabled:opacity-50">
         Enregistrer les paramètres
       </button>
+
+      <hr className="border-slate-700 my-6" />
+
+      <div className="pt-4 border-t border-red-700/30 space-y-3">
+        <h3 className="font-medium text-red-400">Zone dangereuse</h3>
+        <p className="text-sm text-slate-400">Fermer l&apos;entreprise supprime définitivement tous les hangars, employés et demandes. Cette action est irréversible.</p>
+        <FermerEntrepriseButton detail={detail} api={api} flash={flash} busy={busy} onSuccess={() => window.location.href = '/reparation'} />
+      </div>
+    </div>
+  );
+}
+
+function FermerEntrepriseButton({ detail, api, flash, busy, onSuccess }: {
+  detail: Detail; api: (u: string, m: string, b?: unknown) => Promise<unknown>;
+  flash: (m: string, e?: boolean) => void; busy: boolean; onSuccess: () => void;
+}) {
+  const [step, setStep] = useState(0);
+  const [typedConfirm, setTypedConfirm] = useState('');
+
+  const MOT_CLE = 'FERMER';
+
+  if (step === 0) {
+    return (
+      <button
+        disabled={busy}
+        onClick={() => setStep(1)}
+        className="px-4 py-2 rounded-lg bg-red-600/30 text-red-300 text-sm font-medium hover:bg-red-600/50 disabled:opacity-50"
+      >
+        Fermer l&apos;entreprise
+      </button>
+    );
+  }
+
+  if (step === 1) {
+    return (
+      <div className="p-4 rounded-lg bg-red-900/20 border border-red-700/30 space-y-3">
+        <p className="text-slate-200 font-medium">1ère confirmation</p>
+        <p className="text-sm text-slate-400">Êtes-vous sûr de vouloir fermer l&apos;entreprise <strong>{detail.nom}</strong> ? Cette action est irréversible.</p>
+        <div className="flex gap-2">
+          <button onClick={() => setStep(2)} className="px-3 py-1.5 rounded-lg bg-red-600/50 text-red-200 text-sm font-medium hover:bg-red-600/70">Continuer</button>
+          <button onClick={() => setStep(0)} className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 text-sm">Annuler</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === 2) {
+    return (
+      <div className="p-4 rounded-lg bg-red-900/20 border border-red-700/30 space-y-3">
+        <p className="text-slate-200 font-medium">2e confirmation</p>
+        <p className="text-sm text-slate-400">Toutes les demandes, hangars et employés seront définitivement supprimés. Le compte Felitz sera également supprimé.</p>
+        <div className="flex gap-2">
+          <button onClick={() => setStep(3)} className="px-3 py-1.5 rounded-lg bg-red-600/50 text-red-200 text-sm font-medium hover:bg-red-600/70">Je confirme</button>
+          <button onClick={() => setStep(1)} className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 text-sm">Retour</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 rounded-lg bg-red-900/20 border border-red-700/30 space-y-3">
+      <p className="text-slate-200 font-medium">3e confirmation</p>
+      <p className="text-sm text-slate-400">Tapez <strong className="font-mono text-red-300">{MOT_CLE}</strong> pour confirmer définitivement :</p>
+      <input
+        type="text"
+        value={typedConfirm}
+        onChange={e => setTypedConfirm(e.target.value.toUpperCase())}
+        placeholder={MOT_CLE}
+        className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm font-mono uppercase"
+      />
+      <div className="flex gap-2">
+        <button
+          disabled={busy || typedConfirm !== MOT_CLE}
+          onClick={async () => {
+            try {
+              await api(`/api/reparation/entreprises/${detail.id}`, 'DELETE');
+              flash('Entreprise fermée');
+              onSuccess();
+            } catch (err) {
+              flash(err instanceof Error ? err.message : 'Erreur', true);
+            }
+          }}
+          className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium disabled:opacity-50 hover:bg-red-500"
+        >
+          Confirmer définitivement
+        </button>
+        <button onClick={() => { setStep(2); setTypedConfirm(''); }} className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 text-sm">Retour</button>
+      </div>
     </div>
   );
 }

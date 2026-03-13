@@ -91,3 +91,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ ok: true });
 }
+
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+  const admin = createAdminClient();
+  const { data: entreprise } = await admin.from('entreprises_reparation').select('id, nom, pdg_id').eq('id', id).single();
+  if (!entreprise) return NextResponse.json({ error: 'Entreprise introuvable' }, { status: 404 });
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const isAdmin = profile?.role === 'admin';
+  if (entreprise.pdg_id !== user.id && !isAdmin) {
+    return NextResponse.json({ error: 'Seul le PDG ou un admin peut fermer l\'entreprise' }, { status: 403 });
+  }
+
+  await admin.from('entreprises_reparation').delete().eq('id', id);
+  return NextResponse.json({ ok: true });
+}
