@@ -53,8 +53,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return { ...d, compagnie: comp || null, avion: avion || null };
   });
 
-  const myEmploi = (employes || []).find(e => e.user_id === user.id);
-  const myRole = entreprise.pdg_id === user.id ? 'pdg' : myEmploi?.role || null;
+  const myEmploi = (employes || []).find(e => String(e.user_id) === String(user.id));
+  const myRole = String(entreprise.pdg_id) === String(user.id) ? 'pdg' : myEmploi?.role || null;
 
   return NextResponse.json({
     ...entreprise,
@@ -74,8 +74,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const admin = createAdminClient();
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const isAdmin = profile?.role === 'admin';
   const { data: entreprise } = await admin.from('entreprises_reparation').select('pdg_id').eq('id', id).single();
-  if (!entreprise || entreprise.pdg_id !== user.id) return NextResponse.json({ error: 'Seul le PDG' }, { status: 403 });
+  const isPdg = entreprise && String(entreprise.pdg_id) === String(user.id);
+  if (!entreprise || (!isPdg && !isAdmin)) return NextResponse.json({ error: 'Seul le PDG peut modifier l\'entreprise' }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -104,7 +107,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   const isAdmin = profile?.role === 'admin';
-  if (entreprise.pdg_id !== user.id && !isAdmin) {
+  const isPdg = String(entreprise.pdg_id) === String(user.id);
+  if (!isPdg && !isAdmin) {
     return NextResponse.json({ error: 'Seul le PDG ou un admin peut fermer l\'entreprise' }, { status: 403 });
   }
 

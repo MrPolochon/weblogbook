@@ -17,7 +17,7 @@ async function enrichTransactionsWithVban<T extends TxRow>(
   });
   const vbanByUuid: Record<string, string> = {};
   if (toResolve.size > 0) {
-    const ids = [...toResolve];
+    const ids = Array.from(toResolve);
     const { data: byId } = await admin.from('felitz_comptes').select('id, vban').in('id', ids);
     (byId || []).forEach((r: Record<string, string>) => { if (r.id) vbanByUuid[r.id] = r.vban; });
     const cols = ['compagnie_id', 'proprietaire_id', 'alliance_id', 'entreprise_reparation_id'] as const;
@@ -30,7 +30,10 @@ async function enrichTransactionsWithVban<T extends TxRow>(
   }
   return raw.map((t) => {
     let libelle = t.libelle || '';
-    for (const [uuid, vban] of Object.entries(vbanByUuid)) libelle = libelle.split(uuid).join(vban);
+    for (const [uuid, vban] of Object.entries(vbanByUuid)) {
+      const escaped = uuid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      libelle = libelle.replace(new RegExp(escaped, 'gi'), vban);
+    }
     return { ...t, libelle };
   });
 }

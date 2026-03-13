@@ -35,8 +35,11 @@ export async function PATCH(req: Request) {
   if (!entreprise_id) return NextResponse.json({ error: 'entreprise_id requis' }, { status: 400 });
 
   const admin = createAdminClient();
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const isAdmin = profile?.role === 'admin';
   const { data: ent } = await admin.from('entreprises_reparation').select('pdg_id').eq('id', entreprise_id).single();
-  if (!ent || ent.pdg_id !== user.id) return NextResponse.json({ error: 'Seul le PDG' }, { status: 403 });
+  const isPdg = ent && String(ent.pdg_id) === String(user.id);
+  if (!ent || (!isPdg && !isAdmin)) return NextResponse.json({ error: 'Seul le PDG peut modifier les tarifs' }, { status: 403 });
 
   const { error } = await admin.from('reparation_tarifs').upsert({
     entreprise_id,

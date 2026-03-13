@@ -32,8 +32,8 @@ export async function GET(req: NextRequest) {
     const isAdmin = profile?.role === 'admin';
     const comp = compte.compagnies as { pdg_id?: string } | { pdg_id?: string }[] | null;
     const compPdg = Array.isArray(comp) ? comp[0]?.pdg_id : comp?.pdg_id;
-    const isOwner = compte.proprietaire_id === user.id;
-    const isPdg = compPdg === user.id;
+    const isOwner = String(compte.proprietaire_id) === String(user.id);
+    const isPdg = compPdg && String(compPdg) === String(user.id);
     let isAllianceLeader = false;
     let isReparationPdg = false;
     if (compte.alliance_id) {
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       const { data: ent } = await admin.from('entreprises_reparation')
         .select('pdg_id')
         .eq('id', compte.entreprise_reparation_id).single();
-      isReparationPdg = ent?.pdg_id === user.id;
+      isReparationPdg = ent && String(ent.pdg_id) === String(user.id);
     }
 
     if (!isAdmin && !isOwner && !isPdg && !isAllianceLeader && !isReparationPdg) {
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
 
     const vbanByUuid: Record<string, string> = {};
     if (toResolve.size > 0) {
-      const ids = [...toResolve];
+      const ids = Array.from(toResolve);
       const { data: comptesId } = await admin.from('felitz_comptes')
         .select('id, vban')
         .in('id', ids);
@@ -114,7 +114,8 @@ export async function GET(req: NextRequest) {
     const data = (raw || []).map((t: { libelle?: string | null; [k: string]: unknown }) => {
       let libelle = t.libelle || '';
       for (const [uuid, vban] of Object.entries(vbanByUuid)) {
-        libelle = libelle.split(uuid).join(vban);
+        const escaped = uuid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        libelle = libelle.replace(new RegExp(escaped, 'gi'), vban);
       }
       return { ...t, libelle };
     });

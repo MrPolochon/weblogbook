@@ -37,14 +37,16 @@ export default async function AdminReparationPage() {
   (hangars || []).forEach(h => { hangarsByEntreprise[h.entreprise_id] = (hangarsByEntreprise[h.entreprise_id] || 0) + 1; });
 
   const entIds = (entreprises || []).map(e => e.id);
-  const { data: comptes } = await admin.from('felitz_comptes')
-    .select('entreprise_reparation_id, vban')
-    .eq('type', 'reparation')
-    .in('entreprise_reparation_id', entIds);
   const vbanByEnt: Record<string, string> = {};
-  (comptes || []).forEach((c: { entreprise_reparation_id: string; vban: string }) => {
-    if (c.entreprise_reparation_id) vbanByEnt[c.entreprise_reparation_id] = c.vban || '';
-  });
+  if (entIds.length > 0) {
+    const { data: comptes } = await admin.from('felitz_comptes')
+      .select('entreprise_reparation_id, vban')
+      .eq('type', 'reparation')
+      .in('entreprise_reparation_id', entIds);
+    (comptes || []).forEach((c: { entreprise_reparation_id: string; vban: string }) => {
+      if (c.entreprise_reparation_id) vbanByEnt[c.entreprise_reparation_id] = c.vban || '';
+    });
+  }
 
   return (
     <AdminReparationClient
