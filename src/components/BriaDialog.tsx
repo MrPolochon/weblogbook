@@ -230,6 +230,9 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [showSidStarPanel, setShowSidStarPanel] = useState(false);
+  const [sidStarList, setSidStarList] = useState<{ id: string; nom: string; route: string }[]>([]);
+  const [sidStarLoading, setSidStarLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const hasGreeted = useRef(false);
@@ -270,6 +273,11 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     setMessages(prev => [...prev, { role: 'pilote', text }]);
     scrollToBottom();
   }, [scrollToBottom]);
+
+  // Fermer le panel SID/STAR quand on change d'étape
+  useEffect(() => {
+    if (step !== 'sid' && step !== 'star') setShowSidStarPanel(false);
+  }, [step]);
 
   // Vérifier cooldown au montage (sécurité si ouverture directe)
   useEffect(() => {
@@ -1062,6 +1070,91 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
             ))}
           </select>
         );
+
+      case 'sid':
+      case 'star': {
+        const isSid = step === 'sid';
+        const aeroport = isSid ? ctx.aeroport_depart : ctx.aeroport_arrivee;
+        const type = isSid ? 'SID' : 'STAR';
+        const togglePanel = async () => {
+          if (showSidStarPanel) {
+            setShowSidStarPanel(false);
+            return;
+          }
+          if (!aeroport) return;
+          setSidStarLoading(true);
+          setShowSidStarPanel(true);
+          try {
+            const res = await fetch(`/api/sid-star?aeroport=${encodeURIComponent(aeroport)}&type=${type}`);
+            const data = await res.json();
+            setSidStarList(Array.isArray(data) ? data : []);
+          } catch {
+            setSidStarList([]);
+          } finally {
+            setSidStarLoading(false);
+          }
+        };
+        return (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={togglePanel}
+                disabled={!aeroport || sidStarLoading}
+                className="flex items-center justify-center w-12 h-12 shrink-0 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+                title={isSid ? 'Voir les SID disponibles' : 'Voir les STAR disponibles'}
+              >
+                <svg viewBox="0 0 24 12" className="w-6 h-5 fill-current" aria-hidden>
+                  <path d="M0 0 L24 0 L12 12 Z" />
+                </svg>
+              </button>
+              <form onSubmit={(e) => { e.preventDefault(); handleAnswer(inputValue); }} className="flex-1 flex gap-2">
+                <input
+                  ref={inputRef}
+                  type="text"
+                  autoComplete="off"
+                  value={inputValue}
+                  onChange={(e) => { setInputValue(e.target.value); lastActivityRef.current = Date.now(); }}
+                  placeholder={getPlaceholder(step)}
+                  disabled={lookupLoading}
+                  className="flex-1 bg-slate-800 border border-slate-600 text-white rounded-lg px-4 py-3 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  autoFocus={!isIOS()}
+                />
+                <button
+                  type="submit"
+                  disabled={!inputValue.trim() || lookupLoading}
+                  className="px-4 py-3 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </form>
+            </div>
+            {showSidStarPanel && (
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800/95 p-2 space-y-1">
+                {sidStarLoading ? (
+                  <p className="text-slate-400 text-sm py-4 text-center">Chargement...</p>
+                ) : sidStarList.length === 0 ? (
+                  <p className="text-slate-400 text-sm py-2">Aucune {type} disponible.</p>
+                ) : (
+                  sidStarList.map((proc) => (
+                    <button
+                      key={proc.id}
+                      type="button"
+                      onClick={() => {
+                        handleAnswer(proc.nom);
+                        setShowSidStarPanel(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg text-sm font-mono hover:bg-amber-600/30 hover:text-amber-100 transition-colors"
+                    >
+                      {proc.nom}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        );
+      }
 
       case 'resume':
         return (
