@@ -207,6 +207,13 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     setStarCustomMode(false);
   }, [aeroport_arrivee, type_vol]);
 
+  // Remplir la case route avec SID/STAR sélectionnés (modifiable par l'utilisateur)
+  useEffect(() => {
+    if (type_vol !== 'IFR') return;
+    const combined = [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' ');
+    setRouteIfr(combined);
+  }, [type_vol, selectedSidRoute, selectedStarRoute]);
+
   // Charger les tarifs par liaison quand la compagnie change
   useEffect(() => {
     if (!selectedCompagnieId) {
@@ -430,8 +437,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       sid_depart: type_vol === 'IFR' ? sid_depart.trim() : undefined,
       star_arrivee: type_vol === 'IFR' ? star_arrivee.trim() : undefined,
       route_ifr: type_vol === 'IFR' && route_ifr.trim() ? route_ifr.trim() : undefined,
-      strip_route: type_vol === 'IFR' && (selectedSidRoute || selectedStarRoute)
-        ? [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' ')
+      strip_route: type_vol === 'IFR' && (route_ifr.trim() || selectedSidRoute || selectedStarRoute)
+        ? (route_ifr.trim() || [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' '))
         : undefined,
       note_atc: !volSansAtc && note_atc.trim() ? note_atc.trim() : undefined,
       vol_commercial: vol_commercial && !vol_ferry,
@@ -1020,9 +1027,6 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
                       required
                     />
                   )}
-                  {!sidCustomMode && sidList.some((s) => s.nom === sid_depart) && selectedSidRoute && (
-                    <p className="text-xs text-emerald-400/80 mt-1">Route : {selectedSidRoute}</p>
-                  )}
                 </>
               ) : (
                 <input type="text" className="input" value={sid_depart} onChange={(e) => { setSidDepart(e.target.value); setSelectedSidRoute(null); }} required />
@@ -1070,9 +1074,6 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
                       required
                     />
                   )}
-                  {!starCustomMode && starList.some((s) => s.nom === star_arrivee) && selectedStarRoute && (
-                    <p className="text-xs text-emerald-400/80 mt-1">Route : {selectedStarRoute}</p>
-                  )}
                 </>
               ) : (
                 <input type="text" className="input" value={star_arrivee} onChange={(e) => { setStarArrivee(e.target.value); setSelectedStarRoute(null); }} required />
@@ -1088,7 +1089,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
               placeholder="DCT PUNTO DCT MARUK DCT..."
             />
             <p className="text-xs text-slate-500 mt-1">
-              {(selectedSidRoute || selectedStarRoute) ? 'La case route du strip sera remplie automatiquement avec les points SID/STAR sélectionnés.' : 'Si SID/STAR sont choisis dans la liste, la route du strip est remplie automatiquement.'}
+              La case route est remplie automatiquement avec les SID/STAR sélectionnés. Vous pouvez la modifier pour ajouter la partie en route (ex. DCT PUNTO DCT MARUK).
             </p>
           </div>
         </>
