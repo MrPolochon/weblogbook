@@ -19,6 +19,8 @@ interface FormSummary {
   created_at: string;
   updated_at?: string;
   webhook_url?: string;
+  /** Nombre de réponses à vérifier (triche, trashed, time_expired) */
+  pending_review_count?: number;
 }
 
 export default function AdminAeroSchoolPage() {
@@ -160,17 +162,28 @@ export default function AdminAeroSchoolPage() {
                 key={f.id}
                 className="card flex flex-col gap-3 hover:border-sky-500/50 transition-colors relative group"
               >
-                {/* Badge publié/brouillon */}
+                {/* Badge publié/brouillon + point notification à vérifier */}
                 <div className="flex items-center justify-between">
-                  {f.is_published ? (
-                    <span className="flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                      <Globe className="h-3 w-3" /> Publié
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full">
-                      <EyeOff className="h-3 w-3" /> Brouillon
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {f.is_published ? (
+                      <span className="flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                        <Globe className="h-3 w-3" /> Publié
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full">
+                        <EyeOff className="h-3 w-3" /> Brouillon
+                      </span>
+                    )}
+                    {(f.pending_review_count ?? 0) > 0 && (
+                      <span
+                        className="flex items-center gap-1 text-xs font-bold text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40"
+                        title={`${f.pending_review_count} réponse(s) à vérifier`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        {f.pending_review_count}
+                      </span>
+                    )}
+                  </div>
                   <span className="flex items-center gap-1 text-xs text-slate-500">
                     {f.delivery_mode === 'webhook' ? (
                       <><Webhook className="h-3 w-3" /> Webhook</>
@@ -199,9 +212,14 @@ export default function AdminAeroSchoolPage() {
                   </Link>
                   <Link
                     href={`/admin/aeroschool/${f.id}/responses`}
-                    className="flex-1 text-center py-1.5 rounded-lg text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium transition-colors"
+                    className="flex-1 text-center py-1.5 rounded-lg text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium transition-colors relative"
                   >
                     Réponses
+                    {(f.pending_review_count ?? 0) > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center text-[10px] font-bold text-white bg-amber-500 rounded-full">
+                        {f.pending_review_count}
+                      </span>
+                    )}
                   </Link>
                   <button
                     onClick={() => deleteForm(f.id)}
