@@ -214,9 +214,12 @@ export default function FormBuilder({ initial }: Props) {
     }
   };
 
-  // Calcul du barème total
+  // Calcul du barème total (questions notées + modules à questions : 1 pt par question tirée)
   const totalPoints = form.sections.reduce((acc, s) =>
-    acc + s.questions.reduce((qa, q) => qa + (q.is_graded ? q.points : 0), 0), 0);
+    acc + s.questions.reduce((qa, q) => {
+      if (q.type === 'question_module') return qa + Math.max(1, q.module_count ?? 10);
+      return qa + (q.is_graded ? q.points : 0);
+    }, 0), 0);
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">

@@ -224,10 +224,10 @@ export default function AdminResponsesPage() {
                                 const mq = byId.get(questionId);
                                 const displayAnswer = Array.isArray(answer) ? answer.join(', ') : (answer || '—');
                                 const correct = mq?.correct_answers || [];
-                                const isCorrect = correct.length > 0
-                                  ? (Array.isArray(answer)
-                                    ? correct.length === 1 && correct.includes(String(answer?.[0] || ''))
-                                    : correct.includes(String(answer || '')))
+                                const ansNorm = String(Array.isArray(answer) ? answer?.[0] ?? '' : answer ?? '').trim();
+                                const correctNorm = correct.map((c) => String(c).trim());
+                                const isCorrect = correctNorm.length > 0
+                                  ? correctNorm.some((c) => c === ansNorm)
                                   : null;
 
                                 return (

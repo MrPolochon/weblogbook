@@ -153,6 +153,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     let score = 0;
     let maxScore = 0;
     const sections: Section[] = Array.isArray(form.sections) ? form.sections : [];
+    /** Clés de réponses module déjà comptées (évite double comptage si plusieurs blocs partagent le même module_id) */
+    const processedModuleAnswerKeys = new Set<string>();
 
     for (const section of sections) {
       const questions = Array.isArray(section.questions) ? section.questions : [];
@@ -175,14 +177,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           const byId = new Map(modQuestions.map((mq) => [mq.id, mq]));
 
           for (const [key, answer] of moduleAnswers) {
+            if (processedModuleAnswerKeys.has(key)) continue;
+            processedModuleAnswerKeys.add(key);
             const questionId = key.slice(prefix.length);
             const mq = byId.get(questionId);
             if (!mq) continue;
             maxScore += 1;
             const correct = mq.correct_answers || [];
             if (correct.length > 0 && answer) {
-              const ans = String(Array.isArray(answer) ? answer[0] : answer);
-              if (correct.includes(ans)) score += 1;
+              const ans = String(Array.isArray(answer) ? answer[0] : answer).trim();
+              const correctTrimmed = correct.map((c) => String(c).trim());
+              if (correctTrimmed.some((c) => c === ans)) score += 1;
             }
           }
           continue;
