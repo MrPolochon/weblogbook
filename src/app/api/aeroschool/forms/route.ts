@@ -49,7 +49,10 @@ export async function GET() {
     // Retourne un résumé (nombre de sections/questions, pas le contenu complet)
     const summary = (data || []).map((f: { id: string; sections?: unknown[]; title: string; description: string; is_published: boolean; delivery_mode: string; created_at: string }) => {
       const sections = Array.isArray(f.sections) ? f.sections : [];
-      const questionCount = sections.reduce((acc: number, s: { questions?: unknown[] }) => acc + (Array.isArray(s.questions) ? s.questions.length : 0), 0);
+      const questionCount = (sections as { questions?: unknown[] }[]).reduce(
+        (acc, s) => acc + (Array.isArray(s.questions) ? s.questions.length : 0),
+        0
+      );
       return {
         id: f.id,
         title: f.title,
