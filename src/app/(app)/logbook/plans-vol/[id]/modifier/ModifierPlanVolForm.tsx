@@ -13,6 +13,7 @@ type Plan = {
   temps_prev_min: number;
   type_vol: 'VFR' | 'IFR';
   intentions_vol: string | null;
+  niveau_croisiere: string | null;
   sid_depart: string | null;
   star_arrivee: string | null;
   refusal_reason: string | null;
@@ -28,6 +29,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
   const [temps_prev_min, setTempsPrevMin] = useState(String(plan.temps_prev_min || ''));
   const [type_vol, setTypeVol] = useState<'VFR' | 'IFR'>(plan.type_vol || 'VFR');
   const [intentions_vol, setIntentionsVol] = useState(plan.intentions_vol || '');
+  const [niveau_croisiere, setNiveauCroisiere] = useState(plan.niveau_croisiere || '');
   const [sid_depart, setSidDepart] = useState(plan.sid_depart || '');
   const [star_arrivee, setStarArrivee] = useState(plan.star_arrivee || '');
   const [loading, setLoading] = useState(false);
@@ -48,6 +50,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
         temps_prev_min: t,
         type_vol,
         intentions_vol: type_vol === 'VFR' ? intentions_vol.trim() : undefined,
+        niveau_croisiere: type_vol === 'IFR' && niveau_croisiere.trim() ? niveau_croisiere.trim().replace(/^FL\s*/i, '') : undefined,
         sid_depart: type_vol === 'IFR' ? sid_depart.trim() : undefined,
         star_arrivee: type_vol === 'IFR' ? star_arrivee.trim() : undefined,
         vol_sans_atc: volSansAtc,
@@ -165,14 +168,27 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
         </div>
       )}
       {type_vol === 'IFR' && (
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label">SID de départ *</label>
-            <input type="text" className="input" value={sid_depart} onChange={(e) => setSidDepart(e.target.value)} required />
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">SID de départ *</label>
+              <input type="text" className="input" value={sid_depart} onChange={(e) => setSidDepart(e.target.value)} required />
+            </div>
+            <div>
+              <label className="label">STAR d&apos;arrivée *</label>
+              <input type="text" className="input" value={star_arrivee} onChange={(e) => setStarArrivee(e.target.value)} required />
+            </div>
           </div>
           <div>
-            <label className="label">STAR d&apos;arrivée *</label>
-            <input type="text" className="input" value={star_arrivee} onChange={(e) => setStarArrivee(e.target.value)} required />
+            <label className="label">Niveau de croisière (optionnel)</label>
+            <input
+              type="text"
+              className="input w-32 font-mono"
+              value={niveau_croisiere}
+              onChange={(e) => setNiveauCroisiere(e.target.value.replace(/\D/g, '').slice(0, 3))}
+              placeholder="Ex: 350"
+              maxLength={3}
+            />
           </div>
         </div>
       )}

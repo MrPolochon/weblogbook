@@ -321,7 +321,7 @@ export async function PATCH(
       if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
       if (plan.statut !== 'refuse') return NextResponse.json({ error: 'Seul un plan refuse peut etre modifie et renvoye.' }, { status: 400 });
 
-      const { aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee, vol_sans_atc } = body;
+      const { aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, intentions_vol, niveau_croisiere, sid_depart, star_arrivee, vol_sans_atc } = body;
       const ad = String(aeroport_depart || '').toUpperCase();
       const aa = String(aeroport_arrivee || '').toUpperCase();
       if (!CODES_OACI_VALIDES.has(ad) || !CODES_OACI_VALIDES.has(aa)) return NextResponse.json({ error: 'Aeroports invalides.' }, { status: 400 });
@@ -355,6 +355,8 @@ export async function PATCH(
             temps_prev_min: t,
             type_vol: String(type_vol),
             intentions_vol: type_vol === 'VFR' ? String(intentions_vol).trim() : null,
+            niveau_croisiere: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,
+            strip_fl: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,
             sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,
             star_arrivee: type_vol === 'IFR' ? String(star_arrivee).trim() : null,
             statut: 'accepte',
@@ -387,6 +389,8 @@ export async function PATCH(
         temps_prev_min: t,
         type_vol: String(type_vol),
         intentions_vol: type_vol === 'VFR' ? String(intentions_vol).trim() : null,
+        niveau_croisiere: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,
+        strip_fl: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,
         sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,
         star_arrivee: type_vol === 'IFR' ? String(star_arrivee).trim() : null,
         statut: 'en_attente',

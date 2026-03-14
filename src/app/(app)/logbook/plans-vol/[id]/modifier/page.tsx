@@ -16,7 +16,7 @@ export default async function ModifierPlanVolPage({ params }: { params: Promise<
   const admin = createAdminClient();
   const { data: plan } = await admin
     .from('plans_vol')
-    .select('id, pilote_id, statut, aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee, refusal_reason')
+    .select('id, pilote_id, statut, aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, intentions_vol, niveau_croisiere, sid_depart, star_arrivee, refusal_reason')
     .eq('id', id)
     .single();
 

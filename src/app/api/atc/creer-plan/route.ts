@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       temps_prev_min,
       type_vol,
       intentions_vol,
+      niveau_croisiere,
       sid_depart,
       star_arrivee,
       route_ifr,
@@ -105,6 +106,9 @@ export async function POST(request: Request) {
       strip_sid_atc: type_vol === 'IFR' && sid_depart ? String(sid_depart).trim() : null,
       strip_star: type_vol === 'IFR' && star_arrivee ? String(star_arrivee).trim() : null,
       strip_route: (type_vol === 'IFR' && route_ifr) ? String(route_ifr).trim() : null,
+      strip_fl: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,
+      strip_fl_unit: 'FL',
+      niveau_croisiere: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,
       note_atc: note_atc ? String(note_atc).trim() : null,
       statut: 'accepte', // Directement accepté car créé par l'ATC
       accepted_at: new Date().toISOString(),

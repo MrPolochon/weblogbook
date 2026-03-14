@@ -869,6 +869,10 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     if (ctx.type_vol === 'IFR') {
       payload.sid_depart = ctx.sid_depart || 'BRIA';
       payload.star_arrivee = ctx.star_arrivee || 'BRIA';
+      if (ctx.altitude_croisiere) {
+        const raw = String(ctx.altitude_croisiere).trim().replace(/^FL\s*/i, '');
+        if (raw) payload.niveau_croisiere = raw;
+      }
       if (ctx.aircraft?.source === 'compagnie') {
         payload.note_atc = noteAtc;
       }

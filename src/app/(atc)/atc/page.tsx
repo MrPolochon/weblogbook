@@ -115,6 +115,7 @@ export default async function AtcPage() {
       strip_order: plan.strip_order ?? 0,
       pilote_identifiant: piloteIdentifiant,
       intentions_vol: plan.intentions_vol || null,
+      niveau_croisiere: plan.niveau_croisiere || null,
       instructions_atc: plan.note_atc || null,
       automonitoring: plan.automonitoring ?? false,
       isManual: !plan.pilote_id && Boolean(plan.created_by_atc),

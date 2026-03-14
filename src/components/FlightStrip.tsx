@@ -39,6 +39,7 @@ export type StripData = {
   strip_type_wake: string | null;
   pilote_identifiant?: string | null;
   intentions_vol?: string | null;
+  niveau_croisiere?: string | null;
   instructions_atc?: string | null;
   automonitoring?: boolean;
   isManual?: boolean;
@@ -330,7 +331,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
       {(statut === 'en_cours' || statut === 'accepte') && !isAutomonitoring && (
         <button type="button" onClick={() => callAction('transferer', { automonitoring: true })} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 shadow-sm"><Radio className="h-3.5 w-3.5" />{loading === 'transferer' ? '…' : 'Autosurv.'}</button>
       )}
-      {strip.type_vol === 'VFR' && strip.intentions_vol && (
+      {((strip.type_vol === 'VFR' && strip.intentions_vol) || (strip.type_vol === 'IFR' && strip.niveau_croisiere)) && (
         <>
           <button
             type="button"
@@ -353,7 +354,7 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
                 : (isDark ? 'bg-sky-700 text-white hover:bg-sky-600' : 'bg-sky-500 text-white hover:bg-sky-600')
             }`}
           >
-            <MessageSquare className="h-3.5 w-3.5" />Intentions
+            <MessageSquare className="h-3.5 w-3.5" />{strip.type_vol === 'IFR' && strip.niveau_croisiere ? 'CRZ' : 'Intentions'}
           </button>
           {intentionsPos && createPortal(
             (() => {
@@ -368,6 +369,9 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
               const transform = placeAbove ? 'translateY(-100%)' : 'none';
               if (placeAbove && top - estHeight < margin) top = margin + estHeight;
               else if (!placeAbove && top + estHeight > vh - margin) top = vh - margin - estHeight;
+              const intentionsText = strip.type_vol === 'IFR' && strip.niveau_croisiere
+                ? `CRZ : FL ${strip.niveau_croisiere}`
+                : (strip.intentions_vol || '');
               return (
             <div
               style={{
@@ -386,8 +390,10 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
                 isDark ? 'bg-slate-800 border-sky-500 text-slate-100' : 'bg-white border-sky-400 text-slate-900'
               }`}
             >
-              <div className={`text-xs font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>Intentions de vol</div>
-              <p className="text-sm font-mono font-semibold leading-relaxed break-words whitespace-pre-wrap">{strip.intentions_vol}</p>
+              <div className={`text-xs font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>
+                {strip.type_vol === 'IFR' && strip.niveau_croisiere ? 'Niveau de croisière' : 'Intentions de vol'}
+              </div>
+              <p className="text-sm font-mono font-semibold leading-relaxed break-words whitespace-pre-wrap">{intentionsText}</p>
             </div>
           );
         })(),

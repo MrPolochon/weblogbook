@@ -82,6 +82,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const [sid_depart, setSidDepart] = useState('');
   const [star_arrivee, setStarArrivee] = useState('');
   const [route_ifr, setRouteIfr] = useState('');
+  const [niveau_croisiere, setNiveauCroisiere] = useState('');
   const [note_atc, setNoteAtc] = useState('');
   
   // Commercial flight options
@@ -441,6 +442,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       sid_depart: type_vol === 'IFR' ? sid_depart.trim() : undefined,
       star_arrivee: type_vol === 'IFR' ? star_arrivee.trim() : undefined,
       route_ifr: type_vol === 'IFR' && route_ifr.trim() ? stripRouteBrackets(route_ifr).trim() : undefined,
+      niveau_croisiere: type_vol === 'IFR' && niveau_croisiere.trim() ? niveau_croisiere.trim().replace(/^FL\s*/i, '') : undefined,
       strip_route: type_vol === 'IFR' && (sid_depart.trim() || star_arrivee.trim())
         ? (stripRouteBrackets(route_ifr).trim() || (selectedSidRoute && selectedStarRoute ? joinSidStarRoute(selectedSidRoute, selectedStarRoute) : [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' ')) || 'RADAR VECTORS DCT')
         : undefined,
@@ -1117,6 +1119,18 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
             <p className="text-xs text-slate-500 mt-1">
               La SID et la STAR sont définies par les sélecteurs ci-dessus. Vous pouvez ajouter des points en route dans la zone centrale (ex. KOLM DCT IYOL).
             </p>
+          </div>
+          <div>
+            <label className="label">Niveau de croisière (optionnel)</label>
+            <input
+              type="text"
+              className="input w-32 font-mono"
+              value={niveau_croisiere}
+              onChange={(e) => setNiveauCroisiere(e.target.value.replace(/\D/g, '').slice(0, 3))}
+              placeholder="Ex: 350"
+              maxLength={3}
+            />
+            <p className="text-xs text-slate-500 mt-1">Sera affiché dans la case intention du strip comme CRZ : FL XXX</p>
           </div>
         </>
       )}
