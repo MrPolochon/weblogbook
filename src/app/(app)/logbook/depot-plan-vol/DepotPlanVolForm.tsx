@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
+import { joinSidStarRoute } from '@/lib/utils';
 import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio, Phone } from 'lucide-react';
 import BriaDialog, { getBriaCooldownRemaining } from '@/components/BriaDialog';
 import { toast } from 'sonner';
@@ -208,9 +209,12 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   }, [aeroport_arrivee, type_vol]);
 
   // Remplir la case route avec SID/STAR sélectionnés (modifiable par l'utilisateur)
+  // Supprime le waypoint dupliqué si la fin de la SID = début de la STAR
   useEffect(() => {
     if (type_vol !== 'IFR') return;
-    const combined = [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' ');
+    const combined = selectedSidRoute && selectedStarRoute
+      ? joinSidStarRoute(selectedSidRoute, selectedStarRoute)
+      : [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' ');
     setRouteIfr(combined);
   }, [type_vol, selectedSidRoute, selectedStarRoute]);
 
@@ -438,7 +442,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       star_arrivee: type_vol === 'IFR' ? star_arrivee.trim() : undefined,
       route_ifr: type_vol === 'IFR' && route_ifr.trim() ? route_ifr.trim() : undefined,
       strip_route: type_vol === 'IFR' && (route_ifr.trim() || selectedSidRoute || selectedStarRoute)
-        ? (route_ifr.trim() || [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' '))
+        ? (route_ifr.trim() || (selectedSidRoute && selectedStarRoute ? joinSidStarRoute(selectedSidRoute, selectedStarRoute) : [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' ')))
         : undefined,
       note_atc: !volSansAtc && note_atc.trim() ? note_atc.trim() : undefined,
       vol_commercial: vol_commercial && !vol_ferry,

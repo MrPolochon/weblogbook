@@ -7,6 +7,7 @@ import { Phone, PhoneOff, Radio, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { AEROPORTS_PTFS, calculerCoefficientRemplissage, calculerCoefficientChargementCargo, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire } from '@/lib/aeroports-ptfs';
 import { playPhoneRing, playPhoneEnd } from '@/lib/phone-sounds';
+import { joinSidStarRoute } from '@/lib/utils';
 
 // ─── Types ───
 
@@ -866,9 +867,11 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         const starProc = Array.isArray(starList) && starList.find((s: { nom: string }) => String(s.nom).toUpperCase() === String(ctx.star_arrivee).toUpperCase());
         const sidPart = sidProc?.route ? sidProc.route : ctx.sid_depart.trim();
         const starPart = starProc?.route ? starProc.route : ctx.star_arrivee.trim();
-        payload.strip_route = [sidPart, starPart].filter(Boolean).join(' ');
+        payload.strip_route = sidPart && starPart ? joinSidStarRoute(sidPart, starPart) : [sidPart, starPart].filter(Boolean).join(' ');
       } catch {
-        payload.strip_route = [ctx.sid_depart.trim(), ctx.star_arrivee.trim()].filter(Boolean).join(' ');
+        const sid = ctx.sid_depart.trim();
+        const star = ctx.star_arrivee.trim();
+        payload.strip_route = sid && star ? joinSidStarRoute(sid, star) : [sid, star].filter(Boolean).join(' ');
       }
     }
     if (!payload.strip_route && ctx.quoi_ciel?.trim()) {

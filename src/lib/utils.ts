@@ -11,3 +11,27 @@ export function formatDuree(minutes: number): string {
 export function cn(...classes: (string | undefined | false)[]): string {
   return classes.filter(Boolean).join(' ');
 }
+
+/**
+ * Joint les routes SID et STAR en supprimant le waypoint dupliqué
+ * quand la fin de la SID correspond au début de la STAR (ex: WELSH / welsh).
+ */
+export function joinSidStarRoute(sidRoute: string, starRoute: string): string {
+  const sid = sidRoute.trim();
+  const star = starRoute.trim();
+  if (!sid || !star) return [sid, star].filter(Boolean).join(' ');
+
+  const parts = (s: string) => s.split(/\s+(?:dct|DCT)\s+/i).map((p) => p.trim()).filter(Boolean);
+  const sidParts = parts(sid);
+  const starParts = parts(star);
+  const lastSid = sidParts[sidParts.length - 1];
+  const firstStar = starParts[0];
+
+  if (lastSid && firstStar && lastSid.toLowerCase() === firstStar.toLowerCase()) {
+    const starWithoutFirst = starParts.slice(1).join(' dct ');
+    if (!starWithoutFirst) return sid;
+    return `${sid} dct ${starWithoutFirst}`.trim();
+  }
+
+  return `${sid} ${star}`.trim();
+}
