@@ -18,7 +18,7 @@ export default function AdminAtcSessionsEnLigne({ sessions }: { sessions: Sessio
   const [error, setError] = useState<string | null>(null);
 
   async function handleForceDisconnect(userId: string, identifiant: string) {
-    if (!confirm(`Êtes-vous sûr de vouloir déconnecter de force ${identifiant} ?`)) {
+    if (!confirm(`Déconnecter de force ${identifiant} ?\n\nLe contrôleur recevra un message l'informant qu'il a été déconnecté et qu'il doit penser à se mettre hors service pour ne pas bloquer les autres.`)) {
       return;
     }
 

@@ -9,6 +9,7 @@ import AtcLeftSidebar from './AtcLeftSidebar';
 import { AtcThemeProvider } from '@/contexts/AtcThemeContext';
 import AtcTelephone from '@/components/AtcTelephone';
 import InactivityLogout from '@/components/InactivityLogout';
+import AtcSessionRealtimeGuard from '@/components/AtcSessionRealtimeGuard';
 
 export default async function AtcLayout({
   children,
@@ -87,6 +88,7 @@ export default async function AtcLayout({
   return (
     <AtcThemeProvider>
       <div className="min-h-screen flex flex-col">
+        <AtcSessionRealtimeGuard userId={user.id} enService={enService} />
         <InactivityLogout />
         <AutoRefresh intervalSeconds={15} />
         <AtcModeBg isAdmin={isAdmin} />

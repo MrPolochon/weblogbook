@@ -127,6 +127,15 @@ export async function DELETE(
       await admin.from('atc_taxes_pending').delete().eq('session_id', session.id);
     }
 
+    // Message obligatoire : informer le contrôleur qu'il a été déconnecté de force
+    await admin.from('messages').insert({
+      destinataire_id: targetUserId,
+      expediteur_id: null,
+      titre: 'Déconnexion forcée par un administrateur',
+      contenu: `Votre session sur ${session.aeroport} - ${session.position} a été fermée par un administrateur.\n\n⚠️ N'oubliez pas de vous mettre hors service la prochaine fois pour éviter de bloquer la position pour les autres contrôleurs.`,
+      type_message: 'systeme',
+    });
+
     // Supprimer la session
     const { error } = await admin.from('atc_sessions').delete().eq('user_id', targetUserId);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

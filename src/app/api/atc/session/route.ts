@@ -4,6 +4,12 @@ import { NextResponse } from 'next/server';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 
+/**
+ * POST - Se mettre en service sur une position.
+ * Règles : une position (aeroport, position) est bloquée tant que le contrôleur
+ * ne se met pas hors service. Seul un admin peut forcer la déconnexion.
+ * On ne supprime JAMAIS la session d'un autre utilisateur.
+ */
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -23,14 +29,20 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
-    const { data: existing } = await admin.from('atc_sessions').select('id').eq('aeroport', ap).eq('position', position).single();
-    if (existing) return NextResponse.json({ error: 'Position déjà prise.' }, { status: 400 });
+    // Position déjà prise par un autre contrôleur → refuser (ne jamais le déconnecter)
+    const { data: existing } = await admin.from('atc_sessions').select('id, user_id').eq('aeroport', ap).eq('position', position).maybeSingle();
+    if (existing) return NextResponse.json({ error: 'Position déjà prise. Le contrôleur en place doit se mettre hors service.' }, { status: 400 });
 
-    const { data: mySession } = await supabase.from('atc_sessions').select('id').eq('user_id', user.id).single();
+    // Un utilisateur ne peut avoir qu'une seule session
+    const { data: mySession } = await admin.from('atc_sessions').select('id').eq('user_id', user.id).maybeSingle();
     if (mySession) return NextResponse.json({ error: 'Vous avez déjà une session. Mettez-vous hors service d\'abord.' }, { status: 400 });
 
-    const { error } = await supabase.from('atc_sessions').insert({ user_id: user.id, aeroport: ap, position: String(position) });
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    // Insert via admin pour garantir l'atomicité ; la contrainte UNIQUE(aeroport, position) empêche toute prise de position déjà occupée
+    const { error } = await admin.from('atc_sessions').insert({ user_id: user.id, aeroport: ap, position: String(position) });
+    if (error) {
+      if (error.code === '23505') return NextResponse.json({ error: 'Position déjà prise. Le contrôleur en place doit se mettre hors service.' }, { status: 400 });
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error('ATC session POST:', e);

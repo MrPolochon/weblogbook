@@ -156,7 +156,7 @@ export default function FormRenderer({ form }: Props) {
   }, [testStarted, form.sections]);
 
   const antitricheEnabled = form.antitriche_enabled !== false;
-  const { cheatingDetected } = useAntiCheat({
+  const { cheatingDetected, presencePromptVisible, confirmPresence } = useAntiCheat({
     enabled: testStarted && antitricheEnabled,
     onCheatDetected: handleCheat,
     graceMs: 20000,
@@ -614,6 +614,20 @@ export default function FormRenderer({ form }: Props) {
           )}
         </div>
       </form>
+
+      {/* Notification flottante de confirmation de présence (anti-triche relaxé) */}
+      {antitricheEnabled && presencePromptVisible && confirmPresence && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9998] animate-fade-in">
+          <button
+            type="button"
+            onClick={confirmPresence}
+            className="flex items-center gap-3 px-6 py-4 rounded-2xl bg-sky-600 hover:bg-sky-500 text-white font-semibold shadow-xl shadow-sky-900/50 border border-sky-500/50 transition-colors"
+          >
+            <CheckCircle2 className="h-6 w-6 shrink-0" />
+            <span>Je suis toujours là — Cliquez pour confirmer</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

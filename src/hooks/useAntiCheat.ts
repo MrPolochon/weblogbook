@@ -151,10 +151,16 @@ function hasIframeOtherOrigin(): boolean {
   return false;
 }
 
+const PRESENCE_CHECK_INTERVAL_MS = 30000;
+const PRESENCE_RESPONSE_DEADLINE_MS = 30000;
+
 export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, relaxed = false }: AntiCheatOptions = {}) {
   const [cheatingDetected, setCheatingDetected] = useState(false);
+  const [presencePromptVisible, setPresencePromptVisible] = useState(false);
   const cheatingRef = useRef(false);
   const activeRef = useRef(false);
+  const presenceCheckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const presenceResponseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Ne déclencher "perte de focus = triche" que si l'utilisateur a déjà interagi avec la page (évite faux positifs onglet ouvert en arrière-plan). */
   const userHadFocusRef = useRef(false);
   /** Nombre de vérifications consécutives sans focus avant de déclencher (évite faux positifs : notification, menu navigateur, etc.). */
@@ -166,9 +172,20 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
     if (cheatingRef.current) return;
     if (!activeRef.current) return;
     cheatingRef.current = true;
+    setPresencePromptVisible(false);
     setCheatingDetected(true);
     onCheatDetected?.();
   }, [onCheatDetected]);
+
+  const scheduleNextRef = useRef<(() => void) | null>(null);
+  const confirmPresence = useCallback(() => {
+    setPresencePromptVisible(false);
+    if (presenceResponseTimeoutRef.current) {
+      clearTimeout(presenceResponseTimeoutRef.current);
+      presenceResponseTimeoutRef.current = null;
+    }
+    scheduleNextRef.current?.();
+  }, []);
 
   useEffect(() => {
     if (!enabled || cheatingRef.current) return;
@@ -177,9 +194,29 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
     activeRef.current = false;
     userHadFocusRef.current = false;
     noFocusCountRef.current = 0;
+    setPresencePromptVisible(false);
     const graceTimeout = setTimeout(() => {
       activeRef.current = true;
     }, effectiveGrace);
+
+    // ── Mode relaxé : notification de présence toutes les 30s ──
+    // Avant de déclencher l'anti-triche, on affiche une notif. Si l'utilisateur clique en < 30s, pas de déclenchement.
+    const scheduleNextPresenceCheck = () => {
+      if (cheatingRef.current || !activeRef.current) return;
+      if (presenceCheckTimeoutRef.current) clearTimeout(presenceCheckTimeoutRef.current);
+      presenceCheckTimeoutRef.current = setTimeout(() => {
+        if (cheatingRef.current || !activeRef.current) return;
+        presenceCheckTimeoutRef.current = null;
+        setPresencePromptVisible(true);
+        presenceResponseTimeoutRef.current = setTimeout(() => {
+          if (cheatingRef.current) return;
+          presenceResponseTimeoutRef.current = null;
+          triggerCheat();
+        }, PRESENCE_RESPONSE_DEADLINE_MS);
+      }, PRESENCE_CHECK_INTERVAL_MS);
+    };
+    scheduleNextRef.current = scheduleNextPresenceCheck;
+    const presenceGraceTimeout = relaxed ? setTimeout(scheduleNextPresenceCheck, effectiveGrace) : null;
 
     // ── 1. Changement d’onglet ──
     // En mode relaxé : on ne fait rien (on ne peut pas savoir si l’autre onglet est du même domaine).
@@ -255,7 +292,7 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
     const deepScanInterval = relaxed
       ? setInterval(() => {
           if (cheatingRef.current || !activeRef.current) return;
-          if (hasIframeOtherOrigin() || hasAIOverlayOrExtension(true)) triggerCheat();
+          if (hasIframeOtherOrigin()) triggerCheat();
         }, 2500)
       : setInterval(() => {
           if (cheatingRef.current || !activeRef.current) return;
@@ -316,8 +353,9 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
     // Ne plus déclencher sur un seul blur (trop de faux positifs : notification, menu, etc.)
     const handleWindowBlur = () => { /* on s’appuie sur la vérification périodique avec seuil */ };
 
-    // Vérification périodique : déclencher seulement après N fois consécutives sans focus (évite faux positifs en restant passif)
-    const focusCheckWindowInterval = setInterval(() => {
+    // Vérification périodique : déclencher seulement après N fois consécutives sans focus.
+    // DÉSACTIVÉ en mode relaxé : les gens peuvent réfléchir, avoir une notif, un 2e écran, etc. sans quitter la page.
+    const focusCheckWindowInterval = relaxed ? null : setInterval(() => {
       if (cheatingRef.current || !activeRef.current) return;
       if (!userHadFocusRef.current) return;
       if (typeof document.hasFocus !== 'function') return;
@@ -355,10 +393,10 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
       window.removeEventListener('blur', handleWindowBlur);
       if (deepScanInterval) clearInterval(deepScanInterval);
       if (focusCheckInterval) clearInterval(focusCheckInterval);
-      clearInterval(focusCheckWindowInterval);
+      if (focusCheckWindowInterval) clearInterval(focusCheckWindowInterval);
       observer.disconnect();
     };
   }, [enabled, triggerCheat, graceMs, relaxed]);
 
-  return { cheatingDetected };
+  return { cheatingDetected, presencePromptVisible: relaxed ? presencePromptVisible : false, confirmPresence: relaxed ? confirmPresence : undefined };
 }
