@@ -7,7 +7,7 @@ import { Phone, PhoneOff, Radio, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { AEROPORTS_PTFS, calculerCoefficientRemplissage, calculerCoefficientChargementCargo, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire } from '@/lib/aeroports-ptfs';
 import { playPhoneRing, playPhoneEnd } from '@/lib/phone-sounds';
-import { joinSidStarRoute } from '@/lib/utils';
+import { joinSidStarRoute, isIOS, sanitizeForSpeech } from '@/lib/utils';
 
 // ─── Types ───
 
@@ -93,7 +93,7 @@ const SPEECH_TIMEOUT_MS = 12000; // Timeout si la synthèse vocale ne répond pa
 function speakAndWait(text: string): Promise<void> {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return Promise.resolve();
   speechSynthesis.cancel();
-  const toSpeak = textePourTTS(text);
+  const toSpeak = sanitizeForSpeech(textePourTTS(text));
   return new Promise((resolve) => {
     let done = false;
     const finish = () => {
@@ -319,9 +319,13 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     };
   }, [addBria]);
 
-  // Focus input when step changes
+  // Focus input when step changes (iOS : délai pour que le clavier s'ouvre correctement)
   useEffect(() => {
-    if (!isTyping) inputRef.current?.focus();
+    if (!isTyping && inputRef.current) {
+      const delay = isIOS() ? 150 : 0;
+      const t = setTimeout(() => inputRef.current?.focus({ preventScroll: isIOS() }), delay);
+      return () => clearTimeout(t);
+    }
   }, [step, isTyping]);
 
   // Relances en cas d'inactivité
@@ -707,8 +711,13 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         addPilote(v);
         setCtx(prev => ({ ...prev, numero_vol: v.toUpperCase() }));
         await addBria(`Indicatif ${v.toUpperCase()}, bien reçu.`);
-        await addBria("Quelle est votre route ?");
-        setStep('quoi_ciel');
+        if (ctx.type_vol === 'IFR') {
+          setStep('resume');
+          await showResume();
+        } else {
+          await addBria("Quelle est votre route ?");
+          setStep('quoi_ciel');
+        }
         break;
       }
 
@@ -749,7 +758,13 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     } else {
       lines.push(`Autonomie : ${ctx.autonomie} min`);
     }
-    if (ctx.quoi_ciel) lines.push(`Route (strip) : ${ctx.quoi_ciel}`);
+    if (ctx.type_vol === 'IFR') {
+      lines.push(ctx.sid_depart && ctx.star_arrivee
+        ? `Route : ${ctx.sid_depart} + ${ctx.star_arrivee}`
+        : 'Route : RADAR VECTORS DCT');
+    } else if (ctx.quoi_ciel) {
+      lines.push(`Route (strip) : ${ctx.quoi_ciel}`);
+    }
 
     let nbPax = 0;
     let cargoKg = 0;
@@ -854,24 +869,29 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       payload.note_atc = noteAtc;
     }
 
-    // strip_route : si IFR, chercher SID/STAR en base. Si trouvé → utiliser la route ; sinon → garder le texte entré
-    if (ctx.type_vol === 'IFR' && ctx.sid_depart && ctx.star_arrivee && ctx.aeroport_depart && ctx.aeroport_arrivee) {
-      try {
-        const [sidRes, starRes] = await Promise.all([
-          fetch(`/api/sid-star?aeroport=${encodeURIComponent(ctx.aeroport_depart)}&type=SID`),
-          fetch(`/api/sid-star?aeroport=${encodeURIComponent(ctx.aeroport_arrivee)}&type=STAR`),
-        ]);
-        const sidList = await sidRes.json();
-        const starList = await starRes.json();
-        const sidProc = Array.isArray(sidList) && sidList.find((s: { nom: string }) => String(s.nom).toUpperCase() === String(ctx.sid_depart).toUpperCase());
-        const starProc = Array.isArray(starList) && starList.find((s: { nom: string }) => String(s.nom).toUpperCase() === String(ctx.star_arrivee).toUpperCase());
-        const sidPart = sidProc?.route ? sidProc.route : ctx.sid_depart.trim();
-        const starPart = starProc?.route ? starProc.route : ctx.star_arrivee.trim();
-        payload.strip_route = sidPart && starPart ? joinSidStarRoute(sidPart, starPart) : [sidPart, starPart].filter(Boolean).join(' ');
-      } catch {
-        const sid = ctx.sid_depart.trim();
-        const star = ctx.star_arrivee.trim();
-        payload.strip_route = sid && star ? joinSidStarRoute(sid, star) : [sid, star].filter(Boolean).join(' ');
+    // strip_route : IFR = route depuis SID+STAR (si les deux renseignés), sinon RADAR VECTORS DCT
+    if (ctx.type_vol === 'IFR') {
+      if (ctx.sid_depart?.trim() && ctx.star_arrivee?.trim() && ctx.aeroport_depart && ctx.aeroport_arrivee) {
+        try {
+          const [sidRes, starRes] = await Promise.all([
+            fetch(`/api/sid-star?aeroport=${encodeURIComponent(ctx.aeroport_depart)}&type=SID`),
+            fetch(`/api/sid-star?aeroport=${encodeURIComponent(ctx.aeroport_arrivee)}&type=STAR`),
+          ]);
+          const sidList = await sidRes.json();
+          const starList = await starRes.json();
+          const sidProc = Array.isArray(sidList) && sidList.find((s: { nom: string }) => String(s.nom).toUpperCase() === String(ctx.sid_depart).toUpperCase());
+          const starProc = Array.isArray(starList) && starList.find((s: { nom: string }) => String(s.nom).toUpperCase() === String(ctx.star_arrivee).toUpperCase());
+          if (sidProc?.route && starProc?.route) {
+            payload.strip_route = joinSidStarRoute(sidProc.route, starProc.route);
+          } else {
+            payload.strip_route = 'RADAR VECTORS DCT';
+          }
+        } catch {
+          // En cas d'erreur API, on n'a pas les routes réelles (seulement les noms) → fallback sécurisé
+          payload.strip_route = 'RADAR VECTORS DCT';
+        }
+      } else {
+        payload.strip_route = 'RADAR VECTORS DCT';
       }
     }
     if (!payload.strip_route && ctx.quoi_ciel?.trim()) {
@@ -1071,12 +1091,14 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
             <input
               ref={inputRef}
               type="text"
+              inputMode={step === 'nb_personnes' || step === 'temps_vol' || step === 'autonomie' ? 'numeric' : 'text'}
+              autoComplete="off"
               value={inputValue}
               onChange={(e) => { setInputValue(e.target.value); lastActivityRef.current = Date.now(); }}
               placeholder={getPlaceholder(step)}
               disabled={lookupLoading}
               className="flex-1 bg-slate-800 border border-slate-600 text-white rounded-lg px-4 py-3 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
-              autoFocus
+              autoFocus={!isIOS()}
             />
             <button
               type="submit"
@@ -1092,7 +1114,10 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
 
   return createPortal(
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center" style={{ zIndex: 99999 }}>
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl h-[85vh] flex flex-col overflow-hidden">
+      <div
+        className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden"
+        style={isIOS() ? { height: '85dvh', maxHeight: '85dvh' } : { height: '85vh' }}
+      >
         {/* Header */}
         <div className="bg-gradient-to-r from-amber-900/80 to-amber-800/80 border-b border-amber-700/50 px-5 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">

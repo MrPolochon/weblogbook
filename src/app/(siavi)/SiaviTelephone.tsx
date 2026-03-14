@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { unlockAudioForIOS } from '@/lib/phone-sounds';
+import { sanitizeForSpeech } from '@/lib/utils';
 import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX, AlertTriangle } from 'lucide-react';
 import { Room, RoomEvent, Track, ConnectionState } from 'livekit-client';
 
@@ -61,11 +63,11 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     setIsMounted(true);
   }, []);
 
-  // Messages vocaux
+  // Messages vocaux (sanitizeForSpeech pour bug iOS 26 avec < et >)
   const playMessage = useCallback((message: string) => {
     if ('speechSynthesis' in window) {
       speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(message);
+      const utterance = new SpeechSynthesisUtterance(sanitizeForSpeech(message));
       utterance.lang = 'fr-FR';
       utterance.rate = 0.9;
       utterance.volume = 0.8;
@@ -634,7 +636,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     return (
       <>
         <div ref={audioContainerRef} style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }} aria-hidden="true" />
-        <button onClick={() => setIsOpen(true)}
+        <button onClick={() => { unlockAudioForIOS(); setIsOpen(true); }}
           className={`fixed bottom-4 right-4 z-50 bg-gradient-to-b from-red-800 to-red-900 text-white rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl ${callState === 'incoming' && incomingCall?.isEmergency ? 'animate-pulse ring-4 ring-red-500' : ''}`}>
           <div className="p-2 rounded-xl bg-red-700/50"><Phone className="h-5 w-5 text-red-200" /></div>
           <span className="font-medium">Téléphone SIAVI</span>

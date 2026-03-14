@@ -1,3 +1,16 @@
+/** Détection iOS (Safari iPhone/iPad) pour correctifs spécifiques */
+export function isIOS(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+/**
+ * Sanitise le texte pour speechSynthesis (bug iOS 26 : < et > bloquent la synthèse)
+ */
+export function sanitizeForSpeech(text: string): string {
+  return text.replace(/</g, '\uff1c').replace(/>/g, '\uff1e');
+}
+
 /**
  * Affichage durée: < 60 min → "45 min", >= 60 min → "6 h 15"
  */
@@ -34,4 +47,41 @@ export function joinSidStarRoute(sidRoute: string, starRoute: string): string {
   }
 
   return `${sid} ${star}`.trim();
+}
+
+/**
+ * Découpe la route pour affichage coloré (SID bleu, STAR magenta).
+ * Retourne les parties quand la route correspond à joinSidStarRoute(sid, star).
+ */
+export function splitRouteForDisplay(
+  route: string,
+  sidRoute: string | null,
+  starRoute: string | null
+): { sidPart: string; starPart: string; enRoutePart: string } {
+  const r = route.trim();
+  if (!r) return { sidPart: '', starPart: '', enRoutePart: '' };
+  if (!sidRoute?.trim() && !starRoute?.trim()) return { sidPart: '', starPart: '', enRoutePart: r };
+  if (!sidRoute?.trim()) return { sidPart: '', starPart: r, enRoutePart: '' };
+  if (!starRoute?.trim()) return { sidPart: r, starPart: '', enRoutePart: '' };
+
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+  const rn = norm(r);
+  const sn = norm(sidRoute);
+  const stn = norm(starRoute);
+  const joined = norm(joinSidStarRoute(sidRoute.trim(), starRoute.trim()));
+
+  if (rn !== joined) {
+    if (rn.startsWith(sn)) {
+      const sidLen = route.trim().toLowerCase().indexOf(sn) + sn.length;
+      return { sidPart: route.substring(0, sidLen), starPart: '', enRoutePart: route.substring(sidLen).trim() };
+    }
+    return { sidPart: '', starPart: '', enRoutePart: r };
+  }
+
+  const sidLen = rn.indexOf(sn) + sn.length;
+  return {
+    sidPart: route.substring(0, sidLen).trimEnd(),
+    starPart: route.substring(sidLen).trim(),
+    enRoutePart: '',
+  };
 }

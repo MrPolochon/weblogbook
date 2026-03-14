@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { unlockAudioForIOS } from '@/lib/phone-sounds';
+import { sanitizeForSpeech } from '@/lib/utils';
 import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { Room, RoomEvent, Track, ConnectionState } from 'livekit-client';
@@ -62,11 +64,11 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     setIsMounted(true);
   }, []);
 
-  // Messages vocaux
+  // Messages vocaux (sanitizeForSpeech pour bug iOS 26 avec < et >)
   const playMessage = useCallback((message: string) => {
     if ('speechSynthesis' in window) {
       speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(message);
+      const utterance = new SpeechSynthesisUtterance(sanitizeForSpeech(message));
       utterance.lang = 'fr-FR';
       utterance.rate = 0.9;
       utterance.volume = 0.8;
@@ -634,7 +636,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       <>
         {/* Conteneur audio: éviter display:none qui bloque la lecture (cf. bug unidirectionnel) */}
         <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
-        <button onClick={() => setIsOpen(true)}
+        <button onClick={() => { unlockAudioForIOS(); setIsOpen(true); }}
           className={`fixed bottom-4 right-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl`}>
           <div className={`p-2 rounded-xl ${isDark ? 'bg-sky-100' : 'bg-sky-500/20'}`}>
             <Phone className={`h-5 w-5 ${isDark ? 'text-sky-600' : 'text-sky-400'}`} />
