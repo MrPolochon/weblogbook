@@ -46,7 +46,8 @@ export function joinSidStarRoute(sidRoute: string, starRoute: string): string {
     return `${sid} dct ${starWithoutFirst}`.trim();
   }
 
-  return `${sid} ${star}`.trim();
+  // Toujours relier SID et STAR par "dct" (ex: narxx dct space)
+  return `${sid} dct ${star}`.trim();
 }
 
 /**
@@ -71,9 +72,25 @@ export function splitRouteForDisplay(
   const joined = norm(joinSidStarRoute(sidRoute.trim(), starRoute.trim()));
 
   if (rn !== joined) {
+    // Route avec points manuels entre SID et STAR : strax dct narxx dct KOLM DCT IYOL dct space dct beans...
+    if (rn.startsWith(sn) && rn.endsWith(stn) && rn.length > sn.length + stn.length) {
+      const sidLen = rn.indexOf(sn) + sn.length;
+      const starStart = rn.length - stn.length;
+      let mid = r.substring(sidLen, starStart).trim();
+      mid = mid.replace(/^\s*dct\s+/i, '').replace(/\s+dct\s*$/i, '').trim();
+      return {
+        sidPart: r.substring(0, sidLen).trimEnd(),
+        starPart: r.substring(starStart).trim(),
+        enRoutePart: mid,
+      };
+    }
     if (rn.startsWith(sn)) {
       const sidLen = route.trim().toLowerCase().indexOf(sn) + sn.length;
       return { sidPart: route.substring(0, sidLen), starPart: '', enRoutePart: route.substring(sidLen).trim() };
+    }
+    if (rn.endsWith(stn)) {
+      const starStart = rn.length - stn.length;
+      return { sidPart: '', starPart: r.substring(starStart), enRoutePart: r.substring(0, starStart).trim() };
     }
     return { sidPart: '', starPart: '', enRoutePart: r };
   }
@@ -84,4 +101,9 @@ export function splitRouteForDisplay(
     starPart: route.substring(sidLen).trim(),
     enRoutePart: '',
   };
+}
+
+/** Retourne la route sans les crochets [] (pour stockage) */
+export function stripRouteBrackets(route: string): string {
+  return route.replace(/\s*\[\s*|\s*\]\s*/g, ' ').replace(/\s+/g, ' ').trim();
 }

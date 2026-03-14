@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
-import { joinSidStarRoute, splitRouteForDisplay } from '@/lib/utils';
+import { joinSidStarRoute, splitRouteForDisplay, stripRouteBrackets } from '@/lib/utils';
 import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio, Phone } from 'lucide-react';
 import BriaDialog, { getBriaCooldownRemaining } from '@/components/BriaDialog';
 import { unlockAudioForIOS } from '@/lib/phone-sounds';
@@ -441,9 +441,9 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       intentions_vol: type_vol === 'VFR' ? intentions_vol.trim() : undefined,
       sid_depart: type_vol === 'IFR' ? sid_depart.trim() : undefined,
       star_arrivee: type_vol === 'IFR' ? star_arrivee.trim() : undefined,
-      route_ifr: type_vol === 'IFR' && route_ifr.trim() ? route_ifr.trim() : undefined,
+      route_ifr: type_vol === 'IFR' && route_ifr.trim() ? stripRouteBrackets(route_ifr).trim() : undefined,
       strip_route: type_vol === 'IFR' && (sid_depart.trim() || star_arrivee.trim())
-        ? (route_ifr.trim() || (selectedSidRoute && selectedStarRoute ? joinSidStarRoute(selectedSidRoute, selectedStarRoute) : [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' ')) || 'RADAR VECTORS DCT')
+        ? (stripRouteBrackets(route_ifr).trim() || (selectedSidRoute && selectedStarRoute ? joinSidStarRoute(selectedSidRoute, selectedStarRoute) : [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' ')) || 'RADAR VECTORS DCT')
         : undefined,
       note_atc: !volSansAtc && note_atc.trim() ? note_atc.trim() : undefined,
       vol_commercial: vol_commercial && !vol_ferry,
@@ -1088,29 +1088,51 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           </div>
           <div>
             <label className="label">Route IFR (optionnel)</label>
-            {(selectedSidRoute || selectedStarRoute) && route_ifr.trim() && (
-              <div className="mb-2 min-h-[44px] px-3 py-2 rounded-lg bg-slate-800/80 border border-slate-600 text-sm font-mono whitespace-pre-wrap break-words">
-                {(() => {
-                  const { sidPart, starPart, enRoutePart } = splitRouteForDisplay(route_ifr, selectedSidRoute, selectedStarRoute);
-                  return (
-                    <>
-                      {sidPart && <span className="text-sky-300">{sidPart}</span>}
-                      {enRoutePart && <span className="text-slate-300">{enRoutePart}</span>}
-                      {starPart && <span className="text-fuchsia-400">{starPart}</span>}
-                      {!sidPart && !starPart && !enRoutePart && <span className="text-slate-400">{route_ifr}</span>}
-                    </>
-                  );
-                })()}
-              </div>
-            )}
-            <textarea 
-              className="input min-h-[60px]" 
-              value={route_ifr} 
-              onChange={(e) => setRouteIfr(e.target.value)} 
-              placeholder="DCT PUNTO DCT MARUK DCT..."
-            />
+            <div className="relative rounded-xl border border-slate-600/60 bg-slate-800/60 min-h-[80px] overflow-hidden focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/30">
+              {/* Overlay coloré (SID bleu, STAR magenta, crochets si points manuels) */}
+              {route_ifr.trim() && (
+                <div
+                  className="absolute inset-0 px-4 py-2.5 text-sm font-mono whitespace-pre-wrap break-words pointer-events-none overflow-hidden select-none"
+                  aria-hidden
+                >
+                  {(() => {
+                    const { sidPart, starPart, enRoutePart } = splitRouteForDisplay(route_ifr, selectedSidRoute, selectedStarRoute);
+                    const hasManual = !!enRoutePart.trim();
+                    return (
+                      <>
+                        {sidPart && (
+                          <>
+                            {hasManual && <span className="text-slate-500">[</span>}
+                            <span className="text-sky-300">{sidPart}</span>
+                            {hasManual && <span className="text-slate-500">]</span>}
+                            {hasManual && <span className="text-slate-400"> dct </span>}
+                          </>
+                        )}
+                        {enRoutePart && <span className="text-slate-300">{enRoutePart}</span>}
+                        {starPart && (
+                          <>
+                            {hasManual && <span className="text-slate-400"> dct </span>}
+                            {hasManual && <span className="text-slate-500">[</span>}
+                            <span className="text-fuchsia-400">{starPart}</span>
+                            {hasManual && <span className="text-slate-500">]</span>}
+                          </>
+                        )}
+                        {!sidPart && !starPart && !enRoutePart && <span className="text-slate-400">{route_ifr}</span>}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+              <textarea
+                className="min-h-[80px] w-full px-4 py-2.5 border-0 bg-transparent text-transparent caret-slate-200 relative z-10 resize-none focus:outline-none focus:ring-0 placeholder-slate-500"
+                style={{ WebkitTextFillColor: 'transparent' }}
+                value={route_ifr}
+                onChange={(e) => setRouteIfr(e.target.value)}
+                placeholder="DCT PUNTO DCT MARUK DCT..."
+              />
+            </div>
             <p className="text-xs text-slate-500 mt-1">
-              La case route est remplie automatiquement avec les SID/STAR sélectionnés. Vous pouvez toujours la modifier à votre guise pour ajouter la partie en route (ex. DCT PUNTO DCT MARUK).
+              La case route est remplie automatiquement avec les SID/STAR sélectionnés. Vous pouvez toujours la modifier à votre guise. Si vous ajoutez des points manuels entre SID et STAR, ils seront affichés entre crochets.
             </p>
           </div>
         </>
