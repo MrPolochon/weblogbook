@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
-import { joinSidStarRoute, splitRouteForDisplay, stripRouteBrackets } from '@/lib/utils';
+import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
 import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio, Phone } from 'lucide-react';
 import BriaDialog, { getBriaCooldownRemaining } from '@/components/BriaDialog';
 import { unlockAudioForIOS } from '@/lib/phone-sounds';
@@ -116,6 +116,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const [starList, setStarList] = useState<{ id: string; nom: string; route: string }[]>([]);
   const [selectedSidRoute, setSelectedSidRoute] = useState<string | null>(null);
   const [selectedStarRoute, setSelectedStarRoute] = useState<string | null>(null);
+  const [manualRoutePart, setManualRoutePart] = useState('');
   const [sidCustomMode, setSidCustomMode] = useState(false);
   const [starCustomMode, setStarCustomMode] = useState(false);
 
@@ -187,6 +188,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       .catch(() => setSidList([]));
     setSidDepart('');
     setSelectedSidRoute(null);
+    setManualRoutePart('');
     setSidCustomMode(false);
   }, [aeroport_depart, type_vol]);
 
@@ -206,18 +208,15 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       .catch(() => setStarList([]));
     setStarArrivee('');
     setSelectedStarRoute(null);
+    setManualRoutePart('');
     setStarCustomMode(false);
   }, [aeroport_arrivee, type_vol]);
 
-  // Remplir la case route avec SID/STAR sélectionnés (modifiable par l'utilisateur)
-  // Supprime le waypoint dupliqué si la fin de la SID = début de la STAR
+  // Construire route_ifr : SID et STAR viennent des sélecteurs, la partie manuelle est éditable
   useEffect(() => {
     if (type_vol !== 'IFR') return;
-    const combined = selectedSidRoute && selectedStarRoute
-      ? joinSidStarRoute(selectedSidRoute, selectedStarRoute)
-      : [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' ');
-    setRouteIfr(combined);
-  }, [type_vol, selectedSidRoute, selectedStarRoute]);
+    setRouteIfr(buildRouteWithManual(selectedSidRoute, manualRoutePart, selectedStarRoute));
+  }, [type_vol, selectedSidRoute, selectedStarRoute, manualRoutePart]);
 
   // Charger les tarifs par liaison quand la compagnie change
   useEffect(() => {
@@ -1088,51 +1087,35 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           </div>
           <div>
             <label className="label">Route IFR (optionnel)</label>
-            <div className="relative rounded-xl border border-slate-600/60 bg-slate-800/60 min-h-[80px] overflow-hidden focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/30">
-              {/* Overlay coloré (SID bleu, STAR magenta, crochets si points manuels) */}
-              {route_ifr.trim() && (
-                <div
-                  className="absolute inset-0 px-4 py-2.5 text-sm font-mono whitespace-pre-wrap break-words pointer-events-none overflow-hidden select-none"
-                  aria-hidden
-                >
-                  {(() => {
-                    const { sidPart, starPart, enRoutePart } = splitRouteForDisplay(route_ifr, selectedSidRoute, selectedStarRoute);
-                    const hasManual = !!enRoutePart.trim();
-                    return (
-                      <>
-                        {sidPart && (
-                          <>
-                            {hasManual && <span className="text-slate-500">[</span>}
-                            <span className="text-sky-300">{sidPart}</span>
-                            {hasManual && <span className="text-slate-500">]</span>}
-                            {hasManual && <span className="text-slate-400"> dct </span>}
-                          </>
-                        )}
-                        {enRoutePart && <span className="text-slate-300">{enRoutePart}</span>}
-                        {starPart && (
-                          <>
-                            {hasManual && <span className="text-slate-400"> dct </span>}
-                            {hasManual && <span className="text-slate-500">[</span>}
-                            <span className="text-fuchsia-400">{starPart}</span>
-                            {hasManual && <span className="text-slate-500">]</span>}
-                          </>
-                        )}
-                        {!sidPart && !starPart && !enRoutePart && <span className="text-slate-400">{route_ifr}</span>}
-                      </>
-                    );
-                  })()}
-                </div>
+            <div className="flex flex-wrap items-center gap-x-1 gap-y-2 min-h-[52px] px-4 py-2.5 rounded-xl border border-slate-600/60 bg-slate-800/60 focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/30">
+              {/* SID : lecture seule, modifiable uniquement via le sélecteur SID */}
+              {selectedSidRoute && (
+                <>
+                  <span className="text-sky-300 font-mono text-sm select-none shrink-0">{selectedSidRoute}</span>
+                  <span className="text-slate-500 font-mono text-sm select-none shrink-0">dct</span>
+                </>
               )}
-              <textarea
-                className="min-h-[80px] w-full px-4 py-2.5 border-0 bg-transparent text-transparent caret-slate-200 relative z-10 resize-none focus:outline-none focus:ring-0 placeholder-slate-500"
-                style={{ WebkitTextFillColor: 'transparent' }}
-                value={route_ifr}
-                onChange={(e) => setRouteIfr(e.target.value)}
-                placeholder="DCT PUNTO DCT MARUK DCT..."
+              {/* Partie manuelle : seule zone éditable (points entre SID et STAR) */}
+              <input
+                type="text"
+                className="flex-1 min-w-[140px] px-2 py-1 rounded bg-slate-700/50 border border-slate-600/50 text-slate-200 font-mono text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500/30 placeholder-slate-500"
+                value={manualRoutePart}
+                onChange={(e) => setManualRoutePart(e.target.value)}
+                placeholder={selectedSidRoute && selectedStarRoute ? "KOLM DCT IYOL (points en route)" : "Points en route..."}
               />
+              {/* STAR : lecture seule, modifiable uniquement via le sélecteur STAR */}
+              {selectedStarRoute && (
+                <>
+                  <span className="text-slate-500 font-mono text-sm select-none shrink-0">dct</span>
+                  <span className="text-fuchsia-400 font-mono text-sm select-none shrink-0">{selectedStarRoute}</span>
+                </>
+              )}
+              {!selectedSidRoute && !selectedStarRoute && (
+                <span className="text-slate-500 text-sm">Sélectionnez une SID et une STAR pour afficher la route.</span>
+              )}
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              La case route est remplie automatiquement avec les SID/STAR sélectionnés. Vous pouvez toujours la modifier à votre guise. Si vous ajoutez des points manuels entre SID et STAR, ils seront affichés entre crochets.
+              La SID et la STAR sont définies par les sélecteurs ci-dessus. Vous pouvez ajouter des points en route dans la zone centrale (ex. KOLM DCT IYOL).
             </p>
           </div>
         </>

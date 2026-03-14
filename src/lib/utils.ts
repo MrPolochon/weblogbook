@@ -51,6 +51,25 @@ export function joinSidStarRoute(sidRoute: string, starRoute: string): string {
 }
 
 /**
+ * Construit la route complète avec la partie manuelle (points entre SID et STAR).
+ * La SID et la STAR ne sont modifiables que via leurs sélecteurs.
+ */
+export function buildRouteWithManual(
+  sidRoute: string | null,
+  manualPart: string,
+  starRoute: string | null
+): string {
+  const sid = sidRoute?.trim() || '';
+  const star = starRoute?.trim() || '';
+  const manual = manualPart.trim();
+  if (!sid && !star) return manual;
+  if (!sid) return manual ? `${manual} dct ${star}` : star;
+  if (!star) return manual ? `${sid} dct ${manual}` : sid;
+  if (!manual) return joinSidStarRoute(sid, star);
+  return `${sid} dct ${manual} dct ${star}`.trim();
+}
+
+/**
  * Découpe la route pour affichage coloré (SID bleu, STAR magenta).
  * Retourne les parties quand la route correspond à joinSidStarRoute(sid, star).
  */
