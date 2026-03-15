@@ -57,6 +57,11 @@ export default function AdminResponsesPage() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [bulkExamining, setBulkExamining] = useState(false);
+
+  const cheatsToExamine = responses.filter(
+    (r) => r.cheating_detected || r.status === 'trashed' || r.status === 'time_expired'
+  );
 
   const load = useCallback(async () => {
     try {
@@ -108,6 +113,20 @@ export default function AdminResponsesPage() {
     setDeleting(null);
   };
 
+  const examineAllCheats = async () => {
+    if (cheatsToExamine.length === 0) return;
+    if (!confirm(`Examiner et supprimer définitivement les ${cheatsToExamine.length} réponse(s) marquée(s) triche/temps dépassé ?`)) return;
+    setBulkExamining(true);
+    try {
+      const res = await fetch(`/api/aeroschool/forms/${formId}/responses/examine-all-cheats`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      const idsToRemove = new Set(cheatsToExamine.map((r) => r.id));
+      setResponses((r) => r.filter((x) => !idsToRemove.has(x.id)));
+    } catch { /* ignore */ }
+    setBulkExamining(false);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -118,14 +137,27 @@ export default function AdminResponsesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={() => router.push('/admin/aeroschool')} className="text-slate-400 hover:text-white transition-colors">
-          <ArrowLeft className="h-5 w-5" />
-        </button>
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-100">Réponses</h1>
-          <p className="text-slate-400 text-sm">{form?.title || 'Formulaire'}</p>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.push('/admin/aeroschool')} className="text-slate-400 hover:text-white transition-colors">
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-100">Réponses</h1>
+            <p className="text-slate-400 text-sm">{form?.title || 'Formulaire'}</p>
+          </div>
         </div>
+        {cheatsToExamine.length > 0 && (
+          <button
+            onClick={examineAllCheats}
+            disabled={bulkExamining}
+            className="px-4 py-2 rounded-lg border border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+            title={`Examiner et supprimer les ${cheatsToExamine.length} réponse(s) marquée(s) triche`}
+          >
+            {bulkExamining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Examiner toutes les triches ({cheatsToExamine.length})
+          </button>
+        )}
       </div>
 
       {responses.length === 0 ? (
