@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Radio, X, Play, Square, Pencil, Globe, Cloud, Headphones } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
+import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
 interface AtisData {
   airport?: string;
@@ -48,6 +49,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   const [savingConfig, setSavingConfig] = useState(false);
   const configInitializedRef = useRef(false);
   const [botReachable, setBotReachable] = useState<boolean | null>(null);
+  const [botErrorDetail, setBotErrorDetail] = useState<string | null>(null);
 
   const isController = controllingUserId === userId;
   const canStart = !broadcasting;
@@ -73,8 +75,10 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       if (dataRes.ok && dataJson && !dataJson.error) {
         setAtisData(dataJson);
         setBotReachable(true);
-      } else if (dataRes.status >= 500 || dataJson?.error?.includes('connexion')) {
+        setBotErrorDetail(null);
+      } else if (!dataRes.ok) {
         setBotReachable(false);
+        setBotErrorDetail(dataJson?.error || `Erreur ${dataRes.status}`);
       }
       if (configRes.ok && configJson && !configJson.error) {
         setDiscordConfig(configJson);
@@ -86,13 +90,18 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       }
       if (guildsRes.ok && guildsJson?.guilds) {
         setGuilds(guildsJson.guilds);
-        if (guildsJson.guilds?.length > 0) setBotReachable(true);
-      } else if (guildsRes.status >= 500 || guildsJson?.error) {
+        if (guildsJson.guilds?.length > 0) {
+          setBotReachable(true);
+          setBotErrorDetail(null);
+        }
+      } else if (!guildsRes.ok) {
         setBotReachable(false);
+        setBotErrorDetail(guildsJson?.error || `Erreur ${guildsRes.status}`);
       }
     } catch (e) {
       console.error('ATIS fetch:', e);
       setBotReachable(false);
+      setBotErrorDetail('Erreur réseau');
     }
   }, []);
 
@@ -209,6 +218,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     if (isOpen) {
       configInitializedRef.current = false;
       setBotReachable(null);
+      setBotErrorDetail(null);
       fetchStatus();
     }
   }, [isOpen, fetchStatus]);
@@ -237,7 +247,10 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   };
 
   const saveEdit = () => {
-    if (editing === 'airport') handlePatch({ airport_name: editValues.airport_name || undefined });
+    if (editing === 'airport') {
+      const apt = AEROPORTS_PTFS.find((a) => a.code === editValues.airport);
+      handlePatch({ airport: apt?.code, airport_name: apt?.nom });
+    }
     if (editing === 'runway') handlePatch({ runway: editValues.runway || undefined, runway_condition: editValues.runway_condition || undefined });
     if (editing === 'weather') handlePatch({
       wind: editValues.wind || undefined,
@@ -296,10 +309,11 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         {botReachable === false && (
           <div className={`p-3 rounded-lg text-sm ${isDark ? 'bg-amber-50 text-amber-800' : 'bg-amber-900/30 text-amber-200'}`}>
             <p className="font-medium">Bot ATIS injoignable</p>
+            {botErrorDetail && <p className="text-xs mt-1 font-mono bg-black/20 px-2 py-1 rounded">{botErrorDetail}</p>}
             <p className="text-xs mt-1 opacity-90">
               Si Render (plan gratuit) : le bot peut mettre 1–2 min à démarrer. Sinon, vérifiez ATIS_WEBHOOK_URL + ATIS_WEBHOOK_SECRET dans weblogbook.
             </p>
-            <button onClick={() => { setBotReachable(null); fetchStatus(); }} className="mt-2 text-xs underline hover:no-underline">
+            <button onClick={() => { setBotReachable(null); setBotErrorDetail(null); fetchStatus(); }} className="mt-2 text-xs underline hover:no-underline">
               Réessayer
             </button>
           </div>
@@ -354,19 +368,23 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
           <div className="flex justify-between items-center">
             <span className={textMuted}>Aéroport</span>
             {editing === 'airport' ? (
-              <div className="flex gap-1">
-                <input
-                  className={`px-2 py-1 rounded border text-sm w-32 ${inputCl}`}
-                  value={editValues.airport_name ?? ''}
-                  onChange={(e) => setEditValues((v) => ({ ...v, airport_name: e.target.value }))}
-                  placeholder="ex: Chicago O'Hare"
-                />
-                <button onClick={saveEdit} className={`px-2 py-1 rounded text-xs ${btnCl}`}>OK</button>
+              <div className="flex gap-1 flex-1 min-w-0">
+                <select
+                  value={editValues.airport ?? ''}
+                  onChange={(e) => setEditValues((v) => ({ ...v, airport: e.target.value }))}
+                  className={`flex-1 min-w-0 px-2 py-1 rounded border text-sm ${inputCl}`}
+                >
+                  <option value="">— Choisir —</option>
+                  {AEROPORTS_PTFS.map((a) => (
+                    <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>
+                  ))}
+                </select>
+                <button onClick={saveEdit} disabled={!editValues.airport} className={`px-2 py-1 rounded text-xs ${btnCl} disabled:opacity-50`}>OK</button>
                 <button onClick={() => setEditing(null)} className="px-2 py-1 rounded bg-slate-500 text-white text-xs">Annuler</button>
               </div>
             ) : (
-              <button onClick={() => startEdit('airport', { airport_name: d?.airport_name ?? '' })} className="flex items-center gap-1 hover:underline">
-                {val(d?.airport_name || d?.airport)} <Pencil className="h-3 w-3" />
+              <button onClick={() => startEdit('airport', { airport: d?.airport ?? '' })} className="flex items-center gap-1 hover:underline">
+                {d?.airport ? `${d.airport} — ${val(d?.airport_name)}` : val(d?.airport_name || d?.airport)} <Pencil className="h-3 w-3" />
               </button>
             )}
           </div>
