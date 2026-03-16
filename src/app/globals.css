@@ -260,6 +260,11 @@ body.atc-dark .text-red-700 {
   }
 }
 
+@keyframes scroll-left {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 @keyframes zoom-bounce {
   0% { 
     opacity: 0;

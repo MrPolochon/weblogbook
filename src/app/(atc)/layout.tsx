@@ -8,6 +8,8 @@ import AtcAcceptTransfertSidebar from './AtcAcceptTransfertSidebar';
 import AtcLeftSidebar from './AtcLeftSidebar';
 import { AtcThemeProvider } from '@/contexts/AtcThemeContext';
 import AtcTelephone from '@/components/AtcTelephone';
+import AtcAtisButton from '@/components/AtcAtisButton';
+import AtcAtisTicker from '@/components/AtcAtisTicker';
 import InactivityLogout from '@/components/InactivityLogout';
 import AtcSessionRealtimeGuard from '@/components/AtcSessionRealtimeGuard';
 
@@ -93,6 +95,7 @@ export default async function AtcLayout({
         <AutoRefresh intervalSeconds={15} />
         <AtcModeBg isAdmin={isAdmin} />
         <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
+        <AtcAtisTicker />
         <div className="flex flex-1 w-full min-h-0">
           {enService && session && (
             <AtcLeftSidebar plansAuto={plansAuto} plansOrphelins={plansOrphelins} sessionAeroport={session.aeroport} sessionPosition={session.position} />
@@ -101,11 +104,14 @@ export default async function AtcLayout({
           {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} />}
         </div>
         {enService && session && (
-          <AtcTelephone 
-            aeroport={session.aeroport} 
-            position={session.position} 
-            userId={user.id} 
-          />
+          <>
+            <AtcAtisButton aeroport={session.aeroport} position={session.position} userId={user.id} />
+            <AtcTelephone 
+              aeroport={session.aeroport} 
+              position={session.position} 
+              userId={user.id} 
+            />
+          </>
         )}
       </div>
     </AtcThemeProvider>
