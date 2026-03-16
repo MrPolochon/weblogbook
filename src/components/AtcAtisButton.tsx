@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Radio, X, Play, Square, Pencil, Globe, Cloud, Headphones } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
@@ -46,7 +46,8 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   const [guilds, setGuilds] = useState<{ id: string; name: string }[]>([]);
   const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
   const [savingConfig, setSavingConfig] = useState(false);
-  const [configInitialized, setConfigInitialized] = useState(false);
+  const configInitializedRef = useRef(false);
+  const [botReachable, setBotReachable] = useState<boolean | null>(null);
 
   const isController = controllingUserId === userId;
   const canStart = !broadcasting;
@@ -71,20 +72,27 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       }
       if (dataRes.ok && dataJson && !dataJson.error) {
         setAtisData(dataJson);
+        setBotReachable(true);
+      } else if (dataRes.status >= 500 || dataJson?.error?.includes('connexion')) {
+        setBotReachable(false);
       }
       if (configRes.ok && configJson && !configJson.error) {
         setDiscordConfig(configJson);
-        if (!configInitialized && configJson.discord_guild_id) {
+        if (!configInitializedRef.current && configJson.discord_guild_id) {
           setSelectedGuildId(configJson.discord_guild_id);
           setSelectedChannelId(configJson.discord_channel_id || '');
-          setConfigInitialized(true);
+          configInitializedRef.current = true;
         }
       }
       if (guildsRes.ok && guildsJson?.guilds) {
         setGuilds(guildsJson.guilds);
+        if (guildsJson.guilds?.length > 0) setBotReachable(true);
+      } else if (guildsRes.status >= 500 || guildsJson?.error) {
+        setBotReachable(false);
       }
     } catch (e) {
       console.error('ATIS fetch:', e);
+      setBotReachable(false);
     }
   }, []);
 
@@ -199,7 +207,8 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
   useEffect(() => {
     if (isOpen) {
-      setConfigInitialized(false);
+      configInitializedRef.current = false;
+      setBotReachable(null);
       fetchStatus();
     }
   }, [isOpen, fetchStatus]);
@@ -284,6 +293,17 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
       <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${isDark ? 'text-slate-700' : 'text-slate-300'} text-sm`}>
         {error && <p className="text-red-500 text-sm">{error}</p>}
+        {botReachable === false && (
+          <div className={`p-3 rounded-lg text-sm ${isDark ? 'bg-amber-50 text-amber-800' : 'bg-amber-900/30 text-amber-200'}`}>
+            <p className="font-medium">Bot ATIS injoignable</p>
+            <p className="text-xs mt-1 opacity-90">
+              Vérifiez que le bot est en ligne (Render) et que ATIS_WEBHOOK_URL + ATIS_WEBHOOK_SECRET sont configurés dans weblogbook.
+            </p>
+            <button onClick={() => { setBotReachable(null); fetchStatus(); }} className="mt-2 text-xs underline hover:no-underline">
+              Réessayer
+            </button>
+          </div>
+        )}
 
         {/* Config Discord */}
         <div className={`pb-3 border-b ${borderCl}`}>

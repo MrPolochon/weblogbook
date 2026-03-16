@@ -28,7 +28,8 @@ export async function fetchAtisBot<T>(
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      return { error: data.error ?? 'Erreur bot ATIS', status: res.status };
+      const msg = data?.error || (res.status === 401 ? 'Secret incorrect (ATIS_WEBHOOK_SECRET)' : res.status === 503 ? 'Bot non prêt ou webhook non configuré' : `Erreur ${res.status}`);
+      return { error: msg, status: res.status };
     }
     return { data, status: res.status };
   } catch (e) {
