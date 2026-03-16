@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Radio, X, Play, Square, Pencil, Globe, Cloud, Headphones } from 'lucide-react';
+import { Radio, X, Play, Square, Pencil, Globe, Cloud, Headphones, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
@@ -9,6 +9,7 @@ interface AtisData {
   airport?: string;
   airport_name?: string;
   information_code?: string;
+  last_updated?: string;
   runway?: string;
   runway_condition?: string;
   wind?: string;
@@ -29,6 +30,8 @@ interface AtcAtisButtonProps {
 }
 
 const CODE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+const ATIS_VALID_MINUTES = 60;
+const ATIS_WARN_MINUTES = 50; // Alarme 10 min avant obsolescence
 
 export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisButtonProps) {
   const { theme } = useAtcTheme();
@@ -36,6 +39,9 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   const [isOpen, setIsOpen] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
   const [controllingUserId, setControllingUserId] = useState<string | null>(null);
+  const [statusAeroport, setStatusAeroport] = useState<string | null>(null);
+  const [atisCodeAutoRotate, setAtisCodeAutoRotate] = useState(false);
+  const [autoRotateInProgress, setAutoRotateInProgress] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [atisData, setAtisData] = useState<AtisData | null>(null);
@@ -48,6 +54,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
   const [savingConfig, setSavingConfig] = useState(false);
   const configInitializedRef = useRef(false);
+  const alarmFiredRef = useRef(false);
   const [botReachable, setBotReachable] = useState<boolean | null>(null);
   const [botErrorDetail, setBotErrorDetail] = useState<string | null>(null);
 
@@ -71,6 +78,8 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       if (statusRes.ok) {
         setBroadcasting(!!statusData.broadcasting);
         setControllingUserId(statusData.controlling_user_id ?? null);
+        setStatusAeroport(statusData.aeroport ?? null);
+        setAtisCodeAutoRotate(!!statusData.atis_code_auto_rotate);
       }
       if (dataRes.ok && dataJson && !dataJson.error) {
         setAtisData(dataJson);
@@ -182,6 +191,80 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     }
   };
 
+  const getObsolescenceStatus = useCallback(() => {
+    const lu = atisData?.last_updated;
+    if (!lu) return { status: 'unknown' as const, minutesLeft: null };
+    try {
+      const updated = new Date(lu).getTime();
+      const now = Date.now();
+      const elapsedMin = (now - updated) / 60000;
+      const minutesLeft = Math.max(0, ATIS_VALID_MINUTES - elapsedMin);
+      if (elapsedMin >= ATIS_VALID_MINUTES) return { status: 'obsolete' as const, minutesLeft: 0 };
+      if (elapsedMin >= ATIS_WARN_MINUTES) return { status: 'warning' as const, minutesLeft: Math.round(minutesLeft) };
+      return { status: 'ok' as const, minutesLeft: Math.round(minutesLeft) };
+    } catch {
+      return { status: 'unknown' as const, minutesLeft: null };
+    }
+  }, [atisData?.last_updated]);
+
+  const obsStatus = getObsolescenceStatus();
+
+  useEffect(() => {
+    if (broadcasting && isController && (obsStatus.status === 'warning' || obsStatus.status === 'obsolete') && !alarmFiredRef.current) {
+      alarmFiredRef.current = true;
+      try {
+        const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = 800;
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.3);
+      } catch {
+        // Ignore audio errors
+      }
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('ATIS weblogbook', {
+            body: obsStatus.status === 'obsolete' ? 'ATIS obsolète — Mettez à jour le code' : `ATIS obsolète dans ~${obsStatus.minutesLeft} min`,
+            icon: '/favicon.ico',
+          });
+        }
+      } catch {
+        // Ignore notification errors
+      }
+    }
+    if (obsStatus.status === 'ok') alarmFiredRef.current = false;
+  }, [broadcasting, isController, obsStatus.status, obsStatus.minutesLeft]);
+
+  const handleToggleAutoRotate = async () => {
+    const next = !atisCodeAutoRotate;
+    try {
+      await apiCall('/api/atc/atis/auto-code', { method: 'PATCH', body: { auto_rotate: next } });
+      setAtisCodeAutoRotate(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur');
+    }
+  };
+
+  useEffect(() => {
+    if (!broadcasting || !isController || !atisCodeAutoRotate || autoRotateInProgress || obsStatus.status !== 'obsolete') return;
+    const code = atisData?.information_code;
+    if (!code || code.length !== 1) return;
+    const idx = CODE_LETTERS.indexOf(code);
+    const nextCode = idx >= 0 ? CODE_LETTERS[(idx + 1) % 26] : 'A';
+    setAutoRotateInProgress(true);
+    apiCall('/api/atc/atis/atiscode', { method: 'POST', body: { code: nextCode } })
+      .then(() => {
+        setAtisData((prev) => prev ? { ...prev, information_code: nextCode, last_updated: new Date().toISOString() } : null);
+      })
+      .catch(() => {})
+      .finally(() => setAutoRotateInProgress(false));
+  }, [broadcasting, isController, atisCodeAutoRotate, autoRotateInProgress, obsStatus.status, atisData?.information_code]);
+
   const handleCodeChange = async (code: string) => {
     try {
       await apiCall('/api/atc/atis/atiscode', { method: 'POST', body: { code } });
@@ -247,10 +330,6 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   };
 
   const saveEdit = () => {
-    if (editing === 'airport') {
-      const apt = AEROPORTS_PTFS.find((a) => a.code === editValues.airport);
-      handlePatch({ airport: apt?.code, airport_name: apt?.nom });
-    }
     if (editing === 'runway') handlePatch({ runway: editValues.runway || undefined, runway_condition: editValues.runway_condition || undefined });
     if (editing === 'weather') handlePatch({
       wind: editValues.wind || undefined,
@@ -365,40 +444,65 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
         {/* Données actuelles */}
         <div className="space-y-2">
+          {(obsStatus.status === 'warning' || obsStatus.status === 'obsolete') && broadcasting && (
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+              obsStatus.status === 'obsolete'
+                ? 'bg-red-500/20 text-red-400 border border-red-500/50'
+                : 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
+            }`}>
+              <AlertTriangle className="h-5 w-5 shrink-0" />
+              <span className="flex-1">
+                {obsStatus.status === 'obsolete'
+                  ? 'ATIS obsolète — Mettez à jour le code'
+                  : `ATIS obsolète dans ~${obsStatus.minutesLeft} min`}
+              </span>
+              {obsStatus.status === 'obsolete' && atisCodeAutoRotate && isController && autoRotateInProgress && (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              )}
+              {'Notification' in window && Notification.permission !== 'granted' && (
+                <button
+                  type="button"
+                  onClick={() => Notification.requestPermission()}
+                  className="text-xs underline opacity-80 hover:opacity-100"
+                >
+                  Activer alertes
+                </button>
+              )}
+            </div>
+          )}
           <div className="flex justify-between items-center">
             <span className={textMuted}>Aéroport</span>
-            {editing === 'airport' ? (
-              <div className="flex gap-1 flex-1 min-w-0">
-                <select
-                  value={editValues.airport ?? ''}
-                  onChange={(e) => setEditValues((v) => ({ ...v, airport: e.target.value }))}
-                  className={`flex-1 min-w-0 px-2 py-1 rounded border text-sm ${inputCl}`}
-                >
-                  <option value="">— Choisir —</option>
-                  {AEROPORTS_PTFS.map((a) => (
-                    <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>
-                  ))}
-                </select>
-                <button onClick={saveEdit} disabled={!editValues.airport} className={`px-2 py-1 rounded text-xs ${btnCl} disabled:opacity-50`}>OK</button>
-                <button onClick={() => setEditing(null)} className="px-2 py-1 rounded bg-slate-500 text-white text-xs">Annuler</button>
-              </div>
-            ) : (
-              <button onClick={() => startEdit('airport', { airport: d?.airport ?? '' })} className="flex items-center gap-1 hover:underline">
-                {d?.airport ? `${d.airport} — ${val(d?.airport_name)}` : val(d?.airport_name || d?.airport)} <Pencil className="h-3 w-3" />
-              </button>
-            )}
+            <span>
+              {(() => {
+                const code = broadcasting && !isController ? statusAeroport : aeroport;
+                const apt = code ? AEROPORTS_PTFS.find((a) => a.code === code) : null;
+                return apt ? `${apt.code} — ${apt.nom}` : (code || val(d?.airport_name || d?.airport) || '—');
+              })()}
+            </span>
           </div>
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center gap-2">
             <span className={textMuted}>Code</span>
-            <select
-              value={d?.information_code ?? ''}
-              onChange={(e) => handleCodeChange(e.target.value)}
-              className={`px-2 py-1 rounded border text-sm ${inputCl}`}
-            >
-              {CODE_LETTERS.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={d?.information_code ?? ''}
+                onChange={(e) => handleCodeChange(e.target.value)}
+                className={`px-2 py-1 rounded border text-sm ${inputCl}`}
+              >
+                {CODE_LETTERS.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+              {isController && (
+                <button
+                  onClick={handleToggleAutoRotate}
+                  title={atisCodeAutoRotate ? 'Mode auto : rotation du code quand obsolète' : 'Activer la rotation automatique du code'}
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${atisCodeAutoRotate ? 'bg-emerald-600 text-white' : 'bg-slate-600 text-slate-400'} hover:opacity-90`}
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Auto
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex justify-between items-center">
             <span className={textMuted}>Piste</span>

@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { fetchAtisBot } from '@/lib/atis-bot-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +41,16 @@ export async function POST(request: Request) {
     const botSecret = process.env.ATIS_WEBHOOK_SECRET;
     if (!botUrl || !botSecret) {
       return NextResponse.json({ error: 'Bot ATIS non configuré (ATIS_WEBHOOK_URL/SECRET).' }, { status: 503 });
+    }
+
+    // Définir l'aéroport automatiquement selon la session du contrôleur
+    const apt = AEROPORTS_PTFS.find((a) => a.code === String(aeroport).toUpperCase());
+    const patchRes = await fetchAtisBot('/webhook/atis-data', {
+      method: 'PATCH',
+      body: { airport: String(aeroport).toUpperCase(), airport_name: apt?.nom ?? aeroport },
+    });
+    if (patchRes.error && patchRes.status !== 503) {
+      return NextResponse.json({ error: patchRes.error }, { status: patchRes.status });
     }
 
     const res = await fetch(`${botUrl.replace(/\/$/, '')}/webhook/start`, {

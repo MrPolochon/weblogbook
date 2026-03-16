@@ -14,7 +14,7 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role, atc, atis_ticker_visible').eq('id', user.id).single();
+    const { data: profile } = await supabase.from('profiles').select('role, atc, atis_ticker_visible, atis_code_auto_rotate').eq('id', user.id).single();
     const canAtc = profile?.role === 'admin' || profile?.role === 'atc' || Boolean(profile?.atc);
     if (!canAtc) return NextResponse.json({ error: 'Accès ATC requis.' }, { status: 403 });
 
@@ -54,6 +54,7 @@ export async function GET() {
       broadcasting: state?.broadcasting && botBroadcasting,
       atis_text: atisText,
       atis_ticker_visible: profile?.atis_ticker_visible ?? true,
+      atis_code_auto_rotate: profile?.atis_code_auto_rotate ?? false,
     });
   } catch (e) {
     console.error('ATIS status:', e);
