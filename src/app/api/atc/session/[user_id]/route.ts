@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { finaliserCloturePlan } from '@/lib/plans-vol/closure';
+import { stopAtisIfController } from '@/lib/atis-bot-api';
 
 /**
  * DELETE - Déconnecter de force un ATC (admin uniquement)
@@ -135,6 +136,9 @@ export async function DELETE(
       contenu: `Votre session sur ${session.aeroport} - ${session.position} a été fermée par un administrateur.\n\n⚠️ N'oubliez pas de vous mettre hors service la prochaine fois pour éviter de bloquer la position pour les autres contrôleurs.`,
       type_message: 'systeme',
     });
+
+    // Si cet ATC contrôlait l'ATIS, l'arrêter automatiquement
+    await stopAtisIfController(targetUserId);
 
     // Supprimer la session
     const { error } = await admin.from('atc_sessions').delete().eq('user_id', targetUserId);

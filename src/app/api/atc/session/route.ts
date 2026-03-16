@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { stopAtisIfController } from '@/lib/atis-bot-api';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 
@@ -116,6 +117,9 @@ export async function DELETE() {
       // Supprimer les taxes pending traitées
       await admin.from('atc_taxes_pending').delete().eq('session_id', session.id);
     }
+
+    // Si cet ATC contrôlait l'ATIS, l'arrêter automatiquement
+    await stopAtisIfController(user.id);
 
     // Supprimer la session
     const { error } = await supabase.from('atc_sessions').delete().eq('user_id', user.id);

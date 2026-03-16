@@ -1,3 +1,5 @@
+import { createAdminClient } from '@/lib/supabase/admin';
+
 /**
  * Client pour appeler l'API du bot ATIS (ATISVoiceMaker)
  */
@@ -41,4 +43,33 @@ export async function fetchAtisBot<T>(
     const isTimeout = e instanceof Error && e.name === 'AbortError';
     return { error: isTimeout ? 'Délai dépassé (le bot Render démarre peut-être, réessayez dans 1 min)' : 'Erreur de connexion au bot', status: 500 };
   }
+}
+
+/**
+ * Arrête le broadcast ATIS si l'utilisateur donné est le contrôleur.
+ * Appelé quand un ATC se met hors service ou est déconnecté.
+ */
+export async function stopAtisIfController(userId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { data: state } = await admin.from('atis_broadcast_state').select('controlling_user_id').eq('id', 'default').maybeSingle();
+  if (!state?.controlling_user_id || state.controlling_user_id !== userId) return;
+
+  const botUrl = getBotUrl();
+  const secret = getSecret();
+  if (botUrl && secret) {
+    await fetch(`${botUrl}/webhook/stop`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secret}`, 'X-ATIS-Secret': secret },
+    }).catch((e) => console.error('ATIS stop on disconnect:', e));
+  }
+
+  await admin.from('atis_broadcast_state').upsert({
+    id: 'default',
+    controlling_user_id: null,
+    aeroport: null,
+    position: null,
+    broadcasting: false,
+    started_at: null,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'id' });
 }

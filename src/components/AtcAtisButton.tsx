@@ -344,10 +344,10 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
   const bgMain = isDark ? 'bg-gradient-to-b from-slate-100 to-slate-200' : 'bg-gradient-to-b from-slate-800 to-slate-900';
   const textMain = isDark ? 'text-slate-900' : 'text-slate-100';
-  const textMuted = isDark ? 'text-slate-600' : 'text-slate-300';
-  const textValue = isDark ? 'text-slate-800 font-medium' : 'text-slate-100';
-  const borderCl = isDark ? 'border-slate-300' : 'border-slate-600';
-  const inputCl = isDark ? 'bg-white border-slate-400 text-slate-900 text-base' : 'bg-slate-700 border-slate-500 text-slate-100 text-base';
+  const textMuted = isDark ? 'text-slate-700 font-medium' : 'text-slate-300';
+  const textValue = isDark ? 'text-slate-900 font-semibold' : 'text-slate-100 font-medium';
+  const borderCl = isDark ? 'border-slate-400' : 'border-slate-600';
+  const inputCl = isDark ? 'bg-white border-slate-500 text-slate-900 text-base' : 'bg-slate-700 border-slate-500 text-slate-100 text-base';
   const btnCl = isDark ? 'bg-sky-500 hover:bg-sky-400 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white';
 
   if (!isOpen) {
@@ -379,12 +379,12 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
           <Radio className={`h-5 w-5 ${isDark ? 'text-amber-600' : 'text-amber-400'}`} />
           <span className={`text-base font-bold ${textMain}`}>Panneau ATIS</span>
         </div>
-        <button onClick={() => { setIsOpen(false); setError(null); setEditing(null); }} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-300' : 'hover:bg-slate-700'}`}>
-          <X className={`h-3.5 w-3.5 ${textMuted}`} />
+        <button onClick={() => { setIsOpen(false); setError(null); setEditing(null); }} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-300 text-slate-700' : 'hover:bg-slate-700 text-slate-300'}`}>
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      <div className={`flex-1 overflow-y-auto p-5 space-y-4 text-base ${isDark ? 'text-slate-700' : 'text-slate-200'}`}>
+      <div className={`flex-1 overflow-y-auto p-5 space-y-4 text-base ${isDark ? 'text-slate-800' : 'text-slate-200'}`}>
         {error && <p className="text-red-500 text-base font-medium bg-red-500/10 px-3 py-2 rounded-lg border border-red-500/30">{error}</p>}
         {botReachable === false && (
           <div className={`p-4 rounded-lg text-base ${isDark ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-amber-900/40 text-amber-100 border border-amber-600/50'}`}>
@@ -448,8 +448,8 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
           {(obsStatus.status === 'warning' || obsStatus.status === 'obsolete') && broadcasting && (
             <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-base font-semibold ${
               obsStatus.status === 'obsolete'
-                ? 'bg-red-500/20 text-red-400 border border-red-500/50'
-                : 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
+                ? isDark ? 'bg-red-500/20 text-red-800 border border-red-500/50' : 'bg-red-500/20 text-red-400 border border-red-500/50'
+                : isDark ? 'bg-amber-500/20 text-amber-800 border border-amber-500/50' : 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
             }`}>
               <AlertTriangle className="h-5 w-5 shrink-0" />
               <span className="flex-1">
@@ -497,7 +497,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 <button
                   onClick={handleToggleAutoRotate}
                   title={atisCodeAutoRotate ? 'Mode auto : rotation du code quand obsolète' : 'Activer la rotation automatique du code'}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium ${atisCodeAutoRotate ? 'bg-emerald-600 text-white' : 'bg-slate-600 text-slate-300'} hover:opacity-90`}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium ${atisCodeAutoRotate ? 'bg-emerald-600 text-white' : isDark ? 'bg-slate-400 text-slate-900' : 'bg-slate-600 text-slate-300'} hover:opacity-90`}
                 >
                   <RefreshCw className="h-4 w-4" />
                   Auto
@@ -602,14 +602,14 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         <div className={`flex gap-3 pt-4 border-t ${borderCl}`}>
           <button
             onClick={handleToggleCavok}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${d?.cavok ? 'bg-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'bg-slate-500/20'} ${isDark ? 'hover:bg-slate-200' : 'hover:bg-slate-600'}`}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${d?.cavok ? 'bg-emerald-500/30 text-emerald-800 dark:text-emerald-300' : 'bg-slate-500/30'} ${isDark ? 'text-slate-700 hover:bg-slate-300' : 'text-slate-300 hover:bg-slate-600'}`}
           >
             <Cloud className="h-4 w-4" />
             CAVOK {d?.cavok ? '✓' : ''}
           </button>
           <button
             onClick={handleToggleBilingual}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${d?.bilingual_mode ? 'bg-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'bg-slate-500/20'} ${isDark ? 'hover:bg-slate-200' : 'hover:bg-slate-600'}`}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${d?.bilingual_mode ? 'bg-emerald-500/30 text-emerald-800 dark:text-emerald-300' : 'bg-slate-500/30'} ${isDark ? 'text-slate-700 hover:bg-slate-300' : 'text-slate-300 hover:bg-slate-600'}`}
           >
             <Globe className="h-4 w-4" />
             EN+FR {d?.bilingual_mode ? '✓' : ''}
