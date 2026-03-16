@@ -28,6 +28,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Un autre ATC contrôle déjà le bot ATIS.' }, { status: 400 });
     }
 
+    const { data: config } = await admin.from('atis_broadcast_config').select('discord_guild_id, discord_channel_id').eq('id', 'default').maybeSingle();
+    const guildId = config?.discord_guild_id;
+    const channelId = config?.discord_channel_id;
+    if (!guildId || !channelId) {
+      return NextResponse.json({ error: 'Sélectionnez un serveur Discord et un canal vocal dans le panneau ATIS avant de démarrer.' }, { status: 400 });
+    }
+
     const botUrl = process.env.ATIS_WEBHOOK_URL;
     const botSecret = process.env.ATIS_WEBHOOK_SECRET;
     if (!botUrl || !botSecret) {
@@ -37,6 +44,7 @@ export async function POST(request: Request) {
     const res = await fetch(`${botUrl.replace(/\/$/, '')}/webhook/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${botSecret}`, 'X-ATIS-Secret': botSecret },
+      body: JSON.stringify({ guild_id: guildId, channel_id: channelId }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
