@@ -20,12 +20,16 @@ export async function fetchAtisBot<T>(
     return { error: 'Bot ATIS non configuré', status: 503 };
   }
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000); // 45s pour cold start Render
     const res = await fetch(`${url}${path}`, {
       method: options?.method ?? 'GET',
       headers: headers(),
       body: options?.body ? JSON.stringify(options.body) : undefined,
       cache: 'no-store',
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const msg = data?.error || (res.status === 401 ? 'Secret incorrect (ATIS_WEBHOOK_SECRET)' : res.status === 503 ? 'Bot non prêt ou webhook non configuré' : `Erreur ${res.status}`);
@@ -34,6 +38,7 @@ export async function fetchAtisBot<T>(
     return { data, status: res.status };
   } catch (e) {
     console.error('ATIS bot fetch:', e);
-    return { error: 'Erreur de connexion au bot', status: 500 };
+    const isTimeout = e instanceof Error && e.name === 'AbortError';
+    return { error: isTimeout ? 'Délai dépassé (le bot Render démarre peut-être, réessayez dans 1 min)' : 'Erreur de connexion au bot', status: 500 };
   }
 }

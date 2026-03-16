@@ -297,7 +297,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
           <div className={`p-3 rounded-lg text-sm ${isDark ? 'bg-amber-50 text-amber-800' : 'bg-amber-900/30 text-amber-200'}`}>
             <p className="font-medium">Bot ATIS injoignable</p>
             <p className="text-xs mt-1 opacity-90">
-              Vérifiez que le bot est en ligne (Render) et que ATIS_WEBHOOK_URL + ATIS_WEBHOOK_SECRET sont configurés dans weblogbook.
+              Si Render (plan gratuit) : le bot peut mettre 1–2 min à démarrer. Sinon, vérifiez ATIS_WEBHOOK_URL + ATIS_WEBHOOK_SECRET dans weblogbook.
             </p>
             <button onClick={() => { setBotReachable(null); fetchStatus(); }} className="mt-2 text-xs underline hover:no-underline">
               Réessayer
