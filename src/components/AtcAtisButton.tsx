@@ -343,10 +343,11 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   };
 
   const bgMain = isDark ? 'bg-gradient-to-b from-slate-100 to-slate-200' : 'bg-gradient-to-b from-slate-800 to-slate-900';
-  const textMain = isDark ? 'text-slate-800' : 'text-slate-100';
-  const textMuted = isDark ? 'text-slate-500' : 'text-slate-400';
-  const borderCl = isDark ? 'border-slate-300' : 'border-slate-700';
-  const inputCl = isDark ? 'bg-white border-slate-300 text-slate-800' : 'bg-slate-700 border-slate-600 text-slate-100';
+  const textMain = isDark ? 'text-slate-900' : 'text-slate-100';
+  const textMuted = isDark ? 'text-slate-600' : 'text-slate-300';
+  const textValue = isDark ? 'text-slate-800 font-medium' : 'text-slate-100';
+  const borderCl = isDark ? 'border-slate-300' : 'border-slate-600';
+  const inputCl = isDark ? 'bg-white border-slate-400 text-slate-900 text-base' : 'bg-slate-700 border-slate-500 text-slate-100 text-base';
   const btnCl = isDark ? 'bg-sky-500 hover:bg-sky-400 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white';
 
   if (!isOpen) {
@@ -372,45 +373,45 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   const val = (v: string | null | undefined) => v ?? '—';
 
   return (
-    <div className={`fixed left-4 bottom-4 z-50 ${bgMain} rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]`} style={{ width: '340px' }}>
-      <div className={`px-4 py-3 flex items-center justify-between border-b ${borderCl} flex-shrink-0`}>
+    <div className={`fixed left-4 bottom-4 z-50 ${bgMain} rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]`} style={{ width: 'min(420px, 95vw)' }}>
+      <div className={`px-5 py-4 flex items-center justify-between border-b ${borderCl} flex-shrink-0`}>
         <div className="flex items-center gap-2">
-          <Radio className={`h-4 w-4 ${isDark ? 'text-amber-600' : 'text-amber-400'}`} />
-          <span className={`text-sm font-semibold ${textMain}`}>Panneau ATIS</span>
+          <Radio className={`h-5 w-5 ${isDark ? 'text-amber-600' : 'text-amber-400'}`} />
+          <span className={`text-base font-bold ${textMain}`}>Panneau ATIS</span>
         </div>
         <button onClick={() => { setIsOpen(false); setError(null); setEditing(null); }} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-300' : 'hover:bg-slate-700'}`}>
           <X className={`h-3.5 w-3.5 ${textMuted}`} />
         </button>
       </div>
 
-      <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${isDark ? 'text-slate-700' : 'text-slate-300'} text-sm`}>
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+      <div className={`flex-1 overflow-y-auto p-5 space-y-4 text-base ${isDark ? 'text-slate-700' : 'text-slate-200'}`}>
+        {error && <p className="text-red-500 text-base font-medium bg-red-500/10 px-3 py-2 rounded-lg border border-red-500/30">{error}</p>}
         {botReachable === false && (
-          <div className={`p-3 rounded-lg text-sm ${isDark ? 'bg-amber-50 text-amber-800' : 'bg-amber-900/30 text-amber-200'}`}>
-            <p className="font-medium">Bot ATIS injoignable</p>
-            {botErrorDetail && <p className="text-xs mt-1 font-mono bg-black/20 px-2 py-1 rounded">{botErrorDetail}</p>}
-            <p className="text-xs mt-1 opacity-90">
+          <div className={`p-4 rounded-lg text-base ${isDark ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-amber-900/40 text-amber-100 border border-amber-600/50'}`}>
+            <p className="font-semibold">Bot ATIS injoignable</p>
+            {botErrorDetail && <p className="text-sm mt-2 font-mono bg-black/20 px-3 py-2 rounded-lg">{botErrorDetail}</p>}
+            <p className="text-sm mt-2 opacity-95">
               Si Render (plan gratuit) : le bot peut mettre 1–2 min à démarrer. Sinon, vérifiez ATIS_WEBHOOK_URL + ATIS_WEBHOOK_SECRET dans weblogbook.
             </p>
-            <button onClick={() => { setBotReachable(null); setBotErrorDetail(null); fetchStatus(); }} className="mt-2 text-xs underline hover:no-underline">
+            <button onClick={() => { setBotReachable(null); setBotErrorDetail(null); fetchStatus(); }} className="mt-3 text-sm font-medium underline hover:no-underline">
               Réessayer
             </button>
           </div>
         )}
 
         {/* Config Discord */}
-        <div className={`pb-3 border-b ${borderCl}`}>
-          <div className="flex items-center gap-2 mb-2">
-            <Headphones className={`h-4 w-4 ${textMuted}`} />
-            <span className="font-medium">Discord</span>
+        <div className={`pb-4 border-b ${borderCl}`}>
+          <div className="flex items-center gap-2 mb-3">
+            <Headphones className={`h-5 w-5 ${textMuted}`} />
+            <span className="font-semibold text-base">Discord</span>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div>
-              <label className={`text-xs ${textMuted}`}>Serveur</label>
+              <label className={`block text-sm font-medium ${textMuted} mb-1`}>Serveur</label>
               <select
                 value={selectedGuildId}
                 onChange={(e) => { setSelectedGuildId(e.target.value); setSelectedChannelId(''); }}
-                className={`w-full mt-0.5 px-2 py-1.5 rounded border text-sm ${inputCl}`}
+                className={`w-full px-3 py-2 rounded-lg border ${inputCl}`}
               >
                 <option value="">— Choisir —</option>
                 {guilds.map((g) => (
@@ -419,12 +420,12 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
               </select>
             </div>
             <div>
-              <label className={`text-xs ${textMuted}`}>Canal vocal</label>
+              <label className={`block text-sm font-medium ${textMuted} mb-1`}>Canal vocal</label>
               <select
                 value={selectedChannelId}
                 onChange={(e) => setSelectedChannelId(e.target.value)}
                 disabled={!selectedGuildId}
-                className={`w-full mt-0.5 px-2 py-1.5 rounded border text-sm ${inputCl} disabled:opacity-50`}
+                className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
               >
                 <option value="">— Choisir —</option>
                 {channels.map((c) => (
@@ -435,7 +436,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
             <button
               onClick={saveDiscordConfig}
               disabled={savingConfig || !selectedGuildId || !selectedChannelId}
-              className={`w-full py-1.5 rounded-lg text-xs font-medium ${btnCl} disabled:opacity-50`}
+              className={`w-full py-2.5 rounded-lg text-sm font-semibold ${btnCl} disabled:opacity-50`}
             >
               {savingConfig ? 'Enregistrement...' : 'Enregistrer'}
             </button>
@@ -443,9 +444,9 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         </div>
 
         {/* Données actuelles */}
-        <div className="space-y-2">
+        <div className="space-y-3">
           {(obsStatus.status === 'warning' || obsStatus.status === 'obsolete') && broadcasting && (
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+            <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-base font-semibold ${
               obsStatus.status === 'obsolete'
                 ? 'bg-red-500/20 text-red-400 border border-red-500/50'
                 : 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
@@ -463,16 +464,16 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 <button
                   type="button"
                   onClick={() => Notification.requestPermission()}
-                  className="text-xs underline opacity-80 hover:opacity-100"
+                  className="text-sm font-medium underline hover:no-underline shrink-0"
                 >
                   Activer alertes
                 </button>
               )}
             </div>
           )}
-          <div className="flex justify-between items-center">
-            <span className={textMuted}>Aéroport</span>
-            <span>
+          <div className="flex justify-between items-center gap-3">
+            <span className={`text-sm font-medium min-w-[80px] ${textMuted}`}>Aéroport</span>
+            <span className={`text-right ${textValue}`}>
               {(() => {
                 const code = broadcasting && !isController ? statusAeroport : aeroport;
                 const apt = code ? AEROPORTS_PTFS.find((a) => a.code === code) : null;
@@ -480,13 +481,13 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
               })()}
             </span>
           </div>
-          <div className="flex justify-between items-center gap-2">
-            <span className={textMuted}>Code</span>
+          <div className="flex justify-between items-center gap-3">
+            <span className={`text-sm font-medium min-w-[80px] ${textMuted}`}>Code</span>
             <div className="flex items-center gap-2">
               <select
                 value={d?.information_code ?? ''}
                 onChange={(e) => handleCodeChange(e.target.value)}
-                className={`px-2 py-1 rounded border text-sm ${inputCl}`}
+                className={`px-3 py-2 rounded-lg border font-semibold ${inputCl}`}
               >
                 {CODE_LETTERS.map((c) => (
                   <option key={c} value={c}>{c}</option>
@@ -496,45 +497,45 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 <button
                   onClick={handleToggleAutoRotate}
                   title={atisCodeAutoRotate ? 'Mode auto : rotation du code quand obsolète' : 'Activer la rotation automatique du code'}
-                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${atisCodeAutoRotate ? 'bg-emerald-600 text-white' : 'bg-slate-600 text-slate-400'} hover:opacity-90`}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium ${atisCodeAutoRotate ? 'bg-emerald-600 text-white' : 'bg-slate-600 text-slate-300'} hover:opacity-90`}
                 >
-                  <RefreshCw className="h-3 w-3" />
+                  <RefreshCw className="h-4 w-4" />
                   Auto
                 </button>
               )}
             </div>
           </div>
-          <div className="flex justify-between items-center">
-            <span className={textMuted}>Piste</span>
+          <div className="flex justify-between items-center gap-3">
+            <span className={`text-sm font-medium min-w-[80px] ${textMuted}`}>Piste</span>
             {editing === 'runway' ? (
-              <div className="flex flex-col gap-1">
-                <input className={`px-2 py-1 rounded border text-sm ${inputCl}`} placeholder="ex: 25L/25R" value={editValues.runway ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, runway: e.target.value }))} />
-                <input className={`px-2 py-1 rounded border text-sm ${inputCl}`} placeholder="Condition" value={editValues.runway_condition ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, runway_condition: e.target.value }))} />
-                <div className="flex gap-1">
-                  <button onClick={saveEdit} className={`px-2 py-1 rounded text-xs ${btnCl}`}>OK</button>
-                  <button onClick={() => setEditing(null)} className="px-2 py-1 rounded bg-slate-500 text-white text-xs">Annuler</button>
+              <div className="flex flex-col gap-2 flex-1">
+                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="ex: 25L/25R" value={editValues.runway ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, runway: e.target.value }))} />
+                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Condition" value={editValues.runway_condition ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, runway_condition: e.target.value }))} />
+                <div className="flex gap-2">
+                  <button onClick={saveEdit} className={`px-3 py-2 rounded-lg text-sm font-medium ${btnCl}`}>OK</button>
+                  <button onClick={() => setEditing(null)} className="px-3 py-2 rounded-lg bg-slate-500 text-white text-sm font-medium">Annuler</button>
                 </div>
               </div>
             ) : (
-              <button onClick={() => startEdit('runway', { runway: d?.runway ?? '', runway_condition: d?.runway_condition ?? '' })} className="flex items-center gap-1 hover:underline">
-                {val(d?.runway)} ({val(d?.runway_condition)}) <Pencil className="h-3 w-3" />
+              <button onClick={() => startEdit('runway', { runway: d?.runway ?? '', runway_condition: d?.runway_condition ?? '' })} className={`flex items-center gap-2 hover:underline ${textValue}`}>
+                {val(d?.runway)} ({val(d?.runway_condition)}) <Pencil className="h-4 w-4 shrink-0" />
               </button>
             )}
           </div>
-          <div className="flex justify-between items-center">
-            <span className={textMuted}>Vent</span>
+          <div className="flex justify-between items-center gap-3">
+            <span className={`text-sm font-medium min-w-[80px] ${textMuted}`}>Vent</span>
             {editing === 'weather' ? (
-              <div className="flex flex-col gap-1 w-full">
-                <input className={`px-2 py-1 rounded border text-sm ${inputCl}`} placeholder="Vent" value={editValues.wind ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, wind: e.target.value }))} />
-                <input className={`px-2 py-1 rounded border text-sm ${inputCl}`} placeholder="Visibilité" value={editValues.visibility ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, visibility: e.target.value }))} />
-                <input className={`px-2 py-1 rounded border text-sm ${inputCl}`} placeholder="Ciel" value={editValues.sky_condition ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, sky_condition: e.target.value }))} />
+              <div className="flex flex-col gap-2 flex-1">
+                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Vent" value={editValues.wind ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, wind: e.target.value }))} />
+                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Visibilité" value={editValues.visibility ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, visibility: e.target.value }))} />
+                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Ciel" value={editValues.sky_condition ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, sky_condition: e.target.value }))} />
                 <div className="flex gap-2">
-                  <input className={`px-2 py-1 rounded border text-sm w-16 ${inputCl}`} placeholder="Temp" value={editValues.temperature ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, temperature: e.target.value }))} />
-                  <input className={`px-2 py-1 rounded border text-sm w-16 ${inputCl}`} placeholder="Rosée" value={editValues.dewpoint ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, dewpoint: e.target.value }))} />
+                  <input className={`px-3 py-2 rounded-lg border w-20 ${inputCl}`} placeholder="Temp" value={editValues.temperature ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, temperature: e.target.value }))} />
+                  <input className={`px-3 py-2 rounded-lg border w-20 ${inputCl}`} placeholder="Rosée" value={editValues.dewpoint ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, dewpoint: e.target.value }))} />
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={saveEdit} className={`px-2 py-1 rounded text-xs ${btnCl}`}>OK</button>
-                  <button onClick={() => setEditing(null)} className="px-2 py-1 rounded bg-slate-500 text-white text-xs">Annuler</button>
+                <div className="flex gap-2">
+                  <button onClick={saveEdit} className={`px-3 py-2 rounded-lg text-sm font-medium ${btnCl}`}>OK</button>
+                  <button onClick={() => setEditing(null)} className="px-3 py-2 rounded-lg bg-slate-500 text-white text-sm font-medium">Annuler</button>
                 </div>
               </div>
             ) : (
@@ -544,88 +545,88 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 sky_condition: d?.sky_condition ?? '',
                 temperature: d?.temperature ?? '',
                 dewpoint: d?.dewpoint ?? '',
-              })} className="flex items-center gap-1 hover:underline text-right">
-                {val(d?.wind)} <Pencil className="h-3 w-3" />
+              })} className={`flex items-center gap-2 hover:underline text-right ${textValue}`}>
+                {val(d?.wind)} <Pencil className="h-4 w-4 shrink-0" />
               </button>
             )}
           </div>
           {!editing && (
             <>
-              <div className="flex justify-between">
-                <span className={textMuted}>Visibilité</span>
-                <span>{val(d?.visibility)}</span>
+              <div className="flex justify-between items-center gap-3">
+                <span className={`text-sm font-medium min-w-[80px] ${textMuted}`}>Visibilité</span>
+                <span className={textValue}>{val(d?.visibility)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className={textMuted}>Ciel</span>
-                <span>{val(d?.sky_condition)}</span>
+              <div className="flex justify-between items-center gap-3">
+                <span className={`text-sm font-medium min-w-[80px] ${textMuted}`}>Ciel</span>
+                <span className={textValue}>{val(d?.sky_condition)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className={textMuted}>Temp / Rosée</span>
-                <span>{val(d?.temperature)}°C / {val(d?.dewpoint)}°C</span>
+              <div className="flex justify-between items-center gap-3">
+                <span className={`text-sm font-medium min-w-[80px] ${textMuted}`}>Temp / Rosée</span>
+                <span className={textValue}>{val(d?.temperature)}°C / {val(d?.dewpoint)}°C</span>
               </div>
             </>
           )}
-          <div className="flex justify-between items-center">
-            <span className={textMuted}>QNH</span>
+          <div className="flex justify-between items-center gap-3">
+            <span className={`text-sm font-medium min-w-[80px] ${textMuted}`}>QNH</span>
             {editing === 'qnh' ? (
-              <div className="flex gap-1">
-                <input className={`px-2 py-1 rounded border text-sm w-20 ${inputCl}`} value={editValues.qnh ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, qnh: e.target.value }))} placeholder="1013" />
-                <button onClick={saveEdit} className={`px-2 py-1 rounded text-xs ${btnCl}`}>OK</button>
-                <button onClick={() => setEditing(null)} className="px-2 py-1 rounded bg-slate-500 text-white text-xs">Annuler</button>
+              <div className="flex gap-2 items-center">
+                <input className={`px-3 py-2 rounded-lg border w-24 ${inputCl}`} value={editValues.qnh ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, qnh: e.target.value }))} placeholder="1013" />
+                <button onClick={saveEdit} className={`px-3 py-2 rounded-lg text-sm font-medium ${btnCl}`}>OK</button>
+                <button onClick={() => setEditing(null)} className="px-3 py-2 rounded-lg bg-slate-500 text-white text-sm font-medium">Annuler</button>
               </div>
             ) : (
-              <button onClick={() => startEdit('qnh', { qnh: d?.qnh ?? '' })} className="flex items-center gap-1 hover:underline">
-                {val(d?.qnh)} <Pencil className="h-3 w-3" />
+              <button onClick={() => startEdit('qnh', { qnh: d?.qnh ?? '' })} className={`flex items-center gap-2 hover:underline ${textValue}`}>
+                {val(d?.qnh)} <Pencil className="h-4 w-4 shrink-0" />
               </button>
             )}
           </div>
-          <div className="flex justify-between items-start">
-            <span className={textMuted}>Remarques</span>
+          <div className="flex justify-between items-start gap-3">
+            <span className={`text-sm font-medium min-w-[80px] pt-0.5 ${textMuted}`}>Remarques</span>
             {editing === 'remarks' ? (
-              <div className="flex flex-col gap-1 flex-1">
-                <textarea className={`px-2 py-1 rounded border text-sm w-full min-h-12 ${inputCl}`} value={editValues.remarks ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, remarks: e.target.value }))} placeholder="Remarques" />
-                <div className="flex gap-1">
-                  <button onClick={saveEdit} className={`px-2 py-1 rounded text-xs ${btnCl}`}>OK</button>
-                  <button onClick={() => setEditing(null)} className="px-2 py-1 rounded bg-slate-500 text-white text-xs">Annuler</button>
+              <div className="flex flex-col gap-2 flex-1 min-w-0">
+                <textarea className={`px-3 py-2 rounded-lg border w-full min-h-14 ${inputCl}`} value={editValues.remarks ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, remarks: e.target.value }))} placeholder="Remarques" />
+                <div className="flex gap-2">
+                  <button onClick={saveEdit} className={`px-3 py-2 rounded-lg text-sm font-medium ${btnCl}`}>OK</button>
+                  <button onClick={() => setEditing(null)} className="px-3 py-2 rounded-lg bg-slate-500 text-white text-sm font-medium">Annuler</button>
                 </div>
               </div>
             ) : (
-              <button onClick={() => startEdit('remarks', { remarks: d?.remarks ?? '' })} className="flex items-center gap-1 hover:underline text-right max-w-[180px] truncate">
-                {val(d?.remarks)} <Pencil className="h-3 w-3 flex-shrink-0" />
+              <button onClick={() => startEdit('remarks', { remarks: d?.remarks ?? '' })} className={`flex items-center gap-2 hover:underline text-right max-w-[220px] truncate ${textValue}`}>
+                {val(d?.remarks)} <Pencil className="h-4 w-4 shrink-0" />
               </button>
             )}
           </div>
         </div>
 
         {/* Toggles */}
-        <div className="flex gap-2 pt-2 border-t border-slate-500/50">
+        <div className={`flex gap-3 pt-4 border-t ${borderCl}`}>
           <button
             onClick={handleToggleCavok}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-medium ${d?.cavok ? 'bg-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'bg-slate-500/20'} ${isDark ? 'hover:bg-slate-200' : 'hover:bg-slate-600'}`}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${d?.cavok ? 'bg-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'bg-slate-500/20'} ${isDark ? 'hover:bg-slate-200' : 'hover:bg-slate-600'}`}
           >
-            <Cloud className="h-3.5 w-3.5 inline mr-1" />
+            <Cloud className="h-4 w-4" />
             CAVOK {d?.cavok ? '✓' : ''}
           </button>
           <button
             onClick={handleToggleBilingual}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-medium ${d?.bilingual_mode ? 'bg-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'bg-slate-500/20'} ${isDark ? 'hover:bg-slate-200' : 'hover:bg-slate-600'}`}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${d?.bilingual_mode ? 'bg-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'bg-slate-500/20'} ${isDark ? 'hover:bg-slate-200' : 'hover:bg-slate-600'}`}
           >
-            <Globe className="h-3.5 w-3.5 inline mr-1" />
+            <Globe className="h-4 w-4" />
             EN+FR {d?.bilingual_mode ? '✓' : ''}
           </button>
         </div>
 
         {/* Actions Start/Stop */}
-        <div className="flex gap-2 pt-2">
+        <div className="flex gap-3 pt-4">
           {canStart && (
-            <button onClick={handleStart} disabled={loading} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-medium disabled:opacity-50`}>
-              <Play className="h-4 w-4" />
+            <button onClick={handleStart} disabled={loading} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-semibold text-base disabled:opacity-50">
+              <Play className="h-5 w-5" />
               Démarrer
             </button>
           )}
           {canStop && (
-            <button onClick={handleStop} disabled={loading} className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-500 hover:bg-red-400 text-white font-medium disabled:opacity-50">
-              <Square className="h-4 w-4" />
+            <button onClick={handleStop} disabled={loading} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-red-500 hover:bg-red-400 text-white font-semibold text-base disabled:opacity-50">
+              <Square className="h-5 w-5" />
               Arrêter
             </button>
           )}
