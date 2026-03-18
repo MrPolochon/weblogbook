@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FileText } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import VolForm from './VolForm';
 
 type TypeAvion = { id: string; nom: string; constructeur: string };
@@ -57,7 +57,6 @@ export default function NouveauVolClient({
   admins: Admin[];
   autresProfiles: Profil[];
 }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const planIdFromUrl = searchParams.get('plan');
 
@@ -75,59 +74,71 @@ export default function NouveauVolClient({
     }
   }, [planIdFromUrl, closedPlans, planId]);
 
-  function handleRemplissage() {
-    const p = planIdFromUrl ? closedPlans.find((x) => x.id === planIdFromUrl) : closedPlans[0];
-    if (p) {
-      setPlanId(p.id);
-      setPlanPreFill(toPlanPreFill(p));
-    }
-  }
-
   function handleClearPlan() {
     setPlanId(null);
     setPlanPreFill(null);
   }
 
-  const showRemplissage = closedPlans.length > 0 && !planId;
+  function selectPlan(p: PlanClos) {
+    setPlanId(p.id);
+    setPlanPreFill(toPlanPreFill(p));
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Link href="/logbook" className="text-slate-400 hover:text-slate-200">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <h1 className="text-2xl font-semibold text-slate-100">Nouveau vol</h1>
-        </div>
-        {showRemplissage && (
-          <button
-            type="button"
-            onClick={handleRemplissage}
-            className="inline-flex items-center gap-2 rounded-lg border border-sky-500/60 bg-sky-500/20 px-4 py-2 text-sm font-medium text-sky-300 hover:bg-sky-500/30"
-          >
-            <FileText className="h-4 w-4" />
-            Remplissage plan de vol
-          </button>
-        )}
+      <div className="flex items-center gap-4">
+        <Link href="/logbook" className="text-slate-400 hover:text-slate-200">
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <h1 className="text-2xl font-semibold text-slate-100">Nouveau vol</h1>
       </div>
 
-      {showRemplissage && (
-        <div className="card border-sky-500/40 bg-sky-500/10 py-3 px-4">
-          <p className="text-sm text-slate-300">
-            {closedPlans.length} plan{closedPlans.length > 1 ? 's' : ''} de vol clôturé{closedPlans.length > 1 ? 's' : ''} {closedPlans.length > 1 ? 'peuvent' : 'peut'} remplir le formulaire. Cliquez sur &laquo; Remplissage plan de vol &raquo;.
-          </p>
+      <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+        <div className="flex-1 min-w-0">
+          <VolForm
+            typesAvion={typesAvion}
+            compagnies={compagnies}
+            admins={admins}
+            autresProfiles={autresProfiles}
+            planPreFill={planPreFill}
+            planId={planId}
+            onClearPlan={handleClearPlan}
+          />
         </div>
-      )}
 
-      <VolForm
-        typesAvion={typesAvion}
-        compagnies={compagnies}
-        admins={admins}
-        autresProfiles={autresProfiles}
-        planPreFill={planPreFill}
-        planId={planId}
-        onClearPlan={handleClearPlan}
-      />
+        {closedPlans.length > 0 && (
+          <div className="lg:w-80 shrink-0">
+            <div className="card sticky top-4">
+              <h2 className="text-sm font-medium text-slate-300 mb-3">
+                Plans de vol à enregistrer ({closedPlans.length})
+              </h2>
+              <p className="text-xs text-slate-500 mb-3">
+                Cliquez sur un plan pour pré-remplir le formulaire.
+              </p>
+              <ul className="space-y-2 max-h-[calc(100vh-16rem)] overflow-y-auto">
+                {closedPlans.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => selectPlan(p)}
+                      className={`w-full text-left rounded-lg px-3 py-2 text-sm transition-colors ${
+                        planId === p.id
+                          ? 'bg-sky-500/30 border border-sky-500/60 text-sky-200'
+                          : 'border border-slate-600/60 bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 hover:border-slate-500'
+                      }`}
+                    >
+                      <span className="font-mono font-medium">{p.numero_vol || '—'}</span>
+                      <span className="text-slate-500 mx-1">•</span>
+                      <span>{p.aeroport_depart} → {p.aeroport_arrivee}</span>
+                      <span className="text-slate-500 ml-1">({p.type_vol})</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
