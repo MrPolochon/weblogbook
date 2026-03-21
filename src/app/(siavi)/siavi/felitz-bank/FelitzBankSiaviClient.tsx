@@ -95,7 +95,7 @@ export default function FelitzBankSiaviClient({ compteId, transactions }: Props)
               type="text"
               value={vbanDest}
               onChange={(e) => setVbanDest(e.target.value)}
-              placeholder="MIXOU... ou ENTERMIXOU..."
+              placeholder="MIXOU... ENTERMIXOU... ARMYMIXOU... MIXALLIANCE..."
               className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono text-sm bg-white"
               required
             />

@@ -95,7 +95,7 @@ export default function FelitzBankAtcClient({ compteId, transactions }: Props) {
               type="text"
               value={vbanDest}
               onChange={(e) => setVbanDest(e.target.value)}
-              placeholder="MIXOU... ou ENTERMIXOU..."
+              placeholder="MIXOU... ENTERMIXOU... ARMYMIXOU... MIXALLIANCE..."
               className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 font-mono text-sm"
               required
             />

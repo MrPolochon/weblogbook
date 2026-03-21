@@ -16,7 +16,10 @@ export async function POST(req: NextRequest) {
     if (!compte_source_id || !UUID_REGEX.test(String(compte_source_id))) {
       return NextResponse.json({ error: 'compte_source_id invalide' }, { status: 400 });
     }
-    if (!vban_destination || typeof vban_destination !== 'string' || vban_destination.length > 30) {
+    const normalizedVbanDestination = typeof vban_destination === 'string'
+      ? vban_destination.trim().toUpperCase()
+      : '';
+    if (!normalizedVbanDestination || normalizedVbanDestination.length > 30 || !/^[A-Z0-9]+$/.test(normalizedVbanDestination)) {
       return NextResponse.json({ error: 'vban_destination invalide' }, { status: 400 });
     }
     const montant = Number(rawMontant);
@@ -59,7 +62,7 @@ export async function POST(req: NextRequest) {
     // Trouver le compte destination
     const { data: compteDest } = await admin.from('felitz_comptes')
       .select('id, solde, vban')
-      .eq('vban', vban_destination)
+      .eq('vban', normalizedVbanDestination)
       .single();
 
     if (!compteDest) {
@@ -93,7 +96,7 @@ export async function POST(req: NextRequest) {
         compte_id: compte_source_id,
         type: 'debit',
         montant,
-        libelle: `${libelleVirement} vers ${vban_destination}`
+        libelle: `${libelleVirement} vers ${normalizedVbanDestination}`
       },
       {
         compte_id: compteDest.id,
@@ -111,7 +114,7 @@ export async function POST(req: NextRequest) {
     // Enregistrer le virement
     const { data: virement, error: virementError } = await admin.from('felitz_virements').insert({
       compte_source_id,
-      compte_dest_vban: vban_destination,
+      compte_dest_vban: normalizedVbanDestination,
       montant,
       libelle,
       created_by: user.id
