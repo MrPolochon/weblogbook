@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     const normalizedVbanDestination = typeof vban_destination === 'string'
       ? vban_destination.trim().toUpperCase()
       : '';
-    if (!normalizedVbanDestination || normalizedVbanDestination.length > 30 || !/^[A-Z0-9]+$/.test(normalizedVbanDestination)) {
+    if (!normalizedVbanDestination || normalizedVbanDestination.length > 40 || !/^[A-Z0-9]+$/.test(normalizedVbanDestination)) {
       return NextResponse.json({ error: 'vban_destination invalide' }, { status: 400 });
     }
     const montant = Number(rawMontant);
