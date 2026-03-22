@@ -5,7 +5,11 @@ import { useEffect, useRef, useState, useCallback, type RefObject } from 'react'
 interface AntiCheatOptions {
   enabled?: boolean;
   onCheatDetected?: () => void;
-  /** Délai en ms avant d'activer la détection (défaut: 3000) */
+  /**
+   * Délai avant d’activer la détection (ms). Sert surtout d’amortisseur au montage (hydratation, injections DOM).
+   * En mode relaxé sans `allowedInteractionRootRef`, un plancher de 15 s est appliqué (comportement historique).
+   * Avec une zone de clic fournie, seule cette valeur est utilisée — une courte grâce (0–3000 ms) suffit en général.
+   */
   graceMs?: number;
   /**
    * Mode relaxé : copier-coller et clic droit autorisés ; détection renforcée quand même :
@@ -232,7 +236,11 @@ export function useAntiCheat({
   useEffect(() => {
     if (!enabled || cheatingRef.current) return;
 
-    const effectiveGrace = relaxed ? Math.max(graceMs, 15000) : graceMs;
+    const useClickContainment = Boolean(allowedInteractionRootRef);
+    const effectiveGrace =
+      relaxed && !useClickContainment
+        ? Math.max(graceMs, 15000)
+        : graceMs;
     activeRef.current = false;
     userHadFocusRef.current = false;
     noFocusCountRef.current = 0;
@@ -391,7 +399,6 @@ export function useAntiCheat({
     });
 
     // ── 10. Clic / toucher hors du conteneur du test (extensions, iframes overlay, etc.) ──
-    const useClickContainment = Boolean(allowedInteractionRootRef);
     const handlePointerDownCapture = (e: PointerEvent) => {
       if (!useClickContainment || !activeRef.current || cheatingRef.current) return;
       const root = allowedInteractionRootRef?.current;
