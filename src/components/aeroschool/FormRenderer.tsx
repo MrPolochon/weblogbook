@@ -68,6 +68,8 @@ export default function FormRenderer({ form }: Props) {
   const totalSeconds = timeLimitMinutes != null ? timeLimitMinutes * 60 : 0;
   const [remainingSeconds, setRemainingSeconds] = useState(totalSeconds);
   const timeExpiredHandled = useRef(false);
+  /** Zone « légitime » pour l’anti-triche : clics en dehors (extensions, overlay) déclenchent la triche. */
+  const antiCheatShellRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!testStarted || timeLimitMinutes == null || totalSeconds <= 0) return;
@@ -161,6 +163,7 @@ export default function FormRenderer({ form }: Props) {
     onCheatDetected: handleCheat,
     graceMs: 20000,
     relaxed: true,
+    allowedInteractionRootRef: antiCheatShellRef,
   });
 
   const section = form.sections[currentSection];
@@ -338,7 +341,7 @@ export default function FormRenderer({ form }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 py-8 px-4">
+    <div ref={antiCheatShellRef} className="min-h-screen bg-slate-900 py-8 px-4">
       {/* Chrono fixe en haut au centre */}
       {testStarted && timeLimitMinutes != null && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-slate-800 border border-slate-600 shadow-xl">

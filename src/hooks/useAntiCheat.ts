@@ -1,14 +1,25 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type RefObject } from 'react';
 
 interface AntiCheatOptions {
   enabled?: boolean;
   onCheatDetected?: () => void;
   /** Délai en ms avant d'activer la détection (défaut: 3000) */
   graceMs?: number;
-  /** Mode relaxé : pas de réaction au changement d’onglet, pas de blocage copier-coller ; on détecte quand même iframe autre domaine + extensions IA (Copilot, chat, etc.) */
+  /**
+   * Mode relaxé : copier-coller et clic droit autorisés ; détection renforcée quand même :
+   * iframe autre domaine, extensions IA, présence à intervalles aléatoires avec délai de réponse court.
+   * Si `allowedInteractionRootRef` est fourni : la perte de focus / onglet masqué ne déclenche plus (évite les faux positifs) ;
+   * en revanche tout pointerdown en dehors de ce conteneur (overlay extension, autre couche DOM) déclenche la triche.
+   * Limite : consultation sur un 2ᵉ écran sans cliquer hors page reste indétectable côté navigateur.
+   */
   relaxed?: boolean;
+  /**
+   * Conteneur du questionnaire : clics / touches à l’intérieur = légitimes ; en dehors = triche (extensions, calques, etc.).
+   * À lier sur un élément qui englobe chrono, formulaire et bouton de présence.
+   */
+  allowedInteractionRootRef?: RefObject<HTMLElement | null>;
 }
 
 /* ── Mots-clés d'extensions IA connues (ne pas inclure "cursor" = faux positifs avec l’IDE / nom d’app) ── */
@@ -151,10 +162,39 @@ function hasIframeOtherOrigin(): boolean {
   return false;
 }
 
-const PRESENCE_CHECK_INTERVAL_MS = 30000;
-const PRESENCE_RESPONSE_DEADLINE_MS = 30000;
+/** True si le pointer event vise le contenu du test (y compris shadow DOM) ; false = clic « ailleurs » (extension, autre calque). */
+function pointerEventIsInsideAllowedRoot(e: PointerEvent, root: HTMLElement): boolean {
+  // Barre de défilement du document : la cible est souvent <html>, hors du div du formulaire
+  if (e.target === document.documentElement) return true;
 
-export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, relaxed = false }: AntiCheatOptions = {}) {
+  const path = e.composedPath();
+  for (let i = 0; i < path.length; i++) {
+    const n = path[i];
+    if (n === root) return true;
+    if (n instanceof Node && root.contains(n)) return true;
+  }
+  return false;
+}
+
+/** Présence (mode relaxé) : intervalle aléatoire entre min et max pour éviter un rythme prévisible. */
+const PRESENCE_CHECK_MIN_MS = 12000;
+const PRESENCE_CHECK_MAX_MS = 28000;
+/** Temps pour cliquer « Je suis là » — trop long = marge pour consulter une IA entre deux clics. */
+const PRESENCE_RESPONSE_DEADLINE_MS = 10000;
+
+/** Mode relaxé : ticks sans focus fenêtre avant triche (~8 × 1,2 s ≈ 9,6 s ; laisse passer une notif courte). */
+const RELAXED_NO_FOCUS_THRESHOLD = 8;
+/** Mode relaxé : ticks avec onglet masqué avant triche (autre onglet / autre appli en avant-plan sur la même fenêtre). */
+const RELAXED_HIDDEN_STREAK_THRESHOLD = 7;
+const RELAXED_FOCUS_CHECK_MS = 1200;
+
+export function useAntiCheat({
+  enabled = true,
+  onCheatDetected,
+  graceMs = 3000,
+  relaxed = false,
+  allowedInteractionRootRef,
+}: AntiCheatOptions = {}) {
   const [cheatingDetected, setCheatingDetected] = useState(false);
   const [presencePromptVisible, setPresencePromptVisible] = useState(false);
   const cheatingRef = useRef(false);
@@ -165,6 +205,8 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
   const userHadFocusRef = useRef(false);
   /** Nombre de vérifications consécutives sans focus avant de déclencher (évite faux positifs : notification, menu navigateur, etc.). */
   const noFocusCountRef = useRef(0);
+  /** Suite de ticks où l’onglet du test est masqué (mode relaxé uniquement). */
+  const hiddenStreakRef = useRef(0);
   const NO_FOCUS_THRESHOLD = 4;
   const FOCUS_CHECK_INTERVAL_MS = 1500;
 
@@ -194,16 +236,18 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
     activeRef.current = false;
     userHadFocusRef.current = false;
     noFocusCountRef.current = 0;
+    hiddenStreakRef.current = 0;
     setPresencePromptVisible(false);
     const graceTimeout = setTimeout(() => {
       activeRef.current = true;
     }, effectiveGrace);
 
-    // ── Mode relaxé : notification de présence toutes les 30s ──
-    // Avant de déclencher l'anti-triche, on affiche une notif. Si l'utilisateur clique en < 30s, pas de déclenchement.
+    // ── Mode relaxé : notification de présence à intervalle aléatoire ──
     const scheduleNextPresenceCheck = () => {
       if (cheatingRef.current || !activeRef.current) return;
       if (presenceCheckTimeoutRef.current) clearTimeout(presenceCheckTimeoutRef.current);
+      const delay =
+        PRESENCE_CHECK_MIN_MS + Math.random() * (PRESENCE_CHECK_MAX_MS - PRESENCE_CHECK_MIN_MS);
       presenceCheckTimeoutRef.current = setTimeout(() => {
         if (cheatingRef.current || !activeRef.current) return;
         presenceCheckTimeoutRef.current = null;
@@ -213,14 +257,14 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
           presenceResponseTimeoutRef.current = null;
           triggerCheat();
         }, PRESENCE_RESPONSE_DEADLINE_MS);
-      }, PRESENCE_CHECK_INTERVAL_MS);
+      }, delay);
     };
     scheduleNextRef.current = scheduleNextPresenceCheck;
     const presenceGraceTimeout = relaxed ? setTimeout(scheduleNextPresenceCheck, effectiveGrace) : null;
 
     // ── 1. Changement d’onglet ──
-    // En mode relaxé : on ne fait rien (on ne peut pas savoir si l’autre onglet est du même domaine).
-    // En mode strict : tout changement d’onglet = triche.
+    // En mode relaxé : seuil cumulatif via hiddenStreakRef (voir intervalle focus) pour laisser un bref changement d’onglet.
+    // En mode strict : tout changement d’onglet = triche immédiate.
     const handleVisibilityChange = () => {
       if (document.hidden && !relaxed) triggerCheat();
     };
@@ -293,14 +337,15 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
       ? setInterval(() => {
           if (cheatingRef.current || !activeRef.current) return;
           if (hasIframeOtherOrigin()) triggerCheat();
+          if (hasAIOverlayOrExtension(true)) triggerCheat();
         }, 2500)
       : setInterval(() => {
           if (cheatingRef.current || !activeRef.current) return;
           if (deepScanDOM()) triggerCheat();
         }, 2000);
 
-    // ── 8. Surveillance du focus actif (désactivé en mode relaxé) ──
-    const focusCheckInterval = relaxed ? null : setInterval(() => {
+    // ── 8. Surveillance du focus actif (élément = extension) ; en relaxé aussi pour overlay injecté dans la page
+    const focusCheckInterval = setInterval(() => {
       if (cheatingRef.current || !activeRef.current) return;
       const active = document.activeElement;
       if (active && isExtensionElement(active)) triggerCheat();
@@ -345,29 +390,63 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
       attributeFilter: ['class', 'id', 'style', 'data-copilot', 'data-blackbox', 'data-ai'],
     });
 
-    // ── 10. Clic ailleurs / changement d’application = triche ──
+    // ── 10. Clic / toucher hors du conteneur du test (extensions, iframes overlay, etc.) ──
+    const useClickContainment = Boolean(allowedInteractionRootRef);
+    const handlePointerDownCapture = (e: PointerEvent) => {
+      if (!useClickContainment || !activeRef.current || cheatingRef.current) return;
+      const root = allowedInteractionRootRef?.current;
+      if (!root) return;
+      if (e.button !== 0 && e.button !== 1 && e.button !== 2) return;
+      if (!pointerEventIsInsideAllowedRoot(e, root)) triggerCheat();
+    };
+    if (useClickContainment) {
+      document.addEventListener('pointerdown', handlePointerDownCapture, true);
+    }
+
+    // ── 11. Perte de focus fenêtre / onglet masqué (désactivé en relaxé si zone de clic fournie) ──
     const handleWindowFocus = () => {
       userHadFocusRef.current = true;
-      noFocusCountRef.current = 0; // reset à chaque retour de focus
+      noFocusCountRef.current = 0;
+      if (relaxed) hiddenStreakRef.current = 0;
     };
-    // Ne plus déclencher sur un seul blur (trop de faux positifs : notification, menu, etc.)
-    const handleWindowBlur = () => { /* on s’appuie sur la vérification périodique avec seuil */ };
+    const handleWindowBlur = () => { /* seuil via intervalle */ };
 
-    // Vérification périodique : déclencher seulement après N fois consécutives sans focus.
-    // DÉSACTIVÉ en mode relaxé : les gens peuvent réfléchir, avoir une notif, un 2e écran, etc. sans quitter la page.
-    const focusCheckWindowInterval = relaxed ? null : setInterval(() => {
-      if (cheatingRef.current || !activeRef.current) return;
-      if (!userHadFocusRef.current) return;
-      if (typeof document.hasFocus !== 'function') return;
-      if (document.hasFocus()) {
-        noFocusCountRef.current = 0;
-        return;
-      }
-      noFocusCountRef.current += 1;
-      if (noFocusCountRef.current >= NO_FOCUS_THRESHOLD) {
-        triggerCheat();
-      }
-    }, FOCUS_CHECK_INTERVAL_MS);
+    const skipRelaxedWindowFocus =
+      relaxed && useClickContainment;
+
+    // Strict : N ticks sans document.hasFocus. Relaxé sans conteneur : seuil onglet masqué + perte de focus.
+    const focusCheckWindowInterval =
+      skipRelaxedWindowFocus
+        ? null
+        : setInterval(() => {
+            if (cheatingRef.current || !activeRef.current) return;
+            if (!userHadFocusRef.current) return;
+
+            if (relaxed) {
+              if (document.hidden) {
+                hiddenStreakRef.current += 1;
+                if (hiddenStreakRef.current >= RELAXED_HIDDEN_STREAK_THRESHOLD) triggerCheat();
+              } else {
+                hiddenStreakRef.current = 0;
+              }
+              if (typeof document.hasFocus !== 'function') return;
+              if (document.hasFocus()) {
+                noFocusCountRef.current = 0;
+                return;
+              }
+              noFocusCountRef.current += 1;
+              if (noFocusCountRef.current >= RELAXED_NO_FOCUS_THRESHOLD) triggerCheat();
+              return;
+            }
+
+            if (typeof document.hasFocus !== 'function') return;
+            if (document.hasFocus()) {
+              noFocusCountRef.current = 0;
+              return;
+            }
+            noFocusCountRef.current += 1;
+            if (noFocusCountRef.current >= NO_FOCUS_THRESHOLD) triggerCheat();
+          }, relaxed ? RELAXED_FOCUS_CHECK_MS : FOCUS_CHECK_INTERVAL_MS);
 
     // Enregistrer les listeners
     window.addEventListener('focus', handleWindowFocus);
@@ -382,6 +461,15 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
 
     return () => {
       clearTimeout(graceTimeout);
+      if (presenceGraceTimeout != null) clearTimeout(presenceGraceTimeout);
+      if (presenceCheckTimeoutRef.current) {
+        clearTimeout(presenceCheckTimeoutRef.current);
+        presenceCheckTimeoutRef.current = null;
+      }
+      if (presenceResponseTimeoutRef.current) {
+        clearTimeout(presenceResponseTimeoutRef.current);
+        presenceResponseTimeoutRef.current = null;
+      }
       window.removeEventListener('focus', handleWindowFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
@@ -391,12 +479,15 @@ export function useAntiCheat({ enabled = true, onCheatDetected, graceMs = 3000, 
       document.removeEventListener('copy', handleCopy);
       document.removeEventListener('focusin', handleFocusIn);
       window.removeEventListener('blur', handleWindowBlur);
+      if (useClickContainment) {
+        document.removeEventListener('pointerdown', handlePointerDownCapture, true);
+      }
       if (deepScanInterval) clearInterval(deepScanInterval);
       if (focusCheckInterval) clearInterval(focusCheckInterval);
       if (focusCheckWindowInterval) clearInterval(focusCheckWindowInterval);
       observer.disconnect();
     };
-  }, [enabled, triggerCheat, graceMs, relaxed]);
+  }, [enabled, triggerCheat, graceMs, relaxed, allowedInteractionRootRef]);
 
   return { cheatingDetected, presencePromptVisible: relaxed ? presencePromptVisible : false, confirmPresence: relaxed ? confirmPresence : undefined };
 }
