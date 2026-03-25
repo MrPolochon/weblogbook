@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight } from 'lucide-react';
+import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight, CheckCheck } from 'lucide-react';
+import { toast } from 'sonner';
 import ChequeVisuel from '@/components/ChequeVisuel';
 import { formatDateShortUTC, formatDateTimeUTC } from '@/lib/date-utils';
 
@@ -58,6 +59,26 @@ export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, 
 
   const cheques = messagesRecus.filter(m => ['cheque_salaire', 'cheque_siavi_intervention', 'cheque_siavi_taxes'].includes(m.type_message));
   const messagesNormaux = messagesRecus.filter(m => !['cheque_salaire', 'cheque_siavi_intervention', 'cheque_siavi_taxes'].includes(m.type_message));
+
+  const [encaisserToutLoading, setEncaisserToutLoading] = useState(false);
+  const [encaisserToutRecap, setEncaisserToutRecap] = useState<{
+    nb_cheques: number; total: number; par_compte: { label: string; nb: number; total: number }[];
+  } | null>(null);
+
+  async function handleEncaisserTout() {
+    setEncaisserToutLoading(true);
+    try {
+      const res = await fetch('/api/messages/encaisser-tout', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setEncaisserToutRecap(data);
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setEncaisserToutLoading(false);
+    }
+  }
 
   async function handleMarkAsRead(id: string) {
     await fetch(`/api/messages/${id}`, {
@@ -172,6 +193,46 @@ export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, 
             </button>
           ))}
         </div>
+
+        {activeTab === 'cheques' && cheques.filter(c => !c.cheque_encaisse).length >= 2 && (
+          <button
+            onClick={handleEncaisserTout}
+            disabled={encaisserToutLoading}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition-colors disabled:opacity-50 shadow-lg"
+          >
+            {encaisserToutLoading ? (
+              <><Loader2 className="h-4 w-4 animate-spin" />Encaissement en cours...</>
+            ) : (
+              <><CheckCheck className="h-4 w-4" />Tout encaisser ({cheques.filter(c => !c.cheque_encaisse).length} cheques)</>
+            )}
+          </button>
+        )}
+
+        {encaisserToutRecap && (
+          <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-emerald-700 flex items-center gap-2">
+                <CheckCheck className="h-5 w-5" />
+                {encaisserToutRecap.nb_cheques} cheque{encaisserToutRecap.nb_cheques > 1 ? 's' : ''} encaisse{encaisserToutRecap.nb_cheques > 1 ? 's' : ''}
+              </h3>
+              <button onClick={() => setEncaisserToutRecap(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-1">
+              {encaisserToutRecap.par_compte.map((c, i) => (
+                <div key={i} className="flex justify-between text-sm">
+                  <span className="text-slate-600">{c.label} ({c.nb} cheque{c.nb > 1 ? 's' : ''})</span>
+                  <span className="font-bold text-emerald-600">+{c.total.toLocaleString('fr-FR')} F$</span>
+                </div>
+              ))}
+            </div>
+            <div className="pt-2 border-t border-emerald-200 flex justify-between text-sm font-bold">
+              <span className="text-slate-700">Total net encaisse</span>
+              <span className="text-emerald-700">{encaisserToutRecap.total.toLocaleString('fr-FR')} F$</span>
+            </div>
+          </div>
+        )}
 
         <div className="rounded-xl border border-red-200 bg-white shadow-sm overflow-hidden max-h-[600px] overflow-y-auto">
           {activeTab === 'compose' ? (
