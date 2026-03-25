@@ -31,7 +31,7 @@ export async function GET() {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // Pour les admins : compter les réponses à vérifier (triche, trashed, time_expired) par formulaire
+    // Pour les admins : compter les réponses non examinées (submitted, trashed, time_expired — tout sauf reviewed)
     let pendingReviewByForm: Record<string, number> = {};
     if (isAdmin && (data?.length ?? 0) > 0) {
       const formIds = (data || []).map((f: { id: string }) => f.id);
@@ -39,7 +39,7 @@ export async function GET() {
         .from('aeroschool_responses')
         .select('form_id')
         .in('form_id', formIds)
-        .or('cheating_detected.eq.true,status.eq.trashed,status.eq.time_expired');
+        .neq('status', 'reviewed');
       for (const r of responses || []) {
         const fid = (r as { form_id: string }).form_id;
         pendingReviewByForm[fid] = (pendingReviewByForm[fid] ?? 0) + 1;

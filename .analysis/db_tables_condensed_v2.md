@@ -1,0 +1,81 @@
+- `admin_password_reset_codes`: `code`, `expires_at`, `user_id`
+- `aeroport_passagers`: `code_oaci`, `id`, `updated_at`
+- `aeroports_siavi`: `code_oaci`, `created_at`
+- `aeroschool_forms`: `created_at`, `description`, `id`, `updated_at`, `webhook_role_id`, `webhook_url`
+- `aeroschool_question_modules`: `created_at`, `id`, `updated_at`
+- `aeroschool_responses`: `form_id`, `id`, `status`, `submitted_at`
+- `afis_sessions`: `aeroport`, `id`, `started_at`, `user_id`
+- `alliance_annonces`: `alliance_id`, `auteur_id`, `created_at`, `id`, `titre`
+- `alliance_avions_membres`: `alliance_id`, `compagnie_avion_id`, `compagnie_beneficiaire_id`, `compagnie_proprio_id`, `created_at`, `id`
+- `alliance_contributions`: `alliance_id`, `compagnie_id`, `created_at`, `id`, `montant`
+- `alliance_demandes_fonds`: `alliance_id`, `compagnie_id`, `created_at`, `demandeur_id`, `destinataire_vban`, `id`, `montant`, `statut`, `traite_at`
+- `alliance_invitations`: `alliance_id`, `compagnie_id`, `created_at`, `id`, `invite_par_id`, `statut`, `traite_at`
+- `alliance_membres`: `alliance_id`, `codeshare_pourcent`, `compagnie_id`, `id`, `joined_at`, `role`
+- `alliance_parametres`: `actif_codeshare`, `alliance_id`, `codeshare_actif`, `codeshare_pourcent`, `updated_at`
+- `alliance_transferts_avions`: `alliance_id`, `compagnie_avion_id`, `compagnie_dest_id`, `compagnie_source_id`, `created_at`, `from_compagnie_id`, `id`, `montant`, `statut`, `to_compagnie_id`, `traite_at`, `type_transfert`
+- `alliances`: `created_at`, `created_by_compagnie_id`, `description`, `id`, `logo_url`
+- `armee_avions`: `created_at`, `detruit_at`, `id`, `type_avion_id`
+- `armee_missions_log`: `created_at`, `id`, `mission_id`, `user_id`
+- `atc_calls`: `answered_at`, `created_at`, `ended_at`, `from_aeroport`, `from_position`, `from_user_id`, `id`, `started_at`, `status`, `to_aeroport`, `to_position`, `to_user_id`
+- `atc_grades`: `created_at`, `id`
+- `atc_plans_controles`: `aeroport`, `created_at`, `id`, `plan_vol_id`, `position`, `user_id`
+- `atc_sessions`: `aeroport`, `id`, `position`, `started_at`, `user_id`
+- `atc_taxes_pending`: `aeroport`, `created_at`, `description`, `id`, `montant`, `plan_vol_id`, `session_id`, `user_id`
+- `atis_broadcast_config`: `discord_channel_id`, `discord_guild_id`, `id`, `updated_at`
+- `atis_broadcast_state`: `aeroport`, `controlling_user_id`, `id`, `position`, `started_at`, `updated_at`
+- `autorisations_exploitation`: `compagnie_id`, `created_at`, `demandeur_id`, `id`, `statut`, `traite_at`, `traite_par_id`, `type_avion_id`, `updated_at`
+- `cartes_identite`: `created_at`, `id`, `logo_url`, `photo_url`, `sous_titre`, `titre`, `updated_at`, `user_id`
+- `compagnie_avions`: `aeroport_actuel`, `compagnie_id`, `created_at`, `id`, `maintenance_fin_at`, `statut`, `type_avion_id`, `updated_at`
+- `compagnie_employes`: `compagnie_id`, `id`, `pilote_id`
+- `compagnie_flotte`: `compagnie_id`, `id`, `type_avion_id`
+- `compagnie_hubs`: `aeroport_code`, `compagnie_id`, `created_at`, `est_hub_principal`, `id`
+- `compagnie_invitations`: `compagnie_id`, `created_at`, `id`, `pilote_id`, `repondu_at`, `statut`
+- `compagnie_locations`: `accepted_at`, `avion_id`, `cancelled_at`, `created_at`, `end_at`, `id`, `last_billed_at`, `locataire_compagnie_id`, `loueur_compagnie_id`, `start_at`, `statut`
+- `compagnies`: `alliance_id`, `code_oaci`, `created_at`, `dernier_changement_principal_at`, `id`, `logo_url`, `pdg_id`, `updated_at`
+- `deletion_logs`: `deleted_at`, `deleted_by_id`, `deleted_profile_id`, `id`
+- `document_files`: `created_at`, `id`, `section_id`
+- `document_sections`: `created_at`, `id`, `parent_id`, `updated_at`
+- `entreprises_reparation`: `created_at`, `description`, `id`, `logo_url`, `pdg_id`, `updated_at`
+- `felitz_comptes`: `alliance_id`, `compagnie_id`, `created_at`, `entreprise_reparation_id`, `id`, `proprietaire_id`, `solde`, `type`, `vban`
+- `felitz_transactions`: `compte_id`, `created_at`, `id`, `montant`, `reference_id`, `type`
+- `felitz_virements`: `compte_dest_vban`, `compte_source_id`, `created_at`, `id`, `montant`
+- `hangar_market`: `acheteur_id`, `compagnie_acheteur_id`, `compagnie_avion_id`, `compagnie_vendeur_id`, `created_at`, `description`, `flotte_avion_id`, `id`, `inventaire_avion_id`, `statut`, `titre`, `type_avion_id`, `updated_at`, `vendeur_id`, `vendu_at`
+- `hangar_market_config`: `created_at`, `id`, `updated_at`
+- `hangar_market_reventes`: `admin_id`, `compagnie_avion_id`, `compagnie_id`, `created_at`, `demandeur_id`, `execute_at`, `id`, `inventaire_avion_id`, `montant_revente`, `statut`, `traite_at`, `type_avion_id`
+- `ifsa_enquetes`: `cloture_at`, `compagnie_concernee_id`, `created_at`, `description`, `enqueteur_id`, `id`, `ouvert_par_id`, `pilote_concerne_id`, `statut`, `titre`
+- `ifsa_enquetes_notes`: `auteur_id`, `created_at`, `enquete_id`, `id`
+- `ifsa_paiements_amendes`: `compte_credit_id`, `compte_debit_id`, `created_at`, `id`, `montant`, `paye_par_id`, `sanction_id`
+- `ifsa_sanctions`: `amende_payee_at`, `amende_payee_par_id`, `cible_compagnie_id`, `cible_pilote_id`, `cible_type`, `cleared_at`, `cleared_by_id`, `compte_destination_id`, `created_at`, `derniere_relance_at`, `emis_par_id`, `expire_at`, `id`, `montant_amende`, `type_sanction`, `vban_destination`
+- `ifsa_signalements`: `compagnie_signalee_id`, `created_at`, `description`, `enquete_id`, `id`, `pilote_signale_id`, `signale_par_id`, `statut`, `titre`, `traite_at`, `traite_par_id`, `type_signalement`
+- `inventaire_avions`: `created_at`, `id`, `proprietaire_id`, `type_avion_id`
+- `licences_qualifications`: `created_at`, `id`, `type`, `type_avion_id`, `user_id`
+- `login_ip_history`: `created_at`, `id`, `ip`, `previous_ip`, `user_id`
+- `login_verification_codes`: `code`, `created_at`, `expires_at`, `pending_email`, `user_id`
+- `messages`: `created_at`, `destinataire_id`, `expediteur_id`, `id`, `titre`
+- `notams`: `au_at`, `code_aeroport`, `created_at`, `du_at`, `id`
+- `password_reset_requests`: `created_at`, `id`, `identifiant_or_email`, `status`, `user_id`
+- `password_reset_tokens`: `expires_at`, `token`, `user_id`
+- `plans_vol`: `accepted_at`, `aeroport_arrivee`, `aeroport_depart`, `code_transpondeur`, `compagnie_avion_id`, `compagnie_id`, `created_at`, `current_afis_user_id`, `current_holder_aeroport`, `current_holder_position`, `current_holder_user_id`, `demande_cloture_at`, `id`, `location_id`, `pending_transfer_aeroport`, `pilote_id`, `statut`, `strip_atd`, `strip_pilote_text`, `type_cargaison`, `type_cargaison_libelle`, `type_vol`
+- `prets_bancaires`: `compagnie_id`, `created_at`, `demandeur_id`, `id`, `montant_emprunte`, `montant_rembourse`, `montant_total_du`, `rembourse_at`, `statut`
+- `profiles`: `atc_grade_id`, `atis_code_auto_rotate`, `block_reason`, `blocked_until`, `created_at`, `email`, `id`, `last_login_ip`, `role`, `siavi_grade_id`, `updated_at`
+- `reparation_demandes`: `acceptee_at`, `avion_id`, `compagnie_id`, `completee_at`, `created_at`, `debut_reparation_at`, `entreprise_id`, `facturee_at`, `fin_reparation_at`, `hangar_id`, `id`, `payee_at`, `statut`
+- `reparation_employes`: `created_at`, `entreprise_id`, `id`, `role`, `user_id`
+- `reparation_hangars`: `aeroport_code`, `created_at`, `entreprise_id`, `id`
+- `reparation_mini_jeux_scores`: `completed_at`, `demande_id`, `id`, `type_jeu`
+- `reparation_tarifs`: `created_at`, `entreprise_id`, `id`, `type_avion_id`
+- `security_logout`: `created_at`, `user_id`
+- `siavi_grades`: `created_at`, `description`, `id`
+- `siavi_interventions`: `aeroport`, `call_id`, `created_at`, `id`, `montant`, `type_intervention`, `user_id`
+- `sid_star`: `aeroport`, `created_at`, `id`, `type_procedure`
+- `site_config`: `id`, `updated_at`
+- `superadmin_access_codes`: `code`, `expires_at`, `user_id`
+- `superadmin_ip_requests`: `approved_at`, `code_requester`, `created_at`, `id`, `status`
+- `tarifs_liaisons`: `aeroport_arrivee`, `aeroport_depart`, `compagnie_id`, `created_at`, `id`, `updated_at`
+- `taxes_aeroport`: `code_oaci`, `id`
+- `types_avion`: `code_oaci`, `id`
+- `user_login_tracking`: `last_login_at`, `last_login_ip`, `user_id`
+- `vhf_position_frequencies`: `aeroport`, `created_at`, `frequency`, `id`, `position`
+- `vols`: `aeroport_depart`, `armee_avion_id`, `chef_escadron_id`, `compagnie_id`, `copilote_id`, `created_at`, `created_by_user_id`, `editing_by_pilot_id`, `editing_started_at`, `id`, `instructeur_id`, `mission_id`, `pilote_id`, `role_pilote`, `statut`, `type_avion_id`, `type_avion_militaire`, `type_vol`, `updated_at`
+- `vols_archive`: `created_at`, `id`, `purge_at`, `role_pilote`, `type_avion_nom`, `type_vol`
+- `vols_equipage_militaire`: `profile_id`, `vol_id`
+- `vols_ferry`: `aeroport_arrivee`, `aeroport_depart`, `avion_id`, `compagnie_id`, `completed_at`, `created_at`, `id`, `pilote_id`, `statut`

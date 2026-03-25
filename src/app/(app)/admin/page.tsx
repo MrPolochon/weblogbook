@@ -99,7 +99,7 @@ async function getAdminCounts(): Promise<Record<string, number>> {
       admin.from('password_reset_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
       admin.from('vols').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
       admin.from('plans_vol').select('*', { count: 'exact', head: true }).in('statut', ['depose', 'en_attente']).or('created_by_atc.is.null,created_by_atc.eq.false'),
-      admin.from('aeroschool_responses').select('*', { count: 'exact', head: true }).eq('status', 'submitted'),
+      admin.from('aeroschool_responses').select('*', { count: 'exact', head: true }).neq('status', 'reviewed'),
       admin.from('hangar_market_reventes').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
       admin.from('incidents_vol').select('*', { count: 'exact', head: true }).in('statut', ['en_attente', 'en_examen']),
     ]);

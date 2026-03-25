@@ -1,0 +1,171 @@
+- /api/admin/avions : GET, POST, PATCH, DELETE
+- /api/admin/password-reset-requests : GET, PATCH
+- /api/admin/profiles/[id]/email : PATCH
+- /api/admin/send-password-reset-code : POST
+- /api/admin/site-config : PATCH
+- /api/admin/superadmin/approve-request : POST
+- /api/admin/superadmin/ip-access-status : GET
+- /api/admin/superadmin/ips : GET
+- /api/admin/superadmin/pending-requests : GET
+- /api/admin/superadmin/reject-request : POST
+- /api/admin/superadmin/request-access : POST
+- /api/admin/superadmin/request/[id]/approval-view : GET
+- /api/admin/superadmin/submit-approval-code : POST
+- /api/admin/superadmin/verify-code : POST
+- /api/aeroport-cargo : GET
+- /api/aeroport-passagers : GET, POST
+- /api/aeroschool/forms : GET, POST
+- /api/aeroschool/forms/[id] : GET, PUT, DELETE
+- /api/aeroschool/forms/[id]/responses : GET
+- /api/aeroschool/forms/[id]/responses/examine-all-cheats : POST
+- /api/aeroschool/forms/[id]/submit : POST
+- /api/aeroschool/modules : GET, POST
+- /api/aeroschool/modules/[id] : GET, PUT, DELETE
+- /api/aeroschool/modules/[id]/random : GET
+- /api/aeroschool/responses/[id] : DELETE
+- /api/aeroschool/test-webhook : POST
+- /api/alliances : GET, POST
+- /api/alliances/[id] : GET, PATCH, DELETE
+- /api/alliances/[id]/annonces : POST
+- /api/alliances/[id]/fonds : POST, PATCH
+- /api/alliances/[id]/invitations : POST, PATCH
+- /api/alliances/[id]/membres : PATCH
+- /api/alliances/[id]/parametres : PATCH
+- /api/alliances/[id]/quitter : POST
+- /api/alliances/[id]/transferts : POST, PATCH
+- /api/alliances/invitations-pending : GET
+- /api/armee/config : GET, POST, PATCH
+- /api/armee/missions : GET
+- /api/atc/atis/atis-data : GET, PATCH
+- /api/atc/atis/atiscode : POST
+- /api/atc/atis/auto-code : PATCH
+- /api/atc/atis/config : GET, PATCH
+- /api/atc/atis/discord-channels : GET
+- /api/atc/atis/discord-guilds : GET
+- /api/atc/atis/start : POST
+- /api/atc/atis/status : GET
+- /api/atc/atis/stop : POST
+- /api/atc/atis/ticker : PATCH
+- /api/atc/atis/toggle-bilingual : POST
+- /api/atc/atis/toggle-cavok : POST
+- /api/atc/comptes : POST
+- /api/atc/creer-plan : POST
+- /api/atc/creer-strip : POST
+- /api/atc/grades : GET, POST
+- /api/atc/grades/[id] : PATCH, DELETE
+- /api/atc/my-session : GET, OPTIONS
+- /api/atc/session : POST, DELETE
+- /api/atc/session/[user_id] : DELETE
+- /api/atc/telephone/answer : POST
+- /api/atc/telephone/call : POST
+- /api/atc/telephone/hangup : POST
+- /api/atc/telephone/incoming : GET
+- /api/atc/telephone/reject : POST
+- /api/atc/telephone/status : GET
+- /api/auth/forgot-password : POST
+- /api/auth/profile-email : PATCH
+- /api/auth/register-login : POST
+- /api/auth/reset-password-with-token : POST
+- /api/auth/send-login-code : POST
+- /api/auth/session-service : GET
+- /api/auth/verify-login-code : POST
+- /api/autorisations-exploitation : GET, POST, PATCH
+- /api/avions/lookup : GET
+- /api/cartes : GET, POST, DELETE
+- /api/cartes/auto-generate : POST
+- /api/cartes/generate-all : POST
+- /api/cartes/logos : GET, POST, DELETE
+- /api/cartes/ma-photo : POST
+- /api/cartes/refresh-all : POST
+- /api/cartes/upload : POST
+- /api/compagnies : GET, POST
+- /api/compagnies/[id] : GET, PATCH, DELETE
+- /api/compagnies/[id]/pret : GET, POST, PATCH
+- /api/compagnies/avions : GET, POST
+- /api/compagnies/avions/[id] : PATCH, DELETE
+- /api/compagnies/avions/[id]/affreter-techniciens : POST
+- /api/compagnies/avions/[id]/debloquer : POST
+- /api/compagnies/avions/[id]/reparer : POST
+- /api/compagnies/avions/[id]/tenter-reparation : POST
+- /api/compagnies/avions/[id]/vendre-pieces : POST
+- /api/compagnies/employes : GET, POST, DELETE
+- /api/compagnies/hubs : GET, POST, PATCH, DELETE
+- /api/compagnies/list : GET
+- /api/compagnies/locations : GET, POST
+- /api/compagnies/locations/[id] : PATCH
+- /api/compagnies/logo : POST, DELETE
+- /api/compagnies/search : GET
+- /api/compagnies/vols-ferry : GET, POST
+- /api/compagnies/vols-ferry/[id] : PATCH
+- /api/compte : PATCH
+- /api/documents/download/[id] : GET
+- /api/documents/files/[id] : DELETE
+- /api/documents/sections : POST
+- /api/documents/sections/[id] : PATCH, DELETE
+- /api/documents/upload : POST
+- /api/felitz/compte : GET, POST
+- /api/felitz/transactions : GET, POST
+- /api/felitz/virement : GET, POST
+- /api/hangar-market : GET, POST, PATCH, DELETE
+- /api/hangar-market/config : GET, PATCH
+- /api/hangar-market/revente : GET, POST
+- /api/has-admin : GET
+- /api/ifsa/amendes : GET, POST, PATCH
+- /api/ifsa/avion : GET
+- /api/ifsa/controle : GET
+- /api/ifsa/controle/verification : GET
+- /api/ifsa/enquetes : GET, POST, PATCH
+- /api/ifsa/sanctions : GET, POST, PATCH
+- /api/ifsa/signalements : GET, POST, PATCH
+- /api/inventaire : GET, PATCH
+- /api/licences : GET, POST
+- /api/licences/[id] : PATCH, DELETE
+- /api/livekit/status : GET
+- /api/livekit/token : POST, OPTIONS
+- /api/marketplace : GET, POST
+- /api/messages : GET, POST
+- /api/messages/[id] : GET, PATCH, DELETE
+- /api/notams : GET, POST
+- /api/notams/[id] : DELETE
+- /api/pilotes : POST
+- /api/pilotes/[id] : PATCH, DELETE
+- /api/pilotes/search : GET
+- /api/plans-vol : POST
+- /api/plans-vol/[id] : PATCH, DELETE
+- /api/plans-vol/[id]/transpondeur : GET, PATCH
+- /api/profiles/search : GET
+- /api/recrutement : GET, POST, PATCH, DELETE
+- /api/reparation/catalogue : GET
+- /api/reparation/demandes : GET, POST
+- /api/reparation/demandes/[id] : GET, PATCH
+- /api/reparation/demandes/[id]/mini-jeu : POST
+- /api/reparation/employes : POST, DELETE
+- /api/reparation/entreprises : GET, POST
+- /api/reparation/entreprises/[id] : GET, PATCH, DELETE
+- /api/reparation/hangars : GET, POST, DELETE
+- /api/reparation/tarifs : GET, PATCH
+- /api/setup : POST
+- /api/siavi/comptes : POST
+- /api/siavi/comptes/[id] : PATCH, DELETE
+- /api/siavi/grades : POST
+- /api/siavi/grades/[id] : PATCH, DELETE
+- /api/siavi/plan : PATCH
+- /api/siavi/session : POST, DELETE
+- /api/siavi/session/[user_id] : DELETE
+- /api/siavi/telephone/answer : POST
+- /api/siavi/telephone/call : POST
+- /api/siavi/telephone/hangup : POST
+- /api/siavi/telephone/incoming : GET
+- /api/siavi/telephone/reject : POST
+- /api/siavi/telephone/status : GET
+- /api/sid-star : GET, POST
+- /api/sid-star/[id] : DELETE
+- /api/site-config : GET
+- /api/tarifs-liaisons : GET, POST, DELETE
+- /api/taxes : GET, POST, DELETE
+- /api/types-avion : GET
+- /api/types-avion/[id] : PATCH
+- /api/verify-superadmin : POST
+- /api/vhf/frequencies : GET, POST, PATCH, DELETE, OPTIONS
+- /api/vols : POST
+- /api/vols/[id] : PATCH, DELETE

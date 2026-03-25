@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Loader2, Trash2, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronUp,
+  Check, Eye,
 } from 'lucide-react';
 
 interface ModuleQuestion {
@@ -56,10 +57,13 @@ export default function AdminResponsesPage() {
   const [moduleData, setModuleData] = useState<Record<string, ModuleQuestion[]>>({});
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [bulkExamining, setBulkExamining] = useState(false);
+  const [showReviewed, setShowReviewed] = useState(false);
 
-  const cheatsToExamine = responses.filter(
+  const pendingResponses = responses.filter((r) => r.status !== 'reviewed');
+  const reviewedResponses = responses.filter((r) => r.status === 'reviewed');
+  const cheatsToExamine = pendingResponses.filter(
     (r) => r.cheating_detected || r.status === 'trashed' || r.status === 'time_expired'
   );
 
@@ -73,7 +77,6 @@ export default function AdminResponsesPage() {
         const fd = await formRes.json();
         setForm({ id: fd.id, title: fd.title, sections: fd.sections || [] });
 
-        // Charger les modules référencés par les blocs question_module
         const moduleIds = new Set<string>();
         for (const sec of fd.sections || []) {
           for (const q of sec.questions || []) {
@@ -103,28 +106,247 @@ export default function AdminResponsesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const markReviewed = async (id: string) => {
+    setActionLoading(id);
+    try {
+      const res = await fetch(`/api/aeroschool/responses/${id}`, { method: 'PATCH' });
+      if (res.ok) {
+        setResponses((prev) => prev.map((r) => r.id === id ? { ...r, status: 'reviewed' } : r));
+      }
+    } catch { /* ignore */ }
+    setActionLoading(null);
+  };
+
   const deleteResponse = async (id: string) => {
-    if (!confirm('Marquer comme "examiné" et supprimer définitivement cette réponse ?')) return;
-    setDeleting(id);
+    if (!confirm('Supprimer définitivement cette réponse ?')) return;
+    setActionLoading(id);
     try {
       await fetch(`/api/aeroschool/responses/${id}`, { method: 'DELETE' });
       setResponses((r) => r.filter((x) => x.id !== id));
     } catch { /* ignore */ }
-    setDeleting(null);
+    setActionLoading(null);
   };
 
-  const examineAllCheats = async () => {
-    if (cheatsToExamine.length === 0) return;
-    if (!confirm(`Examiner et supprimer définitivement les ${cheatsToExamine.length} réponse(s) marquée(s) triche/temps dépassé ?`)) return;
+  const examineAll = async (mode: 'cheats_only' | 'all') => {
+    const count = mode === 'all' ? pendingResponses.length : cheatsToExamine.length;
+    if (count === 0) return;
+    const msg = mode === 'all'
+      ? `Examiner les ${count} réponse(s) en attente ? (triches supprimées, réponses normales marquées examinées)`
+      : `Examiner et supprimer les ${cheatsToExamine.length} réponse(s) triche/temps dépassé ?`;
+    if (!confirm(msg)) return;
     setBulkExamining(true);
     try {
-      const res = await fetch(`/api/aeroschool/forms/${formId}/responses/examine-all-cheats`, { method: 'POST' });
+      const res = await fetch(`/api/aeroschool/forms/${formId}/responses/examine-all-cheats`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      const idsToRemove = new Set(cheatsToExamine.map((r) => r.id));
-      setResponses((r) => r.filter((x) => !idsToRemove.has(x.id)));
+
+      if (mode === 'all') {
+        setResponses((prev) => prev
+          .filter((r) => !(r.cheating_detected || r.status === 'trashed' || r.status === 'time_expired'))
+          .map((r) => r.status === 'submitted' ? { ...r, status: 'reviewed' } : r)
+        );
+      } else {
+        const idsToRemove = new Set(cheatsToExamine.map((r) => r.id));
+        setResponses((r) => r.filter((x) => !idsToRemove.has(x.id)));
+      }
     } catch { /* ignore */ }
     setBulkExamining(false);
+  };
+
+  const renderResponseCard = (resp: Response) => {
+    const isFlagged = resp.cheating_detected || resp.status === 'trashed' || resp.status === 'time_expired';
+    const isReviewed = resp.status === 'reviewed';
+
+    return (
+      <div
+        key={resp.id}
+        className={`border rounded-xl overflow-hidden transition-colors ${
+          isFlagged
+            ? 'border-red-500/50 bg-red-500/5'
+            : isReviewed
+              ? 'border-slate-700/30 bg-slate-800/30 opacity-60'
+              : 'border-slate-700/50 bg-slate-800/60'
+        }`}
+      >
+        <div
+          className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-700/20 transition-colors"
+          onClick={() => setExpanded(expanded === resp.id ? null : resp.id)}
+        >
+          <div className="flex items-center gap-3">
+            {isFlagged ? (
+              <XCircle className="h-5 w-5 text-red-400 shrink-0" />
+            ) : isReviewed ? (
+              <Eye className="h-5 w-5 text-slate-500 shrink-0" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+            )}
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-200 font-medium text-sm">
+                  {new Date(resp.submitted_at).toLocaleString('fr-FR')}
+                </span>
+                {resp.cheating_detected && (
+                  <span className="text-xs font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> TRICHE
+                  </span>
+                )}
+                {!resp.cheating_detected && resp.status === 'time_expired' && (
+                  <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Temps dépassé
+                  </span>
+                )}
+                {isReviewed && (
+                  <span className="text-xs font-medium text-slate-500 bg-slate-700/50 px-2 py-0.5 rounded-full">
+                    Examiné
+                  </span>
+                )}
+              </div>
+              {resp.max_score !== null && resp.max_score > 0 && (
+                <span className="text-sm text-slate-400">
+                  Score : <span className="text-white font-medium">{resp.score ?? 0}</span> / {resp.max_score}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isReviewed && (
+              <button
+                onClick={(e) => { e.stopPropagation(); markReviewed(resp.id); }}
+                disabled={actionLoading === resp.id}
+                className="px-3 py-1.5 rounded-lg border border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10 text-sm font-medium transition-colors flex items-center gap-1.5"
+                title="Marquer comme examiné"
+              >
+                {actionLoading === resp.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                Examiné
+              </button>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); deleteResponse(resp.id); }}
+              disabled={actionLoading === resp.id}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+              title="Supprimer définitivement"
+            >
+              {actionLoading === resp.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            </button>
+            {expanded === resp.id ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+          </div>
+        </div>
+
+        {expanded === resp.id && (
+          <div className="border-t border-slate-700/50 p-4 space-y-4">
+            {form?.sections.map((section) => (
+              <div key={section.id} className="space-y-3">
+                <h4 className="text-slate-300 font-semibold text-sm border-b border-slate-700/50 pb-1">{section.title}</h4>
+                {section.questions.map((q) => {
+                  if (q.type === 'question_module' && q.module_id) {
+                    const prefix = `module_${q.module_id}_`;
+                    const moduleQuestions = moduleData[q.module_id] || [];
+                    const byId = new Map(moduleQuestions.map((mq) => [mq.id, mq]));
+                    const moduleAnswers = Object.entries(resp.answers).filter(
+                      (entry): entry is [string, string | string[]] =>
+                        typeof entry[0] === 'string' && entry[0].startsWith(prefix)
+                    );
+                    if (moduleAnswers.length === 0) {
+                      return (
+                        <div key={q.id} className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
+                          <span className="text-orange-300 text-sm font-medium">{q.title || 'Module à questions'}</span>
+                          <p className="text-slate-500 text-sm mt-1">Aucune réponse enregistrée</p>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={q.id} className="space-y-2">
+                        {(q.title || 'Module à questions') && (
+                          <h5 className="text-orange-300 font-medium text-sm">{q.title || 'Module à questions'}</h5>
+                        )}
+                        {moduleAnswers.map(([key, answer]) => {
+                          const questionId = key.slice(prefix.length);
+                          const mq = byId.get(questionId);
+                          const displayAnswer = Array.isArray(answer) ? answer.join(', ') : (answer || '—');
+                          const correct = mq?.correct_answers || [];
+                          const ansNorm = String(Array.isArray(answer) ? answer?.[0] ?? '' : answer ?? '').trim();
+                          const correctNorm = correct.map((c) => String(c).trim());
+                          const isCorrect = correctNorm.length > 0
+                            ? correctNorm.some((c) => c === ansNorm)
+                            : null;
+
+                          return (
+                            <div key={key} className="bg-slate-700/20 rounded-lg p-3 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="text-slate-300 text-sm font-medium">{mq?.title || 'Question'}</span>
+                                {correct.length > 0 && (
+                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                                    isCorrect === true ? 'bg-emerald-500/10 text-emerald-400'
+                                      : isCorrect === false ? 'bg-red-500/10 text-red-400'
+                                        : 'bg-slate-600/30 text-slate-400'
+                                  }`}>
+                                    {isCorrect ? '1' : '0'} / 1 pt
+                                  </span>
+                                )}
+                              </div>
+                              <p className={`text-sm ${
+                                isCorrect === false ? 'text-red-300' : isCorrect === true ? 'text-emerald-300' : 'text-slate-400'
+                              }`}>
+                                {displayAnswer}
+                              </p>
+                              {isCorrect === false && correct.length > 0 && (
+                                <p className="text-xs text-emerald-400/70">Réponse attendue : {correct.join(', ')}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  const answer = resp.answers[q.id];
+                  const displayAnswer = Array.isArray(answer) ? answer.join(', ') : (answer || '—');
+                  let isCorrect: boolean | null = null;
+                  if (q.is_graded && q.correct_answers && q.correct_answers.length > 0) {
+                    if (Array.isArray(answer)) {
+                      const correctSet = new Set(q.correct_answers);
+                      const answerSet = new Set(answer as string[]);
+                      isCorrect = correctSet.size === answerSet.size && Array.from(correctSet).every((a) => answerSet.has(a));
+                    } else {
+                      isCorrect = q.correct_answers.includes(String(answer || ''));
+                    }
+                  }
+
+                  return (
+                    <div key={q.id} className="bg-slate-700/20 rounded-lg p-3 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-300 text-sm font-medium">{q.title}</span>
+                        {q.is_graded && q.points && (
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            isCorrect === true ? 'bg-emerald-500/10 text-emerald-400'
+                              : isCorrect === false ? 'bg-red-500/10 text-red-400'
+                                : 'bg-slate-600/30 text-slate-400'
+                          }`}>
+                            {isCorrect ? q.points : 0} / {q.points} pts
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-sm ${
+                        isCorrect === false ? 'text-red-300' : isCorrect === true ? 'text-emerald-300' : 'text-slate-400'
+                      }`}>
+                        {displayAnswer}
+                      </p>
+                      {isCorrect === false && q.correct_answers && (
+                        <p className="text-xs text-emerald-400/70">Réponse attendue : {q.correct_answers.join(', ')}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   if (loading) {
@@ -144,20 +366,36 @@ export default function AdminResponsesPage() {
           </button>
           <div>
             <h1 className="text-2xl font-semibold text-slate-100">Réponses</h1>
-            <p className="text-slate-400 text-sm">{form?.title || 'Formulaire'}</p>
+            <p className="text-slate-400 text-sm">
+              {form?.title || 'Formulaire'}
+              {pendingResponses.length > 0 && (
+                <span className="ml-2 text-amber-400 font-medium">{pendingResponses.length} en attente</span>
+              )}
+            </p>
           </div>
         </div>
-        {cheatsToExamine.length > 0 && (
-          <button
-            onClick={examineAllCheats}
-            disabled={bulkExamining}
-            className="px-4 py-2 rounded-lg border border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
-            title={`Examiner et supprimer les ${cheatsToExamine.length} réponse(s) marquée(s) triche`}
-          >
-            {bulkExamining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            Examiner toutes les triches ({cheatsToExamine.length})
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {cheatsToExamine.length > 0 && (
+            <button
+              onClick={() => examineAll('cheats_only')}
+              disabled={bulkExamining}
+              className="px-3 py-2 rounded-lg border border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              {bulkExamining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Triches ({cheatsToExamine.length})
+            </button>
+          )}
+          {pendingResponses.length > 0 && (
+            <button
+              onClick={() => examineAll('all')}
+              disabled={bulkExamining}
+              className="px-3 py-2 rounded-lg border border-emerald-500/50 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              {bulkExamining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              Tout examiner ({pendingResponses.length})
+            </button>
+          )}
+        </div>
       </div>
 
       {responses.length === 0 ? (
@@ -165,176 +403,25 @@ export default function AdminResponsesPage() {
           <p className="text-slate-400 text-lg">Aucune réponse pour le moment</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {responses.map((resp) => (
-            <div
-              key={resp.id}
-              className={`border rounded-xl overflow-hidden transition-colors ${
-                resp.cheating_detected || resp.status === 'trashed' || resp.status === 'time_expired'
-                  ? 'border-red-500/50 bg-red-500/5'
-                  : 'border-slate-700/50 bg-slate-800/60'
-              }`}
-            >
-              {/* En-tête */}
-              <div
-                className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-700/20 transition-colors"
-                onClick={() => setExpanded(expanded === resp.id ? null : resp.id)}
-              >
-                <div className="flex items-center gap-3">
-                  {resp.cheating_detected || resp.status === 'time_expired' ? (
-                    <XCircle className="h-5 w-5 text-red-400 shrink-0" />
-                  ) : (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
-                  )}
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-200 font-medium text-sm">
-                        {new Date(resp.submitted_at).toLocaleString('fr-FR')}
-                      </span>
-                      {resp.cheating_detected && (
-                        <span className="text-xs font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" /> TRICHE
-                        </span>
-                      )}
-                      {!resp.cheating_detected && resp.status === 'time_expired' && (
-                        <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" /> Temps dépassé
-                        </span>
-                      )}
-                    </div>
-                    {resp.max_score !== null && resp.max_score > 0 && (
-                      <span className="text-sm text-slate-400">
-                        Score : <span className="text-white font-medium">{resp.score ?? 0}</span> / {resp.max_score}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteResponse(resp.id); }}
-                    disabled={deleting === resp.id}
-                    className="px-3 py-1.5 rounded-lg border border-slate-600 text-slate-400 hover:text-red-400 hover:border-red-500/50 text-sm font-medium transition-colors flex items-center gap-1.5"
-                    title="Questionnaire examiné — suppression définitive"
-                  >
-                    {deleting === resp.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                    Examiné
-                  </button>
-                  {expanded === resp.id ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
-                </div>
-              </div>
-
-              {/* Détail des réponses */}
-              {expanded === resp.id && (
-                <div className="border-t border-slate-700/50 p-4 space-y-4">
-                  {form?.sections.map((section) => (
-                    <div key={section.id} className="space-y-3">
-                      <h4 className="text-slate-300 font-semibold text-sm border-b border-slate-700/50 pb-1">{section.title}</h4>
-                      {section.questions.map((q) => {
-                        if (q.type === 'question_module' && q.module_id) {
-                          const prefix = `module_${q.module_id}_`;
-                          const moduleQuestions = moduleData[q.module_id] || [];
-                          const byId = new Map(moduleQuestions.map((mq) => [mq.id, mq]));
-                          const moduleAnswers = Object.entries(resp.answers).filter(
-                            (entry): entry is [string, string | string[]] =>
-                              typeof entry[0] === 'string' && entry[0].startsWith(prefix)
-                          );
-                          if (moduleAnswers.length === 0) {
-                            return (
-                              <div key={q.id} className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
-                                <span className="text-orange-300 text-sm font-medium">{q.title || 'Module à questions'}</span>
-                                <p className="text-slate-500 text-sm mt-1">Aucune réponse enregistrée</p>
-                              </div>
-                            );
-                          }
-                          return (
-                            <div key={q.id} className="space-y-2">
-                              {(q.title || 'Module à questions') && (
-                                <h5 className="text-orange-300 font-medium text-sm">{q.title || 'Module à questions'}</h5>
-                              )}
-                              {moduleAnswers.map(([key, answer]) => {
-                                const questionId = key.slice(prefix.length);
-                                const mq = byId.get(questionId);
-                                const displayAnswer = Array.isArray(answer) ? answer.join(', ') : (answer || '—');
-                                const correct = mq?.correct_answers || [];
-                                const ansNorm = String(Array.isArray(answer) ? answer?.[0] ?? '' : answer ?? '').trim();
-                                const correctNorm = correct.map((c) => String(c).trim());
-                                const isCorrect = correctNorm.length > 0
-                                  ? correctNorm.some((c) => c === ansNorm)
-                                  : null;
-
-                                return (
-                                  <div key={key} className="bg-slate-700/20 rounded-lg p-3 space-y-1">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-slate-300 text-sm font-medium">{mq?.title || 'Question'}</span>
-                                      {correct.length > 0 && (
-                                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                                          isCorrect === true ? 'bg-emerald-500/10 text-emerald-400'
-                                            : isCorrect === false ? 'bg-red-500/10 text-red-400'
-                                              : 'bg-slate-600/30 text-slate-400'
-                                        }`}>
-                                          {isCorrect ? '1' : '0'} / 1 pt
-                                        </span>
-                                      )}
-                                    </div>
-                                    <p className={`text-sm ${
-                                      isCorrect === false ? 'text-red-300' : isCorrect === true ? 'text-emerald-300' : 'text-slate-400'
-                                    }`}>
-                                      {displayAnswer}
-                                    </p>
-                                    {isCorrect === false && correct.length > 0 && (
-                                      <p className="text-xs text-emerald-400/70">Réponse attendue : {correct.join(', ')}</p>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        }
-
-                        const answer = resp.answers[q.id];
-                        const displayAnswer = Array.isArray(answer) ? answer.join(', ') : (answer || '—');
-                        let isCorrect: boolean | null = null;
-                        if (q.is_graded && q.correct_answers && q.correct_answers.length > 0) {
-                          if (Array.isArray(answer)) {
-                            const correctSet = new Set(q.correct_answers);
-                            const answerSet = new Set(answer as string[]);
-                            isCorrect = correctSet.size === answerSet.size && Array.from(correctSet).every((a) => answerSet.has(a));
-                          } else {
-                            isCorrect = q.correct_answers.includes(String(answer || ''));
-                          }
-                        }
-
-                        return (
-                          <div key={q.id} className="bg-slate-700/20 rounded-lg p-3 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-slate-300 text-sm font-medium">{q.title}</span>
-                              {q.is_graded && q.points && (
-                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                                  isCorrect === true ? 'bg-emerald-500/10 text-emerald-400'
-                                    : isCorrect === false ? 'bg-red-500/10 text-red-400'
-                                      : 'bg-slate-600/30 text-slate-400'
-                                }`}>
-                                  {isCorrect ? q.points : 0} / {q.points} pts
-                                </span>
-                              )}
-                            </div>
-                            <p className={`text-sm ${
-                              isCorrect === false ? 'text-red-300' : isCorrect === true ? 'text-emerald-300' : 'text-slate-400'
-                            }`}>
-                              {displayAnswer}
-                            </p>
-                            {isCorrect === false && q.correct_answers && (
-                              <p className="text-xs text-emerald-400/70">Réponse attendue : {q.correct_answers.join(', ')}</p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-              )}
+        <div className="space-y-4">
+          {pendingResponses.length > 0 && (
+            <div className="space-y-3">
+              {pendingResponses.map(renderResponseCard)}
             </div>
-          ))}
+          )}
+
+          {reviewedResponses.length > 0 && (
+            <div className="space-y-3">
+              <button
+                onClick={() => setShowReviewed(!showReviewed)}
+                className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                {showReviewed ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                {reviewedResponses.length} réponse{reviewedResponses.length > 1 ? 's' : ''} examinée{reviewedResponses.length > 1 ? 's' : ''}
+              </button>
+              {showReviewed && reviewedResponses.map(renderResponseCard)}
+            </div>
+          )}
         </div>
       )}
     </div>

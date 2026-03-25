@@ -1,0 +1,1299 @@
+[
+  {
+    "endpoint": "/api/admin/avions",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\avions\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/password-reset-requests",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\password-reset-requests\\route.ts",
+    "methods": [
+      "GET",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/profiles/[id]/email",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\profiles\\[id]\\email\\route.ts",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/send-password-reset-code",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\send-password-reset-code\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/site-config",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\site-config\\route.ts",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/superadmin/approve-request",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\superadmin\\approve-request\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/superadmin/ip-access-status",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\superadmin\\ip-access-status\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/superadmin/ips",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\superadmin\\ips\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/superadmin/pending-requests",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\superadmin\\pending-requests\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/superadmin/reject-request",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\superadmin\\reject-request\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/superadmin/request-access",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\superadmin\\request-access\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/superadmin/request/[id]/approval-view",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\superadmin\\request\\[id]\\approval-view\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/superadmin/submit-approval-code",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\superadmin\\submit-approval-code\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/admin/superadmin/verify-code",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\admin\\superadmin\\verify-code\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/aeroport-cargo",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\aeroport-cargo\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/aeroport-passagers",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\aeroport-passagers\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/aeroschool/forms",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\aeroschool\\forms\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/aeroschool/forms/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\aeroschool\\forms\\[id]\\route.ts",
+    "methods": [
+      "GET",
+      "PUT",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/aeroschool/forms/[id]/responses",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\aeroschool\\forms\\[id]\\responses\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/aeroschool/forms/[id]/responses/examine-all-cheats",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\aeroschool\\forms\\[id]\\responses\\examine-all-cheats\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/aeroschool/forms/[id]/submit",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\aeroschool\\forms\\[id]\\submit\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/aeroschool/modules",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\aeroschool\\modules\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/aeroschool/modules/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\aeroschool\\modules\\[id]\\route.ts",
+    "methods": [
+      "GET",
+      "PUT",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/aeroschool/modules/[id]/random",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\aeroschool\\modules\\[id]\\random\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/aeroschool/responses/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\aeroschool\\responses\\[id]\\route.ts",
+    "methods": [
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/aeroschool/test-webhook",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\aeroschool\\test-webhook\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/alliances",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\alliances\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/alliances/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\alliances\\[id]\\route.ts",
+    "methods": [
+      "GET",
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/alliances/[id]/annonces",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\alliances\\[id]\\annonces\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/alliances/[id]/fonds",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\alliances\\[id]\\fonds\\route.ts",
+    "methods": [
+      "POST",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/alliances/[id]/invitations",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\alliances\\[id]\\invitations\\route.ts",
+    "methods": [
+      "POST",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/alliances/[id]/membres",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\alliances\\[id]\\membres\\route.ts",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/alliances/[id]/parametres",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\alliances\\[id]\\parametres\\route.ts",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/alliances/[id]/quitter",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\alliances\\[id]\\quitter\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/alliances/[id]/transferts",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\alliances\\[id]\\transferts\\route.ts",
+    "methods": [
+      "POST",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/alliances/invitations-pending",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\alliances\\invitations-pending\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/armee/config",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\armee\\config\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/armee/missions",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\armee\\missions\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/atis/atis-data",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\atis\\atis-data\\route.ts",
+    "methods": [
+      "GET",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/atis/atiscode",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\atis\\atiscode\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/atis/auto-code",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\atis\\auto-code\\route.ts",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/atis/config",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\atis\\config\\route.ts",
+    "methods": [
+      "GET",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/atis/discord-channels",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\atis\\discord-channels\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/atis/discord-guilds",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\atis\\discord-guilds\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/atis/start",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\atis\\start\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/atis/status",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\atis\\status\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/atis/stop",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\atis\\stop\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/atis/ticker",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\atis\\ticker\\route.ts",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/atis/toggle-bilingual",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\atis\\toggle-bilingual\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/atis/toggle-cavok",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\atis\\toggle-cavok\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/comptes",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\comptes\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/creer-plan",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\creer-plan\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/creer-strip",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\creer-strip\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/grades",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\grades\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/grades/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\grades\\[id]\\route.ts",
+    "methods": [
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/my-session",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\my-session\\route.ts",
+    "methods": [
+      "GET",
+      "OPTIONS"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/session",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\session\\route.ts",
+    "methods": [
+      "POST",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/session/[user_id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\session\\[user_id]\\route.ts",
+    "methods": [
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/telephone/answer",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\telephone\\answer\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/telephone/call",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\telephone\\call\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/telephone/hangup",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\telephone\\hangup\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/telephone/incoming",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\telephone\\incoming\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/telephone/reject",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\telephone\\reject\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/atc/telephone/status",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\atc\\telephone\\status\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/auth/forgot-password",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\auth\\forgot-password\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/auth/profile-email",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\auth\\profile-email\\route.ts",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/auth/register-login",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\auth\\register-login\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/auth/reset-password-with-token",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\auth\\reset-password-with-token\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/auth/send-login-code",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\auth\\send-login-code\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/auth/session-service",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\auth\\session-service\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/auth/verify-login-code",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\auth\\verify-login-code\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/autorisations-exploitation",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\autorisations-exploitation\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/avions/lookup",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\avions\\lookup\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/cartes",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\cartes\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/cartes/auto-generate",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\cartes\\auto-generate\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/cartes/generate-all",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\cartes\\generate-all\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/cartes/logos",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\cartes\\logos\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/cartes/ma-photo",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\cartes\\ma-photo\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/cartes/refresh-all",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\cartes\\refresh-all\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/cartes/upload",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\cartes\\upload\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\[id]\\route.ts",
+    "methods": [
+      "GET",
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/[id]/pret",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\[id]\\pret\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/avions",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\avions\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/avions/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\avions\\[id]\\route.ts",
+    "methods": [
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/avions/[id]/affreter-techniciens",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\avions\\[id]\\affreter-techniciens\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/avions/[id]/debloquer",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\avions\\[id]\\debloquer\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/avions/[id]/reparer",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\avions\\[id]\\reparer\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/avions/[id]/tenter-reparation",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\avions\\[id]\\tenter-reparation\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/avions/[id]/vendre-pieces",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\avions\\[id]\\vendre-pieces\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/employes",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\employes\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/hubs",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\hubs\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/list",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\list\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/locations",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\locations\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/locations/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\locations\\[id]\\route.ts",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/logo",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\logo\\route.ts",
+    "methods": [
+      "POST",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/search",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\search\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/vols-ferry",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\vols-ferry\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/compagnies/vols-ferry/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compagnies\\vols-ferry\\[id]\\route.ts",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/compte",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\compte\\route.ts",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/documents/download/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\documents\\download\\[id]\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/documents/files/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\documents\\files\\[id]\\route.ts",
+    "methods": [
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/documents/sections",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\documents\\sections\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/documents/sections/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\documents\\sections\\[id]\\route.ts",
+    "methods": [
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/documents/upload",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\documents\\upload\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/felitz/compte",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\felitz\\compte\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/felitz/transactions",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\felitz\\transactions\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/felitz/virement",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\felitz\\virement\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/hangar-market",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\hangar-market\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/hangar-market/config",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\hangar-market\\config\\route.ts",
+    "methods": [
+      "GET",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/hangar-market/revente",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\hangar-market\\revente\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/has-admin",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\has-admin\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/ifsa/amendes",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\ifsa\\amendes\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/ifsa/avion",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\ifsa\\avion\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/ifsa/controle",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\ifsa\\controle\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/ifsa/controle/verification",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\ifsa\\controle\\verification\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/ifsa/enquetes",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\ifsa\\enquetes\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/ifsa/sanctions",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\ifsa\\sanctions\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/ifsa/signalements",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\ifsa\\signalements\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/inventaire",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\inventaire\\route.ts",
+    "methods": [
+      "GET",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/licences",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\licences\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/licences/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\licences\\[id]\\route.ts",
+    "methods": [
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/livekit/status",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\livekit\\status\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/livekit/token",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\livekit\\token\\route.ts",
+    "methods": [
+      "POST",
+      "OPTIONS"
+    ]
+  },
+  {
+    "endpoint": "/api/marketplace",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\marketplace\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/messages",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\messages\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/messages/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\messages\\[id]\\route.ts",
+    "methods": [
+      "GET",
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/notams",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\notams\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/notams/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\notams\\[id]\\route.ts",
+    "methods": [
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/pilotes",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\pilotes\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/pilotes/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\pilotes\\[id]\\route.ts",
+    "methods": [
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/pilotes/search",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\pilotes\\search\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/plans-vol",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\plans-vol\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/plans-vol/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\plans-vol\\[id]\\route.ts",
+    "methods": [
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/plans-vol/[id]/transpondeur",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\plans-vol\\[id]\\transpondeur\\route.ts",
+    "methods": [
+      "GET",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/profiles/search",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\profiles\\search\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/recrutement",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\recrutement\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/reparation/catalogue",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\reparation\\catalogue\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/reparation/demandes",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\reparation\\demandes\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/reparation/demandes/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\reparation\\demandes\\[id]\\route.ts",
+    "methods": [
+      "GET",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/reparation/demandes/[id]/mini-jeu",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\reparation\\demandes\\[id]\\mini-jeu\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/reparation/employes",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\reparation\\employes\\route.ts",
+    "methods": [
+      "POST",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/reparation/entreprises",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\reparation\\entreprises\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/reparation/entreprises/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\reparation\\entreprises\\[id]\\route.ts",
+    "methods": [
+      "GET",
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/reparation/hangars",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\reparation\\hangars\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/reparation/tarifs",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\reparation\\tarifs\\route.ts",
+    "methods": [
+      "GET",
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/setup",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\setup\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/comptes",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\comptes\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/comptes/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\comptes\\[id]\\route.ts",
+    "methods": [
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/grades",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\grades\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/grades/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\grades\\[id]\\route.ts",
+    "methods": [
+      "PATCH",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/plan",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\plan\\route.ts",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/session",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\session\\route.ts",
+    "methods": [
+      "POST",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/session/[user_id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\session\\[user_id]\\route.ts",
+    "methods": [
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/telephone/answer",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\telephone\\answer\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/telephone/call",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\telephone\\call\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/telephone/hangup",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\telephone\\hangup\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/telephone/incoming",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\telephone\\incoming\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/telephone/reject",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\telephone\\reject\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/siavi/telephone/status",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\siavi\\telephone\\status\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/sid-star",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\sid-star\\route.ts",
+    "methods": [
+      "GET",
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/sid-star/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\sid-star\\[id]\\route.ts",
+    "methods": [
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/site-config",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\site-config\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/tarifs-liaisons",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\tarifs-liaisons\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/taxes",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\taxes\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "DELETE"
+    ]
+  },
+  {
+    "endpoint": "/api/types-avion",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\types-avion\\route.ts",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "endpoint": "/api/types-avion/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\types-avion\\[id]\\route.ts",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "endpoint": "/api/verify-superadmin",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\verify-superadmin\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/vhf/frequencies",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\vhf\\frequencies\\route.ts",
+    "methods": [
+      "GET",
+      "POST",
+      "PATCH",
+      "DELETE",
+      "OPTIONS"
+    ]
+  },
+  {
+    "endpoint": "/api/vols",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\vols\\route.ts",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "endpoint": "/api/vols/[id]",
+    "file": "c:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\src\\app\\api\\vols\\[id]\\route.ts",
+    "methods": [
+      "PATCH",
+      "DELETE"
+    ]
+  }
+]
