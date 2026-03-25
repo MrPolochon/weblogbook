@@ -8,6 +8,7 @@ import Link from 'next/link';
 import TarifsLiaisonsClient from './TarifsLiaisonsClient';
 import CompagnieHubsClient from './CompagnieHubsClient';
 import CompagnieAvionsClient from './CompagnieAvionsClient';
+import CompagnieReparationsClient from './CompagnieReparationsClient';
 import CompagnieVolsFerryClient from './CompagnieVolsFerryClient';
 import CompagniePretClient from './CompagniePretClient';
 import CompagnieLocationsClient from './CompagnieLocationsClient';
@@ -808,6 +809,9 @@ export default function MaCompagnieClient({
 
       {/* Autorisations d'exploitation */}
       <CompagnieAutorisationsClient compagnieId={compagnie.id} isPdg={isPdg} />
+
+      {/* Reparations en cours */}
+      <CompagnieReparationsClient compagnieId={compagnie.id} isPdg={isPdg} />
 
       {/* Flotte individuelle */}
       <CompagnieAvionsClient compagnieId={compagnie.id} soldeCompagnie={soldeCompagnie} isPdg={isPdg} allianceId={compagnie.alliance_id} />

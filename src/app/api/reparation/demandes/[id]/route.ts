@@ -133,10 +133,32 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { data: ent } = await admin.from('entreprises_reparation')
       .select('alliance_reparation_actif, alliance_id, prix_alliance_pourcent')
       .eq('id', demande.entreprise_id).single();
-    const { data: tarif } = await admin.from('reparation_tarifs')
-      .select('prix_par_point')
-      .eq('entreprise_id', demande.entreprise_id)
-      .limit(1).single();
+    const { data: avionForTarif } = await admin.from('compagnie_avions')
+      .select('type_avion_id').eq('id', demande.avion_id).single();
+    let tarif = null;
+    if (avionForTarif?.type_avion_id) {
+      const { data: t } = await admin.from('reparation_tarifs')
+        .select('prix_par_point')
+        .eq('entreprise_id', demande.entreprise_id)
+        .eq('type_avion_id', avionForTarif.type_avion_id)
+        .limit(1).maybeSingle();
+      tarif = t;
+    }
+    if (!tarif) {
+      const { data: t } = await admin.from('reparation_tarifs')
+        .select('prix_par_point')
+        .eq('entreprise_id', demande.entreprise_id)
+        .is('type_avion_id', null)
+        .limit(1).maybeSingle();
+      tarif = t;
+    }
+    if (!tarif) {
+      const { data: t } = await admin.from('reparation_tarifs')
+        .select('prix_par_point')
+        .eq('entreprise_id', demande.entreprise_id)
+        .limit(1).maybeSingle();
+      tarif = t;
+    }
     let prixParPoint = tarif?.prix_par_point || 1000;
     if (ent?.alliance_reparation_actif && ent.alliance_id && ent.prix_alliance_pourcent != null) {
       const { data: membre } = await admin.from('alliance_membres')
@@ -175,7 +197,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await admin.from('messages').insert({
         destinataire_id: comp.pdg_id,
         titre: `💰 Facture réparation — ${avion?.immatriculation || 'Avion'}`,
-        contenu: `La réparation est terminée.\nScore qualité : ${demande.score_qualite || 0}/100\nUsure : ${demande.usure_avant}% → ${demande.usure_apres}%\n\nMontant à payer : ${(demande.prix_total || 0).toLocaleString('fr-FR')} F$\n\nRendez-vous dans la section Réparation pour payer.`,
+        contenu: `La reparation est terminee.\nScore qualite : ${demande.score_qualite || 0}/100\nUsure : ${demande.usure_avant}% -> ${demande.usure_apres}%\n\nMontant a payer : ${(demande.prix_total || 0).toLocaleString('fr-FR')} F$\n\nRendez-vous dans Ma Compagnie pour payer.`,
         type_message: 'normal',
       });
     }
@@ -190,17 +212,37 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ ok: true });
     }
 
-    const { data: debit } = await admin.rpc('debiter_compte_safe', {
-      p_compagnie_id: demande.compagnie_id,
+    const { data: compteComp } = await admin.from('felitz_comptes')
+      .select('id, solde, vban')
+      .eq('compagnie_id', demande.compagnie_id)
+      .eq('type', 'entreprise')
+      .single();
+    if (!compteComp) return NextResponse.json({ error: 'Compte Felitz de la compagnie introuvable' }, { status: 400 });
+    if (compteComp.solde < demande.prix_total) return NextResponse.json({ error: 'Fonds insuffisants' }, { status: 400 });
+
+    const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
+      p_compte_id: compteComp.id,
       p_montant: demande.prix_total,
-      p_libelle: `Réparation avion`,
     });
-    if (!debit?.success) return NextResponse.json({ error: debit?.error || 'Fonds insuffisants' }, { status: 400 });
+    if (!debitOk) return NextResponse.json({ error: 'Fonds insuffisants' }, { status: 400 });
+
+    await admin.from('felitz_transactions').insert({
+      compte_id: compteComp.id,
+      type: 'debit',
+      montant: demande.prix_total,
+      libelle: `Reparation avion — demande ${id.slice(0, 8)}`,
+    });
 
     const { data: compteRep } = await admin.from('felitz_comptes')
-      .select('id, solde').eq('entreprise_reparation_id', demande.entreprise_id).eq('type', 'reparation').single();
+      .select('id').eq('entreprise_reparation_id', demande.entreprise_id).eq('type', 'reparation').single();
     if (compteRep) {
-      await admin.from('felitz_comptes').update({ solde: compteRep.solde + demande.prix_total }).eq('id', compteRep.id);
+      await admin.rpc('crediter_compte_safe', { p_compte_id: compteRep.id, p_montant: demande.prix_total });
+      await admin.from('felitz_transactions').insert({
+        compte_id: compteRep.id,
+        type: 'credit',
+        montant: demande.prix_total,
+        libelle: `Paiement reparation — ${compteComp.vban || '?'}`,
+      });
     }
 
     await admin.from('reparation_demandes').update({ statut: 'payee', payee_at: new Date().toISOString() }).eq('id', id);

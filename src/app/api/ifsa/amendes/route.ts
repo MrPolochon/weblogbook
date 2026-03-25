@@ -29,7 +29,13 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (compagnieId) {
-      // Amendes de la compagnie (pour le PDG)
+      const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', compagnieId).single();
+      if (!comp || comp.pdg_id !== user.id) {
+        const { data: prof } = await admin.from('profiles').select('role, ifsa').eq('id', user.id).single();
+        if (prof?.role !== 'admin' && !prof?.ifsa) {
+          return NextResponse.json({ error: 'Acces refuse' }, { status: 403 });
+        }
+      }
       query = query.eq('cible_compagnie_id', compagnieId);
     } else {
       // Amendes personnelles du pilote

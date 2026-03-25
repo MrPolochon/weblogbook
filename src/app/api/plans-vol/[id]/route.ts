@@ -553,22 +553,26 @@ export async function PATCH(
         const { data: compteComp } = await admin.from('felitz_comptes')
           .select('id, solde, vban').eq('compagnie_id', plan.compagnie_id).eq('type', 'entreprise').single();
         if (compteComp) {
-          compteId = compteComp.id;
-          compteDebiteVban = compteComp.vban;
-          await admin.rpc('debiter_compte_safe', { p_compte_id: compteComp.id, p_montant: AMENDE });
-          await admin.from('felitz_transactions').insert({ compte_id: compteComp.id, type: 'debit', montant: AMENDE, libelle: `Amende ${isOver24h ? 'annulation' : 'clôture'} forcée — Plan ${plan.numero_vol}` });
-          amendeAppliquee = true;
+          const { data: debitResult } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteComp.id, p_montant: AMENDE });
+          if (debitResult) {
+            compteId = compteComp.id;
+            compteDebiteVban = compteComp.vban;
+            await admin.from('felitz_transactions').insert({ compte_id: compteComp.id, type: 'debit', montant: AMENDE, libelle: `Amende ${isOver24h ? 'annulation' : 'cloture'} forcee — Plan ${plan.numero_vol}` });
+            amendeAppliquee = true;
+          }
         }
       }
-      if (!amendeAppliquee) {
+      if (!amendeAppliquee && plan.pilote_id) {
         const { data: comptePerso } = await admin.from('felitz_comptes')
           .select('id, solde, vban').eq('proprietaire_id', plan.pilote_id).eq('type', 'personnel').single();
         if (comptePerso) {
-          compteId = comptePerso.id;
-          compteDebiteVban = comptePerso.vban;
-          await admin.rpc('debiter_compte_safe', { p_compte_id: comptePerso.id, p_montant: AMENDE });
-          await admin.from('felitz_transactions').insert({ compte_id: comptePerso.id, type: 'debit', montant: AMENDE, libelle: `Amende ${isOver24h ? 'annulation' : 'clôture'} forcée — Plan ${plan.numero_vol}` });
-          amendeAppliquee = true;
+          const { data: debitResult } = await admin.rpc('debiter_compte_safe', { p_compte_id: comptePerso.id, p_montant: AMENDE });
+          if (debitResult) {
+            compteId = comptePerso.id;
+            compteDebiteVban = comptePerso.vban;
+            await admin.from('felitz_transactions').insert({ compte_id: comptePerso.id, type: 'debit', montant: AMENDE, libelle: `Amende ${isOver24h ? 'annulation' : 'cloture'} forcee — Plan ${plan.numero_vol}` });
+            amendeAppliquee = true;
+          }
         }
       }
 

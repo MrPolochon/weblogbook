@@ -105,15 +105,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       });
     }
     const { data: allianceAccount } = await admin.from('felitz_comptes').select('id').eq('alliance_id', allianceId).eq('type', 'alliance').single();
-    if (allianceAccount) {
-      await admin.rpc('crediter_compte_safe', { p_compte_id: allianceAccount.id, p_montant: amt });
-      await admin.from('felitz_transactions').insert({
-        compte_id: allianceAccount.id,
-        type: 'credit',
-        montant: amt,
-        libelle: `Contribution${isPersonnel ? ' (personnel)' : ''} — ${vbanSource}`,
-      });
+    if (!allianceAccount) {
+      const sourceCompteId = isPersonnel
+        ? (await admin.from('felitz_comptes').select('id').eq('proprietaire_id', user!.id).eq('type', 'personnel').single()).data?.id
+        : (await admin.from('felitz_comptes').select('id').eq('compagnie_id', contribCompagnieId).eq('type', 'entreprise').single()).data?.id;
+      if (sourceCompteId) {
+        await admin.rpc('crediter_compte_safe', { p_compte_id: sourceCompteId, p_montant: amt });
+      }
+      return NextResponse.json({ error: 'Compte alliance introuvable, debit annule' }, { status: 400 });
     }
+
+    const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: allianceAccount.id, p_montant: amt });
+    if (!creditOk) {
+      const sourceCompteId = isPersonnel
+        ? (await admin.from('felitz_comptes').select('id').eq('proprietaire_id', user!.id).eq('type', 'personnel').single()).data?.id
+        : (await admin.from('felitz_comptes').select('id').eq('compagnie_id', contribCompagnieId).eq('type', 'entreprise').single()).data?.id;
+      if (sourceCompteId) {
+        await admin.rpc('crediter_compte_safe', { p_compte_id: sourceCompteId, p_montant: amt });
+      }
+      return NextResponse.json({ error: 'Erreur credit alliance, debit annule' }, { status: 500 });
+    }
+
+    await admin.from('felitz_transactions').insert({
+      compte_id: allianceAccount.id,
+      type: 'credit',
+      montant: amt,
+      libelle: `Contribution${isPersonnel ? ' (personnel)' : ''} — ${vbanSource}`,
+    });
 
     await admin.from('alliance_contributions').insert({
       alliance_id: allianceId,
@@ -122,7 +140,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       libelle: (libelle ? String(libelle).trim() : 'Contribution') + (isPersonnel ? ' (personnel)' : '') + ` — ${vbanSource}`,
     });
 
-    return NextResponse.json({ ok: true, message: `${amt.toLocaleString('fr-FR')} F$ contribués` });
+    return NextResponse.json({ ok: true, message: `${amt.toLocaleString('fr-FR')} F$ contribues` });
   }
 
   return NextResponse.json({ error: 'Action invalide (demande_fonds ou contribuer)' }, { status: 400 });
@@ -167,21 +185,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .select('id, vban').eq('alliance_id', allianceId).eq('type', 'alliance').single();
   if (!allianceAccount) return NextResponse.json({ error: 'Compte alliance introuvable' }, { status: 400 });
 
+  const { data: compteDestComp } = await admin.from('felitz_comptes')
+    .select('id, vban')
+    .eq('compagnie_id', demande.compagnie_id)
+    .eq('type', 'entreprise')
+    .single();
+  if (!compteDestComp) return NextResponse.json({ error: 'Compte destinataire introuvable pour cette compagnie' }, { status: 400 });
+
   const allianceVban = allianceAccount.vban || '';
+  const destVban = compteDestComp.vban || '?';
 
   const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
     p_compte_id: allianceAccount.id,
     p_montant: demande.montant,
   });
   if (!debitOk) return NextResponse.json({ error: 'Fonds alliance insuffisants' }, { status: 400 });
-
-  const { data: compteDestComp } = await admin.from('felitz_comptes')
-    .select('id, vban')
-    .eq('compagnie_id', demande.compagnie_id)
-    .eq('type', 'entreprise')
-    .single();
-
-  const destVban = compteDestComp?.vban || '?';
 
   await admin.from('felitz_transactions').insert({
     compte_id: allianceAccount.id,
@@ -190,18 +208,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     libelle: `Demande fonds — vers ${destVban} : ${demande.motif}`,
   });
 
-  if (compteDestComp) {
-    await admin.rpc('crediter_compte_safe', {
-      p_compte_id: compteDestComp.id,
-      p_montant: demande.montant,
-    });
-    await admin.from('felitz_transactions').insert({
-      compte_id: compteDestComp.id,
-      type: 'credit',
-      montant: demande.montant,
-      libelle: `Fonds alliance — de ${allianceVban} : ${demande.motif}`,
-    });
+  const { data: creditOk } = await admin.rpc('crediter_compte_safe', {
+    p_compte_id: compteDestComp.id,
+    p_montant: demande.montant,
+  });
+  if (!creditOk) {
+    await admin.rpc('crediter_compte_safe', { p_compte_id: allianceAccount.id, p_montant: demande.montant });
+    return NextResponse.json({ error: 'Erreur credit destinataire, debit annule' }, { status: 500 });
   }
+
+  await admin.from('felitz_transactions').insert({
+    compte_id: compteDestComp.id,
+    type: 'credit',
+    montant: demande.montant,
+    libelle: `Fonds alliance — de ${allianceVban} : ${demande.motif}`,
+  });
 
   await admin.from('alliance_demandes_fonds').update({
     statut: 'acceptee', traite_par: user.id, traite_at: new Date().toISOString(),

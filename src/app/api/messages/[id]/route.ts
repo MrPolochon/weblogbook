@@ -160,10 +160,9 @@ export async function PATCH(
         libelle: message.cheque_libelle || `Encaissement chèque vol ${numeroVol}`
       });
 
-      // Débits taxe alliance et codeshare + transactions pour l'historique
       if (taxeAlliance > 0) {
-        const debitTaxe = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: taxeAlliance });
-        if (debitTaxe) {
+        const { data: taxeOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: taxeAlliance });
+        if (taxeOk) {
           await admin.from('felitz_transactions').insert({
             compte_id: compteId,
             type: 'debit',
@@ -173,8 +172,8 @@ export async function PATCH(
         }
       }
       if (codeshare > 0) {
-        const debitCodeshare = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: codeshare });
-        if (debitCodeshare) {
+        const { data: codeshareOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: codeshare });
+        if (codeshareOk) {
           await admin.from('felitz_transactions').insert({
             compte_id: compteId,
             type: 'debit',
