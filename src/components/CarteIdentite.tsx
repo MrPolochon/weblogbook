@@ -103,6 +103,7 @@ export default function CarteIdentite({ carte, identifiant, size = 'md', classNa
                 width={size === 'sm' ? 50 : size === 'md' ? 80 : 100}
                 height={size === 'sm' ? 50 : size === 'md' ? 80 : 100}
                 className="object-contain"
+                unoptimized
               />
             ) : (
               <div 
@@ -126,6 +127,7 @@ export default function CarteIdentite({ carte, identifiant, size = 'md', classNa
                 width={size === 'sm' ? 60 : size === 'md' ? 90 : 110}
                 height={size === 'sm' ? 70 : size === 'md' ? 105 : 130}
                 className="rounded object-cover bg-white"
+                unoptimized
               />
             ) : (
               <div 

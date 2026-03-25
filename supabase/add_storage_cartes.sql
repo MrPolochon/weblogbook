@@ -1,7 +1,7 @@
 -- Bucket Storage pour les images des cartes d'identité
 -- Exécuter dans l'éditeur SQL Supabase
 
--- Créer le bucket pour les cartes
+-- Créer le bucket pour les cartes (ou forcer public si déjà existant)
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
   'cartes-identite',
@@ -10,10 +10,15 @@ VALUES (
   5242880, -- 5MB max
   ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET public = true;
 
--- Politique: tout le monde peut voir les images
-CREATE POLICY "cartes_storage_select" ON storage.objects FOR SELECT TO authenticated
+-- Politique: tout le monde peut voir les images (authentifié + anonyme)
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "cartes_storage_select" ON storage.objects;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+CREATE POLICY "cartes_storage_select" ON storage.objects FOR SELECT TO public
   USING (bucket_id = 'cartes-identite');
 
 -- Politique: admins, IFSA peuvent tout uploader, pilotes peuvent uploader dans leur dossier

@@ -342,6 +342,7 @@ export default function CarteIdentiteEditor({ userId, identifiant, initialData, 
                           width={80}
                           height={80}
                           className="rounded-xl object-cover border-2 border-sky-500"
+                          unoptimized
                         />
                         <button
                           type="button"
@@ -415,6 +416,7 @@ export default function CarteIdentiteEditor({ userId, identifiant, initialData, 
                                   width={64}
                                   height={64}
                                   className="w-full h-full object-cover"
+                                  unoptimized
                                 />
                               </button>
                               {/* Bouton supprimer définitivement */}
@@ -453,6 +455,7 @@ export default function CarteIdentiteEditor({ userId, identifiant, initialData, 
                           width={80}
                           height={100}
                           className="rounded-xl object-cover border-2 border-slate-200"
+                          unoptimized
                         />
                         <button
                           type="button"

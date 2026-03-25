@@ -488,6 +488,7 @@ export default function MaCompagnieClient({
                     height={80}
                     className="rounded-lg border border-slate-600 object-contain bg-white p-1"
                     unoptimized
+                    unoptimized
                   />
                   <button
                     onClick={handleDeleteLogo}
@@ -542,6 +543,7 @@ export default function MaCompagnieClient({
                   width={48}
                   height={48}
                   className="rounded-lg border border-slate-600 object-contain bg-white p-0.5"
+                  unoptimized
                   unoptimized
                 />
               )}

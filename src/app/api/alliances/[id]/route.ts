@@ -30,7 +30,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const pdgCompagnieIds = (pdg || []).map(r => r.id);
   const myMember = myMembers?.[0] ?? null;
-  const myCompagnieIds = (myMembers || []).map(m => m.compagnie_id).filter(id => pdgCompagnieIds.includes(id));
+  const myAllCompagnieIds = (myMembers || []).map(m => m.compagnie_id);
+  const myCompagnieIds = myAllCompagnieIds.filter(cid => pdgCompagnieIds.includes(cid));
   const myRole = myMember?.role ?? (isAdmin ? 'admin' : null);
 
   // codeshare_pourcent might not exist yet (migration pending)
@@ -186,6 +187,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     my_role: myRole,
     my_compagnie_id: myMember?.compagnie_id ?? null,
     my_compagnie_ids: myCompagnieIds,
+    my_all_compagnie_ids: myAllCompagnieIds,
   });
 }
 

@@ -112,6 +112,7 @@ interface AllianceDetail extends Alliance {
   contributions: Contribution[];
   transactions_alliance?: AllianceTransaction[];
   my_compagnie_ids?: string[];
+  my_all_compagnie_ids?: string[];
 }
 
 interface Props {
@@ -150,9 +151,16 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
+  const [selectedCompagnieId, setSelectedCompagnieId] = useState<string | null>(null);
 
-  const isLeader = detail?.my_role === 'president' || detail?.my_role === 'vice_president';
-  const isPresident = detail?.my_role === 'president';
+  const mesCompagniesIds = detail?.my_all_compagnie_ids ?? [];
+  const mesCompagnies = detail ? detail.membres.filter(m => mesCompagniesIds.includes(m.compagnie_id)) : [];
+  const activeCompagnieId = selectedCompagnieId && mesCompagniesIds.includes(selectedCompagnieId) ? selectedCompagnieId : (mesCompagniesIds[0] ?? null);
+  const activeMembre = activeCompagnieId ? detail?.membres.find(m => m.compagnie_id === activeCompagnieId) : null;
+  const activeRole = activeMembre?.role ?? detail?.my_role ?? null;
+
+  const isLeader = activeRole === 'president' || activeRole === 'vice_president';
+  const isPresident = activeRole === 'president';
 
   useEffect(() => {
     fetch('/api/alliances').then(r => r.json()).then(d => setAlliances(Array.isArray(d) ? d : [])).catch(() => setAlliances([])).finally(() => setLoading(false));
@@ -168,6 +176,15 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
   useEffect(() => {
     if (alliances.length === 1 && !detail) loadDetail(alliances[0].id);
   }, [alliances, detail, loadDetail]);
+
+  useEffect(() => {
+    if (detail && detail.my_all_compagnie_ids?.length) {
+      setSelectedCompagnieId(prev => {
+        if (prev && detail.my_all_compagnie_ids!.includes(prev)) return prev;
+        return detail.my_all_compagnie_ids![0];
+      });
+    }
+  }, [detail]);
 
   function flash(msg: string, isError = false) {
     if (isError) { setError(msg); setSuccess(''); }
@@ -242,9 +259,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
 
   if (!detail) return null;
 
-  const mesCompagniesDansAlliance = (detail.my_compagnie_ids?.length ?? 0) > 0
-    ? detail.membres.filter(m => detail.my_compagnie_ids!.includes(m.compagnie_id))
-    : [];
+  const isPdgOfActive = activeCompagnieId ? pdgCompagnieIds.includes(activeCompagnieId) : false;
 
   return (
     <div className="space-y-6">
@@ -273,20 +288,44 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
           </h1>
           {detail.description && <p className="text-slate-400 mt-1">{detail.description}</p>}
           {detail.devise && <p className="text-slate-500 text-sm italic">&laquo; {detail.devise} &raquo;</p>}
-          {mesCompagniesDansAlliance.length > 1 && (
-            <p className="text-xs text-sky-400/90 mt-1 flex items-center gap-1">Vos compagnies : {mesCompagniesDansAlliance.map(m => m.compagnie?.nom).join(', ')}</p>
-          )}
         </div>
-        <span className={`px-3 py-1 rounded-full text-sm font-medium ${ROLE_COLORS[detail.my_role || ''] || ''} bg-slate-800`}>
-          {ROLE_LABELS[detail.my_role || ''] || detail.my_role}
+        <span className={`px-3 py-1 rounded-full text-sm font-medium ${ROLE_COLORS[activeRole || ''] || ''} bg-slate-800`}>
+          {ROLE_LABELS[activeRole || ''] || activeRole}
         </span>
       </div>
+
+      {mesCompagnies.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-slate-500 uppercase tracking-wider font-medium">Vue depuis :</span>
+          {mesCompagnies.map(m => {
+            const isActive = m.compagnie_id === activeCompagnieId;
+            const role = ROLE_LABELS[m.role] || m.role;
+            return (
+              <button
+                key={m.compagnie_id}
+                onClick={() => setSelectedCompagnieId(m.compagnie_id)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition border ${
+                  isActive
+                    ? 'bg-violet-600/20 border-violet-500/50 text-violet-300 shadow-sm shadow-violet-500/10'
+                    : 'bg-slate-800/50 border-slate-700/50 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                }`}
+              >
+                <Building2 className="h-3.5 w-3.5" />
+                {m.compagnie?.nom || m.compagnie_id}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${isActive ? ROLE_COLORS[m.role] || '' : 'text-slate-500'}`}>
+                  {role}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {error && <Alert type="error">{error}</Alert>}
       {success && <Alert type="success">{success}</Alert>}
 
       <nav className="flex gap-1 overflow-x-auto border-b border-slate-700 pb-px">
-        {TABS.filter(t => t.key !== 'parametres' || isLeader || detail.my_role === 'admin').map(t => {
+        {TABS.filter(t => t.key !== 'parametres' || isLeader || activeRole === 'admin').map(t => {
           const Icon = t.icon;
           return (
             <button key={t.key} onClick={() => setTab(t.key)}
@@ -300,8 +339,8 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
       <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-6">
         {tab === 'dashboard' && <DashboardTab detail={detail} />}
         {tab === 'membres' && <MembresTab detail={detail} isPresident={!!isPresident} isLeader={!!isLeader} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} compagniesSansAlliance={compagniesSansAlliance} />}
-        {tab === 'flotte' && <FlotteTab detail={detail} pdgCompagnieIds={pdgCompagnieIds} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
-        {tab === 'finances' && <FinancesTab detail={detail} isLeader={!!isLeader} isPdg={pdgCompagnieIds.some(id => detail.membres.some(m => m.compagnie_id === id))} pdgCompagnieIds={pdgCompagnieIds} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
+        {tab === 'flotte' && <FlotteTab detail={detail} pdgCompagnieIds={pdgCompagnieIds} selectedCompagnieId={activeCompagnieId} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
+        {tab === 'finances' && <FinancesTab detail={detail} isLeader={!!isLeader} isPdg={isPdgOfActive} pdgCompagnieIds={pdgCompagnieIds} selectedCompagnieId={activeCompagnieId} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
         {tab === 'annonces' && <AnnoncesTab detail={detail} isLeader={!!isLeader} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
         {tab === 'parametres' && <ParametresTab detail={detail} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
       </div>
@@ -573,15 +612,16 @@ function MembresTab({ detail, isPresident, isLeader, onRefresh, flash, api, busy
   );
 }
 
-function FlotteTab({ detail, pdgCompagnieIds, onRefresh, flash, api, busy }: {
+function FlotteTab({ detail, pdgCompagnieIds, selectedCompagnieId, onRefresh, flash, api, busy }: {
   detail: AllianceDetail; pdgCompagnieIds: string[];
+  selectedCompagnieId: string | null;
   onRefresh: () => void;
   flash: (m: string, e?: boolean) => void;
   api: (u: string, m: string, b?: unknown) => Promise<unknown>; busy: boolean;
 }) {
   const pending = detail.transferts.filter(t => t.statut === 'en_attente');
   const completed = detail.transferts.filter(t => t.statut !== 'en_attente' && t.statut !== 'annule');
-  const myCompagniesInAlliance = detail.membres.filter(m => pdgCompagnieIds.includes(m.compagnie_id));
+  const isPdgOfSelected = selectedCompagnieId ? pdgCompagnieIds.includes(selectedCompagnieId) : false;
 
   return (
     <div className="space-y-6">
@@ -592,8 +632,8 @@ function FlotteTab({ detail, pdgCompagnieIds, onRefresh, flash, api, busy }: {
             const source = detail.membres.find(m => m.compagnie_id === t.compagnie_source_id);
             const dest = t.compagnie_dest_id ? detail.membres.find(m => m.compagnie_id === t.compagnie_dest_id) : null;
             const isDestSpecifique = !!t.compagnie_dest_id;
-            const isMeDest = isDestSpecifique && t.compagnie_dest_id === detail.my_compagnie_id;
-            const canClaim = !isDestSpecifique && myCompagniesInAlliance.length > 0;
+            const isMeDest = isDestSpecifique && selectedCompagnieId === t.compagnie_dest_id && isPdgOfSelected;
+            const canClaim = !isDestSpecifique && isPdgOfSelected;
             return (
               <div key={t.id} className="p-3 rounded-lg bg-slate-700/20 mb-2 flex items-center justify-between flex-wrap gap-2">
                 <div className="text-sm text-slate-300">
@@ -605,23 +645,12 @@ function FlotteTab({ detail, pdgCompagnieIds, onRefresh, flash, api, busy }: {
                 </div>
                 {(isMeDest || canClaim) && (
                   <div className="flex gap-2 items-center flex-wrap">
-                    {canClaim && myCompagniesInAlliance.length > 1 && (
-                      <select className="input py-1 px-2 text-xs w-36" id={`claim-${t.id}`}>
-                        {myCompagniesInAlliance.map(m => (
-                          <option key={m.compagnie_id} value={m.compagnie_id}>{m.compagnie?.nom || m.compagnie_id}</option>
-                        ))}
-                      </select>
-                    )}
                     <button disabled={busy} onClick={async () => {
-                      const compId = canClaim
-                        ? (myCompagniesInAlliance.length === 1 ? myCompagniesInAlliance[0].compagnie_id : (document.getElementById(`claim-${t.id}`) as HTMLSelectElement)?.value)
-                        : undefined;
-                      if (canClaim && !compId) return;
                       try {
                         await api(`/api/alliances/${detail.id}/transferts`, 'PATCH', {
                           transfert_id: t.id,
                           action: 'accepter',
-                          ...(canClaim && compId && { compagnie_dest_id: compId }),
+                          ...(canClaim && selectedCompagnieId && { compagnie_dest_id: selectedCompagnieId }),
                         });
                         flash(t.type_transfert === 'vente' ? 'Achat effectué' : 'Transfert accepté');
                         onRefresh();
@@ -664,9 +693,10 @@ function FlotteTab({ detail, pdgCompagnieIds, onRefresh, flash, api, busy }: {
   );
 }
 
-function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flash, api, busy }: {
+function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, selectedCompagnieId, onRefresh, flash, api, busy }: {
   detail: AllianceDetail; isLeader: boolean; isPdg: boolean;
   pdgCompagnieIds: string[];
+  selectedCompagnieId: string | null;
   onRefresh: () => void; flash: (m: string, e?: boolean) => void;
   api: (u: string, m: string, b?: unknown) => Promise<unknown>; busy: boolean;
 }) {
@@ -678,24 +708,14 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
   const [showContrib, setShowContrib] = useState(false);
   const [showDemande, setShowDemande] = useState(false);
 
-  const myCompagniesInAlliance = detail.membres.filter(m => pdgCompagnieIds.includes(m.compagnie_id));
-  const [selectedCodeshareCompagnieId, setSelectedCodeshareCompagnieId] = useState(
-    detail.my_compagnie_ids?.[0] ?? myCompagniesInAlliance[0]?.compagnie_id ?? ''
-  );
-  const selectedMember = detail.membres.find(m => m.compagnie_id === selectedCodeshareCompagnieId);
+  const activeCompId = selectedCompagnieId ?? detail.my_compagnie_ids?.[0] ?? '';
+  const selectedMember = detail.membres.find(m => m.compagnie_id === activeCompId);
   const [myCodeshare, setMyCodeshare] = useState(selectedMember?.codeshare_pourcent ?? 0);
 
   useEffect(() => {
-    const m = detail.membres.find(x => x.compagnie_id === selectedCodeshareCompagnieId);
+    const m = detail.membres.find(x => x.compagnie_id === activeCompId);
     setMyCodeshare(m?.codeshare_pourcent ?? 0);
-  }, [selectedCodeshareCompagnieId, detail.membres]);
-
-  useEffect(() => {
-    const mine = detail.membres.filter(m => pdgCompagnieIds.includes(m.compagnie_id));
-    if (mine.length > 0 && !mine.some(m => m.compagnie_id === selectedCodeshareCompagnieId)) {
-      setSelectedCodeshareCompagnieId(mine[0].compagnie_id);
-    }
-  }, [detail.id, detail.membres, pdgCompagnieIds, selectedCodeshareCompagnieId]);
+  }, [activeCompId, detail.membres]);
 
   const pendingDemandes = detail.demandes_fonds.filter(d => d.statut === 'en_attente');
   const codeshareActif = detail.parametres?.codeshare_actif ?? false;
@@ -728,22 +748,6 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
           {isPdg && (
             <div>
               <p className="text-xs font-medium text-slate-300 mb-2 uppercase tracking-wide">Mon % de codeshare</p>
-              {myCompagniesInAlliance.length > 1 && (
-                <div className="mb-2">
-                  <label className="block text-xs text-slate-500 mb-1">Compagnie à modifier</label>
-                  <select
-                    value={selectedCodeshareCompagnieId}
-                    onChange={e => setSelectedCodeshareCompagnieId(e.target.value)}
-                    className="w-full rounded border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm"
-                  >
-                    {myCompagniesInAlliance.map(m => (
-                      <option key={m.compagnie_id} value={m.compagnie_id}>
-                        {m.compagnie?.nom || m.compagnie_id}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
               <div className="flex items-center gap-3 p-3 rounded-lg bg-sky-800/20 border border-sky-700/40">
                 <Building2 className="h-4 w-4 text-sky-400 flex-shrink-0" />
                 <span className="text-sm text-slate-200 flex-1">{selectedMember?.compagnie?.nom || 'Ma compagnie'}</span>
@@ -751,7 +755,7 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
                   className="w-20 rounded border border-slate-600 bg-slate-800 text-slate-200 px-2 py-1.5 text-sm text-right" />
                 <span className="text-sm text-slate-400">%</span>
                 <button disabled={busy || myCodeshare === (selectedMember?.codeshare_pourcent ?? 0)} onClick={async () => {
-                  try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'set_codeshare', codeshare_pourcent: myCodeshare, compagnie_id: selectedCodeshareCompagnieId || undefined }); flash('Codeshare mis à jour'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+                  try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'set_codeshare', codeshare_pourcent: myCodeshare, compagnie_id: activeCompId || undefined }); flash('Codeshare mis à jour'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
                 }} className="px-3 py-1.5 text-xs rounded bg-sky-600 text-white font-medium disabled:opacity-50 hover:bg-sky-500 transition">Enregistrer</button>
               </div>
             </div>
@@ -766,7 +770,7 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
                     <div className="flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-slate-500" />
                       <span className="text-sm text-slate-200">{m.compagnie?.nom || m.compagnie_id}</span>
-                      {pdgCompagnieIds.includes(m.compagnie_id) && <span className="text-[10px] bg-sky-600/30 text-sky-300 px-1.5 py-0.5 rounded">vous</span>}
+                      {m.compagnie_id === activeCompId && <span className="text-[10px] bg-sky-600/30 text-sky-300 px-1.5 py-0.5 rounded">vous</span>}
                     </div>
                     <span className={`text-sm font-medium ${m.codeshare_pourcent > 0 ? 'text-sky-300' : 'text-slate-500'}`}>
                       {m.codeshare_pourcent}%
@@ -793,6 +797,7 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
       {showContrib && (
         <div className="p-4 rounded-lg bg-slate-700/20 space-y-3">
           <h4 className="text-sm font-medium text-slate-300">Contribuer au compte alliance</h4>
+          <p className="text-xs text-slate-500">Depuis : <strong className="text-slate-300">{selectedMember?.compagnie?.nom || 'Compagnie sélectionnée'}</strong></p>
           <div className="flex gap-1 p-1 bg-slate-700/50 rounded-lg w-fit">
             <button type="button" onClick={() => setContribSource('compagnie')}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${contribSource === 'compagnie' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
@@ -803,28 +808,12 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
               <Wallet className="h-3 w-3 inline mr-1" />Compte personnel
             </button>
           </div>
-          {contribSource === 'compagnie' && myCompagniesInAlliance.length > 1 && (
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Compagnie contributrice</label>
-              <select
-                value={selectedCodeshareCompagnieId}
-                onChange={e => setSelectedCodeshareCompagnieId(e.target.value)}
-                className="w-full max-w-xs rounded border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm"
-              >
-                {myCompagniesInAlliance.map(m => (
-                  <option key={m.compagnie_id} value={m.compagnie_id}>
-                    {m.compagnie?.nom || m.compagnie_id}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
           <div className="flex gap-2 flex-wrap">
             <input type="number" min="1" value={contribMontant} onChange={e => setContribMontant(e.target.value)} placeholder="Montant" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-32 text-sm" />
             <input type="text" value={contribLibelle} onChange={e => setContribLibelle(e.target.value)} placeholder="Libellé (opt.)" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 flex-1 text-sm" />
             <button disabled={busy || !contribMontant || Number(contribMontant) <= 0} onClick={async () => {
               const payload: Record<string, unknown> = { action: 'contribuer', montant: Number(contribMontant), libelle: contribLibelle || undefined, source: contribSource };
-              if (contribSource === 'compagnie' && selectedCodeshareCompagnieId) payload.compagnie_id = selectedCodeshareCompagnieId;
+              if (contribSource === 'compagnie' && activeCompId) payload.compagnie_id = activeCompId;
               try { await api(`/api/alliances/${detail.id}/fonds`, 'POST', payload); flash(`${Number(contribMontant).toLocaleString('fr-FR')} F$ contribués depuis le compte ${contribSource === 'personnel' ? 'personnel' : 'compagnie'}`); setContribMontant(''); setContribLibelle(''); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
             }} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium disabled:opacity-50">Contribuer</button>
           </div>
@@ -834,28 +823,13 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, onRefresh, flas
       {showDemande && (
         <div className="p-4 rounded-lg bg-slate-700/20 space-y-2">
           <h4 className="text-sm font-medium text-slate-300">Demander des fonds</h4>
-          {myCompagniesInAlliance.length > 1 && (
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">Compagnie demanderesse</label>
-              <select
-                value={selectedCodeshareCompagnieId}
-                onChange={e => setSelectedCodeshareCompagnieId(e.target.value)}
-                className="w-full max-w-xs rounded border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm"
-              >
-                {myCompagniesInAlliance.map(m => (
-                  <option key={m.compagnie_id} value={m.compagnie_id}>
-                    {m.compagnie?.nom || m.compagnie_id}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <p className="text-xs text-slate-500">Pour : <strong className="text-slate-300">{selectedMember?.compagnie?.nom || 'Compagnie sélectionnée'}</strong></p>
           <div className="flex gap-2 flex-wrap">
             <input type="number" min="1" value={fondsMontant} onChange={e => setFondsMontant(e.target.value)} placeholder="Montant" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-32 text-sm" />
             <input type="text" value={fondsMotif} onChange={e => setFondsMotif(e.target.value)} placeholder="Motif *" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 flex-1 text-sm" />
             <button disabled={busy || !fondsMontant || Number(fondsMontant) <= 0 || !fondsMotif.trim()} onClick={async () => {
               const payload: Record<string, unknown> = { action: 'demande_fonds', montant: Number(fondsMontant), motif: fondsMotif };
-              if (myCompagniesInAlliance.length > 1 && selectedCodeshareCompagnieId) payload.compagnie_id = selectedCodeshareCompagnieId;
+              if (activeCompId) payload.compagnie_id = activeCompId;
               try { await api(`/api/alliances/${detail.id}/fonds`, 'POST', payload); flash('Demande soumise'); setFondsMontant(''); setFondsMotif(''); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
             }} className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium disabled:opacity-50">Envoyer</button>
           </div>
