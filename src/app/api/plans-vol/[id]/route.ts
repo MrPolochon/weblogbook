@@ -623,6 +623,146 @@ export async function PATCH(
       return NextResponse.json({ ok: true, amende: AMENDE, amendeAppliquee, compteDebite: compteDebiteVban, statut: newStatut, annule: isOver24h });
     }
 
+    if (action === 'crash' || action === 'atterrissage_urgence') {
+      const { data: profile } = await supabase.from('profiles').select('role, atc, identifiant').eq('id', user.id).single();
+      const isAdmin = profile?.role === 'admin';
+      const canAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
+      if (!canAtc) return NextResponse.json({ error: 'Acces ATC/admin requis.' }, { status: 403 });
+      if (plan.statut === 'cloture' || plan.statut === 'annule') {
+        return NextResponse.json({ error: 'Plan deja termine.' }, { status: 400 });
+      }
+
+      const isCrash = action === 'crash';
+      const aeroportAtc = plan.current_holder_aeroport || (isCrash ? plan.aeroport_depart : plan.aeroport_arrivee) || plan.aeroport_depart || '';
+      const screenshotUrl = typeof body.screenshot_url === 'string' ? body.screenshot_url.trim() : null;
+
+      let immatriculation: string | null = null;
+      let typeAvion: string | null = null;
+      let usureAvant: number | null = null;
+
+      if (plan.compagnie_avion_id) {
+        const { data: avionData } = await admin.from('compagnie_avions')
+          .select('immatriculation, usure_percent, type_avion_id')
+          .eq('id', plan.compagnie_avion_id).single();
+        if (avionData) {
+          immatriculation = avionData.immatriculation;
+          usureAvant = avionData.usure_percent;
+          if (avionData.type_avion_id) {
+            const { data: ta } = await admin.from('types_avion').select('nom').eq('id', avionData.type_avion_id).single();
+            typeAvion = ta?.nom || null;
+          }
+        }
+        await admin.from('compagnie_avions').update({
+          statut: 'bloque',
+          bloque_incident: true,
+          aeroport_actuel: aeroportAtc || undefined,
+        }).eq('id', plan.compagnie_avion_id);
+      }
+
+      let piloteIdentifiant: string | null = null;
+      if (plan.pilote_id) {
+        const { data: pData } = await admin.from('profiles').select('identifiant').eq('id', plan.pilote_id).single();
+        piloteIdentifiant = pData?.identifiant || null;
+      }
+
+      const { data: numData } = await admin.rpc('generate_incident_numero');
+      const numeroIncident = (numData as string) || `INC-${new Date().getFullYear()}-TEMP`;
+
+      const { data: incident, error: incErr } = await admin.from('incidents_vol').insert({
+        numero_incident: numeroIncident,
+        type_incident: isCrash ? 'crash' : 'atterrissage_urgence',
+        plan_vol_id: plan.id,
+        numero_vol: plan.numero_vol,
+        aeroport_depart: plan.aeroport_depart,
+        aeroport_arrivee: plan.aeroport_arrivee,
+        type_vol: plan.type_vol,
+        aeroport_incident: aeroportAtc,
+        compagnie_avion_id: plan.compagnie_avion_id,
+        immatriculation,
+        type_avion: typeAvion,
+        usure_avant_incident: usureAvant,
+        pilote_id: plan.pilote_id,
+        pilote_identifiant: piloteIdentifiant,
+        compagnie_id: plan.compagnie_id,
+        signale_par_id: user.id,
+        signale_par_identifiant: profile?.identifiant || null,
+        position_atc: plan.current_holder_position,
+        screenshot_url: screenshotUrl,
+        statut: 'en_attente',
+      }).select('id').single();
+
+      if (plan.compagnie_avion_id && incident) {
+        await admin.from('compagnie_avions').update({ incident_id: incident.id }).eq('id', plan.compagnie_avion_id);
+      }
+
+      const sigNumData = await admin.rpc('generate_ifsa_numero', { prefix: 'SIG' });
+      const sigNum = (sigNumData.data as string) || `SIG-${new Date().getFullYear()}-AUTO`;
+      const typeLabel = isCrash ? 'CRASH' : 'ATTERRISSAGE D\'URGENCE';
+
+      const { data: signalement } = await admin.from('ifsa_signalements').insert({
+        numero_signalement: sigNum,
+        type_signalement: 'incident',
+        titre: `${typeLabel} — ${plan.numero_vol}`,
+        description: [
+          `Incident ${typeLabel} signale par l'ATC ${profile?.identifiant || 'inconnu'} (${plan.current_holder_position || '?'}).`,
+          `Vol: ${plan.numero_vol} (${plan.aeroport_depart} -> ${plan.aeroport_arrivee}, ${plan.type_vol})`,
+          immatriculation ? `Avion: ${immatriculation} (${typeAvion || '?'})` : 'Pas d\'avion lie',
+          `Pilote: ${piloteIdentifiant || 'inconnu'}`,
+          `Aeroport incident: ${aeroportAtc}`,
+          usureAvant != null ? `Usure avant incident: ${usureAvant}%` : '',
+          incident ? `Ref incident: ${numeroIncident}` : '',
+        ].filter(Boolean).join('\n'),
+        signale_par_id: user.id,
+        pilote_signale_id: plan.pilote_id || null,
+        preuves: screenshotUrl || null,
+        statut: 'nouveau',
+      }).select('id').single();
+
+      if (signalement && incident) {
+        await admin.from('incidents_vol').update({ signalement_ifsa_id: signalement.id }).eq('id', incident.id);
+      }
+
+      const aeroportDepart = plan.aeroport_depart || '';
+      if (plan.vol_commercial && aeroportDepart) {
+        if (plan.nb_pax_genere && plan.nb_pax_genere > 0) {
+          const { data: cp } = await admin.from('aeroport_passagers').select('passagers_disponibles, passagers_max').eq('code_oaci', aeroportDepart).single();
+          if (cp) await admin.from('aeroport_passagers').update({ passagers_disponibles: Math.min(cp.passagers_max ?? 999999, cp.passagers_disponibles + plan.nb_pax_genere) }).eq('code_oaci', aeroportDepart);
+        }
+        if (plan.cargo_kg_genere && plan.cargo_kg_genere > 0 && (plan.nature_transport === 'cargo' || plan.nature_transport === 'passagers')) {
+          const { data: cc } = await admin.from('aeroport_cargo').select('cargo_disponible, cargo_max').eq('code_oaci', aeroportDepart).single();
+          if (cc) await admin.from('aeroport_cargo').update({ cargo_disponible: Math.min(cc.cargo_max ?? 999999, cc.cargo_disponible + (plan.cargo_kg_genere ?? 0)) }).eq('code_oaci', aeroportDepart);
+        }
+      }
+
+      await admin.from('plans_vol').update({
+        statut: 'annule',
+        cloture_at: new Date().toISOString(),
+        current_holder_user_id: null,
+        current_holder_position: null,
+        current_holder_aeroport: null,
+        automonitoring: false,
+        pending_transfer_aeroport: null,
+        pending_transfer_position: null,
+        pending_transfer_at: null,
+      }).eq('id', id);
+
+      if (plan.pilote_id) {
+        const msgTitre = isCrash ? `CRASH — ${plan.numero_vol}` : `Atterrissage d'urgence — ${plan.numero_vol}`;
+        const msgContenu = isCrash
+          ? `Votre vol ${plan.numero_vol} (${plan.aeroport_depart} -> ${plan.aeroport_arrivee}) a ete declare CRASH par le controle aerien.\n\nVotre avion est bloque en attente d'examen par le staff. Reference: ${numeroIncident}`
+          : `Votre vol ${plan.numero_vol} (${plan.aeroport_depart} -> ${plan.aeroport_arrivee}) a fait l'objet d'un atterrissage d'urgence ordonne par le controle aerien a ${aeroportAtc}.\n\nVotre avion est bloque en attente d'examen par le staff. Reference: ${numeroIncident}`;
+        await admin.from('messages').insert({
+          destinataire_id: plan.pilote_id,
+          titre: msgTitre,
+          contenu: msgContenu,
+          type_message: 'systeme',
+          expediteur_id: user.id,
+        });
+      }
+
+      return NextResponse.json({ ok: true, type: action, incident_id: incident?.id, numero_incident: numeroIncident });
+    }
+
     if (action === 'update_strip') {
       const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
       const isAdmin = profile?.role === 'admin';

@@ -161,7 +161,7 @@ export default function FormRenderer({ form }: Props) {
   const { cheatingDetected, presencePromptVisible, confirmPresence } = useAntiCheat({
     enabled: testStarted && antitricheEnabled,
     onCheatDetected: handleCheat,
-    graceMs: 2500,
+    graceMs: 5000,
     relaxed: true,
     allowedInteractionRootRef: antiCheatShellRef,
   });

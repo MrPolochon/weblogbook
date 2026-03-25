@@ -260,12 +260,18 @@ export async function POST(request: Request) {
     if (compagnie_avion_id) {
       const { data: avionIndiv } = await admin
         .from('compagnie_avions')
-        .select('id, compagnie_id, aeroport_actuel, statut, usure_percent, immatriculation')
+        .select('id, compagnie_id, aeroport_actuel, statut, usure_percent, immatriculation, detruit, bloque_incident')
         .eq('id', compagnie_avion_id)
         .single();
       
       if (!avionIndiv) {
         return NextResponse.json({ error: 'Avion individuel introuvable.' }, { status: 400 });
+      }
+      if ((avionIndiv as any).detruit) {
+        return NextResponse.json({ error: `L'avion ${avionIndiv.immatriculation} est detruit.` }, { status: 400 });
+      }
+      if ((avionIndiv as any).bloque_incident) {
+        return NextResponse.json({ error: `L'avion ${avionIndiv.immatriculation} est bloque suite a un incident, en attente d'examen staff.` }, { status: 400 });
       }
       
       const nowIso = new Date().toISOString();

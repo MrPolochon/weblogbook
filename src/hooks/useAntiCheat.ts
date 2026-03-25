@@ -44,24 +44,18 @@ const SUSPECT_DATA_ATTRS = [
 ];
 
 /**
- * Vérifie si un élément est injecté par une extension IA.
- * Remonte le DOM en cherchant des indices d'injection :
- * shadow DOM, iframes, attributs/classes/ids d'extension.
+ * Vérifie si un élément porte des marqueurs d'extension IA
+ * (id, class, data-*, src contenant des mots-clés connus).
+ * Ne flag PAS les shadow roots de façon universelle (trop de faux positifs
+ * avec les gestionnaires de mots de passe, Grammarly, traducteurs, etc.).
  */
 function isExtensionElement(el: Element | null): boolean {
   if (!el) return false;
 
   let current: Element | null = el;
   while (current && current !== document.body && current !== document.documentElement) {
-    // Shadow DOM host = probablement une extension
-    if (current.shadowRoot) return true;
-
     const tag = current.tagName?.toLowerCase() || '';
 
-    // Iframe injectée
-    if (tag === 'iframe') return true;
-
-    // Vérifier id et classes
     const id = current.id?.toLowerCase() || '';
     const cls = current.className?.toString().toLowerCase() || '';
     const src = (current as HTMLIFrameElement).src?.toLowerCase() || '';
@@ -70,12 +64,10 @@ function isExtensionElement(el: Element | null): boolean {
       if (id.includes(kw) || cls.includes(kw) || src.includes(kw)) return true;
     }
 
-    // Attributs data-* suspects
     for (const attr of SUSPECT_DATA_ATTRS) {
       if (current.hasAttribute(attr)) return true;
     }
 
-    // Attributs personnalisés suspects (data-* avec des noms d'IA)
     if (current.attributes) {
       for (let i = 0; i < current.attributes.length; i++) {
         const attrName = current.attributes[i].name.toLowerCase();
@@ -86,6 +78,9 @@ function isExtensionElement(el: Element | null): boolean {
         }
       }
     }
+
+    // Iframe d'extension
+    if (tag === 'iframe' && (src.startsWith('chrome-extension://') || src.startsWith('moz-extension://'))) return true;
 
     current = current.parentElement;
   }
@@ -105,18 +100,8 @@ function hasAIOverlayOrExtension(skipBigOverlay = false): boolean {
     const src = (iframe.src || '').toLowerCase();
     const id = (iframe.id || '').toLowerCase();
     const cls = (iframe.className?.toString() || '').toLowerCase();
-    if (src.startsWith('chrome-extension://') || src.startsWith('moz-extension://')) return true;
     for (const kw of AI_KEYWORDS) {
       if (src.includes(kw) || id.includes(kw) || cls.includes(kw)) return true;
-    }
-  }
-
-  const allElements = document.querySelectorAll('*');
-  for (let i = 0; i < allElements.length; i++) {
-    const el = allElements[i];
-    if (el.shadowRoot) {
-      const tag = el.tagName?.toLowerCase() || '';
-      if (tag !== 'style' && tag !== 'link') return true;
     }
   }
 
@@ -181,10 +166,10 @@ function pointerEventIsInsideAllowedRoot(e: PointerEvent, root: HTMLElement): bo
 }
 
 /** Présence (mode relaxé) : intervalle aléatoire entre min et max pour éviter un rythme prévisible. */
-const PRESENCE_CHECK_MIN_MS = 12000;
-const PRESENCE_CHECK_MAX_MS = 28000;
-/** Temps pour cliquer « Je suis là » — trop long = marge pour consulter une IA entre deux clics. */
-const PRESENCE_RESPONSE_DEADLINE_MS = 10000;
+const PRESENCE_CHECK_MIN_MS = 25000;
+const PRESENCE_CHECK_MAX_MS = 50000;
+/** Temps pour cliquer « Je suis là » */
+const PRESENCE_RESPONSE_DEADLINE_MS = 15000;
 
 /** Mode relaxé : ticks sans focus fenêtre avant triche (~8 × 1,2 s ≈ 9,6 s ; laisse passer une notif courte). */
 const RELAXED_NO_FOCUS_THRESHOLD = 8;
@@ -371,10 +356,17 @@ export function useAntiCheat({
           const tag = el.tagName?.toLowerCase();
           if (tag === 'script' || tag === 'style' || tag === 'link' || tag === 'meta' || tag === 'noscript') continue;
 
-          if (tag === 'iframe') { triggerCheat(); return; }
-          if (el.shadowRoot) { triggerCheat(); return; }
+          if (tag === 'iframe') {
+            const iframeSrc = ((el as HTMLIFrameElement).src || '').toLowerCase();
+            const iframeId = (el.id || '').toLowerCase();
+            const iframeCls = (el.className?.toString() || '').toLowerCase();
+            const isAiIframe = AI_KEYWORDS.some(kw => iframeSrc.includes(kw) || iframeId.includes(kw) || iframeCls.includes(kw));
+            if (isAiIframe || iframeSrc.startsWith('chrome-extension://') || iframeSrc.startsWith('moz-extension://')) {
+              triggerCheat(); return;
+            }
+          }
           if (isExtensionElement(el)) { triggerCheat(); return; }
-          const subSuspect = el.querySelectorAll('iframe, [class*="copilot"], [class*="blackbox"], [class*="chatgpt"], [class*="codeium"], [id*="copilot"], [id*="blackbox"], [id*="chatgpt"]');
+          const subSuspect = el.querySelectorAll('[class*="copilot"], [class*="blackbox"], [class*="chatgpt"], [class*="codeium"], [id*="copilot"], [id*="blackbox"], [id*="chatgpt"]');
           if (subSuspect.length > 0) { triggerCheat(); return; }
           if (!relaxed && el.parentElement === document.body) {
             const elId = el.id?.toLowerCase() || '';

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare, AlertTriangle, Flame, PlaneLanding } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
 export type StripData = {
@@ -246,6 +246,9 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
   const [loading, setLoading] = useState<string | null>(null);
   const [showRefuse, setShowRefuse] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showCrashConfirm, setShowCrashConfirm] = useState(false);
+  const [showUrgenceConfirm, setShowUrgenceConfirm] = useState(false);
+  const [incidentScreenshot, setIncidentScreenshot] = useState('');
   const [refuseReason, setRefuseReason] = useState('');
   const [intentionsPos, setIntentionsPos] = useState<{ x: number; y: number } | null>(null);
   const [noteAtcPos, setNoteAtcPos] = useState<{ x: number; y: number } | null>(null);
@@ -299,6 +302,72 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
             {loading === 'annuler' ? '…' : 'Confirmer l\'annulation'}
           </button>
           <button type="button" onClick={() => setShowCancelConfirm(false)} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
+            Retour
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (showCrashConfirm) {
+    return (
+      <div className={`px-2 py-2 border-t space-y-2 ${isDark ? 'bg-red-950 border-red-800' : 'bg-red-50 border-red-300'}`} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start gap-2">
+          <div className={`p-1 rounded ${isDark ? 'bg-red-900' : 'bg-red-200'}`}>
+            <Flame className={`h-4 w-4 ${isDark ? 'text-red-300' : 'text-red-700'}`} />
+          </div>
+          <div className="flex-1">
+            <p className={`text-sm font-bold ${isDark ? 'text-red-200' : 'text-red-900'}`}>Signaler un CRASH ?</p>
+            <p className={`text-xs ${isDark ? 'text-red-300' : 'text-red-700'}`}>
+              L&apos;avion de <span className="font-mono font-bold">{strip.numero_vol}</span> sera <strong>bloqué</strong> en attente d&apos;examen par le staff.
+            </p>
+          </div>
+        </div>
+        <input
+          type="url"
+          value={incidentScreenshot}
+          onChange={(e) => setIncidentScreenshot(e.target.value)}
+          placeholder="URL du screenshot (optionnel)"
+          className={`w-full text-xs border rounded px-2 py-1 font-mono ${isDark ? 'bg-slate-900 text-slate-100 border-red-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-red-300 placeholder:text-slate-400'}`}
+        />
+        <div className="flex gap-1.5">
+          <button type="button" onClick={async () => { await callAction('crash', { screenshot_url: incidentScreenshot || undefined }); setShowCrashConfirm(false); setIncidentScreenshot(''); }} disabled={loading === 'crash'} className="flex-1 px-2 py-1.5 text-xs font-bold bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-50 shadow-sm">
+            {loading === 'crash' ? '…' : 'Confirmer CRASH'}
+          </button>
+          <button type="button" onClick={() => { setShowCrashConfirm(false); setIncidentScreenshot(''); }} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
+            Retour
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (showUrgenceConfirm) {
+    return (
+      <div className={`px-2 py-2 border-t space-y-2 ${isDark ? 'bg-amber-950 border-amber-800' : 'bg-amber-50 border-amber-300'}`} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start gap-2">
+          <div className={`p-1 rounded ${isDark ? 'bg-amber-900' : 'bg-amber-200'}`}>
+            <PlaneLanding className={`h-4 w-4 ${isDark ? 'text-amber-300' : 'text-amber-700'}`} />
+          </div>
+          <div className="flex-1">
+            <p className={`text-sm font-bold ${isDark ? 'text-amber-200' : 'text-amber-900'}`}>Atterrissage d&apos;urgence ?</p>
+            <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+              L&apos;avion de <span className="font-mono font-bold">{strip.numero_vol}</span> sera <strong>bloqué</strong> à votre aéroport en attente d&apos;examen staff.
+            </p>
+          </div>
+        </div>
+        <input
+          type="url"
+          value={incidentScreenshot}
+          onChange={(e) => setIncidentScreenshot(e.target.value)}
+          placeholder="URL du screenshot (optionnel)"
+          className={`w-full text-xs border rounded px-2 py-1 font-mono ${isDark ? 'bg-slate-900 text-slate-100 border-amber-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-amber-300 placeholder:text-slate-400'}`}
+        />
+        <div className="flex gap-1.5">
+          <button type="button" onClick={async () => { await callAction('atterrissage_urgence', { screenshot_url: incidentScreenshot || undefined }); setShowUrgenceConfirm(false); setIncidentScreenshot(''); }} disabled={loading === 'atterrissage_urgence'} className="flex-1 px-2 py-1.5 text-xs font-bold bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 shadow-sm">
+            {loading === 'atterrissage_urgence' ? '…' : 'Confirmer atterrissage'}
+          </button>
+          <button type="button" onClick={() => { setShowUrgenceConfirm(false); setIncidentScreenshot(''); }} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
             Retour
           </button>
         </div>
@@ -520,6 +589,12 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
             </div>,
             document.body,
           )}
+        </>
+      )}
+      {(statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
+        <>
+          <button type="button" onClick={() => setShowCrashConfirm(true)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-50 shadow-sm"><Flame className="h-3.5 w-3.5" />CRASH</button>
+          <button type="button" onClick={() => setShowUrgenceConfirm(true)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 shadow-sm"><PlaneLanding className="h-3.5 w-3.5" />Urgence</button>
         </>
       )}
       {(statut === 'en_attente' || statut === 'depose' || statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
