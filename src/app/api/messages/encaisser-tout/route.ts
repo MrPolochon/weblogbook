@@ -90,7 +90,8 @@ export async function POST() {
     const allTransactions: { compte_id: string; type: string; montant: number; libelle: string }[] = [];
     const errors: string[] = [];
 
-    const creditPromises = Array.from(grouped.entries()).map(async ([compteId, g]) => {
+    const groupedEntries = Array.from(grouped.entries());
+    const creditPromises = groupedEntries.map(async ([compteId, g]) => {
       const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: g.credit });
       if (!creditOk) {
         errors.push(`Erreur credit compte ${compteId.slice(0, 8)}`);
@@ -140,7 +141,7 @@ export async function POST() {
     let nbEncaisse = 0;
     const recap: { label: string; nb: number; total: number }[] = [];
 
-    for (const [compteId, g] of grouped) {
+    for (const [compteId, g] of groupedEntries) {
       const montantNet = g.credit - g.taxeAlliance - g.codeshare;
       recap.push({ label: compteLabels[compteId] || 'Compte', nb: g.nb, total: montantNet });
       totalEncaisse += montantNet;
