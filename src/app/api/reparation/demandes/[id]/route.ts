@@ -13,7 +13,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const admin = createAdminClient();
   const { data: demande } = await admin.from('reparation_demandes')
-    .select('*, entreprises_reparation(id, nom), compagnies(id, nom), compagnie_avions(id, immatriculation, nom, usure), reparation_hangars(id, aeroport_code, nom)')
+    .select('*, entreprises_reparation(id, nom), compagnies(id, nom), compagnie_avions(id, immatriculation, nom_bapteme, usure_percent), reparation_hangars(id, aeroport_code, nom)')
     .eq('id', id).single();
   if (!demande) return NextResponse.json({ error: 'Demande introuvable' }, { status: 404 });
 
@@ -110,6 +110,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await admin.from('reparation_demandes').update({
       statut: 'en_reparation', debut_reparation_at: new Date().toISOString(),
     }).eq('id', id);
+    await admin.from('compagnie_avions').update({ statut: 'en_reparation' }).eq('id', demande.avion_id);
     return NextResponse.json({ ok: true });
   }
 
@@ -193,7 +194,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       prix_total: prixTotal,
     }).eq('id', id);
 
-    await admin.from('compagnie_avions').update({ usure: usureApres }).eq('id', demande.avion_id);
+    await admin.from('compagnie_avions').update({ usure_percent: usureApres }).eq('id', demande.avion_id);
 
     return NextResponse.json({ ok: true, score: scoresMoyenne, usure_apres: usureApres, prix_total: prixTotal });
   }
@@ -280,11 +281,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const livraison = body.livraison || 'parking';
 
+    const { data: hangar } = await admin.from('reparation_hangars').select('aeroport_code').eq('id', demande.hangar_id).single();
     if (livraison === 'parking') {
-      const { data: hangar } = await admin.from('reparation_hangars').select('aeroport_code').eq('id', demande.hangar_id).single();
       if (hangar) {
-        await admin.from('compagnie_avions').update({ localisation: hangar.aeroport_code }).eq('id', demande.avion_id);
+        await admin.from('compagnie_avions').update({ aeroport_actuel: hangar.aeroport_code, statut: 'disponible' }).eq('id', demande.avion_id);
       }
+    } else {
+      await admin.from('compagnie_avions').update({ statut: 'disponible' }).eq('id', demande.avion_id);
     }
 
     await admin.from('reparation_demandes').update({

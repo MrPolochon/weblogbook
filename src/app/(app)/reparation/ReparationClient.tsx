@@ -57,7 +57,7 @@ interface Demande {
   commentaire_entreprise: string | null;
   created_at: string;
   compagnie: { id: string; nom: string } | null;
-  avion: { id: string; immatriculation: string; nom: string } | null;
+  avion: { id: string; immatriculation: string; nom_bapteme: string | null } | null;
 }
 
 interface Detail {

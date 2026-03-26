@@ -11,7 +11,7 @@ interface DemandeInfo {
   id: string;
   statut: string;
   entreprise: { nom: string } | null;
-  avion: { immatriculation: string; nom: string } | null;
+  avion: { immatriculation: string; nom_bapteme: string | null } | null;
   scores: Array<{ type_jeu: string; score: number }>;
 }
 
@@ -100,7 +100,7 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
           Mini-jeux de réparation
         </h1>
         <p className="text-slate-400 mt-1">
-          {demande.avion?.immatriculation} ({demande.avion?.nom}) — {demande.entreprise?.nom}
+          {demande.avion?.immatriculation} ({demande.avion?.nom_bapteme || 'sans nom'}) — {demande.entreprise?.nom}
         </p>
       </div>
 

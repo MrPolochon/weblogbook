@@ -28,7 +28,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .eq('entreprise_reparation_id', id).eq('type', 'reparation').single();
 
   const { data: demandes } = await admin.from('reparation_demandes')
-    .select('*, compagnies(id, nom), compagnie_avions(id, immatriculation, nom)')
+    .select('*, compagnies(id, nom), compagnie_avions(id, immatriculation, nom_bapteme)')
     .eq('entreprise_id', id)
     .order('created_at', { ascending: false })
     .limit(50);

@@ -58,10 +58,11 @@ export async function POST(req: Request) {
   if (!isLeader && !empCheck?.length) return NextResponse.json({ error: 'Seul le PDG ou un employé peut demander une réparation' }, { status: 403 });
 
   const { data: avion } = await admin.from('compagnie_avions')
-    .select('id, immatriculation, nom_bapteme, usure_percent, compagnie_id, detruit, bloque_incident')
+    .select('id, immatriculation, nom_bapteme, usure_percent, compagnie_id, statut, bloque_incident')
     .eq('id', avion_id).single();
   if (!avion) return NextResponse.json({ error: 'Avion introuvable' }, { status: 404 });
-  if (avion.detruit) return NextResponse.json({ error: 'Cet avion est detruit.' }, { status: 400 });
+  if (avion.statut === 'detruit') return NextResponse.json({ error: 'Cet avion est détruit.' }, { status: 400 });
+  if (avion.statut === 'en_reparation') return NextResponse.json({ error: 'Cet avion est déjà en réparation.' }, { status: 400 });
   if (avion.bloque_incident) return NextResponse.json({ error: 'Cet avion est bloque suite a un incident et en attente d\'examen par le staff.' }, { status: 400 });
 
   const avionAppartient = avion.compagnie_id === compagnie_id;

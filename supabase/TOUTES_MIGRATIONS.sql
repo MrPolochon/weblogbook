@@ -333,7 +333,7 @@ CREATE TABLE IF NOT EXISTS public.plans_vol (
 
 ALTER TABLE public.plans_vol DROP CONSTRAINT IF EXISTS plans_vol_statut_check;
 ALTER TABLE public.plans_vol ADD CONSTRAINT plans_vol_statut_check CHECK (statut IN (
-  'depose', 'en_attente', 'accepte', 'refuse', 'en_cours', 'automonitoring', 'en_attente_cloture', 'cloture'
+  'depose', 'en_attente', 'accepte', 'refuse', 'annule', 'en_cours', 'automonitoring', 'en_attente_cloture', 'cloture'
 ));
 
 -- Colonnes plans_vol supplémentaires
@@ -731,19 +731,18 @@ BEGIN UPDATE public.felitz_comptes SET solde = solde + p_montant WHERE id = p_co
 -- Prêts bancaires
 CREATE TABLE IF NOT EXISTS public.prets_bancaires (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  compte_id UUID NOT NULL REFERENCES public.felitz_comptes(id) ON DELETE CASCADE,
-  montant_initial INTEGER NOT NULL CHECK (montant_initial > 0),
-  montant_restant INTEGER NOT NULL DEFAULT 0,
-  taux_interet NUMERIC(5,2) NOT NULL DEFAULT 5.00,
-  mensualite INTEGER NOT NULL,
-  nb_mensualites_total INTEGER NOT NULL,
-  nb_mensualites_payees INTEGER NOT NULL DEFAULT 0,
+  compagnie_id UUID NOT NULL REFERENCES public.compagnies(id) ON DELETE CASCADE,
+  demandeur_id UUID NOT NULL REFERENCES public.profiles(id),
+  montant_emprunte INTEGER NOT NULL,
+  taux_interet DECIMAL(5,2) NOT NULL,
+  montant_total_du INTEGER NOT NULL,
+  montant_rembourse INTEGER NOT NULL DEFAULT 0,
   statut TEXT NOT NULL DEFAULT 'actif' CHECK (statut IN ('actif', 'rembourse', 'defaut')),
-  prochaine_echeance_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  rembourse_at TIMESTAMPTZ DEFAULT NULL
 );
-ALTER TABLE public.prets_bancaires ADD COLUMN IF NOT EXISTS rembourse_at TIMESTAMPTZ;
-CREATE INDEX IF NOT EXISTS idx_prets_bancaires_compte ON public.prets_bancaires(compte_id);
+CREATE INDEX IF NOT EXISTS idx_prets_compagnie ON public.prets_bancaires(compagnie_id, statut);
+CREATE INDEX IF NOT EXISTS idx_prets_demandeur ON public.prets_bancaires(demandeur_id);
 
 
 -- ████████████████████████████████████████████████████████████████████████████
