@@ -25,7 +25,7 @@ export async function POST(req: Request) {
 
   const { error } = await admin.from('reparation_employes').insert({
     entreprise_id,
-    user_id,
+    user_id: targetProfile.id,
     role: ['technicien', 'logistique'].includes(role) ? role : 'technicien',
     specialite: specialite ? String(specialite).trim() : null,
   });
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   }
 
   await admin.from('messages').insert({
-    destinataire_id: user_id,
+    destinataire_id: targetProfile.id,
     titre: `🔧 Embauche — Entreprise de réparation`,
     contenu: `Vous avez été embauché dans l'entreprise de réparation. Rendez-vous dans la section Réparation.`,
     type_message: 'normal',
