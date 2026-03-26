@@ -259,22 +259,22 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             <ScrollText className="h-4 w-4" />
             NOTAMs
           </Link>
+          <Link
+            href="/carte-atc"
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              pathname === '/carte-atc'
+                ? 'bg-slate-700/50 text-emerald-300'
+                : 'text-emerald-400/70 hover:bg-emerald-900/20 hover:text-emerald-300'
+            )}
+            title="Carte ATC en direct"
+          >
+            <Radio className="h-4 w-4" />
+            Carte ATC
+          </Link>
         </nav>
         <div className="w-full sm:w-auto">
           <div className="hidden sm:flex items-center gap-2 justify-end flex-wrap">
-            <Link
-              href="/carte-atc"
-              className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                pathname === '/carte-atc'
-                  ? 'bg-slate-700/50 text-emerald-300'
-                  : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
-              )}
-              title="Carte ATC en direct"
-            >
-              <Radio className="h-4 w-4" />
-              Carte ATC
-            </Link>
             {isAdmin && (
               <>
                 <Link

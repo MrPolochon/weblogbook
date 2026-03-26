@@ -310,40 +310,40 @@ export default function AtcMapClient() {
                   <g key={code} onClick={() => setSelectedAirport(selectedAirport === code ? null : code)} style={{ cursor: 'pointer' }}>
                     {/* APP - cercle bleu */}
                     {hasApp && (
-                      <circle cx={x} cy={y} r="35" fill="rgba(59,130,246,0.08)" stroke="#3b82f6" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.9">
-                        <animate attributeName="r" values="33;37;33" dur="4s" repeatCount="indefinite" />
+                      <circle cx={x} cy={y} r="55" fill="rgba(59,130,246,0.06)" stroke="#3b82f6" strokeWidth="2" strokeDasharray="6 4" opacity="0.9">
+                        <animate attributeName="r" values="52;58;52" dur="4s" repeatCount="indefinite" />
                       </circle>
                     )}
 
                     {/* DEP - cercle blanc */}
                     {hasDep && (
-                      <circle cx={x} cy={y} r="28" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.6)" strokeWidth="1" strokeDasharray="3 4" opacity="0.8">
-                        <animate attributeName="r" values="26;30;26" dur="5s" repeatCount="indefinite" />
+                      <circle cx={x} cy={y} r="45" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeDasharray="5 5" opacity="0.8">
+                        <animate attributeName="r" values="42;48;42" dur="5s" repeatCount="indefinite" />
                       </circle>
                     )}
 
                     {/* TWR - carré rouge */}
                     {hasTwr && (
-                      <rect x={x - 10} y={y - 10} width="20" height="20" fill="rgba(239,68,68,0.15)" stroke="#ef4444" strokeWidth="1.5" rx="2" opacity="0.9" />
+                      <rect x={x - 16} y={y - 16} width="32" height="32" fill="rgba(239,68,68,0.12)" stroke="#ef4444" strokeWidth="2" rx="3" opacity="0.9" />
                     )}
 
                     {/* GND - étoile 4 branches cardinal (0°) */}
                     {hasGnd && (
-                      <FourPointStar cx={x} cy={y} outerR={8} innerR={3} rotation={0} fill="rgba(245,158,11,0.7)" stroke="#f59e0b" strokeWidth={0.8} />
+                      <FourPointStar cx={x} cy={y} outerR={14} innerR={5} rotation={0} fill="rgba(245,158,11,0.8)" stroke="#f59e0b" strokeWidth={1.2} />
                     )}
 
                     {/* DEL/Clairance - étoile 4 branches 45° */}
                     {hasDel && (
-                      <FourPointStar cx={x} cy={y} outerR={7} innerR={2.5} rotation={45} fill="rgba(16,185,129,0.7)" stroke="#10b981" strokeWidth={0.8} />
+                      <FourPointStar cx={x} cy={y} outerR={12} innerR={4} rotation={45} fill="rgba(16,185,129,0.8)" stroke="#10b981" strokeWidth={1.2} />
                     )}
 
                     {/* Point central aéroport */}
-                    <circle cx={x} cy={y} r={hasATC ? 5 : 4} fill={hasATC ? '#10b981' : '#64748b'} stroke="white" strokeWidth={hasATC ? 1.5 : 1} opacity={hasATC ? 1 : 0.5} />
+                    <circle cx={x} cy={y} r={hasATC ? 4 : 4} fill={hasATC ? '#10b981' : '#64748b'} stroke="white" strokeWidth={hasATC ? 1.5 : 1} opacity={hasATC ? 1 : 0.5} />
 
                     {/* Indicateur pulsant si ATC en ligne */}
                     {hasATC && (
-                      <circle cx={x} cy={y} r="5" fill="none" stroke="#10b981" strokeWidth="1" opacity="0.6">
-                        <animate attributeName="r" values="5;12;5" dur="2s" repeatCount="indefinite" />
+                      <circle cx={x} cy={y} r="6" fill="none" stroke="#10b981" strokeWidth="1.5" opacity="0.6">
+                        <animate attributeName="r" values="6;18;6" dur="2s" repeatCount="indefinite" />
                         <animate attributeName="opacity" values="0.6;0;0.6" dur="2s" repeatCount="indefinite" />
                       </circle>
                     )}
