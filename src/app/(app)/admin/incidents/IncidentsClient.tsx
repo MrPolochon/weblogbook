@@ -50,6 +50,7 @@ export default function IncidentsClient() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [deciding, setDeciding] = useState<string | null>(null);
+  const [prenant, setPrenant] = useState<string | null>(null);
   const [notesMap, setNotesMap] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<'tous' | 'en_attente' | 'en_examen' | 'clos'>('tous');
 
@@ -68,6 +69,7 @@ export default function IncidentsClient() {
   useEffect(() => { fetchIncidents(); }, [fetchIncidents]);
 
   const handlePrendre = async (id: string) => {
+    setPrenant(id);
     try {
       const res = await fetch(`/api/incidents/${id}`, {
         method: 'PATCH',
@@ -83,6 +85,8 @@ export default function IncidentsClient() {
       fetchIncidents();
     } catch {
       toast.error('Erreur serveur');
+    } finally {
+      setPrenant(null);
     }
   };
 
@@ -231,9 +235,10 @@ export default function IncidentsClient() {
                     {inc.statut === 'en_attente' && (
                       <button
                         onClick={() => handlePrendre(inc.id)}
-                        className="px-4 py-2 text-sm font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        disabled={prenant === inc.id}
+                        className="px-4 py-2 text-sm font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                       >
-                        Prendre en charge
+                        {prenant === inc.id ? 'Prise en charge…' : 'Prendre en charge'}
                       </button>
                     )}
 
@@ -245,6 +250,7 @@ export default function IncidentsClient() {
                           onChange={(e) => setNotesMap(prev => ({ ...prev, [inc.id]: e.target.value }))}
                           placeholder="Notes (optionnel)..."
                           rows={2}
+                          aria-label="Notes de décision"
                           className="w-full text-sm bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-100 placeholder:text-slate-500 resize-none"
                         />
                         <div className="flex gap-2">

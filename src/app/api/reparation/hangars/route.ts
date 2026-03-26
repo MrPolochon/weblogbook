@@ -31,11 +31,14 @@ export async function POST(req: Request) {
   const admin = createAdminClient();
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   const isAdmin = profile?.role === 'admin';
+
   const { data: ent } = await admin.from('entreprises_reparation')
-    .select('pdg_id, prix_hangar_base, prix_hangar_multiplicateur')
+    .select('*')
     .eq('id', entreprise_id).single();
-  const isPdg = ent && String(ent.pdg_id) === String(user.id);
-  if (!ent || (!isPdg && !isAdmin)) return NextResponse.json({ error: 'Seul le PDG peut ajouter un hangar' }, { status: 403 });
+  if (!ent) return NextResponse.json({ error: 'Entreprise introuvable' }, { status: 404 });
+
+  const isPdg = String(ent.pdg_id) === String(user.id);
+  if (!isPdg && !isAdmin) return NextResponse.json({ error: 'Seul le PDG peut ajouter un hangar' }, { status: 403 });
 
   const ac = String(aeroport_code).toUpperCase().trim();
   const cap = Math.max(1, Math.min(20, Number(capacite) || 2));
@@ -44,8 +47,8 @@ export async function POST(req: Request) {
     .select('*', { count: 'exact', head: true })
     .eq('entreprise_id', entreprise_id);
   const numHangar = (count ?? 0) + 1;
-  const base = ent.prix_hangar_base ?? 500000;
-  const mult = ent.prix_hangar_multiplicateur ?? 2;
+  const base = (ent.prix_hangar_base as number) ?? 500000;
+  const mult = (ent.prix_hangar_multiplicateur as number) ?? 2;
   const prix = calculerPrixHangar(numHangar, cap, base, mult);
 
   if (prix > 0) {
@@ -85,7 +88,8 @@ export async function POST(req: Request) {
 
   if (error) {
     if (error.code === '23505') return NextResponse.json({ error: 'Hangar déjà existant pour cet aéroport' }, { status: 409 });
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    console.error('reparation hangars POST:', error);
+    return NextResponse.json({ error: 'Erreur lors de la création du hangar' }, { status: 400 });
   }
   return NextResponse.json({ ok: true, id: hangar?.id, prix });
 }

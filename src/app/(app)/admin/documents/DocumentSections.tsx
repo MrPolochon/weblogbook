@@ -276,7 +276,7 @@ export default function DocumentSections({ sections }: { sections: Section[] }) 
             <span className="text-sm font-medium">
               Dossier <strong className="font-bold">{pickedName}</strong> sélectionné — glissez ou cliquez sur un dossier pour l&apos;y déplacer, relâchez ailleurs pour la racine. Clic droit / Échap pour annuler.
             </span>
-            <button type="button" onClick={cancelPick} className="ml-auto p-1.5 hover:bg-white/20 rounded"><X className="h-4 w-4" /></button>
+            <button type="button" onClick={cancelPick} className="ml-auto p-1.5 hover:bg-white/20 rounded" aria-label="Annuler"><X className="h-4 w-4" /></button>
           </div>
         )}
 

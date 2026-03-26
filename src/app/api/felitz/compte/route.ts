@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     }
 
     const { data, error } = await query;
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 400 });
 
     return NextResponse.json(data);
   } catch (e) {
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       solde: solde_initial || 0
     }).select().single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });
     return NextResponse.json(data);
   } catch (e) {
     console.error('Felitz compte POST:', e);

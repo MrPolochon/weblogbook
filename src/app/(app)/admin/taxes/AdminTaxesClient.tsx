@@ -248,6 +248,7 @@ function TaxeRow({ taxe, onUpdate, onDelete, loading }: {
               disabled={loading}
               className="p-1.5 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors"
               title="Sauvegarder"
+              aria-label="Sauvegarder les taxes"
             >
               <Save className="h-4 w-4" />
             </button>
@@ -257,6 +258,7 @@ function TaxeRow({ taxe, onUpdate, onDelete, loading }: {
             disabled={loading}
             className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
             title="Supprimer"
+            aria-label="Supprimer cette taxe"
           >
             <Trash2 className="h-4 w-4" />
           </button>

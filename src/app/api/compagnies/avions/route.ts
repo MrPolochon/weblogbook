@@ -38,7 +38,7 @@ export async function GET(request: Request) {
       .eq('compagnie_id', compagnie_id)
       .order('immatriculation');
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 400 });
 
     // Charger les avions loués à la compagnie (locataire)
     let avionsLoues: any[] = [];
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
       if (error.code === '23505') {
         return NextResponse.json({ error: 'Cette immatriculation existe déjà.' }, { status: 400 });
       }
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });
     }
     return NextResponse.json({ ok: true, id: avion.id });
   } catch (e) {

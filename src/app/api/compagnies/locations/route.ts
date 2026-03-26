@@ -2,12 +2,18 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isCoPdg } from '@/lib/co-pdg-utils';
+import { isValidUUID } from '@/lib/utils';
 
 export async function GET(request: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
     const { searchParams } = new URL(request.url);
     const compagnie_id = searchParams.get('compagnie_id');
     if (!compagnie_id) return NextResponse.json({ error: 'compagnie_id requis' }, { status: 400 });
+    if (!isValidUUID(compagnie_id)) return NextResponse.json({ error: 'compagnie_id invalide' }, { status: 400 });
 
     const admin = createAdminClient();
     const { data, error } = await admin
@@ -16,7 +22,7 @@ export async function GET(request: Request) {
       .or(`loueur_compagnie_id.eq.${compagnie_id},locataire_compagnie_id.eq.${compagnie_id}`)
       .order('created_at', { ascending: false });
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur chargement locations' }, { status: 400 });
     return NextResponse.json(data || []);
   } catch (e) {
     console.error('compagnies locations GET:', e);

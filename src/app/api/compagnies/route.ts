@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       if (error.code === '23505' || /unique|duplicate/i.test(error.message ?? '')) {
         return NextResponse.json({ error: 'Une compagnie avec ce nom existe déjà' }, { status: 409 });
       }
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });
     }
     return NextResponse.json({ ok: true, id: data.id });
   } catch (e) {
@@ -46,7 +46,7 @@ export async function GET() {
       .select('id, nom, pdg_id')
       .order('nom');
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 400 });
     return NextResponse.json(data);
   } catch (e) {
     console.error('Compagnies GET:', e);

@@ -83,7 +83,7 @@ export async function DELETE(
     
     // Enfin, supprimer la compagnie
     const { error } = await admin.from('compagnies').delete().eq('id', id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la suppression' }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error('Compagnie delete error:', e);
@@ -154,7 +154,7 @@ export async function PATCH(
       .select()
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
     return NextResponse.json(data);
   } catch (e) {
     console.error('Compagnie update error:', e);
@@ -177,7 +177,7 @@ export async function GET(
       .eq('id', id)
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 400 });
     return NextResponse.json(data);
   } catch (e) {
     console.error('Compagnie GET:', e);

@@ -53,7 +53,7 @@ export async function PATCH(
     if (planError) {
       if (planError.code === 'PGRST116') return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
       console.error('[plans-vol PATCH]', planError);
-      return NextResponse.json({ error: planError.message || 'Erreur lors de la récupération du plan.' }, { status: 500 });
+      return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 500 });
     }
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
 
@@ -279,7 +279,7 @@ export async function PATCH(
         await rembourserPaxEtCargo();
         await remettreAvionAuSol();
         const { error } = await admin.from('plans_vol').delete().eq('id', id);
-        if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+        if (error) return NextResponse.json({ error: 'Erreur lors de la suppression' }, { status: 400 });
         return NextResponse.json({ ok: true, deleted: true });
       }
       if (isManualStrip && (isHolder || isAdmin)) {
@@ -293,7 +293,7 @@ export async function PATCH(
           pending_transfer_position: null,
           pending_transfer_at: null,
         }).eq('id', id);
-        if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+        if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
         return NextResponse.json({ ok: true });
       }
       if (isPiloteOwner && ['depose', 'en_attente', 'refuse'].includes(plan.statut)) {
@@ -309,7 +309,7 @@ export async function PATCH(
           pending_transfer_position: null,
           pending_transfer_at: null,
         }).eq('id', id);
-        if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+        if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
         return NextResponse.json({ ok: true });
       }
       return NextResponse.json({ error: 'Annulation non autorisee (pilote : depose/en attente/refuse uniquement ; ATC/admin : tout plan non cloture).' }, { status: 403 });
@@ -372,7 +372,7 @@ export async function PATCH(
             pending_transfer_position: null,
             pending_transfer_at: null,
           }).eq('id', id);
-          if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+          if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
           return NextResponse.json({ ok: true, vol_sans_atc: true });
         }
         return NextResponse.json({ error: 'Aucune frequence ATC de votre aeroport de depart ou d\'arrivee est en ligne. Reessayez plus tard.' }, { status: 400 });
@@ -405,7 +405,7 @@ export async function PATCH(
         pending_transfer_position: null,
         pending_transfer_at: null,
       }).eq('id', id);
-      if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+      if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
 
@@ -418,7 +418,7 @@ export async function PATCH(
       if (plan.statut !== 'accepte' && plan.statut !== 'en_cours') return NextResponse.json({ error: 'Plan non accepte ou non en cours.' }, { status: 400 });
       const instructions = body.instructions != null ? String(body.instructions) : '';
       const { error: err } = await admin.from('plans_vol').update({ instructions: instructions.trim() || null }).eq('id', id);
-      if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+      if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
 
@@ -460,7 +460,7 @@ export async function PATCH(
           pending_transfer_at: null,
           strip_zone: null,
         }).eq('id', id);
-        if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+        if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
         return NextResponse.json({ ok: true });
       }
 
@@ -489,7 +489,7 @@ export async function PATCH(
           pending_transfer_at: null,
           strip_zone: null,
         }).eq('id', id);
-        if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+        if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
         return NextResponse.json({ ok: true });
       }
 
@@ -499,7 +499,7 @@ export async function PATCH(
         pending_transfer_position: String(position),
         pending_transfer_at: new Date().toISOString(),
       }).eq('id', id);
-      if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+      if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
 
@@ -524,7 +524,7 @@ export async function PATCH(
         pending_transfer_at: null,
         strip_zone: null,
       }).eq('id', id);
-      if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+      if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
 
@@ -819,7 +819,7 @@ export async function PATCH(
         const res = await admin.from('plans_vol').update(update).eq('id', id);
         err = res.error;
       }
-      if (err) return NextResponse.json({ error: err.message }, { status: 400 });
+      if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
 
@@ -866,7 +866,7 @@ export async function DELETE(
     if (plan.statut !== 'cloture') return NextResponse.json({ error: 'Seul un plan cloture peut etre supprime ainsi (ne pas enregistrer).' }, { status: 400 });
 
     const { error } = await admin.from('plans_vol').delete().eq('id', id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la suppression' }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error('plans-vol DELETE:', e);

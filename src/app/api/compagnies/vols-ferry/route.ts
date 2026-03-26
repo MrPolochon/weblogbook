@@ -6,11 +6,14 @@ import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function GET(request: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
     const { searchParams } = new URL(request.url);
     const compagnie_id = searchParams.get('compagnie_id');
     if (!compagnie_id) return NextResponse.json({ error: 'compagnie_id requis' }, { status: 400 });
 
-    const supabase = await createClient();
     const admin = createAdminClient();
     
     // Auto-compléter les vols ferry automatiques terminés
@@ -60,7 +63,7 @@ export async function GET(request: Request) {
       .eq('compagnie_id', compagnie_id)
       .order('created_at', { ascending: false });
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur chargement vols ferry' }, { status: 400 });
 
     // Enrichir avec les infos avion et pilote
     const volsEnrichis = await Promise.all((vols || []).map(async (vol) => {

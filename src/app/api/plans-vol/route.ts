@@ -481,7 +481,7 @@ export async function POST(request: Request) {
         bria_conversation: bria_conversation || null,
       }).select('id').single();
 
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      if (error) return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });
 
       if (vol_commercial && nbPaxFinal > 0) {
         try {
@@ -614,7 +614,7 @@ export async function POST(request: Request) {
       bria_conversation: bria_conversation || null,
     }).select('id').single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });
 
     // Vérification de secours : si la session ATC a disparu juste après l'assignation
     if (holder) {

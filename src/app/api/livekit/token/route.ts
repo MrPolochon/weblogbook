@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AccessToken } from 'livekit-server-sdk';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createBrowserClient } from '@supabase/supabase-js';
+import { rateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,9 +43,11 @@ export async function POST(request: NextRequest) {
     }
     
     if (!user) {
-      console.error('[LiveKit Token] Utilisateur non authentifié');
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders });
     }
+
+    const rl = rateLimit(`livekit:${user.id}`, 20, 60_000);
+    if (!rl.allowed) return NextResponse.json({ error: 'Trop de requêtes' }, { status: 429, headers: corsHeaders });
 
     const body = await request.json();
     const { roomName, participantName } = body;
@@ -58,19 +61,9 @@ export async function POST(request: NextRequest) {
     const apiSecret = process.env.LIVEKIT_API_SECRET;
     const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
 
-    if (!apiKey || !apiSecret) {
-      return NextResponse.json({ 
-        error: 'Service non configuré',
-        details: 'Variables d\'environnement LiveKit manquantes'
-      }, { status: 500, headers: corsHeaders });
-    }
-
-    if (!livekitUrl) {
-      console.error('[LiveKit Token] URL LiveKit manquante');
-      return NextResponse.json({ 
-        error: 'Service non configuré',
-        details: 'URL LiveKit manquante'
-      }, { status: 500, headers: corsHeaders });
+    if (!apiKey || !apiSecret || !livekitUrl) {
+      console.error('[LiveKit Token] Configuration manquante');
+      return NextResponse.json({ error: 'Service vocal non configuré' }, { status: 500, headers: corsHeaders });
     }
 
     // Créer le token d'accès
@@ -97,9 +90,6 @@ export async function POST(request: NextRequest) {
     }, { headers: corsHeaders });
   } catch (error) {
     console.error('[LiveKit Token] Erreur:', error);
-    return NextResponse.json({ 
-      error: 'Erreur serveur',
-      details: error instanceof Error ? error.message : 'Erreur inconnue'
-    }, { status: 500, headers: corsHeaders });
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500, headers: corsHeaders });
   }
 }

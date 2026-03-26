@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { rateLimit } from '@/lib/rate-limit';
 
 // POST - Effectuer un virement
 export async function POST(req: NextRequest) {
@@ -8,6 +9,9 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+    const rl = rateLimit(`virement:${user.id}`, 10, 60_000);
+    if (!rl.allowed) return NextResponse.json({ error: 'Trop de virements, réessayez dans une minute' }, { status: 429 });
 
     const body = await req.json();
     const { compte_source_id, vban_destination, montant: rawMontant, libelle } = body;
@@ -172,7 +176,7 @@ export async function GET(req: NextRequest) {
     }
 
     const { data, error } = await query.limit(50);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 400 });
 
     return NextResponse.json(data);
   } catch (e) {

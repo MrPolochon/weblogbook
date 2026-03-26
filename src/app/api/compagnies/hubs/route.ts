@@ -6,13 +6,14 @@ import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function GET(request: Request) {
   try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
     const { searchParams } = new URL(request.url);
     const compagnie_id = searchParams.get('compagnie_id');
     const all = searchParams.get('all');
 
-    const supabase = await createClient();
-
-    // Mode "all" : retourner tous les hubs avec le nom de la compagnie (pour la carte marketplace)
     if (all === '1') {
       const admin = createAdminClient();
       const { data, error } = await admin
@@ -21,11 +22,10 @@ export async function GET(request: Request) {
         .order('aeroport_code')
         .order('est_hub_principal', { ascending: false });
 
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      if (error) return NextResponse.json({ error: 'Erreur chargement hubs' }, { status: 400 });
       return NextResponse.json(data);
     }
 
-    // Mode classique : hubs d'une compagnie spécifique
     if (!compagnie_id) return NextResponse.json({ error: 'compagnie_id requis' }, { status: 400 });
 
     const { data, error } = await supabase
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       .order('est_hub_principal', { ascending: false })
       .order('created_at');
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur chargement hubs' }, { status: 400 });
     return NextResponse.json(data);
   } catch (e) {
     console.error('GET compagnies/hubs:', e);

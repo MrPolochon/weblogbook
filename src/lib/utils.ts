@@ -126,3 +126,13 @@ export function splitRouteForDisplay(
 export function stripRouteBrackets(route: string): string {
   return route.replace(/\s*\[\s*|\s*\]\s*/g, ' ').replace(/\s+/g, ' ').trim();
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function isValidUUID(v: unknown): v is string {
+  return typeof v === 'string' && UUID_RE.test(v);
+}
+
+export function safeErrorMessage(error: unknown, fallback = 'Erreur serveur'): string {
+  if (process.env.NODE_ENV === 'development' && error instanceof Error) return error.message;
+  return fallback;
+}

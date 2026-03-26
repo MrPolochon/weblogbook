@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     }
 
     const { data, error } = await query.order('date_embauche', { ascending: false });
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 400 });
 
     return NextResponse.json(data);
   } catch (e) {
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       pilote_id
     }).select('*, profiles(identifiant), compagnies(nom)').single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });
 
     return NextResponse.json(data);
   } catch (e) {
@@ -115,7 +115,7 @@ export async function PATCH(req: NextRequest) {
     const { error } = await admin.from('compagnie_employes')
       .update({ role })
       .eq('id', id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
 
     return NextResponse.json({ ok: true, role });
   } catch (e) {
@@ -142,7 +142,7 @@ export async function DELETE(req: NextRequest) {
     const admin = createAdminClient();
     const { error } = await admin.from('compagnie_employes').delete().eq('id', id);
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la suppression' }, { status: 400 });
 
     return NextResponse.json({ ok: true });
   } catch (e) {

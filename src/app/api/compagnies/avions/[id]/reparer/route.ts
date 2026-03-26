@@ -146,7 +146,7 @@ export async function POST(
       })
       .eq('id', id);
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
     return NextResponse.json({ ok: true, cout });
   } catch (e) {
     console.error('POST compagnies/avions/reparer:', e);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useMemo, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight, UserPlus, Check, XCircle, AlertTriangle, Banknote, CheckCheck } from 'lucide-react';
 import ChequeVisuel from '@/components/ChequeVisuel';
@@ -67,11 +67,11 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   const [composeSending, setComposeSending] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
 
-  const CHEQUE_TYPES = ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'cheque_siavi_intervention', 'cheque_siavi_taxes'];
-  const cheques = messagesRecus.filter(m => CHEQUE_TYPES.includes(m.type_message));
-  const invitations = messagesRecus.filter(m => m.type_message === 'recrutement');
-  const sanctions = messagesRecus.filter(m => ['amende_ifsa', 'relance_amende'].includes(m.type_message));
-  const messagesNormaux = messagesRecus.filter(m => ![...CHEQUE_TYPES, 'recrutement', 'amende_ifsa', 'relance_amende'].includes(m.type_message));
+  const CHEQUE_TYPES = useMemo(() => ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'cheque_siavi_intervention', 'cheque_siavi_taxes'], []);
+  const cheques = useMemo(() => messagesRecus.filter(m => CHEQUE_TYPES.includes(m.type_message)), [messagesRecus, CHEQUE_TYPES]);
+  const invitations = useMemo(() => messagesRecus.filter(m => m.type_message === 'recrutement'), [messagesRecus]);
+  const sanctions = useMemo(() => messagesRecus.filter(m => ['amende_ifsa', 'relance_amende'].includes(m.type_message)), [messagesRecus]);
+  const messagesNormaux = useMemo(() => messagesRecus.filter(m => ![...CHEQUE_TYPES, 'recrutement', 'amende_ifsa', 'relance_amende'].includes(m.type_message)), [messagesRecus, CHEQUE_TYPES]);
   
   // État pour suivre les invitations en cours de traitement
   const [processingInvitation, setProcessingInvitation] = useState<string | null>(null);

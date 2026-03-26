@@ -222,7 +222,7 @@ export default function AdminStoragePage() {
                 <h3 className="font-medium text-slate-200">{preview.name}</h3>
                 <p className="text-xs text-slate-500">{preview.path} — {formatSize(preview.size)} — {preview.mimetype}</p>
               </div>
-              <button onClick={() => setPreview(null)} className="text-slate-400 hover:text-white p-1">✕</button>
+              <button onClick={() => setPreview(null)} className="text-slate-400 hover:text-white p-1" aria-label="Fermer l'aperçu">✕</button>
             </div>
             <div className="p-4 flex justify-center bg-[repeating-conic-gradient(#1e293b_0%_25%,#0f172a_0%_50%)] bg-[length:20px_20px]">
               {preview.publicUrl && (

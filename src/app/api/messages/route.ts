@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 
     const { data, error } = await query.order('created_at', { ascending: false });
     
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 400 });
     return NextResponse.json(data);
   } catch (e) {
     console.error('Messages GET:', e);
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       type_message: 'normal',
     }).select().single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });
     return NextResponse.json({ ok: true, message: data });
   } catch (e) {
     console.error('Messages POST:', e);

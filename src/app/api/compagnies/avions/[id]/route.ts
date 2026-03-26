@@ -51,7 +51,7 @@ export async function PATCH(
     }
 
     const { error } = await admin.from('compagnie_avions').update(updates).eq('id', id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error('PATCH compagnies/avions/[id]:', e);
@@ -96,7 +96,7 @@ export async function DELETE(
     }
 
     const { error } = await admin.from('compagnie_avions').delete().eq('id', id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la suppression' }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error('DELETE compagnies/avions/[id]:', e);

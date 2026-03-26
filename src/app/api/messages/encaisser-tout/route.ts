@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { rateLimit } from '@/lib/rate-limit';
 
 const CHEQUE_TYPES = ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'cheque_siavi_intervention', 'cheque_siavi_taxes'];
 
@@ -9,6 +10,9 @@ export async function POST() {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+    const rl = rateLimit(`encaisser:${user.id}`, 5, 60_000);
+    if (!rl.allowed) return NextResponse.json({ error: 'Trop de requêtes, réessayez dans une minute' }, { status: 429 });
 
     const admin = createAdminClient();
 

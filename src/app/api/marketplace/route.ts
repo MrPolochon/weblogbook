@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { rateLimit } from '@/lib/rate-limit';
 
 // GET - Liste des avions disponibles à l'achat
 export async function GET() {
@@ -30,6 +31,9 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+    const rl = rateLimit(`marketplace:${user.id}`, 10, 60_000);
+    if (!rl.allowed) return NextResponse.json({ error: 'Trop d\'achats, réessayez dans une minute' }, { status: 429 });
 
     const body = await req.json();
     const { type_avion_id, pour_compagnie_id, nom_personnalise, pour_armee } = body;

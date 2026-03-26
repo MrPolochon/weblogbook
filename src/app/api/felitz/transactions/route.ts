@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(500);
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 400 });
 
     // Enrichir les libellés : remplacer les UUID par les VBAN quand possible
     const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
       libelle: libelleAvecAdmin
     }).select().single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });
 
     return NextResponse.json(transaction);
   } catch (e) {
