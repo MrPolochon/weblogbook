@@ -391,8 +391,13 @@ export async function POST(request: Request) {
         }, { status: 400 });
       }
       if (avionIndiv.statut === 'maintenance') {
-        return NextResponse.json({ 
-          error: `L'avion ${avionIndiv.immatriculation} est en maintenance.` 
+        return NextResponse.json({
+          error: `L'avion ${avionIndiv.immatriculation} est en maintenance.`
+        }, { status: 400 });
+      }
+      if (avionIndiv.statut === 'en_reparation') {
+        return NextResponse.json({
+          error: `L'avion ${avionIndiv.immatriculation} est en réparation professionnelle.`
         }, { status: 400 });
       }
       

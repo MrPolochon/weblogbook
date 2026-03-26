@@ -177,6 +177,12 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+    if (avion.statut === 'en_reparation') {
+      return NextResponse.json({ 
+        error: 'L\'avion est en réparation professionnelle. Il sera libéré après paiement de la facture.' 
+      }, { status: 400 });
+    }
+
     // Vérifier qu'il n'y a pas de plan de vol en cours pour cet avion
     const { count: plansEnCours } = await admin
       .from('plans_vol')

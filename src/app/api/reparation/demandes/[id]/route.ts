@@ -70,12 +70,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       commentaire_entreprise: body.commentaire || null,
     }).eq('id', id);
 
+    await admin.from('compagnie_avions').update({ statut: 'en_reparation' }).eq('id', demande.avion_id);
+
     const { data: comp } = await admin.from('compagnies').select('pdg_id, nom').eq('id', demande.compagnie_id).single();
     if (comp) {
       await admin.from('messages').insert({
         destinataire_id: comp.pdg_id,
         titre: `✅ Réparation acceptée`,
-        contenu: `Votre demande de réparation a été acceptée. L'avion doit être acheminé vers le hangar.${body.commentaire ? `\nMessage : ${body.commentaire}` : ''}`,
+        contenu: `Votre demande de réparation a été acceptée. L'avion est maintenant bloqué au hangar jusqu'à la fin de la réparation et le paiement.${body.commentaire ? `\nMessage : ${body.commentaire}` : ''}`,
         type_message: 'normal',
       });
     }
@@ -90,6 +92,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       statut: 'refusee',
       commentaire_entreprise: body.commentaire || null,
     }).eq('id', id);
+
+    const { data: avionActuel } = await admin.from('compagnie_avions').select('statut').eq('id', demande.avion_id).single();
+    if (avionActuel?.statut === 'en_reparation') {
+      await admin.from('compagnie_avions').update({ statut: 'ground' }).eq('id', demande.avion_id);
+    }
 
     const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', demande.compagnie_id).single();
     if (comp) {
@@ -140,11 +147,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const scoresMoyenne = Math.round((scores || []).reduce((s, sc) => s + sc.score, 0) / (scores?.length || 1));
 
-    let usureApres = 0;
-    if (scoresMoyenne >= 90) usureApres = 0;
-    else if (scoresMoyenne >= 70) usureApres = Math.round((demande.usure_avant || 0) * (1 - scoresMoyenne / 100));
-    else if (scoresMoyenne >= 50) usureApres = Math.round((demande.usure_avant || 0) * 0.3);
-    else usureApres = Math.round((demande.usure_avant || 0) * 0.5);
+    const santeBefore = demande.usure_avant ?? 0;
+    const manque = 100 - santeBefore;
+    let usureApres: number;
+    if (scoresMoyenne >= 90) usureApres = 100;
+    else if (scoresMoyenne >= 70) usureApres = Math.min(100, Math.round(santeBefore + manque * scoresMoyenne / 100));
+    else if (scoresMoyenne >= 50) usureApres = Math.min(100, Math.round(santeBefore + manque * 0.5));
+    else usureApres = Math.min(100, Math.round(santeBefore + manque * 0.3));
 
     const { data: ent } = await admin.from('entreprises_reparation')
       .select('alliance_reparation_actif, alliance_id, prix_alliance_pourcent')
@@ -183,7 +192,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         prixParPoint = Math.round(prixParPoint * (ent.prix_alliance_pourcent / 100));
       }
     }
-    const pointsRepares = Math.max(0, (demande.usure_avant || 0) - usureApres);
+    const pointsRepares = Math.max(0, usureApres - (demande.usure_avant || 0));
     const prixTotal = pointsRepares * prixParPoint;
 
     await admin.from('reparation_demandes').update({
@@ -194,7 +203,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       prix_total: prixTotal,
     }).eq('id', id);
 
-    await admin.from('compagnie_avions').update({ usure_percent: usureApres }).eq('id', demande.avion_id);
+    await admin.from('compagnie_avions').update({ usure_percent: usureApres, statut: 'en_reparation' }).eq('id', demande.avion_id);
 
     return NextResponse.json({ ok: true, score: scoresMoyenne, usure_apres: usureApres, prix_total: prixTotal });
   }
@@ -317,6 +326,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     await admin.from('reparation_demandes').update({ statut: 'annulee' }).eq('id', id);
+
+    const { data: avionActuel } = await admin.from('compagnie_avions').select('statut').eq('id', demande.avion_id).single();
+    if (avionActuel?.statut === 'en_reparation') {
+      await admin.from('compagnie_avions').update({ statut: 'ground' }).eq('id', demande.avion_id);
+    }
     return NextResponse.json({ ok: true });
   }
 

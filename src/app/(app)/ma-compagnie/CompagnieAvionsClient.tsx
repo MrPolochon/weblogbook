@@ -393,6 +393,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       case 'ground': return { text: 'Au sol', className: 'text-emerald-400' };
       case 'in_flight': return { text: 'En vol', className: 'text-sky-400' };
       case 'maintenance': return { text: 'Maintenance', className: 'text-amber-400' };
+      case 'en_reparation': return { text: 'En réparation', className: 'text-orange-400' };
       case 'bloque': return { text: 'Bloqué', className: 'text-red-500' };
       default: return { text: statut, className: 'text-slate-400' };
     }
