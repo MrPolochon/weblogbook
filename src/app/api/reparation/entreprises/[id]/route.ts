@@ -15,7 +15,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!entreprise) return NextResponse.json({ error: 'Entreprise introuvable' }, { status: 404 });
 
   const { data: employes } = await admin.from('reparation_employes')
-    .select('id, user_id, role, specialite, date_embauche, profiles(id, callsign)')
+    .select('id, user_id, role, specialite, date_embauche, profiles(id, identifiant, callsign)')
     .eq('entreprise_id', id);
 
   const { data: hangars } = await admin.from('reparation_hangars').select('*').eq('entreprise_id', id);

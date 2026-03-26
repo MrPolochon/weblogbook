@@ -15,9 +15,15 @@ export async function GET(req: Request) {
 
   const admin = createAdminClient();
   const { data } = await admin.from('profiles')
-    .select('id, callsign')
-    .ilike('callsign', `%${q}%`)
+    .select('id, identifiant, callsign')
+    .or(`identifiant.ilike.%${q}%,callsign.ilike.%${q}%`)
     .limit(10);
 
-  return NextResponse.json(data || []);
+  return NextResponse.json(
+    (data || []).map(p => ({
+      id: p.id,
+      identifiant: p.identifiant,
+      callsign: p.callsign || null,
+    }))
+  );
 }

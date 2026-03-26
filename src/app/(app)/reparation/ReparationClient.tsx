@@ -25,7 +25,7 @@ interface Employe {
   role: string;
   specialite: string | null;
   date_embauche: string;
-  profile: { id: string; callsign: string } | null;
+  profile: { id: string; identifiant: string; callsign: string | null } | null;
 }
 
 interface Hangar {
@@ -778,18 +778,17 @@ function EmployesTab({ detail, isPdg, api, flash, busy, onRefresh }: {
   detail: Detail; isPdg: boolean; api: (u: string, m: string, b?: unknown) => Promise<unknown>;
   flash: (m: string, e?: boolean) => void; busy: boolean; onRefresh: () => void;
 }) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<{ id: string; callsign: string }[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [identifiantInput, setIdentifiantInput] = useState('');
+  const [suggestions, setSuggestions] = useState<{ id: string; identifiant: string; callsign: string | null }[]>([]);
   const [role, setRole] = useState('technicien');
 
   async function searchUsers(q: string) {
-    setSearchQuery(q);
-    if (q.length < 2) { setSearchResults([]); return; }
+    setIdentifiantInput(q);
+    if (q.length < 2) { setSuggestions([]); return; }
     try {
       const res = await fetch(`/api/profiles/search?q=${encodeURIComponent(q)}`);
-      if (res.ok) setSearchResults(await res.json());
-    } catch { setSearchResults([]); }
+      if (res.ok) setSuggestions(await res.json());
+    } catch { setSuggestions([]); }
   }
 
   return (
@@ -797,7 +796,8 @@ function EmployesTab({ detail, isPdg, api, flash, busy, onRefresh }: {
       {detail.employes.map(e => (
         <div key={e.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-700/20">
           <div className="flex items-center gap-2">
-            <span className="text-slate-200">{e.profile?.callsign || e.user_id.slice(0, 8)}</span>
+            <span className="text-slate-200 font-mono">{e.profile?.identifiant || e.user_id.slice(0, 8)}</span>
+            {e.profile?.callsign && <span className="text-xs text-slate-400">({e.profile.callsign})</span>}
             <span className={`text-xs font-medium ${e.role === 'pdg' ? 'text-amber-400' : e.role === 'technicien' ? 'text-violet-400' : 'text-sky-400'}`}>{e.role}</span>
             {e.specialite && <span className="text-xs text-slate-500">({e.specialite})</span>}
           </div>
@@ -812,20 +812,25 @@ function EmployesTab({ detail, isPdg, api, flash, busy, onRefresh }: {
       {isPdg && (
         <div className="pt-4 border-t border-slate-700 space-y-2">
           <h4 className="text-sm font-medium text-slate-300">Embaucher un employé</h4>
-          <input type="text" value={searchQuery} onChange={e => searchUsers(e.target.value)} placeholder="Rechercher par callsign..." className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm" />
-          {searchResults.length > 0 && (
-            <div className="max-h-32 overflow-y-auto rounded border border-slate-600 bg-slate-800">
-              {searchResults.map(u => (
-                <button key={u.id} onClick={() => { setSelectedUserId(u.id); setSearchQuery(u.callsign); setSearchResults([]); }} className="w-full text-left px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700">{u.callsign}</button>
-              ))}
-            </div>
-          )}
+          <div className="relative">
+            <input type="text" value={identifiantInput} onChange={e => searchUsers(e.target.value)} placeholder="Identifiant du joueur..." className="w-full rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm font-mono" />
+            {suggestions.length > 0 && (
+              <div className="absolute z-10 w-full mt-1 max-h-32 overflow-y-auto rounded border border-slate-600 bg-slate-800 shadow-lg">
+                {suggestions.map(u => (
+                  <button key={u.id} onClick={() => { setIdentifiantInput(u.identifiant); setSuggestions([]); }} className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-700 flex items-center gap-2">
+                    <span className="text-slate-200 font-mono">{u.identifiant}</span>
+                    {u.callsign && <span className="text-xs text-slate-400">({u.callsign})</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <select value={role} onChange={e => setRole(e.target.value)} className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 text-sm">
             <option value="technicien">Technicien</option>
             <option value="logistique">Logistique</option>
           </select>
-          <button disabled={busy || !selectedUserId} onClick={async () => {
-            try { await api('/api/reparation/employes', 'POST', { entreprise_id: detail.id, user_id: selectedUserId, role }); flash('Employé embauché'); setSelectedUserId(''); setSearchQuery(''); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+          <button disabled={busy || !identifiantInput.trim()} onClick={async () => {
+            try { await api('/api/reparation/employes', 'POST', { entreprise_id: detail.id, identifiant: identifiantInput.trim(), role }); flash('Employé embauché'); setIdentifiantInput(''); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
           }} className="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm disabled:opacity-50 flex items-center gap-2"><Plus className="h-4 w-4" />Embaucher</button>
         </div>
       )}

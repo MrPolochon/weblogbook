@@ -10,8 +10,8 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const { entreprise_id, user_id, role, specialite } = body;
-  if (!entreprise_id || !user_id) return NextResponse.json({ error: 'entreprise_id et user_id requis' }, { status: 400 });
+  const { entreprise_id, identifiant, role, specialite } = body;
+  if (!entreprise_id || !identifiant) return NextResponse.json({ error: 'entreprise_id et identifiant requis' }, { status: 400 });
 
   const admin = createAdminClient();
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
@@ -20,8 +20,8 @@ export async function POST(req: Request) {
   const isPdg = ent && String(ent.pdg_id) === String(user.id);
   if (!ent || (!isPdg && !isAdmin)) return NextResponse.json({ error: 'Seul le PDG peut embaucher' }, { status: 403 });
 
-  const { data: targetProfile } = await admin.from('profiles').select('id').eq('id', user_id).single();
-  if (!targetProfile) return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 });
+  const { data: targetProfile } = await admin.from('profiles').select('id').eq('identifiant', String(identifiant).trim()).single();
+  if (!targetProfile) return NextResponse.json({ error: `Utilisateur "${identifiant}" introuvable` }, { status: 404 });
 
   const { error } = await admin.from('reparation_employes').insert({
     entreprise_id,
