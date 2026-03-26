@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Radio, X, Play, Square, Pencil, Globe, Cloud, Headphones, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Radio, X, Play, Square, Pencil, Globe, Cloud, Headphones, AlertTriangle, RefreshCw, Monitor, MessageCircle } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
@@ -31,7 +31,7 @@ interface AtcAtisButtonProps {
 
 const CODE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const ATIS_VALID_MINUTES = 60;
-const ATIS_WARN_MINUTES = 50; // Alarme 10 min avant obsolescence
+const ATIS_WARN_MINUTES = 50;
 
 export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisButtonProps) {
   const { theme } = useAtcTheme();
@@ -40,6 +40,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   const [broadcasting, setBroadcasting] = useState(false);
   const [controllingUserId, setControllingUserId] = useState<string | null>(null);
   const [statusAeroport, setStatusAeroport] = useState<string | null>(null);
+  const [atisSource, setAtisSource] = useState<string | null>(null);
   const [atisCodeAutoRotate, setAtisCodeAutoRotate] = useState(false);
   const [autoRotateInProgress, setAutoRotateInProgress] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -60,8 +61,8 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
   const isController = controllingUserId === userId;
   const canStart = !broadcasting;
-  const canStop = broadcasting && isController;
-  const isGrayed = broadcasting && !isController;
+  const canStop = broadcasting;
+  const isFromDiscord = atisSource === 'discord';
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -79,6 +80,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         setBroadcasting(!!statusData.broadcasting);
         setControllingUserId(statusData.controlling_user_id ?? null);
         setStatusAeroport(statusData.aeroport ?? null);
+        setAtisSource(statusData.source ?? null);
         setAtisCodeAutoRotate(!!statusData.atis_code_auto_rotate);
       }
       if (dataRes.ok && dataJson && !dataJson.error) {
@@ -173,6 +175,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       await apiCall('/api/atc/atis/stop', { method: 'POST' });
       setBroadcasting(false);
       setControllingUserId(null);
+      setAtisSource(null);
       setIsOpen(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur à l\'arrêt');
@@ -354,17 +357,26 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     return (
       <button
         onClick={() => setIsOpen(true)}
-        disabled={isGrayed}
-        className={`fixed bottom-4 left-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 ${
-          canStop ? 'ring-2 ring-red-500' : ''
+        className={`fixed bottom-4 left-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl ${
+          broadcasting ? 'ring-2 ring-red-500' : ''
         }`}
-        title={isGrayed ? 'Un autre ATC contrôle le bot ATIS' : canStop ? 'Cliquer pour arrêter' : 'Panneau ATIS (comme /atiscreate)'}
+        title={broadcasting ? 'ATIS en cours — Cliquer pour gérer' : 'Panneau ATIS'}
       >
-        <div className={`p-2 rounded-xl ${canStop ? 'bg-red-500/30' : isDark ? 'bg-amber-100' : 'bg-amber-500/20'}`}>
-          <Radio className={`h-5 w-5 ${canStop ? 'text-red-500' : isDark ? 'text-amber-600' : 'text-amber-400'}`} />
+        <div className={`p-2 rounded-xl ${broadcasting ? 'bg-red-500/30' : isDark ? 'bg-amber-100' : 'bg-amber-500/20'}`}>
+          <Radio className={`h-5 w-5 ${broadcasting ? 'text-red-500' : isDark ? 'text-amber-600' : 'text-amber-400'}`} />
         </div>
         <span className="font-medium">ATIS</span>
-        {broadcasting && <span className="text-xs opacity-80">● En direct</span>}
+        {broadcasting && (
+          <span className="flex items-center gap-1.5 text-xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+            </span>
+            En direct
+            {isFromDiscord && <MessageCircle className="h-3 w-3 ml-0.5 opacity-70" />}
+            {!isFromDiscord && broadcasting && <Monitor className="h-3 w-3 ml-0.5 opacity-70" />}
+          </span>
+        )}
       </button>
     );
   }
@@ -396,6 +408,27 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
             <button onClick={() => { setBotReachable(null); setBotErrorDetail(null); fetchStatus(); }} className="mt-3 text-sm font-medium underline hover:no-underline">
               Réessayer
             </button>
+          </div>
+        )}
+
+        {/* Source indicator */}
+        {broadcasting && (
+          <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium ${
+            isFromDiscord
+              ? isDark ? 'bg-indigo-500/15 text-indigo-800 border border-indigo-400/40' : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+              : isDark ? 'bg-emerald-500/15 text-emerald-800 border border-emerald-400/40' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+          }`}>
+            {isFromDiscord ? (
+              <>
+                <MessageCircle className="h-4 w-4 shrink-0" />
+                <span>ATIS lancé depuis <strong>Discord</strong> (/atiscreate)</span>
+              </>
+            ) : (
+              <>
+                <Monitor className="h-4 w-4 shrink-0" />
+                <span>ATIS lancé depuis le <strong>site</strong>{isController ? ' (par vous)' : ''}</span>
+              </>
+            )}
           </div>
         )}
 
@@ -627,10 +660,15 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
           {canStop && (
             <button onClick={handleStop} disabled={loading} className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-red-500 hover:bg-red-400 text-white font-semibold text-base disabled:opacity-50">
               <Square className="h-5 w-5" />
-              Arrêter
+              Arrêter{isFromDiscord ? ' (Discord)' : ''}
             </button>
           )}
         </div>
+        {broadcasting && !isController && !isFromDiscord && (
+          <p className={`text-xs text-center mt-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+            Lancé par un autre ATC — vous pouvez quand même l&apos;arrêter
+          </p>
+        )}
       </div>
     </div>
   );

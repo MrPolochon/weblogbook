@@ -19,7 +19,7 @@ export async function GET() {
     if (!canAtc) return NextResponse.json({ error: 'Accès ATC requis.' }, { status: 403 });
 
     const admin = createAdminClient();
-    let state: { controlling_user_id?: string; aeroport?: string; position?: string; broadcasting?: boolean } | null = null;
+    let state: { controlling_user_id?: string; aeroport?: string; position?: string; broadcasting?: boolean; source?: string | null } | null = null;
     try {
       const { data } = await admin.from('atis_broadcast_state').select('*').eq('id', 'default').maybeSingle();
       state = data;
@@ -47,11 +47,17 @@ export async function GET() {
       }
     }
 
+    const isDiscordSource = state?.source === 'discord';
+    const effectiveBroadcasting = isDiscordSource
+      ? !!state?.broadcasting
+      : !!(state?.broadcasting && botBroadcasting);
+
     return NextResponse.json({
       controlling_user_id: state?.controlling_user_id ?? null,
       aeroport: state?.aeroport ?? null,
       position: state?.position ?? null,
-      broadcasting: state?.broadcasting && botBroadcasting,
+      broadcasting: effectiveBroadcasting,
+      source: state?.source ?? null,
       atis_text: atisText,
       atis_ticker_visible: profile?.atis_ticker_visible ?? true,
       atis_code_auto_rotate: profile?.atis_code_auto_rotate ?? false,

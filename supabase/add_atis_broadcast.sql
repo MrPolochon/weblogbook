@@ -7,9 +7,11 @@ CREATE TABLE IF NOT EXISTS public.atis_broadcast_state (
   aeroport TEXT,
   position TEXT,
   broadcasting BOOLEAN NOT NULL DEFAULT false,
+  source TEXT CHECK (source IN ('site', 'discord')),
   started_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE public.atis_broadcast_state ADD COLUMN IF NOT EXISTS source TEXT CHECK (source IN ('site', 'discord'));
 
 INSERT INTO public.atis_broadcast_state (id, broadcasting) VALUES ('default', false)
 ON CONFLICT (id) DO NOTHING;

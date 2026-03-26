@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { RefreshCw, ZoomIn, ZoomOut, Move, Radio } from 'lucide-react';
+import { RefreshCw, Radio } from 'lucide-react';
 
 interface AtcSession {
   aeroport: string;
@@ -132,10 +132,6 @@ export default function AtcMapClient() {
   const [sessions, setSessions] = useState<AtcSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAirport, setSelectedAirport] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(Date.now());
 
@@ -159,32 +155,6 @@ export default function AtcMapClient() {
     }, 15000);
     return () => clearInterval(interval);
   }, [fetchSessions]);
-
-  useEffect(() => {
-    const container = mapContainerRef.current;
-    if (!container) return;
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      if (e.deltaY < 0) setZoom(z => Math.min(z + 0.25, 4));
-      else setZoom(z => { const nz = Math.max(z - 0.25, 0.5); if (nz <= 1) setPan({ x: 0, y: 0 }); return nz; });
-    };
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, []);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (zoom > 1) { setIsDragging(true); setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }); }
-  }, [zoom, pan]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isDragging && zoom > 1) {
-      const maxPan = (zoom - 1) * 250;
-      setPan({
-        x: Math.max(-maxPan, Math.min(maxPan, e.clientX - dragStart.x)),
-        y: Math.max(-maxPan, Math.min(maxPan, e.clientY - dragStart.y))
-      });
-    }
-  }, [isDragging, zoom, dragStart]);
 
   const sessionsByAirport = new Map<string, AtcSession[]>();
   sessions.forEach(s => {
@@ -224,13 +194,9 @@ export default function AtcMapClient() {
               {sessions.length} contrôleur{sessions.length > 1 ? 's' : ''} en ligne
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => { setZoom(z => Math.min(z + 0.25, 4)); }} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700"><ZoomIn className="h-4 w-4" /></button>
-            <span className="text-xs text-slate-400 min-w-[40px] text-center">{Math.round(zoom * 100)}%</span>
-            <button onClick={() => { setZoom(z => { const nz = Math.max(z - 0.25, 0.5); if (nz <= 1) setPan({ x: 0, y: 0 }); return nz; }); }} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700"><ZoomOut className="h-4 w-4" /></button>
-            <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700"><Move className="h-4 w-4" /></button>
-            <button onClick={() => { setLoading(true); fetchSessions(); }} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
-          </div>
+          <button onClick={() => { setLoading(true); fetchSessions(); }} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700" title="Actualiser">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </header>
 
@@ -238,13 +204,8 @@ export default function AtcMapClient() {
         {/* Carte */}
         <div className="flex-1 relative rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden"
           ref={mapContainerRef}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={() => setIsDragging(false)}
-          onMouseLeave={() => setIsDragging(false)}
-          style={{ cursor: isDragging ? 'grabbing' : zoom > 1 ? 'grab' : 'default' }}
         >
-          <div style={{ transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transformOrigin: 'center center', transition: isDragging ? 'none' : 'transform 0.2s', width: '100%', height: '100%' }}>
+          <div style={{ width: '100%', height: '100%' }}>
             <svg viewBox="0 0 1024 787" className="w-full h-full" style={{ background: 'linear-gradient(180deg, #0f172a 0%, #1a2744 50%, #0f172a 100%)' }}>
               {/* Grille radar */}
               <defs>

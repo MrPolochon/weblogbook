@@ -69,6 +69,7 @@ export async function stopAtisIfController(userId: string): Promise<void> {
     aeroport: null,
     position: null,
     broadcasting: false,
+    source: null,
     started_at: null,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'id' });

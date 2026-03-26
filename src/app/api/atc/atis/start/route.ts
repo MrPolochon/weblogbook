@@ -25,9 +25,14 @@ export async function POST(request: Request) {
     if (!aeroport || !position) return NextResponse.json({ error: 'aeroport et position requis' }, { status: 400 });
 
     const admin = createAdminClient();
-    const { data: existing } = await admin.from('atis_broadcast_state').select('controlling_user_id, broadcasting').eq('id', 'default').single();
-    if (existing?.broadcasting && existing?.controlling_user_id && existing.controlling_user_id !== user.id) {
-      return NextResponse.json({ error: 'Un autre ATC contrôle déjà le bot ATIS.' }, { status: 400 });
+    const { data: existing } = await admin.from('atis_broadcast_state').select('controlling_user_id, broadcasting, source').eq('id', 'default').single();
+    if (existing?.broadcasting) {
+      if (existing.source === 'discord') {
+        return NextResponse.json({ error: 'L\'ATIS est déjà actif depuis Discord (/atiscreate). Arrêtez-le d\'abord.' }, { status: 409 });
+      }
+      if (existing.controlling_user_id && existing.controlling_user_id !== user.id) {
+        return NextResponse.json({ error: 'Un autre ATC contrôle déjà le bot ATIS.' }, { status: 409 });
+      }
     }
 
     const { data: config } = await admin.from('atis_broadcast_config').select('discord_guild_id, discord_channel_id').eq('id', 'default').maybeSingle();
@@ -69,6 +74,7 @@ export async function POST(request: Request) {
       aeroport: String(aeroport),
       position: String(position),
       broadcasting: true,
+      source: 'site',
       started_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }, { onConflict: 'id' });

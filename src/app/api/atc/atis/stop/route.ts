@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * POST - Arrêter le broadcast ATIS
- * Seul l'ATC qui a démarré peut arrêter (ou admin)
+ * Tout contrôleur ATC en service peut arrêter l'ATIS (pas seulement le créateur)
  */
 export async function POST() {
   try {
@@ -19,10 +19,6 @@ export async function POST() {
     if (!canAtc) return NextResponse.json({ error: 'Accès ATC requis.' }, { status: 403 });
 
     const admin = createAdminClient();
-    const { data: state } = await admin.from('atis_broadcast_state').select('controlling_user_id').eq('id', 'default').single();
-    if (state?.controlling_user_id && state.controlling_user_id !== user.id && profile?.role !== 'admin') {
-      return NextResponse.json({ error: 'Seul l\'ATC qui a démarré le broadcast peut l\'arrêter.' }, { status: 403 });
-    }
 
     const botUrl = process.env.ATIS_WEBHOOK_URL;
     const botSecret = process.env.ATIS_WEBHOOK_SECRET;
@@ -39,6 +35,7 @@ export async function POST() {
       aeroport: null,
       position: null,
       broadcasting: false,
+      source: null,
       started_at: null,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'id' });
