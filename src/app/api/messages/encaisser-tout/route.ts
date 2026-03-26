@@ -8,7 +8,7 @@ export async function POST() {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Non authentifie' }, { status: 401 });
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const admin = createAdminClient();
 
@@ -38,11 +38,19 @@ export async function POST() {
     }
     if (uniqueCompteIds.size > 0) {
       const { data: comptes } = await admin.from('felitz_comptes')
-        .select('id, label, type')
+        .select('id, type, vban, compagnie_id')
         .in('id', Array.from(uniqueCompteIds));
       if (comptes) {
+        const compagnieIds = comptes.filter(c => c.compagnie_id).map(c => c.compagnie_id!);
+        let compagnieNoms: Record<string, string> = {};
+        if (compagnieIds.length > 0) {
+          const { data: comps } = await admin.from('compagnies').select('id, nom').in('id', compagnieIds);
+          if (comps) comps.forEach(c => { compagnieNoms[c.id] = c.nom; });
+        }
         for (const c of comptes) {
-          compteLabels[c.id] = c.label || (c.type === 'personnel' ? 'Compte personnel' : 'Compte entreprise');
+          compteLabels[c.id] = c.type === 'entreprise' && c.compagnie_id
+            ? compagnieNoms[c.compagnie_id] || 'Compte entreprise'
+            : 'Compte personnel';
         }
       }
     }

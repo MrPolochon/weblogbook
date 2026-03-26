@@ -1,16 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign } from 'lucide-react';
-import Link from 'next/link';
+import { Building2 } from 'lucide-react';
 import MaCompagnieClient from './MaCompagnieClient';
-
-function formatHeures(minutes: number | null | undefined): string {
-  if (!minutes) return '0h';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return m > 0 ? `${h}h ${m}min` : `${h}h`;
-}
 
 export default async function MaCompagniePage({ searchParams }: { searchParams: { c?: string } }) {
   const supabase = await createClient();
@@ -102,7 +94,7 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
     const { data: vols } = await admin.from('vols')
       .select('pilote_id, duree_minutes')
       .eq('compagnie_id', selectedCompagnieOption.id)
-      .eq('statut', 'valide')
+      .eq('statut', 'validé')
       .in('pilote_id', employeIds);
 
     (vols || []).forEach(v => {

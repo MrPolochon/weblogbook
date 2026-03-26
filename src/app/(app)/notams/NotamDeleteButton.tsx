@@ -17,8 +17,9 @@ export default function NotamDeleteButton({ notamId, variant = 'default' }: { no
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Erreur');
       startTransition(() => router.refresh());
     } catch {
-      setLoading(false);
       alert('Erreur lors de la suppression.');
+    } finally {
+      setLoading(false);
     }
   }
 

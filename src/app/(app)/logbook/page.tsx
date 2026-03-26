@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
 import { formatDuree, cn } from '@/lib/utils';
 import { formatDateMediumUTC, formatTimeUTC } from '@/lib/date-utils';
-import { Plus, BookOpen, Plane, FileText, Clock, CheckCircle2, XCircle, Timer, TrendingUp, Calendar, MapPin, ArrowRight } from 'lucide-react';
+import { Plus, BookOpen, Plane, FileText, Clock, CheckCircle2, XCircle, Timer, TrendingUp, ArrowRight } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
 import NePasEnregistrerPlanButton from './NePasEnregistrerPlanButton';
 

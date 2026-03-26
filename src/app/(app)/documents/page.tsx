@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import Link from 'next/link';
-import { FolderOpen, FileText, File, Image, Download, FileSpreadsheet, FileArchive, FolderClosed } from 'lucide-react';
+import { FolderOpen } from 'lucide-react';
 import DocumentTree from '@/components/DocumentTree';
 
 export default async function DocumentsPage() {

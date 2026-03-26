@@ -67,10 +67,11 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   const [composeSending, setComposeSending] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
 
-  const cheques = messagesRecus.filter(m => ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(m.type_message));
+  const CHEQUE_TYPES = ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'cheque_siavi_intervention', 'cheque_siavi_taxes'];
+  const cheques = messagesRecus.filter(m => CHEQUE_TYPES.includes(m.type_message));
   const invitations = messagesRecus.filter(m => m.type_message === 'recrutement');
   const sanctions = messagesRecus.filter(m => ['amende_ifsa', 'relance_amende'].includes(m.type_message));
-  const messagesNormaux = messagesRecus.filter(m => !['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'recrutement', 'amende_ifsa', 'relance_amende'].includes(m.type_message));
+  const messagesNormaux = messagesRecus.filter(m => ![...CHEQUE_TYPES, 'recrutement', 'amende_ifsa', 'relance_amende'].includes(m.type_message));
   
   // État pour suivre les invitations en cours de traitement
   const [processingInvitation, setProcessingInvitation] = useState<string | null>(null);
@@ -194,20 +195,22 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   }
 
   async function handleEncaisser(id: string) {
-    const res = await fetch(`/api/messages/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'encaisser' })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-    
-    // Mettre à jour le selectedMessage immédiatement pour refléter l'encaissement
-    if (selectedMessage && selectedMessage.id === id) {
-      setSelectedMessage({ ...selectedMessage, cheque_encaisse: true });
+    try {
+      const res = await fetch(`/api/messages/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'encaisser' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      if (selectedMessage && selectedMessage.id === id) {
+        setSelectedMessage({ ...selectedMessage, cheque_encaisse: true });
+      }
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur lors de l\'encaissement');
     }
-    
-    startTransition(() => router.refresh());
   }
 
   async function handleEncaisserTout() {
@@ -510,7 +513,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
             {/* Contenu */}
             <div className="p-6">
               {/* Si c'est un chèque, afficher le chèque visuel */}
-              {['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(selectedMessage.type_message) && selectedMessage.cheque_montant ? (
+              {CHEQUE_TYPES.includes(selectedMessage.type_message) && selectedMessage.cheque_montant ? (
                 <div className="space-y-6">
                   <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>
                   <ChequeVisuel

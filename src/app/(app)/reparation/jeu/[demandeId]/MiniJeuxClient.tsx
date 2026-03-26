@@ -38,7 +38,10 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
 
   useEffect(() => {
     fetch(`/api/reparation/demandes/${demandeId}`)
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('Erreur chargement');
+        return r.json();
+      })
       .then(d => {
         setDemande(d);
         const map = new Map<string, number>();

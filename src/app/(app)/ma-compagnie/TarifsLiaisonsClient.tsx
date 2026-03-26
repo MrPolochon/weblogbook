@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { AEROPORTS_PTFS, getAeroportInfo, getPrixOptimal, PRIX_MAXIMUM_ABSOLU } from '@/lib/aeroports-ptfs';
-import { DollarSign, Plus, Trash2, RefreshCw, Route, ArrowLeftRight, Info } from 'lucide-react';
+import { Plus, Trash2, RefreshCw, Route, ArrowLeftRight, Info } from 'lucide-react';
 
 interface TarifLiaison {
   id: string;

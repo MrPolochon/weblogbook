@@ -35,7 +35,7 @@ export default async function MessageriePage() {
 
   // Compter les chèques non encaissés
   const chequesNonEncaisses = (messagesRecus || []).filter(
-    m => ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(m.type_message) && !m.cheque_encaisse
+    m => ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'cheque_siavi_intervention', 'cheque_siavi_taxes'].includes(m.type_message) && !m.cheque_encaisse
   );
 
   // Compter les invitations non répondues

@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Clock, MapPin, Plane, Users, Shield, Target, Edit2 } from 'lucide-react';
+import { ArrowLeft, Clock, MapPin, Plane, Users, Target, Edit2 } from 'lucide-react';
 import { formatDuree } from '@/lib/utils';
 import { formatDateMediumUTC, formatTimeUTC } from '@/lib/date-utils';
 import { ARME_MISSIONS } from '@/lib/armee-missions';

@@ -118,6 +118,7 @@ interface AllianceDetail extends Alliance {
 interface Props {
   compagniesSansAlliance: { id: string; nom: string }[];
   pdgCompagnieIds: string[];
+  isAdmin?: boolean;
 }
 
 const TABS = [
@@ -143,7 +144,7 @@ const ROLE_COLORS: Record<string, string> = {
   membre: 'text-slate-400',
 };
 
-export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds }: Props) {
+export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds, isAdmin }: Props) {
   const [alliances, setAlliances] = useState<Alliance[]>([]);
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<AllianceDetail | null>(null);
@@ -325,7 +326,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
       {success && <Alert type="success">{success}</Alert>}
 
       <nav className="flex gap-1 overflow-x-auto border-b border-slate-700 pb-px">
-        {TABS.filter(t => t.key !== 'parametres' || isLeader || activeRole === 'admin').map(t => {
+        {TABS.filter(t => t.key !== 'parametres' || isLeader || isAdmin).map(t => {
           const Icon = t.icon;
           return (
             <button key={t.key} onClick={() => setTab(t.key)}

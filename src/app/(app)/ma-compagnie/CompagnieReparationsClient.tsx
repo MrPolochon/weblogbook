@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Wrench, CreditCard, Loader2, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Wrench, CreditCard, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Demande {

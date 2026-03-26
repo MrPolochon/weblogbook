@@ -9,6 +9,9 @@ export default async function AlliancePage() {
   if (!user) redirect('/login');
 
   const admin = createAdminClient();
+  const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single();
+  const isAdmin = profile?.role === 'admin';
+
   const compagnieIds: string[] = [];
   const { data: pdgRows } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
   (pdgRows || []).forEach((r) => compagnieIds.push(r.id));
@@ -31,6 +34,7 @@ export default async function AlliancePage() {
     <AllianceClient
       compagniesSansAlliance={compagniesSansAlliance}
       pdgCompagnieIds={pdgCompagnieIds}
+      isAdmin={isAdmin}
     />
   );
 }
