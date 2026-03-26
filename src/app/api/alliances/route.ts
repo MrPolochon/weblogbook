@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getLeaderCompagnieIds } from '@/lib/co-pdg-utils';
 
 export const dynamic = 'force-dynamic';
 
 async function getUserCompagnies(admin: ReturnType<typeof createAdminClient>, userId: string): Promise<string[]> {
-  const ids: string[] = [];
-  const { data: pdg } = await admin.from('compagnies').select('id').eq('pdg_id', userId);
-  (pdg || []).forEach(r => ids.push(r.id));
+  const ids = await getLeaderCompagnieIds(userId, admin);
   const { data: emp } = await admin.from('compagnie_employes').select('compagnie_id').eq('pilote_id', userId);
   (emp || []).forEach(r => { if (r.compagnie_id && !ids.includes(r.compagnie_id)) ids.push(r.compagnie_id); });
   return ids;

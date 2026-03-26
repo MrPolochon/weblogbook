@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 // Coût de la tentative de réparation d'un avion détruit
 const COUT_TENTATIVE_REPARATION = 1_000_000; // 1 million F$
@@ -50,7 +51,9 @@ export async function POST(
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     const isAdmin = profile?.role === 'admin';
-    const isPdg = compagnie.pdg_id === user.id;
+    const isPdg =
+      compagnie.pdg_id === user.id ||
+      (await isCoPdg(user.id, compagnie.id, admin));
 
     if (!isPdg && !isAdmin) {
       return NextResponse.json({ error: 'Seul le PDG peut tenter de réparer un avion détruit' }, { status: 403 });

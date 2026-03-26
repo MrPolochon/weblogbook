@@ -50,7 +50,7 @@ export default function IncidentsClient() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [deciding, setDeciding] = useState<string | null>(null);
-  const [notes, setNotes] = useState('');
+  const [notesMap, setNotesMap] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<'tous' | 'en_attente' | 'en_examen' | 'clos'>('tous');
 
   const fetchIncidents = useCallback(async () => {
@@ -92,7 +92,7 @@ export default function IncidentsClient() {
       const res = await fetch(`/api/incidents/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'decider', decision, notes: notes.trim() || undefined }),
+        body: JSON.stringify({ action: 'decider', decision, notes: (notesMap[id] || '').trim() || undefined }),
       });
       if (!res.ok) {
         const d = await res.json();
@@ -100,7 +100,7 @@ export default function IncidentsClient() {
         return;
       }
       toast.success(decision === 'detruit' ? 'Avion detruit' : 'Avion remis en etat');
-      setNotes('');
+      setNotesMap(prev => { const copy = { ...prev }; delete copy[id]; return copy; });
       setExpanded(null);
       fetchIncidents();
     } catch {
@@ -237,12 +237,12 @@ export default function IncidentsClient() {
                       </button>
                     )}
 
-                    {(inc.statut === 'en_attente' || inc.statut === 'en_examen') && (
+                    {inc.statut === 'en_examen' && (
                       <div className="space-y-3 p-3 bg-slate-900/50 border border-slate-600 rounded-lg">
                         <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Rendre une decision</h3>
                         <textarea
-                          value={notes}
-                          onChange={(e) => setNotes(e.target.value)}
+                          value={notesMap[inc.id] || ''}
+                          onChange={(e) => setNotesMap(prev => ({ ...prev, [inc.id]: e.target.value }))}
                           placeholder="Notes (optionnel)..."
                           rows={2}
                           className="w-full text-sm bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-100 placeholder:text-slate-500 resize-none"

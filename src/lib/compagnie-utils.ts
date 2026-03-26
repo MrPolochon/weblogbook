@@ -68,6 +68,12 @@ export function calculerVolFerryAuto(): { cout: number; dureeMin: number } {
 }
 
 // ============================================================
+// RÉPARATION AU HUB (payante)
+// ============================================================
+
+export const FRACTION_REPARATION_HUB = 0.5;
+
+// ============================================================
 // MAINTENANCE (techniciens)
 // ============================================================
 

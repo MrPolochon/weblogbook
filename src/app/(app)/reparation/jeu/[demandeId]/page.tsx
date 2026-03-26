@@ -8,5 +8,5 @@ export default async function MiniJeuxPage({ params }: { params: Promise<{ deman
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  return <MiniJeuxClient demandeId={demandeId} userId={user.id} />;
+  return <MiniJeuxClient demandeId={demandeId} />;
 }

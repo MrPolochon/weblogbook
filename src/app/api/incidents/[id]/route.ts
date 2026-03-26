@@ -54,6 +54,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     if (action === 'decider') {
       if (incident.statut === 'clos') return NextResponse.json({ error: 'Incident deja clos.' }, { status: 400 });
+      if (incident.statut === 'en_attente') return NextResponse.json({ error: 'Prenez d\'abord l\'incident en charge avant de rendre une decision.' }, { status: 400 });
 
       const { decision, notes } = body;
       if (!decision || !['remis_en_etat', 'detruit'].includes(decision)) {

@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { FRACTION_REPARATION_HUB } from '@/lib/compagnie-utils';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function POST(
   _request: Request,
@@ -15,10 +17,18 @@ export async function POST(
     const admin = createAdminClient();
     const { data: avion } = await admin
       .from('compagnie_avions')
-      .select('id, compagnie_id, aeroport_actuel, statut, usure_percent')
+      .select('id, compagnie_id, aeroport_actuel, statut, usure_percent, type_avion_id')
       .eq('id', id)
       .single();
     if (!avion) return NextResponse.json({ error: 'Avion introuvable.' }, { status: 404 });
+
+    const { data: typeAvion } = await admin
+      .from('types_avion')
+      .select('prix')
+      .eq('id', avion.type_avion_id)
+      .single();
+    const prixAvion = typeAvion?.prix || 0;
+    const cout = Math.round(prixAvion * FRACTION_REPARATION_HUB);
 
     const nowIso = new Date().toISOString();
     const { data: locationActive } = await admin
@@ -38,7 +48,10 @@ export async function POST(
       .single();
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     
-    if (compagnie?.pdg_id !== user.id && profile?.role !== 'admin') {
+    const isLeader =
+      compagnie?.pdg_id === user.id ||
+      (await isCoPdg(user.id, compagnieCibleId, admin));
+    if (!isLeader && profile?.role !== 'admin') {
       if (locationActive) {
         return NextResponse.json({ error: 'Avion en location : le PDG locataire gère la maintenance.' }, { status: 403 });
       }
@@ -94,6 +107,36 @@ export async function POST(
       return NextResponse.json({ error: 'L\'avion est déjà à 100% de santé.' }, { status: 400 });
     }
 
+    // Débiter le compte de la compagnie
+    if (cout > 0) {
+      const { data: compte } = await admin
+        .from('felitz_comptes')
+        .select('id, solde, vban')
+        .eq('compagnie_id', compagnieCibleId)
+        .eq('type', 'entreprise')
+        .single();
+      if (!compte) return NextResponse.json({ error: 'Compte Felitz de la compagnie introuvable.' }, { status: 400 });
+      if (compte.solde < cout) {
+        return NextResponse.json({ error: `Fonds insuffisants. Coût : ${cout.toLocaleString('fr-FR')} F$, solde : ${compte.solde.toLocaleString('fr-FR')} F$.` }, { status: 400 });
+      }
+
+      const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
+        p_compte_id: compte.id,
+        p_montant: cout,
+      });
+      if (!debitOk) {
+        return NextResponse.json({ error: 'Échec du débit (fonds insuffisants ou erreur).' }, { status: 400 });
+      }
+
+      await admin.from('felitz_transactions').insert({
+        compte_id: compte.id,
+        type: 'debit',
+        montant: cout,
+        libelle: `Réparation au hub — ${avion.aeroport_actuel}`,
+        reference: `repair-hub-${id}`,
+      });
+    }
+
     // Réparer : remettre à 100% et débloquer si nécessaire
     const { error } = await admin
       .from('compagnie_avions')
@@ -104,7 +147,7 @@ export async function POST(
       .eq('id', id);
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, cout });
   } catch (e) {
     console.error('POST compagnies/avions/reparer:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

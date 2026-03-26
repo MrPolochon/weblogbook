@@ -64,10 +64,16 @@ export default function AdminReparationClient({ entreprises: initial, users }: {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Supprimer l'entreprise "${name}" ? Irréversible.`)) return;
+    if (!confirm(`Supprimer l'entreprise "${name}" ?\n\nCette action est irréversible. Toutes les données (hangars, employés, compte Felitz) seront supprimées.`)) return;
+    const code = prompt(`Pour confirmer, tapez SUPPRIMER :`);
+    if (code?.toUpperCase() !== 'SUPPRIMER') { flash('Suppression annulée.', true); return; }
     setBusy(true);
     try {
-      const res = await fetch(`/api/reparation/entreprises/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/reparation/entreprises/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: 'SUPPRIMER' }),
+      });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Erreur');

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function PATCH(
   request: Request,
@@ -35,8 +36,12 @@ export async function PATCH(
       .eq('id', location.locataire_compagnie_id)
       .single();
 
-    const isLoueurPdg = loueur?.pdg_id === user.id;
-    const isLocatairePdg = locataire?.pdg_id === user.id;
+    const isLoueurPdg =
+      (loueur?.pdg_id === user.id) ||
+      (!!loueur?.id && (await isCoPdg(user.id, loueur.id, admin)));
+    const isLocatairePdg =
+      (locataire?.pdg_id === user.id) ||
+      (!!locataire?.id && (await isCoPdg(user.id, locataire.id, admin)));
 
     if (action === 'accept') {
       if (!isLocatairePdg) return NextResponse.json({ error: 'Seul le PDG locataire peut accepter.' }, { status: 403 });

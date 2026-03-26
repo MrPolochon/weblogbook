@@ -90,9 +90,11 @@ export default async function MilitairePage() {
               </thead>
               <tbody>
                 {vols.map((v) => (
-                  <tr key={v.id} className="border-b border-slate-700/50">
-                    <td className="py-3 pr-4 text-slate-300">
-                      {formatDateMediumUTC(v.depart_utc)}
+                  <tr key={v.id} className="border-b border-slate-700/50 hover:bg-slate-800/50 transition-colors">
+                    <td className="py-3 pr-4">
+                      <Link href={`/militaire/vol/${v.id}`} className="text-slate-300 hover:text-sky-400 underline decoration-slate-600 hover:decoration-sky-400">
+                        {formatDateMediumUTC(v.depart_utc)}
+                      </Link>
                     </td>
                     <td className="py-3 pr-4 text-slate-300">{v.aeroport_depart || '—'} {formatTimeUTC(v.depart_utc)}</td>
                     <td className="py-3 pr-4 text-slate-300">{v.aeroport_arrivee || '—'} {v.arrivee_utc ? formatTimeUTC(v.arrivee_utc) : '—'}</td>

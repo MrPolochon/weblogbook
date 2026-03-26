@@ -757,7 +757,7 @@ function FermerEntrepriseButton({ detail, api, flash, busy, onSuccess }: {
           disabled={busy || typedConfirm !== MOT_CLE}
           onClick={async () => {
             try {
-              await api(`/api/reparation/entreprises/${detail.id}`, 'DELETE');
+              await api(`/api/reparation/entreprises/${detail.id}`, 'DELETE', { confirm: 'SUPPRIMER' });
               flash('Entreprise fermée');
               onSuccess();
             } catch (err) {
@@ -801,7 +801,7 @@ function EmployesTab({ detail, isPdg, api, flash, busy, onRefresh }: {
             <span className={`text-xs font-medium ${e.role === 'pdg' ? 'text-amber-400' : e.role === 'technicien' ? 'text-violet-400' : 'text-sky-400'}`}>{e.role}</span>
             {e.specialite && <span className="text-xs text-slate-500">({e.specialite})</span>}
           </div>
-          {isPdg && e.role !== 'pdg' && (
+          {isPdg && e.role !== 'pdg' && e.user_id !== detail.pdg_id && (
             <button disabled={busy} onClick={async () => {
               try { await api(`/api/reparation/employes?id=${e.id}`, 'DELETE'); flash('Employé licencié'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
             }} className="text-red-400 hover:text-red-300 disabled:opacity-50"><Trash2 className="h-4 w-4" /></button>

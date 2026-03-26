@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function GET(request: Request) {
   try {
@@ -53,7 +54,8 @@ export async function POST(request: Request) {
       .single();
     if (!compagnieLoueur) return NextResponse.json({ error: 'Compagnie loueur introuvable.' }, { status: 404 });
 
-    if (compagnieLoueur.pdg_id !== user.id) {
+    const isLeaderLoueur = compagnieLoueur.pdg_id === user.id || await isCoPdg(user.id, compagnieLoueur.id, admin);
+    if (!isLeaderLoueur) {
       return NextResponse.json({ error: 'Seul le PDG peut proposer une location.' }, { status: 403 });
     }
 

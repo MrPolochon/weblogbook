@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function GET(request: Request) {
   try {
@@ -55,7 +56,7 @@ export async function GET(request: Request) {
       if (avion.type_avion_id) {
         const { data: typeData } = await admin
           .from('types_avion')
-          .select('id, nom, constructeur')
+          .select('id, nom, constructeur, prix')
           .eq('id', avion.type_avion_id)
           .single();
         types_avion = typeData;
@@ -116,7 +117,10 @@ export async function POST(request: Request) {
     if (!compagnie) return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
     
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (compagnie.pdg_id !== user.id && profile?.role !== 'admin') {
+    const isLeader =
+      compagnie.pdg_id === user.id ||
+      (await isCoPdg(user.id, compagnie_id, admin));
+    if (!isLeader && profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Seul le PDG peut gérer les avions' }, { status: 403 });
     }
 

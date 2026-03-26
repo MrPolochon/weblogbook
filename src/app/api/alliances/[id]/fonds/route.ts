@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getLeaderCompagnieIds } from '@/lib/co-pdg-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,8 +12,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const admin = createAdminClient();
-  const { data: myComps } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
-  const myCompIds = (myComps || []).map(c => c.id);
+  const myCompIds = await getLeaderCompagnieIds(user.id, admin);
+  if (myCompIds.length === 0) return NextResponse.json({ error: 'Pas membre' }, { status: 403 });
   const { data: myMember } = await admin.from('alliance_membres')
     .select('role, compagnie_id')
     .eq('alliance_id', allianceId)
@@ -153,11 +154,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const admin = createAdminClient();
-  const { data: myComps } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
+  const myCompIdsPatch = await getLeaderCompagnieIds(user.id, admin);
+  if (myCompIdsPatch.length === 0) {
+    return NextResponse.json({ error: 'Droits insuffisants' }, { status: 403 });
+  }
   const { data: myMember } = await admin.from('alliance_membres')
     .select('role')
     .eq('alliance_id', allianceId)
-    .in('compagnie_id', (myComps || []).map(c => c.id))
+    .in('compagnie_id', myCompIdsPatch)
     .limit(1).single();
 
   if (!myMember || !['president', 'vice_president'].includes(myMember.role)) {

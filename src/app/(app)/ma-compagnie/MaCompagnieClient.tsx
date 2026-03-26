@@ -14,11 +14,12 @@ import CompagniePretClient from './CompagniePretClient';
 import CompagnieLocationsClient from './CompagnieLocationsClient';
 import CompagnieAutorisationsClient from './CompagnieAutorisationsClient';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
+import { toast } from 'sonner';
 
 interface CompagnieOption {
   id: string;
   nom: string;
-  role: 'employe' | 'pdg';
+  role: 'employe' | 'pdg' | 'co_pdg';
 }
 
 interface Compagnie {
@@ -40,6 +41,7 @@ interface Employe {
   piloteId: string;
   identifiant: string;
   heures: number;
+  role: string;
 }
 
 interface Props {
@@ -48,6 +50,7 @@ interface Props {
   compagnie: Compagnie;
   employes: Employe[];
   isPdg: boolean;
+  isLeader?: boolean;
   soldeCompagnie: number;
 }
 
@@ -64,8 +67,10 @@ export default function MaCompagnieClient({
   compagnie, 
   employes, 
   isPdg,
+  isLeader: isLeaderProp,
   soldeCompagnie 
 }: Props) {
+  const isLeader = isLeaderProp ?? isPdg;
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [showSettings, setShowSettings] = useState(false);
@@ -94,6 +99,27 @@ export default function MaCompagnieClient({
   const [invitationsEnvoyees, setInvitationsEnvoyees] = useState<Array<{id: string; pilote: {id: string; identifiant: string}; statut: string; created_at: string}>>([]);
   const [loadingInvitations, setLoadingInvitations] = useState(false);
   const [quittingAlliance, setQuittingAlliance] = useState(false);
+  const [roleLoading, setRoleLoading] = useState<string | null>(null);
+
+  async function handleChangeRole(empId: string, newRole: 'employe' | 'co_pdg') {
+    const label = newRole === 'co_pdg' ? 'Promouvoir en co-PDG' : 'Rétrograder en employé';
+    if (!confirm(`${label} ?`)) return;
+    setRoleLoading(empId);
+    try {
+      const res = await fetch('/api/compagnies/employes', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: empId, role: newRole }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setRoleLoading(null);
+    }
+  }
 
   // Charger les invitations envoyées
   const loadInvitations = useCallback(async () => {
@@ -117,10 +143,10 @@ export default function MaCompagnieClient({
   }, [compagnie.id]);
 
   useEffect(() => {
-    if (isPdg && compagnie.id) {
+    if (isLeader && compagnie.id) {
       loadInvitations();
     }
-  }, [isPdg, compagnie.id, loadInvitations]);
+  }, [isLeader, compagnie.id, loadInvitations]);
 
   // Recherche de pilotes
   async function handleSearchPilote(query: string) {
@@ -327,7 +353,7 @@ export default function MaCompagnieClient({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {isPdg && (
+          {isLeader && (
             <>
               <button
                 onClick={() => setShowSettings(!showSettings)}
@@ -346,27 +372,29 @@ export default function MaCompagnieClient({
                     <Users className="h-4 w-4" />
                     Alliance
                   </Link>
-                  <button
-                    onClick={handleQuitterAlliance}
-                    disabled={quittingAlliance}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-900/30 text-red-300 hover:bg-red-900/50 disabled:opacity-50"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    {quittingAlliance ? 'En cours…' : 'Quitter l\'alliance'}
-                  </button>
+                  {isPdg && (
+                    <button
+                      onClick={handleQuitterAlliance}
+                      disabled={quittingAlliance}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-900/30 text-red-300 hover:bg-red-900/50 disabled:opacity-50"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      {quittingAlliance ? 'En cours…' : 'Quitter l\'alliance'}
+                    </button>
+                  )}
                 </>
               )}
-              <span className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/20 text-amber-300 rounded-full text-sm font-medium">
+              <span className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${isPdg ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'}`}>
                 <Crown className="h-4 w-4" />
-                PDG
+                {isPdg ? 'PDG' : 'Co-PDG'}
               </span>
             </>
           )}
         </div>
       </div>
 
-      {/* Paramètres PDG */}
-      {isPdg && showSettings && (
+      {/* Paramètres PDG / Co-PDG */}
+      {isLeader && showSettings && (
         <div className="card border-sky-500/30 bg-sky-500/5">
           <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
             <Settings className="h-5 w-5 text-sky-400" />
@@ -596,7 +624,7 @@ export default function MaCompagnieClient({
               <Users className="h-5 w-5 text-sky-400" />
               Pilotes ({employes.length})
             </h2>
-            {isPdg && (
+            {isLeader && (
               <button
                 onClick={() => setShowRecrutement(!showRecrutement)}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
@@ -617,11 +645,41 @@ export default function MaCompagnieClient({
                   key={emp.id} 
                   className="flex items-center justify-between bg-slate-800/30 rounded-lg p-3 border border-slate-700/30"
                 >
-                  <span className="text-slate-200 font-medium">{emp.identifiant}</span>
-                  <span className="text-sm text-slate-400 flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5" />
-                    {formatHeures(emp.heures)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-200 font-medium">{emp.identifiant}</span>
+                    {emp.role === 'co_pdg' && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                        Co-PDG
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-400 flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5" />
+                      {formatHeures(emp.heures)}
+                    </span>
+                    {isPdg && (
+                      emp.role === 'co_pdg' ? (
+                        <button
+                          onClick={() => handleChangeRole(emp.id, 'employe')}
+                          disabled={roleLoading === emp.id}
+                          className="text-[11px] text-red-400 hover:text-red-300 disabled:opacity-50"
+                          title="Rétrograder en employé"
+                        >
+                          {roleLoading === emp.id ? '…' : 'Rétrograder'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleChangeRole(emp.id, 'co_pdg')}
+                          disabled={roleLoading === emp.id}
+                          className="text-[11px] text-amber-400 hover:text-amber-300 disabled:opacity-50"
+                          title="Promouvoir co-PDG"
+                        >
+                          {roleLoading === emp.id ? '…' : 'Co-PDG'}
+                        </button>
+                      )
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -631,8 +689,8 @@ export default function MaCompagnieClient({
         </div>
       </div>
 
-      {/* Section Recrutement (PDG uniquement) */}
-      {isPdg && showRecrutement && (
+      {/* Section Recrutement */}
+      {isLeader && showRecrutement && (
         <div className="card border-emerald-500/30 bg-emerald-500/5">
           <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
             <UserPlus className="h-5 w-5 text-emerald-400" />
@@ -779,7 +837,7 @@ export default function MaCompagnieClient({
       )}
 
       {/* Solde compagnie */}
-      {isPdg && (
+      {isLeader && (
         <div className="card bg-gradient-to-r from-emerald-500/10 to-sky-500/10 border-emerald-500/20">
           <div className="flex items-center justify-between">
             <div>
@@ -799,28 +857,28 @@ export default function MaCompagnieClient({
       )}
 
       {/* Prêt bancaire */}
-      {isPdg && <CompagniePretClient compagnieId={compagnie.id} />}
+      {isLeader && <CompagniePretClient compagnieId={compagnie.id} />}
 
       {/* Locations d'avions */}
-      {isPdg && <CompagnieLocationsClient compagnieId={compagnie.id} />}
+      {isLeader && <CompagnieLocationsClient compagnieId={compagnie.id} />}
 
       {/* Hubs */}
-      {isPdg && <CompagnieHubsClient compagnieId={compagnie.id} />}
+      {isLeader && <CompagnieHubsClient compagnieId={compagnie.id} />}
 
       {/* Autorisations d'exploitation */}
-      <CompagnieAutorisationsClient compagnieId={compagnie.id} isPdg={isPdg} />
+      <CompagnieAutorisationsClient compagnieId={compagnie.id} isPdg={isLeader} />
 
       {/* Reparations en cours */}
-      <CompagnieReparationsClient compagnieId={compagnie.id} isPdg={isPdg} />
+      <CompagnieReparationsClient compagnieId={compagnie.id} isPdg={isLeader} />
 
       {/* Flotte individuelle */}
-      <CompagnieAvionsClient compagnieId={compagnie.id} soldeCompagnie={soldeCompagnie} isPdg={isPdg} allianceId={compagnie.alliance_id} />
+      <CompagnieAvionsClient compagnieId={compagnie.id} soldeCompagnie={soldeCompagnie} isPdg={isLeader} allianceId={compagnie.alliance_id} />
 
-      {/* Vols Ferry (PDG uniquement) */}
-      {isPdg && <CompagnieVolsFerryClient compagnieId={compagnie.id} />}
+      {/* Vols Ferry */}
+      {isLeader && <CompagnieVolsFerryClient compagnieId={compagnie.id} />}
 
-      {/* Tarifs par liaison (PDG uniquement) */}
-      {isPdg && (
+      {/* Tarifs par liaison */}
+      {isLeader && (
         <div className="card">
           <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
             <Route className="h-5 w-5 text-amber-400" />
@@ -833,8 +891,8 @@ export default function MaCompagnieClient({
         </div>
       )}
 
-      {/* Lien vers Felitz Bank si PDG */}
-      {isPdg && (
+      {/* Lien vers Felitz Bank */}
+      {isLeader && (
         <Link 
           href="/felitz-bank"
           className="card hover:bg-slate-800/70 transition-colors flex items-center gap-4"

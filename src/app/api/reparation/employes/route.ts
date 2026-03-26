@@ -58,13 +58,18 @@ export async function DELETE(req: Request) {
     .select('id, entreprise_id, user_id, role')
     .eq('id', employeId).single();
   if (!employe) return NextResponse.json({ error: 'Employé introuvable' }, { status: 404 });
-  if (employe.role === 'pdg') return NextResponse.json({ error: 'Impossible de licencier le PDG' }, { status: 400 });
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   const isAdmin = profile?.role === 'admin';
   const { data: ent } = await admin.from('entreprises_reparation').select('pdg_id').eq('id', employe.entreprise_id).single();
-  const isPdg = ent && String(ent.pdg_id) === String(user.id);
-  if (!ent || (!isPdg && !isAdmin)) return NextResponse.json({ error: 'Seul le PDG peut licencier' }, { status: 403 });
+  if (!ent) return NextResponse.json({ error: 'Entreprise introuvable' }, { status: 404 });
+
+  if (employe.role === 'pdg' || String(ent.pdg_id) === String(employe.user_id)) {
+    return NextResponse.json({ error: 'Impossible de licencier le PDG' }, { status: 400 });
+  }
+
+  const isPdg = String(ent.pdg_id) === String(user.id);
+  if (!isPdg && !isAdmin) return NextResponse.json({ error: 'Seul le PDG peut licencier' }, { status: 403 });
 
   await admin.from('reparation_employes').delete().eq('id', employeId);
   return NextResponse.json({ ok: true });

@@ -56,15 +56,26 @@ export default async function FelitzBankPage() {
     .eq('type', 'personnel')
     .single();
 
-  // Compagnies dont l'utilisateur est PDG
+  // Compagnies dont l'utilisateur est PDG ou co-PDG
   const { data: compagniesPdg } = await admin.from('compagnies')
     .select('id, nom, vban')
     .eq('pdg_id', user.id);
+  const { data: coPdgEmps } = await admin.from('compagnie_employes')
+    .select('compagnie_id')
+    .eq('pilote_id', user.id)
+    .eq('role', 'co_pdg');
+  const coPdgIds = (coPdgEmps || []).map(e => e.compagnie_id);
+  let compagniesCoPdg: Array<{ id: string; nom: string; vban: string | null }> = [];
+  if (coPdgIds.length > 0) {
+    const { data } = await admin.from('compagnies').select('id, nom, vban').in('id', coPdgIds);
+    compagniesCoPdg = data || [];
+  }
+  const allLeaderComps = [...(compagniesPdg || []), ...compagniesCoPdg];
 
   // Comptes entreprises
   let comptesEntreprise: Array<{ id: string; vban: string; solde: number; compagnie_id: string; compagnies: { nom: string } | null }> = [];
-  if (compagniesPdg && compagniesPdg.length > 0) {
-    const compagnieIds = compagniesPdg.map(c => c.id);
+  if (allLeaderComps.length > 0) {
+    const compagnieIds = allLeaderComps.map(c => c.id);
     const { data } = await admin.from('felitz_comptes')
       .select('*, compagnies(nom)')
       .eq('type', 'entreprise')

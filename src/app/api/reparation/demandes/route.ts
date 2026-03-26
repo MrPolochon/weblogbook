@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,8 @@ export async function GET(req: Request) {
     const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', compagnieId).single();
     if (!comp) return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
     const { data: empCheck } = await admin.from('compagnie_employes').select('id').eq('compagnie_id', compagnieId).eq('pilote_id', user.id).limit(1);
-    if (comp.pdg_id !== user.id && !empCheck?.length) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+    const isLeader = comp.pdg_id === user.id || (await isCoPdg(user.id, compagnieId, admin));
+    if (!isLeader && !empCheck?.length) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
 
     const { data } = await admin.from('reparation_demandes')
       .select('*, entreprises_reparation(id, nom), compagnie_avions(id, immatriculation, nom)')
@@ -52,7 +54,8 @@ export async function POST(req: Request) {
   const { data: comp } = await admin.from('compagnies').select('id, pdg_id, nom').eq('id', compagnie_id).single();
   if (!comp) return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
   const { data: empCheck } = await admin.from('compagnie_employes').select('id').eq('compagnie_id', compagnie_id).eq('pilote_id', user.id).limit(1);
-  if (comp.pdg_id !== user.id && !empCheck?.length) return NextResponse.json({ error: 'Seul le PDG ou un employé peut demander une réparation' }, { status: 403 });
+  const isLeader = comp.pdg_id === user.id || (await isCoPdg(user.id, compagnie_id, admin));
+  if (!isLeader && !empCheck?.length) return NextResponse.json({ error: 'Seul le PDG ou un employé peut demander une réparation' }, { status: 403 });
 
   const { data: avion } = await admin.from('compagnie_avions')
     .select('id, immatriculation, nom, usure, compagnie_id, detruit, bloque_incident')

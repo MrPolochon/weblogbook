@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getLeaderCompagnieIds } from '@/lib/co-pdg-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,9 +12,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const admin = createAdminClient();
-  const compagnieIds: string[] = [];
-  const { data: pdg } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
-  (pdg || []).forEach(r => compagnieIds.push(r.id));
+  const leaderCompIds = await getLeaderCompagnieIds(user.id, admin);
+  const compagnieIds: string[] = [...leaderCompIds];
   const { data: emp } = await admin.from('compagnie_employes').select('compagnie_id').eq('pilote_id', user.id);
   (emp || []).forEach(r => { if (r.compagnie_id && !compagnieIds.includes(r.compagnie_id)) compagnieIds.push(r.compagnie_id); });
 
@@ -28,7 +28,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const isAdmin = (await admin.from('profiles').select('role').eq('id', user.id).single()).data?.role === 'admin';
   if ((!myMembers || myMembers.length === 0) && !isAdmin) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
 
-  const pdgCompagnieIds = (pdg || []).map(r => r.id);
+  const pdgCompagnieIds = leaderCompIds;
   const myMember = myMembers?.[0] ?? null;
   const myAllCompagnieIds = (myMembers || []).map(m => m.compagnie_id);
   const myCompagnieIds = myAllCompagnieIds.filter(cid => pdgCompagnieIds.includes(cid));
@@ -198,11 +198,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const admin = createAdminClient();
-  const { data: myMember } = await admin.from('alliance_membres')
-    .select('role, compagnie_id')
-    .eq('alliance_id', id)
-    .in('compagnie_id', (await admin.from('compagnies').select('id').eq('pdg_id', user.id)).data?.map(c => c.id) || [])
-    .limit(1).single();
+  const myLeaderIds = await getLeaderCompagnieIds(user.id, admin);
+  const { data: myMember } = myLeaderIds.length === 0
+    ? { data: null as { role: string; compagnie_id: string } | null }
+    : await admin.from('alliance_membres')
+        .select('role, compagnie_id')
+        .eq('alliance_id', id)
+        .in('compagnie_id', myLeaderIds)
+        .limit(1)
+        .single();
 
   if (!myMember || !['president', 'vice_president'].includes(myMember.role)) {
     return NextResponse.json({ error: 'Seul le président ou VP peut modifier l\'alliance' }, { status: 403 });
@@ -229,11 +233,15 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const admin = createAdminClient();
-  const { data: myMember } = await admin.from('alliance_membres')
-    .select('role, compagnie_id')
-    .eq('alliance_id', id)
-    .in('compagnie_id', (await admin.from('compagnies').select('id').eq('pdg_id', user.id)).data?.map(c => c.id) || [])
-    .limit(1).single();
+  const myLeaderIds = await getLeaderCompagnieIds(user.id, admin);
+  const { data: myMember } = myLeaderIds.length === 0
+    ? { data: null as { role: string; compagnie_id: string } | null }
+    : await admin.from('alliance_membres')
+        .select('role, compagnie_id')
+        .eq('alliance_id', id)
+        .in('compagnie_id', myLeaderIds)
+        .limit(1)
+        .single();
 
   const isAdmin = (await admin.from('profiles').select('role').eq('id', user.id).single()).data?.role === 'admin';
   if ((!myMember || myMember.role !== 'president') && !isAdmin) {

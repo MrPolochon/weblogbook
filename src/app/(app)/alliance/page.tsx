@@ -12,7 +12,7 @@ export default async function AlliancePage() {
   const compagnieIds: string[] = [];
   const { data: pdgRows } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
   (pdgRows || []).forEach((r) => compagnieIds.push(r.id));
-  const { data: empRows } = await admin.from('compagnie_employes').select('compagnie_id').eq('pilote_id', user.id);
+  const { data: empRows } = await admin.from('compagnie_employes').select('compagnie_id, role').eq('pilote_id', user.id);
   (empRows || []).forEach((r) => { if (r.compagnie_id && !compagnieIds.includes(r.compagnie_id)) compagnieIds.push(r.compagnie_id); });
 
   const compagniesSansAlliance: { id: string; nom: string }[] = [];
@@ -21,7 +21,11 @@ export default async function AlliancePage() {
     (comps || []).forEach((c) => { const row = c as { id: string; nom: string; alliance_id?: string | null }; if (!row.alliance_id) compagniesSansAlliance.push({ id: row.id, nom: row.nom }); });
   }
 
-  const pdgCompagnieIds = (pdgRows || []).map((r) => r.id);
+  const coPdgCompIds = (empRows || []).filter((e) => e.role === 'co_pdg').map((e) => e.compagnie_id);
+  const pdgCompagnieIds = [
+    ...(pdgRows || []).map((r) => r.id),
+    ...coPdgCompIds,
+  ];
 
   return (
     <AllianceClient

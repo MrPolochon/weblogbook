@@ -80,6 +80,50 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// PATCH - Changer le rôle d'un employé (PDG de la compagnie uniquement)
+export async function PATCH(req: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+    const body = await req.json();
+    const { id, role } = body;
+    if (!id || !role || !['employe', 'co_pdg'].includes(role)) {
+      return NextResponse.json({ error: 'id et role (employe | co_pdg) requis' }, { status: 400 });
+    }
+
+    const admin = createAdminClient();
+
+    const { data: employe } = await admin.from('compagnie_employes')
+      .select('id, compagnie_id, pilote_id, role')
+      .eq('id', id)
+      .single();
+    if (!employe) return NextResponse.json({ error: 'Employé introuvable' }, { status: 404 });
+
+    const { data: compagnie } = await admin.from('compagnies')
+      .select('id, pdg_id')
+      .eq('id', employe.compagnie_id)
+      .single();
+    if (!compagnie) return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
+
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    if (compagnie.pdg_id !== user.id && profile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Seul le PDG peut modifier les rôles' }, { status: 403 });
+    }
+
+    const { error } = await admin.from('compagnie_employes')
+      .update({ role })
+      .eq('id', id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    return NextResponse.json({ ok: true, role });
+  } catch (e) {
+    console.error('Compagnie employes PATCH:', e);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  }
+}
+
 // DELETE - Retirer un employé d'une compagnie (admin uniquement)
 export async function DELETE(req: NextRequest) {
   try {

@@ -118,6 +118,89 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
+    // ===== Branche modification vol militaire =====
+    if (body.type_vol === 'Vol militaire' || body._edit_militaire) {
+      const adminMil = createAdminClient();
+      const { data: volMil } = await adminMil.from('vols')
+        .select('id, pilote_id, copilote_id, chef_escadron_id, statut, type_vol, mission_id')
+        .eq('id', id).single();
+      if (!volMil) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
+      if (volMil.type_vol !== 'Vol militaire') return NextResponse.json({ error: 'Ce vol n\'est pas un vol militaire.' }, { status: 400 });
+      if (volMil.statut !== 'en_attente' && !isAdmin) return NextResponse.json({ error: 'Seuls les vols en attente peuvent être modifiés.' }, { status: 400 });
+
+      const isMilAuthorized = volMil.pilote_id === user.id || volMil.copilote_id === user.id || volMil.chef_escadron_id === user.id || isAdmin;
+      if (!isMilAuthorized) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+
+      const {
+        armee_avion_id, aeroport_depart: milDep, aeroport_arrivee: milArr, duree_minutes: milDuree,
+        depart_utc: milDepUtc, escadrille_ou_escadron: milEsc, nature_vol_militaire: milNature,
+        nature_vol_militaire_autre: milNatureAutre, commandant_bord: milCmdt,
+        callsign: milCallsign, copilote_id: milCopiloteId, chef_escadron_id: milChefId,
+        equipage_ids: milEquipageIds,
+      } = body;
+
+      if (!milDep || !milArr || typeof milDuree !== 'number' || milDuree < 1 || !milDepUtc || !milCmdt) {
+        return NextResponse.json({ error: 'Champs requis manquants.' }, { status: 400 });
+      }
+
+      if (volMil.mission_id) {
+        const mission = ARME_MISSIONS.find(m => m.id === volMil.mission_id);
+        if (mission) {
+          if (milDep !== mission.aeroport_depart || milArr !== mission.aeroport_arrivee || milDuree !== mission.duree_minutes) {
+            return NextResponse.json({ error: 'Le plan de vol doit correspondre à la mission.' }, { status: 400 });
+          }
+        }
+      }
+
+      let typeAvionMil: string | null = null;
+      if (armee_avion_id) {
+        const { data: inv } = await adminMil.from('armee_avions')
+          .select('id, nom_personnalise, types_avion(nom, code_oaci)')
+          .eq('id', armee_avion_id).single();
+        if (!inv) return NextResponse.json({ error: 'Avion militaire introuvable.' }, { status: 400 });
+        const t = inv.types_avion ? (Array.isArray(inv.types_avion) ? inv.types_avion[0] : inv.types_avion) : null;
+        typeAvionMil = inv.nom_personnalise || t?.nom || 'Avion militaire';
+      }
+
+      const milDepStr = /Z$/.test(String(milDepUtc)) ? String(milDepUtc) : String(milDepUtc) + 'Z';
+      const milDepDate = parseISO(milDepStr);
+      const milArrDate = addMinutes(milDepDate, milDuree);
+
+      const milUpdates: Record<string, unknown> = {
+        aeroport_depart: String(milDep).toUpperCase(),
+        aeroport_arrivee: String(milArr).toUpperCase(),
+        duree_minutes: milDuree,
+        depart_utc: milDepDate.toISOString(),
+        arrivee_utc: milArrDate.toISOString(),
+        commandant_bord: String(milCmdt).trim(),
+        callsign: milCallsign ? String(milCallsign).trim() : null,
+      };
+
+      if (armee_avion_id) {
+        milUpdates.armee_avion_id = armee_avion_id;
+        milUpdates.type_avion_militaire = typeAvionMil;
+      }
+      if (milEsc) milUpdates.escadrille_ou_escadron = milEsc;
+      if (milNature !== undefined) milUpdates.nature_vol_militaire = milNature;
+      if (milNatureAutre !== undefined) milUpdates.nature_vol_militaire_autre = milNatureAutre || null;
+      if (milCopiloteId !== undefined) milUpdates.copilote_id = milCopiloteId || null;
+      if (milChefId !== undefined) milUpdates.chef_escadron_id = milChefId || null;
+
+      const { error: milErr } = await adminMil.from('vols').update(milUpdates).eq('id', id);
+      if (milErr) return NextResponse.json({ error: milErr.message }, { status: 400 });
+
+      if (milEquipageIds !== undefined) {
+        await adminMil.from('vols_equipage_militaire').delete().eq('vol_id', id);
+        if (Array.isArray(milEquipageIds) && milEquipageIds.length > 0) {
+          await adminMil.from('vols_equipage_militaire').insert(
+            milEquipageIds.map((pid: string) => ({ vol_id: id, profile_id: pid }))
+          );
+        }
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
     const { data: vol } = await supabase.from('vols').select('pilote_id, copilote_id, copilote_confirme_par_pilote, instructeur_id, statut, refusal_count').eq('id', id).single();
     if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
     const isPiloteOrCopilote = vol.pilote_id === user.id || vol.copilote_id === user.id;

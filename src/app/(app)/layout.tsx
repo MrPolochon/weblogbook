@@ -29,16 +29,17 @@ export default async function AppLayout({
   const isArmee = Boolean(profile?.armee);
   const isIfsa = Boolean(profile?.ifsa);
 
-  // Vérifier si PDG ou employé d'une compagnie
+  // Vérifier si PDG, co-PDG ou employé d'une compagnie
   let isPdg = false;
   let hasCompagnie = false;
   try {
     const admin = createAdminClient();
     const [{ data: pdgData }, { data: employeData }] = await Promise.all([
       admin.from('compagnies').select('id').eq('pdg_id', user.id).limit(1),
-      admin.from('compagnie_employes').select('id').eq('pilote_id', user.id).limit(1),
+      admin.from('compagnie_employes').select('id, role').eq('pilote_id', user.id).limit(10),
     ]);
-    isPdg = (pdgData?.length ?? 0) > 0;
+    const hasCoPdg = (employeData || []).some((e: { role?: string }) => e.role === 'co_pdg');
+    isPdg = (pdgData?.length ?? 0) > 0 || hasCoPdg;
     hasCompagnie = isPdg || (employeData?.length ?? 0) > 0;
   } catch {
     // Tables may not exist yet
@@ -125,8 +126,14 @@ export default async function AppLayout({
   if (hasCompagnie) {
     try {
       const admin = createAdminClient();
-      const { data: myComps } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
-      const compIds = (myComps || []).map((c: { id: string }) => c.id);
+      const [{ data: myPdgComps }, { data: myCoPdgComps }] = await Promise.all([
+        admin.from('compagnies').select('id').eq('pdg_id', user.id),
+        admin.from('compagnie_employes').select('compagnie_id').eq('pilote_id', user.id).eq('role', 'co_pdg'),
+      ]);
+      const compIds = [
+        ...(myPdgComps || []).map((c: { id: string }) => c.id),
+        ...(myCoPdgComps || []).map((c: { compagnie_id: string }) => c.compagnie_id),
+      ];
       if (compIds.length > 0) {
         const { count } = await admin.from('alliance_invitations')
           .select('*', { count: 'exact', head: true })

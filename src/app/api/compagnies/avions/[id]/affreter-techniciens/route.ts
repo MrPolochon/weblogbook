@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { COUT_AFFRETER_TECHNICIENS, calculerDureeMaintenance } from '@/lib/compagnie-utils';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function POST(
   _request: Request,
@@ -76,7 +77,10 @@ export async function POST(
       .single();
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     
-    if (compagnie?.pdg_id !== user.id && profile?.role !== 'admin') {
+    const isLeader =
+      compagnie?.pdg_id === user.id ||
+      (await isCoPdg(user.id, compagnieCibleId, admin));
+    if (!isLeader && profile?.role !== 'admin') {
       if (locationActive) {
         return NextResponse.json({ error: 'Avion en location : le PDG locataire gère la maintenance.' }, { status: 403 });
       }

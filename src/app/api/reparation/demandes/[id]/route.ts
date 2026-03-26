@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +46,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { action } = body;
 
   async function isEntrepriseStaff(): Promise<boolean> {
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user!.id).single();
+    if (profile?.role === 'admin') return true;
     const { data: emp } = await admin.from('reparation_employes')
       .select('id').eq('entreprise_id', demande.entreprise_id).eq('user_id', user!.id).limit(1);
     return !!emp?.length;
@@ -52,8 +55,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   async function isCompagniePdg(): Promise<boolean> {
     const { data: comp } = await admin.from('compagnies')
-      .select('pdg_id').eq('id', demande.compagnie_id).single();
-    return comp?.pdg_id === user!.id;
+      .select('id, pdg_id').eq('id', demande.compagnie_id).single();
+    if (!comp) return false;
+    if (comp.pdg_id === user!.id) return true;
+    return isCoPdg(user!.id, comp.id, admin);
   }
 
   if (action === 'accepter') {
@@ -121,8 +126,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!['en_reparation', 'mini_jeux'].includes(demande.statut)) return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
 
     const { data: scores } = await admin.from('reparation_mini_jeux_scores')
-      .select('score').eq('demande_id', id);
-    const scoresMoyenne = scores?.length ? Math.round(scores.reduce((s, sc) => s + sc.score, 0) / scores.length) : 75;
+      .select('score, type_jeu').eq('demande_id', id);
+
+    const requiredGames = ['inspection', 'calibrage', 'assemblage', 'test_moteur'];
+    const completedGames = new Set((scores || []).map(s => s.type_jeu));
+    const missingGames = requiredGames.filter(g => !completedGames.has(g));
+    if (missingGames.length > 0) {
+      return NextResponse.json({
+        error: `Mini-jeux incomplets : ${missingGames.join(', ')}. Tous les 4 mini-jeux doivent être complétés.`
+      }, { status: 400 });
+    }
+
+    const scoresMoyenne = Math.round((scores || []).reduce((s, sc) => s + sc.score, 0) / (scores?.length || 1));
 
     let usureApres = 0;
     if (scoresMoyenne >= 90) usureApres = 0;

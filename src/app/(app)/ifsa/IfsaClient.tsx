@@ -1103,11 +1103,14 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                         <div className="mt-3">
                           <p className="text-xs text-slate-400 mb-1">Transactions récentes</p>
                           {compagnieData.transactions && compagnieData.transactions.length > 0 ? (
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {compagnieData.transactions.map((t) => (
-                                <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1">
-                                  <span className="text-slate-400 break-all">{t.libelle || t.description || '—'}</span>
-                                  <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>
+                            <div className="space-y-1 max-h-72 overflow-y-auto">
+                              {compagnieData.transactions.map((t: { id: string; type: string; montant: number; libelle?: string; description?: string | null; created_at: string }) => (
+                                <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1 gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-slate-400 break-all text-xs">{t.libelle || t.description || '—'}</span>
+                                    <span className="text-[10px] text-slate-600 ml-2">{new Date(t.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                                  </div>
+                                  <span className={`whitespace-nowrap font-medium ${t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}`}>
                                     {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
                                   </span>
                                 </div>
@@ -1296,11 +1299,14 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                         <div className="mt-3">
                           <p className="text-xs text-slate-400 mb-1">Transactions récentes</p>
                           {piloteData.transactions && piloteData.transactions.length > 0 ? (
-                            <div className="space-y-2 max-h-48 overflow-y-auto">
-                              {piloteData.transactions.map((t) => (
-                                <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1">
-                                  <span className="text-slate-400 break-all">{t.libelle || t.description || '—'}</span>
-                                  <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>
+                            <div className="space-y-1 max-h-72 overflow-y-auto">
+                              {piloteData.transactions.map((t: { id: string; type: string; montant: number; libelle?: string; description?: string | null; created_at: string }) => (
+                                <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1 gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-slate-400 break-all text-xs">{t.libelle || t.description || '—'}</span>
+                                    <span className="text-[10px] text-slate-600 ml-2">{new Date(t.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                                  </div>
+                                  <span className={`whitespace-nowrap font-medium ${t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}`}>
                                     {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
                                   </span>
                                 </div>

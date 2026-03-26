@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { OPTIONS_PRETS, calculerMontantTotalPret, TAUX_PRELEVEMENT_PRET } from '@/lib/compagnie-utils';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 // PATCH - Rembourser manuellement une partie du prêt
 export async function PATCH(
@@ -36,7 +37,7 @@ export async function PATCH(
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     const isAdmin = profile?.role === 'admin';
-    const isPdg = compagnie.pdg_id === user.id;
+    const isPdg = compagnie.pdg_id === user.id || await isCoPdg(user.id, id, admin);
 
     if (!isPdg && !isAdmin) {
       return NextResponse.json({ error: 'Seul le PDG peut rembourser le prêt' }, { status: 403 });
@@ -155,7 +156,7 @@ export async function GET(
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     const isAdmin = profile?.role === 'admin';
-    const isPdg = compagnie.pdg_id === user.id;
+    const isPdg = compagnie.pdg_id === user.id || await isCoPdg(user.id, id, admin);
 
     if (!isPdg && !isAdmin) {
       return NextResponse.json({ error: 'Accès réservé au PDG' }, { status: 403 });
@@ -227,7 +228,7 @@ export async function POST(
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     const isAdmin = profile?.role === 'admin';
-    const isPdg = compagnie.pdg_id === user.id;
+    const isPdg = compagnie.pdg_id === user.id || await isCoPdg(user.id, id, admin);
 
     if (!isPdg && !isAdmin) {
       return NextResponse.json({ error: 'Seul le PDG peut demander un prêt' }, { status: 403 });

@@ -4,11 +4,11 @@ import { useState, useEffect, useCallback, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Plane, Plus, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2, Handshake, Gift } from 'lucide-react';
-import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX } from '@/lib/compagnie-utils';
+import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX, FRACTION_REPARATION_HUB } from '@/lib/compagnie-utils';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
-type TypeAvion = { id: string; nom: string; constructeur: string };
+type TypeAvion = { id: string; nom: string; constructeur: string; prix?: number };
 type Hub = { aeroport_code: string };
 type Avion = {
   id: string;
@@ -113,12 +113,22 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
     }
   }, [compagnieId, isPdg, loadAvions, loadHubs]);
 
+  function getCoutReparationHub(avion: Avion): number {
+    const type = Array.isArray(avion.types_avion) ? avion.types_avion[0] : avion.types_avion;
+    return Math.round((type?.prix || 0) * FRACTION_REPARATION_HUB);
+  }
+
   async function handleReparer(avionId: string) {
+    const avion = avions.find(a => a.id === avionId);
+    if (!avion) return;
+    const cout = getCoutReparationHub(avion);
+    if (!confirm(`Réparer cet avion au hub ?\n\nCoût : ${cout.toLocaleString('fr-FR')} F$ (50% du prix de l'appareil)`)) return;
     setActionId(avionId);
     try {
       const res = await fetch(`/api/compagnies/avions/${avionId}/reparer`, { method: 'POST' });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
+      toast.success(`Avion réparé ! Coût : ${(d.cout || cout).toLocaleString('fr-FR')} F$`);
       startTransition(() => router.refresh());
       loadAvions();
     } catch (e) {
@@ -441,7 +451,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
             {avionsBloques.length} avion(s) bloqué(s) à 0% d&apos;usure
           </div>
           <p className="text-sm text-slate-400">
-            Affrétez des techniciens ({COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$) ou débloquez pour un vol ferry ({COUT_VOL_FERRY.toLocaleString('fr-FR')} F$).
+            Affrétez des techniciens ({COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$), débloquez pour un vol ferry ({COUT_VOL_FERRY.toLocaleString('fr-FR')} F$) ou réparez au hub (50% du prix de l&apos;appareil).
           </p>
         </div>
       )}
@@ -692,10 +702,10 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                       onClick={() => handleReparer(a.id)}
                                       disabled={actionId === a.id || (!isPdg && isLeasedIn)}
                                       className="text-xs text-sky-400 hover:underline disabled:opacity-50 inline-flex items-center gap-1"
-                                      title="Réparer au hub (gratuit)"
+                                      title={`Réparer au hub (${getCoutReparationHub(a).toLocaleString('fr-FR')} F$)`}
                                     >
                                       <Wrench className="h-3 w-3" />
-                                      Réparer
+                                      Réparer ({getCoutReparationHub(a).toLocaleString('fr-FR')} F$)
                                     </button>
                                   )}
                                   {canVerifierMaintenance && (
@@ -763,10 +773,10 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   onClick={() => handleReparer(a.id)}
                                   disabled={actionId === a.id || (!isPdg && isLeasedIn)}
                                   className="text-xs text-sky-400 hover:underline disabled:opacity-50 inline-flex items-center gap-1"
-                                  title="Réparer au hub (gratuit)"
+                                  title={`Réparer au hub (${getCoutReparationHub(a).toLocaleString('fr-FR')} F$)`}
                                 >
                                   <Wrench className="h-3 w-3" />
-                                  Réparer
+                                  Réparer ({getCoutReparationHub(a).toLocaleString('fr-FR')} F$)
                                 </button>
                               )}
                               {a.statut === 'ground' && a.usure_percent > 0 && !a.detruit && !isLeasedOut && isPdg && (

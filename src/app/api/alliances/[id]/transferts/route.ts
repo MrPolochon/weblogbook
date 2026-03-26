@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getLeaderCompagnieIds } from '@/lib/co-pdg-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,8 +12,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const admin = createAdminClient();
-  const { data: myComps } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
-  const myCompIds = (myComps || []).map(c => c.id);
+  const myCompIds = await getLeaderCompagnieIds(user.id, admin);
+  if (myCompIds.length === 0) return NextResponse.json({ error: 'Pas membre' }, { status: 403 });
   const { data: myMember } = await admin.from('alliance_membres')
     .select('role, compagnie_id')
     .eq('alliance_id', allianceId)
@@ -92,8 +93,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const admin = createAdminClient();
-  const { data: myComps } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
-  const myCompIds = (myComps || []).map(c => c.id);
+  const myCompIds = await getLeaderCompagnieIds(user.id, admin);
+  if (myCompIds.length === 0) return NextResponse.json({ error: 'Pas autorisé' }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
   const { transfert_id, action, compagnie_dest_id: claimCompagnieId } = body;
@@ -113,7 +114,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .select('id').eq('alliance_id', allianceId).eq('compagnie_id', destId).single();
   if (!destMember) return NextResponse.json({ error: 'Compagnie pas dans l\'alliance' }, { status: 400 });
 
-  if (!myCompIds.includes(destId)) return NextResponse.json({ error: 'Seul le PDG de la compagnie destinataire peut accepter' }, { status: 403 });
+  if (!myCompIds.includes(destId)) {
+    return NextResponse.json({ error: 'Seul le PDG ou le co-PDG de la compagnie destinataire peut accepter' }, { status: 403 });
+  }
 
   if (action === 'refuser') {
     await admin.from('alliance_transferts_avions').update({ statut: 'refuse', traite_at: new Date().toISOString() }).eq('id', transfert_id);

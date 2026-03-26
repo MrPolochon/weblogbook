@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const admin = createAdminClient();
   const { data: compagnie } = await admin.from('compagnies').select('id, pdg_id').eq('id', compagnie_id).single();
-  if (!compagnie || compagnie.pdg_id !== user.id) return NextResponse.json({ error: 'Seul le PDG peut faire quitter la compagnie' }, { status: 403 });
+  const canQuitter =
+    !!compagnie &&
+    (compagnie.pdg_id === user.id || (await isCoPdg(user.id, compagnie.id, admin)));
+  if (!canQuitter) {
+    return NextResponse.json({ error: 'Seul le PDG ou le co-PDG peut faire quitter la compagnie' }, { status: 403 });
+  }
 
   const { data: mem } = await admin.from('alliance_membres').select('alliance_id').eq('compagnie_id', compagnie_id).eq('alliance_id', allianceId).single();
   if (!mem) return NextResponse.json({ error: 'Cette compagnie n\'est pas dans cette alliance' }, { status: 400 });

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { calculerUsureFerry } from '@/lib/compagnie-utils';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function PATCH(
   request: Request,
@@ -31,7 +32,7 @@ export async function PATCH(
       .eq('id', vol.compagnie_id)
       .single();
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    const isPDG = compagnie?.pdg_id === user.id;
+    const isPDG = compagnie?.pdg_id === user.id || await isCoPdg(user.id, vol.compagnie_id, admin);
     const isAdmin = profile?.role === 'admin';
     const isPilote = vol.pilote_id === user.id;
 

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function POST(
   _request: Request,
@@ -48,7 +49,10 @@ export async function POST(
       return NextResponse.json({ error: 'Avion en location : débloquage interdit pour le loueur.' }, { status: 403 });
     }
 
-    if (compagnie?.pdg_id !== user.id && profile?.role !== 'admin') {
+    const isLeader =
+      compagnie?.pdg_id === user.id ||
+      (await isCoPdg(user.id, avion.compagnie_id, admin));
+    if (!isLeader && profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Seul le PDG peut débloquer un avion.' }, { status: 403 });
     }
 

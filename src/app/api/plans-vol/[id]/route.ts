@@ -695,6 +695,11 @@ export async function PATCH(
         statut: 'en_attente',
       }).select('id').single();
 
+      if (incErr) {
+        console.error('Erreur création incident_vol:', incErr);
+        return NextResponse.json({ error: 'Impossible de créer l\'incident.' }, { status: 500 });
+      }
+
       if (plan.compagnie_avion_id && incident) {
         await admin.from('compagnie_avions').update({ incident_id: incident.id }).eq('id', plan.compagnie_avion_id);
       }

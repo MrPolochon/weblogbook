@@ -95,7 +95,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -110,6 +110,22 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const isPdg = String(entreprise.pdg_id) === String(user.id);
   if (!isPdg && !isAdmin) {
     return NextResponse.json({ error: 'Seul le PDG ou un admin peut fermer l\'entreprise' }, { status: 403 });
+  }
+
+  const { count: activeCount } = await admin.from('reparation_demandes')
+    .select('*', { count: 'exact', head: true })
+    .eq('entreprise_id', id)
+    .not('statut', 'in', '("completee","refusee","annulee")');
+
+  if ((activeCount ?? 0) > 0) {
+    return NextResponse.json({
+      error: `Impossible de fermer l'entreprise : ${activeCount} demande(s) de réparation en cours. Terminez ou annulez-les d'abord.`
+    }, { status: 400 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  if (!isAdmin && body?.confirm !== 'SUPPRIMER') {
+    return NextResponse.json({ error: 'Confirmation requise.' }, { status: 400 });
   }
 
   await admin.from('entreprises_reparation').delete().eq('id', id);

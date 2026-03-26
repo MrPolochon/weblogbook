@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function DELETE(
   _request: Request,
@@ -106,7 +107,7 @@ export async function PATCH(
     // Vérifier si l'utilisateur est PDG de cette compagnie
     const admin = createAdminClient();
     const { data: compagnie } = await admin.from('compagnies').select('pdg_id').eq('id', id).single();
-    const isPdg = compagnie?.pdg_id === user.id;
+    const isPdg = compagnie?.pdg_id === user.id || await isCoPdg(user.id, id, admin);
     
     if (!isAdmin && !isPdg) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });

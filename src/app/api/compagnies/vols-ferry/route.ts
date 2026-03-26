@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { COUT_VOL_FERRY, calculerVolFerryAuto, calculerUsureFerry } from '@/lib/compagnie-utils';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function GET(request: Request) {
   try {
@@ -121,7 +122,8 @@ export async function POST(request: Request) {
     if (!compagnie) return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
     
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (compagnie.pdg_id !== user.id && profile?.role !== 'admin') {
+    const isLeader = compagnie.pdg_id === user.id || await isCoPdg(user.id, compagnie.id, admin);
+    if (!isLeader && profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Seul le PDG peut créer des vols ferry' }, { status: 403 });
     }
 

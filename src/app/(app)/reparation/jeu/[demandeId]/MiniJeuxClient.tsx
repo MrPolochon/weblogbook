@@ -28,7 +28,7 @@ const GAMES = [
   { key: 'test_moteur', label: 'Test Moteur', icon: Gauge, color: 'text-red-400' },
 ] as const;
 
-export default function MiniJeuxClient({ demandeId, userId }: { demandeId: string; userId: string }) {
+export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [demande, setDemande] = useState<DemandeInfo | null>(null);
@@ -167,6 +167,8 @@ function InspectionGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
   const [started, setStarted] = useState(false);
   const [finished, setFinished] = useState(false);
   const startTime = useRef(0);
+  const finishedRef = useRef(false);
+  const foundRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     const d = new Set<number>();
@@ -187,19 +189,21 @@ function InspectionGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
   }, [started, finished]);
 
   function finish() {
-    if (finished) return;
+    if (finishedRef.current) return;
+    finishedRef.current = true;
     setFinished(true);
-    const score = Math.round((found.size / TOTAL_DEFECTS) * 100);
+    const score = Math.round((foundRef.current.size / TOTAL_DEFECTS) * 100);
     const duration = Math.round((Date.now() - startTime.current) / 1000);
     onComplete({ type_jeu: 'inspection', score, duree_secondes: Math.max(duration, 10) });
   }
 
   function handleClick(idx: number) {
-    if (finished || clicked.has(idx)) return;
+    if (finishedRef.current || clicked.has(idx)) return;
     if (!started) { setStarted(true); startTime.current = Date.now(); }
     setClicked(prev => new Set(prev).add(idx));
     if (defects.has(idx)) {
-      const newFound = new Set(found).add(idx);
+      const newFound = new Set(foundRef.current).add(idx);
+      foundRef.current = newFound;
       setFound(newFound);
       if (newFound.size === TOTAL_DEFECTS) finish();
     }
@@ -466,26 +470,30 @@ function TestMoteurGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
   const totalFrames = useRef(0);
   const startTime = useRef(0);
   const animRef = useRef<number>(0);
+  const slidersRef = useRef(PARAMS.map(p => p.target));
+
+  useEffect(() => { slidersRef.current = sliders; }, [sliders]);
 
   const tick = useCallback(() => {
     if (!running || finished) return;
 
-    setFluctuations(PARAMS.map((p, i) => {
+    const newFluct = PARAMS.map((p, i) => {
       const t = Date.now() / 1000;
       return Math.sin(t * (1.5 + i * 0.7)) * (p.greenRange * 0.8) +
              Math.cos(t * (2.3 + i * 0.5)) * (p.greenRange * 0.3);
-    }));
+    });
+    setFluctuations(newFluct);
 
     totalFrames.current++;
     const allInGreen = PARAMS.every((p, i) => {
-      const actual = sliders[i] + fluctuations[i];
+      const actual = slidersRef.current[i] + newFluct[i];
       return Math.abs(actual - p.target) <= p.greenRange;
     });
     if (allInGreen) inGreenFrames.current++;
 
     animRef.current = requestAnimationFrame(tick);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, finished, sliders, fluctuations]);
+  }, [running, finished]);
 
   useEffect(() => {
     if (running && !finished) {

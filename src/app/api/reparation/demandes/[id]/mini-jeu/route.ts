@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +27,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { data: empComp } = await admin.from('compagnie_employes')
     .select('id').eq('compagnie_id', demande.compagnie_id).eq('pilote_id', user.id).limit(1);
   const isEmployeReparation = (emp?.length ?? 0) > 0;
-  const isClientPdg = comp?.pdg_id === user.id;
+  const isClientPdg =
+    comp?.pdg_id === user.id || (await isCoPdg(user.id, demande.compagnie_id, admin));
   const isClientEmploye = (empComp?.length ?? 0) > 0;
   if (!isEmployeReparation && !isClientPdg && !isClientEmploye) {
     return NextResponse.json({ error: 'Accès réservé aux employés de l\'entreprise de réparation ou au PDG/employés de la compagnie cliente' }, { status: 403 });

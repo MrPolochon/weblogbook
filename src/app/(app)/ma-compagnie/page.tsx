@@ -30,14 +30,23 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
     .eq('pdg_id', user.id);
 
   // Construire la liste de toutes les compagnies
-  type CompagnieOption = { id: string; nom: string; role: 'employe' | 'pdg' };
+  type CompagnieOption = { id: string; nom: string; role: 'employe' | 'pdg' | 'co_pdg' };
   const compagniesMap = new Map<string, CompagnieOption>();
+
+  // Récupérer les rôles des employés pour détecter les co-PDG
+  const { data: emploiRoles } = await admin.from('compagnie_employes')
+    .select('compagnie_id, role')
+    .eq('pilote_id', user.id);
+  const coPdgCompIds = new Set(
+    (emploiRoles || []).filter(e => e.role === 'co_pdg').map(e => e.compagnie_id)
+  );
 
   (emplois || []).forEach(e => {
     const c = e.compagnies;
     const cObj = c ? (Array.isArray(c) ? c[0] : c) as { id: string; nom: string } : null;
     if (cObj && !compagniesMap.has(cObj.id)) {
-      compagniesMap.set(cObj.id, { ...cObj, role: 'employe' });
+      const role = coPdgCompIds.has(cObj.id) ? 'co_pdg' : 'employe';
+      compagniesMap.set(cObj.id, { ...cObj, role });
     }
   });
 
@@ -126,10 +135,12 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
   }
 
   const isPdg = compagnie?.pdg_id === user.id;
+  const isCoPdgUser = coPdgCompIds.has(selectedCompagnieOption.id);
+  const isLeader = isPdg || isCoPdgUser;
 
   // Récupérer le solde de la compagnie (compte entreprise)
   let soldeCompagnie = 0;
-  if (isPdg && compagnie) {
+  if (isLeader && compagnie) {
     const { data: compteEntreprise } = await admin.from('felitz_comptes')
       .select('solde')
       .eq('compagnie_id', compagnie.id)
@@ -146,7 +157,8 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
       id: emp.id,
       piloteId: pilote?.id || '',
       identifiant: pilote?.identifiant || '—',
-      heures: pilote ? heuresParPilote[pilote.id] || 0 : 0
+      heures: pilote ? heuresParPilote[pilote.id] || 0 : 0,
+      role: (emp.role as string) || 'employe',
     };
   });
 
@@ -158,6 +170,7 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
 
   return (
     <MaCompagnieClient
+      key={selectedCompagnieOption.id}
       compagniesDisponibles={compagniesDisponibles}
       selectedCompagnieId={selectedCompagnieOption.id}
       compagnie={{
@@ -175,6 +188,7 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
       }}
       employes={employesData}
       isPdg={isPdg}
+      isLeader={isLeader}
       soldeCompagnie={soldeCompagnie}
     />
   );

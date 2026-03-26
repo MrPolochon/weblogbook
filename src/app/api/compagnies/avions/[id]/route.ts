@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function PATCH(
   request: Request,
@@ -27,8 +28,11 @@ export async function PATCH(
       .eq('id', avion.compagnie_id)
       .single();
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    
-    if (compagnie?.pdg_id !== user.id && profile?.role !== 'admin') {
+
+    const isLeader =
+      compagnie?.pdg_id === user.id ||
+      (await isCoPdg(user.id, avion.compagnie_id, admin));
+    if (!isLeader && profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
@@ -83,8 +87,11 @@ export async function DELETE(
       .eq('id', avion.compagnie_id)
       .single();
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    
-    if (compagnie?.pdg_id !== user.id && profile?.role !== 'admin') {
+
+    const isLeader =
+      compagnie?.pdg_id === user.id ||
+      (await isCoPdg(user.id, avion.compagnie_id, admin));
+    if (!isLeader && profile?.role !== 'admin') {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
