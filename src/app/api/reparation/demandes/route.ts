@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     if (!isLeader && !empCheck?.length) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
 
     const { data } = await admin.from('reparation_demandes')
-      .select('*, entreprises_reparation(id, nom), compagnie_avions(id, immatriculation, nom)')
+      .select('*, entreprises_reparation(id, nom), compagnie_avions(id, immatriculation, nom_bapteme)')
       .eq('compagnie_id', compagnieId)
       .order('created_at', { ascending: false });
 
@@ -58,7 +58,7 @@ export async function POST(req: Request) {
   if (!isLeader && !empCheck?.length) return NextResponse.json({ error: 'Seul le PDG ou un employé peut demander une réparation' }, { status: 403 });
 
   const { data: avion } = await admin.from('compagnie_avions')
-    .select('id, immatriculation, nom, usure, compagnie_id, detruit, bloque_incident')
+    .select('id, immatriculation, nom_bapteme, usure_percent, compagnie_id, detruit, bloque_incident')
     .eq('id', avion_id).single();
   if (!avion) return NextResponse.json({ error: 'Avion introuvable' }, { status: 404 });
   if (avion.detruit) return NextResponse.json({ error: 'Cet avion est detruit.' }, { status: 400 });
@@ -92,17 +92,20 @@ export async function POST(req: Request) {
     compagnie_id,
     avion_id,
     hangar_id,
-    usure_avant: avion.usure ?? 0,
+    usure_avant: avion.usure_percent ?? 0,
     commentaire_compagnie: commentaire ? String(commentaire).trim() : null,
   }).select().single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) {
+    console.error('reparation demandes POST:', error);
+    return NextResponse.json({ error: 'Erreur lors de la création de la demande' }, { status: 400 });
+  }
 
   const { data: ent } = await admin.from('entreprises_reparation').select('pdg_id, nom').eq('id', entreprise_id).single();
   if (ent) {
     await admin.from('messages').insert({
       destinataire_id: ent.pdg_id,
       titre: `🔧 Demande de réparation — ${avion.immatriculation}`,
-      contenu: `La compagnie "${comp.nom}" demande la réparation de l'avion ${avion.immatriculation} (${avion.nom || 'sans nom'}).\nUsure actuelle : ${avion.usure ?? 0}%\n${commentaire ? `Message : ${commentaire}` : ''}`,
+      contenu: `La compagnie "${comp.nom}" demande la réparation de l'avion ${avion.immatriculation} (${avion.nom_bapteme || 'sans nom'}).\nUsure actuelle : ${avion.usure_percent ?? 0}%\n${commentaire ? `Message : ${commentaire}` : ''}`,
       type_message: 'normal',
     });
   }
