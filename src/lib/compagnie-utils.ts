@@ -99,16 +99,12 @@ export function calculerDureeMaintenance(): number {
 export const TEMPS_AFFRETER_TECHNICIENS_MIN = 60;
 
 /**
- * Calcule l'usure d'un vol normal (entre 2% et 6% selon le temps de vol)
- * @param tempsVolMin Temps de vol en minutes
+ * Calcule l'usure d'un vol normal : 2% par tranche de 15 minutes (minimum 2%)
+ * 15 min → 2%, 30 min → 4%, 45 min → 6%, 60 min → 8%, etc.
  */
 export function calculerUsureVol(tempsVolMin: number): number {
-  // Usure minimale de 2%, maximale de 6%
-  // Un vol de 30 min = 2%, un vol de 180 min = 6%
-  const base = 2;
-  const max = 6;
-  const facteur = Math.min(tempsVolMin / 180, 1);
-  return Math.round(base + facteur * (max - base));
+  const tranches = Math.max(1, Math.floor(tempsVolMin / 15));
+  return tranches * 2;
 }
 
 // ============================================================

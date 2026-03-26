@@ -34,19 +34,96 @@ export async function POST() {
 
     if (!comptePerso) return NextResponse.json({ error: 'Compte Felitz personnel introuvable' }, { status: 404 });
 
-    const compteLabels: Record<string, string> = {};
-    const uniqueCompteIds = new Set<string>();
+    // 1) Marquer TOUS les chèques comme encaissés en une seule requête
+    const chequeIds = cheques.map(c => c.id);
+    const now = new Date().toISOString();
+    await admin.from('messages')
+      .update({ cheque_encaisse: true, cheque_encaisse_at: now, lu: true })
+      .in('id', chequeIds)
+      .eq('cheque_encaisse', false);
+
+    // 2) Regrouper par compte destination
+    type GroupedAccount = {
+      credit: number;
+      taxeAlliance: number;
+      codeshare: number;
+      transactions: { compte_id: string; type: string; montant: number; libelle: string }[];
+      nb: number;
+    };
+    const grouped = new Map<string, GroupedAccount>();
+
     for (const ch of cheques) {
-      const cid = ch.cheque_destinataire_compte_id || comptePerso.id;
-      uniqueCompteIds.add(cid);
+      const compteId = ch.cheque_destinataire_compte_id || comptePerso.id;
+      const meta = (ch.metadata || {}) as { taxe_alliance?: number; codeshare?: number; numero_vol?: string };
+      const numVol = meta.numero_vol || ch.cheque_numero_vol || '';
+      const taxeAlliance = meta.taxe_alliance ?? 0;
+      const codeshareAmt = meta.codeshare ?? 0;
+
+      if (!grouped.has(compteId)) {
+        grouped.set(compteId, { credit: 0, taxeAlliance: 0, codeshare: 0, transactions: [], nb: 0 });
+      }
+      const g = grouped.get(compteId)!;
+      g.credit += ch.cheque_montant;
+      g.taxeAlliance += taxeAlliance;
+      g.codeshare += codeshareAmt;
+      g.nb++;
+
+      g.transactions.push({
+        compte_id: compteId, type: 'credit', montant: ch.cheque_montant,
+        libelle: ch.cheque_libelle || `Encaissement cheque vol ${numVol}`,
+      });
+      if (taxeAlliance > 0) {
+        g.transactions.push({
+          compte_id: compteId, type: 'debit', montant: taxeAlliance,
+          libelle: `Taxe alliance - Vol ${numVol}`,
+        });
+      }
+      if (codeshareAmt > 0) {
+        g.transactions.push({
+          compte_id: compteId, type: 'debit', montant: codeshareAmt,
+          libelle: `Codeshare alliance - Vol ${numVol}`,
+        });
+      }
     }
-    if (uniqueCompteIds.size > 0) {
+
+    // 3) Créditer/débiter par compte (1 appel RPC par compte au lieu de 1 par chèque)
+    const allTransactions: { compte_id: string; type: string; montant: number; libelle: string }[] = [];
+    const errors: string[] = [];
+
+    const creditPromises = Array.from(grouped.entries()).map(async ([compteId, g]) => {
+      const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: g.credit });
+      if (!creditOk) {
+        errors.push(`Erreur credit compte ${compteId.slice(0, 8)}`);
+        return;
+      }
+
+      if (g.taxeAlliance > 0) {
+        await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: g.taxeAlliance });
+      }
+      if (g.codeshare > 0) {
+        await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: g.codeshare });
+      }
+
+      allTransactions.push(...g.transactions);
+    });
+
+    await Promise.all(creditPromises);
+
+    // 4) Insérer TOUTES les transactions en une seule requête
+    if (allTransactions.length > 0) {
+      await admin.from('felitz_transactions').insert(allTransactions);
+    }
+
+    // 5) Calculer le récap
+    const uniqueCompteIds = Array.from(grouped.keys());
+    const compteLabels: Record<string, string> = {};
+    if (uniqueCompteIds.length > 0) {
       const { data: comptes } = await admin.from('felitz_comptes')
-        .select('id, type, vban, compagnie_id')
-        .in('id', Array.from(uniqueCompteIds));
+        .select('id, type, compagnie_id')
+        .in('id', uniqueCompteIds);
       if (comptes) {
         const compagnieIds = comptes.filter(c => c.compagnie_id).map(c => c.compagnie_id!);
-        let compagnieNoms: Record<string, string> = {};
+        const compagnieNoms: Record<string, string> = {};
         if (compagnieIds.length > 0) {
           const { data: comps } = await admin.from('compagnies').select('id, nom').in('id', compagnieIds);
           if (comps) comps.forEach(c => { compagnieNoms[c.id] = c.nom; });
@@ -59,80 +136,22 @@ export async function POST() {
       }
     }
 
-    const recap: Record<string, { label: string; nb: number; total: number }> = {};
     let totalEncaisse = 0;
     let nbEncaisse = 0;
-    const errors: string[] = [];
+    const recap: { label: string; nb: number; total: number }[] = [];
 
-    for (const ch of cheques) {
-      const compteId = ch.cheque_destinataire_compte_id || comptePerso.id;
-
-      const { data: upd, error: updErr } = await admin.from('messages')
-        .update({ cheque_encaisse: true, cheque_encaisse_at: new Date().toISOString(), lu: true })
-        .eq('id', ch.id)
-        .eq('cheque_encaisse', false)
-        .select('id');
-
-      if (updErr || !upd || upd.length === 0) {
-        errors.push(`Cheque ${ch.id.slice(0, 8)} deja encaisse`);
-        continue;
-      }
-
-      const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: ch.cheque_montant });
-      if (!creditOk) {
-        await admin.from('messages').update({ cheque_encaisse: false, cheque_encaisse_at: null }).eq('id', ch.id);
-        errors.push(`Erreur credit cheque ${ch.id.slice(0, 8)}`);
-        continue;
-      }
-
-      const meta = (ch.metadata || {}) as { taxe_alliance?: number; codeshare?: number; numero_vol?: string };
-      const numVol = meta.numero_vol || ch.cheque_numero_vol || '';
-
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteId,
-        type: 'credit',
-        montant: ch.cheque_montant,
-        libelle: ch.cheque_libelle || `Encaissement cheque vol ${numVol}`,
-      });
-
-      const taxeAlliance = meta.taxe_alliance ?? 0;
-      const codeshareAmt = meta.codeshare ?? 0;
-
-      if (taxeAlliance > 0) {
-        const ok = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: taxeAlliance });
-        if (ok) {
-          await admin.from('felitz_transactions').insert({
-            compte_id: compteId, type: 'debit', montant: taxeAlliance,
-            libelle: `Taxe alliance - Vol ${numVol}`,
-          });
-        }
-      }
-      if (codeshareAmt > 0) {
-        const ok = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: codeshareAmt });
-        if (ok) {
-          await admin.from('felitz_transactions').insert({
-            compte_id: compteId, type: 'debit', montant: codeshareAmt,
-            libelle: `Codeshare alliance - Vol ${numVol}`,
-          });
-        }
-      }
-
-      const montantNet = ch.cheque_montant - taxeAlliance - codeshareAmt;
-
-      if (!recap[compteId]) {
-        recap[compteId] = { label: compteLabels[compteId] || 'Compte', nb: 0, total: 0 };
-      }
-      recap[compteId].nb++;
-      recap[compteId].total += montantNet;
+    for (const [compteId, g] of grouped) {
+      const montantNet = g.credit - g.taxeAlliance - g.codeshare;
+      recap.push({ label: compteLabels[compteId] || 'Compte', nb: g.nb, total: montantNet });
       totalEncaisse += montantNet;
-      nbEncaisse++;
+      nbEncaisse += g.nb;
     }
 
     return NextResponse.json({
       ok: true,
       nb_cheques: nbEncaisse,
       total: totalEncaisse,
-      par_compte: Object.values(recap),
+      par_compte: recap,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (e) {
