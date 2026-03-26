@@ -26,7 +26,10 @@ export async function middleware(request: NextRequest) {
   }
 
   // Routes publiques (et API auth : vérification session faite dans la route)
-  if (isAuthCallback || isApiPublic || isApiAeroSchoolPublic || isApiAuth || isSetup || isLogin || isDownload || isAeroSchool) {
+  const isCarteAtc = pathname === '/carte-atc';
+  const isApiAtcOnline = pathname === '/api/atc/online';
+
+  if (isAuthCallback || isApiPublic || isApiAeroSchoolPublic || isApiAuth || isSetup || isLogin || isDownload || isAeroSchool || isCarteAtc || isApiAtcOnline) {
     return NextResponse.next({ request });
   }
 

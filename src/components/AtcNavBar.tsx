@@ -239,6 +239,10 @@ export default function AtcNavBar({
               <span className="hidden sm:inline">Mon compte</span>
               <span className="sm:hidden">Compte</span>
             </Link>
+            <Link href="/carte-atc" className={cn(linkBase, 'gap-1.5', isDark ? 'text-emerald-300 hover:bg-emerald-900/30' : 'text-emerald-700 hover:bg-emerald-100')} title="Carte ATC en direct">
+              <Radio className="h-4 w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Carte</span>
+            </Link>
             {isAdmin && (
               <>
                 <Link href="/siavi" className={cn(linkBase, 'gap-1.5', isDark ? 'text-red-300 hover:bg-red-900/50 hover:text-red-200' : 'text-red-700 hover:bg-red-100 hover:text-red-800')} title="Passer à l'espace SIAVI">
