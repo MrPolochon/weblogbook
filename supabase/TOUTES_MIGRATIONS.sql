@@ -1481,6 +1481,44 @@ END $$;
 
 
 -- ════════════════════════════════════════════════════════════════════════════
+-- PHASE LIAISON DISCORD OBLIGATOIRE (OAuth + sync bot modération)
+-- ════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS public.discord_links (
+  user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
+  discord_user_id TEXT NOT NULL UNIQUE,
+  discord_username TEXT NOT NULL,
+  discord_avatar TEXT,
+  linked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  guild_member BOOLEAN NOT NULL DEFAULT false,
+  has_required_role BOOLEAN NOT NULL DEFAULT false,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'active', 'missing_guild', 'missing_role', 'temporary_block', 'permanent_block')),
+  sanction_type TEXT,
+  sanction_reason TEXT,
+  sanction_started_at TIMESTAMPTZ,
+  sanction_ends_at TIMESTAMPTZ,
+  is_permanent BOOLEAN NOT NULL DEFAULT false,
+  last_sync_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_discord_links_status
+  ON public.discord_links(status);
+CREATE INDEX IF NOT EXISTS idx_discord_links_last_sync
+  ON public.discord_links(last_sync_at DESC);
+
+ALTER TABLE public.discord_links ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "discord_links_select_owner_or_admin" ON public.discord_links;
+  CREATE POLICY "discord_links_select_owner_or_admin"
+    ON public.discord_links FOR SELECT TO authenticated
+    USING (user_id = auth.uid() OR public.is_admin());
+END $$;
+
+
+-- ════════════════════════════════════════════════════════════════════════════
 -- FICHIERS À EXÉCUTER SÉPARÉMENT (systèmes complets avec beaucoup de SQL) :
 -- ════════════════════════════════════════════════════════════════════════════
 --

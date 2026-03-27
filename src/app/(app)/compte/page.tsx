@@ -5,6 +5,7 @@ import CompteForm from './CompteForm';
 import LicencesSection from '@/components/LicencesSection';
 import MaCartePhoto from './MaCartePhoto';
 import RadarBetaSection from '@/components/RadarBetaSection';
+import DiscordLinkSection from '@/components/DiscordLinkSection';
 
 export default async function ComptePage() {
   const supabase = await createClient();
@@ -36,6 +37,7 @@ export default async function ComptePage() {
             <p className="text-slate-400 text-sm">Identifiant</p>
             <p className="text-slate-100 font-medium">{profile?.identifiant ?? '—'}</p>
           </div>
+          <DiscordLinkSection variant="default" />
           <CompteForm armee={Boolean(profile?.armee)} isAdmin={profile?.role === 'admin'} initialEmail={profile?.email ?? ''} />
           <RadarBetaSection variant="default" />
           <LicencesSection userId={user.id} variant="default" />

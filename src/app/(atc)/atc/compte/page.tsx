@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import CompteForm from '@/app/(app)/compte/CompteForm';
 import LicencesSection from '@/components/LicencesSection';
 import RadarBetaSection from '@/components/RadarBetaSection';
+import DiscordLinkSection from '@/components/DiscordLinkSection';
 
 function formatTemps(min: number | null | undefined): string {
   if (min == null) return '—';
@@ -44,6 +45,7 @@ export default async function AtcComptePage() {
           <p className="text-slate-600 text-sm">Identifiant</p>
           <p className="text-slate-900 font-medium">{profile?.identifiant ?? '—'}</p>
         </div>
+        <DiscordLinkSection variant="atc" />
         <CompteForm armee={false} isAdmin={isAdmin} variant="atc" showArmee={false} />
         <RadarBetaSection variant="atc" />
         <LicencesSection userId={user.id} variant="atc" />

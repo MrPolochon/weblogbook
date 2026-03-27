@@ -156,6 +156,7 @@ function LoginPageContent() {
   const showInactivity = messageParam === 'inactivity';
   const showSecurityLogout = messageParam === 'security_logout';
   const showPasswordReset = messageParam === 'password_reset';
+  const showDiscordRemoved = messageParam === 'discord_removed';
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [identifiant, setIdentifiant] = useState('');
@@ -485,6 +486,12 @@ function LoginPageContent() {
         {showPasswordReset && step === 'form' && (
           <div className="mb-4 p-4 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center gap-3 animate-init animate-reveal-blur">
             <p className="text-emerald-200 font-medium">Mot de passe réinitialisé. Connectez-vous avec votre nouveau mot de passe.</p>
+          </div>
+        )}
+        {showDiscordRemoved && step === 'form' && (
+          <div className="mb-4 p-4 rounded-xl bg-red-500/20 border border-red-500/40 flex items-center gap-3 animate-init animate-reveal-blur">
+            <AlertTriangle className="h-6 w-6 text-red-400 shrink-0" />
+            <p className="text-red-200 font-medium">Ce compte n&apos;est plus autorisé via le serveur Discord requis.</p>
           </div>
         )}
 

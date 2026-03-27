@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isDiscordLinkRequired, isTemporaryDiscordSanctionActive } from '@/lib/discord-link';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -10,7 +11,9 @@ export async function middleware(request: NextRequest) {
   const isAeroSchool = pathname.startsWith('/aeroschool');
   const isAuthCallback = pathname.startsWith('/auth/');
   const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin' || pathname === '/api/site-config';
+  const isApiDiscord = pathname.startsWith('/api/discord/');
   const isApiAeroSchoolPublic = pathname.startsWith('/api/aeroschool/') && request.method !== 'PUT' && request.method !== 'DELETE';
+  const isDiscordRequiredPage = pathname === '/discord-obligatoire';
   // Routes auth (login, code, etc.) : ne pas rediriger ici, laisser la route vérifier la session (évite 307 après signIn)
   const isApiAuth = pathname.startsWith('/api/auth/');
 
@@ -29,7 +32,7 @@ export async function middleware(request: NextRequest) {
   const isCarteAtc = pathname === '/carte-atc';
   const isApiAtcOnline = pathname === '/api/atc/online';
 
-  if (isAuthCallback || isApiPublic || isApiAeroSchoolPublic || isApiAuth || isSetup || isLogin || isDownload || isAeroSchool || isCarteAtc || isApiAtcOnline) {
+  if (isAuthCallback || isApiPublic || isApiDiscord || isApiAeroSchoolPublic || isApiAuth || isSetup || isLogin || isDownload || isAeroSchool || isCarteAtc || isApiAtcOnline) {
     return NextResponse.next({ request });
   }
 
@@ -100,6 +103,43 @@ export async function middleware(request: NextRequest) {
     url.pathname = '/login';
     url.searchParams.set('step', 'verify');
     return NextResponse.redirect(url);
+  }
+
+  if (isDiscordLinkRequired()) {
+    try {
+      const admin = createAdminClient();
+      const [{ data: profile }, { data: discordLink }] = await Promise.all([
+        admin.from('profiles').select('blocked_until, block_reason').eq('id', user.id).maybeSingle(),
+        admin
+          .from('discord_links')
+          .select('discord_user_id, status, sanction_ends_at, is_permanent, guild_member, has_required_role')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+      ]);
+
+      if (discordLink?.is_permanent || discordLink?.status === 'permanent_block') {
+        await supabase.auth.signOut();
+        const url = request.nextUrl.clone();
+        url.pathname = '/login';
+        url.searchParams.set('message', 'discord_removed');
+        return NextResponse.redirect(url);
+      }
+
+      const isTempBlocked =
+        isTemporaryDiscordSanctionActive(discordLink) ||
+        Boolean(profile?.blocked_until && new Date(profile.blocked_until) > new Date());
+      const needsDiscordLink = !discordLink?.discord_user_id;
+      const invalidDiscordMembership =
+        discordLink?.status === 'missing_guild' || discordLink?.status === 'missing_role';
+
+      if ((needsDiscordLink || invalidDiscordMembership || isTempBlocked) && !isDiscordRequiredPage) {
+        const url = request.nextUrl.clone();
+        url.pathname = '/discord-obligatoire';
+        return NextResponse.redirect(url);
+      }
+    } catch {
+      // Si la table Discord n'existe pas encore ou que l'env n'est pas prêt, ne pas casser tout le site.
+    }
   }
 
   return response;

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import CompteForm from '@/app/(app)/compte/CompteForm';
 import LicencesSection from '@/components/LicencesSection';
 import RadarBetaSection from '@/components/RadarBetaSection';
+import DiscordLinkSection from '@/components/DiscordLinkSection';
 
 function formatTemps(min: number | null | undefined): string {
   if (min == null) return '—';
@@ -62,6 +63,9 @@ export default async function SiaviComptePage() {
               <p className="text-slate-900 font-semibold tabular-nums">{formatTemps(profile?.siavi_temps_total_minutes)}</p>
             </div>
           </div>
+        </div>
+        <div className="rounded-xl border-2 border-red-300 bg-white p-4 shadow-sm">
+          <DiscordLinkSection variant="siavi" />
         </div>
         <div className="rounded-xl border-2 border-red-300 bg-white p-4 shadow-sm">
           <CompteForm armee={false} isAdmin={isAdmin} variant="siavi" showArmee={false} />
