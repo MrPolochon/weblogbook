@@ -2,8 +2,20 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isCoPdg } from '@/lib/co-pdg-utils';
+import { ALL_GAMES, getGamesForDemande } from '@/lib/reparation-games';
 
 export const dynamic = 'force-dynamic';
+
+const MIN_DURATIONS: Record<string, number> = {
+  inspection: 10,
+  calibrage: 8,
+  assemblage: 12,
+  test_moteur: 15,
+  cablage: 8,
+  hydraulique: 12,
+  soudure: 10,
+  diagnostic: 8,
+};
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: demandeId } = await params;
@@ -31,23 +43,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     comp?.pdg_id === user.id || (await isCoPdg(user.id, demande.compagnie_id, admin));
   const isClientEmploye = (empComp?.length ?? 0) > 0;
   if (!isEmployeReparation && !isClientPdg && !isClientEmploye) {
-    return NextResponse.json({ error: 'Accès réservé aux employés de l\'entreprise de réparation ou au PDG/employés de la compagnie cliente' }, { status: 403 });
+    return NextResponse.json({ error: 'Accès réservé aux employés ou au PDG/employés de la compagnie cliente' }, { status: 403 });
   }
 
   const body = await req.json().catch(() => ({}));
   const { type_jeu, score, duree_secondes } = body;
 
-  const validTypes = ['inspection', 'calibrage', 'assemblage', 'test_moteur'];
-  if (!validTypes.includes(type_jeu)) return NextResponse.json({ error: 'Type de jeu invalide' }, { status: 400 });
+  if (!ALL_GAMES.includes(type_jeu)) return NextResponse.json({ error: 'Type de jeu invalide' }, { status: 400 });
+
+  const assignedGames = getGamesForDemande(demandeId);
+  if (!assignedGames.includes(type_jeu)) {
+    return NextResponse.json({ error: 'Ce jeu n\'est pas assigné à cette réparation' }, { status: 400 });
+  }
+
   if (typeof score !== 'number' || score < 0 || score > 100) return NextResponse.json({ error: 'Score 0-100' }, { status: 400 });
   if (!duree_secondes || duree_secondes < 5) return NextResponse.json({ error: 'Durée trop courte (anti-triche)' }, { status: 400 });
-
-  const MIN_DURATIONS: Record<string, number> = {
-    inspection: 10,
-    calibrage: 8,
-    assemblage: 12,
-    test_moteur: 15,
-  };
   if (duree_secondes < (MIN_DURATIONS[type_jeu] || 5)) {
     return NextResponse.json({ error: 'Durée suspecte (anti-triche)' }, { status: 400 });
   }
@@ -69,12 +79,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const { data: allScores } = await admin.from('reparation_mini_jeux_scores')
     .select('type_jeu, score').eq('demande_id', demandeId);
-  const completed = validTypes.every(t => allScores?.some(s => s.type_jeu === t));
+  const completed = assignedGames.every(t => allScores?.some(s => s.type_jeu === t));
 
   return NextResponse.json({
     ok: true,
     score: clampedScore,
     all_completed: completed,
     scores: allScores || [],
+    assigned_games: assignedGames,
   });
 }

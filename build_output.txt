@@ -1,0 +1,33 @@
+﻿  Ôû▓ Next.js 14.2.35
+
+node.exe : 
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+> Build error occurred
+Error: EINVAL: invalid argument, readlink 
+'C:\Users\bonno\OneDrive\Images\Documents\GitHub\weblogbook\.next\server\app-paths-manifest.json'
+    at async Object.readlink (node:internal/fs/promises:971:10)
+    at async 
+C:\Users\bonno\OneDrive\Images\Documents\GitHub\weblogbook\node_modules\next\dist\lib\recursive-delete.js:58:30
+    at async Promise.all (index 1)
+    at async recursiveDelete 
+(C:\Users\bonno\OneDrive\Images\Documents\GitHub\weblogbook\node_modules\next\dist\lib\recursive-delete.js:51:5)
+    at async 
+C:\Users\bonno\OneDrive\Images\Documents\GitHub\weblogbook\node_modules\next\dist\lib\recursive-delete.js:68:17
+    at async Promise.all (index 11)
+    at async recursiveDelete 
+(C:\Users\bonno\OneDrive\Images\Documents\GitHub\weblogbook\node_modules\next\dist\lib\recursive-delete.js:51:5)
+    at async C:\Users\bonno\OneDrive\Images\Documents\GitHub\weblogbook\node_modules\next\dist\build\index.js:694:17
+    at async Span.traceAsyncFn 
+(C:\Users\bonno\OneDrive\Images\Documents\GitHub\weblogbook\node_modules\next\dist\trace\trace.js:154:20)
+    at async build 
+(C:\Users\bonno\OneDrive\Images\Documents\GitHub\weblogbook\node_modules\next\dist\build\index.js:368:9) {
+  errno: -4071,
+  code: 'EINVAL',
+  syscall: 'readlink',
+  path: 'C:\\Users\\bonno\\OneDrive\\Images\\Documents\\GitHub\\weblogbook\\.next\\server\\app-paths-manifest.json'
+}

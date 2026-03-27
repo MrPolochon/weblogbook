@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isCoPdg } from '@/lib/co-pdg-utils';
+import { getGamesForDemande } from '@/lib/reparation-games';
 
 export const dynamic = 'force-dynamic';
 
@@ -136,12 +137,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { data: scores } = await admin.from('reparation_mini_jeux_scores')
       .select('score, type_jeu').eq('demande_id', id);
 
-    const requiredGames = ['inspection', 'calibrage', 'assemblage', 'test_moteur'];
+    const requiredGames = getGamesForDemande(id);
     const completedGames = new Set((scores || []).map(s => s.type_jeu));
     const missingGames = requiredGames.filter(g => !completedGames.has(g));
     if (missingGames.length > 0) {
       return NextResponse.json({
-        error: `Mini-jeux incomplets : ${missingGames.join(', ')}. Tous les 4 mini-jeux doivent être complétés.`
+        error: `Mini-jeux incomplets : ${missingGames.join(', ')}. Les 4 mini-jeux assignés doivent être complétés.`
       }, { status: 400 });
     }
 
