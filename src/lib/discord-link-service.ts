@@ -20,7 +20,7 @@ type DiscordStateInput = {
   sanction_ends_at?: string | null;
   is_permanent?: boolean;
   linked_at?: string;
-  last_sync_at?: string;
+  last_sync_at?: string | null;
 };
 
 type BotMemberStatus = {
