@@ -8,6 +8,7 @@ import {
   calculateHeading,
   type RadarTarget,
 } from '@/lib/radar-utils';
+import { hasApprovedRadarAccessForUser } from '@/lib/radar-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +25,8 @@ export async function GET() {
       .single();
 
     if (!profile) return NextResponse.json({ error: 'Profil introuvable' }, { status: 403 });
-    if (profile.role !== 'admin' && !profile.radar_beta) {
+    const hasAccess = await hasApprovedRadarAccessForUser(user.id, profile.role, profile.radar_beta);
+    if (!hasAccess) {
       return NextResponse.json({ error: 'Accès radar non autorisé' }, { status: 403 });
     }
 

@@ -12,6 +12,7 @@ import AtcAtisButton from '@/components/AtcAtisButton';
 import AtcAtisTicker from '@/components/AtcAtisTicker';
 import InactivityLogout from '@/components/InactivityLogout';
 import AtcSessionRealtimeGuard from '@/components/AtcSessionRealtimeGuard';
+import { hasApprovedRadarAccessForUser } from '@/lib/radar-access';
 
 export default async function AtcLayout({
   children,
@@ -31,6 +32,8 @@ export default async function AtcLayout({
   const isAdmin = profile?.role === 'admin';
   const canAccessAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
   if (!canAccessAtc) redirect('/logbook');
+
+  const radarAccess = await hasApprovedRadarAccessForUser(user.id, profile?.role, profile?.radar_beta);
 
   let gradeNom: string | null = null;
   if (profile?.atc_grade_id) {
@@ -94,7 +97,7 @@ export default async function AtcLayout({
         <InactivityLogout />
         <AutoRefresh intervalSeconds={15} />
         <AtcModeBg isAdmin={isAdmin} />
-        <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} radarBeta={Boolean(profile?.radar_beta)} />
+        <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} radarBeta={radarAccess} />
         <AtcAtisTicker />
         <div className="flex flex-1 w-full min-h-0">
           {enService && session && (

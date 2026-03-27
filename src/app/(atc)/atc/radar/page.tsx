@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import RadarClient from './RadarClient';
+import { hasApprovedRadarAccessForUser } from '@/lib/radar-access';
 
 export default async function RadarPage() {
   const supabase = await createClient();
@@ -13,8 +14,7 @@ export default async function RadarPage() {
     .eq('id', user.id)
     .single();
 
-  const isAdmin = profile?.role === 'admin';
-  const hasAccess = isAdmin || profile?.radar_beta;
+  const hasAccess = await hasApprovedRadarAccessForUser(user.id, profile?.role, profile?.radar_beta);
 
   if (!hasAccess) {
     return (

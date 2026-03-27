@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { randomBytes, createHash } from 'crypto';
+import { hasApprovedRadarAccessForUser } from '@/lib/radar-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,8 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
       .single();
 
-    if (!profile || (profile.role !== 'admin' && !profile.radar_beta)) {
+    const hasAccess = await hasApprovedRadarAccessForUser(user.id, profile?.role, profile?.radar_beta);
+    if (!profile || !hasAccess) {
       return NextResponse.json({ error: 'Accès radar non autorisé' }, { status: 403 });
     }
 
@@ -65,6 +67,17 @@ export async function GET() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, radar_beta')
+      .eq('id', user.id)
+      .single();
+
+    const hasAccess = await hasApprovedRadarAccessForUser(user.id, profile?.role, profile?.radar_beta);
+    if (!profile || !hasAccess) {
+      return NextResponse.json({ error: 'Accès radar non autorisé' }, { status: 403 });
+    }
+
     const admin = createAdminClient();
 
     const { data: tokens } = await admin
@@ -85,6 +98,17 @@ export async function DELETE(request: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, radar_beta')
+      .eq('id', user.id)
+      .single();
+
+    const hasAccess = await hasApprovedRadarAccessForUser(user.id, profile?.role, profile?.radar_beta);
+    if (!profile || !hasAccess) {
+      return NextResponse.json({ error: 'Accès radar non autorisé' }, { status: 403 });
+    }
 
     const { searchParams } = new URL(request.url);
     const tokenId = searchParams.get('id');

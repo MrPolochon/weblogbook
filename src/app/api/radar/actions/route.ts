@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { hasApprovedRadarAccessForUser } from '@/lib/radar-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,8 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
       .single();
 
-    if (!profile || (profile.role !== 'admin' && !profile.radar_beta)) {
+    const hasAccess = await hasApprovedRadarAccessForUser(user.id, profile?.role, profile?.radar_beta);
+    if (!profile || !hasAccess) {
       return NextResponse.json({ error: 'Accès radar non autorisé' }, { status: 403 });
     }
 

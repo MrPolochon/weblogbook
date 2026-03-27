@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { hasApprovedRadarAccessForUser } from '@/lib/radar-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,11 +26,12 @@ export async function POST() {
 
     const { data: profile } = await admin
       .from('profiles')
-      .select('radar_beta')
+      .select('role, radar_beta')
       .eq('id', user.id)
       .single();
 
-    if (profile?.radar_beta) {
+    const hasAccess = await hasApprovedRadarAccessForUser(user.id, profile?.role, profile?.radar_beta);
+    if (hasAccess) {
       return NextResponse.json({ error: 'Vous avez déjà accès au radar.' }, { status: 409 });
     }
 
@@ -64,12 +66,14 @@ export async function GET() {
 
     const { data: profile } = await admin
       .from('profiles')
-      .select('radar_beta')
+      .select('role, radar_beta')
       .eq('id', user.id)
       .single();
 
+    const hasAccess = await hasApprovedRadarAccessForUser(user.id, profile?.role, profile?.radar_beta);
+
     return NextResponse.json({
-      radar_beta: profile?.radar_beta ?? false,
+      radar_beta: hasAccess,
       request: request ?? null,
     });
   } catch {
