@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { Users, Plane, TrendingUp, MapPin, RefreshCw, Radio, ZoomIn, ZoomOut, Move, Settings, Copy, Check, X, Eye, EyeOff, Plus, Trash2, Pencil } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { PTFS_OFFICIAL_CHART_SRC } from '@/lib/radar-utils';
 
 interface AeroportData {
   code: string;
@@ -858,6 +859,17 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                   style={{ background: 'linear-gradient(180deg, #1a3a5f 0%, #1a2e4a 50%, #162540 100%)' }}
                   onClick={handleSvgClick}
                 >
+                  <image
+                    href={PTFS_OFFICIAL_CHART_SRC}
+                    x="0"
+                    y="0"
+                    width="1024"
+                    height="787"
+                    preserveAspectRatio="none"
+                    opacity="0.4"
+                  />
+                  <rect width="1024" height="787" fill="rgba(8, 15, 35, 0.3)" />
+
                   {/* Grille */}
                   <defs>
                     <pattern id="smallGrid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -885,6 +897,8 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                           stroke={isSelected ? '#fff' : fir.borderColor}
                           strokeWidth={isSelected ? 3 : 2}
                           strokeDasharray={isSelected ? 'none' : '10,5'}
+                          fillOpacity={isAdminMode ? 1 : 0.72}
+                          strokeOpacity={isAdminMode ? 1 : 0.88}
                           onClick={(e) => { if (isAdminMode && adminEditMode === 'fir') { e.stopPropagation(); setSelectedFir(fir.id); }}}
                           style={{ cursor: isAdminMode && adminEditMode === 'fir' ? 'pointer' : 'default' }}
                         />
@@ -909,6 +923,8 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                           fill={island.fill}
                           stroke={isSelected ? '#fff' : island.stroke}
                           strokeWidth={isSelected ? 3 : 2}
+                          fillOpacity={isAdminMode ? 1 : 0.16}
+                          strokeOpacity={isAdminMode ? 1 : 0.3}
                           onClick={(e) => { if (isAdminMode && adminEditMode === 'islands') { e.stopPropagation(); setSelectedIsland(island.id); }}}
                           style={{ cursor: isAdminMode && adminEditMode === 'islands' ? 'pointer' : 'default' }}
                         />

@@ -1,5 +1,6 @@
 export const SVG_W = 1024;
 export const SVG_H = 787;
+export const PTFS_OFFICIAL_CHART_SRC = '/maps/ptfs-enroute-chart-official.svg';
 
 export interface Point { x: number; y: number }
 
@@ -66,6 +67,33 @@ export const AIRPORT_NAMES: Record<string, string> = {
   'IHEN': 'Henstridge',
   'IIAB': 'McConnell AFB',
   'IUFO': 'UFO Base',
+};
+
+// Reference mapping aligned with the official PTFS enroute chart.
+// St Barthelemy and UFO Base are under Rockford FIR.
+// Skopelos is under Izolirani FIR.
+export const AIRPORT_TO_FIR: Record<string, string> = {
+  ITKO: 'ITKO',
+  IPPH: 'IPPH',
+  ILKL: 'IPPH',
+  IGRV: 'IGRV',
+  ISAU: 'ISAU',
+  IBTH: 'IRFD',
+  IUFO: 'IRFD',
+  IMLR: 'IRFD',
+  IBLT: 'IRFD',
+  IRFD: 'IRFD',
+  IGAR: 'IRFD',
+  ITRC: 'IRFD',
+  ISCM: 'IZOL',
+  IZOL: 'IZOL',
+  IJAF: 'IZOL',
+  ISKP: 'IZOL',
+  ILAR: 'ILAR',
+  IPAP: 'ILAR',
+  IBAR: 'ILAR',
+  IHEN: 'ILAR',
+  IIAB: 'ILAR',
 };
 
 export const DEFAULT_ISLANDS: Island[] = [

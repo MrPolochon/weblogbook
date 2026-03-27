@@ -195,7 +195,6 @@ export interface EspaceAerien {
 
 export const ESPACES_AERIENS: readonly EspaceAerien[] = [
   { code: 'GRINDAVIK', nom: 'Grindavik FIR', type: 'FIR' },
-  { code: 'BARTHELEMY', nom: 'Barthelemy FIR', type: 'FIR' },
   { code: 'ROCKFORD', nom: 'Rockford FIR', type: 'FIR' },
   { code: 'SAUTHEMPTONA', nom: 'Sauthemptona FIR', type: 'FIR' },
   { code: 'LARNACA', nom: 'Larnaca FIR', type: 'FIR' },

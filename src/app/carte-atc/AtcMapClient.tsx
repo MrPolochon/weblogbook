@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { RefreshCw, Radio } from 'lucide-react';
+import { PTFS_OFFICIAL_CHART_SRC } from '@/lib/radar-utils';
 
 interface AtcSession {
   aeroport: string;
@@ -213,6 +214,8 @@ export default function AtcMapClient() {
                   <path d="M 64 0 L 0 0 0 49.19" fill="none" stroke="rgba(100,150,200,0.06)" strokeWidth="0.5" />
                 </pattern>
               </defs>
+              <image href={PTFS_OFFICIAL_CHART_SRC} x="0" y="0" width="1024" height="787" preserveAspectRatio="none" opacity="0.42" />
+              <rect width="1024" height="787" fill="rgba(8, 15, 35, 0.28)" />
               <rect width="1024" height="787" fill="url(#radarGrid)" />
 
               {/* FIR zones - seulement si CTR en ligne */}
@@ -252,7 +255,7 @@ export default function AtcMapClient() {
                   fill={island.fill}
                   stroke={island.stroke}
                   strokeWidth="1.5"
-                  opacity="0.7"
+                  opacity="0.18"
                 />
               ))}
 

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   SVG_W, SVG_H,
   DEFAULT_POSITIONS, DEFAULT_ISLANDS, DEFAULT_FIR_ZONES,
-  AIRPORT_NAMES,
+  AIRPORT_NAMES, PTFS_OFFICIAL_CHART_SRC,
   toSVG, calculateHeading, detectSTCA,
   type RadarTarget, type STCAPair, type Point,
 } from '@/lib/radar-utils';
@@ -256,6 +256,17 @@ export default function RadarClient({ userId }: { userId: string }) {
               </radialGradient>
             </defs>
 
+            <image
+              href={PTFS_OFFICIAL_CHART_SRC}
+              x="0"
+              y="0"
+              width={SVG_W}
+              height={SVG_H}
+              preserveAspectRatio="none"
+              opacity="0.28"
+            />
+            <rect width={SVG_W} height={SVG_H} fill="rgba(3, 10, 4, 0.48)" />
+
             {/* Grid */}
             {[128, 256, 384].map(r => (
               <circle key={r} cx={SVG_W / 2} cy={SVG_H / 2} r={r} fill="none" stroke="#0a2a15" strokeWidth="0.5" />
@@ -307,7 +318,7 @@ export default function RadarClient({ userId }: { userId: string }) {
                 fill="#0d2a18"
                 stroke="#1a4a30"
                 strokeWidth="0.8"
-                opacity="0.6"
+                opacity="0.12"
               />
             ))}
 
