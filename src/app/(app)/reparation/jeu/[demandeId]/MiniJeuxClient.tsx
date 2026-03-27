@@ -35,7 +35,7 @@ const ALL_GAME_META: Record<string, { label: string; icon: typeof Eye; color: st
   diagnostic: { label: 'Diagnostic Technique', icon: ClipboardCheck, color: 'text-teal-400' },
 };
 
-const GAME_COMPONENTS: Record<GameType, React.ComponentType<{ onComplete: (s: GameScore) => void }>> = {
+const GAME_COMPONENTS: Record<GameType, React.ComponentType<{ onComplete: (s: GameScore) => Promise<boolean> | boolean }>> = {
   inspection: InspectionGame,
   calibrage: CalibrageGame,
   assemblage: AssemblageGame,
@@ -72,7 +72,7 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
       .finally(() => setLoading(false));
   }, [demandeId]);
 
-  async function submitScore(gameScore: GameScore) {
+  async function submitScore(gameScore: GameScore): Promise<boolean> {
     try {
       const res = await fetch(`/api/reparation/demandes/${demandeId}/mini-jeu`, {
         method: 'POST',
@@ -87,8 +87,10 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
       if (data.all_completed) {
         setDemande(prev => prev ? { ...prev, scores: data.scores } : prev);
       }
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
+      return false;
     }
   }
 
@@ -1447,7 +1449,7 @@ const DIAGNOSTIC_QUESTIONS: Array<{
   },
 ];
 
-function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
+function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => Promise<boolean> | boolean }) {
   const TOTAL_QUESTIONS = 6;
   const TIME_PER_Q = 20;
 
@@ -1462,8 +1464,12 @@ function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
   const [showResult, setShowResult] = useState(false);
   const [qTimeLeft, setQTimeLeft] = useState(TIME_PER_Q);
   const [timedOut, setTimedOut] = useState(false);
+  const [finalScore, setFinalScore] = useState<GameScore | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const startTime = useRef(Date.now());
   const qTimerRef = useRef<ReturnType<typeof setInterval>>();
+  const finishTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (showResult) return;
@@ -1483,6 +1489,13 @@ function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
     return () => clearInterval(qTimerRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentQ, showResult]);
+
+  useEffect(() => {
+    return () => {
+      clearInterval(qTimerRef.current);
+      clearTimeout(finishTimeoutRef.current);
+    };
+  }, []);
 
   function handleTimeout() {
     setShowResult(true);
@@ -1505,8 +1518,21 @@ function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
     advanceAfterDelay(newAnswers);
   }
 
+  async function finalizeDiagnostic(payload: GameScore) {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
+    clearTimeout(finishTimeoutRef.current);
+    const ok = await onComplete(payload);
+    if (!ok) {
+      submittingRef.current = false;
+      setIsSubmitting(false);
+    }
+  }
+
   function advanceAfterDelay(newAnswers: number[]) {
-    setTimeout(() => {
+    clearTimeout(finishTimeoutRef.current);
+    finishTimeoutRef.current = setTimeout(() => {
       if (currentQ + 1 >= TOTAL_QUESTIONS) {
         let correct = 0;
         let speedBonus = 0;
@@ -1518,11 +1544,14 @@ function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
         });
         const score = Math.min(100, Math.round((correct / TOTAL_QUESTIONS) * 100 + speedBonus));
         const duration = Math.round((Date.now() - startTime.current) / 1000);
-        onComplete({ type_jeu: 'diagnostic', score, duree_secondes: Math.max(duration, 8) });
+        const payload: GameScore = { type_jeu: 'diagnostic', score, duree_secondes: Math.max(duration, 8) };
+        setFinalScore(payload);
+        void finalizeDiagnostic(payload);
       } else {
         setCurrentQ(prev => prev + 1);
         setSelectedAnswer(null);
         setShowResult(false);
+        setFinalScore(null);
       }
     }, 2500);
   }
@@ -1614,6 +1643,20 @@ function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
             {isCorrect ? '✓ Correct !' : timedOut ? '⏱ Temps écoulé !' : `✗ Incorrect — Réponse : ${q.choices[q.correct]}`}
           </p>
           <p className="text-xs text-slate-400 leading-relaxed">{q.explanation}</p>
+          {finalScore && (
+            <div className="pt-2 space-y-2">
+              <p className="text-xs text-slate-300">
+                Fin du QCM. Quittez ici pour enregistrer proprement le résultat sans revenir avec le navigateur.
+              </p>
+              <button
+                onClick={() => void finalizeDiagnostic(finalScore)}
+                disabled={isSubmitting}
+                className="w-full rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-500 disabled:opacity-60"
+              >
+                {isSubmitting ? 'Sauvegarde en cours...' : 'Terminer et revenir aux jeux'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

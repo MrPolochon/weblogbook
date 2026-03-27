@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { RefreshCw, Radio } from 'lucide-react';
 import {
+  AIRPORT_TO_FIR,
   DEFAULT_FIR_ZONES,
   DEFAULT_ISLANDS,
   DEFAULT_POSITIONS,
@@ -133,7 +134,10 @@ export default function AtcMapClient() {
 
               {/* FIR zones - seulement si CTR en ligne */}
               {DEFAULT_FIR_ZONES.map(fir => {
-                if (!centerAirports.has(fir.code)) return null;
+                const hasFirCoverage = Object.entries(AIRPORT_TO_FIR).some(
+                  ([airportCode, firCode]) => firCode === fir.code && centerAirports.has(airportCode)
+                );
+                if (!hasFirCoverage) return null;
                 return (
                   <g key={fir.id}>
                     <polygon
