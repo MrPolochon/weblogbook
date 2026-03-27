@@ -24,7 +24,7 @@ export default async function AtcLayout({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, atc, atc_grade_id')
+    .select('role, atc, atc_grade_id, radar_beta')
     .eq('id', user.id)
     .single();
 
@@ -94,7 +94,7 @@ export default async function AtcLayout({
         <InactivityLogout />
         <AutoRefresh intervalSeconds={15} />
         <AtcModeBg isAdmin={isAdmin} />
-        <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
+        <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} radarBeta={Boolean(profile?.radar_beta)} />
         <AtcAtisTicker />
         <div className="flex flex-1 w-full min-h-0">
           {enService && session && (

@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText, Mail, Moon, Sun, ChevronDown, Menu, Flame, Landmark } from 'lucide-react';
+import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText, Mail, Moon, Sun, ChevronDown, Menu, Flame, Landmark, Radar } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useRef, useTransition } from 'react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
@@ -43,12 +43,14 @@ export default function AtcNavBar({
   gradeNom,
   sessionInfo,
   messagesNonLusCount = 0,
+  radarBeta = false,
 }: {
   isAdmin: boolean;
   enService: boolean;
   gradeNom?: string | null;
   sessionInfo?: { aeroport: string; position: string; started_at: string } | null;
   messagesNonLusCount?: number;
+  radarBeta?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -196,6 +198,12 @@ export default function AtcNavBar({
             <ScrollText className="h-4 w-4 flex-shrink-0" />
             NOTAMs
           </Link>
+          {(isAdmin || radarBeta) && (
+            <Link href="/atc/radar" className={cn(linkBase, 'gap-1.5', pathname.startsWith('/atc/radar') ? linkActive : (isDark ? 'text-emerald-300 hover:bg-emerald-900/30' : 'text-emerald-700 hover:bg-emerald-100'))}>
+              <Radar className="h-4 w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Radar</span>
+            </Link>
+          )}
           {isAdmin && (
             <Link href="/atc/admin" className={cn(linkBase, pathname.startsWith('/atc/admin') ? linkActive : linkInactive)}>
               <LayoutDashboard className="h-4 w-4 flex-shrink-0" />

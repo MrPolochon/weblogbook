@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight, CheckCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import ChequeVisuel from '@/components/ChequeVisuel';
+import MessageContent from '@/components/MessageContent';
 import { formatDateShortUTC, formatDateTimeUTC } from '@/lib/date-utils';
 
 interface Message {
@@ -384,7 +385,7 @@ export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, ut
             <div className="p-6">
               {['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'].includes(selectedMessage.type_message) && selectedMessage.cheque_montant ? (
                 <div className="space-y-6">
-                  <p className="text-slate-700 whitespace-pre-wrap">{selectedMessage.contenu}</p>
+                  <MessageContent className="text-slate-700" content={selectedMessage.contenu} />
                   <ChequeVisuel
                     id={selectedMessage.id}
                     montant={selectedMessage.cheque_montant}
@@ -399,7 +400,7 @@ export default function MessagerieAtcClient({ messagesRecus, messagesEnvoyes, ut
                   />
                 </div>
               ) : (
-                <p className="text-slate-700 whitespace-pre-wrap">{selectedMessage.contenu}</p>
+                <MessageContent className="text-slate-700" content={selectedMessage.contenu} />
               )}
             </div>
           </div>

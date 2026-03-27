@@ -3,7 +3,7 @@ import {
   Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark,
   Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap, Lock,
   Package, KeyRound, Wrench, Handshake, LayoutDashboard, Activity,
-  Settings, Route, Flame, ImageIcon, HardDrive
+  Settings, Route, Flame, ImageIcon, HardDrive, Radar
 } from 'lucide-react';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -33,6 +33,7 @@ const sections: Section[] = [
       { href: '/admin/plans-vol', label: 'Plans de vol', desc: 'Non clôturés & historique', icon: AlertTriangle, countKey: 'plansNonClotures' },
       { href: '/admin/vols', label: 'Vols en attente', desc: 'Validation des vols', icon: Clock, countKey: 'volsEnAttente' },
       { href: '/admin/password-reset-requests', label: 'Mots de passe', desc: 'Demandes de réinitialisation', icon: KeyRound, countKey: 'passwordResetRequests' },
+      { href: '/admin/radar-beta', label: 'Radar BETA', desc: "Demandes d'acces radar", icon: Radar, countKey: 'radarBetaRequests' },
       { href: '/admin/aeroschool', label: 'AeroSchool', desc: 'Questionnaires à corriger', icon: GraduationCap, countKey: 'aeroschoolResponses' },
       { href: '/admin/hangar-market', label: 'Hangar Market', desc: 'Demandes de revente', icon: Store, countKey: 'demandesRevente' },
       { href: '/admin/incidents', label: 'Incidents de vol', desc: 'Crash & urgences a examiner', icon: Flame, countKey: 'incidentsEnAttente' },
@@ -101,11 +102,12 @@ async function getAdminCounts(): Promise<Record<string, number>> {
       admin.from('password_reset_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
       admin.from('vols').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
       admin.from('plans_vol').select('*', { count: 'exact', head: true }).in('statut', ['depose', 'en_attente']).or('created_by_atc.is.null,created_by_atc.eq.false'),
+      admin.from('radar_beta_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
       admin.from('aeroschool_responses').select('*', { count: 'exact', head: true }).neq('status', 'reviewed'),
       admin.from('hangar_market_reventes').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
       admin.from('incidents_vol').select('*', { count: 'exact', head: true }).in('statut', ['en_attente', 'en_examen']),
     ]);
-    const keys = ['passwordResetRequests', 'volsEnAttente', 'plansNonClotures', 'aeroschoolResponses', 'demandesRevente', 'incidentsEnAttente'];
+    const keys = ['passwordResetRequests', 'volsEnAttente', 'plansNonClotures', 'radarBetaRequests', 'aeroschoolResponses', 'demandesRevente', 'incidentsEnAttente'];
     results.forEach((r, i) => {
       if (r.status === 'fulfilled' && r.value && !(r.value as { error?: unknown }).error) {
         counts[keys[i]] = (r.value as { count?: number | null }).count ?? 0;
@@ -150,6 +152,7 @@ export default async function AdminPage() {
               {(counts.volsEnAttente ?? 0) > 0 && <span>Vols : {counts.volsEnAttente}</span>}
               {(counts.aeroschoolResponses ?? 0) > 0 && <span>AeroSchool : {counts.aeroschoolResponses}</span>}
               {(counts.passwordResetRequests ?? 0) > 0 && <span>Mots de passe : {counts.passwordResetRequests}</span>}
+              {(counts.radarBetaRequests ?? 0) > 0 && <span>Radar BETA : {counts.radarBetaRequests}</span>}
               {(counts.demandesRevente ?? 0) > 0 && <span>Hangar Market : {counts.demandesRevente}</span>}
               {(counts.incidentsEnAttente ?? 0) > 0 && <span>Incidents : {counts.incidentsEnAttente}</span>}
             </div>

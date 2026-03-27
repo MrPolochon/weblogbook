@@ -4,6 +4,7 @@ import { useState, useMemo, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight, UserPlus, Check, XCircle, AlertTriangle, Banknote, CheckCheck } from 'lucide-react';
 import ChequeVisuel from '@/components/ChequeVisuel';
+import MessageContent from '@/components/MessageContent';
 import { formatDateShortUTC, formatDateTimeUTC } from '@/lib/date-utils';
 import { toast } from 'sonner';
 
@@ -515,7 +516,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
               {/* Si c'est un chèque, afficher le chèque visuel */}
               {CHEQUE_TYPES.includes(selectedMessage.type_message) && selectedMessage.cheque_montant ? (
                 <div className="space-y-6">
-                  <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>
+                  <MessageContent className="text-slate-300" content={selectedMessage.contenu} />
                   <ChequeVisuel
                     id={selectedMessage.id}
                     montant={selectedMessage.cheque_montant}
@@ -531,7 +532,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                 </div>
               ) : selectedMessage.type_message === 'recrutement' ? (
                 <div className="space-y-6">
-                  <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>
+                  <MessageContent className="text-slate-300" content={selectedMessage.contenu} />
                   
                   {/* Carte d'invitation */}
                   <div className="p-6 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/30">
@@ -592,7 +593,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                 </div>
               ) : ['amende_ifsa', 'relance_amende'].includes(selectedMessage.type_message) ? (
                 <div className="space-y-6">
-                  <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>
+                  <MessageContent className="text-slate-300" content={selectedMessage.contenu} />
                   
                   {/* Carte d'amende */}
                   <div className="p-6 rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/10 border border-red-500/30">
@@ -644,7 +645,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                   </div>
                 </div>
               ) : (
-                <p className="text-slate-300 whitespace-pre-wrap">{selectedMessage.contenu}</p>
+                <MessageContent className="text-slate-300" content={selectedMessage.contenu} />
               )}
             </div>
           </div>

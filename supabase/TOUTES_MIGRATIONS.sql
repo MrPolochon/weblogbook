@@ -1387,6 +1387,50 @@ ON CONFLICT (nom) DO NOTHING;
 
 
 -- ════════════════════════════════════════════════════════════════════════════
+-- PHASE RADAR ATC (système beta + capture + positions)
+-- ════════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS radar_beta BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS public.radar_beta_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  reason TEXT,
+  reviewed_by UUID REFERENCES public.profiles(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  reviewed_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS public.radar_api_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL,
+  label TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS public.radar_ingested_positions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  submitted_by UUID NOT NULL REFERENCES public.profiles(id),
+  cluster_id INTEGER NOT NULL,
+  position_x DOUBLE PRECISION NOT NULL,
+  position_y DOUBLE PRECISION NOT NULL,
+  matched_plan_vol_id UUID REFERENCES public.plans_vol(id) ON DELETE SET NULL,
+  confidence DOUBLE PRECISION,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_radar_beta_requests_status ON public.radar_beta_requests(status);
+CREATE INDEX IF NOT EXISTS idx_radar_beta_requests_user ON public.radar_beta_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_radar_api_tokens_user ON public.radar_api_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_radar_ingested_positions_recent ON public.radar_ingested_positions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_radar_ingested_positions_match ON public.radar_ingested_positions(matched_plan_vol_id);
+
+
+-- ════════════════════════════════════════════════════════════════════════════
 -- FICHIERS À EXÉCUTER SÉPARÉMENT (systèmes complets avec beaucoup de SQL) :
 -- ════════════════════════════════════════════════════════════════════════════
 --

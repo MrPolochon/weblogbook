@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import CompteForm from '@/app/(app)/compte/CompteForm';
 import LicencesSection from '@/components/LicencesSection';
+import RadarBetaSection from '@/components/RadarBetaSection';
 
 function formatTemps(min: number | null | undefined): string {
   if (min == null) return '—';
@@ -44,6 +45,7 @@ export default async function AtcComptePage() {
           <p className="text-slate-900 font-medium">{profile?.identifiant ?? '—'}</p>
         </div>
         <CompteForm armee={false} isAdmin={isAdmin} variant="atc" showArmee={false} />
+        <RadarBetaSection variant="atc" />
         <LicencesSection userId={user.id} variant="atc" />
       </div>
       <div className="lg:min-w-[320px] lg:flex-1">

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import CompteForm from '@/app/(app)/compte/CompteForm';
 import LicencesSection from '@/components/LicencesSection';
+import RadarBetaSection from '@/components/RadarBetaSection';
 
 function formatTemps(min: number | null | undefined): string {
   if (min == null) return '—';
@@ -65,6 +66,7 @@ export default async function SiaviComptePage() {
         <div className="rounded-xl border-2 border-red-300 bg-white p-4 shadow-sm">
           <CompteForm armee={false} isAdmin={isAdmin} variant="siavi" showArmee={false} />
         </div>
+        <RadarBetaSection variant="siavi" />
         <LicencesSection userId={user.id} variant="siavi" />
       </div>
       <div className="lg:min-w-[320px] lg:flex-1">
