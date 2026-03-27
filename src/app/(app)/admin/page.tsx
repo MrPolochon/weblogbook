@@ -87,6 +87,7 @@ const sections: Section[] = [
       { href: '/admin/documents', label: 'Documents', desc: 'Gestion des documents', icon: FileText },
       { href: '/admin/licences', label: 'Licences', desc: 'Licences & qualifications', icon: Award },
       { href: '/admin/sid-star', label: 'SID / STAR', desc: 'Procédures de départ et d\'arrivée', icon: Route },
+      { href: '/admin/cartographie-temporaire', label: 'Cartographie temporaire', desc: 'Edition et validation des cartes', icon: MapPin },
       { href: '/admin/securite', label: 'Sécurité', desc: 'Connexions & IPs', icon: Lock },
       { href: '/admin/storage', label: 'Storage', desc: 'Images & logos stockés', icon: ImageIcon },
       { href: '/admin/storage-overview', label: 'Espace disque', desc: 'Vue d\'ensemble du stockage', icon: HardDrive },

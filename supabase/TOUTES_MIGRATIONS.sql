@@ -1429,6 +1429,56 @@ CREATE INDEX IF NOT EXISTS idx_radar_api_tokens_user ON public.radar_api_tokens(
 CREATE INDEX IF NOT EXISTS idx_radar_ingested_positions_recent ON public.radar_ingested_positions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_radar_ingested_positions_match ON public.radar_ingested_positions(matched_plan_vol_id);
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- PHASE CARTOGRAPHIE TEMPORAIRE (module d'édition temporaire)
+-- ════════════════════════════════════════════════════════════════════════════
+
+ALTER TABLE public.site_config
+  ADD COLUMN IF NOT EXISTS cartography_editor_enabled BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS cartography_editor_password_hash TEXT,
+  ADD COLUMN IF NOT EXISTS cartography_editor_updated_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS public.cartography_editor_drafts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  owner_identifiant TEXT,
+  title TEXT NOT NULL DEFAULT 'Brouillon cartographie',
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_autosaved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cartography_editor_drafts_owner
+  ON public.cartography_editor_drafts(owner_id);
+CREATE INDEX IF NOT EXISTS idx_cartography_editor_drafts_updated
+  ON public.cartography_editor_drafts(updated_at DESC);
+
+ALTER TABLE public.cartography_editor_drafts ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  DROP POLICY IF EXISTS "cartography_drafts_select_owner_or_admin" ON public.cartography_editor_drafts;
+  CREATE POLICY "cartography_drafts_select_owner_or_admin"
+    ON public.cartography_editor_drafts FOR SELECT TO authenticated
+    USING (owner_id = auth.uid() OR public.is_admin());
+
+  DROP POLICY IF EXISTS "cartography_drafts_insert_owner" ON public.cartography_editor_drafts;
+  CREATE POLICY "cartography_drafts_insert_owner"
+    ON public.cartography_editor_drafts FOR INSERT TO authenticated
+    WITH CHECK (owner_id = auth.uid() OR public.is_admin());
+
+  DROP POLICY IF EXISTS "cartography_drafts_update_owner_or_admin" ON public.cartography_editor_drafts;
+  CREATE POLICY "cartography_drafts_update_owner_or_admin"
+    ON public.cartography_editor_drafts FOR UPDATE TO authenticated
+    USING (owner_id = auth.uid() OR public.is_admin())
+    WITH CHECK (owner_id = auth.uid() OR public.is_admin());
+
+  DROP POLICY IF EXISTS "cartography_drafts_delete_owner_or_admin" ON public.cartography_editor_drafts;
+  CREATE POLICY "cartography_drafts_delete_owner_or_admin"
+    ON public.cartography_editor_drafts FOR DELETE TO authenticated
+    USING (owner_id = auth.uid() OR public.is_admin());
+END $$;
+
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- FICHIERS À EXÉCUTER SÉPARÉMENT (systèmes complets avec beaucoup de SQL) :
