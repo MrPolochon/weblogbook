@@ -414,6 +414,22 @@ export async function POST(request: Request) {
         }, { status: 400 });
       }
 
+      // Interdire tout plan de vol quand l'avion est engagé dans un cycle de réparation actif
+      const { data: activeRepair } = await admin
+        .from('reparation_demandes')
+        .select('id, statut')
+        .eq('avion_id', compagnie_avion_id)
+        .in('statut', ['acceptee', 'en_transit', 'en_reparation', 'mini_jeux', 'terminee', 'facturee', 'payee', 'retour_transit'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (activeRepair) {
+        return NextResponse.json({
+          error: `L'avion ${avionIndiv.immatriculation} est engagé en réparation (${activeRepair.statut}). Aucun plan de vol n'est autorisé tant que l'entreprise de réparation ne l'a pas libéré.`
+        }, { status: 400 });
+      }
+
       // Vérifier qu'il n'y a pas de vol ferry en cours pour cet avion
       const { count: ferrysEnCours } = await admin
         .from('vols_ferry')

@@ -75,6 +75,30 @@ export async function PATCH(
         .eq('id', id);
 
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+      // Si ce ferry correspond à un acheminement vers hangar de réparation, basculer la demande en réparation active.
+      const { data: pendingRepair } = await admin
+        .from('reparation_demandes')
+        .select('id, statut, hangar_id, reparation_hangars!inner(aeroport_code)')
+        .eq('avion_id', vol.avion_id)
+        .eq('statut', 'acceptee')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (pendingRepair) {
+        const hangarRow = Array.isArray(pendingRepair.reparation_hangars)
+          ? pendingRepair.reparation_hangars[0]
+          : pendingRepair.reparation_hangars;
+        if (hangarRow?.aeroport_code === vol.aeroport_arrivee) {
+          await admin.from('reparation_demandes').update({
+            statut: 'en_reparation',
+            debut_reparation_at: new Date().toISOString(),
+          }).eq('id', pendingRepair.id);
+          await admin.from('compagnie_avions').update({ statut: 'en_reparation' }).eq('id', vol.avion_id);
+        }
+      }
+
       return NextResponse.json({ ok: true, usure_appliquee: usure, nouvelle_usure: nouvelleUsure });
     }
 

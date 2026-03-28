@@ -41,23 +41,23 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
   ] : [];
 
   return (
-    <nav className="bg-gradient-to-r from-red-800 to-red-700 border-b border-red-600 shadow-lg">
-      <div className="mx-auto max-w-7xl px-4">
+    <nav className="border-b border-red-400/30 bg-gradient-to-r from-[#3a0f18]/95 via-[#5a1022]/95 to-[#7a1428]/95 backdrop-blur-2xl shadow-[0_20px_40px_rgba(40,6,16,0.55)]">
+      <div className="mx-auto max-w-7xl px-4 sm:px-5 lg:px-6">
         <div className="flex h-14 items-center justify-between">
           {/* Logo et titre */}
           <div className="flex items-center gap-3">
-            <div className="p-1.5 rounded-lg bg-white/10">
+            <div className="p-1.5 rounded-lg border border-red-300/25 bg-white/10">
               <Flame className="h-6 w-6 text-white" />
             </div>
             <div>
               <span className="font-bold text-white text-lg">SIAVI</span>
-              <span className="text-red-200 text-xs ml-2 hidden sm:inline">Brigade AFIS</span>
+              <span className="text-red-200/90 text-xs ml-2 hidden sm:inline">Brigade AFIS</span>
             </div>
           </div>
 
           {/* Status service */}
           {enService && sessionInfo && (
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/10">
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-red-300/25 bg-white/10">
               <MapPin className="h-4 w-4 text-red-200" />
               <span className="font-mono font-bold text-white">{sessionInfo.aeroport}</span>
               {estAfis ? (
@@ -80,10 +80,10 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
                 <Link
                   key={href}
                   href={href}
-                  className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-semibold transition-all ${
                     isActive
-                      ? 'bg-white/20 text-white'
-                      : 'text-red-100 hover:bg-white/10 hover:text-white'
+                      ? 'border-red-200/35 bg-white/20 text-white'
+                      : 'border-transparent text-red-100 hover:border-red-200/25 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <Icon className="h-4 w-4" />
@@ -99,10 +99,10 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
                 <Link
                   key={href}
                   href={href}
-                  className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-semibold transition-all ${
                     isActive
-                      ? 'bg-white/20 text-white'
-                      : 'text-red-100 hover:bg-white/10 hover:text-white'
+                      ? 'border-red-200/35 bg-white/20 text-white'
+                      : 'border-transparent text-red-100 hover:border-red-200/25 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <Icon className="h-4 w-4" />
@@ -116,7 +116,7 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
               <>
                 <Link
                   href="/atc"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-red-100 hover:bg-emerald-500/20 hover:text-emerald-200 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-transparent text-sm font-semibold text-red-100 hover:border-emerald-300/30 hover:bg-emerald-500/20 hover:text-emerald-200 transition-all"
                   title="Espace ATC"
                 >
                   <Radio className="h-4 w-4" />
@@ -124,7 +124,7 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
                 </Link>
                 <Link
                   href="/logbook"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-red-100 hover:bg-sky-500/20 hover:text-sky-200 transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-transparent text-sm font-semibold text-red-100 hover:border-sky-300/30 hover:bg-sky-500/20 hover:text-sky-200 transition-all"
                   title="Espace pilote"
                 >
                   <Plane className="h-4 w-4" />
@@ -136,7 +136,7 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
             {/* Déconnexion */}
             <button
               onClick={handleLogout}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-red-100 hover:bg-white/10 hover:text-white transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-transparent text-sm font-semibold text-red-100 hover:border-red-200/25 hover:bg-white/10 hover:text-white transition-all"
             >
               <LogOut className="h-4 w-4" />
             </button>

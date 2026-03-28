@@ -123,7 +123,7 @@ export default async function SiaviLayout({
             </div>
           </aside>
         )}
-        <main className="flex-1 min-w-0 mx-auto w-full max-w-6xl px-4 py-8">{children}</main>
+        <main className="flex-1 min-w-0 mx-auto w-full max-w-7xl px-4 sm:px-5 lg:px-6 py-8">{children}</main>
       </div>
       {enService && session && (
         <SiaviTelephone 

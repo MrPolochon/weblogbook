@@ -104,9 +104,9 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     pathname.startsWith('/perf-ptfs') || pathname.startsWith('/alliance') || pathname.startsWith('/signalement') || pathname.startsWith('/reparation');
 
   const totalAdminBadge = pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount;
-  const navItemBase = 'flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors whitespace-nowrap shrink-0';
-  const navItemMuted = 'text-slate-300 hover:bg-slate-800/60 hover:text-slate-100';
-  const navItemActive = 'bg-slate-700/60 text-sky-300';
+  const navItemBase = 'flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold tracking-[0.01em] transition-all whitespace-nowrap shrink-0 border';
+  const navItemMuted = 'border-slate-700/30 text-slate-200 hover:border-slate-500/35 hover:bg-slate-700/45 hover:text-white';
+  const navItemActive = 'border-sky-500/35 bg-sky-500/18 text-sky-200 shadow-[0_10px_22px_rgba(2,132,199,0.22)]';
 
   function renderInlineBadge(count: number, color: 'red' | 'orange' = 'red') {
     if (count <= 0) return null;
@@ -119,7 +119,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-700/30 bg-slate-900/80 backdrop-blur-xl shadow-lg shadow-slate-900/50">
+    <header className="sticky top-0 z-50 border-b border-slate-600/30 bg-slate-950/82 backdrop-blur-2xl shadow-[0_18px_34px_rgba(2,6,23,0.45)]">
       <div className="mx-auto flex max-w-screen-2xl flex-col gap-2 px-4 py-2 sm:h-16 sm:flex-row sm:flex-nowrap sm:items-center sm:justify-between sm:gap-4 sm:py-0">
         <nav className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-visible whitespace-nowrap scrollbar-hide">
           {/* Menu déroulant Espace Pilote */}
@@ -152,7 +152,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             </button>
             
             {piloteMenuOpen && (
-              <div style={dropdownStyle ?? undefined} className="fixed w-64 rounded-2xl border border-slate-700/40 bg-slate-800 backdrop-blur-2xl py-1.5 shadow-2xl shadow-black/40 z-50 animate-fade-in">
+              <div style={dropdownStyle ?? undefined} className="fixed w-64 rounded-2xl border border-slate-600/35 bg-slate-900/96 backdrop-blur-2xl py-1.5 shadow-[0_24px_56px_rgba(2,6,23,0.55)] z-50 animate-fade-in">
                 {piloteMenuItems.map((item, idx) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || (item.href !== '/logbook' && pathname.startsWith(item.href));
@@ -167,8 +167,8 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
                         className={cn(
                           'flex items-center gap-3 px-4 py-2 text-sm transition-all duration-150 mx-1.5 rounded-lg',
                           isActive
-                            ? 'bg-sky-500/15 text-sky-300'
-                            : 'text-slate-300 hover:bg-slate-700/50 hover:text-slate-100'
+                            ? 'border border-sky-500/25 bg-sky-500/15 text-sky-200'
+                            : 'border border-transparent text-slate-300 hover:border-slate-600/35 hover:bg-slate-700/45 hover:text-slate-100'
                         )}
                       >
                         <Icon className={cn("h-4 w-4 shrink-0 transition-colors", isActive ? "text-sky-400" : "text-slate-500")} />
@@ -191,7 +191,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
               href="/logbook/a-confirmer"
               className={cn(
                 `${navItemBase} bg-red-900/40 text-red-300 hover:bg-red-900/60`,
-                pathname === '/logbook/a-confirmer' ? 'ring-1 ring-red-500' : ''
+              pathname === '/logbook/a-confirmer' ? 'ring-1 ring-red-400/80' : ''
               )}
             >
               À confirmer
@@ -286,7 +286,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
               <>
                 <Link
                   href="/atc"
-                  className={`${navItemBase} gap-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-slate-100`}
+                  className={`${navItemBase} gap-1.5 border-slate-700/35 text-slate-200 hover:border-emerald-500/35 hover:bg-emerald-500/10 hover:text-emerald-200`}
                   title="Passer à l'espace ATC"
                 >
                   <Radio className="h-4 w-4" />
@@ -294,7 +294,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
                 </Link>
                 <Link
                   href="/siavi"
-                  className={`${navItemBase} gap-1.5 text-slate-300 hover:bg-red-800/50 hover:text-red-200`}
+                  className={`${navItemBase} gap-1.5 border-slate-700/35 text-slate-200 hover:border-red-500/45 hover:bg-red-500/15 hover:text-red-200`}
                   title="Passer à l'espace SIAVI"
                 >
                   <Flame className="h-4 w-4" />
@@ -328,7 +328,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             <button
               type="button"
               onClick={() => setAccountMenuOpen((prev) => !prev)}
-              className="w-full flex items-center justify-center rounded-lg px-3 py-2 bg-slate-800/50 text-slate-300 border border-slate-700/50"
+              className="w-full flex items-center justify-center rounded-lg px-3 py-2 bg-slate-900/70 text-slate-300 border border-slate-600/35"
               aria-label="Ouvrir le menu compte"
             >
               <ChevronDown className={cn('h-5 w-5 transition-transform', accountMenuOpen && 'rotate-180')} />

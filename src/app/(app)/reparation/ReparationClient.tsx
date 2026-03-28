@@ -432,7 +432,10 @@ function DemandesTab({ detail, api, flash, busy, onRefresh, router }: {
               </>
             )}
             {d.statut === 'acceptee' && (
-              <button disabled={busy} onClick={() => doAction(d.id, 'ferry_arrive')} className="px-3 py-1 rounded bg-sky-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Truck className="h-3 w-3" />Avion arrivé</button>
+              <button disabled={busy} onClick={() => doAction(d.id, 'ferry_arrive')} className="px-3 py-1 rounded bg-sky-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Truck className="h-3 w-3" />Confirmer arrivée au hangar</button>
+            )}
+            {d.statut === 'en_transit' && (
+              <button disabled={busy} onClick={() => doAction(d.id, 'ferry_arrive')} className="px-3 py-1 rounded bg-sky-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Truck className="h-3 w-3" />Transfert entreprise: avion arrivé</button>
             )}
             {d.statut === 'en_reparation' && (
               <button disabled={busy} onClick={() => router.push(`/reparation/jeu/${d.id}`)} className="px-3 py-1 rounded bg-violet-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Play className="h-3 w-3" />Jouer les mini-jeux</button>

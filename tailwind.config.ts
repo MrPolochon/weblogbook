@@ -25,6 +25,11 @@ const config: Config = {
           850: "#172033",
           925: "#0d1424",
         },
+        surface: {
+          950: "#070b14",
+          900: "#0b1220",
+          850: "#111a2e",
+        },
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
@@ -35,6 +40,8 @@ const config: Config = {
         'glow': '0 0 20px rgba(14, 165, 233, 0.3)',
         'glow-lg': '0 0 40px rgba(14, 165, 233, 0.4)',
         'inner-glow': 'inset 0 0 20px rgba(14, 165, 233, 0.1)',
+        'elevated': '0 20px 44px rgba(2, 6, 23, 0.45)',
+        'panel': 'inset 0 1px 0 rgba(255,255,255,0.06), 0 14px 30px rgba(2,6,23,0.3)',
       },
       animation: {
         'fade-in': 'fade-in 0.3s ease-out forwards',

@@ -183,6 +183,35 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+    // Règles réparation: un avion en demande de réparation active ne peut faire que le ferry vers le hangar demandé (statut acceptee).
+    const { data: activeRepair } = await admin
+      .from('reparation_demandes')
+      .select('id, statut, hangar_id, reparation_hangars!inner(aeroport_code)')
+      .eq('avion_id', avion_id)
+      .in('statut', ['acceptee', 'en_transit', 'en_reparation', 'mini_jeux', 'terminee', 'facturee', 'payee', 'retour_transit'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (activeRepair) {
+      const hangarRow = Array.isArray(activeRepair.reparation_hangars)
+        ? activeRepair.reparation_hangars[0]
+        : activeRepair.reparation_hangars;
+      const hangarAeroport = hangarRow?.aeroport_code;
+
+      if (activeRepair.statut === 'acceptee') {
+        if (!hangarAeroport || aa !== hangarAeroport) {
+          return NextResponse.json({
+            error: `Cet avion est accepté en réparation. Le seul vol ferry autorisé est vers le hangar (${hangarAeroport || 'inconnu'}).`
+          }, { status: 400 });
+        }
+      } else {
+        return NextResponse.json({
+          error: `Cet avion est engagé en réparation (${activeRepair.statut}). Aucun vol ferry n'est autorisé pour le moment.`
+        }, { status: 400 });
+      }
+    }
+
     // Vérifier qu'il n'y a pas de plan de vol en cours pour cet avion
     const { count: plansEnCours } = await admin
       .from('plans_vol')

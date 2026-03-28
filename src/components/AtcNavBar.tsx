@@ -112,19 +112,19 @@ export default function AtcNavBar({
 
   const isAtcMenuActive = pathname === '/atc' || pathname.startsWith('/atc/documents') || pathname.startsWith('/atc/messagerie');
 
-  const linkBase = 'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 border';
+  const linkBase = 'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold tracking-[0.01em] transition-all whitespace-nowrap flex-shrink-0 border';
   const linkActive = isDark ? 'atc-link-active border-sky-800/60 bg-sky-950/70 text-sky-200 shadow-[0_8px_18px_rgba(2,6,23,0.24)]' : 'atc-link-active border-sky-200 bg-sky-100 text-sky-800';
-  const linkInactive = isDark 
-    ? 'border-slate-800/80 bg-slate-950/30 text-slate-300 hover:border-slate-700 hover:bg-slate-800/80 hover:text-slate-100'
-    : 'border-transparent text-slate-700 hover:bg-slate-100 hover:text-slate-900';
+  const linkInactive = isDark
+    ? 'border-slate-700/45 bg-slate-950/45 text-slate-200 hover:border-slate-500/45 hover:bg-slate-800/78 hover:text-white'
+    : 'border-slate-200/70 bg-white/65 text-slate-700 hover:border-sky-300 hover:bg-sky-50 hover:text-slate-900';
 
-  const headerBg = isDark 
-    ? 'bg-slate-950/90 border-slate-800/80 shadow-[0_18px_40px_rgba(2,6,23,0.35)]'
-    : 'bg-white/90 border-slate-300';
+  const headerBg = isDark
+    ? 'bg-slate-950/86 border-slate-700/45 shadow-[0_20px_40px_rgba(2,6,23,0.45)]'
+    : 'bg-white/92 border-slate-300/85 shadow-[0_14px_28px_rgba(15,23,42,0.08)]';
 
   const dropdownBg = isDark
-    ? 'bg-slate-900/95 border-slate-700/80 shadow-[0_24px_48px_rgba(2,6,23,0.45)] backdrop-blur-xl'
-    : 'bg-white border-slate-300';
+    ? 'bg-slate-900/95 border-slate-600/45 shadow-[0_24px_52px_rgba(2,6,23,0.52)] backdrop-blur-xl'
+    : 'bg-white/98 border-slate-300 shadow-[0_18px_34px_rgba(15,23,42,0.1)]';
 
   const dropdownItemActive = isDark
     ? 'bg-slate-800 text-sky-200'

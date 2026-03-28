@@ -103,7 +103,7 @@ export default async function AtcLayout({
           {enService && session && (
             <AtcLeftSidebar plansAuto={plansAuto} plansOrphelins={plansOrphelins} sessionAeroport={session.aeroport} sessionPosition={session.position} />
           )}
-          <main className="flex-1 min-w-0 w-full px-4 py-6 overflow-x-auto">{children}</main>
+          <main className="flex-1 min-w-0 w-full px-4 sm:px-5 lg:px-6 py-6 overflow-x-auto">{children}</main>
           {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} />}
         </div>
         {enService && session && (

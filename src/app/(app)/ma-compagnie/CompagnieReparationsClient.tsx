@@ -35,6 +35,7 @@ export default function CompagnieReparationsClient({ compagnieId, isPdg }: { com
   const [demandes, setDemandes] = useState<Demande[]>([]);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState<string | null>(null);
+  const [askingTransfer, setAskingTransfer] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -67,6 +68,27 @@ export default function CompagnieReparationsClient({ compagnieId, isPdg }: { com
       toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setPaying(null);
+    }
+  }
+
+  async function handleDemanderTransfert(demandeId: string) {
+    if (!confirm('Confirmer la demande de transfert vers le hangar de réparation ? Les frais de transfert seront facturés par l\'entreprise de réparation.')) return;
+    setAskingTransfer(demandeId);
+    try {
+      const res = await fetch(`/api/reparation/demandes/${demandeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'demander_transfert_hangar' }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      toast.success('Transfert demandé à l\'entreprise de réparation');
+      setDemandes(prev => prev.map(dm => dm.id === demandeId ? { ...dm, statut: 'en_transit' } : dm));
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setAskingTransfer(null);
     }
   }
 
@@ -110,6 +132,16 @@ export default function CompagnieReparationsClient({ compagnieId, isPdg }: { com
                 >
                   {paying === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
                   Payer {d.prix_total?.toLocaleString('fr-FR')} F$
+                </button>
+              )}
+              {d.statut === 'acceptee' && isPdg && (
+                <button
+                  onClick={() => handleDemanderTransfert(d.id)}
+                  disabled={askingTransfer === d.id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-sky-600 text-white rounded-lg hover:bg-sky-700 disabled:opacity-50 transition-colors shrink-0"
+                >
+                  {askingTransfer === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
+                  Demander transfert hangar
                 </button>
               )}
             </div>
