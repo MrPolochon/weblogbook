@@ -19,7 +19,7 @@ export default async function DepotPlanVolPage() {
     .eq('pilote_id', user.id)
     .in('statut', ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'])
     .limit(1)
-    .single();
+    .maybeSingle();
 
   // Si un plan est actif, rediriger vers la page des plans avec message
   if (planActif) {
