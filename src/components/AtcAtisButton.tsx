@@ -11,6 +11,8 @@ interface AtisData {
   information_code?: string;
   last_updated?: string;
   runway?: string;
+  expected_approach?: string;
+  expected_runway?: string;
   runway_condition?: string;
   wind?: string;
   visibility?: string;
@@ -18,6 +20,7 @@ interface AtisData {
   temperature?: string;
   dewpoint?: string;
   qnh?: string;
+  transition_level?: string;
   remarks?: string;
   cavok?: boolean;
   bilingual_mode?: boolean;
@@ -333,7 +336,12 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   };
 
   const saveEdit = () => {
-    if (editing === 'runway') handlePatch({ runway: editValues.runway || undefined, runway_condition: editValues.runway_condition || undefined });
+    if (editing === 'runway') handlePatch({
+      runway: editValues.runway || undefined,
+      expected_approach: editValues.expected_approach || undefined,
+      expected_runway: editValues.expected_runway || undefined,
+      runway_condition: editValues.runway_condition || undefined,
+    });
     if (editing === 'weather') handlePatch({
       wind: editValues.wind || undefined,
       visibility: editValues.visibility || undefined,
@@ -341,7 +349,10 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       temperature: editValues.temperature || undefined,
       dewpoint: editValues.dewpoint || undefined,
     });
-    if (editing === 'qnh') handlePatch({ qnh: editValues.qnh || undefined });
+    if (editing === 'qnh') handlePatch({
+      qnh: editValues.qnh || undefined,
+      transition_level: editValues.transition_level || undefined,
+    });
     if (editing === 'remarks') handlePatch({ remarks: editValues.remarks || undefined });
   };
 
@@ -543,6 +554,8 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
             {editing === 'runway' ? (
               <div className="flex flex-col gap-2 flex-1">
                 <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="ex: 25L/25R" value={editValues.runway ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, runway: e.target.value }))} />
+                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Approche prévue (anglais uniquement, ex: ILS)" value={editValues.expected_approach ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, expected_approach: e.target.value }))} />
+                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Piste prévue (anglais uniquement, ex: 25)" value={editValues.expected_runway ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, expected_runway: e.target.value }))} />
                 <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Condition" value={editValues.runway_condition ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, runway_condition: e.target.value }))} />
                 <div className="flex gap-2">
                   <button onClick={saveEdit} className={`px-3 py-2 rounded-lg text-sm font-medium ${btnCl}`}>OK</button>
@@ -550,8 +563,16 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 </div>
               </div>
             ) : (
-              <button onClick={() => startEdit('runway', { runway: d?.runway ?? '', runway_condition: d?.runway_condition ?? '' })} className={`flex items-center gap-2 hover:underline ${textValue}`}>
-                {val(d?.runway)} ({val(d?.runway_condition)}) <Pencil className="h-4 w-4 shrink-0" />
+              <button onClick={() => startEdit('runway', {
+                runway: d?.runway ?? '',
+                expected_approach: d?.expected_approach ?? '',
+                expected_runway: d?.expected_runway ?? '',
+                runway_condition: d?.runway_condition ?? '',
+              })} className={`flex items-center gap-2 hover:underline text-right ${textValue}`}>
+                <span className="max-w-[230px] truncate">
+                  {val(d?.runway)} | {val(d?.expected_approach)} {d?.expected_runway ? `RWY ${d.expected_runway}` : ''} ({val(d?.runway_condition)})
+                </span>
+                <Pencil className="h-4 w-4 shrink-0" />
               </button>
             )}
           </div>
@@ -602,14 +623,18 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
           <div className="flex justify-between items-center gap-3">
             <span className={`text-sm font-medium min-w-[80px] ${textMuted}`}>QNH</span>
             {editing === 'qnh' ? (
-              <div className="flex gap-2 items-center">
+              <div className="flex flex-col gap-2 items-stretch">
                 <input className={`px-3 py-2 rounded-lg border w-24 ${inputCl}`} value={editValues.qnh ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, qnh: e.target.value }))} placeholder="1013" />
+                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} value={editValues.transition_level ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, transition_level: e.target.value }))} placeholder="Transition level manuel (ex: 100 ou FL100)" />
                 <button onClick={saveEdit} className={`px-3 py-2 rounded-lg text-sm font-medium ${btnCl}`}>OK</button>
                 <button onClick={() => setEditing(null)} className="px-3 py-2 rounded-lg bg-slate-500 text-white text-sm font-medium">Annuler</button>
               </div>
             ) : (
-              <button onClick={() => startEdit('qnh', { qnh: d?.qnh ?? '' })} className={`flex items-center gap-2 hover:underline ${textValue}`}>
-                {val(d?.qnh)} <Pencil className="h-4 w-4 shrink-0" />
+              <button onClick={() => startEdit('qnh', { qnh: d?.qnh ?? '', transition_level: d?.transition_level ?? '' })} className={`flex items-center gap-2 hover:underline text-right ${textValue}`}>
+                <span className="max-w-[230px] truncate">
+                  {val(d?.qnh)} | TL {val(d?.transition_level)}
+                </span>
+                <Pencil className="h-4 w-4 shrink-0" />
               </button>
             )}
           </div>
