@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { RefreshCw, Radio } from 'lucide-react';
+import { Plane, RefreshCw, Radio } from 'lucide-react';
 import {
   AIRPORT_TO_FIR,
   DEFAULT_FIR_ZONES,
@@ -342,6 +342,7 @@ export default function AtcMapClient() {
                 const isSelected = selectedFlightId === f.id;
                 const color = f.type_vol === 'VFR' ? '#22c55e' : f.type_vol === 'MIL' ? '#a855f7' : '#ef4444';
                 const lineOpacity = isSelected ? 0.9 : 0.45;
+                const angleDeg = Math.atan2(f.y2 - f.y1, f.x2 - f.x1) * (180 / Math.PI);
                 return (
                   <g key={f.id}>
                     <line
@@ -359,11 +360,22 @@ export default function AtcMapClient() {
                       onClick={() => setSelectedFlightId((prev) => prev === f.id ? null : f.id)}
                     >
                       <circle cx={f.x} cy={f.y} r={isSelected ? 5.5 : 4.2} fill={color} stroke="#e2e8f0" strokeWidth={isSelected ? 1.4 : 1} />
-                      <polygon
-                        points={`${f.x},${f.y - 9} ${f.x - 5.5},${f.y + 5.5} ${f.x + 5.5},${f.y + 5.5}`}
-                        fill={color}
-                        opacity={0.82}
-                      />
+                      <foreignObject x={f.x - 8} y={f.y - 8} width={16} height={16}>
+                        <div
+                          xmlns="http://www.w3.org/1999/xhtml"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '16px',
+                            height: '16px',
+                            transform: `rotate(${angleDeg}deg)`,
+                            transformOrigin: 'center',
+                          }}
+                        >
+                          <Plane size={13} color={color} style={{ opacity: 0.9 }} />
+                        </div>
+                      </foreignObject>
                       <text
                         x={f.x + 8}
                         y={f.y - 8}
