@@ -4,6 +4,7 @@ import CompteForm from '@/app/(app)/compte/CompteForm';
 import LicencesSection from '@/components/LicencesSection';
 import RadarBetaSection from '@/components/RadarBetaSection';
 import DiscordLinkSection from '@/components/DiscordLinkSection';
+import RobloxUsernameSection from '@/components/RobloxUsernameSection';
 
 function formatTemps(min: number | null | undefined): string {
   if (min == null) return '—';
@@ -64,6 +65,7 @@ export default async function SiaviComptePage() {
             </div>
           </div>
         </div>
+        <RobloxUsernameSection variant="siavi" />
         <div className="rounded-xl border-2 border-red-300 bg-white p-4 shadow-sm">
           <DiscordLinkSection variant="siavi" />
         </div>

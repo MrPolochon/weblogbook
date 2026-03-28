@@ -1,0 +1,18 @@
+{
+  "first_run": true,
+  "discord_rpc_enabled": true,
+  "atc_position": "Tower",
+  "transparency": 0.35,
+  "server_url": "",
+  "api_token": "",
+  "capture_region": null,
+  "calibration_points": [],
+  "capture_interval_ms": 2000,
+  "red_hue_range": [0, 10, 170, 180],
+  "red_saturation_min": 80,
+  "red_value_min": 80,
+  "min_cluster_pixels": 5,
+  "max_cluster_pixels": 500,
+  "ocr_enabled": false,
+  "ocr_region": null
+}

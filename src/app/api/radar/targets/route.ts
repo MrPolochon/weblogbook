@@ -45,17 +45,20 @@ export async function GET() {
           route_ifr, strip_route, strip_sid_atc, sid_depart, star_arrivee, strip_star,
           current_holder_user_id, current_holder_position, current_holder_aeroport,
           pilote_id,
-          profiles!plans_vol_pilote_id_fkey ( identifiant, callsign )
+          profiles!plans_vol_pilote_id_fkey ( identifiant, callsign, roblox_username )
         `)
         .in('statut', ['en_cours', 'automonitoring']),
       admin
         .from('radar_ingested_positions')
-        .select('matched_plan_vol_id, position_x, position_y, confidence')
+        .select('id, cluster_id, matched_plan_vol_id, position_x, position_y, confidence')
         .gt('created_at', new Date(now - 15000).toISOString())
         .order('created_at', { ascending: false }),
     ]);
 
     const ingestedByPlan = new Map<string, { x: number; y: number; confidence: number }>();
+    const unmatchedPositions: { id: string; cluster_id: number; x: number; y: number }[] = [];
+    const matchedIngestedIds = new Set<string>();
+
     if (ingested) {
       for (const row of ingested) {
         if (row.matched_plan_vol_id && !ingestedByPlan.has(row.matched_plan_vol_id)) {
@@ -64,12 +67,28 @@ export async function GET() {
             y: row.position_y,
             confidence: row.confidence ?? 0,
           });
+          matchedIngestedIds.add(row.id);
+        }
+      }
+
+      const seenClusters = new Set<number>();
+      for (const row of ingested) {
+        if (!matchedIngestedIds.has(row.id) && !row.matched_plan_vol_id) {
+          if (!seenClusters.has(row.cluster_id)) {
+            seenClusters.add(row.cluster_id);
+            unmatchedPositions.push({
+              id: row.id,
+              cluster_id: row.cluster_id,
+              x: row.position_x,
+              y: row.position_y,
+            });
+          }
         }
       }
     }
 
     let dataSource: 'interpolation' | 'capture' | 'mixed' = 'interpolation';
-    if (ingestedByPlan.size > 0) dataSource = 'mixed';
+    if (ingestedByPlan.size > 0 || unmatchedPositions.length > 0) dataSource = 'mixed';
 
     const targets: RadarTarget[] = [];
 
@@ -89,7 +108,6 @@ export async function GET() {
       if (capturedPos && capturedPos.confidence > 0.3) {
         position = { x: capturedPos.x, y: capturedPos.y };
         source = 'capture';
-        if (dataSource === 'interpolation') dataSource = 'mixed';
         const totalDist = Math.sqrt(
           (arrSVG.x - depSVG.x) ** 2 + (arrSVG.y - depSVG.y) ** 2,
         );
@@ -106,7 +124,7 @@ export async function GET() {
       }
 
       const heading = calculateHeading(depSVG, arrSVG);
-      const profileData = pv.profiles as { identifiant?: string; callsign?: string } | null;
+      const profileData = pv.profiles as { identifiant?: string; callsign?: string; roblox_username?: string } | null;
 
       targets.push({
         id: pv.id,
@@ -131,10 +149,43 @@ export async function GET() {
         source,
         temps_prev_min: pv.temps_prev_min,
         pilote_identifiant: profileData?.identifiant ?? null,
+        identified: true,
+        roblox_username: profileData?.roblox_username ?? null,
       });
     }
 
-    if (targets.length > 0 && ingestedByPlan.size >= targets.length) {
+    // Unmatched captured targets — visible on minimap but no flight plan
+    for (const uPos of unmatchedPositions) {
+      targets.push({
+        id: `unk-${uPos.cluster_id}`,
+        callsign: 'INCONNU',
+        numero_vol: '',
+        type_vol: 'UNK',
+        aeroport_depart: '',
+        aeroport_arrivee: '',
+        position: { x: uPos.x, y: uPos.y },
+        heading: 0,
+        progress: 0,
+        altitude: null,
+        altitude_unit: '',
+        squawk: null,
+        route: null,
+        sid: null,
+        star: null,
+        assumed_by: null,
+        assumed_position: null,
+        assumed_aeroport: null,
+        on_ground: false,
+        source: 'capture',
+        temps_prev_min: 0,
+        pilote_identifiant: null,
+        identified: false,
+        roblox_username: null,
+      });
+    }
+
+    const identifiedCount = targets.filter(t => t.identified).length;
+    if (identifiedCount > 0 && ingestedByPlan.size >= identifiedCount && unmatchedPositions.length === 0) {
       dataSource = 'capture';
     }
 

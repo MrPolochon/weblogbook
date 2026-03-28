@@ -5,7 +5,7 @@ import { hasApprovedRadarAccessForUser } from '@/lib/radar-access';
 
 export const dynamic = 'force-dynamic';
 
-type Action = 'assume' | 'release' | 'transfer' | 'set_altitude' | 'set_squawk';
+type Action = 'assume' | 'release' | 'transfer' | 'set_altitude' | 'set_squawk' | 'tag_unknown';
 
 export async function POST(request: NextRequest) {
   try {
@@ -113,6 +113,31 @@ export async function POST(request: NextRequest) {
           .eq('id', plan_vol_id);
         if (error) throw error;
         return NextResponse.json({ ok: true, action: 'squawk_set', value });
+      }
+
+      case 'tag_unknown': {
+        if (!value) {
+          return NextResponse.json({ error: 'ID du plan de vol cible requis' }, { status: 400 });
+        }
+        if (!plan_vol_id.startsWith('unk-')) {
+          return NextResponse.json({ error: 'Cible inconnue invalide' }, { status: 400 });
+        }
+        const clusterId = Number(plan_vol_id.slice(4));
+        if (!Number.isFinite(clusterId)) {
+          return NextResponse.json({ error: 'Cluster inconnu invalide' }, { status: 400 });
+        }
+
+        const { error } = await admin
+          .from('radar_ingested_positions')
+          .update({
+            matched_plan_vol_id: value,
+            confidence: 1,
+          })
+          .eq('submitted_by', user.id)
+          .eq('cluster_id', clusterId)
+          .gt('created_at', new Date(Date.now() - 30000).toISOString());
+        if (error) throw error;
+        return NextResponse.json({ ok: true, action: 'unknown_tagged', cluster_id: clusterId, value });
       }
 
       default:

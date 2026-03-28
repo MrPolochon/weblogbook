@@ -6,6 +6,7 @@ import LicencesSection from '@/components/LicencesSection';
 import MaCartePhoto from './MaCartePhoto';
 import RadarBetaSection from '@/components/RadarBetaSection';
 import DiscordLinkSection from '@/components/DiscordLinkSection';
+import RobloxUsernameSection from '@/components/RobloxUsernameSection';
 
 export default async function ComptePage() {
   const supabase = await createClient();
@@ -37,6 +38,7 @@ export default async function ComptePage() {
             <p className="text-slate-400 text-sm">Identifiant</p>
             <p className="text-slate-100 font-medium">{profile?.identifiant ?? '—'}</p>
           </div>
+          <RobloxUsernameSection variant="default" />
           <DiscordLinkSection variant="default" />
           <CompteForm armee={Boolean(profile?.armee)} isAdmin={profile?.role === 'admin'} initialEmail={profile?.email ?? ''} />
           <RadarBetaSection variant="default" />

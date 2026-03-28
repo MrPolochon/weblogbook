@@ -4,8 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   SVG_W, SVG_H,
   DEFAULT_POSITIONS, DEFAULT_ISLANDS, DEFAULT_FIR_ZONES,
-  AIRPORT_NAMES,
-  toSVG, calculateHeading, detectSTCA,
+  toSVG, detectSTCA,
   type RadarTarget, type STCAPair, type Point,
 } from '@/lib/radar-utils';
 import { DEFAULT_VORS, DEFAULT_WAYPOINTS } from '@/lib/cartography-data';
@@ -33,24 +32,22 @@ export default function RadarClient({ userId }: { userId: string }) {
   const trailsRef = useRef<Map<string, Point[]>>(new Map());
   const blockOffsetsRef = useRef<Map<string, DataBlockOffset>>(new Map());
 
-  // Controls
   const [centerAirport, setCenterAirport] = useState<string>('');
   const [rangeIdx, setRangeIdx] = useState(2);
   const [showIslands, setShowIslands] = useState(true);
   const [showFIR, setShowFIR] = useState(true);
   const [showAirports, setShowAirports] = useState(true);
-  const [filterType, setFilterType] = useState<'ALL' | 'IFR' | 'VFR'>('ALL');
+  const [filterType, setFilterType] = useState<'ALL' | 'IFR' | 'VFR' | 'UNK'>('ALL');
   const [charSize, setCharSize] = useState<typeof CHAR_SIZES[number]>('M');
   const [showPTL, setShowPTL] = useState(true);
   const [stcaEnabled, setStcaEnabled] = useState(true);
+  const [showUnknown, setShowUnknown] = useState(true);
   const [sweepAngle, setSweepAngle] = useState(0);
 
-  // Context menu actions
   const [actionModal, setActionModal] = useState<{ type: string; targetId: string } | null>(null);
   const [actionValue, setActionValue] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
-  // ATC sessions for transfer
   const [atcSessions, setAtcSessions] = useState<{ aeroport: string; position: string }[]>([]);
 
   const svgRef = useRef<SVGSVGElement>(null);
@@ -128,9 +125,17 @@ export default function RadarClient({ userId }: { userId: string }) {
   }, [centerAirport, rangeIdx]);
 
   const filteredTargets = useMemo(() => {
-    if (filterType === 'ALL') return targets;
-    return targets.filter(t => t.type_vol === filterType);
-  }, [targets, filterType]);
+    let result = targets;
+    if (!showUnknown) {
+      result = result.filter(t => t.identified !== false);
+    }
+    if (filterType === 'ALL') return result;
+    if (filterType === 'UNK') return result.filter(t => !t.identified);
+    return result.filter(t => t.type_vol === filterType);
+  }, [targets, filterType, showUnknown]);
+
+  const identifiedCount = useMemo(() => targets.filter(t => t.identified).length, [targets]);
+  const unknownCount = useMemo(() => targets.filter(t => !t.identified).length, [targets]);
 
   const selectedTarget = useMemo(
     () => targets.find(t => t.id === selected) ?? null,
@@ -222,7 +227,6 @@ export default function RadarClient({ userId }: { userId: string }) {
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] bg-[#080808] text-[#00ff41] select-none overflow-hidden -mx-4 -my-6">
-      {/* STCA alert bar */}
       {stcaEnabled && stcaPairs.length > 0 && (
         <div className="bg-red-900/80 text-red-200 px-4 py-1 text-xs font-mono flex items-center gap-4 flex-shrink-0 animate-pulse">
           <span className="font-bold">⚠ STCA</span>
@@ -239,7 +243,6 @@ export default function RadarClient({ userId }: { userId: string }) {
       )}
 
       <div className="flex flex-1 min-h-0">
-        {/* Main radar SVG */}
         <div className="flex-1 relative">
           <svg
             ref={svgRef}
@@ -257,14 +260,12 @@ export default function RadarClient({ userId }: { userId: string }) {
               </radialGradient>
             </defs>
 
-            {/* Grid */}
             {[128, 256, 384].map(r => (
               <circle key={r} cx={SVG_W / 2} cy={SVG_H / 2} r={r} fill="none" stroke="#0a2a15" strokeWidth="0.5" />
             ))}
             <line x1={0} y1={SVG_H / 2} x2={SVG_W} y2={SVG_H / 2} stroke="#0a2a15" strokeWidth="0.3" />
             <line x1={SVG_W / 2} y1={0} x2={SVG_W / 2} y2={SVG_H} stroke="#0a2a15" strokeWidth="0.3" />
 
-            {/* Sweep */}
             <line
               x1={SVG_W / 2}
               y1={SVG_H / 2}
@@ -275,7 +276,6 @@ export default function RadarClient({ userId }: { userId: string }) {
               opacity="0.15"
             />
 
-            {/* FIR zones */}
             {showFIR && DEFAULT_FIR_ZONES.map(fir => (
               <g key={fir.id}>
                 <polygon
@@ -300,7 +300,6 @@ export default function RadarClient({ userId }: { userId: string }) {
               </g>
             ))}
 
-            {/* Islands */}
             {showIslands && DEFAULT_ISLANDS.map(island => (
               <polygon
                 key={island.id}
@@ -337,7 +336,6 @@ export default function RadarClient({ userId }: { userId: string }) {
               );
             })}
 
-            {/* Airports */}
             {showAirports && Object.entries(DEFAULT_POSITIONS).map(([code, pos]) => {
               const svgPos = toSVG(pos);
               return (
@@ -351,23 +349,25 @@ export default function RadarClient({ userId }: { userId: string }) {
               );
             })}
 
-            {/* Aircraft targets */}
             {filteredTargets.map(target => {
               const isSelected = target.id === selected;
               const isSTCA = stcaTargetIds.has(target.id);
               const isAssumedByMe = target.assumed_by === userId;
-              const isTransfer = !!(target as RadarTarget & { pending_transfer_aeroport?: string }).assumed_by && !isAssumedByMe;
+              const isTransfer = !!target.assumed_by && !isAssumedByMe;
+              const isUnknown = !target.identified;
               const trail = trailsRef.current.get(target.id) ?? [];
               const blockOffset = blockOffsetsRef.current.get(target.id) ?? { dx: 20, dy: -10 };
 
               let blipColor = '#cccccc';
               if (isSTCA) blipColor = '#ff3333';
+              else if (isUnknown) blipColor = '#ff9632';
               else if (target.on_ground) blipColor = '#666666';
               else if (isAssumedByMe) blipColor = '#00ff41';
               else if (isTransfer) blipColor = '#ffcc00';
 
               let labelColor = '#cccccc';
               if (isSTCA) labelColor = '#ff3333';
+              else if (isUnknown) labelColor = '#ff9632';
               else if (isAssumedByMe) labelColor = '#00ff41';
               else if (isTransfer) labelColor = '#ffcc00';
 
@@ -376,7 +376,6 @@ export default function RadarClient({ userId }: { userId: string }) {
 
               return (
                 <g key={target.id} data-target-id={target.id} style={{ cursor: 'pointer' }}>
-                  {/* Trail */}
                   {trail.map((pos, i) => (
                     <rect
                       key={i}
@@ -389,8 +388,7 @@ export default function RadarClient({ userId }: { userId: string }) {
                     />
                   ))}
 
-                  {/* PTL */}
-                  {showPTL && !target.on_ground && (
+                  {showPTL && !target.on_ground && !isUnknown && (
                     <line
                       x1={target.position.x}
                       y1={target.position.y}
@@ -403,22 +401,42 @@ export default function RadarClient({ userId }: { userId: string }) {
                     />
                   )}
 
-                  {/* Blip */}
-                  <rect
-                    x={target.position.x - 2.5}
-                    y={target.position.y - 2.5}
-                    width={5}
-                    height={5}
-                    fill={blipColor}
-                    stroke={isSelected ? '#ffffff' : 'none'}
-                    strokeWidth={isSelected ? 1 : 0}
-                  >
-                    {isSTCA && (
-                      <animate attributeName="opacity" values="1;0.3;1" dur="0.5s" repeatCount="indefinite" />
-                    )}
-                  </rect>
+                  {isUnknown ? (
+                    <g>
+                      <circle
+                        cx={target.position.x}
+                        cy={target.position.y}
+                        r={3.5}
+                        fill="none"
+                        stroke={blipColor}
+                        strokeWidth={1}
+                        strokeDasharray="2 1.5"
+                      >
+                        <animate attributeName="opacity" values="1;0.4;1" dur="1.5s" repeatCount="indefinite" />
+                      </circle>
+                      <circle
+                        cx={target.position.x}
+                        cy={target.position.y}
+                        r={1.2}
+                        fill={blipColor}
+                      />
+                    </g>
+                  ) : (
+                    <rect
+                      x={target.position.x - 2.5}
+                      y={target.position.y - 2.5}
+                      width={5}
+                      height={5}
+                      fill={blipColor}
+                      stroke={isSelected ? '#ffffff' : 'none'}
+                      strokeWidth={isSelected ? 1 : 0}
+                    >
+                      {isSTCA && (
+                        <animate attributeName="opacity" values="1;0.3;1" dur="0.5s" repeatCount="indefinite" />
+                      )}
+                    </rect>
+                  )}
 
-                  {/* Leader line */}
                   <line
                     x1={target.position.x}
                     y1={target.position.y}
@@ -429,38 +447,55 @@ export default function RadarClient({ userId }: { userId: string }) {
                     opacity="0.4"
                   />
 
-                  {/* Data block */}
                   <g
                     onPointerDown={(e) => startBlockDrag(e, target.id)}
                     style={{ cursor: 'grab' }}
                   >
-                    <text
-                      x={target.position.x + blockOffset.dx}
-                      y={target.position.y + blockOffset.dy}
-                      fill={labelColor}
-                      fontSize={fontSize}
-                      fontFamily="monospace"
-                      fontWeight={isSelected ? 'bold' : 'normal'}
-                    >
-                      {isSTCA && <animate attributeName="opacity" values="1;0.3;1" dur="0.5s" repeatCount="indefinite" />}
-                      <tspan x={target.position.x + blockOffset.dx} dy="0">{target.callsign}</tspan>
-                      <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1}>
-                        {target.altitude_unit}{target.altitude ?? '???'} {target.progress > 0.5 ? '↓' : '↑'}
-                      </tspan>
-                      <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1}>
-                        A{target.squawk ?? '????'}
-                      </tspan>
-                      <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1}>
-                        {target.aeroport_arrivee}→
-                      </tspan>
-                    </text>
+                    {isUnknown ? (
+                      <text
+                        x={target.position.x + blockOffset.dx}
+                        y={target.position.y + blockOffset.dy}
+                        fill={labelColor}
+                        fontSize={fontSize}
+                        fontFamily="monospace"
+                        fontWeight={isSelected ? 'bold' : 'normal'}
+                      >
+                        <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite" />
+                        <tspan x={target.position.x + blockOffset.dx} dy="0">
+                          {target.roblox_username || 'INCONNU'}
+                        </tspan>
+                        <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1} fill="#996622">
+                          PAS DE PDV
+                        </tspan>
+                      </text>
+                    ) : (
+                      <text
+                        x={target.position.x + blockOffset.dx}
+                        y={target.position.y + blockOffset.dy}
+                        fill={labelColor}
+                        fontSize={fontSize}
+                        fontFamily="monospace"
+                        fontWeight={isSelected ? 'bold' : 'normal'}
+                      >
+                        {isSTCA && <animate attributeName="opacity" values="1;0.3;1" dur="0.5s" repeatCount="indefinite" />}
+                        <tspan x={target.position.x + blockOffset.dx} dy="0">{target.callsign}</tspan>
+                        <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1}>
+                          {target.altitude_unit}{target.altitude ?? '???'} {target.progress > 0.5 ? '↓' : '↑'}
+                        </tspan>
+                        <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1}>
+                          A{target.squawk ?? '????'}
+                        </tspan>
+                        <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1}>
+                          {target.aeroport_arrivee}→
+                        </tspan>
+                      </text>
+                    )}
                   </g>
                 </g>
               );
             })}
           </svg>
 
-          {/* Context menu overlay */}
           {contextMenu && (
             <div
               className="fixed z-50 bg-[#111] border border-[#0d3320] rounded shadow-xl py-1 text-xs font-mono min-w-[180px]"
@@ -471,6 +506,26 @@ export default function RadarClient({ userId }: { userId: string }) {
                 const ct = targets.find(t => t.id === contextMenu.targetId);
                 if (!ct) return null;
                 const isMyTraffic = ct.assumed_by === userId;
+
+                if (!ct.identified) {
+                  return (
+                    <>
+                      <div className="px-3 py-1.5 text-[#ff9632] font-bold border-b border-[#0d3320]">
+                        {ct.roblox_username || 'INCONNU'}
+                      </div>
+                      <div className="px-3 py-1.5 text-[#666] italic">
+                        Cible non identifiée — pas de plan de vol
+                      </div>
+                      <button
+                        className="w-full text-left px-3 py-1.5 hover:bg-[#0d3320] text-[#ff9632]"
+                        onClick={() => { setActionModal({ type: 'tag_unknown', targetId: ct.id }); setContextMenu(null); }}
+                      >
+                        Associer à un plan (ID)
+                      </button>
+                    </>
+                  );
+                }
+
                 return (
                   <>
                     <div className="px-3 py-1.5 text-[#00ff41] font-bold border-b border-[#0d3320]">
@@ -527,42 +582,71 @@ export default function RadarClient({ userId }: { userId: string }) {
           )}
         </div>
 
-        {/* Side panel */}
         {selectedTarget && (
           <div className="w-72 bg-[#0a0a0a] border-l border-[#0d3320] flex flex-col overflow-y-auto flex-shrink-0">
             <div className="p-3 border-b border-[#0d3320]">
               <div className="flex items-center justify-between">
-                <span className="text-[#00ff41] font-mono font-bold text-sm">{selectedTarget.callsign}</span>
+                <span className={`font-mono font-bold text-sm ${selectedTarget.identified ? 'text-[#00ff41]' : 'text-[#ff9632]'}`}>
+                  {selectedTarget.identified ? selectedTarget.callsign : (selectedTarget.roblox_username || 'INCONNU')}
+                </span>
                 <button onClick={() => setSelected(null)} className="text-[#666] hover:text-[#ccc] text-xs">✕</button>
               </div>
-              <span className="text-[#666] font-mono text-xs">{selectedTarget.numero_vol}</span>
+              {selectedTarget.identified ? (
+                <span className="text-[#666] font-mono text-xs">{selectedTarget.numero_vol}</span>
+              ) : (
+                <span className="text-[#996622] font-mono text-xs">Cible non identifiée</span>
+              )}
             </div>
             <div className="p-3 space-y-2 text-xs font-mono">
-              <Row label="Type" value={selectedTarget.type_vol} />
-              <Row label="Départ" value={selectedTarget.aeroport_depart} />
-              <Row label="Arrivée" value={selectedTarget.aeroport_arrivee} />
-              <Row label="Altitude" value={`${selectedTarget.altitude_unit}${selectedTarget.altitude ?? '???'}`} />
-              <Row label="Squawk" value={selectedTarget.squawk ?? '????'} />
-              <Row label="Cap" value={`${selectedTarget.heading.toFixed(0)}°`} />
-              <Row label="Progression" value={`${(selectedTarget.progress * 100).toFixed(0)}%`} />
-              <Row label="Temps prévu" value={`${selectedTarget.temps_prev_min} min`} />
-              {selectedTarget.route && <Row label="Route" value={selectedTarget.route} />}
-              {selectedTarget.sid && <Row label="SID" value={selectedTarget.sid} />}
-              {selectedTarget.star && <Row label="STAR" value={selectedTarget.star} />}
-              <Row label="Pilote" value={selectedTarget.pilote_identifiant ?? '—'} />
-              <Row label="Contrôle" value={selectedTarget.assumed_position ? `${selectedTarget.assumed_aeroport} ${selectedTarget.assumed_position}` : 'Non assumé'} />
-              <Row label="Source" value={selectedTarget.source} />
-              <div className="pt-2 flex gap-1">
-                {selectedTarget.assumed_by !== userId ? (
-                  <button className="flex-1 bg-[#0d3320] hover:bg-[#1a4a30] text-[#00ff41] py-1 rounded text-center" onClick={() => doAction('assume', selectedTarget.id)}>
-                    Assume
+              {selectedTarget.identified ? (
+                <>
+                  <Row label="Type" value={selectedTarget.type_vol} />
+                  <Row label="Départ" value={selectedTarget.aeroport_depart} />
+                  <Row label="Arrivée" value={selectedTarget.aeroport_arrivee} />
+                  <Row label="Altitude" value={`${selectedTarget.altitude_unit}${selectedTarget.altitude ?? '???'}`} />
+                  <Row label="Squawk" value={selectedTarget.squawk ?? '????'} />
+                  <Row label="Cap" value={`${selectedTarget.heading.toFixed(0)}°`} />
+                  <Row label="Progression" value={`${(selectedTarget.progress * 100).toFixed(0)}%`} />
+                  <Row label="Temps prévu" value={`${selectedTarget.temps_prev_min} min`} />
+                  {selectedTarget.route && <Row label="Route" value={selectedTarget.route} />}
+                  {selectedTarget.sid && <Row label="SID" value={selectedTarget.sid} />}
+                  {selectedTarget.star && <Row label="STAR" value={selectedTarget.star} />}
+                  <Row label="Pilote" value={selectedTarget.pilote_identifiant ?? '—'} />
+                  <Row label="Contrôle" value={selectedTarget.assumed_position ? `${selectedTarget.assumed_aeroport} ${selectedTarget.assumed_position}` : 'Non assumé'} />
+                  <Row label="Source" value={selectedTarget.source} />
+                  <div className="pt-2 flex gap-1">
+                    {selectedTarget.assumed_by !== userId ? (
+                      <button className="flex-1 bg-[#0d3320] hover:bg-[#1a4a30] text-[#00ff41] py-1 rounded text-center" onClick={() => doAction('assume', selectedTarget.id)}>
+                        Assume
+                      </button>
+                    ) : (
+                      <button className="flex-1 bg-[#3a2a00] hover:bg-[#4a3a10] text-[#ffcc00] py-1 rounded text-center" onClick={() => doAction('release', selectedTarget.id)}>
+                        Release
+                      </button>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Row label="Source" value="capture" />
+                  <Row label="Position" value={`${selectedTarget.position.x.toFixed(0)}, ${selectedTarget.position.y.toFixed(0)}`} />
+                  {selectedTarget.roblox_username && (
+                    <Row label="Roblox" value={selectedTarget.roblox_username} />
+                  )}
+                  <div className="pt-3 border-t border-[#0d3320] mt-3">
+                    <p className="text-[#996622] text-[10px] leading-relaxed">
+                      Cette cible a été détectée sur la minimap mais ne correspond à aucun plan de vol actif.
+                      Le pilote n&apos;a probablement pas déposé de plan de vol.
+                    </p>
+                  </div>
+                  <button
+                    className="w-full mt-2 rounded bg-[#3b2a10] hover:bg-[#5a3a10] text-[#ffcc80] py-1.5"
+                    onClick={() => setActionModal({ type: 'tag_unknown', targetId: selectedTarget.id })}
+                  >
+                    Associer à un plan de vol
                   </button>
-                ) : (
-                  <button className="flex-1 bg-[#3a2a00] hover:bg-[#4a3a10] text-[#ffcc00] py-1 rounded text-center" onClick={() => doAction('release', selectedTarget.id)}>
-                    Release
-                  </button>
-                )}
-              </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -603,7 +687,7 @@ export default function RadarClient({ userId }: { userId: string }) {
 
         <div className="flex items-center gap-1">
           <span className="text-[#666]">FILTER</span>
-          {(['ALL', 'IFR', 'VFR'] as const).map(f => (
+          {(['ALL', 'IFR', 'VFR', 'UNK'] as const).map(f => (
             <button key={f} onClick={() => setFilterType(f)} className={`px-1.5 py-0.5 rounded text-[10px] ${filterType === f ? 'bg-[#0d3320] text-[#00ff41]' : 'text-[#666]'}`}>
               {f}
             </button>
@@ -611,6 +695,14 @@ export default function RadarClient({ userId }: { userId: string }) {
         </div>
 
         <button onClick={() => setShowPTL(v => !v)} className={showPTL ? 'text-[#00ff41]' : 'text-[#333]'}>PTL</button>
+
+        <button
+          onClick={() => setShowUnknown(v => !v)}
+          className={showUnknown ? 'text-[#ff9632]' : 'text-[#333]'}
+          title="Afficher/masquer les cibles inconnues"
+        >
+          UNK
+        </button>
 
         <div className="flex items-center gap-1">
           <span className="text-[#666]">CHAR</span>
@@ -629,18 +721,19 @@ export default function RadarClient({ userId }: { userId: string }) {
           <span className={dataSource === 'capture' ? 'text-[#00ff41]' : dataSource === 'mixed' ? 'text-[#ffcc00]' : 'text-[#ff9632]'}>
             {dataSource === 'capture' ? '● LIVE' : dataSource === 'mixed' ? '● MIX' : '● INTERP'}
           </span>
-          <span>TGT: {filteredTargets.length}</span>
+          <span>IDT: {identifiedCount}</span>
+          {unknownCount > 0 && <span className="text-[#ff9632]">UNK: {unknownCount}</span>}
           <span className="tabular-nums">{utcNow} UTC</span>
         </div>
       </div>
 
-      {/* Action modal */}
       {actionModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center" onClick={() => { setActionModal(null); setActionValue(''); }}>
           <div className="bg-[#111] border border-[#0d3320] rounded-lg p-4 min-w-[280px] font-mono text-xs" onClick={e => e.stopPropagation()}>
             <h3 className="text-[#00ff41] font-bold mb-3">
               {actionModal.type === 'transfer' ? 'Transfer vers' :
-               actionModal.type === 'set_altitude' ? 'Set FL' : 'Set Squawk'}
+               actionModal.type === 'set_altitude' ? 'Set FL' :
+               actionModal.type === 'set_squawk' ? 'Set Squawk' : 'Associer cible INCONNUE'}
             </h3>
 
             {actionModal.type === 'transfer' ? (
@@ -664,7 +757,11 @@ export default function RadarClient({ userId }: { userId: string }) {
                   value={actionValue}
                   onChange={e => setActionValue(e.target.value)}
                   className="flex-1 bg-[#0a0a0a] border border-[#0d3320] text-[#00ff41] px-2 py-1 rounded"
-                  placeholder={actionModal.type === 'set_altitude' ? 'ex: 350' : 'ex: 2471'}
+                  placeholder={
+                    actionModal.type === 'set_altitude' ? 'ex: 350'
+                      : actionModal.type === 'set_squawk' ? 'ex: 2471'
+                        : 'ID du plan de vol'
+                  }
                   autoFocus
                   onKeyDown={e => { if (e.key === 'Enter') doAction(actionModal.type, actionModal.targetId, actionValue); }}
                 />

@@ -61,6 +61,8 @@ export interface RadarTarget {
   source: 'interpolation' | 'capture';
   temps_prev_min: number;
   pilote_identifiant: string | null;
+  identified: boolean;
+  roblox_username: string | null;
 }
 
 export interface STCAPair {
