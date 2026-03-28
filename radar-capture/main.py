@@ -113,7 +113,7 @@ class RadarCaptureApp:
     def _build_ui(self):
         self.root = tk.Tk()
         self.root.title("Radar Capture — WebLogbook")
-        self.root.geometry("420x680")
+        self.root.geometry("420x800")
         self.root.configure(bg="#0a0a0a")
         self.root.resizable(False, False)
 
