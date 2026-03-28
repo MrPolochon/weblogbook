@@ -400,10 +400,11 @@ class RadarCaptureApp:
                         positions,
                     )
 
-                    if result:
+                    if result.get("ok"):
                         info = f"Détecté: {len(clusters)} | Envoyé: {result.get('ingested', 0)} | Matché: {result.get('matched', 0)}"
                     else:
-                        info = f"Détecté: {len(clusters)} | Erreur d'envoi"
+                        err = result.get("error", "inconnu")
+                        info = f"Détecté: {len(clusters)} | Erreur: {err[:60]}"
                 else:
                     info = f"Détecté: {len(clusters) if clusters else 0} avions"
 

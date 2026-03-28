@@ -10,14 +10,14 @@ def send_positions(
     server_url: str,
     api_token: str,
     positions: list[dict],
-) -> dict | None:
+) -> dict:
     """
     Send detected aircraft positions to POST /api/radar/ingest.
     positions: list of {"x": float, "y": float, "cluster_id": int}
-    Returns the server response dict or None on error.
+    Returns {"ok": True, ...} on success, or {"ok": False, "error": "..."} on failure.
     """
     if not positions:
-        return None
+        return {"ok": False, "error": "Aucune position"}
 
     url = f"{server_url.rstrip('/')}/api/radar/ingest"
 
@@ -34,6 +34,7 @@ def send_positions(
 
         if resp.status_code == 200:
             data = resp.json()
+            data["ok"] = True
             logger.info(
                 "Envoyé %d positions : %d matchées, %d non matchées",
                 data.get("ingested", 0),
@@ -42,9 +43,10 @@ def send_positions(
             )
             return data
         else:
-            logger.warning("Erreur serveur %d: %s", resp.status_code, resp.text[:200])
-            return None
+            detail = resp.text[:120] if resp.text else "pas de détail"
+            logger.warning("Erreur serveur %d: %s", resp.status_code, detail)
+            return {"ok": False, "error": f"HTTP {resp.status_code}: {detail}"}
 
     except requests.RequestException as e:
         logger.error("Erreur réseau: %s", e)
-        return None
+        return {"ok": False, "error": str(e)[:120]}
