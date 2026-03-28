@@ -184,7 +184,7 @@ export default function AtcMapClient() {
               {sessions.length} contrôleur{sessions.length > 1 ? 's' : ''} en ligne
             </span>
           </div>
-          <button onClick={() => { setLoading(true); fetchSessions(); }} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700" title="Actualiser">
+          <button onClick={() => { setLoading(true); fetchMapData(); }} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700" title="Actualiser">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
