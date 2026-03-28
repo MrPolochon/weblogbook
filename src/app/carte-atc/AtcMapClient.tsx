@@ -22,6 +22,32 @@ interface AtcSession {
   callsign: string | null;
 }
 
+interface MapFlight {
+  id: string;
+  kind: 'civil' | 'military';
+  numero_vol: string;
+  aeroport_depart: string;
+  aeroport_arrivee: string;
+  type_vol: 'VFR' | 'IFR' | 'MIL';
+  temps_prev_min: number;
+  started_at: string;
+  status: string;
+  pilote_id: string | null;
+  pilote_identifiant: string | null;
+  discord_username: string | null;
+}
+
+interface RenderFlight extends MapFlight {
+  progress: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  x: number;
+  y: number;
+  finished: boolean;
+}
+
 const POSITION_PRIORITY = ['Center', 'APP', 'DEP', 'Tower', 'Ground', 'Delivery', 'Clairance'] as const;
 
 function formatDuration(startedAt: string): string {
@@ -47,31 +73,44 @@ function FourPointStar({ cx, cy, outerR, innerR, rotation = 0, fill, stroke, str
 
 export default function AtcMapClient() {
   const [sessions, setSessions] = useState<AtcSession[]>([]);
+  const [flights, setFlights] = useState<MapFlight[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAirport, setSelectedAirport] = useState<string | null>(null);
+  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(Date.now());
 
-  const fetchSessions = useCallback(async () => {
+  const fetchMapData = useCallback(async () => {
     try {
-      const res = await fetch('/api/atc/online');
-      if (res.ok) {
-        const data = await res.json();
-        setSessions(Array.isArray(data) ? data : []);
+      const [sessionsRes, flightsRes] = await Promise.all([
+        fetch('/api/atc/online'),
+        fetch('/api/carte-atc/flights'),
+      ]);
+      if (sessionsRes.ok) {
+        const sessionsData = await sessionsRes.json();
+        setSessions(Array.isArray(sessionsData) ? sessionsData : []);
+      }
+      if (flightsRes.ok) {
+        const flightsData = await flightsRes.json();
+        setFlights(Array.isArray(flightsData) ? flightsData : []);
       }
     } catch { /* ignore */ }
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchSessions(); }, [fetchSessions]);
+  useEffect(() => { fetchMapData(); }, [fetchMapData]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      fetchSessions();
-      setNow(Date.now());
+      fetchMapData();
     }, 15000);
     return () => clearInterval(interval);
-  }, [fetchSessions]);
+  }, [fetchMapData]);
+
+  useEffect(() => {
+    const ticker = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(ticker);
+  }, []);
 
   const sessionsByAirport = new Map<string, AtcSession[]>();
   sessions.forEach(s => {
@@ -98,7 +137,41 @@ export default function AtcMapClient() {
   const hasPosition = (code: string, pos: string) =>
     sessionsByAirport.get(code)?.some(s => s.position === pos) || false;
 
-  void now;
+  const renderedFlights: RenderFlight[] = flights
+    .map((f) => {
+      const dep = DEFAULT_POSITIONS[f.aeroport_depart];
+      const arr = DEFAULT_POSITIONS[f.aeroport_arrivee];
+      if (!dep || !arr) return null;
+
+      const x1 = dep.x * 10.24;
+      const y1 = dep.y * 7.87;
+      const x2 = arr.x * 10.24;
+      const y2 = arr.y * 7.87;
+
+      const startMs = new Date(f.started_at).getTime();
+      if (Number.isNaN(startMs)) return null;
+      const durationMs = Math.max(60_000, f.temps_prev_min * 60_000);
+      const progressRaw = (now - startMs) / durationMs;
+      const progress = Math.max(0, Math.min(1, progressRaw));
+
+      const x = x1 + (x2 - x1) * progress;
+      const y = y1 + (y2 - y1) * progress;
+
+      return {
+        ...f,
+        progress,
+        x1,
+        y1,
+        x2,
+        y2,
+        x,
+        y,
+        finished: progress >= 1,
+      };
+    })
+    .filter((v): v is RenderFlight => Boolean(v));
+
+  const selectedFlight = renderedFlights.find((f) => f.id === selectedFlightId) || null;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
@@ -263,6 +336,49 @@ export default function AtcMapClient() {
                   </g>
                 );
               })}
+
+              {/* Routes + avions des plans de vol */}
+              {renderedFlights.map((f) => {
+                const isSelected = selectedFlightId === f.id;
+                const color = f.type_vol === 'VFR' ? '#22c55e' : f.type_vol === 'MIL' ? '#a855f7' : '#ef4444';
+                const lineOpacity = isSelected ? 0.9 : 0.45;
+                return (
+                  <g key={f.id}>
+                    <line
+                      x1={f.x1}
+                      y1={f.y1}
+                      x2={f.x2}
+                      y2={f.y2}
+                      stroke={color}
+                      strokeWidth={isSelected ? 2 : 1.2}
+                      strokeDasharray="5 3"
+                      opacity={lineOpacity}
+                    />
+                    <g
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => setSelectedFlightId((prev) => prev === f.id ? null : f.id)}
+                    >
+                      <circle cx={f.x} cy={f.y} r={isSelected ? 5.5 : 4.2} fill={color} stroke="#e2e8f0" strokeWidth={isSelected ? 1.4 : 1} />
+                      <polygon
+                        points={`${f.x},${f.y - 9} ${f.x - 5.5},${f.y + 5.5} ${f.x + 5.5},${f.y + 5.5}`}
+                        fill={color}
+                        opacity={0.82}
+                      />
+                      <text
+                        x={f.x + 8}
+                        y={f.y - 8}
+                        fill={color}
+                        fontSize="7"
+                        fontFamily="monospace"
+                        fontWeight="bold"
+                        style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
+                      >
+                        {f.numero_vol}
+                      </text>
+                    </g>
+                  </g>
+                );
+              })}
             </svg>
           </div>
 
@@ -285,7 +401,50 @@ export default function AtcMapClient() {
               <span className="text-slate-300">DEL (Clairance)</span>
             </div>
             <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-orange-500" style={{ borderColor: '#ff9632' }} /> <span className="text-slate-300">FIR (Center en ligne)</span></div>
+            <div className="mt-2 border-t border-slate-700/50 pt-2 space-y-1.5">
+              <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-green-500" /> <span className="text-slate-300">Vol VFR</span></div>
+              <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-red-500" /> <span className="text-slate-300">Vol IFR</span></div>
+              <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-purple-500" /> <span className="text-slate-300">Vol militaire</span></div>
+            </div>
           </div>
+
+          {selectedFlight && (
+            <div className="absolute top-3 left-3 max-w-[340px] rounded-lg bg-slate-900/95 border border-slate-600/40 p-3 text-xs space-y-1.5 backdrop-blur-sm">
+              <p className="text-slate-100 font-semibold text-sm">Plan de vol {selectedFlight.numero_vol}</p>
+              <p className="text-slate-300">
+                {selectedFlight.aeroport_depart} → {selectedFlight.aeroport_arrivee}
+              </p>
+              <div className="flex items-center gap-2">
+                <span
+                  className="px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                  style={{
+                    backgroundColor:
+                      selectedFlight.type_vol === 'VFR' ? 'rgba(34,197,94,0.18)' :
+                      selectedFlight.type_vol === 'MIL' ? 'rgba(168,85,247,0.18)' :
+                      'rgba(239,68,68,0.18)',
+                    color:
+                      selectedFlight.type_vol === 'VFR' ? '#4ade80' :
+                      selectedFlight.type_vol === 'MIL' ? '#c084fc' :
+                      '#f87171',
+                  }}
+                >
+                  {selectedFlight.type_vol === 'MIL' ? 'MILITAIRE' : selectedFlight.type_vol}
+                </span>
+                <span className="text-slate-400">
+                  Durée prévue: {selectedFlight.temps_prev_min} min
+                </span>
+              </div>
+              <p className="text-slate-400">
+                Progression: {Math.round(selectedFlight.progress * 100)}%
+              </p>
+              <p className="text-slate-300">
+                Pilote (ID site): {selectedFlight.pilote_identifiant || 'N/A'}
+              </p>
+              <p className="text-slate-300">
+                Discord: {selectedFlight.discord_username || 'Non lié'}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Panneau latéral */}
@@ -338,6 +497,14 @@ export default function AtcMapClient() {
                 </div>
               </button>
             ))}
+            {!loading && (
+              <div className="mt-2 rounded-lg border border-slate-700/40 bg-slate-800/40 p-3">
+                <p className="text-slate-300 text-xs font-semibold mb-1.5">Trafic affiché</p>
+                <p className="text-[11px] text-slate-400">
+                  {renderedFlights.length} avion{renderedFlights.length > 1 ? 's' : ''} en suivi (routes aéroport à aéroport).
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

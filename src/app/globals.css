@@ -477,7 +477,7 @@ hr {
     box-shadow: 0 14px 34px rgba(14, 165, 233, 0.38);
   }
   .btn-secondary {
-    @apply btn border border-slate-600/55 bg-slate-800/72 text-slate-100 hover:bg-slate-700/85 focus:ring-slate-500;
+    @apply btn border border-slate-600/55 bg-slate-800/70 text-slate-100 hover:bg-slate-700/85 focus:ring-slate-500;
   }
   .btn-danger {
     @apply btn bg-gradient-to-r from-rose-700 to-red-600 text-white hover:from-rose-600 hover:to-red-500 focus:ring-red-500 shadow-lg shadow-red-500/25 hover:shadow-red-500/40;
