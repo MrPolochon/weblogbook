@@ -78,12 +78,13 @@ export default function ChequeVisuel({
     <div className="relative">
       {/* Chèque */}
       <div 
-        className={`relative w-full max-w-2xl mx-auto rounded-lg overflow-hidden shadow-xl transition-all ${
+        className={`relative w-full max-w-2xl mx-auto rounded-lg overflow-hidden shadow-xl transition-all text-[#0f172a] ${
           isEncaisse ? 'opacity-60 grayscale' : ''
         }`}
         style={{ 
-          background: 'linear-gradient(135deg, #e8f4f8 0%, #d4e8ed 50%, #c5dce3 100%)',
-          fontFamily: 'Georgia, serif'
+          background: 'linear-gradient(135deg, #f0f7fb 0%, #e2eef4 50%, #d5e4ec 100%)',
+          fontFamily: 'Georgia, serif',
+          color: '#0f172a',
         }}
       >
         {/* Tampon ENCAISSE */}
@@ -103,13 +104,13 @@ export default function ChequeVisuel({
                 <Banknote className="w-6 h-6 text-slate-700" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-800 text-lg">FELITZ BANK</h3>
-                <p className="text-xs text-slate-600">Banque Virtuelle Internationale</p>
+                <h3 className="font-bold text-lg text-[#0f172a]">FELITZ BANK</h3>
+                <p className="text-xs text-[#334155]">Banque Virtuelle Internationale</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-sm text-slate-600">DATE</p>
-              <p className="font-semibold text-slate-800 border-b border-slate-400 pb-1 min-w-[150px]">
+              <p className="text-sm font-medium text-[#334155]">DATE</p>
+              <p className="font-semibold text-[#0f172a] border-b border-slate-500/80 pb-1 min-w-[150px]">
                 {dateFormatee}
               </p>
             </div>
@@ -117,41 +118,41 @@ export default function ChequeVisuel({
 
           {/* Pay to */}
           <div className="flex items-center gap-4 mt-6">
-            <div className="text-sm text-slate-600 whitespace-nowrap">
+            <div className="text-sm font-medium text-[#334155] whitespace-nowrap">
               PAYEZ À<br/>L&apos;ORDRE DE
             </div>
-            <div className="flex-1 border-b border-slate-400 pb-1">
-              <p className="font-semibold text-slate-800 text-lg">
+            <div className="flex-1 border-b border-slate-500/80 pb-1">
+              <p className="font-semibold text-lg text-[#0f172a]">
                 {pourCompagnie ? compagnieNom : destinataire}
               </p>
             </div>
-            <div className="border-2 border-slate-600 px-4 py-2 bg-white/70 min-w-[140px] text-center">
-              <span className="text-slate-600 text-lg">F$</span>
-              <span className="font-bold text-2xl text-slate-800 ml-2">
+            <div className="border-2 border-slate-600 px-4 py-2 bg-white/90 min-w-[140px] text-center">
+              <span className="text-[#334155] text-lg">F$</span>
+              <span className="font-bold text-2xl text-[#0f172a] ml-2">
                 {montant.toLocaleString('fr-FR')}
               </span>
             </div>
           </div>
 
           {/* Amount in words */}
-          <div className="border-b border-slate-400 pb-1 mt-4">
-            <p className="text-slate-700 capitalize">{montantEnLettres}</p>
+          <div className="border-b border-slate-500/80 pb-1 mt-4">
+            <p className="text-[#0f172a] capitalize font-medium">{montantEnLettres}</p>
           </div>
-          <div className="text-right text-slate-600 text-sm">FELITZ DOLLARS</div>
+          <div className="text-right text-[#334155] text-sm font-medium">FELITZ DOLLARS</div>
 
           {/* Memo */}
           <div className="flex items-end justify-between mt-6">
             <div className="flex-1">
-              <p className="text-sm text-slate-600">MÉMO</p>
-              <div className="border-b border-slate-400 pb-1 max-w-[300px]">
-                <p className="text-slate-700 text-sm">
+              <p className="text-sm font-semibold text-[#334155]">MÉMO</p>
+              <div className="border-b border-slate-500/80 pb-1 max-w-[300px]">
+                <p className="text-sm text-[#0f172a]">
                   {libelle || `Vol ${numeroVol || 'N/A'}`}
                   {compagnieNom && !pourCompagnie && ` - ${compagnieNom}`}
                 </p>
               </div>
             </div>
-            <div className="border-b border-slate-400 pb-1 min-w-[200px] text-center">
-              <p className="text-slate-500 italic text-sm">Signature électronique</p>
+            <div className="border-b border-slate-500/80 pb-1 min-w-[200px] text-center">
+              <p className="text-[#475569] italic text-sm">Signature électronique</p>
             </div>
           </div>
 

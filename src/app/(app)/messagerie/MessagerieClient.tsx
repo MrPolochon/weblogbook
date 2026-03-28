@@ -270,6 +270,24 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
     }
   }
 
+  function classeBoutonListeMessage(msg: Message) {
+    const isSent = activeTab === 'sent';
+    const unread = !msg.lu && !isSent;
+    const sel = selectedMessage?.id === msg.id;
+    const base =
+      'w-full text-left p-4 transition-colors border-b border-slate-700/20 last:border-b-0';
+    if (sel && unread) {
+      return `${base} bg-slate-700/90 ring-1 ring-inset ring-violet-400/35 hover:bg-slate-700`;
+    }
+    if (sel) {
+      return `${base} bg-slate-700/85 hover:bg-slate-700`;
+    }
+    if (unread) {
+      return `${base} bg-slate-900/55 border-l-2 border-l-violet-500/70 hover:bg-slate-800/70`;
+    }
+    return `${base} hover:bg-slate-800/45`;
+  }
+
   const tabs = [
     { id: 'inbox', label: 'Boîte de réception', icon: Inbox, count: messagesNormaux.filter(m => !m.lu).length },
     { id: 'recrutement', label: 'Recrutement', icon: UserPlus, count: invitations.filter(m => !m.lu).length },
@@ -398,7 +416,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
               </button>
             </form>
           ) : (
-            <div className="divide-y divide-slate-700/30">
+            <div>
               {(activeTab === 'inbox' ? messagesNormaux : activeTab === 'recrutement' ? invitations : activeTab === 'cheques' ? cheques : activeTab === 'sanctions' ? sanctions : messagesEnvoyes).length === 0 ? (
                 <div className="p-8 text-center text-slate-500">
                   <Mail className="h-12 w-12 mx-auto mb-2 opacity-50" />
@@ -409,9 +427,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                   <button
                     key={msg.id}
                     onClick={() => selectMessage(msg)}
-                    className={`w-full text-left p-4 hover:bg-slate-700/30 transition-colors ${
-                      selectedMessage?.id === msg.id ? 'bg-slate-700/40' : ''
-                    } ${!msg.lu && activeTab !== 'sent' ? 'bg-violet-500/5' : ''}`}
+                    className={classeBoutonListeMessage(msg)}
                   >
                     <div className="flex items-start gap-3">
                       <div className="shrink-0 mt-0.5">
