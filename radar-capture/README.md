@@ -14,6 +14,8 @@ pip install -r requirements.txt
 python main.py
 ```
 
+Le mode Python est la methode la plus fiable pour tester localement, surtout si Windows bloque un `.exe` non signe.
+
 ### Etapes :
 
 1. **Renseignez** l'URL du serveur et le token API (genere depuis "Mon compte" sur le site)
@@ -24,10 +26,15 @@ python main.py
 ## Creer un .exe
 
 ```bash
-pyinstaller --onefile --windowed --name RadarCapture main.py
+py -m PyInstaller RadarCapture.spec
 ```
 
 Le `.exe` sera dans le dossier `dist/`.
+
+Notes Windows :
+- le build PyInstaller n'est pas signe numeriquement ;
+- Smart App Control peut donc le bloquer apres telechargement ;
+- pour un usage local fiable, privilegiez `python main.py` ou un `.exe` reconstruit localement depuis ces sources.
 
 ## Configuration
 
@@ -36,3 +43,5 @@ Le fichier `config.json` sauvegarde :
 - Zone de capture ecran
 - Points de calibration
 - Parametres de detection (teinte rouge, seuils)
+
+Quand l'application tourne en `.exe`, la configuration est sauvegardee dans `%LOCALAPPDATA%/WebLogbook/RadarCapture/config.json`.

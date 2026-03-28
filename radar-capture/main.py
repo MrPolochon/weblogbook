@@ -9,10 +9,12 @@ import sys
 import time
 import logging
 import threading
+import ctypes
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox
 
 import numpy as np
+from PIL import Image, ImageTk
 
 from capture import capture_region, select_region_interactive
 from detect import detect_red_clusters
@@ -31,7 +33,36 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+
+def enable_dpi_awareness():
+    """Align tkinter coordinates with screen capture coordinates on Windows."""
+    if sys.platform != "win32":
+        return
+
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        return
+    except Exception:
+        pass
+
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
+def get_config_file() -> str:
+    """Store config in a writable user directory when bundled as an exe."""
+    if getattr(sys, "frozen", False):
+        base_dir = os.getenv("LOCALAPPDATA") or os.path.expanduser("~")
+        config_dir = os.path.join(base_dir, "WebLogbook", "RadarCapture")
+        os.makedirs(config_dir, exist_ok=True)
+        return os.path.join(config_dir, "config.json")
+
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+
+
+CONFIG_FILE = get_config_file()
 
 
 def load_config() -> dict:
@@ -54,6 +85,7 @@ def load_config() -> dict:
 
 
 def save_config(config: dict):
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=2)
 
@@ -138,7 +170,7 @@ class RadarCaptureApp:
         self.cal_label.pack(pady=2)
 
         region = self.config.get("capture_region")
-        region_text = f"Zone : {region['width']}x{region['height']}" if region else "Aucune zone sélectionnée"
+        region_text = self._format_region_text(region)
         self.region_label = tk.Label(
             frame, text=region_text, bg="#0a0a0a",
             fg="#00ff41" if region else "#ff9900",
@@ -153,6 +185,8 @@ class RadarCaptureApp:
         btn_style = {"bg": "#0d3320", "fg": "#00ff41", "activebackground": "#1a4a30", "activeforeground": "#00ff41", "font": ("Consolas", 9, "bold"), "relief": "flat", "cursor": "hand2"}
 
         tk.Button(btn_frame, text="Sélectionner zone", command=self.select_region, **btn_style).pack(fill=tk.X, pady=2)
+        tk.Button(btn_frame, text="Auto minimap (bas droite)", command=self.auto_select_minimap, **btn_style).pack(fill=tk.X, pady=2)
+        tk.Button(btn_frame, text="Prévisualiser zone", command=self.preview_region, **btn_style).pack(fill=tk.X, pady=2)
         tk.Button(btn_frame, text="Calibrer (3 aéroports)", command=self.calibrate, **btn_style).pack(fill=tk.X, pady=2)
 
         self.start_btn = tk.Button(btn_frame, text="▶ Démarrer la capture", command=self.toggle_capture, bg="#006622", fg="#00ff41", activebackground="#008833", activeforeground="#00ff41", font=("Consolas", 10, "bold"), relief="flat", cursor="hand2")
@@ -162,19 +196,94 @@ class RadarCaptureApp:
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
+    def _format_region_text(self, region: dict | None) -> str:
+        if not region:
+            return "Aucune zone sélectionnée"
+        return (
+            f"Zone : {region['width']}x{region['height']} "
+            f"({region['left']},{region['top']})"
+        )
+
+    def _apply_region(self, region: dict):
+        self.config["capture_region"] = region
+        save_config(self.config)
+        self.region_label.config(text=self._format_region_text(region), fg="#00ff41")
+        logger.info("Zone sélectionnée : %s", region)
+
     def select_region(self):
         self.root.withdraw()
-        time.sleep(0.3)
-        region = select_region_interactive()
-        self.root.deiconify()
+        self.root.update_idletasks()
+        time.sleep(0.2)
+
+        try:
+            region = select_region_interactive(parent=self.root)
+        finally:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
 
         if region:
-            self.config["capture_region"] = region
-            save_config(self.config)
-            self.region_label.config(text=f"Zone : {region['width']}x{region['height']}", fg="#00ff41")
-            logger.info("Zone sélectionnée : %s", region)
+            self._apply_region(region)
         else:
             messagebox.showwarning("Annulé", "Sélection de zone annulée.")
+
+    def auto_select_minimap(self):
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+
+        size = max(300, min(430, int(screen_h * 0.46)))
+        right_margin = 18
+        bottom_margin = 85
+
+        region = {
+            "left": max(0, screen_w - size - right_margin),
+            "top": max(0, screen_h - size - bottom_margin),
+            "width": size,
+            "height": size,
+        }
+        self._apply_region(region)
+        messagebox.showinfo(
+            "Zone auto",
+            "Une zone minimap par défaut a été appliquée.\n"
+            "Cliquez sur « Prévisualiser zone » pour vérifier avant de calibrer.",
+        )
+
+    def preview_region(self):
+        region = self.config.get("capture_region")
+        if not region:
+            messagebox.showerror("Erreur", "Sélectionnez d'abord une zone de capture.")
+            return
+
+        try:
+            img = capture_region(region)
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Aperçu impossible : {e}")
+            return
+
+        preview = tk.Toplevel(self.root)
+        preview.title("Aperçu de la zone")
+        preview.configure(bg="#0a0a0a")
+        preview.resizable(False, False)
+
+        max_width = 360
+        image = Image.fromarray(img)
+        if image.width > max_width:
+            ratio = max_width / image.width
+            image = image.resize((int(image.width * ratio), int(image.height * ratio)))
+
+        photo = ImageTk.PhotoImage(image)
+        label = tk.Label(preview, image=photo, bg="#0a0a0a")
+        label.image = photo
+        label.pack(padx=10, pady=(10, 6))
+
+        info = tk.Label(
+            preview,
+            text=self._format_region_text(region),
+            bg="#0a0a0a",
+            fg="#00ff41",
+            font=("Consolas", 9),
+        )
+        info.pack(padx=10, pady=(0, 10))
 
     def calibrate(self):
         region = self.config.get("capture_region")
@@ -183,7 +292,8 @@ class RadarCaptureApp:
             return
 
         self.root.withdraw()
-        time.sleep(0.3)
+        self.root.update_idletasks()
+        time.sleep(0.2)
 
         try:
             img = capture_region(region)
@@ -192,8 +302,12 @@ class RadarCaptureApp:
             messagebox.showerror("Erreur", f"Capture échouée : {e}")
             return
 
-        result = calibration_wizard(img.shape[:2])
-        self.root.deiconify()
+        try:
+            result = calibration_wizard(img, parent=self.root)
+        finally:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
 
         if result is None:
             messagebox.showwarning("Annulé", "Calibration annulée.")
@@ -319,5 +433,6 @@ class RadarCaptureApp:
 
 
 if __name__ == "__main__":
+    enable_dpi_awareness()
     app = RadarCaptureApp()
     app.run()

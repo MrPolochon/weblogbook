@@ -1,6 +1,7 @@
 """Calibration module: maps pixel coordinates to SVG radar coordinates."""
 
 import numpy as np
+from PIL import Image, ImageTk
 
 
 # Known airport positions on the SVG map (percentage * 10.24 and * 7.87)
@@ -84,7 +85,7 @@ def transform_point(
     return float(result[0]), float(result[1])
 
 
-def calibration_wizard(image_shape: tuple[int, int]) -> tuple[list[str], list[tuple[float, float]]] | None:
+def calibration_wizard(image: np.ndarray, parent=None) -> tuple[list[str], list[tuple[float, float]]] | None:
     """
     Interactive calibration: user clicks 3+ airports on the captured minimap.
     Returns (airport_codes, pixel_positions) or None if cancelled.
@@ -96,26 +97,32 @@ def calibration_wizard(image_shape: tuple[int, int]) -> tuple[list[str], list[tu
 
     result = {"codes": [], "pixels": []}
     count = {"n": 0, "target": 3}
+    image_height, image_width = image.shape[:2]
+    pil_image = Image.fromarray(image)
 
-    root = tk.Tk()
-    root.title("Calibration Radar - Cliquez sur 3 aéroports")
-    root.geometry(f"{image_shape[1]}x{image_shape[0] + 60}")
+    window = tk.Toplevel(parent) if parent is not None else tk.Tk()
+    window.title("Calibration Radar - Cliquez sur 3 aéroports")
+    window.geometry(f"{image_width}x{image_height + 60}")
+    window.focus_force()
 
     label = tk.Label(
-        root,
+        window,
         text=f"Cliquez sur un aéroport connu sur la minimap (0/{count['target']})",
         font=("Consolas", 11),
     )
     label.pack(pady=5)
 
-    canvas = tk.Canvas(root, width=image_shape[1], height=image_shape[0])
+    canvas = tk.Canvas(window, width=image_width, height=image_height)
     canvas.pack()
+    photo = ImageTk.PhotoImage(pil_image)
+    canvas.create_image(0, 0, image=photo, anchor="nw")
+    canvas.image = photo
 
     def on_click(event):
         code = simpledialog.askstring(
             "Aéroport",
             f"Code OACI de l'aéroport cliqué ?\n\nDisponibles : {', '.join(airports)}",
-            parent=root,
+            parent=window,
         )
         if code and code.upper() in AIRPORT_SVG_COORDS:
             code = code.upper()
@@ -132,12 +139,16 @@ def calibration_wizard(image_shape: tuple[int, int]) -> tuple[list[str], list[tu
             )
             label.config(text=f"Points de calibration : {count['n']}/{count['target']}")
             if count["n"] >= count["target"]:
-                root.after(500, root.destroy)
+                window.after(500, window.destroy)
 
     canvas.bind("<Button-1>", on_click)
-    root.bind("<Escape>", lambda e: root.destroy())
+    window.bind("<Escape>", lambda e: window.destroy())
 
-    root.mainloop()
+    if parent is not None:
+        window.grab_set()
+        parent.wait_window(window)
+    else:
+        window.mainloop()
 
     if count["n"] >= count["target"]:
         return result["codes"], result["pixels"]

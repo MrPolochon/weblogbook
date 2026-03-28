@@ -19,7 +19,7 @@ def capture_region(region: dict) -> np.ndarray:
         return np.array(img)
 
 
-def select_region_interactive() -> dict | None:
+def select_region_interactive(parent=None) -> dict | None:
     """
     Let the user select a screen region by displaying a fullscreen overlay.
     Returns {"top", "left", "width", "height"} or None if cancelled.
@@ -28,13 +28,14 @@ def select_region_interactive() -> dict | None:
 
     result = {"region": None}
 
-    root = tk.Tk()
-    root.attributes("-fullscreen", True)
-    root.attributes("-alpha", 0.3)
-    root.attributes("-topmost", True)
-    root.configure(bg="black")
+    window = tk.Toplevel(parent) if parent is not None else tk.Tk()
+    window.attributes("-fullscreen", True)
+    window.attributes("-alpha", 0.3)
+    window.attributes("-topmost", True)
+    window.configure(bg="black")
+    window.focus_force()
 
-    canvas = tk.Canvas(root, cursor="cross", bg="black", highlightthickness=0)
+    canvas = tk.Canvas(window, cursor="cross", bg="black", highlightthickness=0)
     canvas.pack(fill=tk.BOTH, expand=True)
 
     start = {"x": 0, "y": 0}
@@ -63,22 +64,27 @@ def select_region_interactive() -> dict | None:
                 "width": x2 - x1,
                 "height": y2 - y1,
             }
-        root.destroy()
+        window.destroy()
 
     def on_escape(event):
-        root.destroy()
+        window.destroy()
 
     canvas.bind("<ButtonPress-1>", on_press)
     canvas.bind("<B1-Motion>", on_drag)
     canvas.bind("<ButtonRelease-1>", on_release)
-    root.bind("<Escape>", on_escape)
+    window.bind("<Escape>", on_escape)
 
     label = tk.Label(
-        root,
+        window,
         text="Dessinez un rectangle autour de la minimap PTFS\n(Echap pour annuler)",
         bg="black", fg="lime", font=("Consolas", 14),
     )
     label.place(relx=0.5, rely=0.05, anchor="center")
 
-    root.mainloop()
+    if parent is not None:
+        window.grab_set()
+        parent.wait_window(window)
+    else:
+        window.mainloop()
+
     return result["region"]

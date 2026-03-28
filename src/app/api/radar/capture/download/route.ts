@@ -23,17 +23,31 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Accès radar non autorisé' }, { status: 403 });
     }
 
-    // Primary behavior: direct download served by the site from public/downloads.
     const publicExePath = path.join(process.cwd(), 'public', 'downloads', 'RadarCapture.exe');
-    await fs.access(publicExePath);
+    const builtExePath = path.join(process.cwd(), 'radar-capture', 'dist', 'RadarCapture.exe');
 
-    const origin = new URL(request.url).origin;
-    return NextResponse.redirect(`${origin}/downloads/RadarCapture.exe`);
+    try {
+      await fs.access(builtExePath);
+      const fileBuffer = await fs.readFile(builtExePath);
+
+      return new NextResponse(fileBuffer, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Content-Disposition': 'attachment; filename="RadarCapture.exe"',
+          'Cache-Control': 'no-store',
+        },
+      });
+    } catch {
+      await fs.access(publicExePath);
+      const origin = new URL(request.url).origin;
+      return NextResponse.redirect(`${origin}/downloads/RadarCapture.exe`);
+    }
   } catch {
     return NextResponse.json(
       {
         error:
-          "Fichier indisponible. Placez RadarCapture.exe dans public/downloads/RadarCapture.exe pour activer le telechargement direct.",
+          "Fichier indisponible. Generez RadarCapture.exe depuis radar-capture/dist ou placez-le dans public/downloads/RadarCapture.exe.",
       },
       { status: 404 },
     );
