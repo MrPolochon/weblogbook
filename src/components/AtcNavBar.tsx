@@ -20,12 +20,12 @@ function AtcSessionCompte({ aeroport, position, startedAt, isDark }: { aeroport:
   const temps = h > 0 ? `${h}h ${m}min` : `${m}min`;
   const utc = now.toISOString().substring(11, 19) + ' UTC';
   
-  const badgeClass = isDark 
-    ? 'bg-slate-700 text-slate-200 px-2 py-1 rounded'
-    : 'bg-slate-100 text-slate-800 px-2 py-1 rounded';
+  const badgeClass = isDark
+    ? 'rounded-xl border border-slate-700/80 bg-slate-900/70 px-2.5 py-1 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
+    : 'rounded-xl border border-slate-200 bg-slate-100 px-2.5 py-1 text-slate-800';
   const timeBadgeClass = isDark
-    ? 'bg-sky-900 text-sky-300 px-2 py-1 rounded'
-    : 'bg-sky-100 text-sky-800 px-2 py-1 rounded';
+    ? 'rounded-xl border border-sky-900/70 bg-sky-950/80 px-2.5 py-1 text-sky-200 shadow-[0_0_0_1px_rgba(56,189,248,0.06)]'
+    : 'rounded-xl border border-sky-200 bg-sky-100 px-2.5 py-1 text-sky-800';
     
   return (
     <div className="flex items-center gap-3 text-sm font-semibold whitespace-nowrap flex-shrink-0">
@@ -112,31 +112,31 @@ export default function AtcNavBar({
 
   const isAtcMenuActive = pathname === '/atc' || pathname.startsWith('/atc/documents') || pathname.startsWith('/atc/messagerie');
 
-  const linkBase = 'flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0';
-  const linkActive = isDark ? 'atc-link-active bg-sky-900 text-sky-300' : 'atc-link-active bg-sky-100 text-sky-800';
+  const linkBase = 'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 border';
+  const linkActive = isDark ? 'atc-link-active border-sky-800/60 bg-sky-950/70 text-sky-200 shadow-[0_8px_18px_rgba(2,6,23,0.24)]' : 'atc-link-active border-sky-200 bg-sky-100 text-sky-800';
   const linkInactive = isDark 
-    ? 'text-slate-300 hover:bg-slate-700 hover:text-slate-100' 
-    : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900';
+    ? 'border-slate-800/80 bg-slate-950/30 text-slate-300 hover:border-slate-700 hover:bg-slate-800/80 hover:text-slate-100'
+    : 'border-transparent text-slate-700 hover:bg-slate-100 hover:text-slate-900';
 
   const headerBg = isDark 
-    ? 'bg-slate-900/95 border-slate-700' 
+    ? 'bg-slate-950/90 border-slate-800/80 shadow-[0_18px_40px_rgba(2,6,23,0.35)]'
     : 'bg-white/90 border-slate-300';
 
   const dropdownBg = isDark
-    ? 'bg-slate-800 border-slate-700'
+    ? 'bg-slate-900/95 border-slate-700/80 shadow-[0_24px_48px_rgba(2,6,23,0.45)] backdrop-blur-xl'
     : 'bg-white border-slate-300';
 
   const dropdownItemActive = isDark
-    ? 'bg-slate-700/50 text-sky-300'
+    ? 'bg-slate-800 text-sky-200'
     : 'bg-sky-100 text-sky-800';
 
   const dropdownItemInactive = isDark
-    ? 'text-slate-300 hover:bg-slate-700/30 hover:text-slate-100'
+    ? 'text-slate-300 hover:bg-slate-800/80 hover:text-slate-100'
     : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900';
 
   return (
-    <header className={cn("atc-header sticky top-0 z-50 border-b backdrop-blur", headerBg)}>
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-5 sm:gap-5 flex-wrap sm:flex-nowrap py-2 sm:py-0 sm:h-16">
+    <header className={cn("atc-header sticky top-0 z-50 border-b backdrop-blur-xl", headerBg)}>
+      <div className="mx-auto flex max-w-screen-2xl items-center justify-between gap-3 px-4 sm:px-5 xl:px-6 sm:gap-5 flex-wrap sm:flex-nowrap py-2 sm:py-0 sm:h-[4.5rem]">
         <nav className="flex flex-nowrap items-center gap-3 overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
           {/* Menu déroulant ATC */}
           <div className="relative" ref={menuRef}>
@@ -146,7 +146,7 @@ export default function AtcNavBar({
                 setAtcMenuOpen((prev) => !prev);
               }}
               className={cn(
-                'flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-colors relative flex-shrink-0',
+                'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium transition-all relative flex-shrink-0 border',
                 isAtcMenuActive ? linkActive : linkInactive
               )}
             >
@@ -165,7 +165,7 @@ export default function AtcNavBar({
             </button>
             
             {atcMenuOpen && (
-              <div style={dropdownStyle ?? undefined} className={cn("fixed w-56 rounded-lg border py-1 shadow-xl z-50", dropdownBg)}>
+              <div style={dropdownStyle ?? undefined} className={cn("fixed w-56 rounded-2xl border p-1.5 z-50", dropdownBg)}>
                 {atcMenuItems.map((item) => {
                   const Icon = item.icon;
                   return (

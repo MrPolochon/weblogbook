@@ -57,14 +57,14 @@ export default function AtcAtisTicker() {
   // Barre minimale : ATIS inactif, ou broadcast en cours mais ticker masqué
   if (!showScrollingText) {
     return (
-      <div className={`flex items-center justify-between gap-2 px-4 py-2 border-b ${isDark ? 'border-slate-200 bg-slate-50' : 'border-slate-700 bg-slate-800/50'}`}>
-        <span className={`text-sm ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+      <div className={`flex items-center justify-between gap-2 border-b px-4 py-2.5 ${isDark ? 'border-slate-800 bg-slate-950/50 backdrop-blur-md' : 'border-slate-700 bg-slate-800/50'}`}>
+        <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-400'}`}>
           {broadcasting ? (tickerVisible ? 'Chargement ATIS...' : 'Ticker ATIS masqué') : 'ATIS inactif'}
         </span>
         <button
           onClick={toggleTicker}
           disabled={loading || !broadcasting}
-          className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-200 text-slate-500' : 'hover:bg-slate-700 text-slate-400'} disabled:opacity-40 disabled:cursor-not-allowed`}
+          className={`rounded-xl p-1.5 ${isDark ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-100' : 'text-slate-400 hover:bg-slate-700'} disabled:cursor-not-allowed disabled:opacity-40`}
           title={broadcasting ? (tickerVisible ? 'Masquer le ticker' : 'Afficher le ticker ATIS') : 'Aucun broadcast en cours'}
         >
           {tickerVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -74,17 +74,17 @@ export default function AtcAtisTicker() {
   }
 
   return (
-    <div className={`flex items-center gap-2 border-b overflow-hidden ${isDark ? 'border-slate-200 bg-slate-50' : 'border-slate-700 bg-slate-800/50'}`}>
+    <div className={`flex items-center gap-2 overflow-hidden border-b ${isDark ? 'border-slate-800 bg-slate-950/55 backdrop-blur-md' : 'border-slate-700 bg-slate-800/50'}`}>
       <div className="flex-1 min-w-0 py-2 overflow-hidden">
         <div
           className="whitespace-nowrap inline-block"
           style={{ animation: `scroll-left ${TICKER_INTERVAL_MS / 1000}s linear infinite` }}
         >
-          <span className={`text-sm font-mono ${isDark ? 'text-slate-700' : 'text-slate-300'}`}>
+          <span className={`text-sm font-mono ${isDark ? 'text-slate-200' : 'text-slate-300'}`}>
             {atisText}
           </span>
-          <span className="mx-8 text-slate-400"> • </span>
-          <span className={`text-sm font-mono ${isDark ? 'text-slate-700' : 'text-slate-300'}`}>
+          <span className={`mx-8 ${isDark ? 'text-sky-500/70' : 'text-slate-400'}`}> • </span>
+          <span className={`text-sm font-mono ${isDark ? 'text-slate-200' : 'text-slate-300'}`}>
             {atisText}
           </span>
         </div>
@@ -92,7 +92,7 @@ export default function AtcAtisTicker() {
       <button
         onClick={toggleTicker}
         disabled={loading}
-        className={`flex-shrink-0 p-2 ${isDark ? 'hover:bg-slate-200 text-slate-500' : 'hover:bg-slate-700 text-slate-400'} disabled:opacity-40`}
+        className={`flex-shrink-0 rounded-xl p-2 ${isDark ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-100' : 'text-slate-400 hover:bg-slate-700'} disabled:opacity-40`}
         title="Masquer le ticker ATIS"
       >
         <EyeOff className="h-4 w-4" />

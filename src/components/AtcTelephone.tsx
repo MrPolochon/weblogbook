@@ -620,11 +620,11 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   };
 
   // Styles
-  const bgMain = isDark ? 'bg-gradient-to-b from-slate-100 to-slate-200' : 'bg-gradient-to-b from-slate-800 to-slate-900';
-  const textMain = isDark ? 'text-slate-800' : 'text-slate-100';
+  const bgMain = isDark ? 'border border-slate-800/80 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-900/95' : 'bg-gradient-to-b from-slate-800 to-slate-900';
+  const textMain = isDark ? 'text-slate-100' : 'text-slate-100';
   const screenBg = isDark ? 'bg-slate-800' : 'bg-slate-950';
-  const keyBg = isDark ? 'bg-white hover:bg-slate-50 shadow-md' : 'bg-slate-700 hover:bg-slate-600 shadow-lg';
-  const keyText = isDark ? 'text-slate-700' : 'text-white';
+  const keyBg = isDark ? 'border border-slate-700 bg-slate-900 hover:bg-slate-800 shadow-lg shadow-slate-950/20' : 'bg-slate-700 hover:bg-slate-600 shadow-lg';
+  const keyText = isDark ? 'text-slate-100' : 'text-white';
 
   // Éviter le rendu côté serveur pour les fonctionnalités audio
   if (!isMounted) {
@@ -638,8 +638,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
         <button onClick={() => { unlockAudioForIOS(); setIsOpen(true); }}
           className={`fixed bottom-4 right-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl`}>
-          <div className={`p-2 rounded-xl ${isDark ? 'bg-sky-100' : 'bg-sky-500/20'}`}>
-            <Phone className={`h-5 w-5 ${isDark ? 'text-sky-600' : 'text-sky-400'}`} />
+          <div className={`p-2 rounded-xl ${isDark ? 'bg-sky-500/15' : 'bg-sky-500/20'}`}>
+            <Phone className={`h-5 w-5 ${isDark ? 'text-sky-300' : 'text-sky-400'}`} />
           </div>
           <span className="font-medium">Téléphone</span>
           {callState === 'incoming' && <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-ping" />}
@@ -653,13 +653,13 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     {/* Conteneur audio: éviter display:none qui bloque la lecture (cf. bug unidirectionnel) */}
     <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
     <div className={`fixed right-4 bottom-4 z-50 ${bgMain} rounded-3xl shadow-2xl overflow-hidden transition-all duration-500`} style={{ width: '240px' }}>
-      <div className={`px-4 py-3 flex items-center justify-between border-b ${isDark ? 'border-slate-300' : 'border-slate-700'}`}>
+      <div className={`px-4 py-3 flex items-center justify-between border-b ${isDark ? 'border-slate-800' : 'border-slate-700'}`}>
         <div className="flex items-center gap-2">
-          <Phone className={`h-4 w-4 ${isDark ? 'text-sky-600' : 'text-sky-400'}`} />
+          <Phone className={`h-4 w-4 ${isDark ? 'text-sky-300' : 'text-sky-400'}`} />
           <span className={`text-sm font-semibold ${textMain}`}>Téléphone ATC</span>
         </div>
-        <button onClick={() => { setIsOpen(false); if (callState === 'idle') setNumber(''); }} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-300' : 'hover:bg-slate-700'}`}>
-          <X className={`h-3.5 w-3.5 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+        <button onClick={() => { setIsOpen(false); if (callState === 'idle') setNumber(''); }} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-700'}`}>
+          <X className={`h-3.5 w-3.5 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
         </button>
       </div>
       
@@ -756,7 +756,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
             </button>
           ) : (
             <button onClick={() => { setIsOpen(false); setNumber(''); setCallState('idle'); }}
-              className={`h-11 ${isDark ? 'bg-slate-400 hover:bg-slate-300' : 'bg-slate-600 hover:bg-slate-500'} text-white rounded-xl flex items-center justify-center transition-all active:scale-95`}>
+              className={`h-11 ${isDark ? 'border border-slate-700 bg-slate-900 hover:bg-slate-800' : 'bg-slate-600 hover:bg-slate-500'} text-white rounded-xl flex items-center justify-center transition-all active:scale-95`}>
               <PhoneOff className="h-5 w-5" />
             </button>
           )}

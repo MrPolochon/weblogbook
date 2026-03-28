@@ -356,13 +356,13 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     if (editing === 'remarks') handlePatch({ remarks: editValues.remarks || undefined });
   };
 
-  const bgMain = isDark ? 'bg-gradient-to-b from-slate-100 to-slate-200' : 'bg-gradient-to-b from-slate-800 to-slate-900';
-  const textMain = isDark ? 'text-slate-900' : 'text-white';
-  const textMuted = isDark ? 'text-slate-700 font-medium' : 'text-slate-200 font-medium';
-  const textValue = isDark ? 'text-slate-900 font-semibold' : 'text-white font-semibold';
-  const borderCl = isDark ? 'border-slate-400' : 'border-slate-500';
-  const inputCl = isDark ? 'bg-white border-slate-500 text-slate-900 text-base' : 'bg-slate-600 border-slate-400 text-white text-base';
-  const btnCl = isDark ? 'bg-sky-500 hover:bg-sky-400 text-white' : 'bg-sky-600 hover:bg-sky-500 text-white';
+  const bgMain = isDark ? 'border border-slate-800/80 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-900/95' : 'bg-gradient-to-b from-slate-800 to-slate-900';
+  const textMain = isDark ? 'text-slate-50' : 'text-white';
+  const textMuted = isDark ? 'text-slate-400 font-medium' : 'text-slate-200 font-medium';
+  const textValue = isDark ? 'text-slate-100 font-semibold' : 'text-white font-semibold';
+  const borderCl = isDark ? 'border-slate-800' : 'border-slate-500';
+  const inputCl = isDark ? 'bg-slate-900 border-slate-700 text-slate-100 text-base placeholder:text-slate-500' : 'bg-slate-600 border-slate-400 text-white text-base';
+  const btnCl = isDark ? 'bg-sky-500 hover:bg-sky-400 text-white shadow-lg shadow-sky-950/30' : 'bg-sky-600 hover:bg-sky-500 text-white';
 
   if (!isOpen) {
     return (
@@ -373,8 +373,8 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         }`}
         title={broadcasting ? 'ATIS en cours — Cliquer pour gérer' : 'Panneau ATIS'}
       >
-        <div className={`p-2 rounded-xl ${broadcasting ? 'bg-red-500/30' : isDark ? 'bg-amber-100' : 'bg-amber-500/20'}`}>
-          <Radio className={`h-5 w-5 ${broadcasting ? 'text-red-500' : isDark ? 'text-amber-600' : 'text-amber-400'}`} />
+          <div className={`p-2 rounded-xl ${broadcasting ? 'bg-red-500/30' : isDark ? 'bg-amber-500/15' : 'bg-amber-500/20'}`}>
+            <Radio className={`h-5 w-5 ${broadcasting ? 'text-red-500' : isDark ? 'text-amber-300' : 'text-amber-400'}`} />
         </div>
         <span className="font-medium">ATIS</span>
         {broadcasting && (
@@ -399,18 +399,18 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     <div className={`fixed left-4 bottom-4 z-50 ${bgMain} rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]`} style={{ width: 'min(420px, 95vw)' }}>
       <div className={`px-5 py-4 flex items-center justify-between border-b ${borderCl} flex-shrink-0`}>
         <div className="flex items-center gap-2">
-          <Radio className={`h-5 w-5 ${isDark ? 'text-amber-600' : 'text-amber-400'}`} />
+          <Radio className={`h-5 w-5 ${isDark ? 'text-amber-300' : 'text-amber-400'}`} />
           <span className={`text-base font-bold ${textMain}`}>Panneau ATIS</span>
         </div>
-        <button onClick={() => { setIsOpen(false); setError(null); setEditing(null); }} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-300 text-slate-700' : 'hover:bg-slate-600 text-slate-200'}`}>
+        <button onClick={() => { setIsOpen(false); setError(null); setEditing(null); }} className={`p-1.5 rounded-lg ${isDark ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-100' : 'hover:bg-slate-600 text-slate-200'}`}>
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      <div className={`flex-1 overflow-y-auto p-5 space-y-4 text-base ${isDark ? 'text-slate-800' : 'text-slate-100'}`}>
-        {error && <p className={`text-base font-medium px-3 py-2 rounded-lg border ${isDark ? 'text-red-600 bg-red-500/10 border-red-500/30' : 'text-red-400 bg-red-500/20 border-red-500/50'}`}>{error}</p>}
+      <div className={`flex-1 overflow-y-auto p-5 space-y-4 text-base ${isDark ? 'text-slate-100' : 'text-slate-100'}`}>
+        {error && <p className={`text-base font-medium px-3 py-2 rounded-lg border ${isDark ? 'border-red-500/40 bg-red-500/12 text-red-300' : 'text-red-400 bg-red-500/20 border-red-500/50'}`}>{error}</p>}
         {botReachable === false && (
-          <div className={`p-4 rounded-lg text-base ${isDark ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-amber-900/40 text-amber-100 border border-amber-600/50'}`}>
+          <div className={`p-4 rounded-lg text-base ${isDark ? 'border border-amber-500/30 bg-amber-500/10 text-amber-100' : 'bg-amber-900/40 text-amber-100 border border-amber-600/50'}`}>
             <p className="font-semibold">Bot ATIS injoignable</p>
             {botErrorDetail && <p className="text-sm mt-2 font-mono bg-black/20 px-3 py-2 rounded-lg">{botErrorDetail}</p>}
             <p className="text-sm mt-2 opacity-95">
@@ -426,8 +426,8 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         {broadcasting && (
           <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium ${
             isFromDiscord
-              ? isDark ? 'bg-indigo-500/15 text-indigo-800 border border-indigo-400/40' : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
-              : isDark ? 'bg-emerald-500/15 text-emerald-800 border border-emerald-400/40' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+              ? isDark ? 'border border-indigo-500/30 bg-indigo-500/10 text-indigo-200' : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+              : isDark ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
           }`}>
             {isFromDiscord ? (
               <>
@@ -445,7 +445,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
         {/* Config Discord */}
         <div className={`pb-4 border-b ${borderCl}`}>
-          <div className={`flex items-center gap-2 mb-3 ${isDark ? 'text-slate-800' : 'text-slate-100'}`}>
+          <div className={`flex items-center gap-2 mb-3 ${isDark ? 'text-slate-100' : 'text-slate-100'}`}>
             <Headphones className={`h-5 w-5 ${textMuted}`} />
             <span className="font-semibold text-base">Discord</span>
           </div>
@@ -492,8 +492,8 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
           {(obsStatus.status === 'warning' || obsStatus.status === 'obsolete') && broadcasting && (
             <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-base font-semibold ${
               obsStatus.status === 'obsolete'
-                ? isDark ? 'bg-red-500/20 text-red-800 border border-red-500/50' : 'bg-red-500/20 text-red-400 border border-red-500/50'
-                : isDark ? 'bg-amber-500/20 text-amber-800 border border-amber-500/50' : 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
+                ? isDark ? 'border border-red-500/40 bg-red-500/14 text-red-200' : 'bg-red-500/20 text-red-400 border border-red-500/50'
+                : isDark ? 'border border-amber-500/40 bg-amber-500/14 text-amber-200' : 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
             }`}>
               <AlertTriangle className="h-5 w-5 shrink-0" />
               <span className="flex-1">
@@ -541,7 +541,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 <button
                   onClick={handleToggleAutoRotate}
                   title={atisCodeAutoRotate ? 'Mode auto : rotation du code quand obsolète' : 'Activer la rotation automatique du code'}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium ${atisCodeAutoRotate ? 'bg-emerald-600 text-white' : isDark ? 'bg-slate-400 text-slate-900' : 'bg-slate-500 text-slate-100'} hover:opacity-90`}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium ${atisCodeAutoRotate ? 'bg-emerald-600 text-white' : isDark ? 'bg-slate-800 text-slate-100 border border-slate-700' : 'bg-slate-500 text-slate-100'} hover:opacity-90`}
                 >
                   <RefreshCw className="h-4 w-4" />
                   Auto
@@ -559,7 +559,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Condition" value={editValues.runway_condition ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, runway_condition: e.target.value }))} />
                 <div className="flex gap-2">
                   <button onClick={saveEdit} className={`px-3 py-2 rounded-lg text-sm font-medium ${btnCl}`}>OK</button>
-                  <button onClick={() => setEditing(null)} className="px-3 py-2 rounded-lg bg-slate-500 text-white text-sm font-medium">Annuler</button>
+                  <button onClick={() => setEditing(null)} className={`px-3 py-2 rounded-lg text-sm font-medium ${isDark ? 'border border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700' : 'bg-slate-500 text-white'}`}>Annuler</button>
                 </div>
               </div>
             ) : (
@@ -589,7 +589,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 </div>
                 <div className="flex gap-2">
                   <button onClick={saveEdit} className={`px-3 py-2 rounded-lg text-sm font-medium ${btnCl}`}>OK</button>
-                  <button onClick={() => setEditing(null)} className="px-3 py-2 rounded-lg bg-slate-500 text-white text-sm font-medium">Annuler</button>
+                  <button onClick={() => setEditing(null)} className={`px-3 py-2 rounded-lg text-sm font-medium ${isDark ? 'border border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700' : 'bg-slate-500 text-white'}`}>Annuler</button>
                 </div>
               </div>
             ) : (
@@ -627,7 +627,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 <input className={`px-3 py-2 rounded-lg border w-24 ${inputCl}`} value={editValues.qnh ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, qnh: e.target.value }))} placeholder="1013" />
                 <input className={`px-3 py-2 rounded-lg border ${inputCl}`} value={editValues.transition_level ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, transition_level: e.target.value }))} placeholder="Transition level manuel (ex: 100 ou FL100)" />
                 <button onClick={saveEdit} className={`px-3 py-2 rounded-lg text-sm font-medium ${btnCl}`}>OK</button>
-                <button onClick={() => setEditing(null)} className="px-3 py-2 rounded-lg bg-slate-500 text-white text-sm font-medium">Annuler</button>
+                <button onClick={() => setEditing(null)} className={`px-3 py-2 rounded-lg text-sm font-medium ${isDark ? 'border border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700' : 'bg-slate-500 text-white'}`}>Annuler</button>
               </div>
             ) : (
               <button onClick={() => startEdit('qnh', { qnh: d?.qnh ?? '', transition_level: d?.transition_level ?? '' })} className={`flex items-center gap-2 hover:underline text-right ${textValue}`}>
@@ -645,7 +645,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 <textarea className={`px-3 py-2 rounded-lg border w-full min-h-14 ${inputCl}`} value={editValues.remarks ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, remarks: e.target.value }))} placeholder="Remarques" />
                 <div className="flex gap-2">
                   <button onClick={saveEdit} className={`px-3 py-2 rounded-lg text-sm font-medium ${btnCl}`}>OK</button>
-                  <button onClick={() => setEditing(null)} className="px-3 py-2 rounded-lg bg-slate-500 text-white text-sm font-medium">Annuler</button>
+                  <button onClick={() => setEditing(null)} className={`px-3 py-2 rounded-lg text-sm font-medium ${isDark ? 'border border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700' : 'bg-slate-500 text-white'}`}>Annuler</button>
                 </div>
               </div>
             ) : (
@@ -660,14 +660,14 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         <div className={`flex gap-3 pt-4 border-t ${borderCl}`}>
           <button
             onClick={handleToggleCavok}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${d?.cavok ? (isDark ? 'bg-emerald-500/30 text-emerald-800' : 'bg-emerald-500/30 text-emerald-300') : 'bg-slate-500/40'} ${isDark ? 'text-slate-700 hover:bg-slate-300' : 'text-slate-100 hover:bg-slate-600'}`}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${d?.cavok ? (isDark ? 'border border-emerald-500/30 bg-emerald-500/16 text-emerald-200' : 'bg-emerald-500/30 text-emerald-300') : 'bg-slate-500/40'} ${isDark ? 'text-slate-100 hover:bg-slate-800' : 'text-slate-100 hover:bg-slate-600'}`}
           >
             <Cloud className="h-4 w-4" />
             CAVOK {d?.cavok ? '✓' : ''}
           </button>
           <button
             onClick={handleToggleBilingual}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${d?.bilingual_mode ? (isDark ? 'bg-emerald-500/30 text-emerald-800' : 'bg-emerald-500/30 text-emerald-300') : 'bg-slate-500/40'} ${isDark ? 'text-slate-700 hover:bg-slate-300' : 'text-slate-100 hover:bg-slate-600'}`}
+            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 ${d?.bilingual_mode ? (isDark ? 'border border-emerald-500/30 bg-emerald-500/16 text-emerald-200' : 'bg-emerald-500/30 text-emerald-300') : 'bg-slate-500/40'} ${isDark ? 'text-slate-100 hover:bg-slate-800' : 'text-slate-100 hover:bg-slate-600'}`}
           >
             <Globe className="h-4 w-4" />
             EN+FR {d?.bilingual_mode ? '✓' : ''}

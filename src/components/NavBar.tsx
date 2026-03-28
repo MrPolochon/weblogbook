@@ -103,10 +103,25 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     pathname.startsWith('/marche-passagers') || pathname.startsWith('/marche-cargo') ||
     pathname.startsWith('/perf-ptfs') || pathname.startsWith('/alliance') || pathname.startsWith('/signalement') || pathname.startsWith('/reparation');
 
+  const totalAdminBadge = pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount;
+  const navItemBase = 'flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-colors whitespace-nowrap shrink-0';
+  const navItemMuted = 'text-slate-300 hover:bg-slate-800/60 hover:text-slate-100';
+  const navItemActive = 'bg-slate-700/60 text-sky-300';
+
+  function renderInlineBadge(count: number, color: 'red' | 'orange' = 'red') {
+    if (count <= 0) return null;
+    const badgeClass = color === 'orange' ? 'bg-orange-600' : 'bg-red-600';
+    return (
+      <span className={`ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-xs font-bold text-white ${badgeClass}`}>
+        {count > 99 ? '99+' : count}
+      </span>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-50 border-b border-slate-700/30 bg-slate-900/80 backdrop-blur-xl shadow-lg shadow-slate-900/50">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-2 sm:h-16 sm:py-0 flex-col sm:flex-row gap-2">
-        <nav className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
+      <div className="mx-auto flex max-w-screen-2xl flex-col gap-2 px-4 py-2 sm:h-16 sm:flex-row sm:flex-nowrap sm:items-center sm:justify-between sm:gap-4 sm:py-0">
+        <nav className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-visible whitespace-nowrap scrollbar-hide">
           {/* Menu déroulant Espace Pilote */}
           <div className="relative" ref={menuRef}>
             <button
@@ -117,10 +132,10 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
                 setPiloteMenuOpen((prev) => !prev);
               }}
               className={cn(
-                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
+                `${navItemBase} relative`,
                 isPiloteActive
-                  ? 'bg-slate-700/50 text-sky-300'
-                  : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+                  ? navItemActive
+                  : navItemMuted
               )}
             >
               <Plane className="h-4 w-4" />
@@ -175,7 +190,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             <Link
               href="/logbook/a-confirmer"
               className={cn(
-                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors bg-red-900/40 text-red-300 hover:bg-red-900/60',
+                `${navItemBase} bg-red-900/40 text-red-300 hover:bg-red-900/60`,
                 pathname === '/logbook/a-confirmer' ? 'ring-1 ring-red-500' : ''
               )}
             >
@@ -190,58 +205,50 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             <Link
               href="/admin"
               className={cn(
-                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
+                navItemBase,
                 pathname.startsWith('/admin')
-                  ? 'bg-slate-700/50 text-sky-300'
-                  : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+                  ? navItemActive
+                  : navItemMuted
               )}
             >
               <LayoutDashboard className="h-4 w-4" />
               Admin
-              {(pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount) > 0 && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white ring-2 ring-slate-900"
-                  title={[
-                    pendingVolsCount > 0 && `${pendingVolsCount} vol(s) en attente`,
-                    adminPlansEnAttenteCount > 0 && `${adminPlansEnAttenteCount} plan(s) en attente`,
-                    adminPasswordResetCount > 0 && `${adminPasswordResetCount} demande(s) MDP`,
-                    adminAeroschoolCount > 0 && `${adminAeroschoolCount} AeroSchool`,
-                  ].filter(Boolean).join(' · ')}
-                >
-                  {(pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount) > 99 ? '99+' : (pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount)}
-                </span>
-              )}
+              <span
+                title={[
+                  pendingVolsCount > 0 && `${pendingVolsCount} vol(s) en attente`,
+                  adminPlansEnAttenteCount > 0 && `${adminPlansEnAttenteCount} plan(s) en attente`,
+                  adminPasswordResetCount > 0 && `${adminPasswordResetCount} demande(s) MDP`,
+                  adminAeroschoolCount > 0 && `${adminAeroschoolCount} AeroSchool`,
+                ].filter(Boolean).join(' · ')}
+              >
+                {renderInlineBadge(totalAdminBadge)}
+              </span>
             </Link>
           )}
           {(isIfsa || isAdmin) && (
             <Link
               href="/ifsa"
               className={cn(
-                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors relative',
+                navItemBase,
                 pathname.startsWith('/ifsa')
                   ? 'bg-indigo-700/50 text-indigo-300'
-                  : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+                  : navItemMuted
               )}
             >
               <Shield className="h-4 w-4" />
               IFSA
-              {signalementsNouveauxCount > 0 && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-orange-600 px-1.5 text-xs font-bold text-white ring-2 ring-slate-900"
-                  title={`${signalementsNouveauxCount} signalement(s) nouveau(x)`}
-                >
-                  {signalementsNouveauxCount > 99 ? '99+' : signalementsNouveauxCount}
-                </span>
-              )}
+              <span title={`${signalementsNouveauxCount} signalement(s) nouveau(x)`}>
+                {renderInlineBadge(signalementsNouveauxCount, 'orange')}
+              </span>
             </Link>
           )}
           <Link
             href="/documents"
             className={cn(
-              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              navItemBase,
               pathname.startsWith('/documents')
-                ? 'bg-slate-700/50 text-sky-300'
-                : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+                ? navItemActive
+                : navItemMuted
             )}
           >
             <FileText className="h-4 w-4" />
@@ -250,10 +257,10 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
           <Link
             href="/notams"
             className={cn(
-              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              navItemBase,
               pathname.startsWith('/notams')
-                ? 'bg-slate-700/50 text-sky-300'
-                : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+                ? navItemActive
+                : navItemMuted
             )}
           >
             <ScrollText className="h-4 w-4" />
@@ -262,7 +269,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
           <Link
             href="/carte-atc"
             className={cn(
-              'flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              `${navItemBase} gap-1.5`,
               pathname === '/carte-atc'
                 ? 'bg-slate-700/50 text-emerald-300'
                 : 'text-emerald-400/70 hover:bg-emerald-900/20 hover:text-emerald-300'
@@ -273,13 +280,13 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             Carte ATC
           </Link>
         </nav>
-        <div className="w-full sm:w-auto">
-          <div className="hidden sm:flex items-center gap-2 justify-end flex-wrap">
+        <div className="w-full sm:w-auto sm:shrink-0">
+          <div className="hidden sm:flex items-center justify-end gap-2 border-t border-slate-800/70 pt-2 sm:border-t-0 sm:border-l sm:border-slate-800/70 sm:pl-4 sm:pt-0">
             {isAdmin && (
               <>
                 <Link
                   href="/atc"
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-slate-100"
+                  className={`${navItemBase} gap-1.5 text-slate-300 hover:bg-slate-800/50 hover:text-slate-100`}
                   title="Passer à l'espace ATC"
                 >
                   <Radio className="h-4 w-4" />
@@ -287,7 +294,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
                 </Link>
                 <Link
                   href="/siavi"
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-red-800/50 hover:text-red-200"
+                  className={`${navItemBase} gap-1.5 text-slate-300 hover:bg-red-800/50 hover:text-red-200`}
                   title="Passer à l'espace SIAVI"
                 >
                   <Flame className="h-4 w-4" />
@@ -298,10 +305,10 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             <Link
               href="/compte"
               className={cn(
-                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                navItemBase,
                 pathname === '/compte'
-                  ? 'bg-slate-700/50 text-sky-300'
-                  : 'text-slate-300 hover:bg-slate-800/50 hover:text-slate-100'
+                  ? navItemActive
+                  : navItemMuted
               )}
             >
               <User className="h-4 w-4" />
@@ -310,7 +317,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             <button
               onClick={handleLogout}
               aria-label="Se déconnecter"
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-red-400"
+              className={`${navItemBase} text-slate-300 hover:bg-slate-800/50 hover:text-red-400`}
             >
               <LogOut className="h-4 w-4" />
               Déconnexion
