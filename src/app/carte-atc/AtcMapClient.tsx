@@ -362,7 +362,6 @@ export default function AtcMapClient() {
                       <circle cx={f.x} cy={f.y} r={isSelected ? 5.5 : 4.2} fill={color} stroke="#e2e8f0" strokeWidth={isSelected ? 1.4 : 1} />
                       <foreignObject x={f.x - 8} y={f.y - 8} width={16} height={16}>
                         <div
-                          xmlns="http://www.w3.org/1999/xhtml"
                           style={{
                             display: 'flex',
                             alignItems: 'center',
