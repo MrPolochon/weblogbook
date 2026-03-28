@@ -690,7 +690,7 @@ const WIRE_DEFS = [
 ];
 
 function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
-  const TIME_LIMIT = 60;
+  const TIME_LIMIT = 55;
 
   const [shuffledTerminals, setShuffledTerminals] = useState<number[]>([]);
   const [connections, setConnections] = useState<Map<number, number>>(new Map());
@@ -773,7 +773,7 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
   const allConnected = connections.size === WIRE_DEFS.length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 max-w-5xl">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2"><Zap className="h-5 w-5 text-yellow-400" />Câblage Électrique</h2>
         <div className="flex items-center gap-3">
@@ -787,11 +787,11 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
           style={{ width: `${timerPct}%` }} />
       </div>
 
-      <p className="text-slate-400 text-sm">Connectez les 8 fils aux bons terminaux. Cliquez un fil puis son terminal.</p>
+      <p className="text-slate-400 text-xs">Connectez les 8 fils aux bons terminaux. Cliquez un fil puis son terminal.</p>
 
-      <div ref={containerRef} className="relative grid grid-cols-[1fr_60px_1fr] gap-0 items-start">
+      <div ref={containerRef} className="relative grid grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)] gap-2 items-start">
         {/* Left: wires */}
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <p className="text-[10px] text-slate-600 font-medium mb-1">FILS</p>
           {WIRE_DEFS.map(w => {
             const isSelected = selectedWire === w.id;
@@ -802,7 +802,7 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
             return (
               <button key={w.id} ref={el => { wireRefs.current.set(w.id, el); }}
                 onClick={() => handleWireClick(w.id)} disabled={submitted}
-                className={`w-full p-2 rounded-lg border text-left text-xs transition flex items-center gap-1.5 ${
+                className={`w-full min-h-8 p-1.5 rounded-lg border text-left text-[11px] transition flex items-center gap-1.5 ${
                   isCorrect ? 'border-emerald-500 bg-emerald-900/20' :
                   isWrong ? 'border-red-500 bg-red-900/20' :
                   isSelected ? 'border-amber-400 bg-amber-900/20 ring-1 ring-amber-400 scale-[1.02]' :
@@ -810,7 +810,7 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
                   'border-slate-600/50 bg-slate-800/80 hover:bg-slate-700'
                 }`}>
                 <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-white/20" style={{ backgroundColor: w.color }} />
-                <span className="text-slate-200 truncate">{w.label}</span>
+                <span className="text-slate-200 truncate" title={w.label}>{w.label}</span>
                 <span className="text-[9px] text-slate-600 ml-auto">{w.section}</span>
               </button>
             );
@@ -837,7 +837,7 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
         </svg>
 
         {/* Right: terminals */}
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <p className="text-[10px] text-slate-600 font-medium mb-1">TERMINAUX</p>
           {shuffledTerminals.map((wireId, idx) => {
             const terminal = WIRE_DEFS[wireId];
@@ -849,7 +849,7 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
             return (
               <button key={idx} ref={el => { termRefs.current.set(idx, el); }}
                 onClick={() => handleTerminalClick(idx)} disabled={submitted}
-                className={`w-full p-2 rounded-lg border text-left text-xs transition ${
+                className={`w-full min-h-8 p-1.5 rounded-lg border text-left text-[11px] transition ${
                   isCorrect ? 'border-emerald-500 bg-emerald-900/20' :
                   isWrong ? 'border-red-500 bg-red-900/20' :
                   missed ? 'border-orange-500/40 bg-orange-900/10' :
@@ -857,9 +857,9 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
                   selectedWire !== null ? 'border-amber-600/50 bg-slate-800 hover:bg-amber-900/10 cursor-pointer ring-1 ring-amber-600/20' :
                   'border-slate-600/50 bg-slate-800/80'
                 }`}>
-                <span className="text-slate-300 truncate block">{terminal.terminal}</span>
+                <span className="text-slate-300 truncate block" title={terminal.terminal}>{terminal.terminal}</span>
                 {hasConnection && (
-                  <span className="text-[10px] mt-0.5 block" style={{ color: WIRE_DEFS[connectedWireId].color }}>
+                  <span className="text-[9px] mt-0.5 block truncate" style={{ color: WIRE_DEFS[connectedWireId].color }}>
                     ← {WIRE_DEFS[connectedWireId].label}
                   </span>
                 )}
@@ -1716,7 +1716,7 @@ function TestMoteurGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
     if (!running || finished) return;
 
     const elapsed = (Date.now() - startTime.current) / 1000;
-    const difficultyScale = 1 + (elapsed / DURATION) * 1.2;
+    const difficultyScale = 1 + (elapsed / DURATION) * 0.55;
 
     if (elapsed < 8) setPhase('warmup');
     else if (elapsed < 22) setPhase('cruise');
@@ -1726,17 +1726,16 @@ function TestMoteurGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
       const t = Date.now() / 1000;
       const base = Math.sin(t * (1.3 + i * 0.6)) * (p.greenRange * 0.5 * difficultyScale) +
                    Math.cos(t * (2.1 + i * 0.4)) * (p.greenRange * 0.2 * difficultyScale);
-      const spike = elapsed > 20 && Math.sin(t * 5 + i * 2) > 0.95 ? p.greenRange * 0.8 * (Math.random() > 0.5 ? 1 : -1) : 0;
-      return base + spike;
+      return base;
     });
     setFluctuations(newFluct);
 
     totalFrames.current++;
-    const allInGreen = ENGINE_PARAMS.every((p, i) => {
+    const inGreenCount = ENGINE_PARAMS.reduce((acc, p, i) => {
       const actual = slidersRef.current[i] + newFluct[i];
-      return Math.abs(actual - p.target) <= p.greenRange;
-    });
-    if (allInGreen) inGreenFrames.current++;
+      return acc + (Math.abs(actual - p.target) <= p.greenRange ? 1 : 0);
+    }, 0);
+    inGreenFrames.current += inGreenCount / ENGINE_PARAMS.length;
     if (totalFrames.current > 0) {
       setLiveScore(Math.round((inGreenFrames.current / totalFrames.current) * 100));
     }

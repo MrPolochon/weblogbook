@@ -1060,7 +1060,7 @@ CREATE TABLE IF NOT EXISTS public.reparation_demandes (
 CREATE TABLE IF NOT EXISTS public.reparation_mini_jeux_scores (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   demande_id UUID NOT NULL REFERENCES public.reparation_demandes(id) ON DELETE CASCADE,
-  type_jeu TEXT NOT NULL CHECK (type_jeu IN ('inspection', 'calibrage', 'assemblage', 'test_moteur')),
+  type_jeu TEXT NOT NULL CHECK (type_jeu IN ('inspection', 'calibrage', 'assemblage', 'test_moteur', 'cablage', 'hydraulique', 'soudure', 'diagnostic')),
   score INTEGER NOT NULL CHECK (score >= 0 AND score <= 100),
   duree_secondes INTEGER NOT NULL CHECK (duree_secondes > 0),
   completed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
