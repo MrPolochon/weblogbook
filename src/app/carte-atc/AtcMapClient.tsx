@@ -80,6 +80,9 @@ export default function AtcMapClient() {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(Date.now());
   const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{ x: number; y: number; mouseX: number; mouseY: number } | null>(null);
 
   const fetchMapData = useCallback(async () => {
     try {
@@ -188,16 +191,40 @@ export default function AtcMapClient() {
   const selectedFlight = renderedFlights.find((f) => f.id === selectedFlightId) || null;
 
   function updateZoom(next: number) {
-    const clamped = Math.max(1, Math.min(3, Number(next.toFixed(2))));
+    const clamped = Math.max(1, Math.min(10, Number(next.toFixed(2))));
     setZoom(clamped);
+    if (clamped === 1) setPan({ x: 0, y: 0 });
   }
 
   function zoomIn() {
-    updateZoom(zoom + 0.2);
+    updateZoom(zoom + 0.25);
   }
 
   function zoomOut() {
-    updateZoom(zoom - 0.2);
+    updateZoom(zoom - 0.25);
+  }
+
+  function resetView() {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }
+
+  function startPan(clientX: number, clientY: number) {
+    if (zoom <= 1) return;
+    panStartRef.current = { x: pan.x, y: pan.y, mouseX: clientX, mouseY: clientY };
+    setIsPanning(true);
+  }
+
+  function movePan(clientX: number, clientY: number) {
+    if (!panStartRef.current) return;
+    const dx = clientX - panStartRef.current.mouseX;
+    const dy = clientY - panStartRef.current.mouseY;
+    setPan({ x: panStartRef.current.x + dx, y: panStartRef.current.y + dy });
+  }
+
+  function endPan() {
+    panStartRef.current = null;
+    setIsPanning(false);
   }
 
   return (
@@ -223,17 +250,22 @@ export default function AtcMapClient() {
           ref={mapContainerRef}
           onWheel={(e) => {
             e.preventDefault();
-            const delta = e.deltaY < 0 ? 0.12 : -0.12;
+            const delta = e.deltaY < 0 ? 0.18 : -0.18;
             updateZoom(zoom + delta);
           }}
+          onMouseDown={(e) => startPan(e.clientX, e.clientY)}
+          onMouseMove={(e) => movePan(e.clientX, e.clientY)}
+          onMouseUp={endPan}
+          onMouseLeave={endPan}
+          style={{ cursor: zoom > 1 ? (isPanning ? 'grabbing' : 'grab') : 'default' }}
         >
           <div
             style={{
               width: '100%',
               height: '100%',
-              transform: `scale(${zoom})`,
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
               transformOrigin: 'center center',
-              transition: 'transform 0.12s ease-out',
+              transition: isPanning ? 'none' : 'transform 0.12s ease-out',
             }}
           >
             <svg viewBox="0 0 1024 787" className="w-full h-full" style={{ background: 'linear-gradient(180deg, #0f172a 0%, #1a2744 50%, #0f172a 100%)' }}>
@@ -443,14 +475,21 @@ export default function AtcMapClient() {
             >
               -
             </button>
-            <span className="text-xs text-slate-300 min-w-[52px] text-center">{Math.round(zoom * 100)}%</span>
+            <span className="text-xs text-slate-300 min-w-[62px] text-center">{Math.round(zoom * 100)}%</span>
             <button
               onClick={zoomIn}
               className="h-7 w-7 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
               title="Zoomer"
-              disabled={zoom >= 3}
+              disabled={zoom >= 10}
             >
               +
+            </button>
+            <button
+              onClick={resetView}
+              className="h-7 px-2 rounded bg-slate-800 text-slate-200 hover:bg-slate-700 text-xs"
+              title="Réinitialiser la vue"
+            >
+              Reset
             </button>
           </div>
 

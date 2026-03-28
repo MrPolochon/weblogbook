@@ -496,6 +496,14 @@ hr {
   .input:focus {
     background: linear-gradient(180deg, rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.72));
   }
+  /* Assure la lisibilité des listes déroulantes natives */
+  select.input option,
+  select.input optgroup,
+  select option,
+  select optgroup {
+    color: #0f172a;
+    background-color: #ffffff;
+  }
   .card {
     @apply rounded-2xl border p-5 sm:p-6 overflow-x-auto sm:overflow-visible shadow-xl transition-all duration-300;
     border-color: var(--surface-border);
