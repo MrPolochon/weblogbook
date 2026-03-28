@@ -152,7 +152,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
             </button>
             
             {piloteMenuOpen && (
-              <div style={dropdownStyle ?? undefined} className="fixed w-64 rounded-2xl border border-slate-600/35 bg-slate-900/96 backdrop-blur-2xl py-1.5 shadow-[0_24px_56px_rgba(2,6,23,0.55)] z-50 animate-fade-in">
+              <div style={dropdownStyle ?? undefined} className="fixed w-64 rounded-2xl border border-slate-600/50 bg-slate-950 py-1.5 shadow-[0_24px_56px_rgba(2,6,23,0.75)] z-50 animate-fade-in">
                 {piloteMenuItems.map((item, idx) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || (item.href !== '/logbook' && pathname.startsWith(item.href));
@@ -165,10 +165,10 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
                         href={item.href}
                         onClick={() => setPiloteMenuOpen(false)}
                         className={cn(
-                          'flex items-center gap-3 px-4 py-2 text-sm transition-all duration-150 mx-1.5 rounded-lg',
+                          'flex items-center gap-3 px-4 py-2.5 text-sm transition-all duration-150 mx-1.5 rounded-lg',
                           isActive
-                            ? 'border border-sky-500/25 bg-sky-500/15 text-sky-200'
-                            : 'border border-transparent text-slate-300 hover:border-slate-600/35 hover:bg-slate-700/45 hover:text-slate-100'
+                            ? 'border border-sky-500/35 bg-sky-500/20 text-sky-100'
+                            : 'border border-transparent text-slate-200 hover:border-slate-500/40 hover:bg-slate-800 hover:text-white'
                         )}
                       >
                         <Icon className={cn("h-4 w-4 shrink-0 transition-colors", isActive ? "text-sky-400" : "text-slate-500")} />

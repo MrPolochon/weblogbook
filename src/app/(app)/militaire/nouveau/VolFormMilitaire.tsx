@@ -98,7 +98,6 @@ export default function VolFormMilitaire({ pilotesArmee, inventaireMilitaire = [
       if (
         aeroport_depart !== selectedMission.aeroport_depart ||
         aeroport_arrivee !== selectedMission.aeroport_arrivee ||
-        d !== selectedMission.duree_minutes ||
         escadrille_ou_escadron !== selectedMission.escadrille_ou_escadron ||
         nature_vol_militaire !== selectedMission.nature_vol_militaire
       ) {
@@ -281,7 +280,7 @@ export default function VolFormMilitaire({ pilotesArmee, inventaireMilitaire = [
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="label">Durée (minutes) *</label>
-          <input type="number" className="input" value={duree_minutes} onChange={(e) => setDureeMinutes(e.target.value)} min={1} required disabled={Boolean(selectedMission)} />
+          <input type="number" className="input" value={duree_minutes} onChange={(e) => setDureeMinutes(e.target.value)} min={1} required />
         </div>
         <div className="space-y-2">
           <span className="label block">Heure (UTC) *</span>

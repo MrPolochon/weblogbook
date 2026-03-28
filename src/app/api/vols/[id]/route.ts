@@ -146,7 +146,7 @@ export async function PATCH(
       if (volMil.mission_id) {
         const mission = ARME_MISSIONS.find(m => m.id === volMil.mission_id);
         if (mission) {
-          if (milDep !== mission.aeroport_depart || milArr !== mission.aeroport_arrivee || milDuree !== mission.duree_minutes) {
+          if (milDep !== mission.aeroport_depart || milArr !== mission.aeroport_arrivee) {
             return NextResponse.json({ error: 'Le plan de vol doit correspondre à la mission.' }, { status: 400 });
           }
         }

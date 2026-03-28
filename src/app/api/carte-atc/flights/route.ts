@@ -30,23 +30,20 @@ export async function GET() {
       .from('plans_vol')
       .select(`
         id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, temps_prev_min,
-        statut, accepted_at, pilote_id, vol_sans_atc,
+        statut, accepted_at, created_at, pilote_id, vol_sans_atc, current_holder_user_id,
         profiles!plans_vol_pilote_id_fkey(id, identifiant)
       `)
       .in('statut', ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'])
-      .not('accepted_at', 'is', null)
-      .or('vol_sans_atc.is.null,vol_sans_atc.eq.false')
       .neq('aeroport_depart', 'aeroport_arrivee')
       .not('aeroport_depart', 'is', null)
       .not('aeroport_arrivee', 'is', null),
     admin
       .from('vols')
       .select(`
-        id, callsign, aeroport_depart, aeroport_arrivee, duree_minutes, depart_utc, statut, pilote_id,
+        id, callsign, aeroport_depart, aeroport_arrivee, duree_minutes, depart_utc, arrivee_utc, statut, pilote_id,
         profiles!vols_pilote_id_fkey(id, identifiant)
       `)
       .eq('type_vol', 'Vol militaire')
-      .eq('statut', 'validé')
       .lte('depart_utc', nowIso)
       .neq('aeroport_depart', 'aeroport_arrivee')
       .not('aeroport_depart', 'is', null)
@@ -64,9 +61,16 @@ export async function GET() {
   const flights: MapFlight[] = [];
 
   for (const p of plans || []) {
+    const isAuto = p.statut === 'automonitoring' || p.vol_sans_atc === true;
+    const isAtcManaged = Boolean(p.current_holder_user_id);
+    const isInFlight = p.statut === 'en_cours' || p.statut === 'en_attente_cloture';
+    const shouldDisplay = isAuto || isAtcManaged || isInFlight;
+    if (!shouldDisplay) continue;
+
     const rawProfile = p.profiles as unknown;
     const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
     const piloteId = p.pilote_id || null;
+    const startAt = p.accepted_at || p.created_at || nowIso;
     flights.push({
       id: `pv-${p.id}`,
       kind: 'civil',
@@ -75,7 +79,7 @@ export async function GET() {
       aeroport_arrivee: p.aeroport_arrivee,
       type_vol: p.type_vol === 'VFR' ? 'VFR' : 'IFR',
       temps_prev_min: Math.max(1, Number(p.temps_prev_min || 1)),
-      started_at: p.accepted_at,
+      started_at: startAt,
       status: p.statut,
       pilote_id: piloteId,
       pilote_identifiant: (profile as { identifiant?: string } | null)?.identifiant || null,
@@ -84,6 +88,11 @@ export async function GET() {
   }
 
   for (const m of militaryVols || []) {
+    // Vol validé/refusé = traité/clôturé => ne pas afficher sur la carte.
+    if (m.statut === 'validé' || m.statut === 'refusé') continue;
+    // Si heure d'arrivée dépassée, on ne l'affiche plus.
+    if (m.arrivee_utc && new Date(m.arrivee_utc).getTime() <= Date.now()) continue;
+
     const rawProfile = m.profiles as unknown;
     const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
     const piloteId = m.pilote_id || null;

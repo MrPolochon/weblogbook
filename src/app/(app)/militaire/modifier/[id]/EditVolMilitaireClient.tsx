@@ -118,8 +118,7 @@ export default function EditVolMilitaireClient({ vol, pilotesArmee, inventaireMi
     if (selectedMission) {
       if (
         aeroport_depart !== selectedMission.aeroport_depart ||
-        aeroport_arrivee !== selectedMission.aeroport_arrivee ||
-        d !== selectedMission.duree_minutes
+        aeroport_arrivee !== selectedMission.aeroport_arrivee
       ) {
         setError('Le plan de vol doit correspondre à la mission sélectionnée.');
         return;
@@ -257,7 +256,7 @@ export default function EditVolMilitaireClient({ vol, pilotesArmee, inventaireMi
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="label">Durée (minutes) *</label>
-          <input type="number" className="input" value={duree_minutes} onChange={e => setDureeMinutes(e.target.value)} min={1} required disabled={Boolean(selectedMission)} />
+          <input type="number" className="input" value={duree_minutes} onChange={e => setDureeMinutes(e.target.value)} min={1} required />
         </div>
         <div className="space-y-2">
           <span className="label block">Heure (UTC) *</span>

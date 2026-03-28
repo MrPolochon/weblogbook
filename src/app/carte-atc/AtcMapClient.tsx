@@ -79,6 +79,7 @@ export default function AtcMapClient() {
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(Date.now());
+  const [zoom, setZoom] = useState(1);
 
   const fetchMapData = useCallback(async () => {
     try {
@@ -103,8 +104,21 @@ export default function AtcMapClient() {
   useEffect(() => {
     const interval = setInterval(() => {
       fetchMapData();
-    }, 15000);
+    }, 10000);
     return () => clearInterval(interval);
+  }, [fetchMapData]);
+
+  useEffect(() => {
+    function handleVisibilityOrFocus() {
+      fetchMapData();
+      setNow(Date.now());
+    }
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    return () => {
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
   }, [fetchMapData]);
 
   useEffect(() => {
@@ -173,6 +187,19 @@ export default function AtcMapClient() {
 
   const selectedFlight = renderedFlights.find((f) => f.id === selectedFlightId) || null;
 
+  function updateZoom(next: number) {
+    const clamped = Math.max(1, Math.min(3, Number(next.toFixed(2))));
+    setZoom(clamped);
+  }
+
+  function zoomIn() {
+    updateZoom(zoom + 0.2);
+  }
+
+  function zoomOut() {
+    updateZoom(zoom - 0.2);
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
       <header className="border-b border-slate-700/50 bg-slate-900/80 backdrop-blur-sm">
@@ -194,8 +221,21 @@ export default function AtcMapClient() {
         {/* Carte */}
         <div className="flex-1 relative rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden"
           ref={mapContainerRef}
+          onWheel={(e) => {
+            e.preventDefault();
+            const delta = e.deltaY < 0 ? 0.12 : -0.12;
+            updateZoom(zoom + delta);
+          }}
         >
-          <div style={{ width: '100%', height: '100%' }}>
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              transform: `scale(${zoom})`,
+              transformOrigin: 'center center',
+              transition: 'transform 0.12s ease-out',
+            }}
+          >
             <svg viewBox="0 0 1024 787" className="w-full h-full" style={{ background: 'linear-gradient(180deg, #0f172a 0%, #1a2744 50%, #0f172a 100%)' }}>
               {/* Grille radar */}
               <defs>
@@ -341,20 +381,21 @@ export default function AtcMapClient() {
               {renderedFlights.map((f) => {
                 const isSelected = selectedFlightId === f.id;
                 const color = f.type_vol === 'VFR' ? '#22c55e' : f.type_vol === 'MIL' ? '#a855f7' : '#ef4444';
-                const lineOpacity = isSelected ? 0.9 : 0.45;
                 const angleDeg = Math.atan2(f.y2 - f.y1, f.x2 - f.x1) * (180 / Math.PI);
                 return (
                   <g key={f.id}>
-                    <line
-                      x1={f.x1}
-                      y1={f.y1}
-                      x2={f.x2}
-                      y2={f.y2}
-                      stroke={color}
-                      strokeWidth={isSelected ? 2 : 1.2}
-                      strokeDasharray="5 3"
-                      opacity={lineOpacity}
-                    />
+                    {isSelected && (
+                      <line
+                        x1={f.x1}
+                        y1={f.y1}
+                        x2={f.x}
+                        y2={f.y}
+                        stroke={color}
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        opacity={0.9}
+                      />
+                    )}
                     <g
                       style={{ cursor: 'pointer' }}
                       onClick={() => setSelectedFlightId((prev) => prev === f.id ? null : f.id)}
@@ -391,6 +432,26 @@ export default function AtcMapClient() {
                 );
               })}
             </svg>
+          </div>
+
+          <div className="absolute top-3 right-3 rounded-lg bg-slate-900/90 border border-slate-700/50 p-2 flex items-center gap-2 backdrop-blur-sm">
+            <button
+              onClick={zoomOut}
+              className="h-7 w-7 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
+              title="Dézoomer"
+              disabled={zoom <= 1}
+            >
+              -
+            </button>
+            <span className="text-xs text-slate-300 min-w-[52px] text-center">{Math.round(zoom * 100)}%</span>
+            <button
+              onClick={zoomIn}
+              className="h-7 w-7 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
+              title="Zoomer"
+              disabled={zoom >= 3}
+            >
+              +
+            </button>
           </div>
 
           {/* Légende overlay */}
