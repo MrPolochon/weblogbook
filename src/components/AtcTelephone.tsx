@@ -55,6 +55,8 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const [selectedOutputId, setSelectedOutputId] = useState('');
   const [showAudioPanel, setShowAudioPanel] = useState(false);
   const [audioDeviceError, setAudioDeviceError] = useState<string | null>(null);
+  const [isMicTestActive, setIsMicTestActive] = useState(false);
+  const [micTestLevel, setMicTestLevel] = useState(0);
   
   const roomRef = useRef<Room | null>(null);
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -63,6 +65,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const shouldPlaySoundRef = useRef(false);
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
   const attachedAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const micTestStreamRef = useRef<MediaStream | null>(null);
+  const micTestAudioContextRef = useRef<AudioContext | null>(null);
+  const micTestRafRef = useRef<number | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
   // Éviter les erreurs d'hydratation
@@ -126,6 +131,62 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       playPromise.catch((e) => console.warn('[ATC Phone] audio play blocked:', e));
     }
   }, [selectedOutputId]);
+
+  const stopLocalMicTest = useCallback(() => {
+    if (micTestRafRef.current != null) {
+      cancelAnimationFrame(micTestRafRef.current);
+      micTestRafRef.current = null;
+    }
+    if (micTestStreamRef.current) {
+      micTestStreamRef.current.getTracks().forEach((t) => t.stop());
+      micTestStreamRef.current = null;
+    }
+    if (micTestAudioContextRef.current) {
+      void micTestAudioContextRef.current.close();
+      micTestAudioContextRef.current = null;
+    }
+    setMicTestLevel(0);
+    setIsMicTestActive(false);
+  }, []);
+
+  const startLocalMicTest = useCallback(async () => {
+    stopLocalMicTest();
+    try {
+      const constraints: MediaStreamConstraints = selectedInputId
+        ? { audio: { deviceId: { exact: selectedInputId } } }
+        : { audio: true };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      micTestStreamRef.current = stream;
+
+      const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      micTestAudioContextRef.current = audioCtx;
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+
+      const buffer = new Uint8Array(analyser.fftSize);
+      const tick = () => {
+        analyser.getByteTimeDomainData(buffer);
+        let sum = 0;
+        for (let i = 0; i < buffer.length; i++) {
+          const v = (buffer[i] - 128) / 128;
+          sum += v * v;
+        }
+        const rms = Math.sqrt(sum / buffer.length);
+        const level = Math.max(0, Math.min(1, rms * 4.5));
+        setMicTestLevel(level);
+        micTestRafRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+      setAudioDeviceError(null);
+      setIsMicTestActive(true);
+    } catch (e) {
+      console.error('[ATC Phone] startLocalMicTest error:', e);
+      setAudioDeviceError('Impossible de tester le micro (autorisation ou périphérique)');
+      stopLocalMicTest();
+    }
+  }, [selectedInputId, stopLocalMicTest]);
 
   // Messages vocaux (sanitizeForSpeech pour bug iOS 26 avec < et >)
   const playMessage = useCallback((message: string) => {
@@ -511,6 +572,11 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     });
   }, [selectedOutputId, applyOutputDevice]);
 
+  useEffect(() => {
+    if (!isMicTestActive) return;
+    void startLocalMicTest();
+  }, [selectedInputId, isMicTestActive, startLocalMicTest]);
+
   const parseNumber = (num: string) => {
     if (num === '911' || num === '112') return { aeroport: null, position: 'AFIS', isLocal: false, isEmergency: true };
     if (num.startsWith('*')) {
@@ -704,7 +770,10 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
     } catch (err) { console.error('Reset error:', err); }
   };
 
-  useEffect(() => () => { cleanupLiveKit(); }, [cleanupLiveKit]);
+  useEffect(() => () => {
+    stopLocalMicTest();
+    void cleanupLiveKit();
+  }, [cleanupLiveKit, stopLocalMicTest]);
 
   const formatDuration = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -828,6 +897,22 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <button
+                onClick={() => { if (isMicTestActive) stopLocalMicTest(); else void startLocalMicTest(); }}
+                className={`w-full rounded-md px-2 py-1 text-slate-100 ${
+                  isMicTestActive ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'
+                }`}
+              >
+                {isMicTestActive ? 'Arrêter test micro' : 'Tester micro local'}
+              </button>
+              <div className="mt-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-75 ${isMicTestActive ? 'bg-emerald-400' : 'bg-slate-500'}`}
+                  style={{ width: `${Math.round(micTestLevel * 100)}%` }}
+                />
+              </div>
             </div>
             <div>
               <p className="text-slate-400 mb-1">Sortie audio</p>
