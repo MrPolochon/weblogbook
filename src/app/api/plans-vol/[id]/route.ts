@@ -278,13 +278,24 @@ export async function PATCH(
       if (isAdmin || isAtc) {
         await rembourserPaxEtCargo();
         await remettreAvionAuSol();
-        const { error } = await admin.from('plans_vol').delete().eq('id', id);
-        if (error) return NextResponse.json({ error: 'Erreur lors de la suppression' }, { status: 400 });
-        return NextResponse.json({ ok: true, deleted: true });
+        const { error } = await admin.from('plans_vol').update({
+          statut: 'annule',
+          cloture_at: new Date().toISOString(),
+          current_holder_user_id: null,
+          current_holder_position: null,
+          current_holder_aeroport: null,
+          automonitoring: false,
+          pending_transfer_aeroport: null,
+          pending_transfer_position: null,
+          pending_transfer_at: null,
+        }).eq('id', id);
+        if (error) return NextResponse.json({ error: 'Erreur lors de l\'annulation' }, { status: 400 });
+        return NextResponse.json({ ok: true, annule: true });
       }
       if (isManualStrip && (isHolder || isAdmin)) {
         const { error: err } = await admin.from('plans_vol').update({
           statut: 'annule',
+          cloture_at: new Date().toISOString(),
           current_holder_user_id: null,
           current_holder_position: null,
           current_holder_aeroport: null,
@@ -301,6 +312,7 @@ export async function PATCH(
         await remettreAvionAuSol();
         const { error: err } = await admin.from('plans_vol').update({
           statut: 'annule',
+          cloture_at: new Date().toISOString(),
           current_holder_user_id: null,
           current_holder_position: null,
           current_holder_aeroport: null,

@@ -117,8 +117,8 @@ export default function PlansHistorique({ plans }: { plans: PlanCloture[] }) {
     return (
       <div className="card text-center py-16">
         <Clock className="h-16 w-16 text-slate-500 mx-auto mb-4" />
-        <h2 className="text-xl font-semibold text-slate-200">Aucun plan clôturé</h2>
-        <p className="text-slate-400 mt-2">L&apos;historique apparaîtra ici une fois des plans clôturés.</p>
+        <h2 className="text-xl font-semibold text-slate-200">Aucun plan clôturé/annulé</h2>
+        <p className="text-slate-400 mt-2">L&apos;historique apparaîtra ici une fois des plans clôturés ou annulés.</p>
       </div>
     );
   }
@@ -138,7 +138,7 @@ export default function PlansHistorique({ plans }: { plans: PlanCloture[] }) {
           />
         </div>
         <span className="text-sm text-slate-400">
-          {filtered.length} plan(s) clôturé(s)
+          {filtered.length} plan(s) dans l&apos;historique (clôturés + annulés)
         </span>
       </div>
 
@@ -260,9 +260,9 @@ export default function PlansHistorique({ plans }: { plans: PlanCloture[] }) {
                         <p className="text-xs text-slate-500">Clôture demandée</p>
                         <p className="text-sm text-slate-200 font-medium">{formatDate(plan.demande_cloture_at)}</p>
                       </div>
-                      <div className="bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/20">
-                        <p className="text-xs text-emerald-400">Clôturé</p>
-                        <p className="text-sm text-emerald-300 font-medium">{formatDate(plan.cloture_at)}</p>
+                      <div className={`${isAnnule ? 'bg-red-500/10 border-red-500/20' : 'bg-emerald-500/10 border-emerald-500/20'} rounded-lg p-3 border`}>
+                        <p className={`text-xs ${isAnnule ? 'text-red-400' : 'text-emerald-400'}`}>{isAnnule ? 'Annulé' : 'Clôturé'}</p>
+                        <p className={`text-sm font-medium ${isAnnule ? 'text-red-300' : 'text-emerald-300'}`}>{formatDate(plan.cloture_at)}</p>
                       </div>
                     </div>
                     {plan.accepted_at && plan.cloture_at && (

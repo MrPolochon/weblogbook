@@ -62,7 +62,7 @@ export default async function AdminPlansVolPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-100">Plans de vol</h1>
           <p className="text-sm text-slate-400 mt-1">
-            {openPlans.length} plan(s) ouvert(s) • {closedPlans.length} dans l&apos;historique
+            {openPlans.length} plan(s) ouvert(s) • {closedPlans.length} clôturés/annulés dans l&apos;historique
           </p>
         </div>
       </div>
