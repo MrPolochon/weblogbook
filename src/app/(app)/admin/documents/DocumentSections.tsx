@@ -341,6 +341,7 @@ function FolderNode({ node, depth }: { node: TreeNode; depth: number }) {
   const [loading, setLoading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pendingFile, setPendingFile] = useState<globalThis.File | null>(null);
   const [showNewSub, setShowNewSub] = useState(false);
   const [newSubName, setNewSubName] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -409,6 +410,7 @@ function FolderNode({ node, depth }: { node: TreeNode; depth: number }) {
         alert(d.error || 'Erreur upload');
         return;
       }
+      setPendingFile(null);
       setShowUpload(false);
       refresh();
     } finally {
@@ -552,7 +554,7 @@ function FolderNode({ node, depth }: { node: TreeNode; depth: number }) {
             <button type="button" onClick={() => { setShowNewSub(true); setExpanded(true); }} className="p-1.5 text-slate-500 hover:text-sky-400 rounded hover:bg-slate-700/50" title="Créer un sous-dossier">
               <FolderPlus className="h-3.5 w-3.5" />
             </button>
-            <button type="button" onClick={() => { setShowUpload(true); setExpanded(true); }} className="p-1.5 text-slate-500 hover:text-sky-400 rounded hover:bg-slate-700/50" title="Ajouter un fichier">
+            <button type="button" onClick={() => { setPendingFile(null); setShowUpload(true); setExpanded(true); }} className="p-1.5 text-slate-500 hover:text-sky-400 rounded hover:bg-slate-700/50" title="Ajouter un fichier">
               <Upload className="h-3.5 w-3.5" />
             </button>
             <button type="button" onClick={() => { setEditingName(true); setEditName(node.nom); }} className="p-1.5 text-slate-500 hover:text-sky-400 rounded hover:bg-slate-700/50" title="Renommer">
@@ -594,18 +596,47 @@ function FolderNode({ node, depth }: { node: TreeNode; depth: number }) {
             </form>
           )}
 
-          {/* Upload zone */}
+          {/* Upload zone : choix du fichier puis bouton explicite (évite les soucis Edge / onChange silencieux) */}
           {showUpload && (
-            <div className="flex items-center gap-3 px-3 py-2 ml-6" onClick={(e) => e.stopPropagation()}>
+            <div
+              className="flex flex-wrap items-center gap-3 px-3 py-2 ml-6 rounded-lg border border-slate-700/50 bg-slate-800/30"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+            >
               <input
                 ref={fileInputRef}
                 type="file"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = ''; }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setPendingFile(f);
+                }}
                 disabled={uploading}
-                className="text-sm text-slate-400 file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-sky-600 file:text-white hover:file:bg-sky-700 file:cursor-pointer"
+                className="text-sm text-slate-300 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-sky-600 file:text-white hover:file:bg-sky-700 file:cursor-pointer"
               />
-              {uploading && <Loader2 className="h-4 w-4 text-sky-400 animate-spin" />}
-              <button type="button" onClick={() => setShowUpload(false)} className="text-slate-500 hover:text-slate-300"><X className="h-4 w-4" /></button>
+              {pendingFile && (
+                <span className="text-xs text-slate-400 max-w-[200px] truncate" title={pendingFile.name}>
+                  {pendingFile.name} ({formatSize(pendingFile.size)})
+                </span>
+              )}
+              <button
+                type="button"
+                disabled={uploading || !pendingFile}
+                onClick={() => pendingFile && uploadFile(pendingFile)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-45 disabled:cursor-not-allowed text-white text-xs font-medium rounded-lg"
+              >
+                {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                Téléverser
+              </button>
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={() => { if (fileInputRef.current) fileInputRef.current.value = ''; setPendingFile(null); }}
+                className="text-xs text-slate-500 hover:text-slate-300"
+              >
+                Effacer
+              </button>
+              <button type="button" onClick={() => { setShowUpload(false); setPendingFile(null); }} className="text-slate-500 hover:text-slate-300 ml-auto" aria-label="Fermer"><X className="h-4 w-4" /></button>
             </div>
           )}
 
