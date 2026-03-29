@@ -160,7 +160,11 @@ export default function AdminAvionsClient() {
       const res = await fetch('/api/admin/avions', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editingId, source: editingSource, ...editData }),
+        body: JSON.stringify({
+          id: editingId,
+          source: editingSource ?? 'compagnie',
+          ...editData,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
@@ -170,8 +174,11 @@ export default function AdminAvionsClient() {
       setEditData(null);
       loadAvions();
       startTransition(() => router.refresh());
+      toast.success('Modifications enregistrées');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
+      const msg = e instanceof Error ? e.message : 'Erreur';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -181,7 +188,11 @@ export default function AdminAvionsClient() {
     if (!confirm(`Supprimer définitivement l'avion ${immat} ?`)) return;
     
     try {
-      const res = await fetch(`/api/admin/avions?id=${id}${source === 'armee' ? '&source=armee' : ''}`, { method: 'DELETE' });
+      const q = new URLSearchParams({ id });
+      if (source === 'armee' || source === 'personnel' || source === 'compagnie') {
+        q.set('source', source);
+      }
+      const res = await fetch(`/api/admin/avions?${q.toString()}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
       loadAvions();
@@ -199,7 +210,7 @@ export default function AdminAvionsClient() {
       const res = await fetch('/api/admin/avions', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, detruit: true, detruit_raison: raison || 'Crash', source }),
+        body: JSON.stringify({ id, detruit: true, detruit_raison: raison || 'Crash', source: source ?? 'compagnie' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
@@ -219,7 +230,7 @@ export default function AdminAvionsClient() {
       const res = await fetch('/api/admin/avions', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, detruit: false, source }),
+        body: JSON.stringify({ id, detruit: false, source: source ?? 'compagnie' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
@@ -563,6 +574,7 @@ export default function AdminAvionsClient() {
                       {isEditing ? (
                         <div className="flex items-center gap-2">
                           <button
+                            type="button"
                             onClick={saveEdit}
                             disabled={saving}
                             className="text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
@@ -571,6 +583,7 @@ export default function AdminAvionsClient() {
                             <Save className="h-4 w-4" />
                           </button>
                           <button
+                            type="button"
                             onClick={cancelEdit}
                             className="text-slate-400 hover:text-slate-300"
                             title="Annuler"
@@ -584,6 +597,7 @@ export default function AdminAvionsClient() {
                             <>
                               {avion.detruit ? (
                                 <button
+                                  type="button"
                                   onClick={() => restaurerAvion(avion.id, avion.immatriculation, 'armee')}
                                   className="text-emerald-400 hover:text-emerald-300"
                                   title="Restaurer (annuler destruction)"
@@ -592,6 +606,7 @@ export default function AdminAvionsClient() {
                                 </button>
                               ) : (
                                 <button
+                                  type="button"
                                   onClick={() => marquerDetruit(avion.id, avion.immatriculation, 'armee')}
                                   className="text-orange-400 hover:text-orange-300"
                                   title="Marquer comme DÉTRUIT"
@@ -600,6 +615,7 @@ export default function AdminAvionsClient() {
                                 </button>
                               )}
                               <button
+                                type="button"
                                 onClick={() => deleteAvion(avion.id, avion.immatriculation, 'armee')}
                                 className="text-red-400 hover:text-red-300"
                                 title="Supprimer de la BDD"
@@ -610,6 +626,7 @@ export default function AdminAvionsClient() {
                           ) : (
                             <>
                               <button
+                                type="button"
                                 onClick={() => startEdit(avion)}
                                 className="text-sky-400 hover:text-sky-300"
                                 title="Modifier"
@@ -618,6 +635,7 @@ export default function AdminAvionsClient() {
                               </button>
                               {avion.detruit ? (
                                 <button
+                                  type="button"
                                   onClick={() => restaurerAvion(avion.id, avion.immatriculation, avion.source)}
                                   className="text-emerald-400 hover:text-emerald-300"
                                   title="Restaurer (annuler destruction)"
@@ -626,6 +644,7 @@ export default function AdminAvionsClient() {
                                 </button>
                               ) : (
                                 <button
+                                  type="button"
                                   onClick={() => marquerDetruit(avion.id, avion.immatriculation, avion.source)}
                                   className="text-orange-400 hover:text-orange-300"
                                   title="Marquer comme DÉTRUIT"
@@ -634,6 +653,7 @@ export default function AdminAvionsClient() {
                                 </button>
                               )}
                               <button
+                                type="button"
                                 onClick={() => deleteAvion(avion.id, avion.immatriculation, avion.source)}
                                 className="text-red-400 hover:text-red-300"
                                 title="Supprimer de la BDD"

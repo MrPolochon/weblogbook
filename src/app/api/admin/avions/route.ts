@@ -137,17 +137,18 @@ export async function GET() {
 
     const persoMapped = (persoAvions || []).map((a) => {
       const prof = Array.isArray(a.profiles) ? a.profiles[0] : a.profiles;
+      const bloque = a.statut === 'bloque';
       return {
         id: a.id,
         immatriculation: a.immatriculation || '—',
         nom_bapteme: a.nom_personnalise || null,
         usure_percent: a.usure_percent ?? 100,
-        aeroport_actuel: a.aeroport_actuel || '—',
+        aeroport_actuel: a.aeroport_actuel && String(a.aeroport_actuel).trim() !== '' ? a.aeroport_actuel : 'IRFD',
         statut: a.statut || 'ground',
         created_at: a.created_at,
-        detruit: false,
+        detruit: bloque,
         detruit_at: null,
-        detruit_raison: null,
+        detruit_raison: bloque ? 'Hors service (inventaire)' : null,
         types_avion: a.types_avion,
         compagnies: { id: 'personnel', nom: prof?.identifiant ? `👤 ${prof.identifiant}` : '👤 Utilisateur' },
         source: 'personnel',
@@ -206,16 +207,29 @@ export async function PATCH(request: Request) {
         .select()
         .single();
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      if (!data) {
+        return NextResponse.json({ error: 'Aucun avion armée trouvé avec cet identifiant.' }, { status: 404 });
+      }
       return NextResponse.json(data);
     }
 
     if (source === 'personnel') {
       const updates: Record<string, unknown> = {};
-      if (aeroport_actuel !== undefined) updates.aeroport_actuel = aeroport_actuel.toUpperCase();
+      if (aeroport_actuel !== undefined) {
+        const ap = String(aeroport_actuel).trim();
+        if (ap && ap !== '—') updates.aeroport_actuel = ap.toUpperCase();
+      }
       if (statut !== undefined) updates.statut = statut;
       // Pas d'usure pour les avions personnels — on ignore usure_percent
       if (immatriculation !== undefined) updates.immatriculation = immatriculation.toUpperCase();
       if (nom_bapteme !== undefined) updates.nom_personnalise = nom_bapteme || null;
+      // inventaire_avions : pas de colonnes detruit_* — statut bloque = « détruit » côté UI
+      if (detruit === true) {
+        updates.statut = 'bloque';
+      }
+      if (detruit === false) {
+        updates.statut = 'ground';
+      }
       if (Object.keys(updates).length === 0) {
         return NextResponse.json({ error: 'Aucune modification' }, { status: 400 });
       }
@@ -226,6 +240,9 @@ export async function PATCH(request: Request) {
         .select()
         .single();
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      if (!data) {
+        return NextResponse.json({ error: 'Aucun avion personnel trouvé (source=personnel requis).' }, { status: 404 });
+      }
       return NextResponse.json(data);
     }
 
@@ -265,6 +282,12 @@ export async function PATCH(request: Request) {
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (!data) {
+      return NextResponse.json(
+        { error: 'Aucun avion compagnie trouvé. Utilisez source=personnel ou source=armee si besoin.' },
+        { status: 404 }
+      );
+    }
     return NextResponse.json(data);
   } catch (e) {
     console.error('Admin avions PATCH:', e);
@@ -294,9 +317,20 @@ export async function DELETE(request: Request) {
 
     const admin = createAdminClient();
     const targetTable = source === 'armee' ? 'armee_avions' : source === 'personnel' ? 'inventaire_avions' : 'compagnie_avions';
-    const { error } = await admin.from(targetTable).delete().eq('id', id);
+    const { data: deleted, error } = await admin.from(targetTable).delete().eq('id', id).select('id');
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (!deleted?.length) {
+      return NextResponse.json(
+        {
+          error:
+            source === 'personnel'
+              ? 'Aucun avion supprimé. Vérifiez que la requête indique bien inventaire personnel (source=personnel).'
+              : 'Aucun avion avec cet identifiant dans la table concernée.',
+        },
+        { status: 404 }
+      );
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error('Admin avions DELETE:', e);
