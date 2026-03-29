@@ -14,6 +14,7 @@ export default function EditPiloteForm({
   heuresInitiales,
   blockedUntil,
   blockReason,
+  editorUserId,
 }: {
   piloteId: string;
   identifiant: string;
@@ -25,6 +26,8 @@ export default function EditPiloteForm({
   heuresInitiales: number;
   blockedUntil: string | null;
   blockReason: string | null;
+  /** Admin connecté ; sert à savoir si la réinit MDP d’un admin exige un code superadmin (pas pour soi-même). */
+  editorUserId?: string | null;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -47,6 +50,12 @@ export default function EditPiloteForm({
   const [superadminCode, setSuperadminCode] = useState('');
   const [resetPasswordStep, setResetPasswordStep] = useState<'code' | null>(null);
   const [resetPasswordCode, setResetPasswordCode] = useState('');
+  const [loadingDirectReset, setLoadingDirectReset] = useState(false);
+  const [directNewPassword, setDirectNewPassword] = useState('');
+  const [directConfirmPassword, setDirectConfirmPassword] = useState('');
+  const [directSuperadminPwd, setDirectSuperadminPwd] = useState('');
+  const [directSuperadminStep, setDirectSuperadminStep] = useState<'password' | 'code' | null>(null);
+  const [directSuperadminCode, setDirectSuperadminCode] = useState('');
 
   
   // Sync initial values
@@ -203,6 +212,90 @@ export default function EditPiloteForm({
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setLoadingReset(false);
+    }
+  }
+
+  async function handleSendDirectSuperadminCode() {
+    if (!directSuperadminPwd.trim()) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/superadmin/request-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: directSuperadminPwd }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setDirectSuperadminStep('code');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDirectResetPassword() {
+    const useDefault = !directNewPassword.trim() && !directConfirmPassword.trim();
+    if (!useDefault) {
+      if (directNewPassword.length < 8) {
+        setError('Le mot de passe doit faire au moins 8 caractères, ou laissez les deux champs vides pour utiliser 1234567890.');
+        return;
+      }
+      if (directNewPassword !== directConfirmPassword) {
+        setError('Les deux mots de passe ne correspondent pas.');
+        return;
+      }
+    }
+    let superadminPayload: string | undefined;
+    const needsSuperadminForTarget =
+      roleInitial === 'admin' && (editorUserId == null || piloteId !== editorUserId);
+    if (needsSuperadminForTarget) {
+      const code = directSuperadminCode.trim().replace(/\s/g, '');
+      if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+        setError('Pour le mot de passe d’un autre administrateur, saisissez le code superadmin à 6 chiffres (demandez-le par email ci-dessous).');
+        return;
+      }
+      superadminPayload = code;
+    }
+    const msg = useDefault
+      ? 'Réinitialiser le mot de passe à 1234567890 ? L’utilisateur devra se reconnecter.'
+      : 'Appliquer ce nouveau mot de passe ? L’utilisateur devra se reconnecter.';
+    if (!confirm(msg)) return;
+    setError(null);
+    setLoadingDirectReset(true);
+    try {
+      const res = await fetch('/api/admin/reset-user-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: piloteId,
+          ...(useDefault ? {} : { new_password: directNewPassword }),
+          ...(superadminPayload ? { superadmin_code: superadminPayload } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 403 && data.code === 'SUPERADMIN_REQUIRED') {
+        setError(data.error || 'Code superadmin requis.');
+        setDirectSuperadminStep('password');
+        return;
+      }
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setDirectNewPassword('');
+      setDirectConfirmPassword('');
+      setDirectSuperadminCode('');
+      setDirectSuperadminPwd('');
+      setDirectSuperadminStep(null);
+      setSuccess(
+        data.used_default
+          ? 'Mot de passe réinitialisé à 1234567890.'
+          : 'Nouveau mot de passe enregistré.'
+      );
+      startTransition(() => router.refresh());
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Erreur');
+    } finally {
+      setLoadingDirectReset(false);
     }
   }
 
@@ -466,9 +559,82 @@ export default function EditPiloteForm({
         </button>
       </form>
 
+      <div className="space-y-4 rounded-xl border border-slate-600/50 bg-slate-800/20 p-4">
+        <h2 className="text-lg font-medium text-slate-200">Mot de passe — réinitialisation immédiate</h2>
+        <p className="text-slate-400 text-sm">
+          Sans passer par l&apos;email du joueur : définissez un nouveau mot de passe, ou laissez vide pour <span className="font-mono text-slate-300">1234567890</span>.
+          {roleInitial === 'admin' && (editorUserId == null || piloteId !== editorUserId) && (
+            <span className="block mt-1 text-amber-300/90">
+              Compte administrateur : un code superadmin (email) est obligatoire sauf pour votre propre compte.
+            </span>
+          )}
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2 max-w-md">
+          <div className="flex-1">
+            <label className="label text-xs">Nouveau mot de passe (optionnel)</label>
+            <input
+              type="password"
+              className="input w-full"
+              value={directNewPassword}
+              onChange={(e) => setDirectNewPassword(e.target.value)}
+              placeholder="Vide = 1234567890"
+              autoComplete="new-password"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="label text-xs">Confirmer</label>
+            <input
+              type="password"
+              className="input w-full"
+              value={directConfirmPassword}
+              onChange={(e) => setDirectConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
+        </div>
+        {roleInitial === 'admin' && (editorUserId == null || piloteId !== editorUserId) && (
+          <div className="space-y-2 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3 max-w-lg">
+            <p className="text-amber-200/90 text-xs font-medium">Vérification superadmin (autre admin)</p>
+            {directSuperadminStep !== 'code' ? (
+              <div className="flex flex-wrap items-end gap-2">
+                <input
+                  type="password"
+                  className="input max-w-xs"
+                  value={directSuperadminPwd}
+                  onChange={(e) => setDirectSuperadminPwd(e.target.value)}
+                  placeholder="Mot de passe superadmin"
+                  autoComplete="current-password"
+                />
+                <button type="button" onClick={handleSendDirectSuperadminCode} disabled={loading} className="btn-secondary text-sm">
+                  {loading ? 'Envoi…' : 'Recevoir le code par email'}
+                </button>
+              </div>
+            ) : (
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                className="input max-w-[8rem] text-center font-mono text-lg tracking-widest"
+                value={directSuperadminCode}
+                onChange={(e) => setDirectSuperadminCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+              />
+            )}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={handleDirectResetPassword}
+          className="btn-primary"
+          disabled={loadingDirectReset}
+        >
+          {loadingDirectReset ? 'Enregistrement…' : 'Réinitialiser maintenant'}
+        </button>
+      </div>
+
       <div>
-        <h2 className="text-lg font-medium text-slate-200 mb-2">Mot de passe</h2>
-        <p className="text-slate-400 text-sm mb-2">Un code de vérification est envoyé à l&apos;email du compte ; saisissez-le pour confirmer la réinitialisation.</p>
+        <h2 className="text-lg font-medium text-slate-200 mb-2">Mot de passe — code sur l&apos;email du compte</h2>
+        <p className="text-slate-400 text-sm mb-2">Utile si le joueur peut lire ses mails : un code est envoyé à l&apos;adresse enregistrée pour ce compte.</p>
         {resetPasswordStep !== 'code' ? (
           <button
             type="button"

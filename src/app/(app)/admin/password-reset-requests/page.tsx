@@ -48,7 +48,10 @@ export default async function AdminPasswordResetRequestsPage() {
         <Link href="/admin" className="text-slate-400 hover:text-slate-200">← Administration</Link>
       </div>
       <h1 className="text-2xl font-semibold text-slate-100">Demandes de réinitialisation de mot de passe</h1>
-      <p className="text-slate-400 text-sm">Les utilisateurs qui ont choisi « Demander à un administrateur » sur la page de connexion apparaissent ici. Réinitialisez leur mot de passe depuis la fiche pilote puis marquez la demande comme traitée.</p>
+      <p className="text-slate-400 text-sm">
+        Les utilisateurs qui ont choisi « Demander à un administrateur » sur la page de connexion apparaissent ici. Ouvrez la fiche pilote / admin : section{' '}
+        <strong className="text-slate-300">réinitialisation immédiate</strong> (sans email du compte) ou flux avec code email, puis marquez la demande comme traitée.
+      </p>
       <PasswordResetRequestsClient initialRequests={requests} />
     </div>
   );

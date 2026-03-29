@@ -100,15 +100,13 @@ export default function PilotesActions({
 
   return (
     <div className="flex items-center gap-2">
-      {!isAdmin && (
-        <Link
-          href={`/admin/pilotes/${piloteId}`}
-          className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-sky-400"
-          title="Heures, blocage"
-        >
-          <Settings className="h-4 w-4" />
-        </Link>
-      )}
+      <Link
+        href={`/admin/pilotes/${piloteId}`}
+        className="rounded p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-sky-400"
+        title={isAdmin ? 'Modifier compte (rôles, mot de passe…)' : 'Heures, blocage, mot de passe'}
+      >
+        <Settings className="h-4 w-4" />
+      </Link>
       {role !== 'atc' && (
         <Link
           href={`/admin/pilotes/${piloteId}/logbook`}

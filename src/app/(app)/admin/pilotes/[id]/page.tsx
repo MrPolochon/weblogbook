@@ -14,6 +14,7 @@ export default async function AdminPiloteEditPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
+  const { data: { user: editor } } = await supabase.auth.getUser();
 
   const { data: p } = await supabase
     .from('profiles')
@@ -63,6 +64,7 @@ export default async function AdminPiloteEditPage({
             heuresInitiales={p.heures_initiales_minutes ?? 0}
             blockedUntil={p.blocked_until}
             blockReason={p.block_reason}
+            editorUserId={editor?.id ?? null}
           />
         </div>
 
