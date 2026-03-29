@@ -49,6 +49,12 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const [callDuration, setCallDuration] = useState(0);
   const [audioLevel, setAudioLevel] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState('');
+  const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
+  const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
+  const [selectedInputId, setSelectedInputId] = useState('');
+  const [selectedOutputId, setSelectedOutputId] = useState('');
+  const [showAudioPanel, setShowAudioPanel] = useState(false);
+  const [audioDeviceError, setAudioDeviceError] = useState<string | null>(null);
   
   const roomRef = useRef<Room | null>(null);
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -63,6 +69,62 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  const refreshAudioDevices = useCallback(async () => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      // Demande d'accès micro pour obtenir les labels de périphériques.
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices.filter((d) => d.kind === 'audioinput');
+      const outputs = devices.filter((d) => d.kind === 'audiooutput');
+      setAudioInputs(inputs);
+      setAudioOutputs(outputs);
+      setSelectedInputId((prev) =>
+        prev && inputs.some((d) => d.deviceId === prev) ? prev : (inputs[0]?.deviceId ?? ''),
+      );
+      setSelectedOutputId((prev) =>
+        prev && outputs.some((d) => d.deviceId === prev) ? prev : (outputs[0]?.deviceId ?? ''),
+      );
+      setAudioDeviceError(null);
+    } catch (e) {
+      console.error('[ATC Phone] refreshAudioDevices error:', e);
+      setAudioDeviceError('Accès micro refusé ou périphériques indisponibles');
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshAudioDevices();
+    const mediaDevices = navigator?.mediaDevices;
+    if (!mediaDevices?.addEventListener) return;
+    const onDeviceChange = () => { void refreshAudioDevices(); };
+    mediaDevices.addEventListener('devicechange', onDeviceChange);
+    return () => mediaDevices.removeEventListener('devicechange', onDeviceChange);
+  }, [refreshAudioDevices]);
+
+  const applyOutputDevice = useCallback(async (audioElement: HTMLAudioElement) => {
+    audioElement.volume = 1.0;
+    audioElement.autoplay = true;
+    audioElement.playsInline = true;
+    audioElement.style.position = 'absolute';
+    audioElement.style.left = '-9999px';
+    audioElement.style.width = '1px';
+    audioElement.style.height = '1px';
+    audioElement.style.opacity = '0';
+    const maybeSetSink = audioElement as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
+    if (selectedOutputId && typeof maybeSetSink.setSinkId === 'function') {
+      try {
+        await maybeSetSink.setSinkId(selectedOutputId);
+      } catch (e) {
+        console.warn('[ATC Phone] setSinkId failed:', e);
+      }
+    }
+    const playPromise = audioElement.play();
+    if (playPromise) {
+      playPromise.catch((e) => console.warn('[ATC Phone] audio play blocked:', e));
+    }
+  }, [selectedOutputId]);
 
   // Messages vocaux (sanitizeForSpeech pour bug iOS 26 avec < et >)
   const playMessage = useCallback((message: string) => {
@@ -184,10 +246,9 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   const attachRemoteAudioTrack = useCallback((track: { kind: string; sid?: string; attach: () => HTMLMediaElement }, room: Room) => {
     if (track.kind !== Track.Kind.Audio) return;
     const audioElement = track.attach() as HTMLAudioElement;
-    audioElement.volume = 1.0;
-    audioElement.style.display = 'none'; // Cacher l'élément audio lui-même, pas le parent
     const container = audioContainerRef.current ?? document.body;
     container.appendChild(audioElement);
+    void applyOutputDevice(audioElement);
     const trackSid = (track as { sid?: string }).sid ?? `audio-${Date.now()}`;
     attachedAudioElementsRef.current.set(trackSid, audioElement);
     if (!audioLevelIntervalRef.current) {
@@ -198,7 +259,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         }
       }, 100);
     }
-  }, []);
+  }, [applyOutputDevice]);
 
   // Cleanup LiveKit
   const cleanupLiveKit = useCallback(async () => {
@@ -387,6 +448,26 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       await Promise.race([connectPromise, timeoutPromise]);
       
       console.log('[LiveKit] Connected, enabling microphone...');
+      if (selectedInputId) {
+        const roomWithSwitch = room as unknown as {
+          switchActiveDevice?: (kind: string, deviceId: string) => Promise<void>;
+        };
+        try {
+          await roomWithSwitch.switchActiveDevice?.('audioinput', selectedInputId);
+        } catch (e) {
+          console.warn('[ATC Phone] switchActiveDevice(audioinput) failed:', e);
+        }
+      }
+      if (selectedOutputId) {
+        const roomWithSwitch = room as unknown as {
+          switchActiveDevice?: (kind: string, deviceId: string) => Promise<void>;
+        };
+        try {
+          await roomWithSwitch.switchActiveDevice?.('audiooutput', selectedOutputId);
+        } catch (e) {
+          console.warn('[ATC Phone] switchActiveDevice(audiooutput) failed:', e);
+        }
+      }
       await room.localParticipant.setMicrophoneEnabled(true);
       
       // Vérifier si l'autre participant est DÉJÀ dans la room (rejoint avant nous)
@@ -416,7 +497,18 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       await cleanupLiveKit();
       setCallState('idle');
     }
-  }, [aeroport, position, cleanupLiveKit, playSound, playMessage, attachRemoteAudioTrack]);
+  }, [aeroport, position, cleanupLiveKit, playSound, playMessage, attachRemoteAudioTrack, selectedInputId, selectedOutputId]);
+
+  useEffect(() => {
+    if (!roomRef.current || !selectedOutputId) return;
+    const roomWithSwitch = roomRef.current as unknown as {
+      switchActiveDevice?: (kind: string, deviceId: string) => Promise<void>;
+    };
+    void roomWithSwitch.switchActiveDevice?.('audiooutput', selectedOutputId);
+    attachedAudioElementsRef.current.forEach((el) => {
+      void applyOutputDevice(el);
+    });
+  }, [selectedOutputId, applyOutputDevice]);
 
   const parseNumber = (num: string) => {
     if (num === '911' || num === '112') return { aeroport: null, position: 'AFIS', isLocal: false, isEmergency: true };
@@ -704,6 +796,53 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
         {callState === 'connected' && (
           <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-75" style={{ width: `${audioLevel * 100}%` }} />
+          </div>
+        )}
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <button
+            onClick={() => setShowAudioPanel((v) => !v)}
+            className={`px-2 py-1 rounded-md text-[10px] ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+          >
+            Audio
+          </button>
+          <button
+            onClick={() => { void refreshAudioDevices(); }}
+            className="px-2 py-1 rounded-md text-[10px] bg-slate-700 text-slate-200 hover:bg-slate-600"
+          >
+            Rafraîchir
+          </button>
+        </div>
+        {showAudioPanel && (
+          <div className="mt-2 space-y-2 text-[10px]">
+            <div>
+              <p className="text-slate-400 mb-1">Entrée micro</p>
+              <select
+                value={selectedInputId}
+                onChange={(e) => setSelectedInputId(e.target.value)}
+                className="w-full rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-2 py-1"
+              >
+                {audioInputs.map((d, i) => (
+                  <option key={d.deviceId || `${d.kind}-${i}`} value={d.deviceId}>
+                    {d.label || `Microphone ${i + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <p className="text-slate-400 mb-1">Sortie audio</p>
+              <select
+                value={selectedOutputId}
+                onChange={(e) => setSelectedOutputId(e.target.value)}
+                className="w-full rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-2 py-1"
+              >
+                {audioOutputs.map((d, i) => (
+                  <option key={d.deviceId || `${d.kind}-${i}`} value={d.deviceId}>
+                    {d.label || `Haut-parleur ${i + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {audioDeviceError && <p className="text-amber-400">{audioDeviceError}</p>}
           </div>
         )}
       </div>

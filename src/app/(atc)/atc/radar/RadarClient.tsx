@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   SVG_W, SVG_H,
   DEFAULT_POSITIONS, DEFAULT_ISLANDS, DEFAULT_FIR_ZONES,
-  toSVG, detectSTCA,
+  toSVG, detectSTCA, calculateHeading,
   type RadarTarget, type STCAPair, type Point,
 } from '@/lib/radar-utils';
 import { DEFAULT_VORS, DEFAULT_WAYPOINTS } from '@/lib/cartography-data';
@@ -20,6 +20,10 @@ const RANGE_LEVELS = [
 ];
 const CHAR_SIZES = ['S', 'M', 'L'] as const;
 const CHAR_SIZE_PX = { S: 7, M: 9, L: 11 } as const;
+
+/** Silhouette avion centrée sur (0,0), nez vers le haut (−Y), ~10 u de haut — rotation = cap magnétique ATC */
+const PLANE_BLIP_D =
+  'M0,-5.2 L1.35,-0.85 L2.8,-0.3 L2.8,0.55 L1.15,0.55 L1.15,3.6 L-1.15,3.6 L-1.15,0.55 L-2.8,0.55 L-2.8,-0.3 L-1.35,-0.85 Z';
 
 interface DataBlockOffset { dx: number; dy: number }
 
@@ -371,71 +375,57 @@ export default function RadarClient({ userId }: { userId: string }) {
               else if (isAssumedByMe) labelColor = '#00ff41';
               else if (isTransfer) labelColor = '#ffcc00';
 
-              const headingRad = (target.heading * Math.PI) / 180;
+              const trailForHeading = trailsRef.current.get(target.id) ?? [];
+              let headingDeg = target.heading;
+              if (trailForHeading.length >= 2) {
+                const pNew = trailForHeading[0];
+                const pOld = trailForHeading[1];
+                const tdist = Math.hypot(pNew.x - pOld.x, pNew.y - pOld.y);
+                if (tdist > 0.25) headingDeg = calculateHeading(pOld, pNew);
+              }
+              const headingRad = (headingDeg * Math.PI) / 180;
               const ptlLen = PTL_BASE_LENGTH;
+              const labelStroke = 'rgba(2,6,23,0.92)';
 
               return (
                 <g key={target.id} data-target-id={target.id} style={{ cursor: 'pointer' }}>
                   {trail.map((pos, i) => (
-                    <rect
+                    <circle
                       key={i}
-                      x={pos.x - 1.5}
-                      y={pos.y - 1.5}
-                      width={3}
-                      height={3}
+                      cx={pos.x}
+                      cy={pos.y}
+                      r={1.2}
                       fill={blipColor}
-                      opacity={0.6 - i * 0.15}
+                      opacity={0.55 - i * 0.12}
                     />
                   ))}
 
-                  {showPTL && !target.on_ground && !isUnknown && (
+                  {showPTL && !target.on_ground && (
                     <line
                       x1={target.position.x}
                       y1={target.position.y}
                       x2={target.position.x + Math.sin(headingRad) * ptlLen}
                       y2={target.position.y - Math.cos(headingRad) * ptlLen}
                       stroke={blipColor}
-                      strokeWidth="0.5"
+                      strokeWidth="0.55"
                       strokeDasharray="3 2"
-                      opacity="0.5"
+                      opacity="0.45"
                     />
                   )}
 
-                  {isUnknown ? (
-                    <g>
-                      <circle
-                        cx={target.position.x}
-                        cy={target.position.y}
-                        r={3.5}
-                        fill="none"
-                        stroke={blipColor}
-                        strokeWidth={1}
-                        strokeDasharray="2 1.5"
-                      >
-                        <animate attributeName="opacity" values="1;0.4;1" dur="1.5s" repeatCount="indefinite" />
-                      </circle>
-                      <circle
-                        cx={target.position.x}
-                        cy={target.position.y}
-                        r={1.2}
-                        fill={blipColor}
-                      />
-                    </g>
-                  ) : (
-                    <rect
-                      x={target.position.x - 2.5}
-                      y={target.position.y - 2.5}
-                      width={5}
-                      height={5}
+                  <g transform={`translate(${target.position.x},${target.position.y}) rotate(${headingDeg})`}>
+                    <path
+                      d={PLANE_BLIP_D}
                       fill={blipColor}
-                      stroke={isSelected ? '#ffffff' : 'none'}
-                      strokeWidth={isSelected ? 1 : 0}
+                      stroke={isSelected ? '#ffffff' : 'rgba(0,0,0,0.55)'}
+                      strokeWidth={isSelected ? 0.45 : 0.22}
+                      strokeLinejoin="round"
                     >
-                      {isSTCA && (
-                        <animate attributeName="opacity" values="1;0.3;1" dur="0.5s" repeatCount="indefinite" />
+                      {(isSTCA || isUnknown) && (
+                        <animate attributeName="opacity" values="1;0.45;1" dur={isSTCA ? '0.5s' : '1.4s'} repeatCount="indefinite" />
                       )}
-                    </rect>
-                  )}
+                    </path>
+                  </g>
 
                   <line
                     x1={target.position.x}
@@ -456,15 +446,18 @@ export default function RadarClient({ userId }: { userId: string }) {
                         x={target.position.x + blockOffset.dx}
                         y={target.position.y + blockOffset.dy}
                         fill={labelColor}
+                        stroke={labelStroke}
+                        strokeWidth={1.15}
+                        paintOrder="stroke fill"
                         fontSize={fontSize}
                         fontFamily="monospace"
                         fontWeight={isSelected ? 'bold' : 'normal'}
                       >
                         <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite" />
-                        <tspan x={target.position.x + blockOffset.dx} dy="0">
+                        <tspan x={target.position.x + blockOffset.dx} dy="0" stroke={labelStroke} paintOrder="stroke fill">
                           {target.roblox_username || 'INCONNU'}
                         </tspan>
-                        <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1} fill="#996622">
+                        <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1} fill="#fdba74" stroke={labelStroke} paintOrder="stroke fill">
                           PAS DE PDV
                         </tspan>
                       </text>
@@ -473,19 +466,22 @@ export default function RadarClient({ userId }: { userId: string }) {
                         x={target.position.x + blockOffset.dx}
                         y={target.position.y + blockOffset.dy}
                         fill={labelColor}
+                        stroke={labelStroke}
+                        strokeWidth={1.15}
+                        paintOrder="stroke fill"
                         fontSize={fontSize}
                         fontFamily="monospace"
                         fontWeight={isSelected ? 'bold' : 'normal'}
                       >
                         {isSTCA && <animate attributeName="opacity" values="1;0.3;1" dur="0.5s" repeatCount="indefinite" />}
-                        <tspan x={target.position.x + blockOffset.dx} dy="0">{target.callsign}</tspan>
-                        <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1}>
+                        <tspan x={target.position.x + blockOffset.dx} dy="0" stroke={labelStroke} paintOrder="stroke fill">{target.callsign}</tspan>
+                        <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1} stroke={labelStroke} paintOrder="stroke fill">
                           {target.altitude_unit}{target.altitude ?? '???'} {target.progress > 0.5 ? '↓' : '↑'}
                         </tspan>
-                        <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1}>
+                        <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1} stroke={labelStroke} paintOrder="stroke fill">
                           A{target.squawk ?? '????'}
                         </tspan>
-                        <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1}>
+                        <tspan x={target.position.x + blockOffset.dx} dy={fontSize + 1} stroke={labelStroke} paintOrder="stroke fill">
                           {target.aeroport_arrivee}→
                         </tspan>
                       </text>

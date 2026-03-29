@@ -123,7 +123,18 @@ export async function GET() {
         position = interpolatePosition(depSVG, arrSVG, progress);
       }
 
-      const heading = calculateHeading(depSVG, arrSVG);
+      const onGround = progress < 0.05 || progress > 0.95;
+      // Cap : en capture, viser depuis la position réelle vers l'arrivée (sinon cap figé départ→arrivée alors que la cible est sur le minimap)
+      let heading: number;
+      if (onGround) {
+        heading = calculateHeading(depSVG, arrSVG);
+      } else if (source === 'capture') {
+        const dToArr = Math.hypot(arrSVG.x - position.x, arrSVG.y - position.y);
+        heading =
+          dToArr > 2 ? calculateHeading(position, arrSVG) : calculateHeading(depSVG, arrSVG);
+      } else {
+        heading = calculateHeading(depSVG, arrSVG);
+      }
       const profileData = pv.profiles as { identifiant?: string; callsign?: string; roblox_username?: string } | null;
 
       targets.push({
@@ -145,7 +156,7 @@ export async function GET() {
         assumed_by: pv.current_holder_user_id ?? null,
         assumed_position: pv.current_holder_position ?? null,
         assumed_aeroport: pv.current_holder_aeroport ?? null,
-        on_ground: progress < 0.05 || progress > 0.95,
+        on_ground: onGround,
         source,
         temps_prev_min: pv.temps_prev_min,
         pilote_identifiant: profileData?.identifiant ?? null,
