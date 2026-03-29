@@ -25,7 +25,14 @@ Corrige la fonction `pay_siavi_taxes` qui créditait directement le compte au li
 
 ---
 
-### 3. add_remboursement_pret.sql  
+### 3. fix_pay_siavi_intervention.sql
+**Priorité: CRITIQUE** | **Statut: À exécuter si SIAVI est actif**
+
+Corrige la fonction `pay_siavi_intervention` qui créditait directement le compte ET créait un chèque encaissable = **double paiement** (même bug que `pay_siavi_taxes`).
+
+---
+
+### 4. add_remboursement_pret.sql  
 **Priorité: NORMALE** | **Statut: À exécuter si prêts bancaires actifs**
 
 Met à jour la politique RLS pour permettre au PDG de contribuer manuellement au remboursement d'un prêt bancaire.
@@ -64,6 +71,11 @@ Les fichiers suivants sont des versions itératives du système Felitz Bank :
 | Bug toggleMute SIAVI (inversé) | `SiaviTelephone.tsx` |
 | Bug handleDelete téléphones | `SiaviTelephone.tsx`, `AtcTelephone.tsx` |
 | Double encaissement chèques | `api/messages/[id]/route.ts` |
+| Taxes prélevées sans bénéficiaire | `lib/plans-vol/closure.ts` |
+| Comptes vérifiés après taxes distribuées | `lib/plans-vol/closure.ts` |
+| AFIS ne reçoit pas ses taxes hors session | `lib/plans-vol/closure.ts` |
+| Race condition solde alliance | `lib/plans-vol/closure.ts` |
+| API chèques ne retourne que 2/5 types | `api/messages/route.ts` |
 | Virements non atomiques | `api/felitz/virement/route.ts` |
 | Transactions admin invisibles | `AdminFelitzClient.tsx` |
 | Import useEffect inutilisé | `CreerPlanAtcForm.tsx` |
