@@ -104,7 +104,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   const applyOutputDevice = useCallback(async (audioElement: HTMLAudioElement) => {
     audioElement.volume = 1.0;
     audioElement.autoplay = true;
-    audioElement.playsInline = true;
+    audioElement.setAttribute('playsinline', 'true');
+    audioElement.setAttribute('webkit-playsinline', 'true');
     audioElement.style.position = 'absolute';
     audioElement.style.left = '-9999px';
     audioElement.style.width = '1px';
