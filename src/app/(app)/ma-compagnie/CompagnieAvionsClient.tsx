@@ -28,6 +28,8 @@ type Avion = {
   location_locataire_compagnie_id?: string | null;
   location_prix_journalier?: number | null;
   location_pourcentage_revenu_loueur?: number | null;
+  /** Si vrai (sanction ATC / incident), envoi en réparation pro interdit côté API. */
+  bloque_incident?: boolean | null;
 };
 
 interface Props {
@@ -452,7 +454,8 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
             {avionsBloques.length} avion(s) bloqué(s) à 0% d&apos;usure
           </div>
           <p className="text-sm text-slate-400">
-            Affrétez des techniciens ({COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$), débloquez pour un vol ferry ({COUT_VOL_FERRY.toLocaleString('fr-FR')} F$) ou réparez au hub (50% du prix de l&apos;appareil).
+            Affrétez des techniciens ({COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$), débloquez pour un vol ferry ({COUT_VOL_FERRY.toLocaleString('fr-FR')} F$), réparez au hub (50% du prix de l&apos;appareil) ou envoyez l&apos;appareil en{' '}
+            <span className="text-orange-300/90">réparation professionnelle</span> via le lien « Réparation pro » dans Actions (sauf si l&apos;avion est bloqué en attente d&apos;examen staff après incident).
           </p>
         </div>
       )}
@@ -514,6 +517,13 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                 const canDebloquer = (a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && !isLeasedOut;
                 const canVerifierMaintenance = maintenancePrete && !isLeasedOut;
                 const noLeasedActions = isLeasedIn && !canRepairHub && !canAffreter && !canDebloquer && !canVerifierMaintenance;
+                const canDemanderReparationPro =
+                  isPdg &&
+                  !a.detruit &&
+                  !isLeasedOut &&
+                  !a.bloque_incident &&
+                  a.statut !== 'en_reparation' &&
+                  (a.statut === 'bloque' || a.statut === 'ground');
                 const leasedReasons: string[] = [];
                 if (isLeasedIn && !isAtHub) leasedReasons.push('pas au hub');
                 if (isLeasedIn && a.usure_percent > 0 && a.usure_percent < 100) leasedReasons.push('usure > 0%');
@@ -752,6 +762,16 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   >
                                     Débloquer
                                   </button>
+                                  {canDemanderReparationPro && (
+                                    <Link
+                                      href={`/reparation?demander=1&avion_id=${a.id}&compagnie_id=${compagnieId}`}
+                                      className="text-xs text-orange-400 hover:underline inline-flex items-center gap-1"
+                                      title="Confier à une entreprise de réparation (hangar + mini-jeux)"
+                                    >
+                                      <Wrench className="h-3 w-3" />
+                                      Réparation pro
+                                    </Link>
+                                  )}
                                 </>
                               )}
                               {maintenancePrete && !isLeasedOut && (
@@ -780,7 +800,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   Réparer ({getCoutReparationHub(a).toLocaleString('fr-FR')} F$)
                                 </button>
                               )}
-                              {a.statut === 'ground' && a.usure_percent > 0 && !a.detruit && !isLeasedOut && isPdg && (
+                              {canDemanderReparationPro && !((a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && !isLeasedOut) && (
                                 <Link
                                   href={`/reparation?demander=1&avion_id=${a.id}&compagnie_id=${compagnieId}`}
                                   className="text-xs text-orange-400 hover:underline inline-flex items-center gap-1"
