@@ -392,7 +392,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   }, [callState, currentCall, incomingCall, cleanupLiveKit, playMessage, stopEmergencyAlarm]);
 
   // Rejoindre appel LiveKit
-  const joinLiveKitCall = useCallback(async (callId: string) => {
+  const joinLiveKitCall = useCallback(async (callId: string): Promise<boolean> => {
     console.log('[LiveKit SIAVI] Joining call:', callId);
     setConnectionStatus('Connexion...');
     
@@ -597,7 +597,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       } else {
         console.log('[LiveKit SIAVI] Audio publishing started, waiting for other participant...');
       }
-      
+      return true;
     } catch (err) {
       console.error('[LiveKit SIAVI] Error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
@@ -605,6 +605,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       playMessage('Impossible d\'établir la communication');
       await cleanupLiveKit();
       setCallState('idle');
+      return false;
     }
   }, [aeroport, cleanupLiveKit, playSound, playMessage, stopEmergencyAlarm, selectedInputId, selectedOutputId, applyOutputDevice]);
 
@@ -690,7 +691,15 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           const statusData = await statusRes.json();
           if (statusData.status === 'connected') {
             setCallState('connecting');
-            await joinLiveKitCall(data.call.id);
+            const ok = await joinLiveKitCall(data.call.id);
+            if (!ok) {
+              await fetch('/api/siavi/telephone/hangup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ callId: data.call.id }),
+              }).catch(() => {});
+              playMessage('Connexion audio échouée');
+            }
             return;
           }
           if (statusData.status === 'rejected' || statusData.status === 'ended') break;
@@ -725,7 +734,18 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       });
       if (res.ok) {
         setCurrentCall({ to: incomingCall.from, toPosition: incomingCall.fromPosition, callId: incomingCall.callId });
-        await joinLiveKitCall(incomingCall.callId);
+        const ok = await joinLiveKitCall(incomingCall.callId);
+        if (!ok) {
+          await fetch('/api/siavi/telephone/hangup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ callId: incomingCall.callId }),
+          }).catch(() => {});
+          setCallState('idle');
+          setCurrentCall(null);
+          setIncomingCall(null);
+          return;
+        }
         setIncomingCall(null);
       } else {
         setCallState('idle');

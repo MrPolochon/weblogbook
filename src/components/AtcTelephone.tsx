@@ -370,7 +370,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
   }, [callState, currentCall, incomingCall, cleanupLiveKit, playMessage]);
 
   // Rejoindre un appel LiveKit
-  const joinLiveKitCall = useCallback(async (callId: string) => {
+  const joinLiveKitCall = useCallback(async (callId: string): Promise<boolean> => {
     console.log('[LiveKit] Joining call:', callId);
     setConnectionStatus('Connexion...');
     
@@ -550,7 +550,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       } else {
         console.log('[LiveKit] Audio publishing started, waiting for other participant...');
       }
-      
+      return true;
     } catch (err) {
       console.error('[LiveKit] Error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
@@ -558,6 +558,7 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       playMessage('Impossible d\'établir la communication');
       await cleanupLiveKit();
       setCallState('idle');
+      return false;
     }
   }, [aeroport, position, cleanupLiveKit, playSound, playMessage, attachRemoteAudioTrack, selectedInputId, selectedOutputId]);
 
@@ -661,7 +662,15 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
           
           if (statusData.status === 'connected') {
             setCallState('connecting');
-            await joinLiveKitCall(data.call.id);
+            const ok = await joinLiveKitCall(data.call.id);
+            if (!ok) {
+              await fetch('/api/atc/telephone/hangup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ callId: data.call.id }),
+              }).catch(() => {});
+              playMessage('Connexion audio échouée');
+            }
             return;
           }
           if (statusData.status === 'rejected' || statusData.status === 'ended') break;
@@ -700,7 +709,18 @@ export default function AtcTelephone({ aeroport, position, userId }: AtcTelephon
       });
       if (res.ok) {
         setCurrentCall({ to: incomingCall.from, toPosition: incomingCall.fromPosition, callId: incomingCall.callId });
-        await joinLiveKitCall(incomingCall.callId);
+        const ok = await joinLiveKitCall(incomingCall.callId);
+        if (!ok) {
+          await fetch('/api/atc/telephone/hangup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ callId: incomingCall.callId }),
+          }).catch(() => {});
+          setCallState('idle');
+          setCurrentCall(null);
+          setIncomingCall(null);
+          return;
+        }
         setIncomingCall(null);
       } else {
         setCallState('idle');

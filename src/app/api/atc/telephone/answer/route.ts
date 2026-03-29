@@ -39,18 +39,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Cet appel n\'est plus en attente' }, { status: 400 });
     }
 
-    // Mettre à jour le statut de l'appel
-    const { error } = await admin
+    // Mettre à jour le statut de l'appel (verrou optimiste pour éviter les doubles réponses)
+    const { data: updatedCall, error } = await admin
       .from('atc_calls')
       .update({
         status: 'connected',
         answered_at: new Date().toISOString(),
       })
-      .eq('id', callId);
+      .eq('id', callId)
+      .eq('status', 'ringing')
+      .select('id')
+      .maybeSingle();
 
     if (error) {
       console.error('Erreur réponse appel:', error);
       return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (!updatedCall) {
+      return NextResponse.json({ error: 'Cet appel a déjà été traité.' }, { status: 409 });
     }
 
     return NextResponse.json({ call: { id: callId } });

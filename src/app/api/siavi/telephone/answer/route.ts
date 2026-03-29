@@ -9,6 +9,12 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    const { data: siaviSession } = await supabase
+      .from('afis_sessions')
+      .select('aeroport, est_afis')
+      .eq('user_id', user.id)
+      .single();
+    if (!siaviSession) return NextResponse.json({ error: 'non_en_service' }, { status: 403 });
 
     const body = await request.json();
     const { callId } = body;
@@ -38,30 +44,30 @@ export async function POST(request: Request) {
     }
 
     // Pour les appels d'urgence, réassigner à l'utilisateur qui répond
-    const { error } = await admin.from('atc_calls')
+    const { data: updatedCall, error } = await admin.from('atc_calls')
       .update({ 
         status: 'connected', 
         answered_at: new Date().toISOString(),
         to_user_id: user.id // Réassigner à celui qui répond
       })
       .eq('id', callId)
-      .eq('status', 'ringing'); // Double vérification pour éviter les race conditions
+      .eq('status', 'ringing') // Double vérification pour éviter les race conditions
+      .select('id')
+      .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (!updatedCall) {
+      return NextResponse.json({ error: 'Cet appel a déjà été traité.' }, { status: 409 });
+    }
 
     // Si c'est un appel d'urgence (911/112), vérifier si l'agent est pompier seul et le payer
     if (call.is_emergency) {
-      const { data: session } = await admin.from('afis_sessions')
-        .select('aeroport, est_afis')
-        .eq('user_id', user.id)
-        .single();
-
       // Payer seulement si pompier seul (pas AFIS)
-      if (session && !session.est_afis) {
+      if (!siaviSession.est_afis) {
         await admin.rpc('pay_siavi_intervention', {
           p_user_id: user.id,
           p_call_id: callId,
-          p_aeroport: session.aeroport
+          p_aeroport: siaviSession.aeroport
         });
       }
     }

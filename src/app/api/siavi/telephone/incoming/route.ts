@@ -57,15 +57,8 @@ export async function GET() {
       .maybeSingle();
 
     if (emergencyCall) {
-      // Réassigner l'appel d'urgence à cet agent qui le prend (premier arrivé, premier servi)
-      const { error: updateError } = await admin.from('atc_calls')
-        .update({ to_user_id: user.id })
-        .eq('id', emergencyCall.id)
-        .eq('status', 'ringing'); // Seulement si toujours en attente
-      
-      if (!updateError) {
-        return NextResponse.json({ call: { ...emergencyCall, to_user_id: user.id } });
-      }
+      // Ne pas réassigner ici: la prise d'appel (answer) est l'unique point d'arbitrage.
+      return NextResponse.json({ call: emergencyCall });
     }
 
     return NextResponse.json({ call: null });
