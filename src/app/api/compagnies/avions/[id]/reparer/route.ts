@@ -132,8 +132,7 @@ export async function POST(
         compte_id: compte.id,
         type: 'debit',
         montant: cout,
-        libelle: `Réparation au hub — ${avion.aeroport_actuel}`,
-        reference: `repair-hub-${id}`,
+        libelle: `Réparation au hub — ${avion.aeroport_actuel} (${id.slice(0, 8)})`,
       });
     }
 

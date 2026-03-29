@@ -244,7 +244,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const scoresMoyenne = Math.round((scores || []).reduce((s, sc) => s + sc.score, 0) / (scores?.length || 1));
 
-    const santeBefore = demande.usure_avant ?? 0;
+    const { data: avionLive } = await admin
+      .from('compagnie_avions')
+      .select('usure_percent')
+      .eq('id', demande.avion_id)
+      .single();
+    // Santé réelle au moment de la fin de réparation (l’avion peut avoir changé depuis la demande)
+    const santeBefore = Math.max(
+      0,
+      Math.min(100, avionLive?.usure_percent ?? demande.usure_avant ?? 0),
+    );
     const manque = 100 - santeBefore;
     let usureApres: number;
     if (scoresMoyenne >= 90) usureApres = 100;
@@ -289,7 +298,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         prixParPoint = Math.round(prixParPoint * (ent.prix_alliance_pourcent / 100));
       }
     }
-    const pointsRepares = Math.max(0, usureApres - (demande.usure_avant || 0));
+    const pointsRepares = Math.max(0, usureApres - santeBefore);
     const prixTotal = pointsRepares * prixParPoint;
 
     await admin.from('reparation_demandes').update({
@@ -300,7 +309,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       prix_total: prixTotal,
     }).eq('id', id);
 
-    await admin.from('compagnie_avions').update({ usure_percent: usureApres, statut: 'en_reparation' }).eq('id', demande.avion_id);
+    const { error: avionUpdErr } = await admin
+      .from('compagnie_avions')
+      .update({ usure_percent: usureApres, statut: 'en_reparation' })
+      .eq('id', demande.avion_id);
+    if (avionUpdErr) {
+      console.error('reparation terminer: maj avion', avionUpdErr);
+      return NextResponse.json({ error: 'Réparation enregistrée mais mise à jour de l’avion impossible.' }, { status: 500 });
+    }
 
     return NextResponse.json({ ok: true, score: scoresMoyenne, usure_apres: usureApres, prix_total: prixTotal });
   }
@@ -319,7 +335,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await admin.from('messages').insert({
         destinataire_id: comp.pdg_id,
         titre: `💰 Facture réparation — ${avion?.immatriculation || 'Avion'}`,
-        contenu: `La reparation est terminee.\nScore qualite : ${demande.score_qualite || 0}/100\nUsure : ${demande.usure_avant}% -> ${demande.usure_apres}%\n\nMontant a payer : ${(demande.prix_total || 0).toLocaleString('fr-FR')} F$\n\nRendez-vous dans Ma Compagnie pour payer.`,
+        contenu: `La reparation est terminee.\nScore qualite : ${demande.score_qualite || 0}/100\nEtat technique : ${demande.usure_avant}% -> ${demande.usure_apres}% (100% = pleine sante)\n\nMontant a payer : ${(demande.prix_total || 0).toLocaleString('fr-FR')} F$\n\nRendez-vous dans Ma Compagnie pour payer.`,
         type_message: 'normal',
       });
     }
@@ -328,52 +344,68 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (action === 'payer') {
     if (!await isCompagniePdg()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-    if (demande.statut !== 'facturee') return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
-    if (!demande.prix_total || demande.prix_total <= 0) {
+
+    const { data: demandePay } = await admin.from('reparation_demandes').select('*').eq('id', id).single();
+    if (!demandePay) return NextResponse.json({ error: 'Demande introuvable' }, { status: 404 });
+    if (demandePay.statut !== 'facturee') return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
+
+    /** Garantit l’état de l’avion après paiement (filet de sécurité si la maj à « terminer » avait échoué). */
+    const appliquerUsureApresPaiement = async () => {
+      if (demandePay.usure_apres == null) return;
+      const { error: uErr } = await admin
+        .from('compagnie_avions')
+        .update({ usure_percent: demandePay.usure_apres })
+        .eq('id', demandePay.avion_id);
+      if (uErr) console.error('reparation payer: sync usure avion', uErr);
+    };
+
+    if (!demandePay.prix_total || demandePay.prix_total <= 0) {
       await admin.from('reparation_demandes').update({ statut: 'payee', payee_at: new Date().toISOString() }).eq('id', id);
+      await appliquerUsureApresPaiement();
       return NextResponse.json({ ok: true });
     }
 
     const { data: compteComp } = await admin.from('felitz_comptes')
       .select('id, solde, vban')
-      .eq('compagnie_id', demande.compagnie_id)
+      .eq('compagnie_id', demandePay.compagnie_id)
       .eq('type', 'entreprise')
       .single();
     if (!compteComp) return NextResponse.json({ error: 'Compte Felitz de la compagnie introuvable' }, { status: 400 });
-    if (compteComp.solde < demande.prix_total) return NextResponse.json({ error: 'Fonds insuffisants' }, { status: 400 });
+    if (compteComp.solde < demandePay.prix_total) return NextResponse.json({ error: 'Fonds insuffisants' }, { status: 400 });
 
     const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
       p_compte_id: compteComp.id,
-      p_montant: demande.prix_total,
+      p_montant: demandePay.prix_total,
     });
     if (!debitOk) return NextResponse.json({ error: 'Fonds insuffisants' }, { status: 400 });
 
     await admin.from('felitz_transactions').insert({
       compte_id: compteComp.id,
       type: 'debit',
-      montant: demande.prix_total,
+      montant: demandePay.prix_total,
       libelle: `Reparation avion — demande ${id.slice(0, 8)}`,
     });
 
     const { data: compteRep } = await admin.from('felitz_comptes')
-      .select('id').eq('entreprise_reparation_id', demande.entreprise_id).eq('type', 'reparation').single();
+      .select('id').eq('entreprise_reparation_id', demandePay.entreprise_id).eq('type', 'reparation').single();
     if (compteRep) {
-      await admin.rpc('crediter_compte_safe', { p_compte_id: compteRep.id, p_montant: demande.prix_total });
+      await admin.rpc('crediter_compte_safe', { p_compte_id: compteRep.id, p_montant: demandePay.prix_total });
       await admin.from('felitz_transactions').insert({
         compte_id: compteRep.id,
         type: 'credit',
-        montant: demande.prix_total,
+        montant: demandePay.prix_total,
         libelle: `Paiement reparation — ${compteComp.vban || '?'}`,
       });
     }
 
     await admin.from('reparation_demandes').update({ statut: 'payee', payee_at: new Date().toISOString() }).eq('id', id);
+    await appliquerUsureApresPaiement();
 
-    const { data: ent } = await admin.from('entreprises_reparation').select('pdg_id, nom').eq('id', demande.entreprise_id).single();
+    const { data: ent } = await admin.from('entreprises_reparation').select('pdg_id, nom').eq('id', demandePay.entreprise_id).single();
     if (ent) {
       await admin.from('messages').insert({
         destinataire_id: ent.pdg_id,
-        titre: `💰 Paiement reçu — ${demande.prix_total.toLocaleString('fr-FR')} F$`,
+        titre: `💰 Paiement reçu — ${demandePay.prix_total.toLocaleString('fr-FR')} F$`,
         contenu: `Le paiement de la réparation a été reçu. Vous pouvez organiser le retour de l'avion ou le laisser au parking.`,
         type_message: 'normal',
       });
