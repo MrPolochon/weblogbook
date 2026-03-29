@@ -216,6 +216,43 @@ function isHeureDansLePasse(heureStr: string): boolean {
   return selMin < nowMin;
 }
 
+function normalizeHeureUtc(heureStr: string): string | null {
+  const parsed = parseHeureUtc(heureStr);
+  if (!parsed) return null;
+  if (parsed.h < 0 || parsed.h > 23 || parsed.m < 0 || parsed.m > 59) return null;
+  return `${String(parsed.h).padStart(2, '0')}:${String(parsed.m).padStart(2, '0')}`;
+}
+
+function parseStrictPositiveInt(input: string): number | null {
+  const clean = input.trim();
+  if (!/^\d+$/.test(clean)) return null;
+  const n = parseInt(clean, 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
+function normalizeAirportCode(input: string): string {
+  return input.trim().toUpperCase();
+}
+
+function isKnownAirportCode(code: string): boolean {
+  return AEROPORTS_PTFS.some((a) => a.code === code);
+}
+
+function normalizeAltitude(input: string): string | null {
+  const raw = input.trim().toUpperCase();
+  if (!raw) return null;
+  const flMatch = raw.match(/^FL\s*(\d{2,3})$/i);
+  if (flMatch) return `FL${flMatch[1]}`;
+  const ftMatch = raw.match(/^(\d{3,5})\s*F?T?$/i);
+  if (ftMatch) return ftMatch[1];
+  return null;
+}
+
+function normalizeIndicatif(input: string): string {
+  return input.trim().toUpperCase().replace(/\s+/g, '');
+}
+
 // ─── Component ───
 
 interface BriaDialogProps {
@@ -437,7 +474,14 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       }
 
       case 'regime_vol': {
-        const regime = v.toUpperCase() as 'VFR' | 'IFR';
+        const regimeRaw = v.toUpperCase();
+        const regime = regimeRaw === 'IFR' || regimeRaw === 'VFR' ? regimeRaw : null;
+        if (!regime) {
+          addPilote(v);
+          await addBria("Réponse invalide. Répondez uniquement VFR ou IFR.");
+          setStep('regime_vol');
+          break;
+        }
         addPilote(regime);
         setCtx(prev => ({ ...prev, type_vol: regime }));
         await addBria(`${regime}, bien reçu. Quelle est votre heure de départ souhaitée en UTC ?`);
@@ -446,13 +490,20 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       }
 
       case 'heure_depart': {
-        const heureDansLePasse = isHeureDansLePasse(v);
+        const heureNorm = normalizeHeureUtc(v);
+        if (!heureNorm) {
+          addPilote(v);
+          await addBria("Format heure invalide. Utilisez par exemple 14h30, 14:30, 1430 ou 14.");
+          setStep('heure_depart');
+          break;
+        }
+        const heureDansLePasse = isHeureDansLePasse(heureNorm);
 
         if (heureDansLePasse) {
           wrongHeureCountRef.current += 1;
           const idx = Math.min(wrongHeureCountRef.current - 1, WRONG_HEURE_MESSAGES.length - 1);
           const msg = WRONG_HEURE_MESSAGES[idx];
-          addPilote(v);
+          addPilote(heureNorm);
           await addBria(msg);
 
           if (idx === WRONG_HEURE_MESSAGES.length - 1) {
@@ -464,13 +515,13 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         } else {
           const n = wrongHeureCountRef.current;
           wrongHeureCountRef.current = 0;
-          addPilote(v);
-          setCtx(prev => ({ ...prev, heure_depart: v }));
+          addPilote(heureNorm);
+          setCtx(prev => ({ ...prev, heure_depart: heureNorm }));
           if (n >= 2 && n <= 4) {
             const msg = CORRECT_HEURE_AFTER_WRONG[Math.min(n - 2, CORRECT_HEURE_AFTER_WRONG.length - 1)];
             await addBria(msg);
           }
-          await addBria(`Heure de départ ${v} UTC, bien reçu.`);
+          await addBria(`Heure de départ ${heureNorm} UTC, bien reçu.`);
           await addBria("Quel est votre aéroport de départ ?");
           setStep('aeroport_depart');
         }
@@ -478,9 +529,16 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       }
 
       case 'aeroport_depart': {
+        const depCode = normalizeAirportCode(v);
+        if (!isKnownAirportCode(depCode)) {
+          addPilote(v);
+          await addBria("Aéroport invalide. Choisissez un code présent dans la liste.");
+          setStep('aeroport_depart');
+          break;
+        }
         const ac = ctx.aircraft;
         const avionPos = ac?.aeroport_actuel?.trim().toUpperCase();
-        const selCode = v.trim().toUpperCase();
+        const selCode = depCode;
         const isWrongAirport = ac?.source === 'compagnie' && avionPos && selCode !== avionPos;
 
         if (isWrongAirport) {
@@ -501,13 +559,13 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         } else {
           const n = wrongAirportCountRef.current;
           wrongAirportCountRef.current = 0;
-          addPilote(`${v} — ${getAeroportNom(v)}`);
-          setCtx(prev => ({ ...prev, aeroport_depart: v }));
+          addPilote(`${depCode} — ${getAeroportNom(depCode)}`);
+          setCtx(prev => ({ ...prev, aeroport_depart: depCode }));
           if (n >= 2 && n <= 4) {
             const msg = CORRECT_AIRPORT_AFTER_WRONG[Math.min(n - 2, CORRECT_AIRPORT_AFTER_WRONG.length - 1)];
             await addBria(msg);
           }
-          await addBria(`Aéroport de départ ${getAeroportNom(v)}, bien reçu.`);
+          await addBria(`Aéroport de départ ${getAeroportNom(depCode)}, bien reçu.`);
           await addBria("Quel est votre aéroport de destination ?");
           setStep('aeroport_arrivee');
         }
@@ -515,27 +573,61 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       }
 
       case 'aeroport_arrivee': {
-        addPilote(`${v} — ${getAeroportNom(v)}`);
-        setCtx(prev => ({ ...prev, aeroport_arrivee: v }));
-        await addBria(`Destination ${getAeroportNom(v)}, bien reçu.`);
+        const arrCode = normalizeAirportCode(v);
+        if (!isKnownAirportCode(arrCode)) {
+          addPilote(v);
+          await addBria("Aéroport de destination invalide. Choisissez un code présent dans la liste.");
+          setStep('aeroport_arrivee');
+          break;
+        }
+        if (ctx.aeroport_depart && arrCode === ctx.aeroport_depart) {
+          addPilote(`${arrCode} — ${getAeroportNom(arrCode)}`);
+          await addBria("Départ et destination ne peuvent pas être identiques. Choisissez un autre aéroport d'arrivée.");
+          setStep('aeroport_arrivee');
+          break;
+        }
+        addPilote(`${arrCode} — ${getAeroportNom(arrCode)}`);
+        setCtx(prev => ({ ...prev, aeroport_arrivee: arrCode }));
+        await addBria(`Destination ${getAeroportNom(arrCode)}, bien reçu.`);
         await addBria("Quel est votre temps de vol prévu en minutes ?");
         setStep('temps_vol');
         break;
       }
 
       case 'temps_vol': {
-        addPilote(`${v} minutes`);
-        setCtx(prev => ({ ...prev, temps_prev_min: v }));
-        await addBria(`${v} minutes de vol prévu, bien reçu.`);
+        const temps = parseStrictPositiveInt(v);
+        if (!temps || temps < 5 || temps > 1440) {
+          addPilote(v);
+          await addBria("Temps de vol invalide. Donnez une valeur entre 5 et 1440 minutes.");
+          setStep('temps_vol');
+          break;
+        }
+        addPilote(`${temps} minutes`);
+        setCtx(prev => ({ ...prev, temps_prev_min: String(temps) }));
+        await addBria(`${temps} minutes de vol prévu, bien reçu.`);
         await addBria("Quelle est votre autonomie totale en minutes ?");
         setStep('autonomie');
         break;
       }
 
       case 'autonomie': {
-        addPilote(`${v} minutes`);
-        setCtx(prev => ({ ...prev, autonomie: v }));
-        await addBria(`${v} minutes d'autonomie, bien reçu.`);
+        const auto = parseStrictPositiveInt(v);
+        const temps = parseStrictPositiveInt(ctx.temps_prev_min) ?? 0;
+        if (!auto || auto < 10 || auto > 2880) {
+          addPilote(v);
+          await addBria("Autonomie invalide. Donnez une valeur entre 10 et 2880 minutes.");
+          setStep('autonomie');
+          break;
+        }
+        if (temps > 0 && auto < temps) {
+          addPilote(`${auto} minutes`);
+          await addBria(`Autonomie insuffisante: ${auto} minutes pour un vol prévu de ${temps} minutes. Corrigez l'autonomie.`);
+          setStep('autonomie');
+          break;
+        }
+        addPilote(`${auto} minutes`);
+        setCtx(prev => ({ ...prev, autonomie: String(auto) }));
+        await addBria(`${auto} minutes d'autonomie, bien reçu.`);
         if (ctx.mode === 'intention') {
           await addBria("Combien de personnes à bord ?");
           setStep('nb_personnes');
@@ -670,9 +762,16 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       }
 
       case 'nb_personnes': {
-        addPilote(`${v} personne${parseInt(v) > 1 ? 's' : ''}`);
-        setCtx(prev => ({ ...prev, nb_personnes: v }));
-        await addBria(`${v} personne${parseInt(v) > 1 ? 's' : ''} à bord, bien reçu.`);
+        const nb = parseStrictPositiveInt(v);
+        if (!nb || nb > 1000) {
+          addPilote(v);
+          await addBria("Nombre de personnes invalide. Donnez une valeur entre 1 et 1000.");
+          setStep('nb_personnes');
+          break;
+        }
+        addPilote(`${nb} personne${nb > 1 ? 's' : ''}`);
+        setCtx(prev => ({ ...prev, nb_personnes: String(nb) }));
+        await addBria(`${nb} personne${nb > 1 ? 's' : ''} à bord, bien reçu.`);
         if (ctx.mode === 'intention') {
           setStep('resume');
           await showResume();
@@ -707,18 +806,32 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       }
 
       case 'altitude': {
-        addPilote(v);
-        setCtx(prev => ({ ...prev, altitude_croisiere: v }));
-        await addBria(`Altitude ${v}, bien reçu.`);
+        const altNorm = normalizeAltitude(v);
+        if (!altNorm) {
+          addPilote(v);
+          await addBria("Altitude invalide. Utilisez FL350, 3500 ou 3500FT.");
+          setStep('altitude');
+          break;
+        }
+        addPilote(altNorm);
+        setCtx(prev => ({ ...prev, altitude_croisiere: altNorm }));
+        await addBria(`Altitude ${altNorm}, bien reçu.`);
         await addBria("Quel est votre numéro de vol ou indicatif d'appel ?");
         setStep('numero_vol');
         break;
       }
 
       case 'numero_vol': {
-        addPilote(v);
-        setCtx(prev => ({ ...prev, numero_vol: v.toUpperCase() }));
-        await addBria(`Indicatif ${v.toUpperCase()}, bien reçu.`);
+        const numero = normalizeIndicatif(v);
+        if (numero.length < 2 || numero.length > 16) {
+          addPilote(v);
+          await addBria("Indicatif invalide. Utilisez 2 à 16 caractères (sans espaces).");
+          setStep('numero_vol');
+          break;
+        }
+        addPilote(numero);
+        setCtx(prev => ({ ...prev, numero_vol: numero }));
+        await addBria(`Indicatif ${numero}, bien reçu.`);
         if (ctx.type_vol === 'IFR') {
           setStep('resume');
           await showResume();

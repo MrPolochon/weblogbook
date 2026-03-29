@@ -153,14 +153,15 @@ async function distribuerTaxesAFIS(
 ): Promise<boolean> {
   if (taxesTotales <= 0) return false;
 
-  // Vérifier si l'AFIS est en mode AFIS (pas pompier seul)
+  // Vérifier si l'AFIS est (ou était) en mode AFIS — on accepte même s'il a quitté sa session
+  // car le plan a enregistré current_afis_user_id au moment du vol.
   const { data: afisSession } = await admin.from('afis_sessions')
     .select('id, est_afis, aeroport')
     .eq('user_id', afisUserId)
-    .single();
+    .maybeSingle();
 
-  // Les pompiers seuls ne reçoivent pas de taxes, seulement les primes d'intervention
-  if (!afisSession || !afisSession.est_afis) {
+  // Si l'AFIS est encore en session mais en mode pompier seul, pas de taxes
+  if (afisSession && !afisSession.est_afis) {
     return false;
   }
 
@@ -343,12 +344,39 @@ export async function envoyerChequesVol(
   const montantBonus = Math.round(revenuAvecCoef * bonusCargaison / 100);
   const revenuEffectif = revenuAvecCoef + montantBonus;
 
-  // Distribuer les taxes aux ATC et/ou AFIS
+  // Vérifier les comptes AVANT de distribuer les taxes (évite de payer des taxes puis de fail)
   const numeroVol = plan.numero_vol || 'N/A';
+
+  const { data: compagnie } = await admin.from('compagnies')
+    .select('nom, pdg_id')
+    .eq('id', plan.compagnie_id)
+    .single();
+  if (!compagnie) {
+    return { success: false, message: 'Compagnie introuvable' };
+  }
+
+  const { data: comptePilote } = await admin.from('felitz_comptes')
+    .select('id')
+    .eq('proprietaire_id', plan.pilote_id)
+    .eq('type', 'personnel')
+    .single();
+  if (!comptePilote) {
+    return { success: false, message: 'Compte Felitz du pilote introuvable' };
+  }
+
+  const { data: compteCompagnie } = await admin.from('felitz_comptes')
+    .select('id')
+    .eq('compagnie_id', plan.compagnie_id)
+    .eq('type', 'entreprise')
+    .single();
+  if (!compteCompagnie) {
+    return { success: false, message: 'Compte Felitz de la compagnie introuvable' };
+  }
+
   const baseTaxes = coefficient === 0 ? plan.revenue_brut : revenuEffectif;
   
-  // D'abord distribuer aux ATC
-  const { taxesTotales } = await distribuerTaxesATC(
+  // Distribuer les taxes aux ATC et/ou AFIS
+  const { taxesTotales, atcPayes } = await distribuerTaxesATC(
     admin,
     plan.id,
     baseTaxes,
@@ -357,29 +385,24 @@ export async function envoyerChequesVol(
     numeroVol
   );
 
-  // Si un AFIS surveille ce vol et qu'aucun ATC n'a perçu les taxes, les donner à l'AFIS
-  if (plan.current_afis_user_id && taxesTotales > 0) {
-    // Vérifier si des ATC ont contrôlé ce vol
-    const { data: controles } = await admin.from('atc_plans_controles')
-      .select('id')
-      .eq('plan_vol_id', plan.id)
-      .limit(1);
-    
-    // Si aucun ATC n'a contrôlé, l'AFIS reçoit les taxes
-    if (!controles || controles.length === 0) {
-      await distribuerTaxesAFIS(
-        admin,
-        plan.id,
-        plan.current_afis_user_id,
-        taxesTotales,
-        plan.aeroport_arrivee || '',
-        numeroVol
-      );
-    }
+  // Si un AFIS surveille ce vol et qu'aucun ATC n'a contrôlé, les taxes vont à l'AFIS
+  let afisPayee = false;
+  if (plan.current_afis_user_id && taxesTotales > 0 && atcPayes === 0) {
+    afisPayee = await distribuerTaxesAFIS(
+      admin,
+      plan.id,
+      plan.current_afis_user_id,
+      taxesTotales,
+      plan.aeroport_arrivee || '',
+      numeroVol
+    );
   }
 
+  // Si personne n'a reçu les taxes (ni ATC ni AFIS), ne pas les prélever
+  const taxesReellementPrelevees = (atcPayes > 0 || afisPayee) ? taxesTotales : 0;
+
   // Revenu après taxes
-  const revenuApresTaxes = revenuEffectif - taxesTotales;
+  const revenuApresTaxes = revenuEffectif - taxesReellementPrelevees;
 
   // Part loueur avant salaire (si location)
   const locationPct = plan.location_pourcentage_revenu_loueur || 0;
@@ -395,61 +418,34 @@ export async function envoyerChequesVol(
   }
   const revenuCompagnie = Math.max(0, revenuLocataireAvantSalaire - salaireEffectif);
 
-  const { data: compagnie } = await admin.from('compagnies')
-    .select('nom, pdg_id')
-    .eq('id', plan.compagnie_id)
-    .single();
-
-  if (!compagnie) {
-    return { success: false, message: 'Compagnie introuvable' };
-  }
-
-  const { data: comptePilote } = await admin.from('felitz_comptes')
-    .select('id')
-    .eq('proprietaire_id', plan.pilote_id)
-    .eq('type', 'personnel')
-    .single();
-
-  if (!comptePilote) {
-    return { success: false, message: 'Compte Felitz du pilote introuvable' };
-  }
-
-  const { data: compteCompagnie } = await admin.from('felitz_comptes')
-    .select('id')
-    .eq('compagnie_id', plan.compagnie_id)
-    .eq('type', 'entreprise')
-    .single();
-
-  if (!compteCompagnie) {
-    return { success: false, message: 'Compte Felitz de la compagnie introuvable' };
-  }
-
   const coeffPct = Math.round(coefficient * 100);
 
   // Si ponctualité = 0 : le vol n'est pas rentable, débiter les taxes directement
-  if (coefficient === 0 && taxesTotales > 0) {
+  if (coefficient === 0 && taxesReellementPrelevees > 0) {
     const { data: compteSolde } = await admin.from('felitz_comptes')
       .select('id, solde')
       .eq('id', compteCompagnie.id)
       .single();
 
     if (compteSolde) {
-      await admin.rpc('debiter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: taxesTotales });
+      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: taxesReellementPrelevees });
 
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteCompagnie.id,
-        type: 'debit',
-        montant: taxesTotales,
-        libelle: `Taxes aéroportuaires (ponctualité 0) - Vol ${numeroVol}`,
-        reference_id: null,
-      });
+      if (debitOk) {
+        await admin.from('felitz_transactions').insert({
+          compte_id: compteCompagnie.id,
+          type: 'debit',
+          montant: taxesReellementPrelevees,
+          libelle: `Taxes aéroportuaires (ponctualité 0) - Vol ${numeroVol}`,
+          reference_id: null,
+        });
+      }
 
       if (compagnie.pdg_id) {
         await admin.from('messages').insert({
           destinataire_id: compagnie.pdg_id,
           expediteur_id: null,
           titre: `Taxes aéroportuaires - Vol ${numeroVol}`,
-          contenu: `Le vol ${numeroVol} a un coefficient de ponctualité de 0%.\n\nLes taxes aéroportuaires (${taxesTotales.toLocaleString('fr-FR')} F$) ont été déduites directement du compte de la compagnie.`,
+          contenu: `Le vol ${numeroVol} a un coefficient de ponctualité de 0%.\n\nLes taxes aéroportuaires (${taxesReellementPrelevees.toLocaleString('fr-FR')} F$) ont été déduites directement du compte de la compagnie.`,
           type_message: 'notification'
         });
       }
@@ -458,7 +454,7 @@ export async function envoyerChequesVol(
 
   // Chèque salaire pilote
   if (salaireEffectif > 0) {
-    let contenuSalaire = `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min\nCoefficient de ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesTotales.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`;
+    let contenuSalaire = `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min\nCoefficient de ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`;
     if (plan.type_cargaison === 'marchandise_rare' && plan.type_cargaison_libelle) {
       contenuSalaire += `\n\n💎 Marchandise rare transportée : ${plan.type_cargaison_libelle}`;
     }
@@ -563,14 +559,15 @@ export async function envoyerChequesVol(
           taxeAlliance = Math.round(revenuLocataire * taxeAlliancePct / 100);
           if (taxeAlliance > 0) {
             const { data: allianceAccount } = await admin.from('felitz_comptes')
-              .select('id, solde')
+              .select('id')
               .eq('alliance_id', compAlliance.alliance_id)
               .eq('type', 'alliance')
               .single();
             if (allianceAccount) {
-              await admin.from('felitz_comptes')
-                .update({ solde: allianceAccount.solde + taxeAlliance })
-                .eq('id', allianceAccount.id);
+              await admin.rpc('crediter_compte_safe', {
+                p_compte_id: allianceAccount.id,
+                p_montant: taxeAlliance,
+              });
               await admin.from('felitz_transactions').insert({
                 compte_id: allianceAccount.id,
                 type: 'credit',
@@ -634,7 +631,7 @@ export async function envoyerChequesVol(
 
   // Chèque revenu compagnie
   if (revenuLocataire > 0 && compagnie.pdg_id) {
-    let contenuMessage = `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$\nCoefficient ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesTotales.toLocaleString('fr-FR')} F$\nSalaire pilote: ${salaireEffectif.toLocaleString('fr-FR')} F$`;
+    let contenuMessage = `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$\nCoefficient ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$\nSalaire pilote: ${salaireEffectif.toLocaleString('fr-FR')} F$`;
 
     if (remboursementPret > 0) {
       const resteApres = (pretInfo?.montant_total_du || 0) - (pretInfo?.montant_rembourse || 0) - remboursementPret;
@@ -722,7 +719,7 @@ export async function envoyerChequesVol(
       brut: plan.revenue_brut,
       net: revenuLocataire,
       salaire: salaireEffectif,
-      taxes: taxesTotales,
+      taxes: taxesReellementPrelevees,
       coefficient,
       tempsReel: tempsReelMin,
       bonusCargaison: montantBonus > 0 ? montantBonus : undefined,
