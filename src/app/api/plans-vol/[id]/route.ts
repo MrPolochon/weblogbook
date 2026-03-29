@@ -119,8 +119,21 @@ export async function PATCH(
         paiementResult = await envoyerChequesVol(admin, { ...plan, demande_cloture_at: demandeClotureAt.toISOString() }, demandeClotureAt);
         if (!paiementResult.success) {
           console.error('Erreur paiement vol:', paiementResult.message);
+          await admin
+            .from('plans_vol')
+            .update({
+              statut: plan.statut,
+              demande_cloture_at: null,
+              cloture_at: null,
+            })
+            .eq('id', id)
+            .eq('statut', 'cloture');
+          return NextResponse.json(
+            { ok: false, error: paiementResult.message || 'Paiement impossible — la clôture a été annulée.', paiement: paiementResult },
+            { status: 400 }
+          );
         }
-        
+
         if (plan.compagnie_avion_id) {
           const { data: avion } = await admin
             .from('compagnie_avions')

@@ -348,11 +348,23 @@ export async function envoyerChequesVol(
   const numeroVol = plan.numero_vol || 'N/A';
 
   const { data: compagnie } = await admin.from('compagnies')
-    .select('nom, pdg_id')
+    .select('nom, pdg_id, pourcentage_salaire')
     .eq('id', plan.compagnie_id)
     .single();
   if (!compagnie) {
     return { success: false, message: 'Compagnie introuvable' };
+  }
+
+  // Salaire : le % compagnie fait foi. 0 % = aucun salaire vol (ignore salaire_pilote éventuellement obsolète en BDD).
+  const pctSalaireCompagnie = Math.min(100, Math.max(0, Number(compagnie.pourcentage_salaire) || 0));
+  const revBrut = Number(plan.revenue_brut) || 0;
+  let salairePlanning = 0;
+  if (pctSalaireCompagnie === 0) {
+    salairePlanning = 0;
+  } else if (revBrut > 0) {
+    const depuisPourcent = Math.floor(revBrut * pctSalaireCompagnie / 100);
+    const depuisPlan = Math.max(0, Math.round(Number(plan.salaire_pilote) || 0));
+    salairePlanning = Math.max(depuisPourcent, depuisPlan);
   }
 
   const { data: comptePilote } = await admin.from('felitz_comptes')
@@ -411,8 +423,8 @@ export async function envoyerChequesVol(
     : 0;
   const revenuLocataireAvantSalaire = Math.max(0, revenuApresTaxes - revenuLoueurBrut);
 
-  // Salaire payé par la compagnie locataire
-  let salaireEffectif = Math.round((plan.salaire_pilote || 0) * coefficient);
+  // Salaire payé par la compagnie locataire (salairePlanning inclut le recalcul serveur si besoin)
+  let salaireEffectif = Math.round(salairePlanning * coefficient);
   if (salaireEffectif > revenuLocataireAvantSalaire) {
     salaireEffectif = revenuLocataireAvantSalaire;
   }
@@ -740,6 +752,18 @@ export async function finaliserCloturePlan(
   const paiementResult = await envoyerChequesVol(admin, plan, dateCalculTemps);
   if (!paiementResult.success) {
     console.error('Erreur paiement vol:', paiementResult.message);
+    // La route confirm_cloture peut avoir déjà mis statut = cloture avant cet appel : on annule pour permettre un nouvel essai
+    await admin
+      .from('plans_vol')
+      .update({ statut: 'en_attente_cloture', cloture_at: null })
+      .eq('id', plan.id)
+      .eq('statut', 'cloture');
+    return {
+      success: false,
+      paiementResult,
+      usureAppliquee: 0,
+      error: paiementResult.message || 'Paiement de clôture impossible (comptes Felitz ou plan non éligible).',
+    };
   }
 
   let usureAppliquee = 0;
