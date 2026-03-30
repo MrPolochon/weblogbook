@@ -95,9 +95,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const felitz = await ensureComptePersonnel(admin, u.user.id);
-    if (!felitz) {
-      console.error('Create pilot: compte Felitz non garanti pour', u.user.id);
+    // Le trigger AFTER INSERT sur `profiles` crée déjà un compte personnel → ne pas appeler ensure ici systématiquement (sinon doublon sur felitz_comptes_uniq_personnel_proprietaire).
+    const { data: felitzExistants, error: felitzQErr } = await admin
+      .from('felitz_comptes')
+      .select('id')
+      .eq('proprietaire_id', u.user.id)
+      .eq('type', 'personnel')
+      .order('created_at', { ascending: true })
+      .limit(1);
+    if (felitzQErr) {
+      console.error('Create pilot: lecture felitz_comptes', felitzQErr.message);
+    }
+    if (!felitzExistants?.length) {
+      const felitz = await ensureComptePersonnel(admin, u.user.id);
+      if (!felitz) {
+        console.error('Create pilot: compte Felitz non créé pour', u.user.id);
+      }
     }
 
     return NextResponse.json({ ok: true, id: u.user.id });
