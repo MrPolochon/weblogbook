@@ -243,7 +243,12 @@ export function buildRouteInfo(
     const wp = resolveWaypoint(token);
     if (!wp) return;
     if (calculateDistance(wp, lastPoint) < 1) return;
-    if (source === 'route' && isBacktrackTowardDeparture(lastPoint, wp, depSVG, arrSVG)) return;
+    // Anti-trajets illogiques: évite les points qui repartent vers le départ
+    // alors qu'ils éloignent de l'arrivée (demi-tour/spaghetti).
+    // On autorise seulement le tout premier point SID pour ne pas casser
+    // certains départs publiés qui partent brièvement "dans le mauvais sens".
+    const isFirstSidLeg = source === 'sid' && path.length <= 1;
+    if (!isFirstSidLeg && isBacktrackTowardDeparture(lastPoint, wp, depSVG, arrSVG)) return;
     path.push(wp);
     lastPoint = wp;
     if (source === 'sid') sidPointCount = path.length - 1;

@@ -483,7 +483,6 @@ export default function AtcMapClient() {
               {renderedFlights.map((f) => {
                 const isSelected = selectedFlightId === f.id;
                 const color = f.type_vol === 'VFR' ? '#22c55e' : f.type_vol === 'MIL' ? '#a855f7' : '#ef4444';
-                const phaseFr = PHASE_LABELS_FR[f.flight_phase];
                 return (
                   <g key={f.id}>
                     <g
@@ -512,17 +511,6 @@ export default function AtcMapClient() {
                         style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
                       >
                         {f.numero_vol}
-                      </text>
-                      <text
-                        x={f.x + 8}
-                        y={f.y - 1}
-                        fill="#e2e8f0"
-                        fontSize="6"
-                        fontFamily="monospace"
-                        fontWeight="600"
-                        style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}
-                      >
-                        {`Statut: ${phaseFr}`}
                       </text>
                     </g>
                   </g>
