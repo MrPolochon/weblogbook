@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { identifiantToEmail } from '@/lib/constants';
+import { ensureComptePersonnel } from '@/lib/felitz/ensure-comptes';
 
 export async function POST(request: Request) {
   try {
@@ -67,18 +68,36 @@ export async function POST(request: Request) {
     }
     if (!u?.user?.id) return NextResponse.json({ error: 'Erreur création' }, { status: 500 });
 
-    const { error: profileErr } = await admin.from('profiles').insert({
+    const profilePayload = {
       id: u.user.id,
       identifiant: id,
       role,
       armee,
       atc,
       heures_initiales_minutes: 0,
-    });
+    };
+
+    // Souvent un trigger / hook Auth crée déjà une ligne `profiles` → INSERT seul échoue (doublon sur id).
+    const { error: profileErr } = await admin.from('profiles').upsert(profilePayload, { onConflict: 'id' });
 
     if (profileErr) {
+      console.error('Create pilot profile upsert:', profileErr.code, profileErr.message, profileErr.details);
       await admin.auth.admin.deleteUser(u.user.id);
-      return NextResponse.json({ error: 'Erreur création profil' }, { status: 500 });
+      if (profileErr.code === '23505' && String(profileErr.message || '').includes('identifiant')) {
+        return NextResponse.json(
+          { error: 'Cet identifiant est déjà utilisé par un autre compte.' },
+          { status: 400 },
+        );
+      }
+      return NextResponse.json(
+        { error: profileErr.message || 'Erreur création profil' },
+        { status: 500 },
+      );
+    }
+
+    const felitz = await ensureComptePersonnel(admin, u.user.id);
+    if (!felitz) {
+      console.error('Create pilot: compte Felitz non garanti pour', u.user.id);
     }
 
     return NextResponse.json({ ok: true, id: u.user.id });
