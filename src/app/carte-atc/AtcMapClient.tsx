@@ -85,6 +85,40 @@ function FourPointStar({ cx, cy, outerR, innerR, rotation = 0, fill, stroke, str
   return <polygon points={points.join(' ')} fill={fill} stroke={stroke} strokeWidth={strokeWidth} opacity={opacity} />;
 }
 
+function tracePointsForFlight(f: RenderFlight): string {
+  if (f.routePath.length <= 2) {
+    return `${f.x1},${f.y1} ${f.x},${f.y}`;
+  }
+
+  const clamped = Math.max(0, Math.min(1, f.progress));
+  const dists: number[] = [0];
+  for (let i = 1; i < f.routePath.length; i++) {
+    const dx = f.routePath[i].x - f.routePath[i - 1].x;
+    const dy = f.routePath[i].y - f.routePath[i - 1].y;
+    dists.push(dists[i - 1] + Math.sqrt(dx * dx + dy * dy));
+  }
+  const total = dists[dists.length - 1];
+  if (total <= 0) return `${f.x1},${f.y1} ${f.x},${f.y}`;
+
+  const target = clamped * total;
+  const pts: string[] = [`${f.routePath[0].x},${f.routePath[0].y}`];
+
+  for (let i = 1; i < f.routePath.length; i++) {
+    if (target >= dists[i]) {
+      pts.push(`${f.routePath[i].x},${f.routePath[i].y}`);
+      continue;
+    }
+    const seg = dists[i] - dists[i - 1];
+    const t = seg > 0 ? (target - dists[i - 1]) / seg : 0;
+    const ix = f.routePath[i - 1].x + (f.routePath[i].x - f.routePath[i - 1].x) * t;
+    const iy = f.routePath[i - 1].y + (f.routePath[i].y - f.routePath[i - 1].y) * t;
+    pts.push(`${ix},${iy}`);
+    break;
+  }
+
+  return pts.join(' ');
+}
+
 export default function AtcMapClient() {
   const [sessions, setSessions] = useState<AtcSession[]>([]);
   const [flights, setFlights] = useState<MapFlight[]>([]);
@@ -444,37 +478,20 @@ export default function AtcMapClient() {
                 );
               })}
 
-              {/* Trajets planifiés (tous les vols, pointillés comme dans la légende IFR/VFR) */}
+              {/* Trace parcourue uniquement (départ -> position actuelle) */}
               {renderedFlights.map((f) => {
                 const isSelected = selectedFlightId === f.id;
                 const color = f.type_vol === 'VFR' ? '#22c55e' : f.type_vol === 'MIL' ? '#a855f7' : '#ef4444';
-                if (f.routePath.length > 2) {
-                  return (
-                    <polyline
-                      key={`path-${f.id}`}
-                      points={f.routePath.map((p) => `${p.x},${p.y}`).join(' ')}
-                      fill="none"
-                      stroke={color}
-                      strokeWidth={isSelected ? 1.8 : 1.1}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeDasharray="6 4"
-                      opacity={isSelected ? 0.9 : 0.5}
-                    />
-                  );
-                }
                 return (
-                  <line
+                  <polyline
                     key={`path-${f.id}`}
-                    x1={f.x1}
-                    y1={f.y1}
-                    x2={f.x2}
-                    y2={f.y2}
+                    points={tracePointsForFlight(f)}
+                    fill="none"
                     stroke={color}
-                    strokeWidth={isSelected ? 1.8 : 1.1}
+                    strokeWidth={isSelected ? 2 : 1.2}
                     strokeLinecap="round"
-                    strokeDasharray="6 4"
-                    opacity={isSelected ? 0.85 : 0.45}
+                    strokeLinejoin="round"
+                    opacity={isSelected ? 0.95 : 0.55}
                   />
                 );
               })}
