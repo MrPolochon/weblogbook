@@ -267,19 +267,11 @@ export const DEFAULT_WAYPOINTS: Waypoint[] = [
 ];
 
 export const DEFAULT_VORS: VorPoint[] = [
-  { code: 'HME', freq: '112.20', x: 40, y: 12, name: 'Haneda' },
-  { code: 'PER', freq: '115.43', x: 72, y: 18, name: 'Perth' },
-  { code: 'GVK', freq: '112.32', x: 14, y: 40, name: 'Grindavik' },
-  { code: 'SAU', freq: '115.35', x: 12, y: 66, name: 'Sauthemptona' },
-  { code: 'MLR', freq: '114.75', x: 36, y: 53, name: 'Mellor' },
-  { code: 'RFD', freq: '113.55', x: 44, y: 64, name: 'Rockford' },
-  { code: 'BLA', freq: '117.45', x: 50, y: 56, name: 'Blades' },
-  { code: 'TRN', freq: '113.10', x: 52, y: 76, name: 'Training' },
-  { code: 'GRY', freq: '111.90', x: 36, y: 65, name: 'Garry' },
-  { code: 'LCK', freq: '112.90', x: 74, y: 80, name: 'Larnaca' },
-  { code: 'PFO', freq: '117.95', x: 84, y: 85, name: 'Paphos' },
-  { code: 'NJF', freq: '112.45', x: 92, y: 44, name: 'Najaf' },
-  { code: 'IZO', freq: '117.53', x: 88, y: 46, name: 'Izolirani' },
+  { code: 'BLADES', freq: '117.45', x: 45.6, y: 62.2, name: 'BLD' },
+  { code: 'ROCKFORD', freq: '113.55', x: 49.7, y: 68.4, name: 'RFD' },
+  { code: 'TRAINING CENTRE', freq: '113.10', x: 50.4, y: 78.6, name: 'TRN' },
+  { code: 'MELLOR', freq: '114.75', x: 36.6, y: 62.2, name: 'MLR' },
+  { code: 'GARRY', freq: '111.90', x: 38.9, y: 71.8, name: 'GRY' },
 ];
 
 export function toSVG(pos: Point): Point {

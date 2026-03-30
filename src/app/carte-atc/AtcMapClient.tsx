@@ -479,36 +479,13 @@ export default function AtcMapClient() {
                 );
               })}
 
-              {/* Portion déjà parcourue (vol sélectionné) + icônes avion */}
+              {/* Avions (un seul tracé de route en pointillés par vol — pas de seconde couche « parcouru » qui traversait la carte) */}
               {renderedFlights.map((f) => {
                 const isSelected = selectedFlightId === f.id;
                 const color = f.type_vol === 'VFR' ? '#22c55e' : f.type_vol === 'MIL' ? '#a855f7' : '#ef4444';
                 const phaseFr = PHASE_LABELS_FR[f.flight_phase];
                 return (
                   <g key={f.id}>
-                    {isSelected && (
-                      <polyline
-                        points={(() => {
-                          if (f.routePath.length <= 2) return `${f.x1},${f.y1} ${f.x},${f.y}`;
-                          const covered: string[] = [];
-                          for (const p of f.routePath) {
-                            covered.push(`${p.x},${p.y}`);
-                            const dx = p.x - f.x;
-                            const dy = p.y - f.y;
-                            if (Math.sqrt(dx * dx + dy * dy) < 2 && covered.length > 1) break;
-                          }
-                          covered.push(`${f.x},${f.y}`);
-                          return covered.join(' ');
-                        })()}
-                        fill="none"
-                        stroke={color}
-                        strokeWidth={2}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeDasharray="6 4"
-                        opacity={0.95}
-                      />
-                    )}
                     <g
                       style={{ cursor: 'pointer' }}
                       onClick={() => setSelectedFlightId((prev) => (prev === f.id ? null : f.id))}
@@ -518,10 +495,11 @@ export default function AtcMapClient() {
                         <path
                           d={PLANE_BLIP_D}
                           fill={color}
-                          stroke="#f1f5f9"
-                          strokeWidth={isSelected ? 0.5 : 0.35}
-                          strokeLinejoin="round"
-                          opacity={0.95}
+                          stroke="rgba(15,23,42,0.85)"
+                          strokeWidth={0.22}
+                          strokeLinejoin="miter"
+                          paintOrder="stroke fill"
+                          opacity={0.98}
                         />
                       </g>
                       <text

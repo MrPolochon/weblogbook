@@ -57,7 +57,11 @@ for (const wp of DEFAULT_WAYPOINTS) {
   waypointIndex.set(wp.code.toUpperCase(), toSVG({ x: wp.x, y: wp.y }));
 }
 for (const vor of DEFAULT_VORS) {
-  waypointIndex.set(vor.code.toUpperCase(), toSVG({ x: vor.x, y: vor.y }));
+  const pt = toSVG({ x: vor.x, y: vor.y });
+  const c = vor.code.toUpperCase();
+  waypointIndex.set(c, pt);
+  const abbr = vor.name?.toUpperCase();
+  if (abbr && abbr !== c) waypointIndex.set(abbr, pt);
 }
 for (const [code, pos] of Object.entries(DEFAULT_POSITIONS)) {
   waypointIndex.set(code.toUpperCase(), toSVG(pos));
