@@ -170,13 +170,11 @@ async function distribuerTaxesAFIS(
     return false;
   }
 
-  // Récupérer le compte de l'AFIS
-  const { data: compteAfis } = await admin.from('felitz_comptes')
-    .select('id')
-    .eq('proprietaire_id', afisUserId)
-    .eq('type', 'personnel')
-    .single();
-
+  // Récupérer/garantir le compte canonique AFIS (évite les échecs silencieux avec doublons historiques).
+  let compteAfis = await getComptePersonnelCanonique(admin, afisUserId);
+  if (!compteAfis) {
+    compteAfis = await ensureComptePersonnel(admin, afisUserId);
+  }
   if (!compteAfis) return false;
 
   // Envoyer le chèque via la fonction SQL
@@ -262,7 +260,10 @@ async function distribuerTaxesATC(
         atcPayes++;
       } else {
         // ATC hors service → envoyer le chèque immédiatement
-        const compteAtc = await getComptePersonnelCanonique(admin, user_id);
+        let compteAtc = await getComptePersonnelCanonique(admin, user_id);
+        if (!compteAtc) {
+          compteAtc = await ensureComptePersonnel(admin, user_id);
+        }
         if (!compteAtc) continue;
 
         await admin.from('messages').insert({
@@ -618,11 +619,7 @@ export async function envoyerChequesVol(
 
               if (partParMembre > 0) {
                 for (const member of otherMembers) {
-                  const { data: compteMembre } = await admin.from('felitz_comptes')
-                    .select('id')
-                    .eq('compagnie_id', member.compagnie_id)
-                    .eq('type', 'entreprise')
-                    .single();
+                  const compteMembre = await ensureCompteEntreprise(admin, member.compagnie_id);
                   if (compteMembre) {
                     await admin.rpc('crediter_compte_safe', {
                       p_compte_id: compteMembre.id,
@@ -697,11 +694,7 @@ export async function envoyerChequesVol(
   }
 
   if (revenuLoueur > 0 && loueurInfo?.pdg_id) {
-    const { data: compteLoueur } = await admin.from('felitz_comptes')
-      .select('id')
-      .eq('compagnie_id', loueurInfo.id)
-      .eq('type', 'entreprise')
-      .single();
+    const compteLoueur = await ensureCompteEntreprise(admin, loueurInfo.id);
     if (compteLoueur) {
       await admin.from('messages').insert({
         destinataire_id: loueurInfo.pdg_id,
