@@ -69,6 +69,15 @@ interface Props {
   avionsParCompagnie?: Record<string, AvionIndividuel[]>;
 }
 
+/** Embeds PostgREST : objet, tableau ou null — évite capacité 0 si tableau vide. */
+function premierTypeAvionDepuisEmbed<T extends object>(
+  ta: T | T[] | null | undefined
+): T | null {
+  if (ta == null) return null;
+  if (Array.isArray(ta)) return ta[0] ?? null;
+  return ta;
+}
+
 export default function DepotPlanVolForm({ compagniesDisponibles, inventairePersonnel, avionsParCompagnie = {} }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -306,10 +315,13 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     }
 
     // Obtenir le type d'avion depuis l'avion individuel sélectionné
-    const avion = selectedAvionIndiv?.types_avion 
-      ? (Array.isArray(selectedAvionIndiv.types_avion) ? selectedAvionIndiv.types_avion[0] : selectedAvionIndiv.types_avion)
-      : null;
-    if (!avion) return;
+    const avion = premierTypeAvionDepuisEmbed(selectedAvionIndiv?.types_avion);
+    if (!avion) {
+      setGeneratedPax(0);
+      setGeneratedCargo(0);
+      setLastGeneratedKey('');
+      return;
+    }
 
     const capacitePax = avion.capacite_pax ?? 0;
     const capaciteCargo = avion.capacite_cargo_kg ?? 0;
@@ -415,9 +427,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const salairePilote = Math.floor(revenuBrut * (selectedCompagnie?.pourcentage_salaire || 0) / 100);
 
   // Calculer les capacités et taux de remplissage (avion individuel seulement)
-  const avionType = selectedAvionIndiv?.types_avion 
-    ? (Array.isArray(selectedAvionIndiv.types_avion) ? selectedAvionIndiv.types_avion[0] : selectedAvionIndiv.types_avion)
-    : null;
+  const avionType = premierTypeAvionDepuisEmbed(selectedAvionIndiv?.types_avion);
   const capacitePaxMax = avionType?.capacite_pax ?? 0;
   const capaciteCargoMax = avionType?.capacite_cargo_kg ?? 0;
   
@@ -731,7 +741,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
               >
                 <option value="">— Choisir un avion —</option>
                 {avionsDisponibles.map((a) => {
-                  const typeNom = Array.isArray(a.types_avion) ? a.types_avion[0]?.nom : a.types_avion?.nom;
+                  const typeNom = premierTypeAvionDepuisEmbed(a.types_avion)?.nom;
                   return (
                     <option key={a.id} value={a.id}>
                       {a.immatriculation} {a.nom_bapteme ? `"${a.nom_bapteme}"` : ''} — {typeNom || 'Avion'} — {a.aeroport_actuel} ({a.usure_percent}%)

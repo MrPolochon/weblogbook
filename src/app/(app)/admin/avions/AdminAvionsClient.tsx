@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plane, MapPin, Edit2, Trash2, Save, X, RefreshCw, Building2, Plus, Skull, AlertTriangle, User } from 'lucide-react';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
@@ -23,7 +23,28 @@ type Avion = {
 };
 
 type Compagnie = { id: string; nom: string };
-type TypeAvion = { id: string; nom: string; constructeur: string };
+type TypeAvion = {
+  id: string;
+  nom: string;
+  constructeur: string;
+  code_oaci?: string | null;
+  categorie?: string | null;
+  est_militaire?: boolean;
+  est_cargo?: boolean;
+  capacite_pax?: number;
+  capacite_cargo_kg?: number;
+};
+
+function libelleTypePourSelect(t: TypeAvion): string {
+  const base = [t.nom, t.constructeur?.trim() || null].filter(Boolean).join(' · ');
+  const icao = t.code_oaci ? ` · ${t.code_oaci}` : '';
+  const cap = `${t.capacite_pax ?? 0} pax / ${t.capacite_cargo_kg ?? 0} kg`;
+  return `${base}${icao} — ${cap}`;
+}
+
+function typeSansCapaciteCommercial(t: TypeAvion): boolean {
+  return (t.capacite_pax ?? 0) <= 0 && (t.capacite_cargo_kg ?? 0) <= 0;
+}
 
 const STATUTS = ['ground', 'in_flight', 'maintenance', 'bloque'] as const;
 
@@ -277,6 +298,18 @@ export default function AdminAvionsClient() {
   const nbCompagnie = avions.filter(a => a.source !== 'personnel').length;
   const nbPerso = avions.filter(a => a.source === 'personnel').length;
 
+  /** Types avec capacité 0/0 en bas de liste pour éviter de choisir un « A320 » incomplet par erreur */
+  const typesAvionTries = useMemo(() => {
+    return [...typesAvion].sort((a, b) => {
+      const sansA = typeSansCapaciteCommercial(a) ? 1 : 0;
+      const sansB = typeSansCapaciteCommercial(b) ? 1 : 0;
+      if (sansA !== sansB) return sansA - sansB;
+      return a.nom.localeCompare(b.nom, 'fr', { sensitivity: 'base' });
+    });
+  }, [typesAvion]);
+
+  const typeSelectionne = typesAvion.find((t) => t.id === newAvion.type_avion_id);
+
   return (
     <div className="space-y-4">
       {/* Onglets compagnie / personnel */}
@@ -358,19 +391,26 @@ export default function AdminAvionsClient() {
                 ))}
               </select>
             </div>
-            <div>
+            <div className="md:col-span-2 lg:col-span-1 lg:min-w-[min(100%,28rem)]">
               <label className="block text-sm font-medium text-slate-400 mb-1">Type d&apos;avion *</label>
               <select
                 value={newAvion.type_avion_id}
                 onChange={(e) => setNewAvion({ ...newAvion, type_avion_id: e.target.value })}
-                className="input w-full"
+                className="input w-full font-mono text-sm"
                 required
               >
                 <option value="">— Sélectionner —</option>
-                {typesAvion.map((t) => (
-                  <option key={t.id} value={t.id}>{t.nom} {t.constructeur ? `(${t.constructeur})` : ''}</option>
+                {typesAvionTries.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {libelleTypePourSelect(t)}
+                  </option>
                 ))}
               </select>
+              {typeSelectionne && typeSansCapaciteCommercial(typeSelectionne) && (
+                <p className="text-amber-400 text-xs mt-1.5">
+                  Attention : ce type n’a ni sièges passagers ni cargo — les vols commerciaux afficheront 0 revenu. Vérifiez que ce n’est pas un doublon (ex. « A320 » vs « Airbus A320 »).
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Immatriculation (auto si vide)</label>

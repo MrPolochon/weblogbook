@@ -60,7 +60,7 @@ export default async function DepotPlanVolPage() {
 
   // Récupérer l'inventaire personnel
   const { data: inventaireData } = await admin.from('inventaire_avions')
-    .select('*, types_avion(id, nom, code_oaci, capacite_pax, capacite_cargo_kg, est_militaire)')
+    .select('*, types_avion:type_avion_id(id, nom, code_oaci, capacite_pax, capacite_cargo_kg, est_militaire)')
     .eq('proprietaire_id', user.id);
 
   // Vérifier disponibilité
@@ -92,7 +92,7 @@ export default async function DepotPlanVolPage() {
   if (compagniesDisponibles.length > 0) {
     const compagnieIds = compagniesDisponibles.map(c => c.id);
     const { data: avionsData } = await admin.from('compagnie_avions')
-      .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion(id, nom, constructeur, capacite_pax, capacite_cargo_kg, code_oaci)')
+      .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion:type_avion_id(id, nom, constructeur, capacite_pax, capacite_cargo_kg, code_oaci)')
       .in('compagnie_id', compagnieIds)
       .order('immatriculation');
 
@@ -122,7 +122,7 @@ export default async function DepotPlanVolPage() {
     if (locationsActives && locationsActives.length > 0) {
       const leasedIds = Array.from(new Set(locationsActives.map(l => l.avion_id)));
       const { data: leasedAvions } = await admin.from('compagnie_avions')
-        .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion(id, nom, constructeur, capacite_pax, capacite_cargo_kg, code_oaci)')
+        .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion:type_avion_id(id, nom, constructeur, capacite_pax, capacite_cargo_kg, code_oaci)')
         .in('id', leasedIds);
 
       (leasedAvions || []).forEach(item => {
