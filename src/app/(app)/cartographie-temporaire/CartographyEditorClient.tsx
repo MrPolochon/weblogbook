@@ -133,10 +133,16 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
 
   const exports = useMemo(() => buildCartographyExport(data), [data]);
   const handleRadius = useMemo(() => Math.max(1.4, Math.min(4, viewBox.w / 220)), [viewBox.w]);
-  /** Poignées FIR / îles : taille min. en unités carte (vue dézoomée sinon disques ~5 px, impraticable). */
-  const shapeEditHandleR = useMemo(
-    () => Math.max(handleRadius * 2.2, viewBox.w * 0.034, 6.5),
-    [handleRadius, viewBox.w],
+  /** Poignées FIR / îles : disque visible plafonné (évite les “plateaux” énormes vue carte entière). */
+  const shapeEditHandleR = useMemo(() => {
+    const scaled = viewBox.w * 0.011;
+    const visual = Math.min(scaled, 7);
+    return Math.max(handleRadius * 1.65, 3.5, visual);
+  }, [handleRadius, viewBox.w]);
+  /** Légère marge de clic autour du disque sans masquer la carte. */
+  const shapeEditHitR = useMemo(
+    () => Math.min(shapeEditHandleR * 1.35, shapeEditHandleR + 4),
+    [shapeEditHandleR],
   );
   const fineStroke = useMemo(() => Math.max(0.6, Math.min(2, viewBox.w / 320)), [viewBox.w]);
 
@@ -687,7 +693,7 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                     <circle
                       cx={point.x}
                       cy={point.y}
-                      r={shapeEditHandleR + 2}
+                      r={shapeEditHitR}
                       fill="transparent"
                       pointerEvents="all"
                       style={{ cursor: mode === 'edit' ? 'grab' : undefined }}
@@ -737,7 +743,7 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                     <circle
                       cx={point.x}
                       cy={point.y}
-                      r={shapeEditHandleR + 2}
+                      r={shapeEditHitR}
                       fill="transparent"
                       pointerEvents="all"
                       style={{ cursor: mode === 'edit' ? 'grab' : undefined }}
@@ -954,7 +960,7 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                 </>
               ) : activeLayer === 'fir' || activeLayer === 'islands' ? (
                 <>
-                  <strong className="text-slate-300">FIR / îles&nbsp;:</strong> grandes poignées (zone cliquable transparente autour du disque). Glisser pour déplacer un sommet. Clic sur la carte pour ajouter un sommet à la forme sélectionnée. Clic droit sur une poignée pour le supprimer. Zoomez si besoin pour plus de précision.
+                  <strong className="text-slate-300">FIR / îles&nbsp;:</strong> poignées sur les sommets ; petite zone de clic un peu plus large que le disque. Glisser pour déplacer. Clic sur la carte pour ajouter un sommet. Clic droit sur une poignée pour le supprimer. Zoomez pour affiner.
                 </>
               ) : (
                 <>
