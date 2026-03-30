@@ -165,6 +165,8 @@ const ROUTE_PROJECTED_RATIO_MAX = 2.35;
 const PROC_AWAY_ARR_MAX = 15;
 const PROC_PROJECTED_RATIO_MAX = 2.95;
 const UTURN_REJECT_DEG = 155;
+const SOFT_BACKTRACK_DEP_DELTA = 6;
+const SOFT_BACKTRACK_ARR_DELTA = 2;
 
 /** Évite d’enchaîner la route dépôt après le SID avec des fixes déjà passés (demi-tour vers le départ). */
 function isBacktrackTowardDeparture(prev: Point, cand: Point, dep: Point, arr: Point): boolean {
@@ -173,6 +175,18 @@ function isBacktrackTowardDeparture(prev: Point, cand: Point, dep: Point, arr: P
   const dPrevDep = calculateDistance(prev, dep);
   const dCandDep = calculateDistance(cand, dep);
   return dCandDep < dPrevDep - BACKTRACK_EPS && dCandArr > dPrevArr + BACKTRACK_EPS;
+}
+
+/**
+ * Variante plus sensible que isBacktrackTowardDeparture:
+ * rejette déjà les retours partiels vers le départ qui dégradent un peu la route.
+ */
+function isSoftBacktrack(prev: Point, cand: Point, dep: Point, arr: Point): boolean {
+  const dPrevArr = calculateDistance(prev, arr);
+  const dCandArr = calculateDistance(cand, arr);
+  const dPrevDep = calculateDistance(prev, dep);
+  const dCandDep = calculateDistance(cand, dep);
+  return dCandDep < dPrevDep - SOFT_BACKTRACK_DEP_DELTA && dCandArr > dPrevArr + SOFT_BACKTRACK_ARR_DELTA;
 }
 
 function turnAngleDeg(prevPrev: Point, prev: Point, cand: Point): number {
@@ -230,6 +244,9 @@ function isPertinentNextLeg(
   const firstSidLeg = allowFirstSidLegException && source === 'sid' && !prevPrev;
 
   if (!firstSidLeg && isBacktrackTowardDeparture(prev, cand, dep, arr)) {
+    return false;
+  }
+  if (!firstSidLeg && isSoftBacktrack(prev, cand, dep, arr)) {
     return false;
   }
 
