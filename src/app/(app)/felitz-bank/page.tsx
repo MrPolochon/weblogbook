@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { ensureComptePersonnel, getComptePersonnelCanonique } from '@/lib/felitz/ensure-comptes';
 import { redirect } from 'next/navigation';
 import { Landmark, Building2, Shield } from 'lucide-react';
 import FelitzBankClient from './FelitzBankClient';
@@ -49,12 +50,12 @@ export default async function FelitzBankPage() {
   const { data: profile } = await supabase.from('profiles').select('role, identifiant').eq('id', user.id).single();
   const isAdmin = profile?.role === 'admin';
 
-  // Compte personnel
-  const { data: comptePerso } = await admin.from('felitz_comptes')
-    .select('*')
-    .eq('proprietaire_id', user.id)
-    .eq('type', 'personnel')
-    .single();
+  // Compte personnel référent (created_at le plus ancien si doublons ; création si manquant)
+  await ensureComptePersonnel(admin, user.id);
+  const comptePersoCanon = await getComptePersonnelCanonique(admin, user.id);
+  const { data: comptePerso } = comptePersoCanon
+    ? await admin.from('felitz_comptes').select('*').eq('id', comptePersoCanon.id).maybeSingle()
+    : { data: null };
 
   // Compagnies dont l'utilisateur est PDG ou co-PDG
   const { data: compagniesPdg } = await admin.from('compagnies')

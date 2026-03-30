@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getLeaderCompagnieIds } from '@/lib/co-pdg-utils';
+import {
+  ensureCompteEntreprise,
+  ensureComptePersonnel,
+  getCompteEntrepriseCanonique,
+  getComptePersonnelCanonique,
+} from '@/lib/felitz/ensure-comptes';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,10 +67,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     let vbanSource = '';
 
     if (isPersonnel) {
-      const { data: comptePerso } = await admin.from('felitz_comptes')
+      let cp = await getComptePersonnelCanonique(admin, user.id);
+      if (!cp) cp = await ensureComptePersonnel(admin, user.id);
+      if (!cp) return NextResponse.json({ error: 'Compte personnel introuvable' }, { status: 400 });
+      const { data: comptePerso } = await admin
+        .from('felitz_comptes')
         .select('id, solde, vban')
-        .eq('proprietaire_id', user.id)
-        .eq('type', 'personnel')
+        .eq('id', cp.id)
         .single();
       if (!comptePerso) return NextResponse.json({ error: 'Compte personnel introuvable' }, { status: 400 });
       if (comptePerso.solde < amt) return NextResponse.json({ error: 'Fonds personnels insuffisants' }, { status: 400 });
@@ -83,10 +92,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         libelle: `Contribution alliance (perso)`,
       });
     } else {
-      const { data: compteComp } = await admin.from('felitz_comptes')
+      let cc = await getCompteEntrepriseCanonique(admin, contribCompagnieId);
+      if (!cc) cc = await ensureCompteEntreprise(admin, contribCompagnieId);
+      if (!cc) return NextResponse.json({ error: 'Compte compagnie introuvable' }, { status: 400 });
+      const { data: compteComp } = await admin
+        .from('felitz_comptes')
         .select('id, solde, vban')
-        .eq('compagnie_id', contribCompagnieId)
-        .eq('type', 'entreprise')
+        .eq('id', cc.id)
         .single();
       if (!compteComp) return NextResponse.json({ error: 'Compte compagnie introuvable' }, { status: 400 });
       if (compteComp.solde < amt) return NextResponse.json({ error: 'Fonds compagnie insuffisants' }, { status: 400 });
@@ -108,8 +120,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { data: allianceAccount } = await admin.from('felitz_comptes').select('id').eq('alliance_id', allianceId).eq('type', 'alliance').single();
     if (!allianceAccount) {
       const sourceCompteId = isPersonnel
-        ? (await admin.from('felitz_comptes').select('id').eq('proprietaire_id', user!.id).eq('type', 'personnel').single()).data?.id
-        : (await admin.from('felitz_comptes').select('id').eq('compagnie_id', contribCompagnieId).eq('type', 'entreprise').single()).data?.id;
+        ? (await getComptePersonnelCanonique(admin, user!.id))?.id
+        : (await getCompteEntrepriseCanonique(admin, contribCompagnieId))?.id;
       if (sourceCompteId) {
         await admin.rpc('crediter_compte_safe', { p_compte_id: sourceCompteId, p_montant: amt });
       }
@@ -119,8 +131,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: allianceAccount.id, p_montant: amt });
     if (!creditOk) {
       const sourceCompteId = isPersonnel
-        ? (await admin.from('felitz_comptes').select('id').eq('proprietaire_id', user!.id).eq('type', 'personnel').single()).data?.id
-        : (await admin.from('felitz_comptes').select('id').eq('compagnie_id', contribCompagnieId).eq('type', 'entreprise').single()).data?.id;
+        ? (await getComptePersonnelCanonique(admin, user!.id))?.id
+        : (await getCompteEntrepriseCanonique(admin, contribCompagnieId))?.id;
       if (sourceCompteId) {
         await admin.rpc('crediter_compte_safe', { p_compte_id: sourceCompteId, p_montant: amt });
       }

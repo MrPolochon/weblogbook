@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { ensureComptePersonnel, getComptePersonnelCanonique } from '@/lib/felitz/ensure-comptes';
 
 // GET - Récupérer un message spécifique
 export async function GET(
@@ -102,13 +103,8 @@ export async function PATCH(
       let compteId = message.cheque_destinataire_compte_id;
       
       if (!compteId) {
-        // Chercher le compte personnel de l'utilisateur
-        const { data: compte } = await admin.from('felitz_comptes')
-          .select('id')
-          .eq('proprietaire_id', user.id)
-          .eq('type', 'personnel')
-          .single();
-        
+        let compte = await getComptePersonnelCanonique(admin, user.id);
+        if (!compte) compte = await ensureComptePersonnel(admin, user.id);
         if (!compte) return NextResponse.json({ error: 'Compte Felitz introuvable' }, { status: 404 });
         compteId = compte.id;
       }

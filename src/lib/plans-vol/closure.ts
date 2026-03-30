@@ -1,6 +1,11 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
 import { calculerUsureVol, TAUX_PRELEVEMENT_PRET } from '@/lib/compagnie-utils';
+import {
+  ensureCompteEntreprise,
+  ensureComptePersonnel,
+  getComptePersonnelCanonique,
+} from '@/lib/felitz/ensure-comptes';
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -257,12 +262,7 @@ async function distribuerTaxesATC(
         atcPayes++;
       } else {
         // ATC hors service → envoyer le chèque immédiatement
-        const { data: compteAtc } = await admin.from('felitz_comptes')
-          .select('id')
-          .eq('proprietaire_id', user_id)
-          .eq('type', 'personnel')
-          .single();
-
+        const compteAtc = await getComptePersonnelCanonique(admin, user_id);
         if (!compteAtc) continue;
 
         await admin.from('messages').insert({
@@ -367,22 +367,27 @@ export async function envoyerChequesVol(
     salairePlanning = Math.max(depuisPourcent, depuisPlan);
   }
 
-  const { data: comptePilote } = await admin.from('felitz_comptes')
-    .select('id')
-    .eq('proprietaire_id', plan.pilote_id)
-    .eq('type', 'personnel')
-    .single();
-  if (!comptePilote) {
-    return { success: false, message: 'Compte Felitz du pilote introuvable' };
+  const compagnieIdFelitz = plan.compagnie_id;
+  if (!compagnieIdFelitz) {
+    return { success: false, message: 'Compagnie introuvable pour la clôture' };
   }
 
-  const { data: compteCompagnie } = await admin.from('felitz_comptes')
-    .select('id')
-    .eq('compagnie_id', plan.compagnie_id)
-    .eq('type', 'entreprise')
-    .single();
+  const comptePilote = await ensureComptePersonnel(admin, plan.pilote_id);
+  if (!comptePilote) {
+    return {
+      success: false,
+      message:
+        'Compte Felitz du pilote introuvable. Si le pilote est récent ou migré, vérifiez son profil ; le compte aurait dû être créé automatiquement.',
+    };
+  }
+
+  const compteCompagnie = await ensureCompteEntreprise(admin, compagnieIdFelitz);
   if (!compteCompagnie) {
-    return { success: false, message: 'Compte Felitz de la compagnie introuvable' };
+    return {
+      success: false,
+      message:
+        'Compte Felitz de la compagnie introuvable. Si la compagnie a été créée hors processus normal, vérifiez qu’elle existe et son VBAN.',
+    };
   }
 
   const baseTaxes = coefficient === 0 ? plan.revenue_brut : revenuEffectif;

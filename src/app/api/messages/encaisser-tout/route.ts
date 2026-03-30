@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/rate-limit';
+import { ensureComptePersonnel, getComptePersonnelCanonique } from '@/lib/felitz/ensure-comptes';
 
 const CHEQUE_TYPES = ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'cheque_siavi_intervention', 'cheque_siavi_taxes'];
 
@@ -26,12 +27,8 @@ export async function POST() {
     if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
     if (!cheques || cheques.length === 0) return NextResponse.json({ error: 'Aucun cheque a encaisser' }, { status: 400 });
 
-    const { data: comptePerso } = await admin.from('felitz_comptes')
-      .select('id')
-      .eq('proprietaire_id', user.id)
-      .eq('type', 'personnel')
-      .single();
-
+    let comptePerso = await getComptePersonnelCanonique(admin, user.id);
+    if (!comptePerso) comptePerso = await ensureComptePersonnel(admin, user.id);
     if (!comptePerso) return NextResponse.json({ error: 'Compte Felitz personnel introuvable' }, { status: 404 });
 
     // 1) Marquer TOUS les chèques comme encaissés en une seule requête
