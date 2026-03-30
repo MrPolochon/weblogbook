@@ -244,8 +244,32 @@ export function getFlightPhase(info: RouteInfo, progress: number): FlightPhase {
     return 'cruising';
   }
   if (progress >= 0.97) return 'arrived';
-  if (info.starStartProgress < 1 && progress >= info.starStartProgress) return 'approaching';
-  if (info.sidEndProgress > 0 && progress <= info.sidEndProgress) return 'departing';
+
+  const hasSid = info.sidEndProgress > 0;
+  const hasStar = info.starStartProgress < 1;
+
+  if (!hasSid && !hasStar) {
+    if (progress < 0.33) return 'departing';
+    if (progress < 0.85) return 'cruising';
+    return 'approaching';
+  }
+
+  if (hasStar && progress >= info.starStartProgress) return 'approaching';
+  if (hasSid && progress <= info.sidEndProgress) return 'departing';
+
+  if (!hasSid) {
+    const cruiseEnd = info.starStartProgress;
+    if (progress < cruiseEnd * 0.33) return 'departing';
+    return 'cruising';
+  }
+
+  if (!hasStar) {
+    const cruiseStart = info.sidEndProgress;
+    const remaining = 1 - cruiseStart;
+    if (progress > cruiseStart + remaining * 0.85) return 'approaching';
+    return 'cruising';
+  }
+
   return 'cruising';
 }
 
