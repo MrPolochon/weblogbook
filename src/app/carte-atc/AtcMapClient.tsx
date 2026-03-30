@@ -14,6 +14,7 @@ import {
   type Island,
   type Point,
 } from '@/lib/cartography-data';
+import { buildRoutePath, interpolateAlongRoute } from '@/lib/radar-utils';
 
 interface AtcSession {
   aeroport: string;
@@ -35,6 +36,9 @@ interface MapFlight {
   pilote_id: string | null;
   pilote_identifiant: string | null;
   discord_username: string | null;
+  route: string | null;
+  sid: string | null;
+  star: string | null;
 }
 
 interface RenderFlight extends MapFlight {
@@ -45,6 +49,8 @@ interface RenderFlight extends MapFlight {
   y2: number;
   x: number;
   y: number;
+  heading: number;
+  routePath: Point[];
   finished: boolean;
 }
 
@@ -171,8 +177,25 @@ export default function AtcMapClient() {
       const progressRaw = (now - startMs) / durationMs;
       const progress = Math.max(0, Math.min(1, progressRaw));
 
-      const x = x1 + (x2 - x1) * progress;
-      const y = y1 + (y2 - y1) * progress;
+      const routePath = buildRoutePath(
+        f.aeroport_depart, f.aeroport_arrivee,
+        f.route, f.sid, f.star,
+      );
+      const hasRoute = routePath.length > 2;
+
+      let x: number, y: number, heading: number;
+      if (hasRoute) {
+        const result = interpolateAlongRoute(routePath, progress);
+        x = result.position.x;
+        y = result.position.y;
+        heading = result.heading;
+      } else {
+        x = x1 + (x2 - x1) * progress;
+        y = y1 + (y2 - y1) * progress;
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        heading = ((Math.atan2(dx, -dy) * 180) / Math.PI + 360) % 360;
+      }
 
       return {
         ...f,
@@ -183,6 +206,8 @@ export default function AtcMapClient() {
         y2,
         x,
         y,
+        heading,
+        routePath,
         finished: progress >= 1,
       };
     })
@@ -413,18 +438,52 @@ export default function AtcMapClient() {
               {renderedFlights.map((f) => {
                 const isSelected = selectedFlightId === f.id;
                 const color = f.type_vol === 'VFR' ? '#22c55e' : f.type_vol === 'MIL' ? '#a855f7' : '#ef4444';
-                const angleDeg = Math.atan2(f.y2 - f.y1, f.x2 - f.x1) * (180 / Math.PI);
+                const svgHeading = f.heading - 90;
                 return (
                   <g key={f.id}>
-                    {isSelected && (
+                    {isSelected && f.routePath.length > 2 && (
+                      <polyline
+                        points={f.routePath.map(p => `${p.x},${p.y}`).join(' ')}
+                        fill="none"
+                        stroke={color}
+                        strokeWidth={1.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeDasharray="6 3"
+                        opacity={0.7}
+                      />
+                    )}
+                    {isSelected && f.routePath.length <= 2 && (
                       <line
                         x1={f.x1}
                         y1={f.y1}
-                        x2={f.x}
-                        y2={f.y}
+                        x2={f.x2}
+                        y2={f.y2}
+                        stroke={color}
+                        strokeWidth={1.5}
+                        strokeLinecap="round"
+                        strokeDasharray="6 3"
+                        opacity={0.7}
+                      />
+                    )}
+                    {isSelected && (
+                      <polyline
+                        points={(() => {
+                          if (f.routePath.length <= 2) return `${f.x1},${f.y1} ${f.x},${f.y}`;
+                          const covered: string[] = [];
+                          for (const p of f.routePath) {
+                            covered.push(`${p.x},${p.y}`);
+                            const dx = p.x - f.x, dy = p.y - f.y;
+                            if (Math.sqrt(dx * dx + dy * dy) < 2 && covered.length > 1) break;
+                          }
+                          covered.push(`${f.x},${f.y}`);
+                          return covered.join(' ');
+                        })()}
+                        fill="none"
                         stroke={color}
                         strokeWidth={2}
                         strokeLinecap="round"
+                        strokeLinejoin="round"
                         opacity={0.9}
                       />
                     )}
@@ -441,7 +500,7 @@ export default function AtcMapClient() {
                             justifyContent: 'center',
                             width: '16px',
                             height: '16px',
-                            transform: `rotate(${angleDeg}deg)`,
+                            transform: `rotate(${svgHeading}deg)`,
                             transformOrigin: 'center',
                           }}
                         >

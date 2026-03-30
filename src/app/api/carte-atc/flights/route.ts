@@ -18,6 +18,9 @@ interface MapFlight {
   pilote_id: string | null;
   pilote_identifiant: string | null;
   discord_username: string | null;
+  route: string | null;
+  sid: string | null;
+  star: string | null;
 }
 
 export async function GET() {
@@ -31,6 +34,7 @@ export async function GET() {
       .select(`
         id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, temps_prev_min,
         statut, accepted_at, created_at, pilote_id, vol_sans_atc, current_holder_user_id,
+        route_ifr, strip_route, strip_sid_atc, sid_depart, star_arrivee, strip_star,
         profiles!plans_vol_pilote_id_fkey(id, identifiant)
       `)
       .in('statut', ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'])
@@ -84,6 +88,9 @@ export async function GET() {
       pilote_id: piloteId,
       pilote_identifiant: (profile as { identifiant?: string } | null)?.identifiant || null,
       discord_username: piloteId ? (discordByUser.get(piloteId) || null) : null,
+      route: p.strip_route || p.route_ifr || null,
+      sid: p.strip_sid_atc || p.sid_depart || null,
+      star: p.strip_star || p.star_arrivee || null,
     });
   }
 
@@ -109,6 +116,9 @@ export async function GET() {
       pilote_id: piloteId,
       pilote_identifiant: (profile as { identifiant?: string } | null)?.identifiant || null,
       discord_username: piloteId ? (discordByUser.get(piloteId) || null) : null,
+      route: null,
+      sid: null,
+      star: null,
     });
   }
 

@@ -6,6 +6,8 @@ import {
   toSVG,
   interpolatePosition,
   calculateHeading,
+  buildRoutePath,
+  interpolateAlongRoute,
   type RadarTarget,
 } from '@/lib/radar-utils';
 import { hasApprovedRadarAccessForUser } from '@/lib/radar-access';
@@ -105,6 +107,12 @@ export async function GET() {
       let progress: number;
       let source: 'interpolation' | 'capture' = 'interpolation';
 
+      const routeStr = pv.strip_route || pv.route_ifr || null;
+      const sidStr = pv.strip_sid_atc || pv.sid_depart || null;
+      const starStr = pv.strip_star || pv.star_arrivee || null;
+      const routePath = buildRoutePath(pv.aeroport_depart, pv.aeroport_arrivee, routeStr, sidStr, starStr);
+      const hasRoute = routePath.length > 2;
+
       if (capturedPos && capturedPos.confidence > 0.3) {
         position = { x: capturedPos.x, y: capturedPos.y };
         source = 'capture';
@@ -120,11 +128,16 @@ export async function GET() {
         const elapsedMs = now - acceptedAt;
         const totalMs = (pv.temps_prev_min || 30) * 60 * 1000;
         progress = Math.max(0, Math.min(1, elapsedMs / totalMs));
-        position = interpolatePosition(depSVG, arrSVG, progress);
+
+        if (hasRoute) {
+          const routeResult = interpolateAlongRoute(routePath, progress);
+          position = routeResult.position;
+        } else {
+          position = interpolatePosition(depSVG, arrSVG, progress);
+        }
       }
 
       const onGround = progress < 0.05 || progress > 0.95;
-      // Cap : en capture, viser depuis la position réelle vers l'arrivée (sinon cap figé départ→arrivée alors que la cible est sur le minimap)
       let heading: number;
       if (onGround) {
         heading = calculateHeading(depSVG, arrSVG);
@@ -132,6 +145,8 @@ export async function GET() {
         const dToArr = Math.hypot(arrSVG.x - position.x, arrSVG.y - position.y);
         heading =
           dToArr > 2 ? calculateHeading(position, arrSVG) : calculateHeading(depSVG, arrSVG);
+      } else if (hasRoute) {
+        heading = interpolateAlongRoute(routePath, progress).heading;
       } else {
         heading = calculateHeading(depSVG, arrSVG);
       }
