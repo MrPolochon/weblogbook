@@ -148,31 +148,42 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   }, []);
 
   const startLocalMicTest = useCallback(async () => {
+    unlockAudioForIOS();
     stopLocalMicTest();
     try {
-      const constraints: MediaStreamConstraints = selectedInputId
-        ? { audio: { deviceId: { exact: selectedInputId } } }
+      const useDevice = selectedInputId?.trim();
+      const constraints: MediaStreamConstraints = useDevice
+        ? { audio: { deviceId: { exact: useDevice } } }
         : { audio: true };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       micTestStreamRef.current = stream;
 
-      const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const AC =
+        window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const audioCtx = new AC();
       micTestAudioContextRef.current = audioCtx;
+      await audioCtx.resume();
+
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 512;
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.45;
       source.connect(analyser);
+      const silentGain = audioCtx.createGain();
+      silentGain.gain.value = 0;
+      analyser.connect(silentGain);
+      silentGain.connect(audioCtx.destination);
 
-      const buffer = new Uint8Array(analyser.fftSize);
+      const buffer = new Float32Array(analyser.fftSize);
       const tick = () => {
-        analyser.getByteTimeDomainData(buffer);
+        if (!micTestAudioContextRef.current || !micTestStreamRef.current) return;
+        analyser.getFloatTimeDomainData(buffer);
         let sum = 0;
         for (let i = 0; i < buffer.length; i++) {
-          const v = (buffer[i] - 128) / 128;
-          sum += v * v;
+          sum += buffer[i] * buffer[i];
         }
         const rms = Math.sqrt(sum / buffer.length);
-        const level = Math.max(0, Math.min(1, rms * 4.5));
+        const level = Math.max(0, Math.min(1, rms * 5));
         setMicTestLevel(level);
         micTestRafRef.current = requestAnimationFrame(tick);
       };
