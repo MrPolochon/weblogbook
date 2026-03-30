@@ -157,6 +157,9 @@ export const DEFAULT_WAYPOINTS: Waypoint[] = [
   { code: 'ODOKU', x: 48.6, y: 82.8 },
   { code: 'EMJAY', x: 40.5, y: 83.2 },
   { code: 'LOGAN', x: 36.6, y: 68.2 },
+  /** IRFD départs / transition ouest — placés entre IRFD et LOGAN (route type ROCKFORD) */
+  { code: 'DLREY', x: 46.85, y: 68.35 },
+  { code: 'DAALE', x: 42.4, y: 68.28 },
   { code: 'BEANS', x: 30, y: 63.1 },
   { code: 'ICTAM', x: 40.8, y: 59.5 },
   { code: 'KUNAV', x: 44.3, y: 55.9 },
@@ -167,6 +170,7 @@ export const DEFAULT_WAYPOINTS: Waypoint[] = [
   { code: 'SETHR', x: 53.8, y: 57.3 },
   { code: 'KENED', x: 44.2, y: 50.1 },
   { code: 'BUCFA', x: 36.8, y: 55.9 },
+  { code: 'SKYDV', x: 38.65, y: 50.2 },
   { code: 'SAWPE', x: 29.8, y: 58.1 },
   { code: 'SUNST', x: 29.9, y: 51 },
   { code: 'ENDER', x: 32.7, y: 46.8 },

@@ -143,6 +143,29 @@ function tokenize(str: string): string[] {
     .filter((t) => t.length >= 2);
 }
 
+/** Mots-clés route IFR / phrases type « RADAR VECTORS » — pas des fixes sur la carte. */
+const ROUTE_NOISE_TOKENS = new Set([
+  'DCT', 'DIRECT', 'DRCT',
+  'VECTOR', 'VECTORS',
+  'RADAR',
+]);
+
+function routeTokens(str: string | null | undefined): string[] {
+  if (!str) return [];
+  return tokenize(str).filter((t) => !ROUTE_NOISE_TOKENS.has(t));
+}
+
+const BACKTRACK_EPS = 10;
+
+/** Évite d’enchaîner la route dépôt après le SID avec des fixes déjà passés (demi-tour vers le départ). */
+function isBacktrackTowardDeparture(prev: Point, cand: Point, dep: Point, arr: Point): boolean {
+  const dPrevArr = calculateDistance(prev, arr);
+  const dCandArr = calculateDistance(cand, arr);
+  const dPrevDep = calculateDistance(prev, dep);
+  const dCandDep = calculateDistance(cand, dep);
+  return dCandDep < dPrevDep - BACKTRACK_EPS && dCandArr > dPrevArr + BACKTRACK_EPS;
+}
+
 /**
  * Parse a route string (SID + route + STAR) and return SVG waypoints plus
  * progress boundaries for SID/STAR phases.
@@ -185,11 +208,12 @@ export function buildRouteInfo(
     }
     const path: Point[] = [depSVG];
     let lastPoint = depSVG;
-    for (const t of tokenize(routeStr)) {
+    for (const t of routeTokens(routeStr)) {
       if (t === depUp || t === arrUp) continue;
       const wp = resolveWaypoint(t);
       if (!wp) continue;
       if (calculateDistance(wp, lastPoint) < 1) continue;
+      if (isBacktrackTowardDeparture(lastPoint, wp, depSVG, arrSVG)) continue;
       path.push(wp);
       lastPoint = wp;
     }
@@ -210,10 +234,12 @@ export function buildRouteInfo(
   let starFirstIdx = -1;
 
   const addToken = (token: string, source: 'sid' | 'route' | 'star') => {
+    if (ROUTE_NOISE_TOKENS.has(token)) return;
     if (token === depUp || token === arrUp) return;
     const wp = resolveWaypoint(token);
     if (!wp) return;
     if (calculateDistance(wp, lastPoint) < 1) return;
+    if (source === 'route' && isBacktrackTowardDeparture(lastPoint, wp, depSVG, arrSVG)) return;
     path.push(wp);
     lastPoint = wp;
     if (source === 'sid') sidPointCount = path.length - 1;
@@ -221,15 +247,15 @@ export function buildRouteInfo(
   };
 
   if (hasSid) {
-    for (const t of tokenize(sidStr!)) addToken(t, 'sid');
+    for (const t of routeTokens(sidStr)) addToken(t, 'sid');
   }
 
   if (hasSid && hasStar && routeStr) {
-    for (const t of tokenize(routeStr)) addToken(t, 'route');
+    for (const t of routeTokens(routeStr)) addToken(t, 'route');
   }
 
   if (hasStar) {
-    for (const t of tokenize(starStr!)) addToken(t, 'star');
+    for (const t of routeTokens(starStr)) addToken(t, 'star');
   }
 
   if (calculateDistance(arrSVG, lastPoint) > 1) {
