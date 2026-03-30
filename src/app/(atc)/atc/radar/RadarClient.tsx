@@ -6,6 +6,7 @@ import {
   DEFAULT_POSITIONS, DEFAULT_ISLANDS, DEFAULT_FIR_ZONES,
   toSVG, detectSTCA, calculateHeading,
   PHASE_LABELS,
+  PLANE_BLIP_D,
   type RadarTarget, type STCAPair, type Point,
 } from '@/lib/radar-utils';
 import { DEFAULT_VORS, DEFAULT_WAYPOINTS } from '@/lib/cartography-data';
@@ -21,10 +22,6 @@ const RANGE_LEVELS = [
 ];
 const CHAR_SIZES = ['S', 'M', 'L'] as const;
 const CHAR_SIZE_PX = { S: 7, M: 9, L: 11 } as const;
-
-/** Silhouette avion centrée sur (0,0), nez vers le haut (−Y), ~10 u de haut — rotation = cap magnétique ATC */
-const PLANE_BLIP_D =
-  'M0,-5.2 L1.35,-0.85 L2.8,-0.3 L2.8,0.55 L1.15,0.55 L1.15,3.6 L-1.15,3.6 L-1.15,0.55 L-2.8,0.55 L-2.8,-0.3 L-1.35,-0.85 Z';
 
 interface DataBlockOffset { dx: number; dy: number }
 

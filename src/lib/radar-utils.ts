@@ -46,6 +46,10 @@ export function calculateDistance(a: Point, b: Point): number {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+/** Silhouette avion centrée sur (0,0), nez vers le nord (−Y). Utiliser `rotate(heading)` avec `calculateHeading`. */
+export const PLANE_BLIP_D =
+  'M0,-5.2 L1.35,-0.85 L2.8,-0.3 L2.8,0.55 L1.15,0.55 L1.15,3.6 L-1.15,3.6 L-1.15,0.55 L-2.8,0.55 L-2.8,-0.3 L-1.35,-0.85 Z';
+
 // ─── Route-based interpolation ───────────────────────────────────────────────
 
 const waypointIndex = new Map<string, Point>();
@@ -144,7 +148,7 @@ function tokenize(str: string): string[] {
  * progress boundaries for SID/STAR phases.
  *
  * Rules:
- *  - No SID & no STAR → straight line dep→arr (route_ifr ignored)
+ *  - No SID & no STAR → dep → route_ifr waypoints (if any) → arr, else straight line
  *  - SID only          → dep → SID waypoints → straight to arr
  *  - STAR only         → dep → straight to 1st STAR point → STAR waypoints → arr
  *  - SID + STAR        → dep → SID waypoints → route waypoints → STAR waypoints → arr
@@ -171,12 +175,31 @@ export function buildRouteInfo(
     return { path, sidEndProgress: 0, starStartProgress: 1, isLocalFlight: true };
   }
 
-  if (!sidStr && !starStr) {
-    return { path: [depSVG, arrSVG], sidEndProgress: 0, starStartProgress: 1, isLocalFlight: false };
-  }
-
   const depUp = depCode.toUpperCase();
   const arrUp = arrCode.toUpperCase();
+
+  /* Route- only: follow route_ifr waypoints between airports (no SID/STAR). */
+  if (!sidStr && !starStr) {
+    if (!routeStr) {
+      return { path: [depSVG, arrSVG], sidEndProgress: 0, starStartProgress: 1, isLocalFlight: false };
+    }
+    const path: Point[] = [depSVG];
+    let lastPoint = depSVG;
+    for (const t of tokenize(routeStr)) {
+      if (t === depUp || t === arrUp) continue;
+      const wp = resolveWaypoint(t);
+      if (!wp) continue;
+      if (calculateDistance(wp, lastPoint) < 1) continue;
+      path.push(wp);
+      lastPoint = wp;
+    }
+    if (calculateDistance(arrSVG, lastPoint) > 1) path.push(arrSVG);
+    if (path.length < 2) {
+      return { path: [depSVG, arrSVG], sidEndProgress: 0, starStartProgress: 1, isLocalFlight: false };
+    }
+    return { path, sidEndProgress: 0, starStartProgress: 1, isLocalFlight: false };
+  }
+
   const hasSid = Boolean(sidStr);
   const hasStar = Boolean(starStr);
 
@@ -278,6 +301,13 @@ export const PHASE_LABELS: Record<FlightPhase, string> = {
   cruising: 'Cruising',
   approaching: 'Approaching',
   arrived: 'Arrived',
+};
+
+export const PHASE_LABELS_FR: Record<FlightPhase, string> = {
+  departing: 'Départ',
+  cruising: 'Croisière',
+  approaching: 'Approche',
+  arrived: 'Arrivée',
 };
 
 /** Cumulative distances along route segments. */

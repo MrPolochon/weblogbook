@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Plane, RefreshCw, Radio } from 'lucide-react';
+import { RefreshCw, Radio } from 'lucide-react';
 import {
   AIRPORT_TO_FIR,
   DEFAULT_FIR_ZONES,
@@ -14,7 +14,14 @@ import {
   type Island,
   type Point,
 } from '@/lib/cartography-data';
-import { buildRouteInfo, interpolateAlongRoute, getFlightPhase, PHASE_LABELS, type FlightPhase } from '@/lib/radar-utils';
+import {
+  buildRouteInfo,
+  interpolateAlongRoute,
+  getFlightPhase,
+  PHASE_LABELS_FR,
+  PLANE_BLIP_D,
+  type FlightPhase,
+} from '@/lib/radar-utils';
 
 interface AtcSession {
   aeroport: string;
@@ -437,38 +444,48 @@ export default function AtcMapClient() {
                 );
               })}
 
-              {/* Routes + avions des plans de vol */}
+              {/* Trajets planifiés (tous les vols, pointillés comme dans la légende IFR/VFR) */}
               {renderedFlights.map((f) => {
                 const isSelected = selectedFlightId === f.id;
                 const color = f.type_vol === 'VFR' ? '#22c55e' : f.type_vol === 'MIL' ? '#a855f7' : '#ef4444';
-                const svgHeading = f.heading - 90;
+                if (f.routePath.length > 2) {
+                  return (
+                    <polyline
+                      key={`path-${f.id}`}
+                      points={f.routePath.map((p) => `${p.x},${p.y}`).join(' ')}
+                      fill="none"
+                      stroke={color}
+                      strokeWidth={isSelected ? 1.8 : 1.1}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeDasharray="6 4"
+                      opacity={isSelected ? 0.9 : 0.5}
+                    />
+                  );
+                }
+                return (
+                  <line
+                    key={`path-${f.id}`}
+                    x1={f.x1}
+                    y1={f.y1}
+                    x2={f.x2}
+                    y2={f.y2}
+                    stroke={color}
+                    strokeWidth={isSelected ? 1.8 : 1.1}
+                    strokeLinecap="round"
+                    strokeDasharray="6 4"
+                    opacity={isSelected ? 0.85 : 0.45}
+                  />
+                );
+              })}
+
+              {/* Portion déjà parcourue (vol sélectionné) + icônes avion */}
+              {renderedFlights.map((f) => {
+                const isSelected = selectedFlightId === f.id;
+                const color = f.type_vol === 'VFR' ? '#22c55e' : f.type_vol === 'MIL' ? '#a855f7' : '#ef4444';
+                const phaseFr = PHASE_LABELS_FR[f.flight_phase];
                 return (
                   <g key={f.id}>
-                    {isSelected && f.routePath.length > 2 && (
-                      <polyline
-                        points={f.routePath.map(p => `${p.x},${p.y}`).join(' ')}
-                        fill="none"
-                        stroke={color}
-                        strokeWidth={1.5}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeDasharray="6 3"
-                        opacity={0.7}
-                      />
-                    )}
-                    {isSelected && f.routePath.length <= 2 && (
-                      <line
-                        x1={f.x1}
-                        y1={f.y1}
-                        x2={f.x2}
-                        y2={f.y2}
-                        stroke={color}
-                        strokeWidth={1.5}
-                        strokeLinecap="round"
-                        strokeDasharray="6 3"
-                        opacity={0.7}
-                      />
-                    )}
                     {isSelected && (
                       <polyline
                         points={(() => {
@@ -476,7 +493,8 @@ export default function AtcMapClient() {
                           const covered: string[] = [];
                           for (const p of f.routePath) {
                             covered.push(`${p.x},${p.y}`);
-                            const dx = p.x - f.x, dy = p.y - f.y;
+                            const dx = p.x - f.x;
+                            const dy = p.y - f.y;
                             if (Math.sqrt(dx * dx + dy * dy) < 2 && covered.length > 1) break;
                           }
                           covered.push(`${f.x},${f.y}`);
@@ -487,32 +505,28 @@ export default function AtcMapClient() {
                         strokeWidth={2}
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        opacity={0.9}
+                        strokeDasharray="6 4"
+                        opacity={0.95}
                       />
                     )}
                     <g
                       style={{ cursor: 'pointer' }}
-                      onClick={() => setSelectedFlightId((prev) => prev === f.id ? null : f.id)}
+                      onClick={() => setSelectedFlightId((prev) => (prev === f.id ? null : f.id))}
                     >
-                      <circle cx={f.x} cy={f.y} r={isSelected ? 5.5 : 4.2} fill={color} stroke="#e2e8f0" strokeWidth={isSelected ? 1.4 : 1} />
-                      <foreignObject x={f.x - 8} y={f.y - 8} width={16} height={16}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: '16px',
-                            height: '16px',
-                            transform: `rotate(${svgHeading}deg)`,
-                            transformOrigin: 'center',
-                          }}
-                        >
-                          <Plane size={13} color={color} style={{ opacity: 0.9 }} />
-                        </div>
-                      </foreignObject>
+                      <circle cx={f.x} cy={f.y} r="14" fill="transparent" />
+                      <g transform={`translate(${f.x},${f.y}) rotate(${f.heading})`}>
+                        <path
+                          d={PLANE_BLIP_D}
+                          fill={color}
+                          stroke="#f1f5f9"
+                          strokeWidth={isSelected ? 0.5 : 0.35}
+                          strokeLinejoin="round"
+                          opacity={0.95}
+                        />
+                      </g>
                       <text
                         x={f.x + 8}
-                        y={f.y - 8}
+                        y={f.y - 10}
                         fill={color}
                         fontSize="7"
                         fontFamily="monospace"
@@ -520,6 +534,17 @@ export default function AtcMapClient() {
                         style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
                       >
                         {f.numero_vol}
+                      </text>
+                      <text
+                        x={f.x + 8}
+                        y={f.y - 1}
+                        fill="#e2e8f0"
+                        fontSize="6"
+                        fontFamily="monospace"
+                        fontWeight="600"
+                        style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95)' }}
+                      >
+                        {`Statut: ${phaseFr}`}
                       </text>
                     </g>
                   </g>
@@ -607,18 +632,11 @@ export default function AtcMapClient() {
                   Durée prévue: {selectedFlight.temps_prev_min} min
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-400">
-                  Progression: {Math.round(selectedFlight.progress * 100)}%
-                </span>
-                <span
-                  className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide"
+              <p className="text-slate-200">
+                <span className="text-slate-400">Statut : </span>
+                <strong
+                  className="font-semibold"
                   style={{
-                    backgroundColor:
-                      selectedFlight.flight_phase === 'departing' ? 'rgba(59,130,246,0.2)' :
-                      selectedFlight.flight_phase === 'cruising' ? 'rgba(34,197,94,0.2)' :
-                      selectedFlight.flight_phase === 'approaching' ? 'rgba(245,158,11,0.2)' :
-                      'rgba(139,92,246,0.2)',
                     color:
                       selectedFlight.flight_phase === 'departing' ? '#60a5fa' :
                       selectedFlight.flight_phase === 'cruising' ? '#4ade80' :
@@ -626,9 +644,12 @@ export default function AtcMapClient() {
                       '#a78bfa',
                   }}
                 >
-                  {PHASE_LABELS[selectedFlight.flight_phase]}
-                </span>
-              </div>
+                  {PHASE_LABELS_FR[selectedFlight.flight_phase]}
+                </strong>
+              </p>
+              <p className="text-slate-400">
+                Progression : {Math.round(selectedFlight.progress * 100)}%
+              </p>
               <p className="text-slate-300">
                 Pilote (ID site): {selectedFlight.pilote_identifiant || 'N/A'}
               </p>
@@ -689,12 +710,29 @@ export default function AtcMapClient() {
                 </div>
               </button>
             ))}
-            {!loading && (
-              <div className="mt-2 rounded-lg border border-slate-700/40 bg-slate-800/40 p-3">
-                <p className="text-slate-300 text-xs font-semibold mb-1.5">Trafic affiché</p>
-                <p className="text-[11px] text-slate-400">
-                  {renderedFlights.length} avion{renderedFlights.length > 1 ? 's' : ''} en suivi (routes aéroport à aéroport).
-                </p>
+            {!loading && renderedFlights.length > 0 && (
+              <div className="mt-2 rounded-lg border border-slate-700/40 bg-slate-800/40 p-3 space-y-2">
+                <p className="text-slate-300 text-xs font-semibold">Trafic affiché</p>
+                {renderedFlights.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setSelectedFlightId((prev) => (prev === f.id ? null : f.id))}
+                    className={`w-full text-left rounded-md px-2 py-1.5 text-[11px] border transition ${
+                      selectedFlightId === f.id
+                        ? 'border-emerald-500/50 bg-emerald-950/30 text-slate-100'
+                        : 'border-slate-700/50 bg-slate-800/50 text-slate-300 hover:border-slate-600'
+                    }`}
+                  >
+                    <span className="font-mono font-bold">{f.numero_vol}</span>
+                    <span className="text-slate-500 mx-1">·</span>
+                    <span className="text-slate-400">
+                      {f.aeroport_depart} → {f.aeroport_arrivee}
+                    </span>
+                    <br />
+                    <span className="text-slate-500">Statut : {PHASE_LABELS_FR[f.flight_phase]}</span>
+                  </button>
+                ))}
               </div>
             )}
           </div>
