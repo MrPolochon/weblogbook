@@ -79,6 +79,23 @@ function clampViewBox(next: ViewBox): ViewBox {
   return { x, y, w, h };
 }
 
+/** Échelle et offsets réels (SVG `meet` = bandes possibles ; la carte ne remplit pas tout le `getBoundingClientRect`). */
+function viewBoxMeetLayout(rect: DOMRect, vb: ViewBox) {
+  const scale = Math.min(rect.width / vb.w, rect.height / vb.h);
+  const drawW = scale * vb.w;
+  const drawH = scale * vb.h;
+  const offsetX = rect.left + (rect.width - drawW) / 2;
+  const offsetY = rect.top + (rect.height - drawH) / 2;
+  return { scale, offsetX, offsetY };
+}
+
+function viewBoxClientToUser(rect: DOMRect, vb: ViewBox, clientX: number, clientY: number): Point {
+  const { scale, offsetX, offsetY } = viewBoxMeetLayout(rect, vb);
+  const x = vb.x + (clientX - offsetX) / scale;
+  const y = vb.y + (clientY - offsetY) / scale;
+  return { x, y };
+}
+
 function formatDate(value: string | null) {
   if (!value) return 'Jamais';
   return new Date(value).toLocaleString('fr-FR');
@@ -110,30 +127,36 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<DragState>(null);
   const panRef = useRef<{ startX: number; startY: number; original: ViewBox } | null>(null);
+  /** Évite qu’un `click` sur le SVG ajoute un sommet juste après un relâchement de glissement (poignée / aéroport / etc.). */
+  const suppressMapClickAfterDragRef = useRef(false);
   const dirtyRef = useRef(false);
 
   const exports = useMemo(() => buildCartographyExport(data), [data]);
   const handleRadius = useMemo(() => Math.max(1.4, Math.min(4, viewBox.w / 220)), [viewBox.w]);
+  /** Poignées FIR / îles : taille min. en unités carte (vue dézoomée sinon disques ~5 px, impraticable). */
+  const shapeEditHandleR = useMemo(
+    () => Math.max(handleRadius * 2.2, viewBox.w * 0.034, 6.5),
+    [handleRadius, viewBox.w],
+  );
   const fineStroke = useMemo(() => Math.max(0.6, Math.min(2, viewBox.w / 320)), [viewBox.w]);
 
   const getSvgCoordinates = useCallback((clientX: number, clientY: number): Point => {
     if (!svgRef.current) return { x: 0, y: 0 };
     const rect = svgRef.current.getBoundingClientRect();
-    const x = viewBox.x + ((clientX - rect.left) / rect.width) * viewBox.w;
-    const y = viewBox.y + ((clientY - rect.top) / rect.height) * viewBox.h;
-    return { x: Math.round(x), y: Math.round(y) };
+    return viewBoxClientToUser(rect, viewBox, clientX, clientY);
   }, [viewBox]);
 
   const zoomAt = useCallback((direction: 'in' | 'out', clientX?: number, clientY?: number) => {
     const factor = direction === 'in' ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
     setViewBox((prev) => {
       const rect = svgRef.current?.getBoundingClientRect();
-      const focusX = rect && clientX !== undefined
-        ? prev.x + ((clientX - rect.left) / rect.width) * prev.w
-        : prev.x + prev.w / 2;
-      const focusY = rect && clientY !== undefined
-        ? prev.y + ((clientY - rect.top) / rect.height) * prev.h
-        : prev.y + prev.h / 2;
+      let focusX = prev.x + prev.w / 2;
+      let focusY = prev.y + prev.h / 2;
+      if (rect && clientX !== undefined && clientY !== undefined) {
+        const p = viewBoxClientToUser(rect, prev, clientX, clientY);
+        focusX = p.x;
+        focusY = p.y;
+      }
 
       const newW = prev.w * factor;
       const newH = prev.h * factor;
@@ -221,9 +244,17 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
     markDirty();
   }, [markDirty]);
 
-  const handleWheel = useCallback((event: React.WheelEvent<SVGSVGElement>) => {
-    event.preventDefault();
-    zoomAt(event.deltaY < 0 ? 'in' : 'out', event.clientX, event.clientY);
+  /** La molette sur le SVG : `onWheel` React est souvent passif → `preventDefault` ignoré et la page défile encore. */
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      zoomAt(event.deltaY < 0 ? 'in' : 'out', event.clientX, event.clientY);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
   }, [zoomAt]);
 
   const startPan = useCallback((event: React.PointerEvent<SVGSVGElement>) => {
@@ -257,14 +288,20 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
         updateIslands((prev) => prev.map((island) => {
           if (island.id !== dragState.id) return island;
           const nextPoints = [...island.points];
-          nextPoints[dragState.pointIndex] = coords;
+          nextPoints[dragState.pointIndex] = {
+            x: Math.round(coords.x),
+            y: Math.round(coords.y),
+          };
           return { ...island, points: nextPoints };
         }));
       } else if (dragState.type === 'fir-point') {
         updateFirZones((prev) => prev.map((fir) => {
           if (fir.id !== dragState.id) return fir;
           const nextPoints = [...fir.points];
-          nextPoints[dragState.pointIndex] = coords;
+          nextPoints[dragState.pointIndex] = {
+            x: Math.round(coords.x),
+            y: Math.round(coords.y),
+          };
           return { ...fir, points: nextPoints };
         }));
       } else if (dragState.type === 'waypoint') {
@@ -290,19 +327,25 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
     if (panRef.current) {
       const rect = svgRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const dx = ((event.clientX - panRef.current.startX) / rect.width) * panRef.current.original.w;
-      const dy = ((event.clientY - panRef.current.startY) / rect.height) * panRef.current.original.h;
+      const orig = panRef.current.original;
+      const scale = Math.min(rect.width / orig.w, rect.height / orig.h);
+      const dx = (event.clientX - panRef.current.startX) / scale;
+      const dy = (event.clientY - panRef.current.startY) / scale;
       setViewBox(clampViewBox({
-        ...panRef.current.original,
-        x: panRef.current.original.x - dx,
-        y: panRef.current.original.y - dy,
+        ...orig,
+        x: orig.x - dx,
+        y: orig.y - dy,
       }));
     }
   }, [getSvgCoordinates, updateFirZones, updateIslands, updatePositions, updateVors, updateWaypoints]);
 
   const handlePointerUp = useCallback((event: React.PointerEvent<SVGSVGElement>) => {
+    const hadDrag = dragRef.current !== null;
     dragRef.current = null;
     panRef.current = null;
+    if (hadDrag) {
+      suppressMapClickAfterDragRef.current = true;
+    }
     const svg = svgRef.current;
     if (svg?.hasPointerCapture(event.pointerId)) {
       svg.releasePointerCapture(event.pointerId);
@@ -310,14 +353,20 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
   }, []);
 
   const addPointToSelectedShape = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
+    if (suppressMapClickAfterDragRef.current) {
+      suppressMapClickAfterDragRef.current = false;
+      return;
+    }
     if (mode !== 'edit') return;
     if (activeLayer === 'islands' && selectedIsland) {
-      const coords = getSvgCoordinates(event.clientX, event.clientY);
+      const p = getSvgCoordinates(event.clientX, event.clientY);
+      const coords = { x: Math.round(p.x), y: Math.round(p.y) };
       updateIslands((prev) => prev.map((island) => island.id === selectedIsland
         ? { ...island, points: [...island.points, coords] }
         : island));
     } else if (activeLayer === 'fir' && selectedFir) {
-      const coords = getSvgCoordinates(event.clientX, event.clientY);
+      const p = getSvgCoordinates(event.clientX, event.clientY);
+      const coords = { x: Math.round(p.x), y: Math.round(p.y) };
       updateFirZones((prev) => prev.map((fir) => fir.id === selectedFir
         ? { ...fir, points: [...fir.points, coords] }
         : fir));
@@ -453,12 +502,11 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
             </div>
           </div>
 
-          <div className="relative h-[78vh] min-h-[700px]">
+          <div className="relative h-[78vh] min-h-[700px] overscroll-contain [touch-action:none]">
             <svg
               ref={svgRef}
               viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
               className="h-full w-full bg-slate-950"
-              onWheel={handleWheel}
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
@@ -622,6 +670,7 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
 
               {selectedFirData && activeLayer === 'fir' && selectedFirData.points.map((point, pointIndex) => {
                 const next = selectedFirData.points[(pointIndex + 1) % selectedFirData.points.length];
+                const guideStroke = Math.max(fineStroke * 1.35, 1);
                 return (
                   <g key={`${selectedFirData.id}-${pointIndex}`}>
                     <line
@@ -630,17 +679,18 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                       x2={next.x}
                       y2={next.y}
                       stroke="#ffffff"
-                      strokeWidth={fineStroke}
-                      strokeDasharray={`${fineStroke * 2} ${fineStroke * 2}`}
-                      opacity="0.8"
+                      strokeWidth={guideStroke}
+                      strokeDasharray={`${guideStroke * 2} ${guideStroke * 2}`}
+                      opacity="0.85"
+                      pointerEvents="none"
                     />
                     <circle
                       cx={point.x}
                       cy={point.y}
-                      r={handleRadius * 1.6}
-                      fill={selectedFirData.borderColor}
-                      stroke="#fff"
-                      strokeWidth={fineStroke}
+                      r={shapeEditHandleR + 2}
+                      fill="transparent"
+                      pointerEvents="all"
+                      style={{ cursor: mode === 'edit' ? 'grab' : undefined }}
                       onPointerDown={(event) => {
                         if (mode !== 'edit') return;
                         event.stopPropagation();
@@ -654,12 +704,23 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                         deleteShapePoint('fir', selectedFirData.id, pointIndex);
                       }}
                     />
+                    <circle
+                      cx={point.x}
+                      cy={point.y}
+                      r={shapeEditHandleR}
+                      fill={selectedFirData.borderColor}
+                      stroke="#fff"
+                      strokeWidth={Math.max(fineStroke, 1)}
+                      style={{ cursor: mode === 'edit' ? 'grab' : undefined }}
+                      pointerEvents="none"
+                    />
                   </g>
                 );
               })}
 
               {selectedIslandData && activeLayer === 'islands' && selectedIslandData.points.map((point, pointIndex) => {
                 const next = selectedIslandData.points[(pointIndex + 1) % selectedIslandData.points.length];
+                const guideStroke = Math.max(fineStroke * 1.35, 1);
                 return (
                   <g key={`${selectedIslandData.id}-${pointIndex}`}>
                     <line
@@ -668,17 +729,18 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                       x2={next.x}
                       y2={next.y}
                       stroke="#ffffff"
-                      strokeWidth={fineStroke}
-                      strokeDasharray={`${fineStroke * 2} ${fineStroke * 2}`}
-                      opacity="0.75"
+                      strokeWidth={guideStroke}
+                      strokeDasharray={`${guideStroke * 2} ${guideStroke * 2}`}
+                      opacity="0.8"
+                      pointerEvents="none"
                     />
                     <circle
                       cx={point.x}
                       cy={point.y}
-                      r={handleRadius * 1.5}
-                      fill="#fff"
-                      stroke={selectedIslandData.fill}
-                      strokeWidth={fineStroke}
+                      r={shapeEditHandleR + 2}
+                      fill="transparent"
+                      pointerEvents="all"
+                      style={{ cursor: mode === 'edit' ? 'grab' : undefined }}
                       onPointerDown={(event) => {
                         if (mode !== 'edit') return;
                         event.stopPropagation();
@@ -691,6 +753,16 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                         event.preventDefault();
                         deleteShapePoint('island', selectedIslandData.id, pointIndex);
                       }}
+                    />
+                    <circle
+                      cx={point.x}
+                      cy={point.y}
+                      r={shapeEditHandleR}
+                      fill="#fff"
+                      stroke={selectedIslandData.fill}
+                      strokeWidth={Math.max(fineStroke, 1)}
+                      style={{ cursor: mode === 'edit' ? 'grab' : undefined }}
+                      pointerEvents="none"
                     />
                   </g>
                 );
@@ -880,9 +952,13 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                 <>
                   <strong className="text-slate-300">Waypoints / IFR&nbsp;:</strong> cliquez sur le disque coloré et glissez pour déplacer (mode édition). Les points sont au-dessus des aéroports pour pouvoir les saisir près d&apos;un hub.
                 </>
+              ) : activeLayer === 'fir' || activeLayer === 'islands' ? (
+                <>
+                  <strong className="text-slate-300">FIR / îles&nbsp;:</strong> grandes poignées (zone cliquable transparente autour du disque). Glisser pour déplacer un sommet. Clic sur la carte pour ajouter un sommet à la forme sélectionnée. Clic droit sur une poignée pour le supprimer. Zoomez si besoin pour plus de précision.
+                </>
               ) : (
                 <>
-                  Clic sur la carte pour ajouter un point à la forme sélectionnée. Clic droit sur une poignée pour supprimer un point.
+                  <strong className="text-slate-300">Aéroports&nbsp;:</strong> glisser le disque coloré pour repositionner. Les autres calques ont leurs propres contrôles ci-dessus.
                 </>
               )}
             </p>
