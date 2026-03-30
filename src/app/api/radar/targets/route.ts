@@ -6,8 +6,9 @@ import {
   toSVG,
   interpolatePosition,
   calculateHeading,
-  buildRoutePath,
+  buildRouteInfo,
   interpolateAlongRoute,
+  getFlightPhase,
   type RadarTarget,
 } from '@/lib/radar-utils';
 import { hasApprovedRadarAccessForUser } from '@/lib/radar-access';
@@ -110,7 +111,8 @@ export async function GET() {
       const routeStr = pv.strip_route || pv.route_ifr || null;
       const sidStr = pv.strip_sid_atc || pv.sid_depart || null;
       const starStr = pv.strip_star || pv.star_arrivee || null;
-      const routePath = buildRoutePath(pv.aeroport_depart, pv.aeroport_arrivee, routeStr, sidStr, starStr);
+      const routeInfo = buildRouteInfo(pv.aeroport_depart, pv.aeroport_arrivee, routeStr, sidStr, starStr);
+      const routePath = routeInfo.path;
       const hasRoute = routePath.length > 2;
 
       if (capturedPos && capturedPos.confidence > 0.3) {
@@ -162,6 +164,7 @@ export async function GET() {
         position,
         heading,
         progress,
+        flight_phase: getFlightPhase(routeInfo, progress),
         altitude: pv.strip_fl ?? null,
         altitude_unit: pv.strip_fl_unit ?? 'FL',
         squawk: pv.code_transpondeur ?? null,
@@ -192,6 +195,7 @@ export async function GET() {
         position: { x: uPos.x, y: uPos.y },
         heading: 0,
         progress: 0,
+        flight_phase: 'cruising',
         altitude: null,
         altitude_unit: '',
         squawk: null,

@@ -119,12 +119,115 @@ function buildOrbitPath(airportSVG: Point, island: { points: Point[] }): Point[]
   return [airportSVG, ...reordered, airportSVG];
 }
 
+// ─── Route info with SID/STAR phase boundaries ──────────────────────────────
+
+export type FlightPhase = 'departing' | 'cruising' | 'approaching' | 'arrived';
+
+export interface RouteInfo {
+  path: Point[];
+  /** progress (0-1) at which SID waypoints end (0 if no SID) */
+  sidEndProgress: number;
+  /** progress (0-1) at which STAR waypoints begin (1 if no STAR) */
+  starStartProgress: number;
+  isLocalFlight: boolean;
+}
+
+function tokenize(str: string): string[] {
+  return str
+    .toUpperCase()
+    .split(/[\s.,\-/]+/)
+    .filter((t) => t.length >= 2);
+}
+
 /**
- * Parse a route string (SID + route) and return SVG waypoints that exist on the map.
- * Tokens are separated by spaces, dots, dashes, or commas.
- * Departure and arrival airports are automatically placed at the start and end.
- * If departure === arrival, generates an orbit around the nearest island.
+ * Parse a route string (SID + route + STAR) and return SVG waypoints plus
+ * progress boundaries for SID/STAR phases.
+ *
+ * Rules:
+ *  - No SID & no STAR → straight line dep→arr (route_ifr ignored)
+ *  - SID only          → dep → SID waypoints → straight to arr
+ *  - STAR only         → dep → straight to 1st STAR point → STAR waypoints → arr
+ *  - SID + STAR        → dep → SID waypoints → route waypoints → STAR waypoints → arr
+ *  - dep === arr       → orbit around nearest island
  */
+export function buildRouteInfo(
+  depCode: string,
+  arrCode: string,
+  routeStr: string | null,
+  sidStr: string | null,
+  starStr: string | null,
+): RouteInfo {
+  const depPos = DEFAULT_POSITIONS[depCode];
+  const arrPos = DEFAULT_POSITIONS[arrCode];
+  const straight: RouteInfo = { path: [], sidEndProgress: 0, starStartProgress: 1, isLocalFlight: false };
+  if (!depPos || !arrPos) return straight;
+
+  const depSVG = toSVG(depPos);
+  const arrSVG = toSVG(arrPos);
+
+  if (depCode === arrCode) {
+    const island = findNearestIsland(depSVG);
+    const path = island ? buildOrbitPath(depSVG, island) : [depSVG, arrSVG];
+    return { path, sidEndProgress: 0, starStartProgress: 1, isLocalFlight: true };
+  }
+
+  if (!sidStr && !starStr) {
+    return { path: [depSVG, arrSVG], sidEndProgress: 0, starStartProgress: 1, isLocalFlight: false };
+  }
+
+  const depUp = depCode.toUpperCase();
+  const arrUp = arrCode.toUpperCase();
+  const hasSid = Boolean(sidStr);
+  const hasStar = Boolean(starStr);
+
+  const path: Point[] = [depSVG];
+  let lastPoint = depSVG;
+
+  let sidPointCount = 0;
+  let starFirstIdx = -1;
+
+  const addToken = (token: string, source: 'sid' | 'route' | 'star') => {
+    if (token === depUp || token === arrUp) return;
+    const wp = resolveWaypoint(token);
+    if (!wp) return;
+    if (calculateDistance(wp, lastPoint) < 1) return;
+    path.push(wp);
+    lastPoint = wp;
+    if (source === 'sid') sidPointCount = path.length - 1;
+    if (source === 'star' && starFirstIdx === -1) starFirstIdx = path.length - 1;
+  };
+
+  if (hasSid) {
+    for (const t of tokenize(sidStr!)) addToken(t, 'sid');
+  }
+
+  if (hasSid && hasStar && routeStr) {
+    for (const t of tokenize(routeStr)) addToken(t, 'route');
+  }
+
+  if (hasStar) {
+    for (const t of tokenize(starStr!)) addToken(t, 'star');
+  }
+
+  if (calculateDistance(arrSVG, lastPoint) > 1) {
+    path.push(arrSVG);
+  }
+
+  const dists = segmentDistances(path);
+  const totalDist = dists[dists.length - 1] || 1;
+
+  const sidEndProgress = sidPointCount > 0
+    ? dists[sidPointCount] / totalDist
+    : 0;
+
+  const starStartProgress = starFirstIdx > 0
+    ? dists[starFirstIdx] / totalDist
+    : 1;
+
+  return { path, sidEndProgress, starStartProgress, isLocalFlight: false };
+}
+
+/** Backward-compatible wrapper that returns just the path. */
 export function buildRoutePath(
   depCode: string,
   arrCode: string,
@@ -132,50 +235,26 @@ export function buildRoutePath(
   sidStr: string | null,
   starStr: string | null,
 ): Point[] {
-  const depPos = DEFAULT_POSITIONS[depCode];
-  const arrPos = DEFAULT_POSITIONS[arrCode];
-  if (!depPos || !arrPos) return [];
-
-  const depSVG = toSVG(depPos);
-  const arrSVG = toSVG(arrPos);
-
-  if (depCode === arrCode) {
-    const island = findNearestIsland(depSVG);
-    if (island) return buildOrbitPath(depSVG, island);
-    return [depSVG, arrSVG];
-  }
-
-  if (!routeStr && !sidStr && !starStr) {
-    return [depSVG, arrSVG];
-  }
-
-  const combined = [sidStr, routeStr, starStr].filter(Boolean).join(' ');
-  const tokens = combined
-    .toUpperCase()
-    .split(/[\s.,\-/]+/)
-    .filter((t) => t.length >= 2);
-
-  const depUp = depCode.toUpperCase();
-  const arrUp = arrCode.toUpperCase();
-
-  const path: Point[] = [depSVG];
-  let lastPoint = depSVG;
-
-  for (const token of tokens) {
-    if (token === depUp || token === arrUp) continue;
-    const wp = resolveWaypoint(token);
-    if (!wp) continue;
-    if (calculateDistance(wp, lastPoint) < 1) continue;
-    path.push(wp);
-    lastPoint = wp;
-  }
-
-  if (calculateDistance(arrSVG, lastPoint) > 1) {
-    path.push(arrSVG);
-  }
-
-  return path;
+  return buildRouteInfo(depCode, arrCode, routeStr, sidStr, starStr).path;
 }
+
+export function getFlightPhase(info: RouteInfo, progress: number): FlightPhase {
+  if (info.isLocalFlight) {
+    if (progress >= 0.97) return 'arrived';
+    return 'cruising';
+  }
+  if (progress >= 0.97) return 'arrived';
+  if (info.starStartProgress < 1 && progress >= info.starStartProgress) return 'approaching';
+  if (info.sidEndProgress > 0 && progress <= info.sidEndProgress) return 'departing';
+  return 'cruising';
+}
+
+export const PHASE_LABELS: Record<FlightPhase, string> = {
+  departing: 'Departing',
+  cruising: 'Cruising',
+  approaching: 'Approaching',
+  arrived: 'Arrived',
+};
 
 /** Cumulative distances along route segments. */
 function segmentDistances(path: Point[]): number[] {
@@ -233,6 +312,7 @@ export interface RadarTarget {
   position: Point;
   heading: number;
   progress: number;
+  flight_phase: FlightPhase;
   altitude: string | null;
   altitude_unit: string;
   squawk: string | null;

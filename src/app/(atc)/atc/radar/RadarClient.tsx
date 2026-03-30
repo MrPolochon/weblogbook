@@ -5,6 +5,7 @@ import {
   SVG_W, SVG_H,
   DEFAULT_POSITIONS, DEFAULT_ISLANDS, DEFAULT_FIR_ZONES,
   toSVG, detectSTCA, calculateHeading,
+  PHASE_LABELS,
   type RadarTarget, type STCAPair, type Point,
 } from '@/lib/radar-utils';
 import { DEFAULT_VORS, DEFAULT_WAYPOINTS } from '@/lib/cartography-data';
@@ -603,6 +604,7 @@ export default function RadarClient({ userId }: { userId: string }) {
                   <Row label="Squawk" value={selectedTarget.squawk ?? '????'} />
                   <Row label="Cap" value={`${selectedTarget.heading.toFixed(0)}°`} />
                   <Row label="Progression" value={`${(selectedTarget.progress * 100).toFixed(0)}%`} />
+                  <Row label="Phase" value={PHASE_LABELS[selectedTarget.flight_phase]} />
                   <Row label="Temps prévu" value={`${selectedTarget.temps_prev_min} min`} />
                   {selectedTarget.route && <Row label="Route" value={selectedTarget.route} />}
                   {selectedTarget.sid && <Row label="SID" value={selectedTarget.sid} />}

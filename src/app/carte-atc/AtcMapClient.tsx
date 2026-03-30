@@ -14,7 +14,7 @@ import {
   type Island,
   type Point,
 } from '@/lib/cartography-data';
-import { buildRoutePath, interpolateAlongRoute } from '@/lib/radar-utils';
+import { buildRouteInfo, interpolateAlongRoute, getFlightPhase, PHASE_LABELS, type FlightPhase } from '@/lib/radar-utils';
 
 interface AtcSession {
   aeroport: string;
@@ -51,6 +51,7 @@ interface RenderFlight extends MapFlight {
   y: number;
   heading: number;
   routePath: Point[];
+  flight_phase: FlightPhase;
   finished: boolean;
 }
 
@@ -177,10 +178,11 @@ export default function AtcMapClient() {
       const progressRaw = (now - startMs) / durationMs;
       const progress = Math.max(0, Math.min(1, progressRaw));
 
-      const routePath = buildRoutePath(
+      const routeInfo = buildRouteInfo(
         f.aeroport_depart, f.aeroport_arrivee,
         f.route, f.sid, f.star,
       );
+      const routePath = routeInfo.path;
       const hasRoute = routePath.length > 2;
 
       let x: number, y: number, heading: number;
@@ -208,6 +210,7 @@ export default function AtcMapClient() {
         y,
         heading,
         routePath,
+        flight_phase: getFlightPhase(routeInfo, progress),
         finished: progress >= 1,
       };
     })
@@ -604,9 +607,28 @@ export default function AtcMapClient() {
                   Durée prévue: {selectedFlight.temps_prev_min} min
                 </span>
               </div>
-              <p className="text-slate-400">
-                Progression: {Math.round(selectedFlight.progress * 100)}%
-              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400">
+                  Progression: {Math.round(selectedFlight.progress * 100)}%
+                </span>
+                <span
+                  className="px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide"
+                  style={{
+                    backgroundColor:
+                      selectedFlight.flight_phase === 'departing' ? 'rgba(59,130,246,0.2)' :
+                      selectedFlight.flight_phase === 'cruising' ? 'rgba(34,197,94,0.2)' :
+                      selectedFlight.flight_phase === 'approaching' ? 'rgba(245,158,11,0.2)' :
+                      'rgba(139,92,246,0.2)',
+                    color:
+                      selectedFlight.flight_phase === 'departing' ? '#60a5fa' :
+                      selectedFlight.flight_phase === 'cruising' ? '#4ade80' :
+                      selectedFlight.flight_phase === 'approaching' ? '#fbbf24' :
+                      '#a78bfa',
+                  }}
+                >
+                  {PHASE_LABELS[selectedFlight.flight_phase]}
+                </span>
+              </div>
               <p className="text-slate-300">
                 Pilote (ID site): {selectedFlight.pilote_identifiant || 'N/A'}
               </p>
