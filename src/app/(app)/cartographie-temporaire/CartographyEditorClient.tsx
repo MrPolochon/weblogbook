@@ -269,11 +269,19 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
         }));
       } else if (dragState.type === 'waypoint') {
         updateWaypoints((prev) => prev.map((waypoint) => waypoint.code === dragState.code
-          ? { ...waypoint, x: coords.x / 10.24, y: coords.y / 7.87 }
+          ? {
+            ...waypoint,
+            x: Math.max(0, Math.min(100, coords.x / 10.24)),
+            y: Math.max(0, Math.min(100, coords.y / 7.87)),
+          }
           : waypoint));
       } else if (dragState.type === 'vor') {
         updateVors((prev) => prev.map((vor) => vor.code === dragState.code
-          ? { ...vor, x: coords.x / 10.24, y: coords.y / 7.87 }
+          ? {
+            ...vor,
+            x: Math.max(0, Math.min(100, coords.x / 10.24)),
+            y: Math.max(0, Math.min(100, coords.y / 7.87)),
+          }
           : vor));
       }
       return;
@@ -295,8 +303,9 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
   const handlePointerUp = useCallback((event: React.PointerEvent<SVGSVGElement>) => {
     dragRef.current = null;
     panRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    const svg = svgRef.current;
+    if (svg?.hasPointerCapture(event.pointerId)) {
+      svg.releasePointerCapture(event.pointerId);
     }
   }, []);
 
@@ -505,57 +514,6 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                 />
               ))}
 
-              {data.waypoints.map((waypoint) => {
-                const x = waypoint.x * 10.24;
-                const y = waypoint.y * 7.87;
-                return (
-                  <g key={waypoint.code}>
-                    <circle
-                      cx={x}
-                      cy={y}
-                      r={handleRadius}
-                      fill={selectedWaypoint === waypoint.code ? '#d9f99d' : '#84cc16'}
-                      onPointerDown={(event) => {
-                        if (mode !== 'edit') return;
-                        event.stopPropagation();
-                        dragRef.current = { type: 'waypoint', code: waypoint.code };
-                        setSelectedWaypoint(waypoint.code);
-                      }}
-                    />
-                    <text x={x + 4} y={y - 3} fill="#d9f99d" fontSize={Math.max(5, viewBox.w / 165)} fontFamily="monospace">
-                      {waypoint.code}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {data.vors.map((vor) => {
-                const x = vor.x * 10.24;
-                const y = vor.y * 7.87;
-                return (
-                  <g key={vor.code}>
-                    <circle
-                      cx={x}
-                      cy={y}
-                      r={handleRadius * 2.2}
-                      fill="none"
-                      stroke={selectedVor === vor.code ? '#ffffff' : '#22d3ee'}
-                      strokeWidth={fineStroke}
-                      onPointerDown={(event) => {
-                        if (mode !== 'edit') return;
-                        event.stopPropagation();
-                        dragRef.current = { type: 'vor', code: vor.code };
-                        setSelectedVor(vor.code);
-                      }}
-                    />
-                    <circle cx={x} cy={y} r={handleRadius} fill="#22d3ee" />
-                    <text x={x + 7} y={y - 5} fill="#67e8f9" fontSize={Math.max(5, viewBox.w / 165)} fontFamily="monospace">
-                      {vor.code}
-                    </text>
-                  </g>
-                );
-              })}
-
               {Object.entries(data.positions).map(([code, pos]) => {
                 const airport = AEROPORTS_PTFS.find((item) => item.code === code);
                 const x = pos.x * 10.24;
@@ -579,11 +537,84 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                       onPointerDown={(event) => {
                         if (mode !== 'edit') return;
                         event.stopPropagation();
+                        try {
+                          svgRef.current?.setPointerCapture(event.pointerId);
+                        } catch {
+                          /* certains navigateurs */
+                        }
                         dragRef.current = { type: 'airport', code };
                       }}
                     />
                     <text x={x} y={y + 9} fill="#f8fafc" fontSize={Math.max(5, viewBox.w / 170)} fontFamily="monospace" textAnchor="middle">
                       {code}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* Waypoints / VOR au-dessus des aéroports : sinon les gros disques d&apos;aéroport volent le clic (ex. MOGTA près d&apos;un hub). */}
+              {data.waypoints.map((waypoint) => {
+                const x = waypoint.x * 10.24;
+                const y = waypoint.y * 7.87;
+                const grabR = Math.max(handleRadius * 1.8, 6);
+                return (
+                  <g key={waypoint.code}>
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={grabR}
+                      fill={selectedWaypoint === waypoint.code ? '#d9f99d' : '#84cc16'}
+                      fillOpacity={0.92}
+                      stroke={selectedWaypoint === waypoint.code ? '#facc15' : 'rgba(255,255,255,0.35)'}
+                      strokeWidth={fineStroke}
+                      style={{ cursor: mode === 'edit' ? 'grab' : undefined }}
+                      onPointerDown={(event) => {
+                        if (mode !== 'edit') return;
+                        event.stopPropagation();
+                        try {
+                          svgRef.current?.setPointerCapture(event.pointerId);
+                        } catch {
+                          /* ignore */
+                        }
+                        dragRef.current = { type: 'waypoint', code: waypoint.code };
+                        setSelectedWaypoint(waypoint.code);
+                      }}
+                    />
+                    <text x={x + 4} y={y - 3} fill="#d9f99d" fontSize={Math.max(5, viewBox.w / 165)} fontFamily="monospace" pointerEvents="none">
+                      {waypoint.code}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {data.vors.map((vor) => {
+                const x = vor.x * 10.24;
+                const y = vor.y * 7.87;
+                return (
+                  <g key={vor.code}>
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={handleRadius * 2.2}
+                      fill="none"
+                      stroke={selectedVor === vor.code ? '#ffffff' : '#22d3ee'}
+                      strokeWidth={fineStroke}
+                      style={{ cursor: mode === 'edit' ? 'grab' : undefined }}
+                      onPointerDown={(event) => {
+                        if (mode !== 'edit') return;
+                        event.stopPropagation();
+                        try {
+                          svgRef.current?.setPointerCapture(event.pointerId);
+                        } catch {
+                          /* ignore */
+                        }
+                        dragRef.current = { type: 'vor', code: vor.code };
+                        setSelectedVor(vor.code);
+                      }}
+                    />
+                    <circle cx={x} cy={y} r={handleRadius} fill="#22d3ee" pointerEvents="none" />
+                    <text x={x + 7} y={y - 5} fill="#67e8f9" fontSize={Math.max(5, viewBox.w / 165)} fontFamily="monospace" pointerEvents="none">
+                      {vor.code}
                     </text>
                   </g>
                 );
@@ -613,6 +644,9 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                       onPointerDown={(event) => {
                         if (mode !== 'edit') return;
                         event.stopPropagation();
+                        try {
+                          svgRef.current?.setPointerCapture(event.pointerId);
+                        } catch { /* ignore */ }
                         dragRef.current = { type: 'fir-point', id: selectedFirData.id, pointIndex };
                       }}
                       onContextMenu={(event) => {
@@ -648,6 +682,9 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                       onPointerDown={(event) => {
                         if (mode !== 'edit') return;
                         event.stopPropagation();
+                        try {
+                          svgRef.current?.setPointerCapture(event.pointerId);
+                        } catch { /* ignore */ }
                         dragRef.current = { type: 'island-point', id: selectedIslandData.id, pointIndex };
                       }}
                       onContextMenu={(event) => {
@@ -839,7 +876,15 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
             )}
 
             <p className="text-xs text-slate-400">
-              Clic sur la carte pour ajouter un point à la forme sélectionnée. Clic droit sur une poignée pour supprimer un point.
+              {activeLayer === 'waypoints' || activeLayer === 'vors' ? (
+                <>
+                  <strong className="text-slate-300">Waypoints / IFR&nbsp;:</strong> cliquez sur le disque coloré et glissez pour déplacer (mode édition). Les points sont au-dessus des aéroports pour pouvoir les saisir près d&apos;un hub.
+                </>
+              ) : (
+                <>
+                  Clic sur la carte pour ajouter un point à la forme sélectionnée. Clic droit sur une poignée pour supprimer un point.
+                </>
+              )}
             </p>
           </div>
 
