@@ -160,6 +160,11 @@ function routeTokens(str: string | null | undefined): string[] {
 }
 
 const BACKTRACK_EPS = 10;
+const ROUTE_AWAY_ARR_MAX = 10;
+const ROUTE_PROJECTED_RATIO_MAX = 2.35;
+const PROC_AWAY_ARR_MAX = 15;
+const PROC_PROJECTED_RATIO_MAX = 2.95;
+const UTURN_REJECT_DEG = 155;
 
 /** Évite d’enchaîner la route dépôt après le SID avec des fixes déjà passés (demi-tour vers le départ). */
 function isBacktrackTowardDeparture(prev: Point, cand: Point, dep: Point, arr: Point): boolean {
@@ -168,6 +173,89 @@ function isBacktrackTowardDeparture(prev: Point, cand: Point, dep: Point, arr: P
   const dPrevDep = calculateDistance(prev, dep);
   const dCandDep = calculateDistance(cand, dep);
   return dCandDep < dPrevDep - BACKTRACK_EPS && dCandArr > dPrevArr + BACKTRACK_EPS;
+}
+
+function turnAngleDeg(prevPrev: Point, prev: Point, cand: Point): number {
+  const ax = prev.x - prevPrev.x;
+  const ay = prev.y - prevPrev.y;
+  const bx = cand.x - prev.x;
+  const by = cand.y - prev.y;
+  const aLen = Math.hypot(ax, ay);
+  const bLen = Math.hypot(bx, by);
+  if (aLen < 1e-6 || bLen < 1e-6) return 0;
+  const dot = ax * bx + ay * by;
+  const cos = Math.max(-1, Math.min(1, dot / (aLen * bLen)));
+  return Math.acos(cos) * (180 / Math.PI);
+}
+
+/**
+ * Anti-spaghetti pour les segments "route" (hors SID/STAR):
+ * - rejette un point qui éloigne fortement de l'arrivée
+ * - rejette si le trajet projeté devient un détour trop grand vs direct
+ */
+function isIllogicalRouteLeg(
+  prev: Point,
+  cand: Point,
+  arr: Point,
+  directDist: number,
+  coveredDist: number,
+): boolean {
+  const dPrevArr = calculateDistance(prev, arr);
+  const dCandArr = calculateDistance(cand, arr);
+  if (dCandArr > dPrevArr + ROUTE_AWAY_ARR_MAX) return true;
+
+  const step = calculateDistance(prev, cand);
+  const projectedTotal = coveredDist + step + dCandArr;
+  return directDist > 0 && projectedTotal > directDist * ROUTE_PROJECTED_RATIO_MAX;
+}
+
+type LegSource = 'sid' | 'route' | 'star';
+
+/**
+ * Décide si le prochain point est pertinent (SID/ROUTE/STAR).
+ * Applique une logique "anti-illogique" globale: retour départ, détour trop long,
+ * éloignement excessif de la destination, demi-tour dur.
+ */
+function isPertinentNextLeg(
+  source: LegSource,
+  prevPrev: Point | null,
+  prev: Point,
+  cand: Point,
+  dep: Point,
+  arr: Point,
+  directDist: number,
+  coveredDist: number,
+  allowFirstSidLegException: boolean,
+): boolean {
+  const firstSidLeg = allowFirstSidLegException && source === 'sid' && !prevPrev;
+
+  if (!firstSidLeg && isBacktrackTowardDeparture(prev, cand, dep, arr)) {
+    return false;
+  }
+
+  const dPrevArr = calculateDistance(prev, arr);
+  const dCandArr = calculateDistance(cand, arr);
+  const awayLimit = source === 'route' ? ROUTE_AWAY_ARR_MAX : PROC_AWAY_ARR_MAX;
+  if (dCandArr > dPrevArr + awayLimit) {
+    return false;
+  }
+
+  const step = calculateDistance(prev, cand);
+  const projectedTotal = coveredDist + step + dCandArr;
+  const ratioLimit = source === 'route' ? ROUTE_PROJECTED_RATIO_MAX : PROC_PROJECTED_RATIO_MAX;
+  if (directDist > 0 && projectedTotal > directDist * ratioLimit) {
+    return false;
+  }
+
+  if (prevPrev) {
+    const angle = turnAngleDeg(prevPrev, prev, cand);
+    // U-turn net sans gain réel vers la destination => illogique.
+    if (angle >= UTURN_REJECT_DEG && dCandArr > dPrevArr - 2) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -212,12 +300,17 @@ export function buildRouteInfo(
     }
     const path: Point[] = [depSVG];
     let lastPoint = depSVG;
+    const directDist = calculateDistance(depSVG, arrSVG);
+    let coveredDist = 0;
     for (const t of routeTokens(routeStr)) {
       if (t === depUp || t === arrUp) continue;
       const wp = resolveWaypoint(t);
       if (!wp) continue;
       if (calculateDistance(wp, lastPoint) < 1) continue;
-      if (isBacktrackTowardDeparture(lastPoint, wp, depSVG, arrSVG)) continue;
+      const prevPrev = path.length >= 2 ? path[path.length - 2] : null;
+      if (!isPertinentNextLeg('route', prevPrev, lastPoint, wp, depSVG, arrSVG, directDist, coveredDist, false)) continue;
+      if (isIllogicalRouteLeg(lastPoint, wp, arrSVG, directDist, coveredDist)) continue;
+      coveredDist += calculateDistance(lastPoint, wp);
       path.push(wp);
       lastPoint = wp;
     }
@@ -233,6 +326,8 @@ export function buildRouteInfo(
 
   const path: Point[] = [depSVG];
   let lastPoint = depSVG;
+  const directDist = calculateDistance(depSVG, arrSVG);
+  let coveredDist = 0;
 
   let sidPointCount = 0;
   let starFirstIdx = -1;
@@ -243,12 +338,9 @@ export function buildRouteInfo(
     const wp = resolveWaypoint(token);
     if (!wp) return;
     if (calculateDistance(wp, lastPoint) < 1) return;
-    // Anti-trajets illogiques: évite les points qui repartent vers le départ
-    // alors qu'ils éloignent de l'arrivée (demi-tour/spaghetti).
-    // On autorise seulement le tout premier point SID pour ne pas casser
-    // certains départs publiés qui partent brièvement "dans le mauvais sens".
-    const isFirstSidLeg = source === 'sid' && path.length <= 1;
-    if (!isFirstSidLeg && isBacktrackTowardDeparture(lastPoint, wp, depSVG, arrSVG)) return;
+    const prevPrev = path.length >= 2 ? path[path.length - 2] : null;
+    if (!isPertinentNextLeg(source, prevPrev, lastPoint, wp, depSVG, arrSVG, directDist, coveredDist, true)) return;
+    coveredDist += calculateDistance(lastPoint, wp);
     path.push(wp);
     lastPoint = wp;
     if (source === 'sid') sidPointCount = path.length - 1;
