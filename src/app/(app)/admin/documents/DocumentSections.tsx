@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, createContext, useContext, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import {
   FolderOpen, FolderPlus, FileText, Plus, Pencil, Trash2, Upload, X,
   ChevronRight, ChevronDown as ChevronDownIcon, File, Image as ImageIcon, FileSpreadsheet,
@@ -401,13 +402,61 @@ function FolderNode({ node, depth }: { node: TreeNode; depth: number }) {
   async function uploadFile(file: globalThis.File) {
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('section_id', node.id);
-      const res = await fetch('/api/documents/upload', { method: 'POST', body: fd });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        alert(d.error || 'Erreur upload');
+      const supabase = createClient();
+      const prep = await fetch('/api/documents/upload/prepare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          section_id: node.id,
+          filename: file.name,
+          size: file.size,
+        }),
+      });
+      const prepRaw = await prep.text();
+      let prepJson: { error?: string; path?: string; token?: string } | null = null;
+      try {
+        prepJson = prepRaw ? JSON.parse(prepRaw) : null;
+      } catch {
+        prepJson = null;
+      }
+      if (!prep.ok) {
+        const msg = prepJson?.error || prepRaw || `Échec préparation (${prep.status})`;
+        alert(msg.trim() || 'Erreur upload');
+        return;
+      }
+      if (!prepJson?.path || !prepJson?.token) {
+        alert('Réponse serveur invalide (upload)');
+        return;
+      }
+      const { error: upErr } = await supabase.storage
+        .from('documents')
+        .uploadToSignedUrl(prepJson.path, prepJson.token, file, {
+          contentType: file.type || 'application/octet-stream',
+        });
+      if (upErr) {
+        alert(upErr.message || 'Échec envoi vers le stockage');
+        return;
+      }
+      const done = await fetch('/api/documents/upload/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          section_id: node.id,
+          storage_path: prepJson.path,
+          nom_original: file.name,
+          taille_bytes: file.size,
+        }),
+      });
+      const doneRaw = await done.text();
+      let doneJson: { error?: string } | null = null;
+      try {
+        doneJson = doneRaw ? JSON.parse(doneRaw) : null;
+      } catch {
+        doneJson = null;
+      }
+      if (!done.ok) {
+        const msg = doneJson?.error || doneRaw || `Échec enregistrement (${done.status})`;
+        alert(msg.trim() || 'Erreur upload');
         return;
       }
       setPendingFile(null);

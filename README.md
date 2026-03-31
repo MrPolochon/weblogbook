@@ -19,7 +19,7 @@ c:\Users\bonno\OneDrive\Bureau\Logbook\
    - Copier `env.example.txt` en `.env.local`
    - Remplir `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
    - **Auth** : Désactiver l’inscription publique (Dashboard > Authentication > Providers > Email > « Enable email signup » = off).
-   - **Storage** : Créer un bucket nommé `documents` (Dashboard > Storage > New bucket, nom `documents`, privé). Les uploads et téléchargements passent par l’API (service_role).
+   - **Storage** : Créer un bucket nommé `documents` (privé, ~20 Mo max par fichier). Vous pouvez exécuter `supabase/add_storage_documents.sql` dans l’éditeur SQL. Les téléchargements passent par l’API (URL signée) ; les **uploads admin** vont directement vers Storage (URL signée générée par l’API) pour éviter les limites de taille des requêtes sur l’hébergeur.
 4. **Base de données** : exécuter le script SQL dans `supabase/schema.sql` (éditeur SQL Supabase).
 5. **Lancer** :  
    `npm run dev`
