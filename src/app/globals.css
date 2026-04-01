@@ -64,17 +64,6 @@ body.easter-theme:not(.disable-easter-theme) .input {
   background: linear-gradient(180deg, rgba(56, 35, 90, 0.78), rgba(44, 28, 77, 0.68));
 }
 
-body.easter-theme:not(.disable-easter-theme).atc-admin-bg,
-body.easter-theme:not(.disable-easter-theme).atc-normal-bg,
-body.easter-theme:not(.disable-easter-theme).atc-light.atc-admin-bg,
-body.easter-theme:not(.disable-easter-theme).atc-light.atc-normal-bg {
-  background:
-    radial-gradient(circle at top left, rgba(250, 204, 21, 0.14), transparent 34%),
-    radial-gradient(circle at top right, rgba(244, 114, 182, 0.12), transparent 34%),
-    linear-gradient(180deg, #fbf4ff 0%, #fce7f3 100%) !important;
-  color: #3b0764 !important;
-}
-
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
