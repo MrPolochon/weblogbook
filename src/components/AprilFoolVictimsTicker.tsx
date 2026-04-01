@@ -1,15 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Radio } from 'lucide-react';
 import { getParisCalendarYear } from '@/lib/paris-date';
 
 const CHUNK_SIZE = 5;
 const POLL_MS = 45_000;
-const SCROLL_SEC = 50;
-/** Temps d’affichage d’un bloc avant de passer au suivant (identifiants toujours différents). */
+/** Temps d’affichage d’un groupe de noms avant de passer au suivant (jamais les mêmes identifiants entre paliers). */
 const CHUNK_SHOW_MS = 50_000;
-/** Entre la fin du dernier bloc et le retour au premier : pas de répétition immédiate du même groupe. */
+/** Pause entre la fin du dernier palier et le retour au premier. */
 const CYCLE_PAUSE_MS = 60_000;
 
 export default function AprilFoolVictimsTicker() {
@@ -18,6 +17,7 @@ export default function AprilFoolVictimsTicker() {
   const [chunkIndex, setChunkIndex] = useState(0);
   const [phase, setPhase] = useState<'show' | 'pause'>('show');
   const year = getParisCalendarYear();
+  const chunksRef = useRef<string[][]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,12 +62,9 @@ export default function AprilFoolVictimsTicker() {
     return out;
   }, [identifiers]);
 
-  const chunksKey = identifiers.join('\0');
+  chunksRef.current = chunks;
 
-  useEffect(() => {
-    setChunkIndex(0);
-    setPhase('show');
-  }, [chunksKey]);
+  const chunksKey = identifiers.join('\0');
 
   useEffect(() => {
     if (fetchState !== 'ok' || chunks.length === 0) return;
@@ -75,43 +72,48 @@ export default function AprilFoolVictimsTicker() {
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout>;
 
-    const loop = (index: number, afterCyclePause: boolean) => {
+    setChunkIndex(0);
+    setPhase('show');
+
+    const scheduleAfterCyclePause = () => {
       if (cancelled) return;
+      setPhase('pause');
+      timeoutId = setTimeout(() => {
+        if (cancelled) return;
+        setPhase('show');
+        setChunkIndex(0);
+        scheduleChunk(0);
+      }, CYCLE_PAUSE_MS);
+    };
 
-      if (afterCyclePause) {
-        setPhase('pause');
-        timeoutId = setTimeout(() => {
-          if (cancelled) return;
-          setPhase('show');
-          setChunkIndex(0);
-          loop(0, false);
-        }, CYCLE_PAUSE_MS);
-        return;
-      }
-
+    const scheduleChunk = (index: number) => {
+      if (cancelled) return;
       setPhase('show');
       setChunkIndex(index);
 
       timeoutId = setTimeout(() => {
         if (cancelled) return;
+        const len = chunksRef.current.length;
         const next = index + 1;
-        if (next >= chunks.length) {
-          loop(0, true);
+        if (next >= len) {
+          scheduleAfterCyclePause();
         } else {
-          loop(next, false);
+          scheduleChunk(next);
         }
       }, CHUNK_SHOW_MS);
     };
 
-    loop(0, false);
+    scheduleChunk(0);
 
     return () => {
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [fetchState, chunks.length, chunksKey]);
+  }, [fetchState, chunksKey, chunks.length]);
 
-  const currentChunk = chunks[chunkIndex] ?? [];
+  const safeIndex =
+    chunks.length === 0 ? 0 : Math.min(Math.max(0, chunkIndex), chunks.length - 1);
+  const currentChunk = chunks[safeIndex] ?? [];
 
   let line: string;
   if (fetchState === 'loading') {
@@ -123,50 +125,44 @@ export default function AprilFoolVictimsTicker() {
     line =
       "Aucun identifiant dans le panneau pour l'instant — les courageux apparaîtront ici après la blague.";
   } else if (phase === 'pause') {
-    line =
-      'Pause palmarès — les mêmes blocs ne se répètent pas tout de suite · reprise dans une minute…';
+    line = 'Palmarès · courte pause · reprise sous peu';
   } else {
     line = `Ils sont tombés dans le panneau : ${currentChunk.join(' · ')}`;
   }
 
-  const useMarquee =
-    fetchState === 'ok' && identifiers.length > 0 && phase === 'show' && currentChunk.length > 0;
-
-  /** Une ligne dupliquée pour l’animation -50 % ; un seul bloc de noms à la fois. */
-  const marqueeLine = useMemo(
-    () => (
-      <span className="text-xs font-medium tracking-wide text-amber-100/90 sm:text-sm">
-        <span className="font-semibold text-amber-300/90">POISSON D&apos;AVRIL {year}</span>
-        {' — '}
-        <span className="font-mono">{`Ils sont tombés dans le panneau : ${currentChunk.join(' · ')}`}</span>
-        <span className="mx-6 text-amber-500/60">•</span>
-      </span>
-    ),
-    [currentChunk, year],
-  );
+  const showPalier =
+    fetchState === 'ok' &&
+    identifiers.length > 0 &&
+    phase === 'show' &&
+    currentChunk.length > 0 &&
+    chunks.length > 1;
 
   return (
     <div className="flex w-full items-center gap-2 overflow-hidden border-b border-amber-500/30 bg-gradient-to-r from-amber-950/50 via-slate-950/90 to-amber-950/50 px-2 py-1.5 backdrop-blur-md">
       <Radio className="h-4 w-4 shrink-0 text-amber-400 animate-pulse" aria-hidden />
       <div className="min-w-0 flex-1 overflow-hidden py-0.5">
-        {useMarquee ? (
-          <div
-            key={`marquee-${chunkIndex}-${currentChunk.join('|')}`}
-            className="flex w-max whitespace-nowrap"
-            style={{ animation: `april-fool-scroll ${SCROLL_SEC}s linear infinite` }}
-          >
-            <div className="flex w-max shrink-0 whitespace-nowrap">{marqueeLine}</div>
-            <div className="flex w-max shrink-0 whitespace-nowrap" aria-hidden>
-              {marqueeLine}
-            </div>
-          </div>
-        ) : (
-          <p className="text-center text-xs font-medium text-amber-100/90 sm:text-sm">
-            <span className="font-semibold text-amber-300/90">POISSON D&apos;AVRIL {year}</span>
-            {' — '}
-            <span className="font-mono">{line}</span>
-          </p>
-        )}
+        <p
+          className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-center text-xs font-medium text-amber-100/90 sm:flex-nowrap sm:text-sm"
+          title={phase === 'show' && currentChunk.length > 0 ? currentChunk.join(' · ') : undefined}
+        >
+          <span className="font-semibold text-amber-300/90">POISSON D&apos;AVRIL {year}</span>
+          {showPalier ? (
+            <span
+              className="rounded border border-amber-500/25 bg-amber-950/40 px-1.5 py-0 text-[10px] font-medium tabular-nums text-amber-400/90 sm:text-[11px]"
+              aria-label={`Palier ${safeIndex + 1} sur ${chunks.length}`}
+            >
+              Palier {safeIndex + 1}/{chunks.length}
+            </span>
+          ) : null}
+          <span className="font-mono leading-snug sm:truncate">
+            <span
+              key={`${phase}-${safeIndex}-${currentChunk.join('|')}`}
+              className="april-fool-ticker-line inline"
+            >
+              {line}
+            </span>
+          </span>
+        </p>
       </div>
     </div>
   );
