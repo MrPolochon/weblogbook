@@ -13,8 +13,6 @@ import AtcAtisTicker from '@/components/AtcAtisTicker';
 import InactivityLogout from '@/components/InactivityLogout';
 import AtcSessionRealtimeGuard from '@/components/AtcSessionRealtimeGuard';
 import { hasApprovedRadarAccessForUser } from '@/lib/radar-access';
-import AprilFoolGate from '@/components/AprilFoolGate';
-
 export default async function AtcLayout({
   children,
 }: {
@@ -93,33 +91,31 @@ export default async function AtcLayout({
 
   return (
     <AtcThemeProvider>
-      <AprilFoolGate>
-        <div className="min-h-screen flex flex-col">
-          <AtcSessionRealtimeGuard userId={user.id} enService={enService} />
-          <InactivityLogout />
-          <AutoRefresh intervalSeconds={15} />
-          <AtcModeBg isAdmin={isAdmin} />
-          <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} radarBeta={radarAccess} />
-          <AtcAtisTicker />
-          <div className="flex flex-1 w-full min-h-0">
-            {enService && session && (
-              <AtcLeftSidebar plansAuto={plansAuto} plansOrphelins={plansOrphelins} sessionAeroport={session.aeroport} sessionPosition={session.position} />
-            )}
-            <main className="flex-1 min-w-0 w-full px-4 sm:px-5 lg:px-6 py-6 overflow-x-auto">{children}</main>
-            {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} />}
-          </div>
+      <div className="min-h-screen flex flex-col">
+        <AtcSessionRealtimeGuard userId={user.id} enService={enService} />
+        <InactivityLogout />
+        <AutoRefresh intervalSeconds={15} />
+        <AtcModeBg isAdmin={isAdmin} />
+        <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} radarBeta={radarAccess} />
+        <AtcAtisTicker />
+        <div className="flex flex-1 w-full min-h-0">
           {enService && session && (
-            <>
-              <AtcAtisButton aeroport={session.aeroport} position={session.position} userId={user.id} />
-              <AtcTelephone 
-                aeroport={session.aeroport} 
-                position={session.position} 
-                userId={user.id} 
-              />
-            </>
+            <AtcLeftSidebar plansAuto={plansAuto} plansOrphelins={plansOrphelins} sessionAeroport={session.aeroport} sessionPosition={session.position} />
           )}
+          <main className="flex-1 min-w-0 w-full px-4 sm:px-5 lg:px-6 py-6 overflow-x-auto">{children}</main>
+          {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} />}
         </div>
-      </AprilFoolGate>
+        {enService && session && (
+          <>
+            <AtcAtisButton aeroport={session.aeroport} position={session.position} userId={user.id} />
+            <AtcTelephone 
+              aeroport={session.aeroport} 
+              position={session.position} 
+              userId={user.id} 
+            />
+          </>
+        )}
+      </div>
     </AtcThemeProvider>
   );
 }

@@ -3,7 +3,6 @@ import { Suspense } from 'react';
 import NavigationProgress from '@/components/NavigationProgress';
 import EasterThemeController from '@/components/EasterThemeController';
 import ThemedToaster from '@/components/ThemedToaster';
-import AprilFoolVictimsTicker from '@/components/AprilFoolVictimsTicker';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -24,7 +23,6 @@ export default function RootLayout({
           <NavigationProgress />
         </Suspense>
         <ThemedToaster />
-        <AprilFoolVictimsTicker />
         {children}
       </body>
     </html>

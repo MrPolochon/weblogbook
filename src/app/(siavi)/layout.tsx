@@ -7,8 +7,6 @@ import SiaviModeBg from './SiaviModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import SiaviTelephone from './SiaviTelephone';
 import InactivityLogout from '@/components/InactivityLogout';
-import AprilFoolGate from '@/components/AprilFoolGate';
-
 export default async function SiaviLayout({
   children,
 }: {
@@ -60,81 +58,79 @@ export default async function SiaviLayout({
   }
 
   return (
-    <AprilFoolGate>
-      <div className="min-h-screen flex flex-col">
-        <InactivityLogout />
-        <AutoRefresh intervalSeconds={15} />
-        <SiaviModeBg isAdmin={isAdmin} />
-        <SiaviNavBar 
-          isAdmin={isAdmin} 
-          enService={enService} 
-          estAfis={estAfis}
-          sessionInfo={enService && session ? { aeroport: session.aeroport, started_at: session.started_at } : null} 
-          messagesNonLusCount={messagesNonLusCount || 0} 
-        />
-        <div className="flex flex-1 w-full min-h-0">
-          {enService && estAfis && (
-            <aside className="w-52 flex-shrink-0 border-r border-red-400/30 bg-gradient-to-b from-red-950/50 to-red-950/30 py-4 px-3 hidden md:flex flex-col backdrop-blur-sm">
-              <div className="mb-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-red-400 px-2 mb-2 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                  Non surveillés
-                </p>
-                {plansAuto.length === 0 ? (
-                  <span className="text-red-300/60 text-sm px-2 italic">Aucun vol</span>
-                ) : (
-                  <ul className="space-y-1">
-                    {plansAuto.map((p) => (
-                      <li key={p.id}>
-                        <Link
-                          href={`/siavi/plan/${p.id}`}
-                          className="block truncate text-sm font-medium text-red-200 hover:text-white hover:bg-red-500/30 rounded-lg px-3 py-2 transition-all duration-200"
-                          title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
-                        >
-                          <span className="font-semibold">{p.numero_vol}</span>
-                          <span className="text-red-300/80 ml-1">{p.aeroport_depart}→{p.aeroport_arrivee}</span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div className="border-t border-red-500/20 pt-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 px-2 mb-2 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  Mes surveillés
-                </p>
-                {plansSurveilles.length === 0 ? (
-                  <span className="text-red-300/60 text-sm px-2 italic">Aucun vol</span>
-                ) : (
-                  <ul className="space-y-1">
-                    {plansSurveilles.map((p) => (
-                      <li key={p.id}>
-                        <Link
-                          href={`/siavi/plan/${p.id}`}
-                          className="block truncate text-sm font-medium text-emerald-200 hover:text-white hover:bg-emerald-500/30 rounded-lg px-3 py-2 transition-all duration-200"
-                          title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
-                        >
-                          <span className="font-semibold">{p.numero_vol}</span>
-                          <span className="text-emerald-300/80 ml-1">{p.aeroport_depart}→{p.aeroport_arrivee}</span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </aside>
-          )}
-          <main className="flex-1 min-w-0 mx-auto w-full max-w-7xl px-4 sm:px-5 lg:px-6 py-8">{children}</main>
-        </div>
-        {enService && session && (
-          <SiaviTelephone 
-            aeroport={session.aeroport} 
-            estAfis={estAfis}
-            userId={user.id} 
-          />
+    <div className="min-h-screen flex flex-col">
+      <InactivityLogout />
+      <AutoRefresh intervalSeconds={15} />
+      <SiaviModeBg isAdmin={isAdmin} />
+      <SiaviNavBar 
+        isAdmin={isAdmin} 
+        enService={enService} 
+        estAfis={estAfis}
+        sessionInfo={enService && session ? { aeroport: session.aeroport, started_at: session.started_at } : null} 
+        messagesNonLusCount={messagesNonLusCount || 0} 
+      />
+      <div className="flex flex-1 w-full min-h-0">
+        {enService && estAfis && (
+          <aside className="w-52 flex-shrink-0 border-r border-red-400/30 bg-gradient-to-b from-red-950/50 to-red-950/30 py-4 px-3 hidden md:flex flex-col backdrop-blur-sm">
+            <div className="mb-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-red-400 px-2 mb-2 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                Non surveillés
+              </p>
+              {plansAuto.length === 0 ? (
+                <span className="text-red-300/60 text-sm px-2 italic">Aucun vol</span>
+              ) : (
+                <ul className="space-y-1">
+                  {plansAuto.map((p) => (
+                    <li key={p.id}>
+                      <Link
+                        href={`/siavi/plan/${p.id}`}
+                        className="block truncate text-sm font-medium text-red-200 hover:text-white hover:bg-red-500/30 rounded-lg px-3 py-2 transition-all duration-200"
+                        title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
+                      >
+                        <span className="font-semibold">{p.numero_vol}</span>
+                        <span className="text-red-300/80 ml-1">{p.aeroport_depart}→{p.aeroport_arrivee}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="border-t border-red-500/20 pt-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-emerald-400 px-2 mb-2 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Mes surveillés
+              </p>
+              {plansSurveilles.length === 0 ? (
+                <span className="text-red-300/60 text-sm px-2 italic">Aucun vol</span>
+              ) : (
+                <ul className="space-y-1">
+                  {plansSurveilles.map((p) => (
+                    <li key={p.id}>
+                      <Link
+                        href={`/siavi/plan/${p.id}`}
+                        className="block truncate text-sm font-medium text-emerald-200 hover:text-white hover:bg-emerald-500/30 rounded-lg px-3 py-2 transition-all duration-200"
+                        title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
+                      >
+                        <span className="font-semibold">{p.numero_vol}</span>
+                        <span className="text-emerald-300/80 ml-1">{p.aeroport_depart}→{p.aeroport_arrivee}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </aside>
         )}
+        <main className="flex-1 min-w-0 mx-auto w-full max-w-7xl px-4 sm:px-5 lg:px-6 py-8">{children}</main>
       </div>
-    </AprilFoolGate>
+      {enService && session && (
+        <SiaviTelephone 
+          aeroport={session.aeroport} 
+          estAfis={estAfis}
+          userId={user.id} 
+        />
+      )}
+    </div>
   );
 }
