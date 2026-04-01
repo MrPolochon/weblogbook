@@ -13,6 +13,11 @@ CREATE INDEX IF NOT EXISTS idx_april_fool_ack_year ON public.april_fool_ack(year
 CREATE INDEX IF NOT EXISTS idx_april_fool_ack_year_ack_at ON public.april_fool_ack(year, ack_at);
 
 ALTER TABLE public.april_fool_ack ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.april_fool_ack FORCE ROW LEVEL SECURITY;
+
+-- Évite l’exposition via la clé anon (API PostgREST) : lecture palmarès = route serveur (service_role) uniquement.
+REVOKE ALL ON TABLE public.april_fool_ack FROM anon;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.april_fool_ack TO authenticated;
 
 DROP POLICY IF EXISTS "april_fool_ack_insert_own" ON public.april_fool_ack;
 CREATE POLICY "april_fool_ack_insert_own" ON public.april_fool_ack
@@ -20,9 +25,9 @@ CREATE POLICY "april_fool_ack_insert_own" ON public.april_fool_ack
   WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "april_fool_ack_select_authenticated" ON public.april_fool_ack;
-CREATE POLICY "april_fool_ack_select_authenticated" ON public.april_fool_ack
+CREATE POLICY "april_fool_ack_select_own" ON public.april_fool_ack
   FOR SELECT TO authenticated
-  USING (true);
+  USING (auth.uid() = user_id);
 
 -- Upsert = UPDATE en cas de conflit
 DROP POLICY IF EXISTS "april_fool_ack_update_own" ON public.april_fool_ack;
