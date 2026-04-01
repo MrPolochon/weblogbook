@@ -8,6 +8,7 @@ import AdminModeBg from '@/components/AdminModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import InactivityLogout from '@/components/InactivityLogout';
 import AprilFoolGate from '@/components/AprilFoolGate';
+import AprilFoolVictimsTicker from '@/components/AprilFoolVictimsTicker';
 
 export default async function AppLayout({
   children,
@@ -169,6 +170,7 @@ export default async function AppLayout({
         <AutoRefresh intervalSeconds={30} />
         <AdminModeBg />
         <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} isReparateur={isReparateur} pendingVolsCount={pendingVolsCount} adminPlansEnAttenteCount={adminPlansEnAttenteCount} adminPasswordResetCount={adminPasswordResetCount} adminAeroschoolCount={adminAeroschoolCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} allianceInvitationsCount={allianceInvitationsCount} />
+        <AprilFoolVictimsTicker />
         {plansNonCloturesCount > 0 && (
           <div className="border-b border-amber-400/35 bg-gradient-to-r from-amber-500/10 via-orange-400/15 to-amber-500/10 backdrop-blur-md">
             <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-center gap-3 flex-wrap">

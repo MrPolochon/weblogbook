@@ -106,6 +106,11 @@ export default function AprilFoolGate({ children }: AprilFoolGateProps) {
   const handleContinue = () => {
     const { year } = getParisDateParts();
     localStorage.setItem(getStorageKey(year), '1');
+    void fetch('/api/april-fool/ack', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year }),
+    }).catch(() => {});
     let stored: string | null = null;
     try {
       stored = sessionStorage.getItem(APRIL_FOOL_RETURN_PATH_KEY);
