@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import {
   APRIL_FOOL_RETURN_PATH_KEY,
   getAprilFoolErrorPathForPathname,
@@ -17,6 +18,11 @@ type GatePhase = 'checking' | 'hidden' | 'fake-error' | 'reveal';
 const PARIS_TIMEZONE = 'Europe/Paris';
 const REQUIRED_CLICKS = 4;
 const ERROR_CODE = 'ERR-ACCT-NOTFOUND-404';
+
+const APRIL_FOOL_TOAST_OPTS = {
+  position: 'top-center' as const,
+  duration: 2800,
+};
 
 function getParisDateParts() {
   const formatter = new Intl.DateTimeFormat('fr-FR', {
@@ -77,16 +83,25 @@ export default function AprilFoolGate({ children }: AprilFoolGateProps) {
     router.replace(target);
   }, [phase, pathname, router]);
 
-  const handleErrorCodeClick = () => {
-    if (phase !== 'fake-error') return;
-    setClickCount((previous) => {
-      const next = previous + 1;
-      if (next >= REQUIRED_CLICKS) {
-        setPhase('reveal');
-      }
-      return next;
-    });
-  };
+  const handleFakeErrorScreenPointerDown = useCallback(
+    (_e: React.PointerEvent) => {
+      if (phase !== 'fake-error') return;
+      setClickCount((previous) => {
+        const next = previous + 1;
+        if (next === 1) {
+          toast('oh un clic', APRIL_FOOL_TOAST_OPTS);
+        } else if (next === 2) {
+          toast('arete sa chatouille', APRIL_FOOL_TOAST_OPTS);
+        } else if (next === 3) {
+          toast('putain tu va areter', APRIL_FOOL_TOAST_OPTS);
+        } else if (next >= REQUIRED_CLICKS) {
+          setPhase('reveal');
+        }
+        return next;
+      });
+    },
+    [phase],
+  );
 
   const handleContinue = () => {
     const { year } = getParisDateParts();
@@ -134,7 +149,11 @@ export default function AprilFoolGate({ children }: AprilFoolGateProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black px-6">
+    <div
+      className="fixed inset-0 z-[10050] flex cursor-default items-center justify-center bg-black px-6"
+      onPointerDownCapture={handleFakeErrorScreenPointerDown}
+      role="presentation"
+    >
       <div className="w-full max-w-3xl rounded-2xl border border-red-500/25 bg-slate-950 p-7 shadow-2xl md:p-10">
         <p className="text-xs uppercase tracking-[0.3em] text-red-300/80">Incident critique</p>
         <h1 className="mt-4 text-3xl font-bold text-red-100 md:text-4xl">Erreur de restauration des comptes</h1>
@@ -158,9 +177,7 @@ export default function AprilFoolGate({ children }: AprilFoolGateProps) {
           </p>
           <p className="mt-2 font-mono text-[13px] text-slate-400">
             <span className="text-slate-500">Code incident : </span>
-            <span className="cursor-text select-all text-slate-300" onClick={handleErrorCodeClick}>
-              {ERROR_CODE}
-            </span>
+            <span className="cursor-text select-all text-slate-300">{ERROR_CODE}</span>
           </p>
         </div>
       </div>
