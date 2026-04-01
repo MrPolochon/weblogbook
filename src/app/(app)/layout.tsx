@@ -7,6 +7,7 @@ import NavBar from '@/components/NavBar';
 import AdminModeBg from '@/components/AdminModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import InactivityLogout from '@/components/InactivityLogout';
+import AprilFoolGate from '@/components/AprilFoolGate';
 
 export default async function AppLayout({
   children,
@@ -162,27 +163,29 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <InactivityLogout />
-      <AutoRefresh intervalSeconds={30} />
-      <AdminModeBg />
-      <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} isReparateur={isReparateur} pendingVolsCount={pendingVolsCount} adminPlansEnAttenteCount={adminPlansEnAttenteCount} adminPasswordResetCount={adminPasswordResetCount} adminAeroschoolCount={adminAeroschoolCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} allianceInvitationsCount={allianceInvitationsCount} />
-      {plansNonCloturesCount > 0 && (
-        <div className="border-b border-amber-400/35 bg-gradient-to-r from-amber-500/10 via-orange-400/15 to-amber-500/10 backdrop-blur-md">
-          <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/30">
-              <Bell className="h-4 w-4 flex-shrink-0 text-amber-400 animate-pulse-soft" />
-              <span className="text-amber-100 text-sm font-medium">
-                {plansNonCloturesCount} plan{plansNonCloturesCount > 1 ? 's' : ''} de vol non clôturé{plansNonCloturesCount > 1 ? 's' : ''}
-              </span>
+    <AprilFoolGate>
+      <div className="min-h-screen flex flex-col">
+        <InactivityLogout />
+        <AutoRefresh intervalSeconds={30} />
+        <AdminModeBg />
+        <NavBar isAdmin={isAdmin} isArmee={isArmee} isPdg={isPdg} hasCompagnie={hasCompagnie} isIfsa={isIfsa} isReparateur={isReparateur} pendingVolsCount={pendingVolsCount} adminPlansEnAttenteCount={adminPlansEnAttenteCount} adminPasswordResetCount={adminPasswordResetCount} adminAeroschoolCount={adminAeroschoolCount} volsAConfirmerCount={volsAConfirmerCount} messagesNonLusCount={messagesNonLusCount} invitationsCount={invitationsCount} signalementsNouveauxCount={signalementsNouveauxCount} allianceInvitationsCount={allianceInvitationsCount} />
+        {plansNonCloturesCount > 0 && (
+          <div className="border-b border-amber-400/35 bg-gradient-to-r from-amber-500/10 via-orange-400/15 to-amber-500/10 backdrop-blur-md">
+            <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/30">
+                <Bell className="h-4 w-4 flex-shrink-0 text-amber-400 animate-pulse-soft" />
+                <span className="text-amber-100 text-sm font-medium">
+                  {plansNonCloturesCount} plan{plansNonCloturesCount > 1 ? 's' : ''} de vol non clôturé{plansNonCloturesCount > 1 ? 's' : ''}
+                </span>
+              </div>
+              <Link href="/logbook/plans-vol" className="text-sm font-semibold text-amber-200 hover:text-amber-100 transition-colors px-3 py-1 rounded-full hover:bg-amber-500/20">
+                Clôturer maintenant →
+              </Link>
             </div>
-            <Link href="/logbook/plans-vol" className="text-sm font-semibold text-amber-200 hover:text-amber-100 transition-colors px-3 py-1 rounded-full hover:bg-amber-500/20">
-              Clôturer maintenant →
-            </Link>
           </div>
-        </div>
-      )}
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-5 lg:px-6 py-8">{children}</main>
-    </div>
+        )}
+        <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-5 lg:px-6 py-8">{children}</main>
+      </div>
+    </AprilFoolGate>
   );
 }
