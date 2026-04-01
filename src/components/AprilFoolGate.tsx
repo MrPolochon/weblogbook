@@ -1,6 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import {
+  APRIL_FOOL_RETURN_PATH_KEY,
+  getAprilFoolErrorPathForPathname,
+  resolveAprilFoolReturnPath,
+} from '@/lib/april-fool-paths';
 
 type AprilFoolGateProps = {
   children: React.ReactNode;
@@ -33,13 +39,10 @@ function getStorageKey(year: number) {
 }
 
 export default function AprilFoolGate({ children }: AprilFoolGateProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [phase, setPhase] = useState<GatePhase>('checking');
   const [clickCount, setClickCount] = useState(0);
-
-  const remainingClicks = useMemo(
-    () => Math.max(0, REQUIRED_CLICKS - clickCount),
-    [clickCount],
-  );
 
   useEffect(() => {
     const { day, month, year } = getParisDateParts();
@@ -62,6 +65,18 @@ export default function AprilFoolGate({ children }: AprilFoolGateProps) {
     };
   }, [phase]);
 
+  useEffect(() => {
+    if (phase !== 'fake-error') return;
+    const target = getAprilFoolErrorPathForPathname(pathname);
+    if (pathname === target) return;
+    try {
+      sessionStorage.setItem(APRIL_FOOL_RETURN_PATH_KEY, pathname);
+    } catch {
+      /* quota / private mode */
+    }
+    router.replace(target);
+  }, [phase, pathname, router]);
+
   const handleErrorCodeClick = () => {
     if (phase !== 'fake-error') return;
     setClickCount((previous) => {
@@ -76,6 +91,15 @@ export default function AprilFoolGate({ children }: AprilFoolGateProps) {
   const handleContinue = () => {
     const { year } = getParisDateParts();
     localStorage.setItem(getStorageKey(year), '1');
+    let stored: string | null = null;
+    try {
+      stored = sessionStorage.getItem(APRIL_FOOL_RETURN_PATH_KEY);
+      sessionStorage.removeItem(APRIL_FOOL_RETURN_PATH_KEY);
+    } catch {
+      /* ignore */
+    }
+    const returnPath = resolveAprilFoolReturnPath(pathname, stored);
+    router.replace(returnPath);
     setPhase('hidden');
   };
 
@@ -94,8 +118,8 @@ export default function AprilFoolGate({ children }: AprilFoolGateProps) {
           <p className="text-xs uppercase tracking-[0.4em] text-emerald-300/80">Annonce officielle</p>
           <h1 className="mt-4 text-4xl font-black text-white md:text-6xl">POISSON D&apos;AVRIL !</h1>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-slate-200 md:text-lg">
-            J&apos;espere que vous avez apprecie la blague. Au nom de tout le staff, nous vous souhaitons
-            une excellente Semaine sainte et de joyeuses Paques en avance !
+            J&apos;espère que vous avez apprécié la blague. Au nom de tout le staff, nous vous souhaitons
+            une excellente Semaine sainte et de joyeuses Pâques en avance !
           </p>
           <button
             type="button"
@@ -111,29 +135,34 @@ export default function AprilFoolGate({ children }: AprilFoolGateProps) {
 
   return (
     <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black px-6">
-      <div className="w-full max-w-3xl rounded-2xl border border-red-500/30 bg-slate-950 p-7 shadow-2xl md:p-10">
+      <div className="w-full max-w-3xl rounded-2xl border border-red-500/25 bg-slate-950 p-7 shadow-2xl md:p-10">
         <p className="text-xs uppercase tracking-[0.3em] text-red-300/80">Incident critique</p>
         <h1 className="mt-4 text-3xl font-bold text-red-100 md:text-4xl">Erreur de restauration des comptes</h1>
         <p className="mt-6 text-base leading-relaxed text-slate-300">
-          Une erreur majeure a ete detectee lors de la synchronisation des donnees. Certains comptes sont
-          actuellement introuvables ou marques comme supprimes. Les services economiques et les flottes
-          ont ete temporairement desactives pendant l&apos;investigation.
+          Une erreur majeure a été détectée lors de la synchronisation des données. Certains comptes sont
+          actuellement introuvables ou marqués comme supprimés. Les services économiques et les flottes
+          ont été temporairement désactivés pendant l&apos;enquête.
         </p>
         <p className="mt-4 text-sm text-slate-400">
-          Ne fermez pas cette page. Une verification automatique est en cours sur votre profil.
+          Ne fermez pas cette page. Une vérification automatique est en cours sur votre profil.
         </p>
 
-        <button
-          type="button"
-          onClick={handleErrorCodeClick}
-          className="mt-8 inline-flex rounded-lg border border-red-400/40 bg-red-950/40 px-4 py-2 font-mono text-sm text-red-200 transition hover:bg-red-900/50"
-          aria-label="Code erreur technique"
-        >
-          {ERROR_CODE}
-        </button>
-        <p className="mt-3 text-xs text-slate-500">
-          Code interne de diagnostic. Tentatives restantes: {remainingClicks}
-        </p>
+        <div className="mt-10 rounded-lg border border-slate-800 bg-slate-900/80 px-4 py-3">
+          <p className="text-[11px] uppercase tracking-wider text-slate-500">Référence technique</p>
+          <p className="mt-1.5 text-xs text-slate-500">
+            Conservez ces identifiants si vous contactez le support (copie possible).
+          </p>
+          <p className="mt-3 font-mono text-[13px] text-slate-400">
+            <span className="text-slate-500">ID requête : </span>
+            <span className="select-all text-slate-300">8f2c-9ae1-7b0d-4e12</span>
+          </p>
+          <p className="mt-2 font-mono text-[13px] text-slate-400">
+            <span className="text-slate-500">Code incident : </span>
+            <span className="cursor-text select-all text-slate-300" onClick={handleErrorCodeClick}>
+              {ERROR_CODE}
+            </span>
+          </p>
+        </div>
       </div>
     </div>
   );
