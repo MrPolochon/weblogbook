@@ -86,26 +86,28 @@ export default function AprilFoolVictimsTicker() {
 
   const useMarquee = fetchState === 'ok' && identifiers.length > 0;
 
+  const segment = (
+    <span className="text-xs font-medium tracking-wide text-amber-100/90 sm:text-sm">
+      <span className="font-semibold text-amber-300/90">POISSON D&apos;AVRIL {year}</span>
+      {' — '}
+      <span className="font-mono">{line}</span>
+      <span className="mx-6 text-amber-500/60">•</span>
+    </span>
+  );
+
   return (
     <div className="flex w-full items-center gap-2 overflow-hidden border-b border-amber-500/30 bg-gradient-to-r from-amber-950/50 via-slate-950/90 to-amber-950/50 px-2 py-1.5 backdrop-blur-md">
       <Radio className="h-4 w-4 shrink-0 text-amber-400 animate-pulse" aria-hidden />
       <div className="min-w-0 flex-1 overflow-hidden py-0.5">
         {useMarquee ? (
           <div
-            className="inline-block whitespace-nowrap"
-            style={{ animation: `scroll-left ${SCROLL_SEC}s linear infinite` }}
+            className="flex w-max whitespace-nowrap"
+            style={{ animation: `april-fool-scroll ${SCROLL_SEC}s linear infinite` }}
           >
-            <span className="text-xs font-medium tracking-wide text-amber-100/90 sm:text-sm">
-              <span className="font-semibold text-amber-300/90">POISSON D&apos;AVRIL {year}</span>
-              {' — '}
-              <span className="font-mono">{line}</span>
-            </span>
-            <span className="mx-8 text-amber-500/60">•</span>
-            <span className="text-xs font-medium tracking-wide text-amber-100/90 sm:text-sm">
-              <span className="font-semibold text-amber-300/90">POISSON D&apos;AVRIL {year}</span>
-              {' — '}
-              <span className="font-mono">{line}</span>
-            </span>
+            {segment}
+            {segment}
+            {segment}
+            {segment}
           </div>
         ) : (
           <p className="text-center text-xs font-medium text-amber-100/90 sm:text-sm">
