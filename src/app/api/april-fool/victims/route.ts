@@ -1,18 +1,16 @@
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { getParisCalendarYear } from '@/lib/paris-date';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * GET — liste des identifiants profil (identifiant) ayant validé la blague pour une année donnée.
+ * GET — liste publique des identifiants profil ayant validé la blague (palmarès).
+ * Lecture via service role (pas de session requise) : visible par tous sur le site.
  */
 export async function GET(req: Request) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-
+    const admin = createAdminClient();
     const { searchParams } = new URL(req.url);
     let year = getParisCalendarYear();
     const y = searchParams.get('year');
@@ -24,7 +22,7 @@ export async function GET(req: Request) {
       year = parsed;
     }
 
-    const { data: acks, error: ackErr } = await supabase
+    const { data: acks, error: ackErr } = await admin
       .from('april_fool_ack')
       .select('user_id')
       .eq('year', year)
@@ -40,7 +38,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ year, identifiers: [] as string[] });
     }
 
-    const { data: profs, error: profErr } = await supabase
+    const { data: profs, error: profErr } = await admin
       .from('profiles')
       .select('id, identifiant')
       .in('id', userIds);

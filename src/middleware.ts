@@ -31,8 +31,9 @@ export async function middleware(request: NextRequest) {
   // Routes publiques (et API auth : vérification session faite dans la route)
   const isCarteAtc = pathname === '/carte-atc';
   const isApiAtcOnline = pathname === '/api/atc/online';
+  const isApiAprilFoolVictimsPublic = pathname === '/api/april-fool/victims' && request.method === 'GET';
 
-  if (isAuthCallback || isApiPublic || isApiDiscord || isApiAeroSchoolPublic || isApiAuth || isSetup || isLogin || isDownload || isAeroSchool || isCarteAtc || isApiAtcOnline) {
+  if (isAuthCallback || isApiPublic || isApiDiscord || isApiAeroSchoolPublic || isApiAuth || isSetup || isLogin || isDownload || isAeroSchool || isCarteAtc || isApiAtcOnline || isApiAprilFoolVictimsPublic) {
     return NextResponse.next({ request });
   }
 
