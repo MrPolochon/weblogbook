@@ -26,31 +26,48 @@ export async function GET(req: Request) {
       .from('april_fool_ack')
       .select('user_id')
       .eq('year', year)
-      .order('ack_at', { ascending: true });
+      .order('ack_at', { ascending: true })
+      .limit(10_000);
 
     if (ackErr) {
       console.error('april_fool victims:', ackErr.message);
       return NextResponse.json({ error: ackErr.message }, { status: 500 });
     }
 
-    const userIds = Array.from(new Set((acks ?? []).map((a) => a.user_id)));
-    if (userIds.length === 0) {
+    const uniqueOrderedIds: string[] = [];
+    const seen = new Set<string>();
+    for (const row of acks ?? []) {
+      if (seen.has(row.user_id)) continue;
+      seen.add(row.user_id);
+      uniqueOrderedIds.push(row.user_id);
+    }
+
+    if (uniqueOrderedIds.length === 0) {
       return NextResponse.json({ year, identifiers: [] as string[] });
     }
 
-    const { data: profs, error: profErr } = await admin
-      .from('profiles')
-      .select('id, identifiant')
-      .in('id', userIds);
+    const IN_BATCH = 120;
+    const profRows: { id: string; identifiant: string | null }[] = [];
+    for (let i = 0; i < uniqueOrderedIds.length; i += IN_BATCH) {
+      const slice = uniqueOrderedIds.slice(i, i + IN_BATCH);
+      const { data: profs, error: profErr } = await admin
+        .from('profiles')
+        .select('id, identifiant')
+        .in('id', slice);
 
-    if (profErr) {
-      console.error('april_fool victims profiles:', profErr.message);
-      return NextResponse.json({ error: profErr.message }, { status: 500 });
+      if (profErr) {
+        console.error('april_fool victims profiles:', profErr.message);
+        return NextResponse.json({ error: profErr.message }, { status: 500 });
+      }
+      profRows.push(...(profs ?? []));
     }
 
-    const byId = new Map((profs ?? []).map((p) => [p.id, p.identifiant as string]));
-    const identifiers = (acks ?? [])
-      .map((a) => byId.get(a.user_id))
+    const byId = new Map<string, string>();
+    for (const p of profRows) {
+      if (p.identifiant) byId.set(p.id, p.identifiant);
+    }
+    const identifiers = uniqueOrderedIds
+      .map((id) => byId.get(id))
       .filter((x): x is string => Boolean(x));
 
     return NextResponse.json({ year, identifiers });
