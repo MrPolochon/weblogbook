@@ -478,9 +478,9 @@ export default function AtcMapClient() {
                 );
               })}
 
-              {/* Trace parcourue uniquement (départ -> position actuelle) */}
+              {/* Trace (départ → position actuelle) : uniquement pour le vol sélectionné au clic (carte ou liste). */}
               {renderedFlights.map((f) => {
-                const isSelected = selectedFlightId === f.id;
+                if (selectedFlightId !== f.id) return null;
                 const color = f.type_vol === 'VFR' ? '#22c55e' : f.type_vol === 'MIL' ? '#a855f7' : '#ef4444';
                 return (
                   <polyline
@@ -488,10 +488,10 @@ export default function AtcMapClient() {
                     points={tracePointsForFlight(f)}
                     fill="none"
                     stroke={color}
-                    strokeWidth={isSelected ? 2 : 1.2}
+                    strokeWidth={2}
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    opacity={isSelected ? 0.95 : 0.55}
+                    opacity={0.95}
                   />
                 );
               })}
