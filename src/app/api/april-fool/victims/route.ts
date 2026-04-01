@@ -35,7 +35,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: ackErr.message }, { status: 500 });
     }
 
-    const userIds = [...new Set((acks ?? []).map((a) => a.user_id))];
+    const userIds = Array.from(new Set((acks ?? []).map((a) => a.user_id)));
     if (userIds.length === 0) {
       return NextResponse.json({ year, identifiers: [] as string[] });
     }
