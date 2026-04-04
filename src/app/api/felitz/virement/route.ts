@@ -49,12 +49,21 @@ export async function POST(req: NextRequest) {
     // Vérifier autorisation : propriétaire (personnel) ou PDG (entreprise)
     const isOwner = compteSource.proprietaire_id === user.id;
     let isPdg = false;
+    let isCoPdg = false;
     if (compteSource.compagnie_id) {
       const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', compteSource.compagnie_id).single();
       isPdg = comp?.pdg_id === user.id;
+      const { data: emp } = await admin
+        .from('compagnie_employes')
+        .select('id')
+        .eq('compagnie_id', compteSource.compagnie_id)
+        .eq('pilote_id', user.id)
+        .eq('role', 'co_pdg')
+        .maybeSingle();
+      isCoPdg = Boolean(emp);
     }
 
-    if (!isAdmin && !isOwner && !isPdg) {
+    if (!isAdmin && !isOwner && !isPdg && !isCoPdg) {
       return NextResponse.json({ error: 'Non autorisé pour ce compte' }, { status: 403 });
     }
 
@@ -156,11 +165,20 @@ export async function GET(req: NextRequest) {
       const isAdmin = profile?.role === 'admin';
       const isOwner = compte.proprietaire_id === user.id;
       let isPdg = false;
+      let isCoPdg = false;
       if (compte.compagnie_id) {
         const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', compte.compagnie_id).single();
         isPdg = comp?.pdg_id === user.id;
+        const { data: emp } = await admin
+          .from('compagnie_employes')
+          .select('id')
+          .eq('compagnie_id', compte.compagnie_id)
+          .eq('pilote_id', user.id)
+          .eq('role', 'co_pdg')
+          .maybeSingle();
+        isCoPdg = Boolean(emp);
       }
-      if (!isAdmin && !isOwner && !isPdg) {
+      if (!isAdmin && !isOwner && !isPdg && !isCoPdg) {
         return NextResponse.json({ error: 'Non autorisé pour ce compte' }, { status: 403 });
       }
     }

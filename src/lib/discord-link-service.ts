@@ -148,7 +148,24 @@ export async function refreshDiscordLinkState(userId: string) {
 
   const guildId = getDiscordGuildId();
   const requiredRoleId = getDiscordRequiredRoleId();
-  if (!guildId || !requiredRoleId) return link;
+  /**
+   * Sans guilde + rôle requis, ou sans bot ATIS : on ne peut pas valider la présence sur le serveur.
+   * Après OAuth, laisser « missing_guild » bloquait l’utilisateur indéfiniment (middleware).
+   * Dans ce cas, considérer la liaison Discord « identify » comme suffisante pour débloquer l’accès.
+   */
+  const oauthOnlyActive = async () =>
+    upsertDiscordLinkState(userId, {
+      discord_user_id: link.discord_user_id,
+      discord_username: link.discord_username,
+      discord_avatar: link.discord_avatar,
+      guild_member: true,
+      has_required_role: true,
+      last_sync_at: new Date().toISOString(),
+    });
+
+  if (!guildId || !requiredRoleId) {
+    return oauthOnlyActive();
+  }
 
   const query = new URLSearchParams({
     guild_id: guildId,
@@ -156,7 +173,14 @@ export async function refreshDiscordLinkState(userId: string) {
     required_role_id: requiredRoleId,
   });
   const result = await fetchDiscordBot<BotMemberStatus>(`/webhook/discord-member-status?${query.toString()}`);
-  if (!result.data) return link;
+  if (!result.data) {
+    const botUnconfigured =
+      result.status === 503 && result.error === 'Bot Discord non configuré';
+    if (botUnconfigured) {
+      return oauthOnlyActive();
+    }
+    return link;
+  }
 
   return upsertDiscordLinkState(userId, {
     discord_user_id: link.discord_user_id,

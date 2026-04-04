@@ -221,6 +221,9 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setEncaisserToutRecap(data);
+      if (Array.isArray(data.erreurs_partielles) && data.erreurs_partielles.length > 0) {
+        toast.warning(`Certains chèques n’ont pas pu être encaissés (${data.erreurs_partielles.length}). Vérifiez la messagerie.`);
+      }
       startTransition(() => router.refresh());
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erreur');

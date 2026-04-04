@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { ensureComptePersonnel, getComptePersonnelCanonique } from '@/lib/felitz/ensure-comptes';
+import { encaisserChequeMessage } from '@/lib/felitz/encaisser-cheque';
 
 // GET - Récupérer un message spécifique
 export async function GET(
@@ -88,99 +88,11 @@ export async function PATCH(
     }
 
     if (action === 'encaisser') {
-      // Vérifier que c'est un chèque non encaissé
-      if (!['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'cheque_siavi_intervention', 'cheque_siavi_taxes'].includes(message.type_message)) {
-        return NextResponse.json({ error: 'Ce message n\'est pas un chèque' }, { status: 400 });
+      const result = await encaisserChequeMessage(admin, user.id, message);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: result.status });
       }
-      if (message.cheque_encaisse) {
-        return NextResponse.json({ error: 'Ce chèque a déjà été encaissé' }, { status: 400 });
-      }
-      if (!message.cheque_montant || message.cheque_montant <= 0) {
-        return NextResponse.json({ error: 'Montant du chèque invalide' }, { status: 400 });
-      }
-
-      // Trouver le compte à créditer
-      let compteId = message.cheque_destinataire_compte_id;
-      
-      if (!compteId) {
-        let compte = await getComptePersonnelCanonique(admin, user.id);
-        if (!compte) compte = await ensureComptePersonnel(admin, user.id);
-        if (!compte) return NextResponse.json({ error: 'Compte Felitz introuvable' }, { status: 404 });
-        compteId = compte.id;
-      }
-
-      // Protection contre le double encaissement avec UPDATE conditionnel
-      // On marque d'abord le chèque comme encaissé UNIQUEMENT s'il ne l'est pas déjà
-      const { data: updateResult, error: updateError } = await admin.from('messages')
-        .update({
-          cheque_encaisse: true,
-          cheque_encaisse_at: new Date().toISOString(),
-          lu: true
-        })
-        .eq('id', id)
-        .eq('cheque_encaisse', false)
-        .select('id');
-      
-      if (updateError || !updateResult || updateResult.length === 0) {
-        return NextResponse.json({ error: 'Ce chèque a déjà été encaissé' }, { status: 400 });
-      }
-
-      // Récupérer le solde actuel
-      const { data: compteData, error: compteError } = await admin.from('felitz_comptes')
-        .select('id, solde')
-        .eq('id', compteId)
-        .single();
-
-      if (compteError || !compteData) {
-        // Rollback: remettre le chèque comme non encaissé
-        await admin.from('messages').update({ cheque_encaisse: false, cheque_encaisse_at: null }).eq('id', id);
-        return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
-      }
-
-      const metadata = (message.metadata || {}) as { taxe_alliance?: number; codeshare?: number; numero_vol?: string };
-      const taxeAlliance = metadata.taxe_alliance ?? 0;
-      const codeshare = metadata.codeshare ?? 0;
-      const numeroVol = metadata.numero_vol || message.cheque_numero_vol || '';
-
-      const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: message.cheque_montant });
-      if (!creditOk) {
-        await admin.from('messages').update({ cheque_encaisse: false, cheque_encaisse_at: null }).eq('id', id);
-        return NextResponse.json({ error: 'Erreur lors du crédit' }, { status: 500 });
-      }
-
-      // Transaction crédit (revenu brut)
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteId,
-        type: 'credit',
-        montant: message.cheque_montant,
-        libelle: message.cheque_libelle || `Encaissement chèque vol ${numeroVol}`
-      });
-
-      if (taxeAlliance > 0) {
-        const { data: taxeOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: taxeAlliance });
-        if (taxeOk) {
-          await admin.from('felitz_transactions').insert({
-            compte_id: compteId,
-            type: 'debit',
-            montant: taxeAlliance,
-            libelle: `Taxe alliance - Vol ${numeroVol}`,
-          });
-        }
-      }
-      if (codeshare > 0) {
-        const { data: codeshareOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: codeshare });
-        if (codeshareOk) {
-          await admin.from('felitz_transactions').insert({
-            compte_id: compteId,
-            type: 'debit',
-            montant: codeshare,
-            libelle: `Codeshare alliance - Vol ${numeroVol}`,
-          });
-        }
-      }
-
-      const montantNet = message.cheque_montant - taxeAlliance - codeshare;
-      return NextResponse.json({ ok: true, montant: montantNet });
+      return NextResponse.json({ ok: true, montant: result.montantNet });
     }
 
     return NextResponse.json({ error: 'Action inconnue' }, { status: 400 });

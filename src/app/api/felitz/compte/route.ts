@@ -27,12 +27,21 @@ export async function GET(req: NextRequest) {
     } else if (isAdmin && compagnieId) {
       query = query.eq('compagnie_id', compagnieId);
     } else if (!isAdmin) {
-      // Non-admin: voir ses propres comptes ou ceux de ses compagnies (PDG)
+      // Non-admin : personnel + comptes des compagnies dont l’utilisateur est PDG ou co-PDG
       const { data: pdgCompagnies } = await supabase.from('compagnies').select('id').eq('pdg_id', user.id);
-      const compagnieIds = (pdgCompagnies || []).map(c => c.id);
-      
-      if (compagnieIds.length > 0) {
-        query = query.or(`proprietaire_id.eq.${user.id},compagnie_id.in.(${compagnieIds.join(',')})`);
+      const { data: coPdgRows } = await supabase
+        .from('compagnie_employes')
+        .select('compagnie_id')
+        .eq('pilote_id', user.id)
+        .eq('role', 'co_pdg');
+      const compagnieIds = [
+        ...(pdgCompagnies || []).map((c) => c.id),
+        ...(coPdgRows || []).map((r) => r.compagnie_id),
+      ];
+      const uniqueCompIds = Array.from(new Set(compagnieIds));
+
+      if (uniqueCompIds.length > 0) {
+        query = query.or(`proprietaire_id.eq.${user.id},compagnie_id.in.(${uniqueCompIds.join(',')})`);
       } else {
         query = query.eq('proprietaire_id', user.id);
       }

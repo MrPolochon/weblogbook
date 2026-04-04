@@ -34,6 +34,17 @@ export async function GET(req: NextRequest) {
     const compPdg = Array.isArray(comp) ? comp[0]?.pdg_id : comp?.pdg_id;
     const isOwner = String(compte.proprietaire_id) === String(user.id);
     const isPdg = compPdg && String(compPdg) === String(user.id);
+    let isCoPdg = false;
+    if (compte.compagnie_id && !isPdg) {
+      const { data: emp } = await admin
+        .from('compagnie_employes')
+        .select('id')
+        .eq('compagnie_id', compte.compagnie_id)
+        .eq('pilote_id', user.id)
+        .eq('role', 'co_pdg')
+        .maybeSingle();
+      isCoPdg = Boolean(emp);
+    }
     let isAllianceLeader = false;
     let isReparationPdg = false;
     if (compte.alliance_id) {
@@ -56,7 +67,7 @@ export async function GET(req: NextRequest) {
       isReparationPdg = !!(ent && String(ent.pdg_id) === String(user.id));
     }
 
-    if (!isAdmin && !isOwner && !isPdg && !isAllianceLeader && !isReparationPdg) {
+    if (!isAdmin && !isOwner && !isPdg && !isCoPdg && !isAllianceLeader && !isReparationPdg) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
