@@ -11,19 +11,28 @@ export default async function InstructionPage() {
   if (!user) redirect('/login');
 
   const admin = createAdminClient();
-  const { data: me } = await admin
+
+  // Récupération de base du rôle via client utilisateur (colonnes stables).
+  // Évite de "tomber pilote" si des colonnes instruction ne sont pas encore migrées.
+  const { data: meBase } = await supabase
     .from('profiles')
-    .select('id, identifiant, role, formation_instruction_active, formation_instruction_licence, instructeur_referent_id')
+    .select('id, identifiant, role')
     .eq('id', user.id)
     .maybeSingle();
 
-  const viewer = me ?? {
-    id: user.id,
-    identifiant: user.email || 'pilote',
-    role: 'pilote',
-    formation_instruction_active: false,
-    formation_instruction_licence: null,
-    instructeur_referent_id: null,
+  const { data: meInstruction } = await admin
+    .from('profiles')
+    .select('formation_instruction_active, formation_instruction_licence, instructeur_referent_id')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  const viewer = {
+    id: meBase?.id || user.id,
+    identifiant: meBase?.identifiant || user.email || 'pilote',
+    role: meBase?.role || 'pilote',
+    formation_instruction_active: Boolean(meInstruction?.formation_instruction_active),
+    formation_instruction_licence: (meInstruction?.formation_instruction_licence as string | null) || null,
+    instructeur_referent_id: (meInstruction?.instructeur_referent_id as string | null) || null,
   };
 
   const isManager = viewer.role === 'instructeur' || viewer.role === 'admin';
