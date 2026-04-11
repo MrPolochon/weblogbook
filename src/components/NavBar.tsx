@@ -81,7 +81,6 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
 
   const piloteMenuItems: Array<{ href: string; label: string; icon: typeof BookOpen; badge: number; separator?: boolean }> = [
     { href: '/logbook', label: 'Mon logbook', icon: BookOpen, badge: 0 },
-    ...(isInstructeur || isAdmin ? [{ href: '/instruction', label: 'Instruction', icon: Users, badge: 0 }] : []),
     { href: '/logbook/depot-plan-vol', label: 'Déposer un plan de vol', icon: Plane, badge: 0 },
     { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText, badge: 0 },
     { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0, separator: true },
@@ -103,8 +102,7 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
     pathname.startsWith('/marketplace') || pathname.startsWith('/hangar-market') ||
     pathname.startsWith('/inventaire') || pathname.startsWith('/messagerie') || 
     pathname.startsWith('/marche-passagers') || pathname.startsWith('/marche-cargo') ||
-    pathname.startsWith('/perf-ptfs') || pathname.startsWith('/alliance') || pathname.startsWith('/signalement') || pathname.startsWith('/reparation') ||
-    pathname.startsWith('/instruction');
+    pathname.startsWith('/perf-ptfs') || pathname.startsWith('/alliance') || pathname.startsWith('/signalement') || pathname.startsWith('/reparation');
 
   const totalAdminBadge = pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount;
   const navItemBase = 'flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold tracking-[0.01em] transition-all whitespace-nowrap shrink-0 border';
@@ -201,6 +199,21 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
               <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
                 {volsAConfirmerCount > 99 ? '99+' : volsAConfirmerCount}
               </span>
+            </Link>
+          )}
+
+          {(isInstructeur || isAdmin) && (
+            <Link
+              href="/instruction"
+              className={cn(
+                navItemBase,
+                pathname.startsWith('/instruction')
+                  ? navItemActive
+                  : navItemMuted
+              )}
+            >
+              <Users className="h-4 w-4" />
+              Instruction
             </Link>
           )}
 
