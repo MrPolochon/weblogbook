@@ -74,6 +74,8 @@ export async function PATCH(
       .select('*')
       .eq('compagnie_id', id)
       .eq('statut', 'actif')
+      .order('created_at', { ascending: true })
+      .limit(1)
       .maybeSingle();
 
     if (!pret) {
@@ -81,6 +83,21 @@ export async function PATCH(
     }
 
     const resteARembourser = pret.montant_total_du - pret.montant_rembourse;
+    if (resteARembourser <= 0) {
+      await admin
+        .from('prets_bancaires')
+        .update({ statut: 'rembourse', rembourse_at: new Date().toISOString() })
+        .eq('id', pret.id);
+
+      return NextResponse.json({
+        ok: true,
+        message: 'Le prêt était déjà soldé. Son statut a été corrigé automatiquement.',
+        montantRembourse: 0,
+        resteARembourser: 0,
+        pretRembourse: true,
+      });
+    }
+
     const montantEffectif = Math.min(montant, resteARembourser);
 
     if (montantEffectif <= 0) {
@@ -193,6 +210,8 @@ export async function GET(
       .select('*')
       .eq('compagnie_id', id)
       .eq('statut', 'actif')
+      .order('created_at', { ascending: true })
+      .limit(1)
       .maybeSingle();
 
     // Récupérer l'historique des prêts remboursés
@@ -265,13 +284,22 @@ export async function POST(
       .select('id, montant_emprunte, montant_total_du, montant_rembourse')
       .eq('compagnie_id', id)
       .eq('statut', 'actif')
+      .order('created_at', { ascending: true })
+      .limit(1)
       .maybeSingle();
 
     if (pretExistant) {
       const resteARembourser = pretExistant.montant_total_du - pretExistant.montant_rembourse;
+      if (resteARembourser <= 0) {
+        await admin
+          .from('prets_bancaires')
+          .update({ statut: 'rembourse', rembourse_at: new Date().toISOString() })
+          .eq('id', pretExistant.id);
+      } else {
       return NextResponse.json({ 
         error: `Un prêt est déjà en cours. Il reste ${resteARembourser.toLocaleString('fr-FR')} F$ à rembourser.` 
       }, { status: 400 });
+      }
     }
 
     // Calculer le montant total à rembourser

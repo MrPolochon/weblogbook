@@ -100,11 +100,13 @@ export default function CompagniePretClient({ compagnieId }: Props) {
     }
   }
 
-  async function handleRembourserPret() {
-    const montant = Number.parseInt(
-      montantRemboursement.replace(/[\s\u00A0\u202F]/g, '').replace(/[Ff]\$/g, '').replace(/\$/g, ''),
-      10
-    );
+  async function handleRembourserPret(montantForce?: number) {
+    const montant = Number.isFinite(montantForce)
+      ? Math.floor(montantForce as number)
+      : Number.parseInt(
+          montantRemboursement.replace(/[\s\u00A0\u202F]/g, '').replace(/[Ff]\$/g, '').replace(/\$/g, ''),
+          10
+        );
     if (!Number.isFinite(montant) || montant <= 0) {
       setError('Montant invalide (entier positif requis).');
       return;
@@ -255,11 +257,19 @@ export default function CompagniePretClient({ compagnieId }: Props) {
               />
               <button
                 type="button"
-                onClick={handleRembourserPret}
+                onClick={() => handleRembourserPret()}
                 disabled={remboursementEnCours || !montantRemboursement}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm whitespace-nowrap"
               >
                 {remboursementEnCours ? 'En cours...' : 'Rembourser'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRembourserPret(resteARembourser)}
+                disabled={remboursementEnCours || resteARembourser <= 0}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm whitespace-nowrap"
+              >
+                Rembourser le reste
               </button>
             </div>
           </div>
