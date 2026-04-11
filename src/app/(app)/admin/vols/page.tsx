@@ -30,7 +30,7 @@ export default async function AdminVolsPage() {
     admin.from('profiles').select('id, identifiant, role').order('identifiant'),
   ]);
 
-  const admins = (profiles || []).filter((p: { role?: string }) => p.role === 'admin');
+  const instructeurs = (profiles || []).filter((p: { role?: string }) => p.role === 'admin' || p.role === 'instructeur');
 
   return (
     <div className="space-y-6">
@@ -45,7 +45,7 @@ export default async function AdminVolsPage() {
         typesAvion={types || []}
         compagnies={compagnies || []}
         profiles={profiles || []}
-        admins={admins}
+        instructeurs={instructeurs}
       />
 
       <VolsEnAttente vols={vols || []} />

@@ -239,10 +239,10 @@ export async function PATCH(
     }
     if (type_vol === 'Instruction') {
       if (!instructeurId || !instructionType || typeof instructionType !== 'string' || !String(instructionType).trim()) {
-        return NextResponse.json({ error: 'Vol d\'instruction : instructeur (admin) et type d\'instruction requis.' }, { status: 400 });
+        return NextResponse.json({ error: 'Vol d\'instruction : instructeur et type d\'instruction requis.' }, { status: 400 });
       }
-      const { data: inst } = await supabase.from('profiles').select('id').eq('id', instructeurId).eq('role', 'admin').single();
-      if (!inst) return NextResponse.json({ error: 'L\'instructeur doit être un administrateur.' }, { status: 400 });
+      const { data: inst } = await supabase.from('profiles').select('id').eq('id', instructeurId).in('role', ['admin', 'instructeur']).single();
+      if (!inst) return NextResponse.json({ error: 'L\'instructeur doit avoir le rôle instructeur ou administrateur.' }, { status: 400 });
     }
 
     const isConfirmingByPilote = vol.statut === 'en_attente_confirmation_pilote' && vol.pilote_id === user.id;

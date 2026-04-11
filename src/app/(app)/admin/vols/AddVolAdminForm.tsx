@@ -20,12 +20,12 @@ export default function AddVolAdminForm({
   typesAvion,
   compagnies,
   profiles,
-  admins,
+  instructeurs,
 }: {
   typesAvion: T[];
   compagnies: C[];
   profiles: P[];
-  admins: P[];
+  instructeurs: P[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -300,10 +300,10 @@ export default function AddVolAdminForm({
           {type_vol === 'Instruction' && (
             <div className="space-y-4 rounded-lg border border-slate-600/50 bg-slate-800/30 p-4">
               <div>
-                <label className="label">Admin instructeur *</label>
+                <label className="label">Instructeur *</label>
                 <select className="input" value={instructeur_id} onChange={(e) => setInstructeurId(e.target.value)}>
                   <option value="">— Choisir —</option>
-                  {admins.map((a) => (
+                  {instructeurs.map((a) => (
                     <option key={a.id} value={a.id}>{a.identifiant}</option>
                   ))}
                 </select>

@@ -8,13 +8,13 @@ export default function CreatePiloteForm() {
   const [, startTransition] = useTransition();
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'pilote' | 'admin'>('pilote');
+  const [role, setRole] = useState<'pilote' | 'instructeur' | 'admin'>('pilote');
   const [armee, setArmee] = useState(false);
   const [atc, setAtc] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [lastCreatedRole, setLastCreatedRole] = useState<'pilote' | 'admin'>('pilote');
+  const [lastCreatedRole, setLastCreatedRole] = useState<'pilote' | 'instructeur' | 'admin'>('pilote');
   const [superadminStep, setSuperadminStep] = useState<'password' | 'code' | null>(null);
   const [superadminPassword, setSuperadminPassword] = useState('');
   const [superadminCode, setSuperadminCode] = useState('');
@@ -80,7 +80,7 @@ export default function CreatePiloteForm() {
 
   return (
     <div className="card">
-      <h2 className="text-lg font-medium text-slate-200 mb-4">Créer un pilote ou un admin</h2>
+      <h2 className="text-lg font-medium text-slate-200 mb-4">Créer un pilote, instructeur ou admin</h2>
       <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-4">
         <div className="min-w-[140px]">
           <label className="label">Identifiant</label>
@@ -111,12 +111,13 @@ export default function CreatePiloteForm() {
             className="input"
             value={role}
             onChange={(e) => {
-              const v = e.target.value as 'pilote' | 'admin';
+              const v = e.target.value as 'pilote' | 'instructeur' | 'admin';
               setRole(v);
               if (v === 'pilote') setSuperadminStep(null);
             }}
           >
             <option value="pilote">Pilote</option>
+            <option value="instructeur">Instructeur</option>
             <option value="admin">Admin</option>
           </select>
         </div>
@@ -166,7 +167,7 @@ export default function CreatePiloteForm() {
         </button>
       </form>
       {error && <p className="text-red-400 text-sm mt-2">{error}</p>}
-      {success && <p className="text-emerald-400 text-sm mt-2">{lastCreatedRole === 'admin' ? 'Admin créé.' : 'Pilote créé.'}</p>}
+      {success && <p className="text-emerald-400 text-sm mt-2">{lastCreatedRole === 'admin' ? 'Admin créé.' : lastCreatedRole === 'instructeur' ? 'Instructeur créé.' : 'Pilote créé.'}</p>}
     </div>
   );
 }

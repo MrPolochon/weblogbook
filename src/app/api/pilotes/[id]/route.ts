@@ -42,8 +42,8 @@ export async function PATCH(
       }
     }
 
-    // Gestion du changement de rôle (pilote, atc, siavi, admin)
-    if (roleBody && ['pilote', 'atc', 'siavi', 'admin'].includes(roleBody)) {
+    // Gestion du changement de rôle (pilote, instructeur, atc, siavi, admin)
+    if (roleBody && ['pilote', 'instructeur', 'atc', 'siavi', 'admin'].includes(roleBody)) {
       const { data: target } = await admin.from('profiles').select('role').eq('id', id).single();
       if (!target) return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
 
@@ -97,8 +97,8 @@ export async function PATCH(
         // siavi est défini par le frontend (peut être true ou laisser tel quel)
         if (siaviBody === undefined) updates.siavi = true;
       }
-      // Si on passe en pilote, utiliser les valeurs du frontend
-      else if (roleBody === 'pilote') {
+      // Si on passe en pilote ou instructeur, utiliser les valeurs du frontend
+      else if (roleBody === 'pilote' || roleBody === 'instructeur') {
         // Les valeurs atc, siavi, armee viennent du frontend
       }
       // Si on passe en admin, garder les autres accès

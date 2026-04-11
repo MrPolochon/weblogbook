@@ -7,7 +7,7 @@ import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
 type T = { id: string; nom: string; constructeur?: string };
 type C = { id: string; nom: string };
-type Admin = { id: string; identifiant: string };
+type Instructeur = { id: string; identifiant: string };
 
 function parseUtcLocal(s: string): Date | null {
   if (!s) return null;
@@ -35,7 +35,7 @@ export default function VolEditForm({
   copiloteId,
   typesAvion,
   compagnies,
-  admins,
+  instructeurs,
   autresProfiles,
   successRedirect,
   isConfirmationMode,
@@ -63,7 +63,7 @@ export default function VolEditForm({
   callsign?: string;
   typesAvion: T[];
   compagnies: C[];
-  admins: Admin[];
+  instructeurs: Instructeur[];
   autresProfiles: { id: string; identifiant: string }[];
   successRedirect?: string;
   isConfirmationMode?: boolean;
@@ -185,7 +185,7 @@ export default function VolEditForm({
       return;
     }
     if (type_vol === 'Instruction' && (!instructeur_id || !instruction_type.trim())) {
-      setError('Pour un vol d\'instruction : choisir l\'admin instructeur et indiquer le type d\'instruction.');
+      setError('Pour un vol d\'instruction : choisir l\'instructeur et indiquer le type d\'instruction.');
       return;
     }
     if (type_vol !== 'Instruction' && role_pilote === 'Co-pilote' && !autrePersonneId && !(isCurrentUserPilote && copiloteId)) {
@@ -358,10 +358,10 @@ export default function VolEditForm({
       {type_vol === 'Instruction' && (
         <div className="space-y-4 rounded-lg border border-slate-600/50 bg-slate-800/30 p-4">
           <div>
-            <label className="label">Admin / instructeur *</label>
+            <label className="label">Instructeur *</label>
             <select className="input" value={instructeur_id} onChange={(e) => setInstructeurId(e.target.value)} disabled={readOnly}>
               <option value="">— Choisir —</option>
-              {admins.map((a) => (
+              {instructeurs.map((a) => (
                 <option key={a.id} value={a.id}>{a.identifiant}</option>
               ))}
             </select>

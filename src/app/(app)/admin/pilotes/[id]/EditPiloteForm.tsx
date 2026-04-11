@@ -144,6 +144,11 @@ export default function EditPiloteForm({
         }
         body.armee = false;
         body.atc = false;
+      } else if (role === 'instructeur') {
+        // Instructeur avec accès pilote
+        body.role = 'instructeur';
+        body.armee = armee;
+        body.atc = atc;
       } else {
         // Pilote standard
         body.role = 'pilote';
@@ -426,6 +431,7 @@ export default function EditPiloteForm({
             className="input max-w-xs"
           >
             <option value="pilote">Pilote</option>
+            <option value="instructeur">Instructeur</option>
             <option value="atc">ATC uniquement</option>
             <option value="siavi">SIAVI/Pompier uniquement</option>
             <option value="admin">Administrateur</option>
@@ -434,6 +440,7 @@ export default function EditPiloteForm({
             {role === 'admin' && '⚠️ Les administrateurs ont accès à toutes les fonctionnalités du site.'}
             {role === 'atc' && 'Accès uniquement à l\'espace ATC, pas d\'espace pilote.'}
             {role === 'siavi' && 'Accès uniquement à l\'espace SIAVI/Pompier, pas d\'espace pilote.'}
+            {role === 'instructeur' && 'Accès à l\'espace pilote avec statut instructeur. Peut être sélectionné comme instructeur pour les vols d\'instruction.'}
             {role === 'pilote' && 'Accès à l\'espace pilote. Peut aussi avoir accès à l\'ATC ou SIAVI si coché.'}
           </p>
         </div>

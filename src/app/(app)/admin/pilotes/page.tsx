@@ -51,14 +51,24 @@ export default async function AdminPilotesPage() {
 
   const renderRow = (p: (typeof pilotes)[number] | (typeof admins)[number], isAdminRole: boolean) => {
     const blocked = p.blocked_until ? new Date(p.blocked_until) > new Date() : false;
-    const sansEspacePilote = p.role === 'atc';
+    const sansEspacePilote = p.role === 'atc' || p.role === 'siavi';
+    const roleLabel =
+      p.role === 'admin'
+        ? 'admin'
+        : p.role === 'atc'
+          ? 'atc'
+          : p.role === 'siavi'
+            ? 'siavi'
+            : p.role === 'instructeur'
+              ? 'instructeur'
+              : 'pilote';
     return (
       <tr
         key={p.id}
         className={`border-b border-slate-700/50 ${p.inactif1Mois ? 'bg-red-500/15' : ''}`}
       >
         <td className="py-3 pr-4 font-medium text-slate-200">{p.identifiant}</td>
-        <td className="py-3 pr-4 text-slate-300">{p.role === 'admin' ? 'admin' : p.role === 'atc' ? 'atc' : 'pilote'}</td>
+        <td className="py-3 pr-4 text-slate-300">{roleLabel}</td>
         <td className="py-3 pr-4 text-slate-300">{p.armee ? 'Oui' : '—'}</td>
         <td className="py-3 pr-4 text-slate-300">{p.atc ? 'Oui' : '—'}</td>
         <td className="py-3 pr-4 text-slate-300">{p.ifsa ? <span className="text-indigo-400">Oui</span> : '—'}</td>
@@ -95,7 +105,7 @@ export default async function AdminPilotesPage() {
         <Link href="/admin" className="text-slate-400 hover:text-slate-200">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="text-2xl font-semibold text-slate-100">Pilotes et admins</h1>
+        <h1 className="text-2xl font-semibold text-slate-100">Pilotes, instructeurs et admins</h1>
       </div>
 
       <CreatePiloteForm />
@@ -115,7 +125,7 @@ export default async function AdminPilotesPage() {
               <thead>
                 <tr className="border-b border-slate-600 text-left text-slate-400">
                   <th className="pb-2 pr-4">Identifiant</th>
-                  <th className="pb-2 pr-4">Pilote / Admin</th>
+                  <th className="pb-2 pr-4">Rôle principal</th>
                   <th className="pb-2 pr-4">Armée</th>
                   <th className="pb-2 pr-4">ATC</th>
                   <th className="pb-2 pr-4">IFSA</th>
@@ -142,7 +152,7 @@ export default async function AdminPilotesPage() {
               <thead>
                 <tr className="border-b border-slate-600 text-left text-slate-400">
                   <th className="pb-2 pr-4">Identifiant</th>
-                  <th className="pb-2 pr-4">Pilote / Admin</th>
+                  <th className="pb-2 pr-4">Rôle principal</th>
                   <th className="pb-2 pr-4">Armée</th>
                   <th className="pb-2 pr-4">ATC</th>
                   <th className="pb-2 pr-4">IFSA</th>

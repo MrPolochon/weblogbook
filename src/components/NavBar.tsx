@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 
 interface NavBarProps {
   isAdmin: boolean;
+  isInstructeur?: boolean;
   isArmee?: boolean;
   isPdg?: boolean;
   hasCompagnie?: boolean;
@@ -25,7 +26,7 @@ interface NavBarProps {
   allianceInvitationsCount?: number;
 }
 
-export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCompagnie = false, isIfsa = false, isReparateur = false, pendingVolsCount = 0, adminPlansEnAttenteCount = 0, adminPasswordResetCount = 0, adminAeroschoolCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0, invitationsCount = 0, signalementsNouveauxCount = 0, allianceInvitationsCount = 0 }: NavBarProps) {
+export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false, isPdg = false, hasCompagnie = false, isIfsa = false, isReparateur = false, pendingVolsCount = 0, adminPlansEnAttenteCount = 0, adminPasswordResetCount = 0, adminAeroschoolCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0, invitationsCount = 0, signalementsNouveauxCount = 0, allianceInvitationsCount = 0 }: NavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -80,6 +81,7 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
 
   const piloteMenuItems: Array<{ href: string; label: string; icon: typeof BookOpen; badge: number; separator?: boolean }> = [
     { href: '/logbook', label: 'Mon logbook', icon: BookOpen, badge: 0 },
+    ...(isInstructeur || isAdmin ? [{ href: '/instruction', label: 'Instruction', icon: Users, badge: 0 }] : []),
     { href: '/logbook/depot-plan-vol', label: 'Déposer un plan de vol', icon: Plane, badge: 0 },
     { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText, badge: 0 },
     { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0, separator: true },
@@ -101,7 +103,8 @@ export default function NavBar({ isAdmin, isArmee = false, isPdg = false, hasCom
     pathname.startsWith('/marketplace') || pathname.startsWith('/hangar-market') ||
     pathname.startsWith('/inventaire') || pathname.startsWith('/messagerie') || 
     pathname.startsWith('/marche-passagers') || pathname.startsWith('/marche-cargo') ||
-    pathname.startsWith('/perf-ptfs') || pathname.startsWith('/alliance') || pathname.startsWith('/signalement') || pathname.startsWith('/reparation');
+    pathname.startsWith('/perf-ptfs') || pathname.startsWith('/alliance') || pathname.startsWith('/signalement') || pathname.startsWith('/reparation') ||
+    pathname.startsWith('/instruction');
 
   const totalAdminBadge = pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount;
   const navItemBase = 'flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold tracking-[0.01em] transition-all whitespace-nowrap shrink-0 border';

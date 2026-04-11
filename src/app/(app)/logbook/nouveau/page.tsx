@@ -13,10 +13,10 @@ export default async function NouveauVolPage() {
   if (profile?.blocked_until && new Date(profile.blocked_until) > new Date()) redirect('/logbook');
 
   const admin = createAdminClient();
-  const [{ data: types }, { data: compagnies }, { data: admins }, { data: allProfiles }, { data: closedPlans }] = await Promise.all([
+  const [{ data: types }, { data: compagnies }, { data: instructeurs }, { data: allProfiles }, { data: closedPlans }] = await Promise.all([
     supabase.from('types_avion').select('id, nom, constructeur').order('ordre'),
     supabase.from('compagnies').select('id, nom').order('nom'),
-    supabase.from('profiles').select('id, identifiant').eq('role', 'admin').order('identifiant'),
+    supabase.from('profiles').select('id, identifiant').in('role', ['admin', 'instructeur']).order('identifiant'),
     supabase.from('profiles').select('id, identifiant').order('identifiant'),
     admin.from('plans_vol').select('id, aeroport_depart, aeroport_arrivee, type_vol, numero_vol, accepted_at, cloture_at').eq('pilote_id', user.id).eq('statut', 'cloture').not('accepted_at', 'is', null).not('cloture_at', 'is', null).order('cloture_at', { ascending: false }),
   ]);
@@ -29,7 +29,7 @@ export default async function NouveauVolPage() {
         closedPlans={closedPlans || []}
         typesAvion={types || []}
         compagnies={compagnies || []}
-        admins={admins || []}
+        instructeurs={instructeurs || []}
         autresProfiles={autresProfiles}
       />
     </Suspense>

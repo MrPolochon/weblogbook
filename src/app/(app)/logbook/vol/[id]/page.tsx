@@ -51,10 +51,10 @@ export default async function LogbookVolEditPage({
   if (vol.statut === 'refusé' && (vol.refusal_count ?? 0) >= 3 && !isAdmin) redirect('/logbook');
 
   const client = isAdmin ? admin : supabase;
-  const [{ data: types }, { data: compagnies }, { data: admins }, { data: allProfiles }] = await Promise.all([
+  const [{ data: types }, { data: compagnies }, { data: instructeurs }, { data: allProfiles }] = await Promise.all([
     client.from('types_avion').select('id, nom, constructeur').order('ordre'),
     client.from('compagnies').select('id, nom').order('nom'),
-    client.from('profiles').select('id, identifiant').eq('role', 'admin').order('identifiant'),
+    client.from('profiles').select('id, identifiant').in('role', ['admin', 'instructeur']).order('identifiant'),
     client.from('profiles').select('id, identifiant').order('identifiant'),
   ]);
 
@@ -132,7 +132,7 @@ export default async function LogbookVolEditPage({
         copiloteId={vol.copilote_id ?? ''}
         typesAvion={types || []}
         compagnies={compagnies || []}
-        admins={admins || []}
+        instructeurs={instructeurs || []}
         autresProfiles={autresProfiles}
         successRedirect={isConfirmationInstructeur ? '/logbook/a-confirmer' : (isRefuseParCopilote ? '/logbook' : backHref)}
         isConfirmationMode={isConfirmationMode}

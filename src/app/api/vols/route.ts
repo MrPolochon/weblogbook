@@ -278,10 +278,10 @@ export async function POST(request: Request) {
     }
     if (type_vol === 'Instruction') {
       if (!body.instructeur_id || !body.instruction_type || typeof body.instruction_type !== 'string' || !String(body.instruction_type).trim()) {
-        return NextResponse.json({ error: 'Vol d\'instruction : instructeur (admin) et type d\'instruction requis.' }, { status: 400 });
+        return NextResponse.json({ error: 'Vol d\'instruction : instructeur et type d\'instruction requis.' }, { status: 400 });
       }
-      const { data: inst } = await supabase.from('profiles').select('id').eq('id', body.instructeur_id).eq('role', 'admin').single();
-      if (!inst) return NextResponse.json({ error: 'L\'instructeur doit être un administrateur.' }, { status: 400 });
+      const { data: inst } = await supabase.from('profiles').select('id').eq('id', body.instructeur_id).in('role', ['admin', 'instructeur']).single();
+      if (!inst) return NextResponse.json({ error: 'L\'instructeur doit avoir le rôle instructeur ou administrateur.' }, { status: 400 });
     }
 
     const depStr = /Z$/.test(String(depart_utc)) ? String(depart_utc) : String(depart_utc) + 'Z';

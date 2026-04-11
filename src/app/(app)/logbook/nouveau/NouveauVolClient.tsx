@@ -8,7 +8,7 @@ import VolForm from './VolForm';
 
 type TypeAvion = { id: string; nom: string; constructeur: string };
 type Compagnie = { id: string; nom: string };
-type Admin = { id: string; identifiant: string };
+type Instructeur = { id: string; identifiant: string };
 type Profil = { id: string; identifiant: string };
 
 type PlanClos = {
@@ -48,13 +48,13 @@ export default function NouveauVolClient({
   closedPlans,
   typesAvion,
   compagnies,
-  admins,
+  instructeurs,
   autresProfiles,
 }: {
   closedPlans: PlanClos[];
   typesAvion: TypeAvion[];
   compagnies: Compagnie[];
-  admins: Admin[];
+  instructeurs: Instructeur[];
   autresProfiles: Profil[];
 }) {
   const searchParams = useSearchParams();
@@ -98,7 +98,7 @@ export default function NouveauVolClient({
           <VolForm
             typesAvion={typesAvion}
             compagnies={compagnies}
-            admins={admins}
+            instructeurs={instructeurs}
             autresProfiles={autresProfiles}
             planPreFill={planPreFill}
             planId={planId}

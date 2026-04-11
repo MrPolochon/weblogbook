@@ -9,7 +9,7 @@ import type { PlanPreFill } from './NouveauVolClient';
 
 type TypeAvion = { id: string; nom: string; constructeur: string };
 type Compagnie = { id: string; nom: string };
-type Admin = { id: string; identifiant: string };
+type Instructeur = { id: string; identifiant: string };
 
 function parseUtcLocal(s: string): Date | null {
   if (!s) return null;
@@ -23,7 +23,7 @@ type Profil = { id: string; identifiant: string };
 export default function VolForm({
   typesAvion,
   compagnies,
-  admins,
+  instructeurs,
   autresProfiles,
   planPreFill,
   planId,
@@ -31,7 +31,7 @@ export default function VolForm({
 }: {
   typesAvion: TypeAvion[];
   compagnies: Compagnie[];
-  admins: Admin[];
+  instructeurs: Instructeur[];
   autresProfiles: Profil[];
   planPreFill?: PlanPreFill | null;
   planId?: string | null;
@@ -110,7 +110,7 @@ export default function VolForm({
       return;
     }
     if (type_vol === 'Instruction' && (!instructeur_id || !instruction_type.trim())) {
-      setError('Pour un vol d\'instruction : choisir l\'admin instructeur et indiquer le type d\'instruction.');
+      setError('Pour un vol d\'instruction : choisir l\'instructeur et indiquer le type d\'instruction.');
       return;
     }
     if (role_pilote === 'Co-pilote' && type_vol !== 'Instruction' && !pilote_id) {
@@ -339,10 +339,10 @@ export default function VolForm({
       {type_vol === 'Instruction' && (
         <div className="space-y-4 rounded-lg border border-slate-600/50 bg-slate-800/30 p-4">
           <div>
-            <label className="label">Admin / instructeur avec qui vous avez fait le vol *</label>
+            <label className="label">Instructeur avec qui vous avez fait le vol *</label>
             <select className="input" value={instructeur_id} onChange={(e) => setInstructeurId(e.target.value)}>
               <option value="">— Choisir —</option>
-              {admins.map((a) => (
+              {instructeurs.map((a) => (
                 <option key={a.id} value={a.id}>{a.identifiant}</option>
               ))}
             </select>
