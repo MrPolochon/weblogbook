@@ -15,15 +15,23 @@ export default async function InstructionPage() {
     .from('profiles')
     .select('id, identifiant, role, formation_instruction_active, formation_instruction_licence, instructeur_referent_id')
     .eq('id', user.id)
-    .single();
-  if (!me) redirect('/logbook');
+    .maybeSingle();
 
-  const isManager = me.role === 'instructeur' || me.role === 'admin';
+  const viewer = me ?? {
+    id: user.id,
+    identifiant: user.email || 'pilote',
+    role: 'pilote',
+    formation_instruction_active: false,
+    formation_instruction_licence: null,
+    instructeur_referent_id: null,
+  };
+
+  const isManager = viewer.role === 'instructeur' || viewer.role === 'admin';
 
   const [{ data: typesAvion }, { data: meInstructorProfile }, { data: examMine }] = await Promise.all([
     admin.from('types_avion').select('id, nom, constructeur, code_oaci').order('ordre', { ascending: true }),
-    me.instructeur_referent_id
-      ? admin.from('profiles').select('identifiant').eq('id', me.instructeur_referent_id).maybeSingle()
+    viewer.instructeur_referent_id
+      ? admin.from('profiles').select('identifiant').eq('id', viewer.instructeur_referent_id).maybeSingle()
       : Promise.resolve({ data: null }),
     admin
       .from('instruction_exam_requests')
@@ -32,12 +40,12 @@ export default async function InstructionPage() {
       .order('created_at', { ascending: false }),
   ]);
 
-  const { data: myProgression } = me.formation_instruction_active && me.formation_instruction_licence
+  const { data: myProgression } = viewer.formation_instruction_active && viewer.formation_instruction_licence
     ? await admin
         .from('instruction_progression_items')
         .select('licence_code, module_code, completed')
         .eq('eleve_id', user.id)
-        .eq('licence_code', me.formation_instruction_licence)
+        .eq('licence_code', viewer.formation_instruction_licence)
     : { data: [] as Array<Record<string, unknown>> };
 
   const { data: eleves } = isManager
@@ -72,12 +80,12 @@ export default async function InstructionPage() {
 
   return (
     <InstructionClient
-      viewerRole={me.role}
-      viewerId={me.id}
+      viewerRole={viewer.role}
+      viewerId={viewer.id}
       programs={INSTRUCTION_PROGRAMS}
       examLicenceOptions={[...ALL_LICENCE_TYPES]}
-      myFormationActive={Boolean(me.formation_instruction_active)}
-      myFormationLicence={(me.formation_instruction_licence as string | null) || null}
+      myFormationActive={Boolean(viewer.formation_instruction_active)}
+      myFormationLicence={(viewer.formation_instruction_licence as string | null) || null}
       myInstructorIdentifiant={(meInstructorProfile as { identifiant?: string } | null)?.identifiant || null}
       myProgression={(myProgression || []) as Array<{ licence_code: string; module_code: string; completed: boolean }>}
       examRequestsMine={(examMine || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; created_at: string; updated_at: string; instructeur: { identifiant: string } | { identifiant: string }[] | null }>}
