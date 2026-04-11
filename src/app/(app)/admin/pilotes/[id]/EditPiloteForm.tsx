@@ -450,6 +450,20 @@ export default function EditPiloteForm({
           <p className="text-sm font-medium text-slate-300">Accès additionnels :</p>
           
           <div className="flex flex-wrap items-center gap-4">
+            {/* Instructeur */}
+            {role !== 'atc' && role !== 'siavi' && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={role === 'instructeur'}
+                  onChange={(e) => setRole(e.target.checked ? 'instructeur' : 'pilote')}
+                  className="rounded"
+                  disabled={role === 'admin'}
+                />
+                <span className={`${role === 'admin' ? 'text-slate-500' : 'text-slate-300'}`}>🎓 Instructeur (Section instruction)</span>
+              </label>
+            )}
+
             {/* Armée */}
             <label className="flex items-center gap-2 cursor-pointer">
               <input 

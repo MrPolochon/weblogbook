@@ -35,6 +35,7 @@ export default function InstructionClient({
   viewerRole,
   viewerId,
   programs,
+  examLicenceOptions,
   myFormationActive,
   myFormationLicence,
   myInstructorIdentifiant,
@@ -49,6 +50,7 @@ export default function InstructionClient({
   viewerRole: string;
   viewerId: string;
   programs: InstructionProgram[];
+  examLicenceOptions: string[];
   myFormationActive: boolean;
   myFormationLicence: string | null;
   myInstructorIdentifiant: string | null;
@@ -71,7 +73,7 @@ export default function InstructionClient({
   const [typeAvionId, setTypeAvionId] = useState('');
   const [nomPerso, setNomPerso] = useState('');
   const [immat, setImmat] = useState('');
-  const [examLicence, setExamLicence] = useState(myFormationLicence || 'PPL');
+  const [examLicence, setExamLicence] = useState(myFormationLicence || examLicenceOptions[0] || 'PPL');
   const [examMessage, setExamMessage] = useState('');
   const [examStatusEdit, setExamStatusEdit] = useState<Record<string, { statut: string; response_note: string }>>({});
   const [editById, setEditById] = useState<Record<string, { nom: string; immat: string; aeroport: string }>>({});
@@ -287,8 +289,8 @@ export default function InstructionClient({
         <h2 className="text-lg font-medium text-slate-200">Demander un examen</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <select className="input" value={examLicence} onChange={(e) => setExamLicence(e.target.value)} required>
-            {programs.map((p) => (
-              <option key={p.licenceCode} value={p.licenceCode}>{p.label}</option>
+            {examLicenceOptions.map((licence) => (
+              <option key={licence} value={licence}>{licence}</option>
             ))}
           </select>
           <input

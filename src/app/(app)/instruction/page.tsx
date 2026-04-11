@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import InstructionClient from './InstructionClient';
 import { INSTRUCTION_PROGRAMS } from '@/lib/instruction-programs';
+import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
 
 export default async function InstructionPage() {
   const supabase = await createClient();
@@ -74,6 +75,7 @@ export default async function InstructionPage() {
       viewerRole={me.role}
       viewerId={me.id}
       programs={INSTRUCTION_PROGRAMS}
+      examLicenceOptions={[...ALL_LICENCE_TYPES]}
       myFormationActive={Boolean(me.formation_instruction_active)}
       myFormationLicence={(me.formation_instruction_licence as string | null) || null}
       myInstructorIdentifiant={(meInstructorProfile as { identifiant?: string } | null)?.identifiant || null}

@@ -123,6 +123,19 @@ export default function CreatePiloteForm() {
         </div>
         <div className="flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={role === 'instructeur'}
+              onChange={(e) => {
+                if (role === 'admin') return;
+                setRole(e.target.checked ? 'instructeur' : 'pilote');
+              }}
+              className="rounded"
+              disabled={role === 'admin'}
+            />
+            <span className={`${role === 'admin' ? 'text-slate-500' : 'text-slate-300'}`}>🎓 Instructeur (Section instruction)</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={armee} onChange={(e) => setArmee(e.target.checked)} className="rounded" />
             <span className="text-slate-300">Armée</span>
           </label>
