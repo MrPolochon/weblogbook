@@ -16,10 +16,35 @@ export async function PATCH(
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const body = await request.json();
-    const { montant } = body;
+    const montantRaw = body?.montant;
 
-    if (!montant || montant <= 0) {
-      return NextResponse.json({ error: 'Montant invalide' }, { status: 400 });
+    // Accepte un nombre ou une chaîne ("1 000", "1000", "1000 F$")
+    // et refuse explicitement les formats ambigus/invalides.
+    const parseMontant = (value: unknown): number | null => {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        const n = Math.floor(value);
+        return n > 0 ? n : null;
+      }
+      if (typeof value !== 'string') return null;
+
+      const cleaned = value
+        .trim()
+        .replace(/[Ff]\$/g, '')
+        .replace(/\$/g, '')
+        .replace(/[\s\u00A0\u202F]/g, '');
+
+      if (!/^\d+$/.test(cleaned)) return null;
+      const n = Number.parseInt(cleaned, 10);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      return n;
+    };
+
+    const montant = parseMontant(montantRaw);
+    if (!montant) {
+      return NextResponse.json(
+        { error: 'Montant invalide. Entrez un nombre entier positif (ex: 1, 1000).' },
+        { status: 400 }
+      );
     }
 
     const admin = createAdminClient();

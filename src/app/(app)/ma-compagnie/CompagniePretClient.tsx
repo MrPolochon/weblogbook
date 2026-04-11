@@ -101,9 +101,25 @@ export default function CompagniePretClient({ compagnieId }: Props) {
   }
 
   async function handleRembourserPret() {
-    const montant = parseInt(montantRemboursement, 10);
-    if (!montant || montant <= 0) {
-      setError('Montant invalide');
+    const montant = Number.parseInt(
+      montantRemboursement.replace(/[\s\u00A0\u202F]/g, '').replace(/[Ff]\$/g, '').replace(/\$/g, ''),
+      10
+    );
+    if (!Number.isFinite(montant) || montant <= 0) {
+      setError('Montant invalide (entier positif requis).');
+      return;
+    }
+
+    if (pretActif) {
+      const reste = pretActif.montant_total_du - pretActif.montant_rembourse;
+      if (montant > reste) {
+        setError(`Montant trop élevé. Maximum autorisé: ${reste.toLocaleString('fr-FR')} F$.`);
+        return;
+      }
+    }
+
+    if (!Number.isInteger(montant)) {
+      setError('Montant invalide (pas de décimales).');
       return;
     }
 
