@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { identifiantToEmail } from '@/lib/constants';
 import { ensureComptePersonnel } from '@/lib/felitz/ensure-comptes';
+import { INSTRUCTION_LICENCE_CODES } from '@/lib/instruction-programs';
 
 function canManageInstruction(role: string | null | undefined): boolean {
   return role === 'instructeur' || role === 'admin';
@@ -22,7 +23,7 @@ export async function GET() {
 
     const { data: eleves, error } = await admin
       .from('profiles')
-      .select('id, identifiant, role, formation_instruction_active, created_at')
+      .select('id, identifiant, role, formation_instruction_active, formation_instruction_licence, created_at')
       .eq('instructeur_referent_id', user.id)
       .order('created_at', { ascending: false });
 
@@ -49,12 +50,16 @@ export async function POST(request: Request) {
     const body = await request.json();
     const identifiant = String(body.identifiant || '').trim().toLowerCase();
     const password = String(body.password || '');
+    const requestedLicence = String(body.formation_instruction_licence || 'PPL').trim();
 
     if (!identifiant || identifiant.length < 2) {
       return NextResponse.json({ error: 'Identifiant invalide.' }, { status: 400 });
     }
     if (password.length < 8) {
       return NextResponse.json({ error: 'Le mot de passe doit faire au moins 8 caractères.' }, { status: 400 });
+    }
+    if (!INSTRUCTION_LICENCE_CODES.includes(requestedLicence)) {
+      return NextResponse.json({ error: 'Licence de formation invalide.' }, { status: 400 });
     }
 
     const email = identifiantToEmail(identifiant);
@@ -75,6 +80,7 @@ export async function POST(request: Request) {
       heures_initiales_minutes: 0,
       instructeur_referent_id: user.id,
       formation_instruction_active: true,
+      formation_instruction_licence: requestedLicence,
     };
     const { error: profileErr } = await admin.from('profiles').upsert(payload, { onConflict: 'id' });
     if (profileErr) {

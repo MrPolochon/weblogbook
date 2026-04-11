@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import InstructionClient from './InstructionClient';
+import { INSTRUCTION_PROGRAMS } from '@/lib/instruction-programs';
 
 export default async function InstructionPage() {
   const supabase = await createClient();
@@ -9,37 +10,80 @@ export default async function InstructionPage() {
   if (!user) redirect('/login');
 
   const admin = createAdminClient();
-  const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
-  if (me?.role !== 'instructeur' && me?.role !== 'admin') redirect('/logbook');
+  const { data: me } = await admin
+    .from('profiles')
+    .select('id, identifiant, role, formation_instruction_active, formation_instruction_licence, instructeur_referent_id')
+    .eq('id', user.id)
+    .single();
+  if (!me) redirect('/logbook');
 
-  const [{ data: eleves }, { data: typesAvion }] = await Promise.all([
+  const isManager = me.role === 'instructeur' || me.role === 'admin';
+
+  const [{ data: typesAvion }, { data: meInstructorProfile }, { data: examMine }] = await Promise.all([
+    admin.from('types_avion').select('id, nom, constructeur, code_oaci').order('ordre', { ascending: true }),
+    me.instructeur_referent_id
+      ? admin.from('profiles').select('identifiant').eq('id', me.instructeur_referent_id).maybeSingle()
+      : Promise.resolve({ data: null }),
     admin
-      .from('profiles')
-      .select('id, identifiant, formation_instruction_active, created_at')
-      .eq('instructeur_referent_id', user.id)
+      .from('instruction_exam_requests')
+      .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, created_at, updated_at, instructeur:profiles!instruction_exam_requests_instructeur_id_fkey(identifiant)')
+      .eq('requester_id', user.id)
       .order('created_at', { ascending: false }),
-    admin
-      .from('types_avion')
-      .select('id, nom, constructeur, code_oaci')
-      .order('ordre', { ascending: true }),
   ]);
 
-  const eleveIds = (eleves || []).map((e) => e.id);
-  const { data: avionsTemp } = eleveIds.length > 0
+  const { data: myProgression } = me.formation_instruction_active && me.formation_instruction_licence
     ? await admin
-        .from('inventaire_avions')
-        .select('id, proprietaire_id, type_avion_id, nom_personnalise, immatriculation, aeroport_actuel, statut, usure_percent, instruction_actif')
-        .eq('instruction_actif', true)
-        .eq('instruction_instructeur_id', user.id)
-        .in('proprietaire_id', eleveIds)
+        .from('instruction_progression_items')
+        .select('licence_code, module_code, completed')
+        .eq('eleve_id', user.id)
+        .eq('licence_code', me.formation_instruction_licence)
+    : { data: [] as Array<Record<string, unknown>> };
+
+  const { data: eleves } = isManager
+    ? await admin
+        .from('profiles')
+        .select('id, identifiant, formation_instruction_active, formation_instruction_licence, created_at')
+        .eq('instructeur_referent_id', user.id)
         .order('created_at', { ascending: false })
     : { data: [] as Array<Record<string, unknown>> };
 
+  const eleveIds = (eleves || []).map((e) => e.id);
+  const [{ data: avionsTemp }, { data: elevesProgression }, { data: examAssigned }] = isManager && eleveIds.length > 0
+    ? await Promise.all([
+        admin
+          .from('inventaire_avions')
+          .select('id, proprietaire_id, type_avion_id, nom_personnalise, immatriculation, aeroport_actuel, statut, usure_percent, instruction_actif')
+          .eq('instruction_actif', true)
+          .eq('instruction_instructeur_id', user.id)
+          .in('proprietaire_id', eleveIds)
+          .order('created_at', { ascending: false }),
+        admin
+          .from('instruction_progression_items')
+          .select('eleve_id, licence_code, module_code, completed')
+          .in('eleve_id', eleveIds),
+        admin
+          .from('instruction_exam_requests')
+          .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, created_at, updated_at, requester:profiles!instruction_exam_requests_requester_id_fkey(identifiant)')
+          .eq('instructeur_id', user.id)
+          .order('created_at', { ascending: false }),
+      ])
+    : [{ data: [] as Array<Record<string, unknown>> }, { data: [] as Array<Record<string, unknown>> }, { data: [] as Array<Record<string, unknown>> }];
+
   return (
     <InstructionClient
-      eleves={(eleves || []) as Array<{ id: string; identifiant: string; formation_instruction_active: boolean; created_at: string }>}
+      viewerRole={me.role}
+      viewerId={me.id}
+      programs={INSTRUCTION_PROGRAMS}
+      myFormationActive={Boolean(me.formation_instruction_active)}
+      myFormationLicence={(me.formation_instruction_licence as string | null) || null}
+      myInstructorIdentifiant={(meInstructorProfile as { identifiant?: string } | null)?.identifiant || null}
+      myProgression={(myProgression || []) as Array<{ licence_code: string; module_code: string; completed: boolean }>}
+      examRequestsMine={(examMine || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; created_at: string; updated_at: string; instructeur: { identifiant: string } | { identifiant: string }[] | null }>}
+      examRequestsAssigned={(examAssigned || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; created_at: string; updated_at: string; requester: { identifiant: string } | { identifiant: string }[] | null }>}
+      eleves={(eleves || []) as Array<{ id: string; identifiant: string; formation_instruction_active: boolean; formation_instruction_licence: string | null; created_at: string }>}
       typesAvion={(typesAvion || []) as Array<{ id: string; nom: string; constructeur: string | null; code_oaci: string | null }>}
       avionsTemp={(avionsTemp || []) as Array<{ id: string; proprietaire_id: string; type_avion_id: string; nom_personnalise: string | null; immatriculation: string | null; aeroport_actuel: string | null; statut: string | null; usure_percent: number | null; instruction_actif: boolean }>}
+      elevesProgression={(elevesProgression || []) as Array<{ eleve_id: string; licence_code: string; module_code: string; completed: boolean }>}
     />
   );
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { INSTRUCTION_LICENCE_CODES } from '@/lib/instruction-programs';
 
 const STATUTS_PLANS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
 
@@ -36,15 +37,27 @@ export async function PATCH(
 
     const body = await request.json();
     const action = String(body.action || '').trim();
-    if (action !== 'terminer_formation') {
+    if (action !== 'terminer_formation' && action !== 'set_licence') {
       return NextResponse.json({ error: 'Action inconnue.' }, { status: 400 });
+    }
+
+    if (action === 'set_licence') {
+      const licenceCode = String(body.licence_code || '').trim();
+      if (!INSTRUCTION_LICENCE_CODES.includes(licenceCode)) {
+        return NextResponse.json({ error: 'Licence invalide.' }, { status: 400 });
+      }
+      const { error: setErr } = await admin
+        .from('profiles')
+        .update({ formation_instruction_licence: licenceCode })
+        .eq('id', eleveId);
+      if (setErr) return NextResponse.json({ error: setErr.message }, { status: 400 });
+      return NextResponse.json({ ok: true });
     }
 
     const { data: avionsTemp } = await admin
       .from('inventaire_avions')
       .select('id, immatriculation')
       .eq('instruction_actif', true)
-      .eq('instruction_instructeur_id', user.id)
       .eq('instruction_eleve_id', eleveId);
 
     const ids = (avionsTemp || []).map((a) => a.id);

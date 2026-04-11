@@ -202,20 +202,18 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
             </Link>
           )}
 
-          {(isInstructeur || isAdmin) && (
-            <Link
-              href="/instruction"
-              className={cn(
-                navItemBase,
-                pathname.startsWith('/instruction')
-                  ? navItemActive
-                  : navItemMuted
-              )}
-            >
-              <Users className="h-4 w-4" />
-              Instruction
-            </Link>
-          )}
+          <Link
+            href="/instruction"
+            className={cn(
+              navItemBase,
+              pathname.startsWith('/instruction')
+                ? navItemActive
+                : navItemMuted
+            )}
+          >
+            <Users className="h-4 w-4" />
+            Instruction
+          </Link>
 
           {isAdmin && (
             <Link
