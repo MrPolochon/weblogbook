@@ -15,7 +15,7 @@ export default async function AdminCompagniesPage() {
       .order('nom'),
     admin.from('profiles')
       .select('id, identifiant')
-      .in('role', ['pilote', 'admin'])
+      .in('role', ['pilote', 'instructeur', 'admin'])
       .order('identifiant')
   ]);
 
