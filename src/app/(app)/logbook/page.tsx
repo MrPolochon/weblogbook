@@ -12,20 +12,11 @@ export default async function LogbookPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('heures_initiales_minutes, blocked_until, role')
-    .eq('id', user.id)
-    .single();
-
-  const isAdmin = profile?.role === 'admin';
-
-  const blocked = profile?.blocked_until
-    ? new Date(profile.blocked_until) > new Date()
-    : false;
-
   const admin = createAdminClient();
-  const [{ data: vols }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }, { data: plansVolRefuses }, { data: plansVolClotures }] = await Promise.all([
+
+  // Profile + all flight data in a single parallel batch
+  const [{ data: profile }, { data: vols }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }, { data: plansVolRefuses }, { data: plansVolClotures }] = await Promise.all([
+    supabase.from('profiles').select('heures_initiales_minutes, blocked_until, role').eq('id', user.id).single(),
     admin.from('vols').select(`
       id, pilote_id, copilote_id, instructeur_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote, callsign,
       aeroport_depart, aeroport_arrivee, instruction_type,
@@ -42,6 +33,12 @@ export default async function LogbookPage() {
     admin.from('plans_vol').select('id').eq('pilote_id', user.id).eq('statut', 'refuse'),
     admin.from('plans_vol').select('id, numero_vol').eq('pilote_id', user.id).eq('statut', 'cloture').not('accepted_at', 'is', null).not('cloture_at', 'is', null),
   ]);
+
+  const isAdmin = profile?.role === 'admin';
+
+  const blocked = profile?.blocked_until
+    ? new Date(profile.blocked_until) > new Date()
+    : false;
 
   const totalValides = (vols || []).filter((v) => v.statut === 'validé');
   const volsEnAttente = (vols || []).filter((v) => v.statut === 'en_attente');

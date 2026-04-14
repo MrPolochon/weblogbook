@@ -23,7 +23,7 @@ export default async function AdminEmployesPage() {
   // Liste des pilotes (non employés ou à réassigner)
   const { data: pilotes } = await admin.from('profiles')
     .select('id, identifiant')
-    .in('role', ['pilote', 'admin'])
+    .in('role', ['pilote', 'instructeur', 'admin'])
     .order('identifiant');
 
   // Liste des employés actuels

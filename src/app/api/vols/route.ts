@@ -237,8 +237,10 @@ export async function POST(request: Request) {
     if (role_pilote === 'Co-pilote') {
       if (isAdmin && created_by_admin) {
         if (!piloteIdBody || !copiloteIdBody) return NextResponse.json({ error: 'Vol Co-pilote : pilote et copilote requis.' }, { status: 400 });
-        const { data: p1 } = await supabase.from('profiles').select('id').eq('id', piloteIdBody).single();
-        const { data: p2 } = await supabase.from('profiles').select('id').eq('id', copiloteIdBody).single();
+        const [{ data: p1 }, { data: p2 }] = await Promise.all([
+          supabase.from('profiles').select('id').eq('id', piloteIdBody).single(),
+          supabase.from('profiles').select('id').eq('id', copiloteIdBody).single(),
+        ]);
         if (!p1 || !p2) return NextResponse.json({ error: 'Pilote ou copilote introuvable.' }, { status: 400 });
         targetPiloteId = piloteIdBody;
         targetCopiloteId = copiloteIdBody;

@@ -27,17 +27,19 @@ export default async function AdminPilotesPage() {
   if (profile?.role !== 'admin') redirect('/admin');
 
   const admin = createAdminClient();
-  const { data: profiles } = await admin
-    .from('profiles')
-    .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc, ifsa')
-    .order('identifiant');
 
-  let lastLoginByUser: Record<string, string | null> = {};
-  try {
-    const { data: tracking } = await admin.from('user_login_tracking').select('user_id, last_login_at');
-    if (tracking) lastLoginByUser = Object.fromEntries(tracking.map((t) => [t.user_id, t.last_login_at]));
-  } catch {
-    // Table peut ne pas exister
+  // Profiles + login tracking in parallel
+  const [{ data: profiles }, trackingResult] = await Promise.all([
+    admin
+      .from('profiles')
+      .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc, ifsa')
+      .order('identifiant'),
+    Promise.resolve(admin.from('user_login_tracking').select('user_id, last_login_at')).then(r => r.data).catch(() => null),
+  ]);
+
+  const lastLoginByUser: Record<string, string | null> = {};
+  if (trackingResult) {
+    for (const t of trackingResult) lastLoginByUser[t.user_id] = t.last_login_at;
   }
 
   const withInactif = (profiles || []).map((p) => ({

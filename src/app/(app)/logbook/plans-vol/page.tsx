@@ -22,29 +22,32 @@ const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: str
 
 export default async function MesPlansVolPage() {
   const supabase = await createClient();
-  const admin = createAdminClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
-  const { data: profile } = await supabase.from('profiles').select('role, identifiant').eq('id', user.id).single();
+
+  const admin = createAdminClient();
+
+  // Profile and plans in parallel
+  const [{ data: profile }, { data: raw }] = await Promise.all([
+    supabase.from('profiles').select('role, identifiant').eq('id', user.id).single(),
+    supabase
+      .from('plans_vol')
+      .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring')
+      .eq('pilote_id', user.id)
+      .order('created_at', { ascending: false }),
+  ]);
+
   if (profile?.role === 'atc') redirect('/logbook');
   const piloteIdentifiant = profile?.identifiant || 'Pilote';
-
-  const { data: raw } = await supabase
-    .from('plans_vol')
-    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring')
-    .eq('pilote_id', user.id)
-    .order('created_at', { ascending: false });
   
   const plans = (raw || []).filter((p: { statut: string }) => !['cloture', 'annule'].includes(p.statut));
   const plansRefuses = plans.filter((p: { statut: string }) => p.statut === 'refuse');
   const plansNonClotures = plans.filter((p: { statut: string }) => p.statut !== 'refuse');
   const plansEnCours = plans.filter((p: { statut: string }) => ['en_cours', 'accepte', 'automonitoring', 'en_attente_cloture'].includes(p.statut));
   
-  // Plan actif avec transpondeur (accepté, en cours, automonitoring ou en attente de clôture)
   const planActif = plans.find((p: { statut: string }) => ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'].includes(p.statut)) as PlanVol | undefined;
   const hasActivePlan = !!planActif;
 
-  // Récupérer l'identifiant du contrôleur en charge si plan actif
   let controleurIdentifiant: string | null = null;
   if (planActif?.current_holder_user_id) {
     const { data: controleurProfile } = await admin

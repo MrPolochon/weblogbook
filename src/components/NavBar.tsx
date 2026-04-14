@@ -105,9 +105,9 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
     pathname.startsWith('/perf-ptfs') || pathname.startsWith('/alliance') || pathname.startsWith('/signalement') || pathname.startsWith('/reparation');
 
   const totalAdminBadge = pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount;
-  const navItemBase = 'flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold tracking-[0.01em] transition-all whitespace-nowrap shrink-0 border';
-  const navItemMuted = 'border-slate-700/30 text-slate-200 hover:border-slate-500/35 hover:bg-slate-700/45 hover:text-white';
-  const navItemActive = 'border-sky-500/35 bg-sky-500/18 text-sky-200 shadow-[0_10px_22px_rgba(2,132,199,0.22)]';
+  const navItemBase = 'flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold tracking-[0.01em] transition-all duration-200 whitespace-nowrap shrink-0 border';
+  const navItemMuted = 'border-slate-700/25 text-slate-300 hover:border-slate-500/40 hover:bg-slate-700/50 hover:text-white hover:shadow-[0_4px_12px_rgba(2,6,23,0.3)]';
+  const navItemActive = 'border-sky-500/40 bg-sky-500/20 text-sky-100 shadow-[0_8px_24px_rgba(2,132,199,0.25)]';
 
   function renderInlineBadge(count: number, color: 'red' | 'orange' = 'red') {
     if (count <= 0) return null;
@@ -120,7 +120,7 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-600/30 bg-slate-950/82 backdrop-blur-2xl shadow-[0_18px_34px_rgba(2,6,23,0.45)]">
+    <header className="sticky top-0 z-50 border-b border-slate-600/25 bg-slate-950/85 backdrop-blur-2xl shadow-[0_18px_34px_rgba(2,6,23,0.5)]" style={{ backdropFilter: 'blur(20px) saturate(1.3)' }}>
       <div className="mx-auto flex max-w-screen-2xl flex-col gap-2 px-4 py-2 sm:h-16 sm:flex-row sm:flex-nowrap sm:items-center sm:justify-between sm:gap-4 sm:py-0">
         <nav className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-visible whitespace-nowrap scrollbar-hide">
           {/* Menu déroulant Espace Pilote */}
@@ -153,7 +153,7 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
             </button>
             
             {piloteMenuOpen && (
-              <div style={dropdownStyle ?? undefined} className="fixed w-64 rounded-2xl border border-slate-600/50 bg-slate-950 py-1.5 shadow-[0_24px_56px_rgba(2,6,23,0.75)] z-50 animate-fade-in">
+              <div style={dropdownStyle ?? undefined} className="fixed w-64 rounded-2xl border border-slate-600/40 bg-slate-950/95 backdrop-blur-xl py-1.5 shadow-[0_24px_56px_rgba(2,6,23,0.8)] z-50 animate-fade-in">
                 {piloteMenuItems.map((item, idx) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || (item.href !== '/logbook' && pathname.startsWith(item.href));

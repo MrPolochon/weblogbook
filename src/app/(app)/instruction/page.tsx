@@ -12,19 +12,19 @@ export default async function InstructionPage() {
 
   const admin = createAdminClient();
 
-  // Récupération de base du rôle via client utilisateur (colonnes stables).
-  // Évite de "tomber pilote" si des colonnes instruction ne sont pas encore migrées.
-  const { data: meBase } = await supabase
-    .from('profiles')
-    .select('id, identifiant, role')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  const { data: meInstruction } = await admin
-    .from('profiles')
-    .select('formation_instruction_active, formation_instruction_licence, instructeur_referent_id')
-    .eq('id', user.id)
-    .maybeSingle();
+  // Fetch base profile and instruction columns in parallel
+  const [{ data: meBase }, { data: meInstruction }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, identifiant, role')
+      .eq('id', user.id)
+      .maybeSingle(),
+    admin
+      .from('profiles')
+      .select('formation_instruction_active, formation_instruction_licence, instructeur_referent_id')
+      .eq('id', user.id)
+      .maybeSingle(),
+  ]);
 
   const viewer = {
     id: meBase?.id || user.id,
@@ -37,7 +37,8 @@ export default async function InstructionPage() {
 
   const isManager = viewer.role === 'instructeur' || viewer.role === 'admin';
 
-  const [{ data: typesAvion }, { data: meInstructorProfile }, { data: examMine }] = await Promise.all([
+  // Batch all independent queries together
+  const [{ data: typesAvion }, { data: meInstructorProfile }, { data: examMine }, progressionResult, elevesResult] = await Promise.all([
     admin.from('types_avion').select('id, nom, constructeur, code_oaci').order('ordre', { ascending: true }),
     viewer.instructeur_referent_id
       ? admin.from('profiles').select('identifiant').eq('id', viewer.instructeur_referent_id).maybeSingle()
@@ -47,23 +48,24 @@ export default async function InstructionPage() {
       .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, created_at, updated_at, instructeur:profiles!instruction_exam_requests_instructeur_id_fkey(identifiant)')
       .eq('requester_id', user.id)
       .order('created_at', { ascending: false }),
+    viewer.formation_instruction_active && viewer.formation_instruction_licence
+      ? admin
+          .from('instruction_progression_items')
+          .select('licence_code, module_code, completed')
+          .eq('eleve_id', user.id)
+          .eq('licence_code', viewer.formation_instruction_licence)
+      : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
+    isManager
+      ? admin
+          .from('profiles')
+          .select('id, identifiant, formation_instruction_active, formation_instruction_licence, created_at')
+          .eq('instructeur_referent_id', user.id)
+          .order('created_at', { ascending: false })
+      : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
   ]);
 
-  const { data: myProgression } = viewer.formation_instruction_active && viewer.formation_instruction_licence
-    ? await admin
-        .from('instruction_progression_items')
-        .select('licence_code, module_code, completed')
-        .eq('eleve_id', user.id)
-        .eq('licence_code', viewer.formation_instruction_licence)
-    : { data: [] as Array<Record<string, unknown>> };
-
-  const { data: eleves } = isManager
-    ? await admin
-        .from('profiles')
-        .select('id, identifiant, formation_instruction_active, formation_instruction_licence, created_at')
-        .eq('instructeur_referent_id', user.id)
-        .order('created_at', { ascending: false })
-    : { data: [] as Array<Record<string, unknown>> };
+  const myProgression = progressionResult?.data;
+  const eleves = elevesResult?.data;
 
   const eleveIds = (eleves || []).map((e) => e.id);
   const [{ data: avionsTemp }, { data: elevesProgression }, { data: examAssigned }] = isManager && eleveIds.length > 0

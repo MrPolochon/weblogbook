@@ -11,26 +11,21 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
 
   const admin = createAdminClient();
 
-  // Récupérer TOUTES les compagnies où l'utilisateur est employé
-  const { data: emplois } = await admin.from('compagnie_employes')
-    .select('compagnie_id, compagnies(id, nom)')
-    .eq('pilote_id', user.id);
+  // Single batch: employee records (with role) + PDG companies
+  const [{ data: emplois }, { data: compagniesPdg }] = await Promise.all([
+    admin.from('compagnie_employes')
+      .select('compagnie_id, role, compagnies(id, nom)')
+      .eq('pilote_id', user.id),
+    admin.from('compagnies')
+      .select('id, nom')
+      .eq('pdg_id', user.id),
+  ]);
 
-  // Récupérer TOUTES les compagnies où l'utilisateur est PDG
-  const { data: compagniesPdg } = await admin.from('compagnies')
-    .select('id, nom')
-    .eq('pdg_id', user.id);
-
-  // Construire la liste de toutes les compagnies
   type CompagnieOption = { id: string; nom: string; role: 'employe' | 'pdg' | 'co_pdg' };
   const compagniesMap = new Map<string, CompagnieOption>();
 
-  // Récupérer les rôles des employés pour détecter les co-PDG
-  const { data: emploiRoles } = await admin.from('compagnie_employes')
-    .select('compagnie_id, role')
-    .eq('pilote_id', user.id);
   const coPdgCompIds = new Set(
-    (emploiRoles || []).filter(e => e.role === 'co_pdg').map(e => e.compagnie_id)
+    (emplois || []).filter(e => e.role === 'co_pdg').map(e => e.compagnie_id)
   );
 
   (emplois || []).forEach(e => {
@@ -63,85 +58,78 @@ export default async function MaCompagniePage({ searchParams }: { searchParams: 
     );
   }
 
-  // Déterminer la compagnie à afficher
   const selectedId = searchParams.c || compagniesDisponibles[0].id;
   const selectedCompagnieOption = compagniesDisponibles.find(c => c.id === selectedId) || compagniesDisponibles[0];
 
-  // Récupérer les infos complètes de la compagnie sélectionnée
-  const { data: compagnie } = await admin.from('compagnies')
-    .select('*, profiles!compagnies_pdg_id_fkey(identifiant)')
-    .eq('id', selectedCompagnieOption.id)
-    .single();
+  // Company details + employees in parallel
+  const [{ data: compagnie }, { data: employes }] = await Promise.all([
+    admin.from('compagnies')
+      .select('*, profiles!compagnies_pdg_id_fkey(identifiant)')
+      .eq('id', selectedCompagnieOption.id)
+      .single(),
+    admin.from('compagnie_employes')
+      .select('*, profiles(id, identifiant)')
+      .eq('compagnie_id', selectedCompagnieOption.id),
+  ]);
 
-  // Liste des employés avec leurs heures de vol
-  const { data: employes } = await admin.from('compagnie_employes')
-    .select('*, profiles(id, identifiant)')
-    .eq('compagnie_id', selectedCompagnieOption.id);
-
-  // Calculer les heures de vol par pilote
-  // On compte les heures de DEUX sources :
-  // 1. Table 'vols' (logbook classique) avec statut 'valide'
-  // 2. Table 'plans_vol' (vols commerciaux) avec statut 'cloture' 
   const employeIds = (employes || []).map(e => {
     const p = e.profiles;
     const pObj = p ? (Array.isArray(p) ? p[0] : p) : null;
     return (pObj as { id: string } | null)?.id;
   }).filter(Boolean);
   
-  const heuresParPilote: Record<string, number> = {};
-  if (employeIds.length > 0) {
-    // Source 1: Table vols (logbook classique)
-    const { data: vols } = await admin.from('vols')
-      .select('pilote_id, duree_minutes')
-      .eq('compagnie_id', selectedCompagnieOption.id)
-      .eq('statut', 'validé')
-      .in('pilote_id', employeIds);
-
-    (vols || []).forEach(v => {
-      if (v.pilote_id) {
-        heuresParPilote[v.pilote_id] = (heuresParPilote[v.pilote_id] || 0) + (v.duree_minutes || 0);
-      }
-    });
-
-    // Source 2: Table plans_vol (vols commerciaux clôturés)
-    // Le temps réel est calculé à partir de accepted_at et demande_cloture_at (ou cloture_at)
-    const { data: plansVol } = await admin.from('plans_vol')
-      .select('pilote_id, temps_prev_min, accepted_at, demande_cloture_at, cloture_at')
-      .eq('compagnie_id', selectedCompagnieOption.id)
-      .eq('statut', 'cloture')
-      .in('pilote_id', employeIds);
-
-    (plansVol || []).forEach(p => {
-      if (p.pilote_id) {
-        // Calculer le temps réel de vol
-        let tempsMinutes = p.temps_prev_min || 0;
-        if (p.accepted_at && (p.demande_cloture_at || p.cloture_at)) {
-          const debut = new Date(p.accepted_at);
-          const fin = new Date(p.demande_cloture_at || p.cloture_at);
-          const diffMs = fin.getTime() - debut.getTime();
-          tempsMinutes = Math.max(1, Math.round(diffMs / 60000));
-        }
-        heuresParPilote[p.pilote_id] = (heuresParPilote[p.pilote_id] || 0) + tempsMinutes;
-      }
-    });
-  }
-
   const isPdg = compagnie?.pdg_id === user.id;
   const isCoPdgUser = coPdgCompIds.has(selectedCompagnieOption.id);
   const isLeader = isPdg || isCoPdgUser;
 
-  // Récupérer le solde de la compagnie (compte entreprise)
-  let soldeCompagnie = 0;
-  if (isLeader && compagnie) {
-    const { data: compteEntreprise } = await admin.from('felitz_comptes')
-      .select('solde')
-      .eq('compagnie_id', compagnie.id)
-      .eq('type', 'entreprise')
-      .single();
-    soldeCompagnie = compteEntreprise?.solde || 0;
-  }
+  // Flight hours (vols + plans_vol) + company balance in parallel
+  const heuresParPilote: Record<string, number> = {};
 
-  // Préparer les données pour le client
+  const [volsResult, plansVolResult, soldeResult] = await Promise.all([
+    employeIds.length > 0
+      ? admin.from('vols')
+          .select('pilote_id, duree_minutes')
+          .eq('compagnie_id', selectedCompagnieOption.id)
+          .eq('statut', 'validé')
+          .in('pilote_id', employeIds)
+      : Promise.resolve({ data: null }),
+    employeIds.length > 0
+      ? admin.from('plans_vol')
+          .select('pilote_id, temps_prev_min, accepted_at, demande_cloture_at, cloture_at')
+          .eq('compagnie_id', selectedCompagnieOption.id)
+          .eq('statut', 'cloture')
+          .in('pilote_id', employeIds)
+      : Promise.resolve({ data: null }),
+    isLeader && compagnie
+      ? admin.from('felitz_comptes')
+          .select('solde')
+          .eq('compagnie_id', compagnie.id)
+          .eq('type', 'entreprise')
+          .single()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  (volsResult?.data || []).forEach((v: { pilote_id?: string; duree_minutes?: number }) => {
+    if (v.pilote_id) {
+      heuresParPilote[v.pilote_id] = (heuresParPilote[v.pilote_id] || 0) + (v.duree_minutes || 0);
+    }
+  });
+
+  (plansVolResult?.data || []).forEach((p: { pilote_id?: string; temps_prev_min?: number; accepted_at?: string; demande_cloture_at?: string; cloture_at?: string }) => {
+    if (p.pilote_id) {
+      let tempsMinutes = p.temps_prev_min || 0;
+      if (p.accepted_at && (p.demande_cloture_at || p.cloture_at)) {
+        const debut = new Date(p.accepted_at);
+        const fin = new Date(p.demande_cloture_at || p.cloture_at!);
+        const diffMs = fin.getTime() - debut.getTime();
+        tempsMinutes = Math.max(1, Math.round(diffMs / 60000));
+      }
+      heuresParPilote[p.pilote_id] = (heuresParPilote[p.pilote_id] || 0) + tempsMinutes;
+    }
+  });
+
+  const soldeCompagnie = (soldeResult?.data as { solde?: number } | null)?.solde || 0;
+
   const employesData = (employes || []).map(emp => {
     const pData = emp.profiles;
     const pilote = pData ? (Array.isArray(pData) ? pData[0] : pData) as { id: string; identifiant: string } | null : null;

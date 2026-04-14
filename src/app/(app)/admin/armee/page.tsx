@@ -30,7 +30,7 @@ export default async function AdminArmeePage() {
   // Récupérer tous les pilotes (pour sélection PDG)
   const { data: tousPilotes } = await admin.from('profiles')
     .select('id, identifiant, role')
-    .in('role', ['pilote', 'admin'])
+    .in('role', ['pilote', 'instructeur', 'admin'])
     .order('identifiant');
 
   // Stats militaires
