@@ -330,7 +330,10 @@ export default function AtcMapClient() {
         <div className="max-w-[1600px] mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Radio className="h-6 w-6 text-emerald-400" />
-            <h1 className="text-xl font-bold text-slate-100">Carte ATC en direct</h1>
+            <h1 className="text-xl font-bold text-slate-100">Carte œil du web</h1>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-sky-500/40 text-sky-300/90" title="Œil du web">
+              ODW
+            </span>
             <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400 border border-emerald-600/30">
               {sessions.length} contrôleur{sessions.length > 1 ? 's' : ''} en ligne
             </span>

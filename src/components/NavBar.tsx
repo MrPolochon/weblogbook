@@ -288,10 +288,10 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
                 ? 'bg-slate-700/50 text-emerald-300'
                 : 'text-emerald-400/70 hover:bg-emerald-900/20 hover:text-emerald-300'
             )}
-            title="Carte ATC en direct"
+            title="Carte œil du web (ODW : œil du web)"
           >
             <Radio className="h-4 w-4" />
-            Carte ATC
+            ODW
           </Link>
         </nav>
         <div className="w-full sm:w-auto sm:shrink-0">
@@ -353,9 +353,10 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
                 <Link
                   href="/carte-atc"
                   className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-emerald-300 bg-slate-800/50 hover:bg-slate-800"
+                  title="Carte œil du web (ODW)"
                 >
                   <Radio className="h-4 w-4" />
-                  Carte ATC
+                  Carte œil du web
                 </Link>
                 {isAdmin && (
                   <>

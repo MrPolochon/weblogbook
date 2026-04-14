@@ -247,9 +247,9 @@ export default function AtcNavBar({
               <span className="hidden sm:inline">Mon compte</span>
               <span className="sm:hidden">Compte</span>
             </Link>
-            <Link href="/carte-atc" className={cn(linkBase, 'gap-1.5', isDark ? 'text-emerald-300 hover:bg-emerald-900/30' : 'text-emerald-700 hover:bg-emerald-100')} title="Carte ATC en direct">
+            <Link href="/carte-atc" className={cn(linkBase, 'gap-1.5', isDark ? 'text-emerald-300 hover:bg-emerald-900/30' : 'text-emerald-700 hover:bg-emerald-100')} title="Carte œil du web (ODW : œil du web)">
               <Radio className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Carte</span>
+              <span className="hidden sm:inline">ODW</span>
             </Link>
             {isAdmin && (
               <>
