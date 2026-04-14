@@ -9,7 +9,7 @@ import {
   PLANE_BLIP_D,
   type RadarTarget, type STCAPair, type Point,
 } from '@/lib/radar-utils';
-import { DEFAULT_VORS, DEFAULT_WAYPOINTS } from '@/lib/cartography-data';
+import { AIRPORT_TO_FIR, DEFAULT_VORS, DEFAULT_WAYPOINTS } from '@/lib/cartography-data';
 
 const POLL_INTERVAL = 3000;
 const TRAIL_LENGTH = 4;
@@ -37,8 +37,10 @@ export default function RadarClient({ userId }: { userId: string }) {
   const [centerAirport, setCenterAirport] = useState<string>('');
   const [rangeIdx, setRangeIdx] = useState(2);
   const [showIslands, setShowIslands] = useState(true);
-  const [showFIR, setShowFIR] = useState(true);
+  /** FIR sans Center en ligne (bleu). Les FIR contrôlés restent toujours affichés. */
+  const [showOptionalFirs, setShowOptionalFirs] = useState(false);
   const [showAirports, setShowAirports] = useState(true);
+  const [showWaypoints, setShowWaypoints] = useState(true);
   const [filterType, setFilterType] = useState<'ALL' | 'IFR' | 'VFR' | 'UNK'>('ALL');
   const [charSize, setCharSize] = useState<typeof CHAR_SIZES[number]>('M');
   const [showPTL, setShowPTL] = useState(true);
@@ -60,6 +62,17 @@ export default function RadarClient({ userId }: { userId: string }) {
     stcaPairs.forEach(p => { set.add(p.targetA); set.add(p.targetB); });
     return set;
   }, [stcaPairs]);
+
+  const centerAirports = useMemo(
+    () => new Set(atcSessions.filter(s => s.position === 'Center').map(s => s.aeroport)),
+    [atcSessions],
+  );
+
+  function firHasCenterCoverage(fir: { code: string }): boolean {
+    return Object.entries(AIRPORT_TO_FIR).some(
+      ([airportCode, firCode]) => firCode === fir.code && centerAirports.has(airportCode),
+    );
+  }
 
   const fetchTargets = useCallback(async () => {
     try {
@@ -278,29 +291,59 @@ export default function RadarClient({ userId }: { userId: string }) {
               opacity="0.15"
             />
 
-            {showFIR && DEFAULT_FIR_ZONES.map(fir => (
-              <g key={fir.id}>
-                <polygon
-                  points={fir.points.map(p => `${p.x},${p.y}`).join(' ')}
-                  fill="none"
-                  stroke="#0d3320"
-                  strokeWidth="1"
-                  strokeDasharray="6 4"
-                  opacity="0.6"
-                />
-                <text
-                  x={fir.points.reduce((s, p) => s + p.x, 0) / fir.points.length}
-                  y={fir.points.reduce((s, p) => s + p.y, 0) / fir.points.length}
-                  fill="#0d4a28"
-                  fontSize="10"
-                  fontFamily="monospace"
-                  textAnchor="middle"
-                  opacity="0.5"
-                >
-                  {fir.name}
-                </text>
-              </g>
-            ))}
+            {DEFAULT_FIR_ZONES.map((fir) => {
+              if (!firHasCenterCoverage(fir)) return null;
+              return (
+                <g key={fir.id}>
+                  <polygon
+                    points={fir.points.map(p => `${p.x},${p.y}`).join(' ')}
+                    fill="none"
+                    stroke="#0d3320"
+                    strokeWidth="1"
+                    strokeDasharray="6 4"
+                    opacity="0.6"
+                  />
+                  <text
+                    x={fir.points.reduce((s, p) => s + p.x, 0) / fir.points.length}
+                    y={fir.points.reduce((s, p) => s + p.y, 0) / fir.points.length}
+                    fill="#0d4a28"
+                    fontSize="10"
+                    fontFamily="monospace"
+                    textAnchor="middle"
+                    opacity="0.5"
+                  >
+                    {fir.name}
+                  </text>
+                </g>
+              );
+            })}
+
+            {showOptionalFirs && DEFAULT_FIR_ZONES.map((fir) => {
+              if (firHasCenterCoverage(fir)) return null;
+              return (
+                <g key={`opt-fir-${fir.id}`}>
+                  <polygon
+                    points={fir.points.map(p => `${p.x},${p.y}`).join(' ')}
+                    fill="rgba(37,99,235,0.06)"
+                    stroke="#2563eb"
+                    strokeWidth="1"
+                    strokeDasharray="6 4"
+                    opacity="0.75"
+                  />
+                  <text
+                    x={fir.points.reduce((s, p) => s + p.x, 0) / fir.points.length}
+                    y={fir.points.reduce((s, p) => s + p.y, 0) / fir.points.length}
+                    fill="#60a5fa"
+                    fontSize="10"
+                    fontFamily="monospace"
+                    textAnchor="middle"
+                    opacity="0.55"
+                  >
+                    {fir.name}
+                  </text>
+                </g>
+              );
+            })}
 
             {showIslands && DEFAULT_ISLANDS.map(island => (
               <polygon
@@ -313,7 +356,7 @@ export default function RadarClient({ userId }: { userId: string }) {
               />
             ))}
 
-            {DEFAULT_WAYPOINTS.map((waypoint) => {
+            {showWaypoints && DEFAULT_WAYPOINTS.map((waypoint) => {
               const point = toSVG(waypoint);
               return (
                 <g key={waypoint.code} opacity="0.3">
@@ -676,8 +719,23 @@ export default function RadarClient({ userId }: { userId: string }) {
         <div className="flex items-center gap-1">
           <span className="text-[#666]">MAPS</span>
           <button onClick={() => setShowIslands(v => !v)} className={showIslands ? 'text-[#00ff41]' : 'text-[#333]'}>ISL</button>
-          <button onClick={() => setShowFIR(v => !v)} className={showFIR ? 'text-[#00ff41]' : 'text-[#333]'}>FIR</button>
+          <button
+            type="button"
+            onClick={() => setShowOptionalFirs(v => !v)}
+            className={showOptionalFirs ? 'text-[#60a5fa]' : 'text-[#333]'}
+            title="FIR sans Center en ligne (bleu). FIR contrôlés toujours visibles."
+          >
+            FIR+
+          </button>
           <button onClick={() => setShowAirports(v => !v)} className={showAirports ? 'text-[#00ff41]' : 'text-[#333]'}>APT</button>
+          <button
+            type="button"
+            onClick={() => setShowWaypoints(v => !v)}
+            className={showWaypoints ? 'text-[#00ff41]' : 'text-[#333]'}
+            title="Waypoints"
+          >
+            WPT
+          </button>
         </div>
 
         <div className="flex items-center gap-1">

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { RefreshCw, Radio } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { RefreshCw, Radio, Layers } from 'lucide-react';
 import {
   AIRPORT_TO_FIR,
   DEFAULT_FIR_ZONES,
@@ -119,6 +119,15 @@ function tracePointsForFlight(f: RenderFlight): string {
   return pts.join(' ');
 }
 
+function firHasCenterCoverage(
+  fir: { code: string },
+  centerAirports: Set<string>,
+): boolean {
+  return Object.entries(AIRPORT_TO_FIR).some(
+    ([airportCode, firCode]) => firCode === fir.code && centerAirports.has(airportCode),
+  );
+}
+
 export default function AtcMapClient() {
   const [sessions, setSessions] = useState<AtcSession[]>([]);
   const [flights, setFlights] = useState<MapFlight[]>([]);
@@ -126,11 +135,17 @@ export default function AtcMapClient() {
   const [selectedAirport, setSelectedAirport] = useState<string | null>(null);
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const layersPanelRef = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(Date.now());
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef<{ x: number; y: number; mouseX: number; mouseY: number } | null>(null);
+  const [layersOpen, setLayersOpen] = useState(false);
+  /** FIR sans Center en ligne : affichage optionnel (bleu). */
+  const [showOptionalFirs, setShowOptionalFirs] = useState(false);
+  const [showAirports, setShowAirports] = useState(true);
+  const [showWaypoints, setShowWaypoints] = useState(true);
 
   const fetchMapData = useCallback(async () => {
     try {
@@ -177,16 +192,29 @@ export default function AtcMapClient() {
     return () => clearInterval(ticker);
   }, []);
 
-  const sessionsByAirport = new Map<string, AtcSession[]>();
-  sessions.forEach(s => {
-    const list = sessionsByAirport.get(s.aeroport) || [];
-    list.push(s);
-    sessionsByAirport.set(s.aeroport, list);
-  });
+  useEffect(() => {
+    if (!layersOpen) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (layersPanelRef.current && !layersPanelRef.current.contains(e.target as Node)) {
+        setLayersOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [layersOpen]);
 
-  const centerAirports = new Set(
-    sessions.filter(s => s.position === 'Center').map(s => s.aeroport)
-  );
+  const { sessionsByAirport, centerAirports } = useMemo(() => {
+    const map = new Map<string, AtcSession[]>();
+    sessions.forEach((s) => {
+      const list = map.get(s.aeroport) || [];
+      list.push(s);
+      map.set(s.aeroport, list);
+    });
+    const center = new Set(
+      sessions.filter((s) => s.position === 'Center').map((s) => s.aeroport),
+    );
+    return { sessionsByAirport: map, centerAirports: center };
+  }, [sessions]);
 
   const airportsWithATC = Array.from(sessionsByAirport.entries())
     .map(([code, sess]) => ({
@@ -346,12 +374,9 @@ export default function AtcMapClient() {
               </defs>
               <rect width="1024" height="787" fill="url(#radarGrid)" />
 
-              {/* FIR zones - seulement si CTR en ligne */}
-              {DEFAULT_FIR_ZONES.map(fir => {
-                const hasFirCoverage = Object.entries(AIRPORT_TO_FIR).some(
-                  ([airportCode, firCode]) => firCode === fir.code && centerAirports.has(airportCode)
-                );
-                if (!hasFirCoverage) return null;
+              {/* FIR contrôlés (Center en ligne) — toujours visibles */}
+              {DEFAULT_FIR_ZONES.map((fir) => {
+                if (!firHasCenterCoverage(fir, centerAirports)) return null;
                 return (
                   <g key={fir.id}>
                     <polygon
@@ -378,6 +403,35 @@ export default function AtcMapClient() {
                 );
               })}
 
+              {/* FIR sans Center (affichage manuel, bleu) */}
+              {showOptionalFirs && DEFAULT_FIR_ZONES.map((fir) => {
+                if (firHasCenterCoverage(fir, centerAirports)) return null;
+                return (
+                  <g key={`opt-fir-${fir.id}`}>
+                    <polygon
+                      points={fir.points.map(p => `${p.x},${p.y}`).join(' ')}
+                      fill="rgba(59,130,246,0.12)"
+                      stroke="#3b82f6"
+                      strokeWidth="2"
+                      strokeDasharray="8 4"
+                      opacity="0.88"
+                    />
+                    <text
+                      x={fir.points.reduce((s, p) => s + p.x, 0) / fir.points.length}
+                      y={fir.points.reduce((s, p) => s + p.y, 0) / fir.points.length}
+                      fill="#93c5fd"
+                      fontSize="14"
+                      fontFamily="monospace"
+                      fontWeight="bold"
+                      textAnchor="middle"
+                      opacity="0.75"
+                    >
+                      {fir.name}
+                    </text>
+                  </g>
+                );
+              })}
+
               {/* Iles */}
               {DEFAULT_ISLANDS.map(island => (
                 <polygon
@@ -390,7 +444,7 @@ export default function AtcMapClient() {
                 />
               ))}
 
-              {DEFAULT_WAYPOINTS.map((waypoint) => {
+              {showWaypoints && DEFAULT_WAYPOINTS.map((waypoint) => {
                 const x = waypoint.x * 10.24;
                 const y = waypoint.y * 7.87;
                 return (
@@ -418,7 +472,7 @@ export default function AtcMapClient() {
               })}
 
               {/* Overlays ATC pour chaque aéroport */}
-              {Object.entries(DEFAULT_POSITIONS).map(([code, pos]) => {
+              {showAirports && Object.entries(DEFAULT_POSITIONS).map(([code, pos]) => {
                 const x = pos.x * 10.24;
                 const y = pos.y * 7.87;
                 const hasATC = sessionsByAirport.has(code);
@@ -536,7 +590,22 @@ export default function AtcMapClient() {
             </svg>
           </div>
 
-          <div className="absolute top-3 right-3 rounded-lg bg-slate-900/90 border border-slate-700/50 p-2 flex items-center gap-2 backdrop-blur-sm">
+          <div ref={layersPanelRef} className="absolute top-3 right-3 flex flex-col items-end gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLayersOpen((o) => !o)}
+                className={`rounded-lg border p-2 backdrop-blur-sm transition-colors ${
+                  layersOpen || showOptionalFirs || !showAirports || !showWaypoints
+                    ? 'bg-sky-600/25 border-sky-500/50 text-sky-200'
+                    : 'bg-slate-900/90 border-slate-700/50 text-slate-200 hover:bg-slate-800'
+                }`}
+                title="Couches : FIR, aéroports, waypoints"
+                aria-expanded={layersOpen}
+              >
+                <Layers className="h-4 w-4" />
+              </button>
+              <div className="rounded-lg bg-slate-900/90 border border-slate-700/50 p-2 flex items-center gap-2 backdrop-blur-sm">
             <button
               onClick={zoomOut}
               className="h-7 w-7 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
@@ -561,6 +630,44 @@ export default function AtcMapClient() {
             >
               Reset
             </button>
+              </div>
+            </div>
+
+            {layersOpen && (
+              <div className="rounded-lg bg-slate-900/95 border border-slate-600/50 p-3 text-xs text-slate-200 shadow-xl backdrop-blur-sm w-[220px] space-y-3">
+                <p className="font-semibold text-slate-100">Couches carte</p>
+                <label className="flex items-center justify-between gap-2 cursor-pointer">
+                  <span>FIR (sans Center)</span>
+                  <input
+                    type="checkbox"
+                    className="accent-sky-500"
+                    checked={showOptionalFirs}
+                    onChange={(e) => setShowOptionalFirs(e.target.checked)}
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-2 cursor-pointer">
+                  <span>Aéroports</span>
+                  <input
+                    type="checkbox"
+                    className="accent-sky-500"
+                    checked={showAirports}
+                    onChange={(e) => setShowAirports(e.target.checked)}
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-2 cursor-pointer">
+                  <span>Waypoints</span>
+                  <input
+                    type="checkbox"
+                    className="accent-sky-500"
+                    checked={showWaypoints}
+                    onChange={(e) => setShowWaypoints(e.target.checked)}
+                  />
+                </label>
+                <p className="text-[10px] leading-relaxed text-slate-500 border-t border-slate-700/50 pt-2">
+                  Les FIR avec une position Center en ligne restent affichés (style actuel), même si les autres FIR sont masqués.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Légende overlay */}
@@ -581,7 +688,8 @@ export default function AtcMapClient() {
               </svg>
               <span className="text-slate-300">DEL (Clairance)</span>
             </div>
-            <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-orange-500" style={{ borderColor: '#ff9632' }} /> <span className="text-slate-300">FIR (Center en ligne)</span></div>
+            <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-amber-400" /> <span className="text-slate-300">FIR contrôlé (Center)</span></div>
+            <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-blue-500" /> <span className="text-slate-300">FIR affiché manuellement</span></div>
             <div className="mt-2 border-t border-slate-700/50 pt-2 space-y-1.5">
               <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-green-500" /> <span className="text-slate-300">Vol VFR</span></div>
               <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-red-500" /> <span className="text-slate-300">Vol IFR</span></div>

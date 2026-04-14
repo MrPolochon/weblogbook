@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { InstructionProgram } from '@/lib/instruction-programs';
 
@@ -80,6 +80,9 @@ export default function InstructionClient({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  /** Clé `eleveId::licence::module` → état affiché en avance de phase avant la réponse serveur */
+  const [progressionOverrides, setProgressionOverrides] = useState<Record<string, boolean>>({});
+  const [savingProgKeys, setSavingProgKeys] = useState<Set<string>>(() => new Set());
 
   const avionsByEleve = useMemo(() => {
     const map = new Map<string, AvionTemp[]>();
@@ -100,7 +103,40 @@ export default function InstructionClient({
       set.add(row.module_code);
       map.set(key, set);
     }
+    for (const [rawKey, completed] of Object.entries(progressionOverrides)) {
+      const parts = rawKey.split('::');
+      if (parts.length !== 3) continue;
+      const [eleveId, licenceCode, moduleCode] = parts;
+      const mapKey = `${eleveId}::${licenceCode}`;
+      const set = map.get(mapKey) || new Set<string>();
+      if (completed) set.add(moduleCode);
+      else set.delete(moduleCode);
+      map.set(mapKey, set);
+    }
     return map;
+  }, [elevesProgression, progressionOverrides]);
+
+  useEffect(() => {
+    setProgressionOverrides((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      const next = { ...prev };
+      let changed = false;
+      for (const key of Object.keys(next)) {
+        const parts = key.split('::');
+        if (parts.length !== 3) continue;
+        const [eleveId, licenceCode, moduleCode] = parts;
+        const want = next[key];
+        const row = elevesProgression.find(
+          (r) => r.eleve_id === eleveId && r.licence_code === licenceCode && r.module_code === moduleCode,
+        );
+        const serverCompleted = row?.completed ?? false;
+        if (serverCompleted === want) {
+          delete next[key];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
   }, [elevesProgression]);
 
   const myProgram = useMemo(
@@ -227,8 +263,16 @@ export default function InstructionClient({
     });
   }
 
+  function progressionToggleKey(eleveId: string, licenceCode: string, moduleCode: string) {
+    return `${eleveId}::${licenceCode}::${moduleCode}`;
+  }
+
   async function toggleProgression(eleveId: string, licenceCode: string, moduleCode: string, completed: boolean) {
-    await run(async () => {
+    const key = progressionToggleKey(eleveId, licenceCode, moduleCode);
+    setError(null);
+    setProgressionOverrides((o) => ({ ...o, [key]: completed }));
+    setSavingProgKeys((s) => new Set(s).add(key));
+    try {
       const res = await fetch('/api/instruction/progression', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -241,8 +285,21 @@ export default function InstructionClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur progression');
-      setSuccess('Progression mise à jour.');
-    });
+      startTransition(() => router.refresh());
+    } catch (e) {
+      setProgressionOverrides((o) => {
+        const next = { ...o };
+        delete next[key];
+        return next;
+      });
+      setError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setSavingProgKeys((s) => {
+        const next = new Set(s);
+        next.delete(key);
+        return next;
+      });
+    }
   }
 
   async function createExamRequest(e: React.FormEvent) {
@@ -434,7 +491,7 @@ export default function InstructionClient({
                             type="checkbox"
                             checked={checked}
                             onChange={(ev) => toggleProgression(e.id, licenceCode, m.code, ev.target.checked)}
-                            disabled={loading}
+                            disabled={loading || savingProgKeys.has(progressionToggleKey(e.id, licenceCode, m.code))}
                           />
                           <span className="text-sm text-slate-300">{m.code} - {m.title}</span>
                         </label>
