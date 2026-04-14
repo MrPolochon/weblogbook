@@ -162,6 +162,20 @@ export default async function HangarMarketPage() {
     .select('taxe_vente_pourcent')
     .single();
 
+  // Reventas rapides utilisées cette semaine (lundi → dimanche UTC)
+  const now = new Date();
+  const dayOfWeek = now.getUTCDay();
+  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const weekStart = new Date(now);
+  weekStart.setUTCDate(now.getUTCDate() - daysFromMonday);
+  weekStart.setUTCHours(0, 0, 0, 0);
+  const { count: reventesRapidesUsees } = await admin.from('hangar_market_reventes')
+    .select('*', { count: 'exact', head: true })
+    .eq('demandeur_id', user.id)
+    .eq('statut', 'executee')
+    .is('admin_id', null)
+    .gte('created_at', weekStart.toISOString());
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -206,6 +220,7 @@ export default async function HangarMarketPage() {
         isPdg={isPdg}
         annonces={annonces}
         taxePourcent={config?.taxe_vente_pourcent || 5}
+        reventesRapidesUsees={reventesRapidesUsees ?? 0}
       />
     </div>
   );

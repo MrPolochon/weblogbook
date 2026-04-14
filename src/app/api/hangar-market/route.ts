@@ -399,13 +399,34 @@ export async function POST(req: NextRequest) {
         }
       ]);
 
-      // Transférer l'avion
+      // Transférer l'avion — on vérifie d'abord qu'il existe toujours
       if (annonce.compagnie_avion_id) {
-        // Avion de flotte : changer la compagnie propriétaire
+        // Avion de flotte : vérifier qu'il existe encore (pas supprimé par une revente directe simultanée)
+        const { data: avionFlotteCheck } = await admin.from('compagnie_avions')
+          .select('id')
+          .eq('id', annonce.compagnie_avion_id)
+          .single();
+        if (!avionFlotteCheck) {
+          // Rembourser l'acheteur
+          await admin.rpc('crediter_compte_safe', { p_compte_id: compteAcheteurId, p_montant: prixTotal });
+          await admin.rpc('debiter_compte_safe', { p_compte_id: compteVendeurId, p_montant: annonce.prix });
+          return NextResponse.json({ error: 'Cet avion n\'est plus disponible (annonce expirée ou déjà traitée).' }, { status: 409 });
+        }
         await admin.from('compagnie_avions')
           .update({ compagnie_id: compagnie_acheteur_id })
           .eq('id', annonce.compagnie_avion_id);
       } else if (annonce.inventaire_avion_id) {
+        // Avion personnel : vérifier qu'il existe encore
+        const { data: avionPersoCheck } = await admin.from('inventaire_avions')
+          .select('id, proprietaire_id')
+          .eq('id', annonce.inventaire_avion_id)
+          .single();
+        if (!avionPersoCheck) {
+          // Rembourser l'acheteur
+          await admin.rpc('crediter_compte_safe', { p_compte_id: compteAcheteurId, p_montant: prixTotal });
+          await admin.rpc('debiter_compte_safe', { p_compte_id: compteVendeurId, p_montant: annonce.prix });
+          return NextResponse.json({ error: 'Cet avion n\'est plus disponible (annonce expirée ou déjà traitée).' }, { status: 409 });
+        }
         await admin.from('inventaire_avions')
           .update({ proprietaire_id: user.id })
           .eq('id', annonce.inventaire_avion_id);

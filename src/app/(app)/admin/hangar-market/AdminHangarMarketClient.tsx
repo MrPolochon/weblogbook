@@ -120,9 +120,8 @@ export default function AdminHangarMarketClient({ taxeActuelle, dernieresVentes,
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-lg font-bold text-amber-400">{d.pourcentage_demande}%</p>
-                    <p className="text-sm text-emerald-400 font-mono">{d.montant_revente.toLocaleString('fr-FR')} F$</p>
-                    <p className="text-xs text-slate-500">au lieu de {Math.round(d.prix_initial * 50 / 100).toLocaleString('fr-FR')} F$ (50%)</p>
+                    <p className="text-lg font-bold text-emerald-400 font-mono">{d.montant_revente.toLocaleString('fr-FR')} F$</p>
+                    <p className="text-xs text-slate-500">{d.pourcentage_demande}% de {d.prix_initial.toLocaleString('fr-FR')} F$</p>
                   </div>
                 </div>
                 {d.raison && (

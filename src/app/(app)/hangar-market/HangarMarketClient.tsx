@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { 
   Plus, Search, Plane, ShoppingCart, RefreshCw, Building2, User, 
-  Tag, X, AlertCircle, Check, Trash2, DollarSign, Send
+  Tag, X, AlertCircle, Check, Trash2, DollarSign
 } from 'lucide-react';
 
 interface Compagnie {
@@ -63,6 +63,7 @@ interface Props {
   isPdg: boolean;
   annonces: Annonce[];
   taxePourcent: number;
+  reventesRapidesUsees: number;
 }
 
 const ETATS = [
@@ -81,7 +82,8 @@ export default function HangarMarketClient({
   flotteDisponible,
   isPdg,
   annonces,
-  taxePourcent
+  taxePourcent,
+  reventesRapidesUsees,
 }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -107,12 +109,14 @@ export default function HangarMarketClient({
   const [selectedAnnonce, setSelectedAnnonce] = useState<Annonce | null>(null);
   const [acheterPour, setAcheterPour] = useState<string | null>(null);
 
-  // Modal revente admin
+  // Modal revente
   const [showReventeModal, setShowReventeModal] = useState(false);
   const [reventeType, setReventeType] = useState<'personnel' | 'flotte'>('personnel');
   const [reventeAvionId, setReventeAvionId] = useState('');
-  const [reventePourcentage, setReventePourcentage] = useState('50');
-  const [reventeRaison, setReventeRaison] = useState('');
+  const [reventeMode, setReventeMode] = useState<'rapide' | 'demande'>('rapide');
+
+  const LIMITE_RAPIDE = 2;
+  const reventesRapideRestantes = Math.max(0, LIMITE_RAPIDE - reventesRapidesUsees);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -227,19 +231,13 @@ export default function HangarMarketClient({
     setLoading(true);
 
     try {
-      const pct = parseInt(reventePourcentage);
-      const isDemande = pct > 50;
       const bodyData: Record<string, unknown> = {
-        action: isDemande ? 'demande_revente' : 'revente_directe',
-        pourcentage: pct,
+        action: reventeMode === 'rapide' ? 'revente_directe' : 'demande_revente',
       };
       if (reventeType === 'flotte') {
         bodyData.compagnie_avion_id = reventeAvionId;
       } else {
         bodyData.inventaire_avion_id = reventeAvionId;
-      }
-      if (isDemande) {
-        bodyData.raison = reventeRaison;
       }
 
       const res = await fetch('/api/hangar-market/revente', {
@@ -251,11 +249,9 @@ export default function HangarMarketClient({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
-      setSuccess(data.message || 'Opération réussie');
+      setSuccess(data.message || 'Demande envoyée');
       setShowReventeModal(false);
       setReventeAvionId('');
-      setReventePourcentage('50');
-      setReventeRaison('');
       startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -267,8 +263,7 @@ export default function HangarMarketClient({
   function openReventeModal(type: 'personnel' | 'flotte', avionId?: string) {
     setReventeType(type);
     setReventeAvionId(avionId || '');
-    setReventePourcentage('50');
-    setReventeRaison('');
+    setReventeMode(reventesRapideRestantes > 0 ? 'rapide' : 'demande');
     setShowReventeModal(true);
   }
 
@@ -759,11 +754,47 @@ export default function HangarMarketClient({
       {/* Modal Revente */}
       {showReventeModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full">
             <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-emerald-400" />
-              Revente rapide
+              Revente d&apos;avion — 50%
             </h3>
+
+            {/* Choix du mode */}
+            <div className="grid grid-cols-2 gap-2 mb-5">
+              <button
+                onClick={() => setReventeMode('rapide')}
+                disabled={reventesRapideRestantes === 0}
+                className={`p-3 rounded-lg border text-left transition-colors ${
+                  reventeMode === 'rapide'
+                    ? 'border-emerald-500 bg-emerald-500/15'
+                    : reventesRapideRestantes === 0
+                    ? 'border-slate-700 opacity-40 cursor-not-allowed'
+                    : 'border-slate-600 hover:border-slate-500'
+                }`}
+              >
+                <p className="text-sm font-semibold text-slate-100">Revente rapide</p>
+                <p className="text-xs text-slate-400 mt-0.5">Instantané · pas d&apos;approbation</p>
+                <div className="mt-1.5 flex items-center gap-1">
+                  {[...Array(LIMITE_RAPIDE)].map((_, i) => (
+                    <span key={i} className={`w-2 h-2 rounded-full ${i < reventesRapidesUsees ? 'bg-slate-600' : 'bg-emerald-400'}`} />
+                  ))}
+                  <span className="text-xs text-slate-400 ml-1">{reventesRapideRestantes}/{LIMITE_RAPIDE} restante{reventesRapideRestantes > 1 ? 's' : ''} cette semaine</span>
+                </div>
+              </button>
+              <button
+                onClick={() => setReventeMode('demande')}
+                className={`p-3 rounded-lg border text-left transition-colors ${
+                  reventeMode === 'demande'
+                    ? 'border-amber-500 bg-amber-500/15'
+                    : 'border-slate-600 hover:border-slate-500'
+                }`}
+              >
+                <p className="text-sm font-semibold text-slate-100">Demande admin</p>
+                <p className="text-xs text-slate-400 mt-0.5">Validation requise</p>
+                <p className="text-xs text-amber-400 mt-1.5">Illimité</p>
+              </button>
+            </div>
 
             <div className="space-y-4">
               {/* Sélection de l'avion */}
@@ -778,7 +809,7 @@ export default function HangarMarketClient({
                   {reventeType === 'personnel'
                     ? mesAvionsDisponibles.map((item) => (
                         <option key={item.id} value={item.id}>
-                          {item.nom_personnalise || item.types_avion?.nom} — Prix initial : {item.prixAchat.toLocaleString('fr-FR')} F$
+                          {item.nom_personnalise || item.types_avion?.nom} — Revente : {Math.round(item.prixAchat * 0.5).toLocaleString('fr-FR')} F$
                         </option>
                       ))
                     : flotteDisponible.map((av) => (
@@ -789,63 +820,18 @@ export default function HangarMarketClient({
                 </select>
               </div>
 
-              {/* Pourcentage */}
-              <div>
-                <label className="text-sm text-slate-400 mb-1 block">Pourcentage du prix initial</label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min="50"
-                    max="100"
-                    value={reventePourcentage}
-                    onChange={(e) => setReventePourcentage(e.target.value)}
-                    className="flex-1"
-                  />
-                  <span className="text-lg font-bold text-emerald-400 w-16 text-right">{reventePourcentage}%</span>
-                </div>
-                {parseInt(reventePourcentage) > 50 && (
-                  <p className="text-xs text-amber-400 mt-1">
-                    Au-dessus de 50%, une demande sera envoyée aux administrateurs pour approbation.
-                  </p>
-                )}
-              </div>
-
               {/* Prix calculé */}
-              {reventeAvionId && (
-                <div className="p-3 bg-slate-900 rounded-lg">
-                  <p className="text-sm text-slate-400">Montant de la revente :</p>
-                  <p className="text-xl font-bold text-emerald-400">
-                    {(() => {
-                      const pct = parseInt(reventePourcentage);
-                      let prixInit = 0;
-                      if (reventeType === 'personnel') {
-                        const av = mesAvionsDisponibles.find(a => a.id === reventeAvionId);
-                        prixInit = av?.prixAchat || 0;
-                      }
-                      return prixInit > 0
-                        ? `${Math.round(prixInit * pct / 100).toLocaleString('fr-FR')} F$`
-                        : 'Calcul côté serveur';
-                    })()}
-                  </p>
-                </div>
-              )}
-
-              {/* Raison (obligatoire si > 50%) */}
-              {parseInt(reventePourcentage) > 50 && (
-                <div>
-                  <label className="text-sm text-slate-400 mb-1 block">
-                    Raison de la demande <span className="text-red-400">*</span>
-                  </label>
-                  <textarea
-                    placeholder="Expliquez pourquoi vous souhaitez un pourcentage supérieur (min. 10 caractères)..."
-                    value={reventeRaison}
-                    onChange={(e) => setReventeRaison(e.target.value)}
-                    rows={3}
-                    className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-200 placeholder-slate-500 resize-none"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">{reventeRaison.length}/1000 caractères</p>
-                </div>
-              )}
+              {reventeAvionId && reventeType === 'personnel' && (() => {
+                const av = mesAvionsDisponibles.find(a => a.id === reventeAvionId);
+                const montant = av ? Math.round(av.prixAchat * 0.5) : 0;
+                return montant > 0 ? (
+                  <div className="p-3 bg-slate-900 rounded-lg">
+                    <p className="text-sm text-slate-400">Montant {reventeMode === 'rapide' ? 'reçu immédiatement' : 'si approuvé'} :</p>
+                    <p className="text-xl font-bold text-emerald-400">{montant.toLocaleString('fr-FR')} F$</p>
+                    <p className="text-xs text-slate-500 mt-0.5">50% de {av!.prixAchat.toLocaleString('fr-FR')} F$</p>
+                  </div>
+                ) : null;
+              })()}
             </div>
 
             {error && <p className="text-sm text-red-400 mt-4">{error}</p>}
@@ -853,17 +839,13 @@ export default function HangarMarketClient({
             <div className="flex gap-3 mt-6">
               <button
                 onClick={handleRevente}
-                disabled={loading || !reventeAvionId || (parseInt(reventePourcentage) > 50 && reventeRaison.trim().length < 10)}
-                className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                disabled={loading || !reventeAvionId}
+                className={`flex-1 px-4 py-2 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
+                  reventeMode === 'rapide' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'
+                }`}
               >
-                {loading ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : parseInt(reventePourcentage) > 50 ? (
-                  <Send className="h-4 w-4" />
-                ) : (
-                  <DollarSign className="h-4 w-4" />
-                )}
-                {parseInt(reventePourcentage) > 50 ? 'Envoyer la demande' : 'Revendre maintenant'}
+                {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <DollarSign className="h-4 w-4" />}
+                {reventeMode === 'rapide' ? 'Revendre maintenant' : 'Envoyer la demande'}
               </button>
               <button
                 onClick={() => { setShowReventeModal(false); setError(''); }}
