@@ -3,7 +3,11 @@
 import { useState, useRef, useEffect, useTransition } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, LayoutDashboard, FileText, User, Users, LogOut, Radio, Shield, ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, Store, AlertTriangle, Flame, Gauge, Wrench } from 'lucide-react';
+import {
+  BookOpen, LayoutDashboard, FileText, User, Users, LogOut, Radio, Shield,
+  ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map,
+  Store, AlertTriangle, Flame, Gauge, Wrench, Eye,
+} from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 
@@ -26,7 +30,13 @@ interface NavBarProps {
   allianceInvitationsCount?: number;
 }
 
-export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false, isPdg = false, hasCompagnie = false, isIfsa = false, isReparateur = false, pendingVolsCount = 0, adminPlansEnAttenteCount = 0, adminPasswordResetCount = 0, adminAeroschoolCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0, invitationsCount = 0, signalementsNouveauxCount = 0, allianceInvitationsCount = 0 }: NavBarProps) {
+export default function NavBar({
+  isAdmin, isInstructeur = false, isArmee = false, isPdg = false,
+  hasCompagnie = false, isIfsa = false, isReparateur = false,
+  pendingVolsCount = 0, adminPlansEnAttenteCount = 0, adminPasswordResetCount = 0,
+  adminAeroschoolCount = 0, volsAConfirmerCount = 0, messagesNonLusCount = 0,
+  invitationsCount = 0, signalementsNouveauxCount = 0, allianceInvitationsCount = 0,
+}: NavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -34,17 +44,12 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties | null>(null);
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const accountMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      const targetNode = event.target as Node | null;
-      if (menuRef.current && targetNode && !menuRef.current.contains(targetNode)) {
+      const t = event.target as Node | null;
+      if (menuRef.current && t && !menuRef.current.contains(t)) {
         setPiloteMenuOpen(false);
-      }
-      if (accountMenuRef.current && targetNode && !accountMenuRef.current.contains(targetNode)) {
-        setAccountMenuOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -52,24 +57,16 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
   }, []);
 
   useEffect(() => {
-    function updateDropdownPosition() {
-      if (!piloteMenuOpen || !triggerRef.current) {
-        setDropdownStyle(null);
-        return;
-      }
+    function updatePos() {
+      if (!piloteMenuOpen || !triggerRef.current) { setDropdownStyle(null); return; }
       const rect = triggerRef.current.getBoundingClientRect();
-      const top = Math.round(rect.bottom + 4);
-      const left = Math.round(rect.left);
-      setDropdownStyle({ position: 'fixed', top, left, zIndex: 70 });
+      setDropdownStyle({ position: 'fixed', top: Math.round(rect.bottom + 6), left: Math.round(rect.left), zIndex: 70 });
     }
-    updateDropdownPosition();
+    updatePos();
     if (!piloteMenuOpen) return;
-    window.addEventListener('resize', updateDropdownPosition);
-    window.addEventListener('scroll', updateDropdownPosition, true);
-    return () => {
-      window.removeEventListener('resize', updateDropdownPosition);
-      window.removeEventListener('scroll', updateDropdownPosition, true);
-    };
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    return () => { window.removeEventListener('resize', updatePos); window.removeEventListener('scroll', updatePos, true); };
   }, [piloteMenuOpen]);
 
   async function handleLogout() {
@@ -79,14 +76,20 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
     startTransition(() => router.refresh());
   }
 
-  const piloteMenuItems: Array<{ href: string; label: string; icon: typeof BookOpen; badge: number; separator?: boolean }> = [
+  const piloteMenuItems: Array<{
+    href: string; label: string; icon: typeof BookOpen;
+    badge: number; separator?: boolean; color?: string;
+  }> = [
     { href: '/logbook', label: 'Mon logbook', icon: BookOpen, badge: 0 },
     { href: '/logbook/depot-plan-vol', label: 'Déposer un plan de vol', icon: Plane, badge: 0 },
     { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText, badge: 0 },
     { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0, separator: true },
     { href: '/marche-cargo', label: 'Marché cargo', icon: Package, badge: 0 },
     { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount + invitationsCount, separator: true },
-    ...(hasCompagnie ? [{ href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 }, { href: '/alliance', label: 'Alliance', icon: Users, badge: allianceInvitationsCount }] : []),
+    ...(hasCompagnie ? [
+      { href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 },
+      { href: '/alliance', label: 'Alliance', icon: Users, badge: allianceInvitationsCount },
+    ] : []),
     ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield, badge: 0 }] : []),
     { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0, separator: true },
     { href: '/marketplace', label: 'Marketplace', icon: Package, badge: 0 },
@@ -94,88 +97,96 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
     ...(isReparateur || isPdg ? [{ href: '/reparation', label: 'Réparation', icon: Wrench, badge: 0 }] : []),
     { href: '/inventaire', label: 'Mon inventaire', icon: Plane, badge: 0 },
     { href: '/perf-ptfs', label: 'Calculateur perf PTFS', icon: Gauge, badge: 0 },
+    { href: '/documents', label: 'Documents', icon: FileText, badge: 0, separator: true },
+    { href: '/notams', label: 'NOTAMs', icon: ScrollText, badge: 0 },
     { href: '/signalement', label: 'Signalement IFSA', icon: AlertTriangle, badge: 0, separator: true },
   ];
 
-  const isPiloteActive = pathname.startsWith('/logbook') || pathname.startsWith('/militaire') || 
-    pathname.startsWith('/felitz-bank') || pathname.startsWith('/ma-compagnie') ||
-    pathname.startsWith('/marketplace') || pathname.startsWith('/hangar-market') ||
-    pathname.startsWith('/inventaire') || pathname.startsWith('/messagerie') || 
-    pathname.startsWith('/marche-passagers') || pathname.startsWith('/marche-cargo') ||
-    pathname.startsWith('/perf-ptfs') || pathname.startsWith('/alliance') || pathname.startsWith('/signalement') || pathname.startsWith('/reparation');
+  const isPiloteActive = [
+    '/logbook', '/militaire', '/felitz-bank', '/ma-compagnie', '/marketplace',
+    '/hangar-market', '/inventaire', '/messagerie', '/marche-passagers',
+    '/marche-cargo', '/perf-ptfs', '/alliance', '/signalement', '/reparation',
+    '/documents', '/notams',
+  ].some(p => pathname.startsWith(p));
 
   const totalAdminBadge = pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount;
-  const navItemBase = 'flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold tracking-[0.01em] transition-all duration-200 whitespace-nowrap shrink-0 border';
-  const navItemMuted = 'border-slate-700/25 text-slate-300 hover:border-slate-500/40 hover:bg-slate-700/50 hover:text-white hover:shadow-[0_4px_12px_rgba(2,6,23,0.3)]';
-  const navItemActive = 'border-sky-500/40 bg-sky-500/20 text-sky-100 shadow-[0_8px_24px_rgba(2,132,199,0.25)]';
 
-  function renderInlineBadge(count: number, color: 'red' | 'orange' = 'red') {
+  function Badge({ count, color = 'red' }: { count: number; color?: 'red' | 'orange' }) {
     if (count <= 0) return null;
-    const badgeClass = color === 'orange' ? 'bg-orange-600' : 'bg-red-600';
     return (
-      <span className={`ml-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-xs font-bold text-white ${badgeClass}`}>
+      <span className={cn(
+        'ml-1 flex h-4.5 min-w-[1.1rem] items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white leading-none',
+        color === 'orange' ? 'bg-orange-500' : 'bg-red-500',
+      )}>
         {count > 99 ? '99+' : count}
       </span>
     );
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-600/25 bg-slate-950/85 backdrop-blur-2xl shadow-[0_18px_34px_rgba(2,6,23,0.5)]" style={{ backdropFilter: 'blur(20px) saturate(1.3)' }}>
-      <div className="mx-auto flex max-w-screen-2xl flex-col gap-2 px-4 py-2 sm:h-16 sm:flex-row sm:flex-nowrap sm:items-center sm:justify-between sm:gap-4 sm:py-0">
-        <nav className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-visible whitespace-nowrap scrollbar-hide">
-          {/* Menu déroulant Espace Pilote */}
-          <div className="relative" ref={menuRef}>
+    <header
+      className="sticky top-0 z-50 border-b border-white/5"
+      style={{
+        background: 'linear-gradient(180deg, rgba(8,10,20,0.97) 0%, rgba(12,16,30,0.94) 100%)',
+        backdropFilter: 'blur(24px) saturate(1.4)',
+        boxShadow: '0 1px 0 rgba(255,255,255,0.05), 0 16px 40px rgba(0,0,0,0.55)',
+      }}
+    >
+      <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between gap-3 px-4">
+
+        {/* ── Navigation principale ─────────────────────────────────── */}
+        <nav className="flex items-center gap-1.5 min-w-0 overflow-hidden">
+
+          {/* Espace Pilote dropdown */}
+          <div className="relative shrink-0" ref={menuRef}>
             <button
               ref={triggerRef}
-              aria-label="Ouvrir le menu Espace Pilote"
+              aria-label="Espace Pilote"
               aria-expanded={piloteMenuOpen}
-              onPointerDown={() => {
-                setPiloteMenuOpen((prev) => !prev);
-              }}
+              onPointerDown={() => setPiloteMenuOpen(p => !p)}
               className={cn(
-                `${navItemBase} relative`,
-                isPiloteActive
-                  ? navItemActive
-                  : navItemMuted
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-150 select-none border',
+                isPiloteActive || piloteMenuOpen
+                  ? 'border-sky-500/50 bg-sky-500/15 text-sky-200 shadow-[0_0_16px_rgba(14,165,233,0.2)]'
+                  : 'border-white/8 text-slate-300 hover:border-white/15 hover:bg-white/6 hover:text-white',
               )}
             >
-              <Plane className="h-4 w-4" />
-              Espace Pilote
-              <ChevronDown className={cn('h-4 w-4 transition-transform', piloteMenuOpen && 'rotate-180')} />
+              <Plane className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">Espace Pilote</span>
+              <span className="md:hidden">Pilote</span>
+              <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', piloteMenuOpen && 'rotate-180')} />
               {volsAConfirmerCount > 0 && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white ring-2 ring-slate-900"
-                  title={`${volsAConfirmerCount} vol(s) à confirmer`}
-                >
+                <span className="absolute -top-1 -right-1 flex h-4.5 min-w-[1.1rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white ring-2 ring-[#0a0e1a]">
                   {volsAConfirmerCount > 99 ? '99+' : volsAConfirmerCount}
                 </span>
               )}
             </button>
-            
+
             {piloteMenuOpen && (
-              <div style={dropdownStyle ?? undefined} className="fixed w-64 rounded-2xl border border-slate-600/40 bg-slate-950/95 backdrop-blur-xl py-1.5 shadow-[0_24px_56px_rgba(2,6,23,0.8)] z-50 animate-fade-in">
+              <div
+                style={dropdownStyle ?? undefined}
+                className="w-64 rounded-2xl border border-white/10 bg-[#0d1120]/97 py-2 shadow-[0_24px_60px_rgba(0,0,0,0.8)] backdrop-blur-2xl z-50 overflow-hidden"
+              >
                 {piloteMenuItems.map((item, idx) => {
                   const Icon = item.icon;
                   const isActive = pathname === item.href || (item.href !== '/logbook' && pathname.startsWith(item.href));
                   return (
                     <div key={item.href}>
-                      {item.separator && idx > 0 && (
-                        <div className="mx-4 my-1 border-t border-slate-700/40" />
-                      )}
+                      {item.separator && idx > 0 && <div className="mx-3 my-1.5 border-t border-white/6" />}
                       <Link
                         href={item.href}
                         onClick={() => setPiloteMenuOpen(false)}
                         className={cn(
-                          'flex items-center gap-3 px-4 py-2.5 text-sm transition-all duration-150 mx-1.5 rounded-lg',
+                          'flex items-center gap-3 mx-2 px-3 py-2 text-[13px] rounded-lg transition-all duration-100',
                           isActive
-                            ? 'border border-sky-500/35 bg-sky-500/20 text-sky-100'
-                            : 'border border-transparent text-slate-200 hover:border-slate-500/40 hover:bg-slate-800 hover:text-white'
+                            ? 'bg-sky-500/18 text-sky-200 border border-sky-500/30'
+                            : 'text-slate-300 hover:bg-white/6 hover:text-white border border-transparent',
                         )}
                       >
-                        <Icon className={cn("h-4 w-4 shrink-0 transition-colors", isActive ? "text-sky-400" : "text-slate-500")} />
+                        <Icon className={cn('h-3.5 w-3.5 shrink-0', isActive ? 'text-sky-400' : 'text-slate-500')} />
                         <span className="truncate">{item.label}</span>
                         {item.badge > 0 && (
-                          <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white">
+                          <span className="ml-auto flex h-4.5 min-w-[1.1rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
                             {item.badge > 99 ? '99+' : item.badge}
                           </span>
                         )}
@@ -187,222 +198,125 @@ export default function NavBar({ isAdmin, isInstructeur = false, isArmee = false
             )}
           </div>
 
+          {/* Vols à confirmer (badge urgent) */}
           {volsAConfirmerCount > 0 && (
             <Link
               href="/logbook/a-confirmer"
               className={cn(
-                `${navItemBase} bg-red-900/40 text-red-300 hover:bg-red-900/60`,
-              pathname === '/logbook/a-confirmer' ? 'ring-1 ring-red-400/80' : ''
+                'flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold border transition-all duration-150 shrink-0',
+                pathname === '/logbook/a-confirmer'
+                  ? 'border-red-500/50 bg-red-500/20 text-red-200'
+                  : 'border-red-500/30 bg-red-500/10 text-red-300 hover:bg-red-500/18 hover:text-red-200',
               )}
             >
               À confirmer
-              <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
+              <span className="flex h-4.5 min-w-[1.1rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
                 {volsAConfirmerCount > 99 ? '99+' : volsAConfirmerCount}
               </span>
             </Link>
           )}
 
-          <Link
-            href="/instruction"
-            className={cn(
-              navItemBase,
-              pathname.startsWith('/instruction')
-                ? navItemActive
-                : navItemMuted
-            )}
-          >
-            <Users className="h-4 w-4" />
-            Instruction
-          </Link>
+          {/* Séparateur visuel */}
+          <span className="mx-1 h-5 w-px bg-white/8 shrink-0 hidden sm:block" />
+
+          {/* Instruction */}
+          <NavLink href="/instruction" active={pathname.startsWith('/instruction')}>
+            <Users className="h-3.5 w-3.5" />
+            <span className="hidden lg:inline">Instruction</span>
+          </NavLink>
+
+          {/* Admin */}
+          {isAdmin && (
+            <NavLink href="/admin" active={pathname.startsWith('/admin')} accent="purple">
+              <LayoutDashboard className="h-3.5 w-3.5" />
+              Admin
+              <Badge count={totalAdminBadge} />
+            </NavLink>
+          )}
+
+          {/* IFSA */}
+          {(isIfsa || isAdmin) && (
+            <NavLink href="/ifsa" active={pathname.startsWith('/ifsa')} accent="indigo">
+              <Shield className="h-3.5 w-3.5" />
+              IFSA
+              <Badge count={signalementsNouveauxCount} color="orange" />
+            </NavLink>
+          )}
+
+          {/* ODW */}
+          <NavLink href="/carte-atc" active={pathname === '/carte-atc'} accent="emerald" title="Carte œil du web">
+            <Eye className="h-3.5 w-3.5" />
+            ODW
+          </NavLink>
+        </nav>
+
+        {/* ── Section droite ─────────────────────────────────────────── */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Séparateur */}
+          <span className="mr-1 h-5 w-px bg-white/8 hidden sm:block" />
 
           {isAdmin && (
-            <Link
-              href="/admin"
-              className={cn(
-                navItemBase,
-                pathname.startsWith('/admin')
-                  ? navItemActive
-                  : navItemMuted
-              )}
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              Admin
-              <span
-                title={[
-                  pendingVolsCount > 0 && `${pendingVolsCount} vol(s) en attente`,
-                  adminPlansEnAttenteCount > 0 && `${adminPlansEnAttenteCount} plan(s) en attente`,
-                  adminPasswordResetCount > 0 && `${adminPasswordResetCount} demande(s) MDP`,
-                  adminAeroschoolCount > 0 && `${adminAeroschoolCount} AeroSchool`,
-                ].filter(Boolean).join(' · ')}
-              >
-                {renderInlineBadge(totalAdminBadge)}
-              </span>
-            </Link>
+            <>
+              <NavLink href="/atc" active={pathname.startsWith('/atc')} accent="emerald" title="Espace ATC">
+                <Radio className="h-3.5 w-3.5" />
+                <span className="hidden lg:inline">Espace ATC</span>
+                <span className="lg:hidden">ATC</span>
+              </NavLink>
+              <NavLink href="/siavi" active={pathname.startsWith('/siavi')} accent="red" title="Espace SIAVI">
+                <Flame className="h-3.5 w-3.5" />
+                <span className="hidden lg:inline">Espace SIAVI</span>
+                <span className="lg:hidden">SIAVI</span>
+              </NavLink>
+            </>
           )}
-          {(isIfsa || isAdmin) && (
-            <Link
-              href="/ifsa"
-              className={cn(
-                navItemBase,
-                pathname.startsWith('/ifsa')
-                  ? 'bg-indigo-700/50 text-indigo-300'
-                  : navItemMuted
-              )}
-            >
-              <Shield className="h-4 w-4" />
-              IFSA
-              <span title={`${signalementsNouveauxCount} signalement(s) nouveau(x)`}>
-                {renderInlineBadge(signalementsNouveauxCount, 'orange')}
-              </span>
-            </Link>
-          )}
-          <Link
-            href="/documents"
-            className={cn(
-              navItemBase,
-              pathname.startsWith('/documents')
-                ? navItemActive
-                : navItemMuted
-            )}
-          >
-            <FileText className="h-4 w-4" />
-            Documents
-          </Link>
-          <Link
-            href="/notams"
-            className={cn(
-              navItemBase,
-              pathname.startsWith('/notams')
-                ? navItemActive
-                : navItemMuted
-            )}
-          >
-            <ScrollText className="h-4 w-4" />
-            NOTAMs
-          </Link>
-          <Link
-            href="/carte-atc"
-            className={cn(
-              `${navItemBase} gap-1.5`,
-              pathname === '/carte-atc'
-                ? 'bg-slate-700/50 text-emerald-300'
-                : 'text-emerald-400/70 hover:bg-emerald-900/20 hover:text-emerald-300'
-            )}
-            title="Carte œil du web (ODW : œil du web)"
-          >
-            <Radio className="h-4 w-4" />
-            ODW
-          </Link>
-        </nav>
-        <div className="w-full sm:w-auto sm:shrink-0">
-          <div className="hidden sm:flex items-center justify-end gap-2 border-t border-slate-800/70 pt-2 sm:border-t-0 sm:border-l sm:border-slate-800/70 sm:pl-4 sm:pt-0">
-            {isAdmin && (
-              <>
-                <Link
-                  href="/atc"
-                  className={`${navItemBase} gap-1.5 border-slate-700/35 text-slate-200 hover:border-emerald-500/35 hover:bg-emerald-500/10 hover:text-emerald-200`}
-                  title="Passer à l'espace ATC"
-                >
-                  <Radio className="h-4 w-4" />
-                  Espace ATC
-                </Link>
-                <Link
-                  href="/siavi"
-                  className={`${navItemBase} gap-1.5 border-slate-700/35 text-slate-200 hover:border-red-500/45 hover:bg-red-500/15 hover:text-red-200`}
-                  title="Passer à l'espace SIAVI"
-                >
-                  <Flame className="h-4 w-4" />
-                  Espace SIAVI
-                </Link>
-              </>
-            )}
-            <Link
-              href="/compte"
-              className={cn(
-                navItemBase,
-                pathname === '/compte'
-                  ? navItemActive
-                  : navItemMuted
-              )}
-            >
-              <User className="h-4 w-4" />
-              Mon compte
-            </Link>
-            <button
-              onClick={handleLogout}
-              aria-label="Se déconnecter"
-              className={`${navItemBase} text-slate-300 hover:bg-slate-800/50 hover:text-red-400`}
-            >
-              <LogOut className="h-4 w-4" />
-              Déconnexion
-            </button>
-          </div>
 
-          <div className="sm:hidden" ref={accountMenuRef}>
-            <button
-              type="button"
-              onClick={() => setAccountMenuOpen((prev) => !prev)}
-              className="w-full flex items-center justify-center rounded-lg px-3 py-2 bg-slate-900/70 text-slate-300 border border-slate-600/35"
-              aria-label="Ouvrir le menu compte"
-            >
-              <ChevronDown className={cn('h-5 w-5 transition-transform', accountMenuOpen && 'rotate-180')} />
-            </button>
+          {/* Séparateur */}
+          <span className="mx-1 h-5 w-px bg-white/8 hidden sm:block" />
 
-            {accountMenuOpen && (
-              <div className="mt-2 grid gap-2">
-                <Link
-                  href="/carte-atc"
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-emerald-300 bg-slate-800/50 hover:bg-slate-800"
-                  title="Carte œil du web (ODW)"
-                >
-                  <Radio className="h-4 w-4" />
-                  Carte œil du web
-                </Link>
-                {isAdmin && (
-                  <>
-                    <Link
-                      href="/atc"
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800/50 hover:bg-slate-800"
-                      title="Passer à l'espace ATC"
-                    >
-                      <Radio className="h-4 w-4" />
-                      Espace ATC
-                    </Link>
-                    <Link
-                      href="/siavi"
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 bg-red-900/50 hover:bg-red-800"
-                      title="Passer à l'espace SIAVI"
-                    >
-                      <Flame className="h-4 w-4" />
-                      Espace SIAVI
-                    </Link>
-                  </>
-                )}
-                <Link
-                  href="/compte"
-                  className={cn(
-                    'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    pathname === '/compte'
-                      ? 'bg-slate-700/50 text-sky-300'
-                      : 'text-slate-300 bg-slate-800/50 hover:bg-slate-800'
-                  )}
-                >
-                  <User className="h-4 w-4" />
-                  Mon compte
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  aria-label="Se déconnecter"
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800/50 hover:bg-slate-800 hover:text-red-300"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Déconnexion
-                </button>
-              </div>
-            )}
-          </div>
+          <NavLink href="/compte" active={pathname === '/compte'} title="Mon compte">
+            <User className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Mon compte</span>
+          </NavLink>
+
+          <button
+            onClick={handleLogout}
+            title="Se déconnecter"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold border border-white/8 text-slate-400 transition-all duration-150 hover:border-red-500/35 hover:bg-red-500/10 hover:text-red-300"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Déconnexion</span>
+          </button>
         </div>
       </div>
     </header>
+  );
+}
+
+/* ── Composant interne NavLink ──────────────────────────────────────────── */
+const ACCENT = {
+  default: { inactive: 'border-white/8 text-slate-300 hover:border-white/15 hover:bg-white/6 hover:text-white', active: 'border-sky-500/50 bg-sky-500/15 text-sky-200 shadow-[0_0_14px_rgba(14,165,233,0.18)]' },
+  purple:  { inactive: 'border-white/8 text-slate-300 hover:border-purple-500/35 hover:bg-purple-500/10 hover:text-purple-200', active: 'border-purple-500/50 bg-purple-500/15 text-purple-200 shadow-[0_0_14px_rgba(168,85,247,0.18)]' },
+  indigo:  { inactive: 'border-white/8 text-slate-300 hover:border-indigo-500/35 hover:bg-indigo-500/10 hover:text-indigo-200', active: 'border-indigo-500/50 bg-indigo-500/15 text-indigo-200 shadow-[0_0_14px_rgba(99,102,241,0.18)]' },
+  emerald: { inactive: 'border-white/8 text-slate-300 hover:border-emerald-500/35 hover:bg-emerald-500/10 hover:text-emerald-200', active: 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200 shadow-[0_0_14px_rgba(16,185,129,0.18)]' },
+  red:     { inactive: 'border-white/8 text-slate-300 hover:border-red-500/35 hover:bg-red-500/10 hover:text-red-200', active: 'border-red-500/50 bg-red-500/15 text-red-200 shadow-[0_0_14px_rgba(239,68,68,0.18)]' },
+};
+
+function NavLink({
+  href, active, accent = 'default', title, children,
+}: {
+  href: string; active: boolean; accent?: keyof typeof ACCENT; title?: string; children: React.ReactNode;
+}) {
+  const a = ACCENT[accent];
+  return (
+    <Link
+      href={href}
+      title={title}
+      className={cn(
+        'flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold border transition-all duration-150 whitespace-nowrap shrink-0',
+        active ? a.active : a.inactive,
+      )}
+    >
+      {children}
+    </Link>
   );
 }
