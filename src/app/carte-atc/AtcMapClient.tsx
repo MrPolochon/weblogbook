@@ -146,6 +146,7 @@ export default function AtcMapClient() {
   const [showOptionalFirs, setShowOptionalFirs] = useState(false);
   const [showAirports, setShowAirports] = useState(true);
   const [showWaypoints, setShowWaypoints] = useState(true);
+  const [showVors, setShowVors] = useState(true);
 
   const fetchMapData = useCallback(async () => {
     try {
@@ -460,7 +461,7 @@ export default function AtcMapClient() {
                 );
               })}
 
-              {DEFAULT_VORS.map((vor) => {
+              {showVors && DEFAULT_VORS.map((vor) => {
                 const x = vor.x * 10.24;
                 const y = vor.y * 7.87;
                 return (
@@ -599,11 +600,11 @@ export default function AtcMapClient() {
                 type="button"
                 onClick={() => setLayersOpen((o) => !o)}
                 className={`rounded-lg border p-2 backdrop-blur-sm transition-colors ${
-                  layersOpen || showOptionalFirs || !showAirports || !showWaypoints
+                  layersOpen || showOptionalFirs || !showAirports || !showWaypoints || !showVors
                     ? 'bg-sky-600/25 border-sky-500/50 text-sky-200'
                     : 'bg-slate-900/90 border-slate-700/50 text-slate-200 hover:bg-slate-800'
                 }`}
-                title="Couches : FIR, aéroports, waypoints"
+                title="Couches : FIR, aéroports, waypoints, VOR"
                 aria-expanded={layersOpen}
               >
                 <Layers className="h-4 w-4" />
@@ -666,6 +667,15 @@ export default function AtcMapClient() {
                     onChange={(e) => setShowWaypoints(e.target.checked)}
                   />
                 </label>
+                <label className="flex items-center justify-between gap-2 cursor-pointer">
+                  <span>VOR</span>
+                  <input
+                    type="checkbox"
+                    className="accent-sky-500"
+                    checked={showVors}
+                    onChange={(e) => setShowVors(e.target.checked)}
+                  />
+                </label>
                 <p className="text-[10px] leading-relaxed text-slate-500 border-t border-slate-700/50 pt-2">
                   Les FIR avec une position Center en ligne restent affichés (style actuel), même si les autres FIR sont masqués.
                 </p>
@@ -693,6 +703,19 @@ export default function AtcMapClient() {
             </div>
             <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-amber-400" /> <span className="text-slate-300">FIR contrôlé (Center)</span></div>
             <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-blue-500" /> <span className="text-slate-300">FIR affiché manuellement</span></div>
+            <div className="flex items-center gap-2">
+              <span className="w-4 h-4 inline-flex items-center justify-center shrink-0">
+                <svg viewBox="0 0 16 16" className="w-4 h-4" aria-hidden>
+                  <circle cx="8" cy="8" r="5" fill="none" stroke="#22d3ee" strokeWidth="1.2" />
+                  <circle cx="8" cy="8" r="2" fill="#22d3ee" />
+                </svg>
+              </span>
+              <span className="text-slate-300">VOR</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-lime-400 shrink-0 ring-1 ring-lime-300/50" />
+              <span className="text-slate-300">Waypoint</span>
+            </div>
             <div className="mt-2 border-t border-slate-700/50 pt-2 space-y-1.5">
               <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-green-500" /> <span className="text-slate-300">Vol VFR</span></div>
               <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-red-500" /> <span className="text-slate-300">Vol IFR</span></div>

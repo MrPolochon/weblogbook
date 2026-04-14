@@ -41,6 +41,7 @@ export default function RadarClient({ userId }: { userId: string }) {
   const [showOptionalFirs, setShowOptionalFirs] = useState(false);
   const [showAirports, setShowAirports] = useState(true);
   const [showWaypoints, setShowWaypoints] = useState(true);
+  const [showVors, setShowVors] = useState(true);
   const [filterType, setFilterType] = useState<'ALL' | 'IFR' | 'VFR' | 'UNK'>('ALL');
   const [charSize, setCharSize] = useState<typeof CHAR_SIZES[number]>('M');
   const [showPTL, setShowPTL] = useState(true);
@@ -368,7 +369,7 @@ export default function RadarClient({ userId }: { userId: string }) {
               );
             })}
 
-            {DEFAULT_VORS.map((vor) => {
+            {showVors && DEFAULT_VORS.map((vor) => {
               const point = toSVG(vor);
               return (
                 <g key={vor.code} opacity="0.35">
@@ -735,6 +736,14 @@ export default function RadarClient({ userId }: { userId: string }) {
             title="Waypoints"
           >
             WPT
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowVors(v => !v)}
+            className={showVors ? 'text-[#22d3ee]' : 'text-[#333]'}
+            title="VOR"
+          >
+            VOR
           </button>
         </div>
 
