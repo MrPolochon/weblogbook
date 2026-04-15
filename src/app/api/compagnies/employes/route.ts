@@ -124,24 +124,43 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-// DELETE - Retirer un employé d'une compagnie (admin uniquement)
+// DELETE - Retirer un employé d'une compagnie (PDG ou admin)
 export async function DELETE(req: NextRequest) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
-
     if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 });
 
     const admin = createAdminClient();
-    const { error } = await admin.from('compagnie_employes').delete().eq('id', id);
 
+    const { data: employe } = await admin.from('compagnie_employes')
+      .select('id, compagnie_id, pilote_id')
+      .eq('id', id)
+      .single();
+    if (!employe) return NextResponse.json({ error: 'Employé introuvable' }, { status: 404 });
+
+    const { data: compagnie } = await admin.from('compagnies')
+      .select('pdg_id')
+      .eq('id', employe.compagnie_id)
+      .single();
+
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const isAdmin = profile?.role === 'admin';
+    const isPdg = compagnie?.pdg_id === user.id;
+
+    if (!isAdmin && !isPdg) {
+      return NextResponse.json({ error: 'Seul le PDG ou un admin peut licencier un employe' }, { status: 403 });
+    }
+
+    if (employe.pilote_id === user.id) {
+      return NextResponse.json({ error: 'Vous ne pouvez pas vous licencier vous-meme' }, { status: 400 });
+    }
+
+    const { error } = await admin.from('compagnie_employes').delete().eq('id', id);
     if (error) return NextResponse.json({ error: 'Erreur lors de la suppression' }, { status: 400 });
 
     return NextResponse.json({ ok: true });

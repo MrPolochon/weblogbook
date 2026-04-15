@@ -119,6 +119,7 @@ export async function PATCH(
     const updates: Record<string, unknown> = {};
 
     // Seuls les admins peuvent changer le PDG
+    const ancienPdgId = compagnie?.pdg_id;
     if (pdg_id !== undefined && isAdmin) updates.pdg_id = pdg_id;
 
     // Validation des plages (alignées sur les CHECK en base)
@@ -155,6 +156,23 @@ export async function PATCH(
       .single();
 
     if (error) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
+
+    // Transferer les cheques compagnie non encaisses au nouveau PDG
+    if (pdg_id && ancienPdgId && pdg_id !== ancienPdgId) {
+      const { data: chequesNonEncaisses } = await admin.from('messages')
+        .select('id')
+        .eq('destinataire_id', ancienPdgId)
+        .eq('cheque_encaisse', false)
+        .in('type_message', ['cheque_revenu_compagnie']);
+
+      if (chequesNonEncaisses && chequesNonEncaisses.length > 0) {
+        const ids = chequesNonEncaisses.map(c => c.id);
+        await admin.from('messages')
+          .update({ destinataire_id: pdg_id })
+          .in('id', ids);
+      }
+    }
+
     return NextResponse.json(data);
   } catch (e) {
     console.error('Compagnie update error:', e);

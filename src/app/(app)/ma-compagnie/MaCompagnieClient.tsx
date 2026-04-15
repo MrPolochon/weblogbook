@@ -100,6 +100,25 @@ export default function MaCompagnieClient({
   const [loadingInvitations, setLoadingInvitations] = useState(false);
   const [quittingAlliance, setQuittingAlliance] = useState(false);
   const [roleLoading, setRoleLoading] = useState<string | null>(null);
+  const [fireConfirm, setFireConfirm] = useState<{ empId: string; identifiant: string; step: 1 | 2 } | null>(null);
+  const [fireLoading, setFireLoading] = useState(false);
+
+  async function handleFireEmployee() {
+    if (!fireConfirm) return;
+    setFireLoading(true);
+    try {
+      const res = await fetch(`/api/compagnies/employes?id=${fireConfirm.empId}`, { method: 'DELETE' });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      toast.success(`${fireConfirm.identifiant} a ete licencie`);
+      setFireConfirm(null);
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setFireLoading(false);
+    }
+  }
 
   async function handleChangeRole(empId: string, newRole: 'employe' | 'co_pdg') {
     const label = newRole === 'co_pdg' ? 'Promouvoir en co-PDG' : 'Rétrograder en employé';
@@ -659,25 +678,34 @@ export default function MaCompagnieClient({
                       {formatHeures(emp.heures)}
                     </span>
                     {isPdg && (
-                      emp.role === 'co_pdg' ? (
+                      <>
+                        {emp.role === 'co_pdg' ? (
+                          <button
+                            onClick={() => handleChangeRole(emp.id, 'employe')}
+                            disabled={roleLoading === emp.id}
+                            className="text-[11px] text-red-400 hover:text-red-300 disabled:opacity-50"
+                            title="Rétrograder en employé"
+                          >
+                            {roleLoading === emp.id ? '…' : 'Rétrograder'}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleChangeRole(emp.id, 'co_pdg')}
+                            disabled={roleLoading === emp.id}
+                            className="text-[11px] text-amber-400 hover:text-amber-300 disabled:opacity-50"
+                            title="Promouvoir co-PDG"
+                          >
+                            {roleLoading === emp.id ? '…' : 'Co-PDG'}
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleChangeRole(emp.id, 'employe')}
-                          disabled={roleLoading === emp.id}
-                          className="text-[11px] text-red-400 hover:text-red-300 disabled:opacity-50"
-                          title="Rétrograder en employé"
+                          onClick={() => setFireConfirm({ empId: emp.id, identifiant: emp.identifiant, step: 1 })}
+                          className="text-[11px] text-red-500 hover:text-red-400"
+                          title="Licencier"
                         >
-                          {roleLoading === emp.id ? '…' : 'Rétrograder'}
+                          Licencier
                         </button>
-                      ) : (
-                        <button
-                          onClick={() => handleChangeRole(emp.id, 'co_pdg')}
-                          disabled={roleLoading === emp.id}
-                          className="text-[11px] text-amber-400 hover:text-amber-300 disabled:opacity-50"
-                          title="Promouvoir co-PDG"
-                        >
-                          {roleLoading === emp.id ? '…' : 'Co-PDG'}
-                        </button>
-                      )
+                      </>
                     )}
                   </div>
                 </div>
@@ -688,6 +716,51 @@ export default function MaCompagnieClient({
           )}
         </div>
       </div>
+
+      {/* Modal licenciement double confirmation */}
+      {fireConfirm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setFireConfirm(null)}>
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full" onClick={e => e.stopPropagation()}>
+            {fireConfirm.step === 1 && (
+              <>
+                <h3 className="text-lg font-semibold text-slate-100 mb-3">Licencier {fireConfirm.identifiant} ?</h3>
+                <p className="text-sm text-slate-400 mb-5">Ce pilote sera retire de la compagnie et perdra son poste.</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setFireConfirm({ ...fireConfirm, step: 2 })}
+                    className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+                  >
+                    Oui, licencier
+                  </button>
+                  <button onClick={() => setFireConfirm(null)} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition-colors">
+                    Annuler
+                  </button>
+                </div>
+              </>
+            )}
+            {fireConfirm.step === 2 && (
+              <>
+                <h3 className="text-lg font-semibold text-red-400 mb-3">Confirmation finale</h3>
+                <p className="text-sm text-slate-300 mb-5">
+                  <span className="font-bold text-red-400">{fireConfirm.identifiant}</span> sera definitivement licencie de la compagnie. Cette action est irreversible.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleFireEmployee}
+                    disabled={fireLoading}
+                    className="flex-1 px-4 py-2 bg-red-700 hover:bg-red-800 disabled:opacity-50 text-white rounded-lg font-bold transition-colors"
+                  >
+                    {fireLoading ? 'Licenciement…' : 'Confirmer le licenciement'}
+                  </button>
+                  <button onClick={() => setFireConfirm(null)} disabled={fireLoading} className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg font-medium transition-colors">
+                    Retour
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Section Recrutement */}
       {isLeader && showRecrutement && (
