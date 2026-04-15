@@ -10,7 +10,7 @@ export default function DownloadPage() {
       icon: Radar,
       description: 'Outil de capture radar pour ATC — Capturez les positions des avions depuis PTFS et alimentez le radar en temps réel.',
       version: 'v1.0 — Disponible',
-      downloadUrl: '/api/radar/capture/download',
+      downloadUrl: '/downloads/RadarCapture.exe',
       color: 'from-sky-500 to-cyan-600',
       bgColor: 'bg-sky-50',
       borderColor: 'border-sky-200',

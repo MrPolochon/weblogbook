@@ -269,7 +269,7 @@ export default function NavBar({
         <div
           ref={dropdownRef}
           style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
-          className="w-64 rounded-2xl border border-slate-600/60 bg-[#0d1120] py-2 shadow-2xl"
+          className="w-56 max-h-[calc(100vh-4rem)] overflow-y-auto rounded-2xl border border-slate-600/60 bg-[#0d1120] py-2 shadow-2xl scrollbar-hide"
         >
           {piloteMenuItems.map((item, idx) => {
             const Icon = item.icon;
@@ -283,7 +283,7 @@ export default function NavBar({
                   href={item.href}
                   onClick={() => setMenuOpen(false)}
                   className={cn(
-                    'flex items-center gap-3 mx-2 px-3 py-2 text-[13px] rounded-lg transition-colors',
+                    'flex items-center gap-2.5 mx-1.5 px-2.5 py-1.5 text-[13px] rounded-lg transition-colors',
                     isActive
                       ? 'bg-sky-500/20 text-sky-200 border border-sky-500/30'
                       : 'text-slate-300 hover:bg-slate-700/60 hover:text-white border border-transparent',

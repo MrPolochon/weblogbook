@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Radar } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail } from 'lucide-react';
 
 const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
 
@@ -846,15 +846,8 @@ function LoginPageContent() {
             href="/download"
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-300 hover:text-sky-200 hover:bg-sky-500/20 hover:border-sky-500/50 transition-all backdrop-blur-sm group cursor-pointer"
           >
-            <Radar className="h-4 w-4 text-sky-400 group-hover:scale-110 transition-transform" />
-            <span className="font-semibold">RadarCapture</span>
-          </Link>
-          <Link
-            href="/download"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50 text-slate-300 hover:text-white hover:bg-slate-700/60 transition-all backdrop-blur-sm group cursor-pointer"
-          >
             <Download className="h-4 w-4 text-sky-400 group-hover:scale-110 transition-transform" />
-            <span>Téléchargements</span>
+            <span className="font-semibold">Téléchargements</span>
           </Link>
         </div>
       </div>

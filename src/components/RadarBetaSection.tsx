@@ -117,7 +117,7 @@ export default function RadarBetaSection({ variant = 'default' }: Props) {
         )}
 
         <a
-          href="/api/radar/capture/download"
+          href="/downloads/RadarCapture.exe"
           className={`inline-flex items-center gap-2 text-xs font-medium mt-2 ${isSiavi ? 'text-red-600 hover:text-red-700' : 'text-sky-400 hover:text-sky-300'} transition-colors`}
         >
           ⬇ Télécharger RadarCapture.exe
