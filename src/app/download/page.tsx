@@ -136,20 +136,53 @@ export default function DownloadPage() {
           {/* Configuration RadarCapture */}
           <div className="mt-8 max-w-2xl mx-auto">
             <div className="rounded-xl border border-sky-300/30 bg-sky-50/5 p-5 mb-4">
-              <h3 className="text-sky-300 font-bold text-sm mb-3">Configuration de RadarCapture</h3>
-              <p className="text-slate-400 text-sm mb-3">Au lancement de l&apos;application, vous devez renseigner :</p>
-              <div className="space-y-3">
+              <h3 className="text-sky-300 font-bold text-sm mb-3">Guide d&apos;utilisation de RadarCapture</h3>
+
+              <p className="text-slate-300 text-sm font-semibold mb-2">1. Configuration initiale</p>
+              <p className="text-slate-400 text-sm mb-2">Au lancement, renseignez :</p>
+              <div className="space-y-2 mb-4">
                 <div>
-                  <p className="text-slate-300 text-sm font-semibold mb-1">URL du serveur</p>
+                  <p className="text-slate-300 text-xs font-semibold mb-1">URL du serveur</p>
                   <code className="block bg-slate-800 px-3 py-2 rounded-lg text-sky-300 text-sm select-all">https://www.mixouairlinesptfsweblogbook.com</code>
                 </div>
                 <div>
-                  <p className="text-slate-300 text-sm font-semibold mb-1">Token API</p>
+                  <p className="text-slate-300 text-xs font-semibold mb-1">Token API</p>
                   <p className="text-slate-400 text-sm">
-                    Connectez-vous, allez dans <strong className="text-slate-300">Espace ATC</strong> &rarr; <strong className="text-slate-300">Mon compte</strong> &rarr; section <strong className="text-slate-300">Radar ATC</strong> &rarr; cliquez <strong className="text-slate-300">&quot;Generer un token&quot;</strong>.
-                    Copiez le token affiche et collez-le dans l&apos;application.
+                    <strong className="text-slate-300">Espace ATC</strong> &rarr; <strong className="text-slate-300">Mon compte</strong> &rarr; <strong className="text-slate-300">Radar ATC</strong> &rarr; <strong className="text-slate-300">&quot;Generer un token&quot;</strong>. Copiez-le et collez-le dans l&apos;app.
                   </p>
                 </div>
+              </div>
+
+              <p className="text-slate-300 text-sm font-semibold mb-2">2. Selectionner la zone de capture</p>
+              <p className="text-slate-400 text-sm mb-1">
+                Ouvrez PTFS avec la minimap visible, puis dans RadarCapture :
+              </p>
+              <ul className="text-slate-400 text-sm space-y-1 list-disc list-inside mb-4">
+                <li><strong className="text-slate-300">Auto minimap</strong> : detecte automatiquement la zone en bas a droite de l&apos;ecran</li>
+                <li><strong className="text-slate-300">Selectionner zone</strong> : dessinez manuellement un rectangle autour de la minimap</li>
+                <li><strong className="text-slate-300">Previsualiser zone</strong> : verifiez que la capture correspond bien a la minimap</li>
+              </ul>
+
+              <p className="text-slate-300 text-sm font-semibold mb-2">3. Calibrer (obligatoire)</p>
+              <p className="text-slate-400 text-sm mb-1">
+                Cliquez <strong className="text-slate-300">&quot;Calibrer (3 aeroports)&quot;</strong>. Une capture de la minimap s&apos;affiche :
+              </p>
+              <ul className="text-slate-400 text-sm space-y-1 list-disc list-inside mb-4">
+                <li>Cliquez sur un aeroport visible sur la minimap</li>
+                <li>Entrez son code OACI (ex: IRFD, ITKO, IPPH...)</li>
+                <li>Repetez pour 3 aeroports differents et espaces</li>
+                <li>Choisissez des aeroports bien eloignes les uns des autres pour une meilleure precision</li>
+              </ul>
+
+              <p className="text-slate-300 text-sm font-semibold mb-2">4. Demarrer la capture</p>
+              <p className="text-slate-400 text-sm mb-4">
+                Cliquez <strong className="text-slate-300">&quot;Demarrer la capture&quot;</strong>. L&apos;application capture la minimap toutes les 2 secondes, detecte les avions (points rouges) et envoie leurs positions au radar ATC en temps reel. Laissez l&apos;app tourner en arriere-plan pendant que vous jouez.
+              </p>
+
+              <div className="p-3 bg-slate-800/50 rounded-lg">
+                <p className="text-slate-500 text-xs">
+                  <strong className="text-slate-400">Astuce :</strong> la configuration (URL, token, zone, calibration) est sauvegardee automatiquement. Au prochain lancement, cliquez simplement &quot;Demarrer la capture&quot;.
+                </p>
               </div>
             </div>
           </div>
