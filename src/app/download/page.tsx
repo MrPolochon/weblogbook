@@ -133,8 +133,29 @@ export default function DownloadPage() {
             })}
           </div>
 
-          {/* Avertissement Windows */}
+          {/* Configuration RadarCapture */}
           <div className="mt-8 max-w-2xl mx-auto">
+            <div className="rounded-xl border border-sky-300/30 bg-sky-50/5 p-5 mb-4">
+              <h3 className="text-sky-300 font-bold text-sm mb-3">Configuration de RadarCapture</h3>
+              <p className="text-slate-400 text-sm mb-3">Au lancement de l&apos;application, vous devez renseigner :</p>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-slate-300 text-sm font-semibold mb-1">URL du serveur</p>
+                  <code className="block bg-slate-800 px-3 py-2 rounded-lg text-sky-300 text-sm select-all">https://www.mixouairlinesptfsweblogbook.com</code>
+                </div>
+                <div>
+                  <p className="text-slate-300 text-sm font-semibold mb-1">Token API</p>
+                  <p className="text-slate-400 text-sm">
+                    Connectez-vous, allez dans <strong className="text-slate-300">Espace ATC</strong> &rarr; <strong className="text-slate-300">Mon compte</strong> &rarr; section <strong className="text-slate-300">Radar ATC</strong> &rarr; cliquez <strong className="text-slate-300">&quot;Generer un token&quot;</strong>.
+                    Copiez le token affiche et collez-le dans l&apos;application.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Avertissement Windows */}
+          <div className="max-w-2xl mx-auto">
             <div className="rounded-xl border border-amber-300/30 bg-amber-50/5 p-5">
               <h3 className="text-amber-300 font-bold text-sm mb-2">Windows bloque le fichier ?</h3>
               <p className="text-slate-400 text-sm leading-relaxed mb-3">
