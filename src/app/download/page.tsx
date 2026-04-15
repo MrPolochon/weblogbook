@@ -133,8 +133,26 @@ export default function DownloadPage() {
             })}
           </div>
 
+          {/* Avertissement Windows */}
+          <div className="mt-8 max-w-2xl mx-auto">
+            <div className="rounded-xl border border-amber-300/30 bg-amber-50/5 p-5">
+              <h3 className="text-amber-300 font-bold text-sm mb-2">Windows bloque le fichier ?</h3>
+              <p className="text-slate-400 text-sm leading-relaxed mb-3">
+                RadarCapture n&apos;est pas encore signe numeriquement. Windows SmartScreen ou Smart App Control peuvent bloquer son execution.
+              </p>
+              <ul className="text-slate-400 text-sm space-y-1.5 list-disc list-inside">
+                <li><strong className="text-slate-300">SmartScreen</strong> : cliquez &quot;Informations complementaires&quot; puis &quot;Executer quand meme&quot;</li>
+                <li><strong className="text-slate-300">Smart App Control</strong> : Parametres &rarr; Securite Windows &rarr; Controle des applications &rarr; Smart App Control &rarr; Desactiver temporairement</li>
+                <li><strong className="text-slate-300">Proprietes</strong> : clic droit sur le fichier &rarr; Proprietes &rarr; cocher &quot;Debloquer&quot; en bas &rarr; OK</li>
+              </ul>
+              <p className="text-slate-500 text-xs mt-3">
+                Vous pouvez aussi lancer directement le script Python : installez Python, puis executez <code className="bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">python main.py</code> depuis le dossier <code className="bg-slate-800 px-1.5 py-0.5 rounded text-sky-300">radar-capture/</code>.
+              </p>
+            </div>
+          </div>
+
           {/* Web app notice */}
-          <div className="mt-12 text-center">
+          <div className="mt-8 text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800 border border-slate-700">
               <ExternalLink className="h-4 w-4 text-sky-400" />
               <span className="text-slate-300 text-sm">
