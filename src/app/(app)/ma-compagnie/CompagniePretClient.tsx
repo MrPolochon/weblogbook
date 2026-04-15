@@ -231,12 +231,21 @@ export default function CompagniePretClient({ compagnieId }: Props) {
           </div>
 
           {/* Echeance */}
-          {pretActif.echeance_at && (() => {
+          {(() => {
+            if (!pretActif.echeance_at) {
+              return (
+                <div className="mt-4 p-3 bg-slate-800/30 rounded-lg flex items-start gap-2">
+                  <Clock className="h-4 w-4 mt-0.5 shrink-0 text-slate-400" />
+                  <p className="text-sm text-slate-400">Date limite de remboursement : <span className="text-slate-300 font-semibold">non definie</span></p>
+                </div>
+              );
+            }
             const echeance = new Date(pretActif.echeance_at);
             const now = new Date();
-            const joursRestants = Math.max(0, Math.ceil((echeance.getTime() - now.getTime()) / 86_400_000));
-            const isUrgent = joursRestants <= 3;
-            const isDepasse = joursRestants === 0 && now > echeance;
+            const msRestants = echeance.getTime() - now.getTime();
+            const joursRestants = Math.max(0, Math.ceil(msRestants / 86_400_000));
+            const isDepasse = msRestants < 0;
+            const isUrgent = !isDepasse && joursRestants <= 3;
             return (
               <div className={`mt-4 p-3 rounded-lg flex items-start gap-2 ${
                 isDepasse ? 'bg-red-500/15 border border-red-500/40' :
@@ -248,14 +257,14 @@ export default function CompagniePretClient({ compagnieId }: Props) {
                   <p className={`text-sm font-semibold ${isDepasse ? 'text-red-300' : isUrgent ? 'text-orange-300' : 'text-slate-300'}`}>
                     {isDepasse
                       ? 'Echeance depassee — remboursement force imminent'
-                      : `Echeance : ${echeance.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                      : `Date limite : ${echeance.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`
                     }
                   </p>
                   <p className={`text-xs mt-0.5 ${isDepasse ? 'text-red-400' : isUrgent ? 'text-orange-400' : 'text-slate-500'}`}>
                     {isDepasse
                       ? 'Le solde du compte sera debite du montant restant. En cas de decouvert, vos actifs pourront etre vendus automatiquement.'
-                      : joursRestants === 1
-                      ? 'Plus que 1 jour pour rembourser !'
+                      : joursRestants <= 1
+                      ? 'Dernier jour pour rembourser !'
                       : `${joursRestants} jours restants`
                     }
                   </p>
