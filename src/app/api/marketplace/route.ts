@@ -207,7 +207,7 @@ export async function POST(req: NextRequest) {
       const aeroportInitial = hubPrincipal?.aeroport_code || 'IRFD';
 
       // Créer l'avion individuel
-      await admin.from('compagnie_avions').insert({
+      const { error: insertAvionErr } = await admin.from('compagnie_avions').insert({
         compagnie_id: pour_compagnie_id,
         type_avion_id,
         immatriculation,
@@ -217,6 +217,12 @@ export async function POST(req: NextRequest) {
         statut: 'ground',
         prix_achat: avion.prix,
       });
+
+      if (insertAvionErr) {
+        console.error('Marketplace: echec insert compagnie_avions:', insertAvionErr);
+        await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
+        return NextResponse.json({ error: 'Erreur lors de la creation de l\'avion. Le compte a ete recredite.' }, { status: 500 });
+      }
 
       // Transaction
       await admin.from('felitz_transactions').insert({
@@ -257,8 +263,8 @@ export async function POST(req: NextRequest) {
       const { data: immatPerso } = await admin.rpc('generer_immatriculation', { prefixe: 'F-' });
       const immatPersonnel = immatPerso || `F-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
-      // Ajouter à l'inventaire personnel (sans position : pas de revenus, pas de frais)
-      await admin.from('inventaire_avions').insert({
+      // Ajouter à l'inventaire personnel
+      const { error: insertPersoErr } = await admin.from('inventaire_avions').insert({
         proprietaire_id: user.id,
         type_avion_id,
         nom_personnalise,
@@ -266,6 +272,12 @@ export async function POST(req: NextRequest) {
         aeroport_actuel: null,
         prix_achat: avion.prix,
       });
+
+      if (insertPersoErr) {
+        console.error('Marketplace: echec insert inventaire_avions:', insertPersoErr);
+        await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
+        return NextResponse.json({ error: 'Erreur lors de la creation de l\'avion. Le compte a ete recredite.' }, { status: 500 });
+      }
 
       // Transaction
       await admin.from('felitz_transactions').insert({

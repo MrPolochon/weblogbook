@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import type { InstructionProgram } from '@/lib/instruction-programs';
 
 type Eleve = {
@@ -80,8 +81,8 @@ export default function InstructionClient({
   const [examStatusEdit, setExamStatusEdit] = useState<Record<string, { statut: string; response_note: string }>>({});
   const [editById, setEditById] = useState<Record<string, { nom: string; immat: string; aeroport: string }>>({});
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  
+  
   /** Clé `eleveId::licence::module` → état affiché en avance de phase avant la réponse serveur */
   const [progressionOverrides, setProgressionOverrides] = useState<Record<string, boolean>>({});
   const [savingProgKeys, setSavingProgKeys] = useState<Set<string>>(() => new Set());
@@ -155,14 +156,12 @@ export default function InstructionClient({
   }, [myProgram, myCompletedSet]);
 
   async function run(action: () => Promise<void>) {
-    setError(null);
-    setSuccess(null);
     setLoading(true);
     try {
       await action();
       startTransition(() => router.refresh());
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoading(false);
     }
@@ -184,7 +183,7 @@ export default function InstructionClient({
       if (!res.ok) throw new Error(data.error || 'Erreur création élève');
       setIdentifiant('');
       setPassword('');
-      setSuccess('Élève créé et rattaché à votre formation.');
+      toast.success('Eleve cree et rattache a votre formation.');
     });
   }
 
@@ -197,7 +196,7 @@ export default function InstructionClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur changement licence');
-      setSuccess('Licence de formation mise à jour.');
+      toast.success('Licence de formation mise a jour.');
     });
   }
 
@@ -219,7 +218,7 @@ export default function InstructionClient({
       setTypeAvionId('');
       setNomPerso('');
       setImmat('');
-      setSuccess('Avion temporaire assigné.');
+      toast.success('Avion temporaire assigne.');
     });
   }
 
@@ -239,7 +238,7 @@ export default function InstructionClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur mise à jour avion');
-      setSuccess('Avion temporaire mis à jour.');
+      toast.success('Avion temporaire mis a jour.');
     });
   }
 
@@ -248,7 +247,7 @@ export default function InstructionClient({
       const res = await fetch(`/api/instruction/avions?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur suppression avion');
-      setSuccess('Avion temporaire supprimé.');
+      toast.success('Avion temporaire supprime.');
     });
   }
 
@@ -261,7 +260,7 @@ export default function InstructionClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur fin de formation');
-      setSuccess('Formation terminée: les avions temporaires ont été retirés.');
+      toast.success('Formation terminee: les avions temporaires ont ete retires.');
     });
   }
 
@@ -271,7 +270,6 @@ export default function InstructionClient({
 
   async function toggleProgression(eleveId: string, licenceCode: string, moduleCode: string, completed: boolean) {
     const key = progressionToggleKey(eleveId, licenceCode, moduleCode);
-    setError(null);
     setProgressionOverrides((o) => ({ ...o, [key]: completed }));
     setSavingProgKeys((s) => new Set(s).add(key));
     try {
@@ -294,7 +292,7 @@ export default function InstructionClient({
         delete next[key];
         return next;
       });
-      setError(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setSavingProgKeys((s) => {
         const next = new Set(s);
@@ -315,7 +313,7 @@ export default function InstructionClient({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur demande examen');
       setExamMessage('');
-      setSuccess('Demande d’examen envoyée. Un instructeur vous a été assigné.');
+      toast.success('Action effectuee.');
     });
   }
 
@@ -333,7 +331,7 @@ export default function InstructionClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur mise à jour examen');
-      setSuccess('Demande d’examen mise à jour.');
+      toast.success('Action effectuee.');
     });
   }
 
@@ -344,16 +342,7 @@ export default function InstructionClient({
           {loadError}
         </div>
       )}
-      {error && (
-        <div className="sticky top-0 z-10 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="sticky top-0 z-10 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
-          {success}
-        </div>
-      )}
+      
 
       <div className="card space-y-2">
         <h1 className="text-2xl font-semibold text-slate-100">Instruction</h1>
