@@ -87,12 +87,8 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
   // ─── Drag start ───
   const handleDragStart = useCallback((e: React.DragEvent, stripId: string) => {
-    let el = e.target as HTMLElement | null;
-    let fromHandle = false;
-    while (el && el !== e.currentTarget) {
-      if ((el as HTMLElement).dataset?.dragHandle) { fromHandle = true; break; }
-      el = el.parentElement;
-    }
+    const target = e.target as Element;
+    const fromHandle = target.closest('[data-drag-handle]') != null;
     if (!fromHandle) { e.preventDefault(); return; }
 
     setDraggedId(stripId);

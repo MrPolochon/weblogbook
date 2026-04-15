@@ -131,7 +131,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     }
   }, [selectedOutputId]);
 
-  const stopLocalMicTest = useCallback(() => {
+  const cleanupMicTestResources = useCallback(() => {
     if (micTestRafRef.current != null) {
       cancelAnimationFrame(micTestRafRef.current);
       micTestRafRef.current = null;
@@ -145,12 +145,16 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       micTestAudioContextRef.current = null;
     }
     setMicTestLevel(0);
-    setIsMicTestActive(false);
   }, []);
+
+  const stopLocalMicTest = useCallback(() => {
+    cleanupMicTestResources();
+    setIsMicTestActive(false);
+  }, [cleanupMicTestResources]);
 
   const startLocalMicTest = useCallback(async () => {
     unlockAudioForIOS();
-    stopLocalMicTest();
+    cleanupMicTestResources();
     try {
       const useDevice = selectedInputId?.trim();
       const constraints: MediaStreamConstraints = useDevice
@@ -170,7 +174,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       analyser.fftSize = 1024;
       analyser.smoothingTimeConstant = 0.45;
       source.connect(analyser);
-      // Sortie gain 0 : certains navigateurs ne « tournent » pas le graphe sans lien vers destination.
       const silentGain = audioCtx.createGain();
       silentGain.gain.value = 0;
       analyser.connect(silentGain);
@@ -194,10 +197,11 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       setIsMicTestActive(true);
     } catch (e) {
       console.error('[ATC Phone] startLocalMicTest error:', e);
-      setAudioDeviceError('Impossible de tester le micro (autorisation ou périphérique)');
-      stopLocalMicTest();
+      setAudioDeviceError('Impossible de tester le micro (autorisation ou peripherique)');
+      cleanupMicTestResources();
+      setIsMicTestActive(false);
     }
-  }, [selectedInputId, stopLocalMicTest]);
+  }, [selectedInputId, cleanupMicTestResources]);
 
   // Messages vocaux (sanitizeForSpeech pour bug iOS 26 avec < et >)
   const playMessage = useCallback((message: string) => {
@@ -584,10 +588,15 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     });
   }, [selectedOutputId, applyOutputDevice]);
 
+  const micTestActiveRef = useRef(false);
+  micTestActiveRef.current = isMicTestActive;
+  const prevInputIdRef = useRef(selectedInputId);
   useEffect(() => {
-    if (!isMicTestActive) return;
+    if (prevInputIdRef.current === selectedInputId) return;
+    prevInputIdRef.current = selectedInputId;
+    if (!micTestActiveRef.current) return;
     void startLocalMicTest();
-  }, [selectedInputId, isMicTestActive, startLocalMicTest]);
+  }, [selectedInputId, startLocalMicTest]);
 
   const parseNumber = (num: string) => {
     if (num === '911' || num === '112') return { aeroport: null, position: 'AFIS', isLocal: false, isEmergency: true };
