@@ -313,7 +313,7 @@ async function getAvionInfo(
 }> {
   if (inventaireAvionId) {
     const { data: avion } = await admin.from('inventaire_avions')
-      .select('id, type_avion_id, proprietaire_id, types_avion:type_avion_id(id, nom, prix)')
+      .select('id, type_avion_id, proprietaire_id, prix_achat, types_avion:type_avion_id(id, nom, prix)')
       .eq('id', inventaireAvionId)
       .single();
 
@@ -343,6 +343,10 @@ async function getAvionInfo(
     const typesAvion = (Array.isArray(rawType) ? rawType[0] : rawType) as { id: string; nom: string; prix: number } | null;
     if (!typesAvion || !typesAvion.prix) return { success: false, error: 'Type d\'avion introuvable', status: 404 };
 
+    const prixCatalogue = typesAvion.prix;
+    const prixAchatReel = (avion.prix_achat && avion.prix_achat > 0) ? avion.prix_achat : prixCatalogue;
+    const prixPourRevente = Math.min(prixCatalogue, prixAchatReel);
+
     const { data: compte } = await admin.from('felitz_comptes')
       .select('id')
       .eq('proprietaire_id', userId)
@@ -353,7 +357,7 @@ async function getAvionInfo(
       success: true,
       typeAvionId: typesAvion.id,
       typeAvionNom: typesAvion.nom,
-      prixInitial: typesAvion.prix,
+      prixInitial: prixPourRevente,
       compagnieId: null,
       compteId: compte?.id,
     };
@@ -361,7 +365,7 @@ async function getAvionInfo(
 
   if (compagnieAvionId) {
     const { data: avion } = await admin.from('compagnie_avions')
-      .select('id, compagnie_id, type_avion_id, detruit, statut, types_avion:type_avion_id(id, nom, prix)')
+      .select('id, compagnie_id, type_avion_id, detruit, statut, prix_achat, types_avion:type_avion_id(id, nom, prix)')
       .eq('id', compagnieAvionId)
       .single();
 
@@ -394,6 +398,10 @@ async function getAvionInfo(
     const typesAvion = (Array.isArray(rawType2) ? rawType2[0] : rawType2) as { id: string; nom: string; prix: number } | null;
     if (!typesAvion || !typesAvion.prix) return { success: false, error: 'Type d\'avion introuvable', status: 404 };
 
+    const prixCatalogue = typesAvion.prix;
+    const prixAchatReel = (avion.prix_achat && avion.prix_achat > 0) ? avion.prix_achat : prixCatalogue;
+    const prixPourRevente = Math.min(prixCatalogue, prixAchatReel);
+
     const { data: compte } = await admin.from('felitz_comptes')
       .select('id')
       .eq('compagnie_id', avion.compagnie_id)
@@ -404,7 +412,7 @@ async function getAvionInfo(
       success: true,
       typeAvionId: typesAvion.id,
       typeAvionNom: typesAvion.nom,
-      prixInitial: typesAvion.prix,
+      prixInitial: prixPourRevente,
       compagnieId: avion.compagnie_id,
       compteId: compte?.id,
     };

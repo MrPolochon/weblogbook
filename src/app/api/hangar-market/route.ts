@@ -413,7 +413,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'Cet avion n\'est plus disponible (annonce expirée ou déjà traitée).' }, { status: 409 });
         }
         await admin.from('compagnie_avions')
-          .update({ compagnie_id: compagnie_acheteur_id })
+          .update({ compagnie_id: compagnie_acheteur_id, prix_achat: annonce.prix })
           .eq('id', annonce.compagnie_avion_id);
       } else if (annonce.inventaire_avion_id) {
         // Avion personnel : vérifier qu'il existe encore
@@ -428,7 +428,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'Cet avion n\'est plus disponible (annonce expirée ou déjà traitée).' }, { status: 409 });
         }
         await admin.from('inventaire_avions')
-          .update({ proprietaire_id: user.id })
+          .update({ proprietaire_id: user.id, prix_achat: annonce.prix })
           .eq('id', annonce.inventaire_avion_id);
       } else if (annonce.flotte_avion_id) {
         return NextResponse.json({ error: 'Cette annonce utilise l\'ancien système de flotte qui n\'est plus supporté.' }, { status: 400 });

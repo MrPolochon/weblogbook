@@ -214,7 +214,8 @@ export async function POST(req: NextRequest) {
         nom_bapteme: nom_personnalise || null,
         aeroport_actuel: aeroportInitial,
         usure_percent: 100,
-        statut: 'ground'
+        statut: 'ground',
+        prix_achat: avion.prix,
       });
 
       // Transaction
@@ -263,6 +264,7 @@ export async function POST(req: NextRequest) {
         nom_personnalise,
         immatriculation: immatPersonnel,
         aeroport_actuel: null,
+        prix_achat: avion.prix,
       });
 
       // Transaction
