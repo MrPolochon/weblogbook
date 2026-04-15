@@ -53,10 +53,11 @@ const ZONE_DROP_DARK: Record<ZoneId, string> = {
   transit: 'ring-4 ring-violet-500 bg-violet-900/60',
 };
 
-export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
+export default function FlightStripBoard({ strips, atcPosition }: { strips: StripData[]; atcPosition?: string }) {
   const router = useRouter();
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
+  const isCenter = atcPosition === 'Center';
   const [transferDialog, setTransferDialog] = useState<string | null>(null);
 
   // État local pour mises à jour optimistes (déplacement immédiat au drop)
@@ -295,11 +296,11 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      {/* 4 zones */}
+      {/* Zones */}
       <div className="flex gap-3 flex-1 min-h-0 overflow-x-auto pb-1">
         {renderZone('sol', solStrips)}
         {renderZone('depart', departStrips)}
-        {renderZone('transit', transitStrips)}
+        {isCenter && renderZone('transit', transitStrips)}
         {renderZone('arrivee', arriveeStrips)}
       </div>
 

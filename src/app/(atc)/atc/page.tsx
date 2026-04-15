@@ -247,6 +247,7 @@ export default async function AtcPage() {
             <FlightStripBoardWrapper 
               allStrips={plansChezMoi} 
               plansATraiter={plansChezMoi.filter(s => ['depose', 'en_attente'].includes(s.statut)).map(s => s.id)}
+              atcPosition={session.position}
             />
           )}
         </div>

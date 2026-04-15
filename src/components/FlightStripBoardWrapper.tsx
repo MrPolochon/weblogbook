@@ -6,10 +6,11 @@ import type { StripData } from './FlightStrip';
 
 interface FlightStripBoardWrapperProps {
   allStrips: StripData[];
-  plansATraiter: string[]; // IDs des plans à traiter (depose, en_attente)
+  plansATraiter: string[];
+  atcPosition?: string;
 }
 
-export default function FlightStripBoardWrapper({ allStrips, plansATraiter }: FlightStripBoardWrapperProps) {
+export default function FlightStripBoardWrapper({ allStrips, plansATraiter, atcPosition }: FlightStripBoardWrapperProps) {
   const [activatedPlanIds, setActivatedPlanIds] = useState<Set<string>>(new Set());
 
   // Filtrer les strips : exclure ceux qui sont "à traiter" ET pas encore activés
@@ -39,5 +40,5 @@ export default function FlightStripBoardWrapper({ allStrips, plansATraiter }: Fl
     return () => window.removeEventListener('activateStrip' as never, handleActivation as never);
   }, []);
 
-  return <FlightStripBoard strips={visibleStrips} />;
+  return <FlightStripBoard strips={visibleStrips} atcPosition={atcPosition} />;
 }
