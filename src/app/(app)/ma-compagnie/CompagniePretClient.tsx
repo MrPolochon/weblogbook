@@ -19,6 +19,7 @@ type Pret = {
   statut: string;
   created_at: string;
   rembourse_at: string | null;
+  echeance_at: string | null;
 };
 
 interface Props {
@@ -228,6 +229,40 @@ export default function CompagniePretClient({ compagnieId }: Props) {
               {pretActif.montant_rembourse.toLocaleString('fr-FR')} F$ remboursés sur {pretActif.montant_total_du.toLocaleString('fr-FR')} F$
             </p>
           </div>
+
+          {/* Echeance */}
+          {pretActif.echeance_at && (() => {
+            const echeance = new Date(pretActif.echeance_at);
+            const now = new Date();
+            const joursRestants = Math.max(0, Math.ceil((echeance.getTime() - now.getTime()) / 86_400_000));
+            const isUrgent = joursRestants <= 3;
+            const isDepasse = joursRestants === 0 && now > echeance;
+            return (
+              <div className={`mt-4 p-3 rounded-lg flex items-start gap-2 ${
+                isDepasse ? 'bg-red-500/15 border border-red-500/40' :
+                isUrgent ? 'bg-orange-500/15 border border-orange-500/30' :
+                'bg-slate-800/30'
+              }`}>
+                <Clock className={`h-4 w-4 mt-0.5 shrink-0 ${isDepasse ? 'text-red-400' : isUrgent ? 'text-orange-400' : 'text-slate-400'}`} />
+                <div>
+                  <p className={`text-sm font-semibold ${isDepasse ? 'text-red-300' : isUrgent ? 'text-orange-300' : 'text-slate-300'}`}>
+                    {isDepasse
+                      ? 'Echeance depassee — remboursement force imminent'
+                      : `Echeance : ${echeance.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`
+                    }
+                  </p>
+                  <p className={`text-xs mt-0.5 ${isDepasse ? 'text-red-400' : isUrgent ? 'text-orange-400' : 'text-slate-500'}`}>
+                    {isDepasse
+                      ? 'Le solde du compte sera debite du montant restant. En cas de decouvert, vos actifs pourront etre vendus automatiquement.'
+                      : joursRestants === 1
+                      ? 'Plus que 1 jour pour rembourser !'
+                      : `${joursRestants} jours restants`
+                    }
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="mt-4 p-3 bg-slate-800/30 rounded-lg flex items-start gap-2">
             <TrendingDown className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
