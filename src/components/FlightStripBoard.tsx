@@ -6,44 +6,51 @@ import FlightStrip, { type StripData } from './FlightStrip';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 
-type ZoneId = 'sol' | 'depart' | 'arrivee';
+type ZoneId = 'sol' | 'depart' | 'arrivee' | 'transit';
 type ZoneOrNull = ZoneId | null;
 
 const ZONE_LABELS: Record<ZoneId, string> = {
   sol: 'Trafic au sol',
   depart: 'Trafic au départ',
   arrivee: "Trafic à l'arrivée",
+  transit: 'En transit',
 };
 const ZONE_COLORS_LIGHT: Record<ZoneId, string> = {
   sol: 'border-amber-400 bg-amber-50/60',
   depart: 'border-sky-400 bg-sky-50/60',
   arrivee: 'border-emerald-400 bg-emerald-50/60',
+  transit: 'border-violet-400 bg-violet-50/60',
 };
 const ZONE_COLORS_DARK: Record<ZoneId, string> = {
   sol: 'border-amber-600 bg-amber-950/40',
   depart: 'border-sky-600 bg-sky-950/40',
   arrivee: 'border-emerald-600 bg-emerald-950/40',
+  transit: 'border-violet-600 bg-violet-950/40',
 };
 const ZONE_HEADER_LIGHT: Record<ZoneId, string> = {
   sol: 'bg-amber-200 text-amber-900',
   depart: 'bg-sky-200 text-sky-900',
   arrivee: 'bg-emerald-200 text-emerald-900',
+  transit: 'bg-violet-200 text-violet-900',
 };
 const ZONE_HEADER_DARK: Record<ZoneId, string> = {
   sol: 'bg-amber-800 text-amber-100',
   depart: 'bg-sky-800 text-sky-100',
   arrivee: 'bg-emerald-800 text-emerald-100',
+  transit: 'bg-violet-800 text-violet-100',
 };
 
 const ZONE_DROP_LIGHT: Record<ZoneId, string> = {
   sol: 'ring-4 ring-amber-400 bg-amber-100/80',
   depart: 'ring-4 ring-sky-400 bg-sky-100/80',
   arrivee: 'ring-4 ring-emerald-400 bg-emerald-100/80',
+  transit: 'ring-4 ring-violet-400 bg-violet-100/80',
 };
 const ZONE_DROP_DARK: Record<ZoneId, string> = {
   sol: 'ring-4 ring-amber-500 bg-amber-900/60',
   depart: 'ring-4 ring-sky-500 bg-sky-900/60',
   arrivee: 'ring-4 ring-emerald-500 bg-emerald-900/60',
+  transit: 'ring-4 ring-violet-500 bg-violet-900/60',
 };
 
 export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
@@ -71,6 +78,7 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
   const solStrips = getZone('sol');
   const departStrips = getZone('depart');
   const arriveeStrips = getZone('arrivee');
+  const transitStrips = getZone('transit');
 
   // ─── Double right-click = transfer dialog ───
   const lastRightClick = useRef<{ id: string; time: number } | null>(null);
@@ -87,10 +95,6 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
   // ─── Drag start ───
   const handleDragStart = useCallback((e: React.DragEvent, stripId: string) => {
-    const target = e.target as Element;
-    const fromHandle = target.closest('[data-drag-handle]') != null;
-    if (!fromHandle) { e.preventDefault(); return; }
-
     setDraggedId(stripId);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', stripId);
@@ -291,10 +295,11 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      {/* 3 zones */}
+      {/* 4 zones */}
       <div className="flex gap-3 flex-1 min-h-0 overflow-x-auto pb-1">
         {renderZone('sol', solStrips)}
         {renderZone('depart', departStrips)}
+        {renderZone('transit', transitStrips)}
         {renderZone('arrivee', arriveeStrips)}
       </div>
 

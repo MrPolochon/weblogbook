@@ -113,6 +113,7 @@ export default function DownloadPage() {
                   {app.available && app.downloadUrl ? (
                     <a
                       href={app.downloadUrl}
+                      download
                       className={`w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r ${app.color} text-white font-medium hover:opacity-90 transition-opacity`}
                     >
                       <Download className="h-5 w-5" />

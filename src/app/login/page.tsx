@@ -827,7 +827,7 @@ function LoginPageContent() {
         </p>
 
         {/* Boutons secondaires */}
-        <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3 flex-wrap animate-init animate-slide-up delay-800">
+        <div className="mt-6 flex flex-row items-center justify-center gap-3 animate-init animate-slide-up delay-800">
           <Link
             href="/aeroschool"
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:text-amber-200 hover:bg-amber-500/20 hover:border-amber-500/50 transition-all backdrop-blur-sm group cursor-pointer"
@@ -840,7 +840,7 @@ function LoginPageContent() {
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all backdrop-blur-sm group cursor-pointer"
           >
             <Radio className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-            <span className="font-semibold">Carte œil du web (ODW)</span>
+            <span className="font-semibold">ODW</span>
           </Link>
           <Link
             href="/download"
