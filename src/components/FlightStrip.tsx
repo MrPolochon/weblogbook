@@ -243,7 +243,7 @@ function FlUnitToggle({ planId, unit, onSaved }: { planId: string; unit: string 
 /* ============================================================ */
 /*  ACTION BAR                                                     */
 /* ============================================================ */
-function StripActionBar({ strip, onRefresh, onTransferRequest }: { strip: StripData; onRefresh?: () => void; onTransferRequest?: (stripId: string) => void }) {
+function StripActionBar({ strip, onRefresh, onTransferRequest }: { strip: StripData; onRefresh?: () => void; onTransferRequest?: (stripId: string, event?: React.MouseEvent) => void }) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
   const [loading, setLoading] = useState<string | null>(null);
@@ -404,7 +404,7 @@ function StripActionBar({ strip, onRefresh, onTransferRequest }: { strip: StripD
         <button type="button" onClick={() => callAction('transferer', { automonitoring: true })} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 shadow-sm"><Radio className="h-3.5 w-3.5" />{loading === 'transferer' ? '…' : 'Autosurv.'}</button>
       )}
       {strip.current_holder_user_id && onTransferRequest && (
-        <button type="button" onClick={() => onTransferRequest(strip.id)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50 shadow-sm"><ArrowRightLeft className="h-3.5 w-3.5" />Transférer</button>
+        <button type="button" onClick={(e) => onTransferRequest(strip.id, e)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50 shadow-sm"><ArrowRightLeft className="h-3.5 w-3.5" />Transférer</button>
       )}
       {((strip.type_vol === 'VFR' && strip.intentions_vol) || (strip.type_vol === 'IFR' && strip.niveau_croisiere)) && (
         <>
@@ -637,7 +637,7 @@ export default function FlightStrip({
   strip: StripData;
   onRefresh?: () => void;
   onContextMenu?: (e: React.MouseEvent, stripId: string) => void;
-  onTransferRequest?: (stripId: string) => void;
+  onTransferRequest?: (stripId: string, event?: React.MouseEvent) => void;
 }) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';

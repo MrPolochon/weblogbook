@@ -1,10 +1,22 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useTransition } from 'react';
+import { useState, useRef, useCallback, useEffect, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import FlightStrip, { type StripData } from './FlightStrip';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { AIRPORT_TO_FIR } from '@/lib/cartography-data';
+import type { OnlineSession } from './FlightStripBoardWrapper';
+
+const TRANSFER_HIERARCHY: Record<string, string[]> = {
+  Delivery: ['Ground'],
+  Ground: ['Delivery', 'Clairance', 'Tower'],
+  Clairance: ['Ground'],
+  Tower: ['Ground', 'APP', 'DEP'],
+  APP: ['Tower', 'Center'],
+  DEP: ['Tower', 'Center'],
+  Center: ['APP', 'DEP'],
+};
 
 type ZoneId = 'sol' | 'depart' | 'arrivee' | 'transit';
 type ZoneOrNull = ZoneId | null;
@@ -53,7 +65,7 @@ const ZONE_DROP_DARK: Record<ZoneId, string> = {
   transit: 'ring-4 ring-violet-500 bg-violet-900/60',
 };
 
-export default function FlightStripBoard({ strips, atcPosition }: { strips: StripData[]; atcPosition?: string }) {
+export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onlineSessions }: { strips: StripData[]; atcPosition?: string; atcAeroport?: string; onlineSessions?: OnlineSession[] }) {
   const router = useRouter();
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
@@ -226,9 +238,100 @@ export default function FlightStripBoard({ strips, atcPosition }: { strips: Stri
 
   const refresh = useCallback(() => router.refresh(), [router]);
 
-  const handleTransferClick = useCallback((stripId: string) => {
-    setTransferDialog(stripId);
-  }, []);
+  const quickTransferTargets = useMemo(() => {
+    if (!atcPosition || !atcAeroport || !onlineSessions) return [];
+    const allowedPositions = TRANSFER_HIERARCHY[atcPosition] ?? [];
+    const myFir = AIRPORT_TO_FIR[atcAeroport] ?? '';
+    const seen = new Set<string>();
+    const targets: { aeroport: string; position: string; label: string }[] = [];
+
+    const addTarget = (apt: string, pos: string, label: string) => {
+      const key = `${apt}:${pos}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      targets.push({ aeroport: apt, position: pos, label });
+    };
+
+    for (const pos of allowedPositions) {
+      if (pos === 'Center') continue;
+
+      // APP/DEP → Tower : toutes les Tower de la FIR
+      // Center → APP/DEP : toutes les APP/DEP de la FIR
+      const isFirWide = (
+        ((atcPosition === 'APP' || atcPosition === 'DEP') && pos === 'Tower') ||
+        (atcPosition === 'Center' && (pos === 'APP' || pos === 'DEP'))
+      );
+      if (isFirWide) {
+        for (const s of onlineSessions) {
+          if (s.position !== pos) continue;
+          const sFir = AIRPORT_TO_FIR[s.aeroport] ?? '';
+          if (sFir === myFir) {
+            addTarget(s.aeroport, pos, s.aeroport === atcAeroport ? pos : `${pos} ${s.aeroport}`);
+          }
+        }
+        continue;
+      }
+
+      // Autres positions : même aéroport uniquement
+      const online = onlineSessions.find(s => s.aeroport === atcAeroport && s.position === pos);
+      if (online) {
+        addTarget(atcAeroport, pos, pos);
+      }
+    }
+
+    // Centers : tous les Centers en ligne
+    if (allowedPositions.includes('Center')) {
+      for (const s of onlineSessions) {
+        if (s.position === 'Center') {
+          addTarget(s.aeroport, 'Center', `Center ${s.aeroport}`);
+        }
+      }
+    }
+
+    // Center → tous les autres Centers
+    if (atcPosition === 'Center') {
+      for (const s of onlineSessions) {
+        if (s.position === 'Center' && s.aeroport !== atcAeroport) {
+          addTarget(s.aeroport, 'Center', `Center ${s.aeroport}`);
+        }
+      }
+    }
+
+    return targets;
+  }, [atcPosition, atcAeroport, onlineSessions]);
+
+  const [quickTransferMenu, setQuickTransferMenu] = useState<{ stripId: string; x: number; y: number } | null>(null);
+
+  const handleTransferClick = useCallback((stripId: string, event?: React.MouseEvent) => {
+    if (quickTransferTargets.length === 0) {
+      setTransferDialog(stripId);
+      return;
+    }
+    if (event) {
+      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      setQuickTransferMenu({ stripId, x: rect.left, y: rect.bottom + 4 });
+    } else {
+      setTransferDialog(stripId);
+    }
+  }, [quickTransferTargets]);
+
+  const doQuickTransfer = useCallback(async (stripId: string, aeroport: string, position: string) => {
+    setQuickTransferMenu(null);
+    try {
+      const res = await fetch(`/api/plans-vol/${stripId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'transferer', aeroport, position }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Erreur');
+      }
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    }
+  }, [router]);
 
   // ─── Render a strip item with drag support ───
   const renderStripItem = (s: StripData, zone: ZoneOrNull) => {
@@ -333,7 +436,35 @@ export default function FlightStripBoard({ strips, atcPosition }: { strips: Stri
         );
       })()}
 
-      {/* Transfer dialog */}
+      {/* Quick transfer menu */}
+      {quickTransferMenu && (
+        <div className="fixed inset-0 z-40" onClick={() => setQuickTransferMenu(null)}>
+          <div
+            style={{ position: 'fixed', top: quickTransferMenu.y, left: quickTransferMenu.x, zIndex: 50 }}
+            className={`w-52 rounded-lg border shadow-xl py-1 ${isDark ? 'bg-slate-800 border-slate-600' : 'bg-white border-slate-300'}`}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              Transférer vers
+            </div>
+            {quickTransferTargets.map((t) => (
+              <button
+                key={`${t.aeroport}-${t.position}`}
+                type="button"
+                onClick={() => doQuickTransfer(quickTransferMenu.stripId, t.aeroport, t.position)}
+                className={`w-full text-left px-3 py-2 text-sm font-semibold transition-colors ${isDark ? 'text-slate-200 hover:bg-slate-700' : 'text-slate-800 hover:bg-slate-100'}`}
+              >
+                {t.label}
+              </button>
+            ))}
+            {quickTransferTargets.length === 0 && (
+              <p className={`px-3 py-2 text-sm italic ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Aucune position en ligne</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Transfer dialog (double clic droit) */}
       {transferDialog && <TransferDialog planId={transferDialog} onClose={() => setTransferDialog(null)} />}
     </div>
   );

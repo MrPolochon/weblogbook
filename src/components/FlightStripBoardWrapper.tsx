@@ -4,13 +4,17 @@ import { useState, useEffect } from 'react';
 import FlightStripBoard from './FlightStripBoard';
 import type { StripData } from './FlightStrip';
 
+export interface OnlineSession { aeroport: string; position: string; user_id: string }
+
 interface FlightStripBoardWrapperProps {
   allStrips: StripData[];
   plansATraiter: string[];
   atcPosition?: string;
+  atcAeroport?: string;
+  onlineSessions?: OnlineSession[];
 }
 
-export default function FlightStripBoardWrapper({ allStrips, plansATraiter, atcPosition }: FlightStripBoardWrapperProps) {
+export default function FlightStripBoardWrapper({ allStrips, plansATraiter, atcPosition, atcAeroport, onlineSessions }: FlightStripBoardWrapperProps) {
   const [activatedPlanIds, setActivatedPlanIds] = useState<Set<string>>(new Set());
 
   // Filtrer les strips : exclure ceux qui sont "à traiter" ET pas encore activés
@@ -40,5 +44,5 @@ export default function FlightStripBoardWrapper({ allStrips, plansATraiter, atcP
     return () => window.removeEventListener('activateStrip' as never, handleActivation as never);
   }, []);
 
-  return <FlightStripBoard strips={visibleStrips} atcPosition={atcPosition} />;
+  return <FlightStripBoard strips={visibleStrips} atcPosition={atcPosition} atcAeroport={atcAeroport} onlineSessions={onlineSessions} />;
 }
