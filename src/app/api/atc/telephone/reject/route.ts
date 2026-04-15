@@ -46,7 +46,8 @@ export async function POST(request: Request) {
         status: 'rejected',
         ended_at: new Date().toISOString(),
       })
-      .eq('id', callId);
+      .eq('id', callId)
+      .eq('status', 'ringing');
 
     if (error) {
       console.error('Erreur refus appel:', error);

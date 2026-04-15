@@ -128,6 +128,31 @@ export const OPTIONS_PRETS = [
 export const TAUX_PRELEVEMENT_PRET = 30; // 30% des revenus bruts de chaque vol
 
 /**
+ * Délai de remboursement par montant emprunté (en jours).
+ * Plus le prêt est gros, plus le PDG a de temps.
+ */
+export const ECHEANCE_PRETS: Record<number, number> = {
+  200_000: 14,   // 2 semaines
+  500_000: 28,   // 4 semaines
+  1_000_000: 42, // 6 semaines
+  5_000_000: 56, // 8 semaines
+};
+
+export function getEcheanceJours(montant: number): number {
+  return ECHEANCE_PRETS[montant] ?? 28;
+}
+
+/**
+ * Délai (jours) accordé au PDG pour sortir du découvert après échéance
+ */
+export const DELAI_DECOUVERT_JOURS = 7;
+
+/**
+ * Montant crédité par hub vendu automatiquement lors de la procédure de découvert
+ */
+export const PRIX_VENTE_HUB_FORCE = 200_000;
+
+/**
  * Calcule le montant total à rembourser pour un prêt
  */
 export function calculerMontantTotalPret(montant: number, tauxInteret: number): number {

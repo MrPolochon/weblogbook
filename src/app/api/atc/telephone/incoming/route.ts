@@ -14,14 +14,14 @@ export async function GET() {
     const admin = createAdminClient();
 
     // Nettoyer les anciens appels expirés de l'utilisateur (ringing > 60s, connected > 10min)
-    const thirtySecondsAgo = new Date(Date.now() - 60000).toISOString();
+    const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
     const tenMinutesAgo = new Date(Date.now() - 600000).toISOString();
     
     await admin.from('atc_calls')
       .update({ status: 'ended', ended_at: new Date().toISOString() })
       .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
       .eq('status', 'ringing')
-      .lt('started_at', thirtySecondsAgo);
+      .lt('started_at', sixtySecondsAgo);
     
     await admin.from('atc_calls')
       .update({ status: 'ended', ended_at: new Date().toISOString() })
@@ -29,8 +29,6 @@ export async function GET() {
       .eq('status', 'connected')
       .lt('started_at', tenMinutesAgo);
 
-    // Chercher les appels entrants en attente (récents uniquement)
-    const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
     const { data: incomingCall } = await admin
       .from('atc_calls')
       .select('id, from_user_id, from_aeroport, from_position, number_dialed, started_at, is_emergency')
@@ -55,7 +53,7 @@ export async function GET() {
 
     return NextResponse.json({ call: null });
   } catch (e) {
-    // Si aucun appel trouvé, retourner null (normal)
-    return NextResponse.json({ call: null });
+    console.error('Erreur GET telephone/incoming:', e);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }

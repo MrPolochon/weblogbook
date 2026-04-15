@@ -13,57 +13,6 @@
   --surface-border: rgba(148, 163, 184, 0.22);
 }
 
-body.easter-theme:not(.disable-easter-theme) {
-  --foreground: #fdf4ff;
-  --background: #140d22;
-  --accent-gradient: linear-gradient(135deg, #f9a8d4 0%, #c4b5fd 52%, #93c5fd 100%);
-  --surface-0: rgba(42, 24, 74, 0.72);
-  --surface-1: rgba(56, 35, 90, 0.66);
-  --surface-2: rgba(80, 49, 122, 0.62);
-  --surface-border: rgba(244, 171, 237, 0.28);
-  background:
-    radial-gradient(1400px 900px at 8% -8%, rgba(250, 204, 21, 0.2) 0%, rgba(250, 204, 21, 0.02) 48%, transparent 72%),
-    radial-gradient(1200px 850px at 95% 8%, rgba(244, 114, 182, 0.2) 0%, rgba(244, 114, 182, 0.02) 42%, transparent 70%),
-    radial-gradient(1100px 900px at 50% 115%, rgba(147, 197, 253, 0.16) 0%, rgba(147, 197, 253, 0.01) 40%, transparent 68%),
-    linear-gradient(180deg, #170f2b 0%, #21133c 52%, #261a45 100%);
-}
-
-body.easter-theme:not(.disable-easter-theme)::before {
-  background-image:
-    linear-gradient(rgba(251, 207, 232, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(196, 181, 253, 0.05) 1px, transparent 1px);
-  opacity: 0.38;
-}
-
-body.easter-theme:not(.disable-easter-theme)::after {
-  background:
-    radial-gradient(circle at 15% 22%, rgba(253, 224, 71, 0.17) 0%, transparent 24%),
-    radial-gradient(circle at 82% 30%, rgba(244, 114, 182, 0.16) 0%, transparent 26%),
-    radial-gradient(circle at 70% 76%, rgba(167, 139, 250, 0.15) 0%, transparent 28%);
-}
-
-body.easter-theme:not(.disable-easter-theme) .card {
-  border-color: rgba(244, 171, 237, 0.3);
-  background:
-    linear-gradient(180deg, rgba(102, 51, 153, 0.18), rgba(51, 33, 87, 0.14)),
-    rgba(44, 28, 77, 0.72);
-}
-
-body.easter-theme:not(.disable-easter-theme) .btn-primary {
-  background: linear-gradient(135deg, #ec4899 0%, #a855f7 52%, #6366f1 100%);
-}
-
-body.easter-theme:not(.disable-easter-theme) .btn-secondary {
-  border-color: rgba(244, 171, 237, 0.42);
-  background: rgba(76, 45, 125, 0.62);
-  color: #fdf4ff;
-}
-
-body.easter-theme:not(.disable-easter-theme) .input {
-  border-color: rgba(244, 171, 237, 0.36);
-  background: linear-gradient(180deg, rgba(56, 35, 90, 0.78), rgba(44, 28, 77, 0.68));
-}
-
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;

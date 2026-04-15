@@ -95,7 +95,7 @@ export default async function AtcPage() {
       type_avion_nom: typeAvionNom,
       type_wake: getTypeWake(typeAvionCodeOaci),
       code_transpondeur: plan.code_transpondeur || null,
-      squawk_attendu: plan.code_transpondeur || null,
+      squawk_attendu: null,
       sid_depart: plan.sid_depart || null,
       star_arrivee: plan.star_arrivee || null,
       route_ifr: plan.route_ifr || null,
@@ -121,6 +121,7 @@ export default async function AtcPage() {
       isManual: !plan.pilote_id && Boolean(plan.created_by_atc),
       callsign_telephonie: callsignTelephonie,
       bria_conversation: plan.bria_conversation || null,
+      current_holder_user_id: plan.current_holder_user_id || null,
     } as StripData;
   }));
 

@@ -40,12 +40,15 @@ export async function PATCH(request: Request) {
 
     const { data: eleve } = await admin
       .from('profiles')
-      .select('id, instructeur_referent_id')
+      .select('id, instructeur_referent_id, formation_instruction_licence')
       .eq('id', eleveId)
       .single();
     if (!eleve) return NextResponse.json({ error: 'Élève introuvable.' }, { status: 404 });
     if (eleve.instructeur_referent_id !== user.id && me?.role !== 'admin') {
       return NextResponse.json({ error: 'Cet élève n’est pas rattaché à vous.' }, { status: 403 });
+    }
+    if (eleve.formation_instruction_licence !== licenceCode) {
+      return NextResponse.json({ error: 'Le code licence ne correspond pas à la formation de l’élève' }, { status: 400 });
     }
 
     const payload = {

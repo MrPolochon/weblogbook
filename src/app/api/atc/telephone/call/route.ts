@@ -14,6 +14,10 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { to_aeroport, to_position, number } = body;
 
+    if (!number || typeof number !== 'string' || !number.trim()) {
+      return NextResponse.json({ error: 'Numéro requis' }, { status: 400 });
+    }
+
     if (!to_aeroport || !to_position) {
       return NextResponse.json({ error: 'Aéroport et position requis' }, { status: 400 });
     }
@@ -50,6 +54,17 @@ export async function POST(request: Request) {
     // Gestion des appels d'urgence 911/112 vers AFIS
     const isEmergency = number === '911' || number === '112';
     if (isEmergency && to_position === 'AFIS') {
+      // Vérifier que l'appelant n'a pas déjà un appel en cours
+      const { data: myEmergencyCalls } = await admin
+        .from('atc_calls')
+        .select('id, status')
+        .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
+        .in('status', ['ringing', 'connected']);
+
+      if (myEmergencyCalls && myEmergencyCalls.length > 0) {
+        return NextResponse.json({ error: 'appel_en_cours' }, { status: 400 });
+      }
+
       // Chercher n'importe quel AFIS disponible
       const { data: afisSession } = await admin
         .from('afis_sessions')
@@ -60,6 +75,10 @@ export async function POST(request: Request) {
 
       if (!afisSession) {
         return NextResponse.json({ error: 'no_afis' }, { status: 404 });
+      }
+
+      if (afisSession.user_id === user.id) {
+        return NextResponse.json({ error: 'auto_appel' }, { status: 400 });
       }
 
       // Créer l'appel d'urgence
@@ -99,6 +118,10 @@ export async function POST(request: Request) {
 
       if (!afisSession) {
         return NextResponse.json({ error: 'offline' }, { status: 404 });
+      }
+
+      if (afisSession.user_id === user.id) {
+        return NextResponse.json({ error: 'auto_appel' }, { status: 400 });
       }
 
       // Vérifier que l'AFIS n'est pas déjà en ligne
@@ -148,6 +171,10 @@ export async function POST(request: Request) {
 
     if (!targetSession) {
       return NextResponse.json({ error: 'offline' }, { status: 404 });
+    }
+
+    if (targetSession.user_id === user.id) {
+      return NextResponse.json({ error: 'auto_appel' }, { status: 400 });
     }
 
     // Vérifier si l'ATC cible a refusé un appel récent de cet utilisateur

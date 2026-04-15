@@ -1,26 +1,12 @@
-import { createAdminClient } from '@/lib/supabase/admin';
-
+/**
+ * Le radar est désormais accessible à tous les utilisateurs ATC.
+ * L'accès ATC est garanti par le layout (atc) qui redirige les non-ATC.
+ * Cette fonction est conservée pour compatibilité avec les routes API existantes.
+ */
 export async function hasApprovedRadarAccessForUser(
-  userId: string,
-  role?: string | null,
-  radarBeta?: boolean | null,
+  _userId: string,
+  _role?: string | null,
+  _radarBeta?: boolean | null,
 ) {
-  if (role === 'admin') return true;
-  if (!radarBeta) return false;
-
-  try {
-    const admin = createAdminClient();
-    const { data, error } = await admin
-      .from('radar_beta_requests')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('status', 'approved')
-      .limit(1)
-      .maybeSingle();
-
-    if (error) return false;
-    return Boolean(data?.id);
-  } catch {
-    return false;
-  }
+  return true;
 }

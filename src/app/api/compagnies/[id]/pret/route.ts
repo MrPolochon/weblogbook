@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
-import { OPTIONS_PRETS, calculerMontantTotalPret, TAUX_PRELEVEMENT_PRET } from '@/lib/compagnie-utils';
+import { OPTIONS_PRETS, calculerMontantTotalPret, TAUX_PRELEVEMENT_PRET, getEcheanceJours } from '@/lib/compagnie-utils';
 import { isCoPdg } from '@/lib/co-pdg-utils';
 
 // PATCH - Rembourser manuellement une partie du prêt
@@ -305,7 +305,9 @@ export async function POST(
     // Calculer le montant total à rembourser
     const montantTotalDu = calculerMontantTotalPret(optionPret.montant, optionPret.tauxInteret);
 
-    // Créer le prêt
+    const echeanceJours = getEcheanceJours(optionPret.montant);
+    const echeanceAt = new Date(Date.now() + echeanceJours * 86_400_000).toISOString();
+
     const { data: nouveauPret, error: pretError } = await admin
       .from('prets_bancaires')
       .insert({
@@ -316,6 +318,7 @@ export async function POST(
         montant_total_du: montantTotalDu,
         montant_rembourse: 0,
         statut: 'actif',
+        echeance_at: echeanceAt,
       })
       .select()
       .single();
@@ -361,7 +364,7 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
-      message: `💰 Prêt de ${optionPret.montant.toLocaleString('fr-FR')} F$ accordé ! Taux: ${optionPret.tauxInteret}%. À rembourser: ${montantTotalDu.toLocaleString('fr-FR')} F$ (dont ${interets.toLocaleString('fr-FR')} F$ d'intérêts). ${TAUX_PRELEVEMENT_PRET}% des revenus de vols seront prélevés automatiquement.`,
+      message: `Pret de ${optionPret.montant.toLocaleString('fr-FR')} F$ accorde ! Taux: ${optionPret.tauxInteret}%. A rembourser: ${montantTotalDu.toLocaleString('fr-FR')} F$ (dont ${interets.toLocaleString('fr-FR')} F$ d'interets). Echeance: ${echeanceJours} jours. ${TAUX_PRELEVEMENT_PRET}% des revenus de vols seront preleves automatiquement.`,
       pret: nouveauPret,
     });
   } catch (e) {

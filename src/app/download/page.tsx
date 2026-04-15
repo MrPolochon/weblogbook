@@ -1,10 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, Smartphone, Monitor, Apple, Download, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Smartphone, Monitor, Apple, Download, ExternalLink, Radar } from 'lucide-react';
 
 export default function DownloadPage() {
   const apps = [
+    {
+      platform: 'RadarCapture',
+      icon: Radar,
+      description: 'Outil de capture radar pour ATC — Capturez les positions des avions depuis PTFS et alimentez le radar en temps réel.',
+      version: 'v1.0 — Disponible',
+      downloadUrl: '/api/radar/capture/download',
+      color: 'from-sky-500 to-cyan-600',
+      bgColor: 'bg-sky-50',
+      borderColor: 'border-sky-200',
+      available: true,
+    },
     {
       platform: 'Android',
       icon: Smartphone,

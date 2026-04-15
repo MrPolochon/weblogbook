@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare, AlertTriangle, Flame, PlaneLanding } from 'lucide-react';
+import { Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare, AlertTriangle, Flame, PlaneLanding, ArrowRightLeft } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
 export type StripData = {
@@ -45,6 +45,7 @@ export type StripData = {
   isManual?: boolean;
   callsign_telephonie?: string | null;
   bria_conversation?: { role: string; text: string }[] | null;
+  current_holder_user_id?: string | null;
 };
 
 type EditableField = 'strip_atd' | 'strip_rwy' | 'strip_fl' | 'strip_fl_unit' | 'strip_sid_atc' | 'strip_note_1' | 'strip_note_2' | 'strip_note_3' | 'strip_star' | 'strip_route' | 'numero_vol' | 'aeroport_depart' | 'aeroport_arrivee' | 'type_vol' | 'strip_pilote_text' | 'strip_type_wake';
@@ -211,10 +212,13 @@ function InlineEdit({
 /* ============================================================ */
 function FlUnitToggle({ planId, unit, onSaved }: { planId: string; unit: string | null; onSaved?: () => void }) {
   const [current, setCurrent] = useState(unit || 'FL');
+  const prevRef = useRef(current);
   const toggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const next = current === 'FL' ? 'ft' : 'FL';
-    setCurrent(next); // Optimistic update
+    const prev = current;
+    prevRef.current = prev;
+    const next = prev === 'FL' ? 'ft' : 'FL';
+    setCurrent(next);
     try {
       const res = await fetch(`/api/plans-vol/${planId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -223,11 +227,10 @@ function FlUnitToggle({ planId, unit, onSaved }: { planId: string; unit: string 
       if (res.ok) {
         onSaved?.();
       } else {
-        console.error('FlUnitToggle save error');
-        setCurrent(current); // Revert on error
+        setCurrent(prevRef.current);
       }
     } catch {
-      setCurrent(current); // Revert on error
+      setCurrent(prevRef.current);
     }
   };
   return (
@@ -240,7 +243,7 @@ function FlUnitToggle({ planId, unit, onSaved }: { planId: string; unit: string 
 /* ============================================================ */
 /*  ACTION BAR                                                     */
 /* ============================================================ */
-function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: () => void }) {
+function StripActionBar({ strip, onRefresh, onTransferRequest }: { strip: StripData; onRefresh?: () => void; onTransferRequest?: (stripId: string) => void }) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
   const [loading, setLoading] = useState<string | null>(null);
@@ -399,6 +402,9 @@ function StripActionBar({ strip, onRefresh }: { strip: StripData; onRefresh?: ()
       )}
       {(statut === 'en_cours' || statut === 'accepte') && !isAutomonitoring && (
         <button type="button" onClick={() => callAction('transferer', { automonitoring: true })} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 shadow-sm"><Radio className="h-3.5 w-3.5" />{loading === 'transferer' ? '…' : 'Autosurv.'}</button>
+      )}
+      {strip.current_holder_user_id && onTransferRequest && (
+        <button type="button" onClick={() => onTransferRequest(strip.id)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50 shadow-sm"><ArrowRightLeft className="h-3.5 w-3.5" />Transférer</button>
       )}
       {((strip.type_vol === 'VFR' && strip.intentions_vol) || (strip.type_vol === 'IFR' && strip.niveau_croisiere)) && (
         <>
@@ -626,11 +632,12 @@ function Cell({ children, className = '' }: { children: React.ReactNode; classNa
   ⠿ drag handle on the left
 */
 export default function FlightStrip({
-  strip, onRefresh, onContextMenu,
+  strip, onRefresh, onContextMenu, onTransferRequest,
 }: {
   strip: StripData;
   onRefresh?: () => void;
   onContextMenu?: (e: React.MouseEvent, stripId: string) => void;
+  onTransferRequest?: (stripId: string) => void;
 }) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
@@ -728,6 +735,7 @@ export default function FlightStrip({
       <div className="flex">
         {/* ═══ DRAG HANDLE ═══ */}
         <div
+          data-drag-handle="true"
           className={`w-5 flex items-center justify-center cursor-grab active:cursor-grabbing ${topBg} border-r ${sep} shrink-0`}
         >
           <GripVertical className={`h-3.5 w-3.5 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
@@ -889,7 +897,7 @@ export default function FlightStrip({
       </div>
 
       {/* ACTION BAR */}
-      <StripActionBar strip={strip} onRefresh={onRefresh} />
+      <StripActionBar strip={strip} onRefresh={onRefresh} onTransferRequest={onTransferRequest} />
       
       {/* Animation CSS pour clignotement rouge */}
       {isClotureRequested && (

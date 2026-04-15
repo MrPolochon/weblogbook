@@ -12,8 +12,10 @@ export default async function InstructionPage() {
 
   const admin = createAdminClient();
 
+  const errors: string[] = [];
+
   // Fetch base profile and instruction columns in parallel
-  const [{ data: meBase }, { data: meInstruction }] = await Promise.all([
+  const [profileBaseResult, profileInstructionResult] = await Promise.all([
     supabase
       .from('profiles')
       .select('id, identifiant, role')
@@ -25,6 +27,12 @@ export default async function InstructionPage() {
       .eq('id', user.id)
       .maybeSingle(),
   ]);
+
+  if (profileBaseResult.error) errors.push(`Profil: ${profileBaseResult.error.message}`);
+  if (profileInstructionResult.error) errors.push(`Profil instruction: ${profileInstructionResult.error.message}`);
+
+  const meBase = profileBaseResult.data;
+  const meInstruction = profileInstructionResult.data;
 
   const viewer = {
     id: meBase?.id || user.id,
@@ -38,11 +46,11 @@ export default async function InstructionPage() {
   const isManager = viewer.role === 'instructeur' || viewer.role === 'admin';
 
   // Batch all independent queries together
-  const [{ data: typesAvion }, { data: meInstructorProfile }, { data: examMine }, progressionResult, elevesResult] = await Promise.all([
+  const [typesAvionResult, instructorProfileResult, examMineResult, progressionResult, elevesResult] = await Promise.all([
     admin.from('types_avion').select('id, nom, constructeur, code_oaci').order('ordre', { ascending: true }),
     viewer.instructeur_referent_id
       ? admin.from('profiles').select('identifiant').eq('id', viewer.instructeur_referent_id).maybeSingle()
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
     admin
       .from('instruction_exam_requests')
       .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, created_at, updated_at, instructeur:profiles!instruction_exam_requests_instructeur_id_fkey(identifiant)')
@@ -54,21 +62,31 @@ export default async function InstructionPage() {
           .select('licence_code, module_code, completed')
           .eq('eleve_id', user.id)
           .eq('licence_code', viewer.formation_instruction_licence)
-      : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
+      : Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null }),
     isManager
       ? admin
           .from('profiles')
           .select('id, identifiant, formation_instruction_active, formation_instruction_licence, created_at')
           .eq('instructeur_referent_id', user.id)
+          .eq('formation_instruction_active', true)
           .order('created_at', { ascending: false })
-      : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
+      : Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null }),
   ]);
 
+  if (typesAvionResult.error) errors.push(`Types avion: ${typesAvionResult.error.message}`);
+  if (instructorProfileResult.error) errors.push(`Instructeur référent: ${instructorProfileResult.error.message}`);
+  if (examMineResult.error) errors.push(`Demandes examen: ${examMineResult.error.message}`);
+  if (progressionResult.error) errors.push(`Progression: ${progressionResult.error.message}`);
+  if (elevesResult.error) errors.push(`Élèves: ${elevesResult.error.message}`);
+
+  const typesAvion = typesAvionResult.data;
+  const meInstructorProfile = instructorProfileResult.data;
+  const examMine = examMineResult.data;
   const myProgression = progressionResult?.data;
   const eleves = elevesResult?.data;
 
   const eleveIds = (eleves || []).map((e) => e.id);
-  const [{ data: avionsTemp }, { data: elevesProgression }, { data: examAssigned }] = isManager && eleveIds.length > 0
+  const [avionsTempResult, elevesProgressionResult, examAssignedResult] = isManager && eleveIds.length > 0
     ? await Promise.all([
         admin
           .from('inventaire_avions')
@@ -87,10 +105,21 @@ export default async function InstructionPage() {
           .eq('instructeur_id', user.id)
           .order('created_at', { ascending: false }),
       ])
-    : [{ data: [] as Array<Record<string, unknown>> }, { data: [] as Array<Record<string, unknown>> }, { data: [] as Array<Record<string, unknown>> }];
+    : [{ data: [] as Array<Record<string, unknown>>, error: null }, { data: [] as Array<Record<string, unknown>>, error: null }, { data: [] as Array<Record<string, unknown>>, error: null }];
+
+  if (avionsTempResult.error) errors.push(`Avions temp: ${avionsTempResult.error.message}`);
+  if (elevesProgressionResult.error) errors.push(`Progression élèves: ${elevesProgressionResult.error.message}`);
+  if (examAssignedResult.error) errors.push(`Examens assignés: ${examAssignedResult.error.message}`);
+
+  const avionsTemp = avionsTempResult.data;
+  const elevesProgression = elevesProgressionResult.data;
+  const examAssigned = examAssignedResult.data;
+
+  const loadError = errors.length > 0 ? errors.join(' · ') : undefined;
 
   return (
     <InstructionClient
+      loadError={loadError}
       viewerRole={viewer.role}
       viewerId={viewer.id}
       programs={INSTRUCTION_PROGRAMS}

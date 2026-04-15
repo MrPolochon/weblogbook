@@ -12,7 +12,6 @@ import AtcAtisButton from '@/components/AtcAtisButton';
 import AtcAtisTicker from '@/components/AtcAtisTicker';
 import InactivityLogout from '@/components/InactivityLogout';
 import AtcSessionRealtimeGuard from '@/components/AtcSessionRealtimeGuard';
-import { hasApprovedRadarAccessForUser } from '@/lib/radar-access';
 export default async function AtcLayout({
   children,
 }: {
@@ -24,15 +23,13 @@ export default async function AtcLayout({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, atc, atc_grade_id, radar_beta')
+    .select('role, atc, atc_grade_id')
     .eq('id', user.id)
     .single();
 
   const isAdmin = profile?.role === 'admin';
   const canAccessAtc = isAdmin || profile?.role === 'atc' || Boolean(profile?.atc);
   if (!canAccessAtc) redirect('/logbook');
-
-  const radarAccess = await hasApprovedRadarAccessForUser(user.id, profile?.role, profile?.radar_beta);
 
   let gradeNom: string | null = null;
   if (profile?.atc_grade_id) {
@@ -96,7 +93,7 @@ export default async function AtcLayout({
         <InactivityLogout />
         <AutoRefresh intervalSeconds={15} />
         <AtcModeBg isAdmin={isAdmin} />
-        <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} radarBeta={radarAccess} />
+        <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
         <AtcAtisTicker />
         <div className="flex flex-1 w-full min-h-0">
           {enService && session && (
@@ -111,7 +108,6 @@ export default async function AtcLayout({
             <AtcTelephone 
               aeroport={session.aeroport} 
               position={session.position} 
-              userId={user.id} 
             />
           </>
         )}

@@ -87,6 +87,14 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
   // ─── Drag start ───
   const handleDragStart = useCallback((e: React.DragEvent, stripId: string) => {
+    let el = e.target as HTMLElement | null;
+    let fromHandle = false;
+    while (el && el !== e.currentTarget) {
+      if ((el as HTMLElement).dataset?.dragHandle) { fromHandle = true; break; }
+      el = el.parentElement;
+    }
+    if (!fromHandle) { e.preventDefault(); return; }
+
     setDraggedId(stripId);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', stripId);
@@ -217,6 +225,10 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
 
   const refresh = useCallback(() => router.refresh(), [router]);
 
+  const handleTransferClick = useCallback((stripId: string) => {
+    setTransferDialog(stripId);
+  }, []);
+
   // ─── Render a strip item with drag support ───
   const renderStripItem = (s: StripData, zone: ZoneOrNull) => {
     const isBeingDragged = draggedId === s.id;
@@ -236,7 +248,7 @@ export default function FlightStripBoard({ strips }: { strips: StripData[] }) {
           onDrop={(e) => handleDrop(e, zone, s.id, dropTarget?.stripId === s.id ? dropTarget.position : 'after')}
           className={`transition-all duration-200 ${isBeingDragged ? 'opacity-30 scale-95' : 'opacity-100'} cursor-grab active:cursor-grabbing`}
         >
-          <FlightStrip strip={s} onRefresh={refresh} onContextMenu={handleStripRightClickWithDouble} />
+          <FlightStrip strip={s} onRefresh={refresh} onContextMenu={handleStripRightClickWithDouble} onTransferRequest={handleTransferClick} />
         </div>
         {isDropAfter && (
           <div className={`h-1.5 rounded-full mx-1 mt-1 transition-all ${isDark ? 'bg-sky-400' : 'bg-sky-500'} shadow-lg shadow-sky-500/50`} />

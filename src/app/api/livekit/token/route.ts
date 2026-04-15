@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AccessToken } from 'livekit-server-sdk';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createBrowserClient } from '@supabase/supabase-js';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { rateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
@@ -55,6 +56,20 @@ export async function POST(request: NextRequest) {
     if (!roomName) {
       console.error('[LiveKit Token] roomName manquant');
       return NextResponse.json({ error: 'roomName requis' }, { status: 400, headers: corsHeaders });
+    }
+
+    if (roomName.startsWith('call-')) {
+      const callId = roomName.substring(5);
+      const admin = createAdminClient();
+      const { data: call } = await admin
+        .from('atc_calls')
+        .select('from_user_id, to_user_id')
+        .eq('id', callId)
+        .single();
+
+      if (!call || (call.from_user_id !== user.id && call.to_user_id !== user.id)) {
+        return NextResponse.json({ error: 'Non autorisé pour cet appel' }, { status: 403, headers: corsHeaders });
+      }
     }
 
     const apiKey = process.env.LIVEKIT_API_KEY;

@@ -320,7 +320,8 @@ export async function PATCH(
         if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
         return NextResponse.json({ ok: true });
       }
-      if (isPiloteOwner && ['depose', 'en_attente', 'refuse'].includes(plan.statut)) {
+      if (isPiloteOwner && plan.statut !== 'annule') {
+        const holderId = plan.current_holder_user_id;
         await rembourserPaxEtCargo();
         await remettreAvionAuSol();
         const { error: err } = await admin.from('plans_vol').update({
@@ -335,9 +336,18 @@ export async function PATCH(
           pending_transfer_at: null,
         }).eq('id', id);
         if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
+
+        if (holderId) {
+          await admin.from('messages').insert({
+            destinataire_id: holderId,
+            titre: `✈️ Vol ${plan.numero_vol || id.slice(0, 8)} annulé par le pilote`,
+            contenu: `Le pilote a annulé le vol ${plan.numero_vol || ''} (${plan.aeroport_depart || '?'} → ${plan.aeroport_arrivee || '?'}).\n\nLe strip a été retiré de votre board.`,
+            type_message: 'systeme',
+          });
+        }
         return NextResponse.json({ ok: true });
       }
-      return NextResponse.json({ error: 'Annulation non autorisee (pilote : depose/en attente/refuse uniquement ; ATC/admin : tout plan non cloture).' }, { status: 403 });
+      return NextResponse.json({ error: 'Annulation non autorisee.' }, { status: 403 });
     }
 
     if (action === 'modifier_et_renvoyer') {

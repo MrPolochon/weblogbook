@@ -12,7 +12,6 @@ type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connecting' | 'c
 interface AtcTelephoneProps {
   aeroport: string;
   position: string;
-  userId: string;
 }
 
 const POSITION_CODES: Record<string, string> = {
@@ -37,7 +36,7 @@ const CODE_TO_AEROPORT: Record<string, string> = Object.fromEntries(
   Object.entries(AEROPORT_CODES).map(([code, num]) => [num, code])
 );
 
-export default function AtcTelephone({ aeroport, position, userId }: AtcTelephoneProps) {
+export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
   const [isOpen, setIsOpen] = useState(false);

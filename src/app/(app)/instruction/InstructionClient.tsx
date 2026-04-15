@@ -32,6 +32,7 @@ type AvionTemp = {
 };
 
 export default function InstructionClient({
+  loadError,
   viewerRole,
   viewerId,
   programs,
@@ -47,6 +48,7 @@ export default function InstructionClient({
   avionsTemp,
   elevesProgression,
 }: {
+  loadError?: string;
   viewerRole: string;
   viewerId: string;
   programs: InstructionProgram[];
@@ -337,6 +339,22 @@ export default function InstructionClient({
 
   return (
     <div className="space-y-6">
+      {loadError && (
+        <div className="sticky top-0 z-10 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {loadError}
+        </div>
+      )}
+      {error && (
+        <div className="sticky top-0 z-10 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          {error}
+        </div>
+      )}
+      {success && (
+        <div className="sticky top-0 z-10 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
+          {success}
+        </div>
+      )}
+
       <div className="card space-y-2">
         <h1 className="text-2xl font-semibold text-slate-100">Instruction</h1>
         <p className="text-sm text-slate-400">Suivi de formation et demandes d&apos;examens.</p>
@@ -587,8 +605,6 @@ export default function InstructionClient({
         </div>
       )}
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
-      {success && <p className="text-emerald-400 text-sm">{success}</p>}
     </div>
   );
 }

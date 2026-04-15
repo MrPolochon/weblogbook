@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import NavigationProgress from '@/components/NavigationProgress';
-import EasterThemeController from '@/components/EasterThemeController';
-import ThemedToaster from '@/components/ThemedToaster';
+import { Toaster } from 'sonner';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -18,11 +17,18 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body className="antialiased">
-        <EasterThemeController />
         <Suspense fallback={null}>
           <NavigationProgress />
         </Suspense>
-        <ThemedToaster />
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            className: '!bg-slate-900/95 !border-slate-600/35 !text-slate-100 !shadow-2xl backdrop-blur-xl',
+            duration: 4000,
+          }}
+          richColors
+          closeButton
+        />
         {children}
       </body>
     </html>
