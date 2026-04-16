@@ -26,7 +26,7 @@ export default async function AdminLogsPage() {
     .select('action')
     .limit(1000);
 
-  const uniqueActions = [...new Set((actionTypes || []).map(a => a.action))].sort();
+  const uniqueActions = Array.from(new Set((actionTypes || []).map(a => a.action))).sort();
 
   return <LogsClient logs={logs || []} actionTypes={uniqueActions} />;
 }
