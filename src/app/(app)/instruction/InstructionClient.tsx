@@ -343,6 +343,16 @@ export default function InstructionClient({
     });
   }
 
+  async function cancelMyExamRequest(id: string) {
+    if (!confirm('Annuler cette demande d\'examen ?')) return;
+    await run(async () => {
+      const res = await fetch(`/api/instruction/exam-requests/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur annulation');
+      toast.success('Demande d\'examen annulée.');
+    });
+  }
+
   async function acceptExam(id: string) {
     await updateExamStatus(id, 'accepte');
   }
@@ -495,6 +505,12 @@ export default function InstructionClient({
                   )}
                   {r.message && <p className="text-sm text-slate-400 mt-1">Demande: {r.message}</p>}
                   {r.response_note && <p className="text-sm text-sky-300 mt-1">Réponse: {r.response_note}</p>}
+                  {(r.statut === 'assigne' || r.statut === 'accepte') && (
+                    <button type="button" onClick={() => cancelMyExamRequest(r.id)} disabled={loading}
+                      className="mt-2 px-3 py-1.5 rounded text-xs font-medium text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                      Annuler la demande
+                    </button>
+                  )}
                 </div>
               );
             })}

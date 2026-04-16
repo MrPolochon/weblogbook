@@ -287,3 +287,44 @@ export async function PATCH(
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+
+    const admin = createAdminClient();
+    const { data: row } = await admin
+      .from('instruction_exam_requests')
+      .select('id, requester_id, statut, licence_code')
+      .eq('id', id)
+      .single();
+    if (!row) return NextResponse.json({ error: 'Demande introuvable.' }, { status: 404 });
+
+    if (row.requester_id !== user.id) {
+      const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
+      if (me?.role !== 'admin') return NextResponse.json({ error: 'Vous ne pouvez annuler que vos propres demandes.' }, { status: 403 });
+    }
+
+    if (row.statut === 'en_cours') {
+      return NextResponse.json({ error: 'Impossible d\'annuler une session en cours.' }, { status: 400 });
+    }
+    if (row.statut === 'termine') {
+      return NextResponse.json({ error: 'Cette demande est déjà terminée.' }, { status: 400 });
+    }
+
+    await admin.from('instruction_exam_request_refusals').delete().eq('request_id', id);
+    await admin.from('instruction_exam_requests').delete().eq('id', id);
+
+    logActivity({ userId: user.id, action: 'cancel_exam_request', targetType: 'exam_request', targetId: id, details: { licence_code: row.licence_code } });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error('instruction/exam-requests/[id] DELETE:', e);
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+  }
+}
