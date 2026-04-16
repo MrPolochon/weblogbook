@@ -504,7 +504,7 @@ export async function PATCH(
       if (!aeroport || !position) return NextResponse.json({ error: 'Aeroport et position requis (ou automonitoring: true).' }, { status: 400 });
       if (!CODES_OACI_VALIDES.has(aeroport)) return NextResponse.json({ error: 'Aeroport invalide.' }, { status: 400 });
       if (!(ATC_POSITIONS as readonly string[]).includes(String(position))) return NextResponse.json({ error: 'Position invalide.' }, { status: 400 });
-      if (plan.pending_transfer_aeroport != null) return NextResponse.json({ error: 'Un transfert est deja en attente d\'acceptation. Attendez 1 min ou l\'acceptation par la position cible.' }, { status: 400 });
+      if (plan.pending_transfer_aeroport != null) return NextResponse.json({ error: 'Un transfert est déjà en attente. Attendez 5 min ou l\'acceptation par la position cible.' }, { status: 400 });
 
       const { data: sess } = await admin.from('atc_sessions').select('user_id').eq('aeroport', aeroport).eq('position', String(position)).single();
       if (!sess?.user_id) return NextResponse.json({ error: 'Aucun ATC en ligne a cette position pour cet aeroport.' }, { status: 400 });
@@ -543,8 +543,8 @@ export async function PATCH(
       if (!sess) return NextResponse.json({ error: 'Mettez-vous en service pour accepter un transfert.' }, { status: 403 });
       if (!plan.pending_transfer_aeroport || plan.pending_transfer_position !== sess.position || plan.pending_transfer_aeroport !== sess.aeroport)
         return NextResponse.json({ error: 'Ce transfert ne vous est pas destine ou a expire.' }, { status: 403 });
-      const oneMinAgo = new Date(Date.now() - 60000).toISOString();
-      if (plan.pending_transfer_at && plan.pending_transfer_at < oneMinAgo) return NextResponse.json({ error: 'Ce transfert a expire (1 min).' }, { status: 400 });
+      const fiveMinAgo = new Date(Date.now() - 300000).toISOString();
+      if (plan.pending_transfer_at && plan.pending_transfer_at < fiveMinAgo) return NextResponse.json({ error: 'Ce transfert a expiré (5 min).' }, { status: 400 });
 
       // Enregistrer que cet ATC a contrôlé ce vol
       await enregistrerControleATC(admin, id, user.id, sess.aeroport, sess.position);

@@ -13,64 +13,51 @@ type PlanCloture = { id: string; numero_vol: string; aeroport_depart: string; ae
 // Sons de notification avec intensité variable
 function playNotificationSound(type: 'transfer' | 'cloture' | 'nouveau' | 'rappel', intensity: number = 1) {
   try {
-    const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
-    if (!AudioContext) return;
-    
-    const ctx = new AudioContext();
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    
-    // Volume augmente avec l'intensité (max 0.6)
-    const baseVolume = Math.min(0.6, 0.2 + (intensity * 0.1));
-    
+    const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const vol = Math.min(0.9, 0.4 + (intensity * 0.12));
+
+    function beep(freq: number, start: number, dur: number, v?: number) {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(v ?? vol, ctx.currentTime + start);
+      g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + start + dur);
+      o.start(ctx.currentTime + start);
+      o.stop(ctx.currentTime + start + dur);
+    }
+
     switch (type) {
       case 'transfer':
-        oscillator.frequency.value = 800;
-        gainNode.gain.value = baseVolume;
-        oscillator.start();
-        setTimeout(() => { oscillator.frequency.value = 1000; }, 150);
-        setTimeout(() => { oscillator.stop(); ctx.close(); }, 300);
-        break;
+        setTimeout(() => ctx.close(), 100);
+        return;
       case 'cloture':
-        oscillator.frequency.value = 400;
-        gainNode.gain.value = baseVolume + 0.1;
-        oscillator.start();
-        setTimeout(() => { oscillator.frequency.value = 500; }, 200);
-        setTimeout(() => { oscillator.frequency.value = 400; }, 400);
-        setTimeout(() => { oscillator.stop(); ctx.close(); }, 600);
+        beep(500, 0, 0.2);
+        beep(600, 0.25, 0.2);
+        beep(500, 0.5, 0.3);
+        setTimeout(() => ctx.close(), 1000);
         break;
       case 'nouveau':
-        oscillator.frequency.value = 600;
-        gainNode.gain.value = baseVolume;
-        oscillator.start();
-        setTimeout(() => { gainNode.gain.value = 0; }, 100);
-        setTimeout(() => { gainNode.gain.value = baseVolume; }, 200);
-        setTimeout(() => { gainNode.gain.value = 0; }, 300);
-        setTimeout(() => { gainNode.gain.value = baseVolume; }, 400);
-        setTimeout(() => { oscillator.stop(); ctx.close(); }, 500);
+        beep(660, 0, 0.12);
+        beep(880, 0.15, 0.12);
+        beep(660, 0.3, 0.12);
+        beep(880, 0.45, 0.12);
+        setTimeout(() => ctx.close(), 800);
         break;
-      case 'rappel':
-        // Son de rappel insistant - devient plus agressif avec l'intensité
-        const baseFreq = 500 + (intensity * 100);
-        oscillator.frequency.value = baseFreq;
-        gainNode.gain.value = baseVolume;
-        oscillator.start();
-        
-        // Plus de bips avec l'intensité
-        const beeps = Math.min(5, 2 + Math.floor(intensity));
-        for (let i = 0; i < beeps; i++) {
-          setTimeout(() => { gainNode.gain.value = 0; }, 100 + (i * 200));
-          setTimeout(() => { gainNode.gain.value = baseVolume; oscillator.frequency.value = baseFreq + (i * 50); }, 150 + (i * 200));
+      case 'rappel': {
+        const f = 600 + (intensity * 120);
+        const n = Math.min(6, 3 + Math.floor(intensity));
+        for (let i = 0; i < n; i++) {
+          beep(f + (i * 60), i * 0.16, 0.12, vol);
         }
-        setTimeout(() => { oscillator.stop(); ctx.close(); }, 100 + (beeps * 200));
+        beep(f + (n * 80), n * 0.16, 0.3, Math.min(1, vol + 0.15));
+        setTimeout(() => ctx.close(), (n + 2) * 160 + 400);
         break;
+      }
     }
-  } catch (e) {
-    console.warn('Audio not available:', e);
-  }
+  } catch { /* audio unavailable */ }
 }
 
 // Calcule le niveau d'urgence (0-5) basé sur le temps écoulé en secondes
@@ -93,6 +80,35 @@ function getReminderInterval(urgency: number): number {
     case 4: return 10; // 10 secondes
     default: return 5; // 5 secondes (très insistant)
   }
+}
+
+function startTransferAlarm(): () => void {
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  function playBurst() {
+    if (stopped) return;
+    try {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
+      if (!AC) return;
+      const ctx = new AC();
+      const times = [0, 0.1, 0.2, 0.3, 0.4];
+      const freqs = [880, 1100, 880, 1100, 1320];
+      times.forEach((t, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = freqs[i];
+        g.gain.setValueAtTime(0.7, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + t + 0.08);
+        o.start(ctx.currentTime + t);
+        o.stop(ctx.currentTime + t + 0.08);
+      });
+      setTimeout(() => ctx.close(), 800);
+    } catch { /* audio unavailable */ }
+    timer = setTimeout(playBurst, 2000);
+  }
+  playBurst();
+  return () => { stopped = true; if (timer) clearTimeout(timer); };
 }
 
 export default function AtcAcceptTransfertSidebar({
@@ -131,13 +147,23 @@ export default function AtcAcceptTransfertSidebar({
     return () => clearInterval(interval);
   }, []);
 
-  // Enregistrer les nouveaux éléments et jouer le son initial
+  // Alarme continue pour les transferts : 5 bips rapides toutes les 2s
+  const stopAlarmRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (plansTransfert.length > 0 && !stopAlarmRef.current) {
+      stopAlarmRef.current = startTransferAlarm();
+    } else if (plansTransfert.length === 0 && stopAlarmRef.current) {
+      stopAlarmRef.current();
+      stopAlarmRef.current = null;
+    }
+    return () => { if (stopAlarmRef.current) { stopAlarmRef.current(); stopAlarmRef.current = null; } };
+  }, [plansTransfert.length]);
+
   useEffect(() => {
     const currentIds = new Set(plansTransfert.map(p => p.id));
     plansTransfert.forEach(p => {
       if (!prevTransfertIds.current.has(p.id)) {
         firstSeenRef.current.set(p.id, Date.now());
-        playNotificationSound('transfer');
       }
     });
     prevTransfertIds.current = currentIds;
@@ -304,7 +330,7 @@ export default function AtcAcceptTransfertSidebar({
   
   return (
     <aside 
-      className={`atc-sidebar w-52 flex-shrink-0 ${sidebarBg} py-3 px-2 hidden md:flex flex-col transition-all duration-300`}
+      className={`atc-sidebar w-52 flex-shrink-0 ${sidebarBg} py-3 px-2 flex flex-col transition-all duration-300 fixed md:static bottom-0 right-0 z-50 md:z-auto rounded-tl-xl md:rounded-none max-h-[50vh] md:max-h-none overflow-y-auto`}
       style={{
         borderLeft: `${sidebarBorderWidth}px solid rgb(249, 115, 22)`,
         boxShadow: `0 0 ${sidebarShadow}px rgba(249, 115, 22, ${0.3 + (maxUrgency * 0.1)})`,
@@ -350,7 +376,7 @@ export default function AtcAcceptTransfertSidebar({
       {/* Transferts */}
       {plansTransfert.length > 0 && (
         <div>
-          <p className={`text-[10px] font-semibold px-2 mb-1 ${isDark ? 'text-orange-400' : 'text-orange-800'}`}>Transferts (1 min)</p>
+          <p className={`text-[10px] font-semibold px-2 mb-1 ${isDark ? 'text-orange-400' : 'text-orange-800'}`}>Transferts (5 min)</p>
           <ul className="space-y-1">
             {plansTransfert.map((p) => {
               const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);

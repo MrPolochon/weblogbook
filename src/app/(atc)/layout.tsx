@@ -60,8 +60,8 @@ export default async function AtcLayout({
   if (enService && session) {
     try {
       const admin = createAdminClient();
-      const oneMinAgo = new Date(Date.now() - 60000).toISOString();
-      await admin.from('plans_vol').update({ pending_transfer_aeroport: null, pending_transfer_position: null, pending_transfer_at: null }).lt('pending_transfer_at', oneMinAgo);
+      const fiveMinAgo = new Date(Date.now() - 300000).toISOString();
+      await admin.from('plans_vol').update({ pending_transfer_aeroport: null, pending_transfer_position: null, pending_transfer_at: null }).lt('pending_transfer_at', fiveMinAgo);
 
     // Note: On ne réassigne PAS les plans orphelins aux autres ATC.
     // Si un plan n'a pas d'ATC assigné, le pilote peut le clôturer seul.
