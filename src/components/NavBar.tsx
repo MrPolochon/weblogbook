@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   BookOpen, LayoutDashboard, FileText, User, Users, LogOut, Radio, Shield,
   ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map,
-  Store, AlertTriangle, Flame, Gauge, Wrench, Eye,
+  Store, AlertTriangle, Flame, Gauge, Wrench, Eye, Trophy,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
@@ -122,13 +122,14 @@ export default function NavBar({
     { href: '/documents', label: 'Documents', icon: FileText, badge: 0, separator: true },
     { href: '/notams', label: 'NOTAMs', icon: ScrollText, badge: 0 },
     { href: '/signalement', label: 'Signalement IFSA', icon: AlertTriangle, badge: 0, separator: true },
+    { href: '/classement', label: 'Classement', icon: Trophy, badge: 0 },
   ];
 
   const isPiloteActive = [
     '/logbook', '/militaire', '/felitz-bank', '/ma-compagnie', '/marketplace',
     '/hangar-market', '/inventaire', '/messagerie', '/marche-passagers',
     '/marche-cargo', '/perf-ptfs', '/alliance', '/signalement', '/reparation',
-    '/documents', '/notams',
+    '/documents', '/notams', '/classement',
   ].some(p => pathname.startsWith(p));
 
   const totalAdminBadge = pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount;

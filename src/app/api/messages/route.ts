@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
+import { logActivity, getClientIp } from '@/lib/activity-log';
 
 // GET - Récupérer les messages de l'utilisateur
 export async function GET(req: NextRequest) {
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest) {
     }).select().single();
 
     if (error) return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });
+    logActivity({ userId: user.id, action: 'send_message', targetType: 'message', targetId: data.id, details: { titre, destinataire_id }, ip: getClientIp(req) });
     return NextResponse.json({ ok: true, message: data });
   } catch (e) {
     console.error('Messages POST:', e);

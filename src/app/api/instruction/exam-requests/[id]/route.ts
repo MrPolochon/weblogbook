@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
+import { logActivity, getClientIp } from '@/lib/activity-log';
 
 const VALID_STATUSES = ['assigne', 'accepte', 'en_cours', 'termine', 'refuse'] as const;
 
@@ -52,6 +53,7 @@ export async function PATCH(
         .update({ statut: 'en_cours', response_note: responseNote, updated_at: new Date().toISOString() })
         .eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      logActivity({ userId: user.id, userIdentifiant: me?.identifiant, action: 'exam_start_session', targetType: 'exam_request', targetId: id, details: { licence_code: row.licence_code, requester_id: row.requester_id }, ip: getClientIp(request) });
       return NextResponse.json({ ok: true });
     }
 
@@ -142,6 +144,7 @@ export async function PATCH(
           ].filter(Boolean).join('\n'),
         });
 
+        logActivity({ userId: user.id, userIdentifiant: me?.identifiant, action: 'exam_passed', targetType: 'exam_request', targetId: id, details: { licence_code: row.licence_code, requester_id: row.requester_id, licence_id: licence.id }, ip: getClientIp(request) });
         return NextResponse.json({ ok: true, licence_id: licence.id });
       }
 
@@ -185,6 +188,7 @@ export async function PATCH(
           .eq('id', id);
       }
 
+      logActivity({ userId: user.id, userIdentifiant: me?.identifiant, action: 'exam_failed', targetType: 'exam_request', targetId: id, details: { licence_code: row.licence_code, requester_id: row.requester_id, dossier_conserve: dossierConserve }, ip: getClientIp(request) });
       return NextResponse.json({ ok: true });
     }
 

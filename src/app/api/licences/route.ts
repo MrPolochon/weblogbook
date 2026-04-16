@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { logActivity } from '@/lib/activity-log';
 
 const TYPES_VALIDES = [
   'PPL', 'CPL', 'ATPL',
@@ -115,6 +116,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await admin.from('licences_qualifications').insert(row).select('id').single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    logActivity({ userId: user.id, action: 'create_licence', targetType: 'licence', targetId: data.id, details: { type, user_id, a_vie } });
     return NextResponse.json({ ok: true, id: data.id });
   } catch (e) {
     console.error('Licences POST:', e);

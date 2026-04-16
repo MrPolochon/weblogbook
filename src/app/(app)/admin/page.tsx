@@ -3,7 +3,7 @@ import {
   Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark,
   Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap, Lock,
   Package, KeyRound, Wrench, Handshake, LayoutDashboard, Activity,
-  Settings, Route, Flame, ImageIcon, HardDrive
+  Settings, Route, Flame, ImageIcon, HardDrive, ScrollText
 } from 'lucide-react';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -90,6 +90,7 @@ const sections: Section[] = [
       { href: '/admin/securite', label: 'Sécurité', desc: 'Connexions & IPs', icon: Lock },
       { href: '/admin/storage', label: 'Storage', desc: 'Images & logos stockés', icon: ImageIcon },
       { href: '/admin/storage-overview', label: 'Espace disque', desc: 'Vue d\'ensemble du stockage', icon: HardDrive },
+      { href: '/admin/logs', label: 'Journal d\'activité', desc: 'Toutes les actions du site', icon: ScrollText },
     ],
   },
 ];

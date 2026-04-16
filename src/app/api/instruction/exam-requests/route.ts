@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
+import { logActivity } from '@/lib/activity-log';
 
 type ExamStatus = 'assigne' | 'accepte' | 'termine' | 'refuse';
 
@@ -122,6 +123,7 @@ export async function POST(request: Request) {
     };
     const { data, error } = await admin.from('instruction_exam_requests').insert(payload).select('id').single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    logActivity({ userId: user.id, action: 'request_exam', targetType: 'exam_request', targetId: data.id, details: { licence_code: licenceCode, instructeur_id: selectedInstructorId } });
     return NextResponse.json({ ok: true, id: data.id });
   } catch (e) {
     console.error('instruction/exam-requests POST:', e);
