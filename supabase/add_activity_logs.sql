@@ -24,9 +24,13 @@ CREATE POLICY "activity_logs_admin_select"
     SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
   ));
 
-CREATE POLICY "activity_logs_insert_all"
+CREATE POLICY "activity_logs_service_insert"
   ON public.activity_logs FOR INSERT
-  WITH CHECK (true);
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
+    )
+  );
 
 -- Nettoyage automatique des logs > 90 jours (a exécuter via cron ou manuellement)
 -- DELETE FROM public.activity_logs WHERE created_at < now() - interval '90 days';

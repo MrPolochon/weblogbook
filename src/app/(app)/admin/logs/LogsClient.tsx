@@ -70,7 +70,7 @@ export default function LogsClient({ logs, actionTypes }: Props) {
   const targetTypes = useMemo(() => {
     const set = new Set<string>();
     for (const l of logs) if (l.target_type) set.add(l.target_type);
-    return [...set].sort();
+    return Array.from(set).sort();
   }, [logs]);
 
   const filtered = useMemo(() => {

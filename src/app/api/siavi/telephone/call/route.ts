@@ -16,7 +16,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { to_aeroport, to_position, is_emergency, number } = body;
     const numberDialed = number || `${to_aeroport}-${to_position}`;
-    console.log('SIAVI call request:', { to_aeroport, to_position, is_emergency, from_aeroport: session.aeroport, numberDialed });
 
     const admin = createAdminClient();
 
@@ -44,7 +43,6 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (existing) {
-      console.log('Appel existant trouvé:', existing);
       return NextResponse.json({ error: 'appel_en_cours' }, { status: 400 });
     }
 
@@ -94,20 +92,11 @@ export async function POST(request: Request) {
       if (!targetSession) return NextResponse.json({ error: 'offline' }, { status: 400 });
       toUserId = targetSession.user_id;
     } else {
-      // Appel vers ATC normal
-      console.log('SIAVI->ATC call:', { to_aeroport, to_position });
-      
-      // Debug: lister toutes les sessions ATC actives
-      const { data: allAtcSessions } = await admin.from('atc_sessions').select('aeroport, position, user_id');
-      console.log('All active ATC sessions:', allAtcSessions);
-      
-      const { data: targetSession, error: sessionErr } = await admin.from('atc_sessions')
+      const { data: targetSession } = await admin.from('atc_sessions')
         .select('user_id')
         .eq('aeroport', to_aeroport)
         .eq('position', to_position)
         .maybeSingle();
-
-      console.log('Target ATC session found:', targetSession, 'Query error:', sessionErr);
       
       if (!targetSession) {
         // Vérifier si l'aéroport a des ATC en ligne (mais pas sur cette position)
@@ -118,15 +107,12 @@ export async function POST(request: Request) {
         if (aeroportSessions && aeroportSessions.length > 0) {
           // Il y a des ATC mais pas sur cette position
           const positions = aeroportSessions.map(s => s.position).join(', ');
-          console.log(`ATC offline for ${to_position} at ${to_aeroport}. Available positions: ${positions}`);
           return NextResponse.json({ 
             error: 'position_offline',
             message: `Position ${to_position} non disponible. Positions en ligne: ${positions}`
           }, { status: 400 });
         }
         
-        // Aucun ATC sur cet aéroport
-        console.log(`No ATC online at ${to_aeroport}`);
         return NextResponse.json({ error: 'offline' }, { status: 400 });
       }
       toUserId = targetSession.user_id;

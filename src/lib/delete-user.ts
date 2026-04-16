@@ -38,7 +38,6 @@ export async function deleteUserAccount(userId: string) {
   await admin.from('compagnie_employes').delete().eq('pilote_id', userId);
   await admin.from('messages').delete().eq('destinataire_id', userId);
   await admin.from('messages').delete().eq('expediteur_id', userId);
-  await admin.from('licences').delete().eq('pilote_id', userId);
   await admin.from('atc_sessions').delete().eq('user_id', userId);
   await admin.from('atc_plans_controles').delete().eq('user_id', userId);
   await admin.from('atc_taxes_pending').delete().eq('user_id', userId);

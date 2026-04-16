@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
 import { logActivity, getClientIp } from '@/lib/activity-log';
 
 const VALID_STATUSES = ['assigne', 'accepte', 'en_cours', 'termine', 'refuse'] as const;
