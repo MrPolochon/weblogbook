@@ -822,9 +822,6 @@ function LoginPageContent() {
           </div>
         )}
 
-        <p className="text-slate-500 text-sm mt-8 text-center animate-init animate-slide-up delay-700">
-          Premier accès ? <Link href="/setup" className="text-sky-400 hover:text-sky-300 font-medium transition-colors">Créer le premier admin</Link>
-        </p>
 
         {/* Boutons secondaires */}
         <div className="mt-6 flex flex-row items-center justify-center gap-3 animate-init animate-slide-up delay-800">

@@ -58,8 +58,8 @@ export default function InstructionClient({
   myFormationLicence: string | null;
   myInstructorIdentifiant: string | null;
   myProgression: Array<{ licence_code: string; module_code: string; completed: boolean }>;
-  examRequestsMine: Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; created_at: string; updated_at: string; instructeur: { identifiant: string } | { identifiant: string }[] | null }>;
-  examRequestsAssigned: Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; created_at: string; updated_at: string; requester: { identifiant: string } | { identifiant: string }[] | null }>;
+  examRequestsMine: Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; instructeur: { identifiant: string } | { identifiant: string }[] | null }>;
+  examRequestsAssigned: Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; requester: { identifiant: string } | { identifiant: string }[] | null }>;
   eleves: Eleve[];
   typesAvion: TypeAvion[];
   avionsTemp: AvionTemp[];
@@ -78,7 +78,20 @@ export default function InstructionClient({
   const [immat, setImmat] = useState('');
   const [examLicence, setExamLicence] = useState(myFormationLicence || examLicenceOptions[0] || 'PPL');
   const [examMessage, setExamMessage] = useState('');
-  const [examStatusEdit, setExamStatusEdit] = useState<Record<string, { statut: string; response_note: string }>>({});
+  const [examFinishDialog, setExamFinishDialog] = useState<{
+    requestId: string;
+    requesterName: string;
+    licenceCode: string;
+    step: 'choose_result' | 'form_reussi' | 'form_echoue';
+  } | null>(null);
+  const [examResultForm, setExamResultForm] = useState({
+    a_vie: false,
+    date_delivrance: new Date().toISOString().split('T')[0],
+    date_expiration: '',
+    note: '',
+  });
+  const [examEchoueKeep, setExamEchoueKeep] = useState(true);
+  const [examEchoueNote, setExamEchoueNote] = useState('');
   const [editById, setEditById] = useState<Record<string, { nom: string; immat: string; aeroport: string }>>({});
   const [loading, setLoading] = useState(false);
   
@@ -317,21 +330,78 @@ export default function InstructionClient({
     });
   }
 
-  async function updateExamRequest(id: string) {
-    const edit = examStatusEdit[id];
-    if (!edit) return;
+  async function updateExamStatus(id: string, statut: string, extra?: Record<string, unknown>) {
     await run(async () => {
       const res = await fetch(`/api/instruction/exam-requests/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          statut: edit.statut,
-          response_note: edit.response_note || null,
-        }),
+        body: JSON.stringify({ statut, ...extra }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur mise à jour examen');
-      toast.success('Action effectuee.');
+      toast.success('Action effectuée.');
+    });
+  }
+
+  async function acceptExam(id: string) {
+    await updateExamStatus(id, 'accepte');
+  }
+
+  async function refuseExam(id: string) {
+    await updateExamStatus(id, 'refuse');
+  }
+
+  async function startExamSession(id: string) {
+    await updateExamStatus(id, 'en_cours');
+  }
+
+  function openFinishDialog(requestId: string, requesterName: string, licenceCode: string) {
+    setExamFinishDialog({ requestId, requesterName, licenceCode, step: 'choose_result' });
+    setExamResultForm({ a_vie: false, date_delivrance: new Date().toISOString().split('T')[0], date_expiration: '', note: '' });
+    setExamEchoueKeep(true);
+    setExamEchoueNote('');
+  }
+
+  async function submitExamReussi() {
+    if (!examFinishDialog) return;
+    await run(async () => {
+      const res = await fetch(`/api/instruction/exam-requests/${examFinishDialog.requestId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          statut: 'termine',
+          resultat: 'reussi',
+          a_vie: examResultForm.a_vie,
+          date_delivrance: examResultForm.date_delivrance,
+          date_expiration: examResultForm.a_vie ? null : examResultForm.date_expiration,
+          note: examResultForm.note || null,
+          response_note: examResultForm.note || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur validation examen');
+      toast.success('Examen validé — Licence délivrée et message envoyé au pilote.');
+      setExamFinishDialog(null);
+    });
+  }
+
+  async function submitExamEchoue() {
+    if (!examFinishDialog) return;
+    await run(async () => {
+      const res = await fetch(`/api/instruction/exam-requests/${examFinishDialog.requestId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          statut: 'termine',
+          resultat: 'echoue',
+          dossier_conserve: examEchoueKeep,
+          response_note: examEchoueNote || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur validation examen');
+      toast.success('Examen échoué — Message envoyé au pilote.');
+      setExamFinishDialog(null);
     });
   }
 
@@ -397,10 +467,32 @@ export default function InstructionClient({
           <div className="space-y-2">
             {examRequestsMine.map((r) => {
               const instructeur = Array.isArray(r.instructeur) ? r.instructeur[0] : r.instructeur;
+              const statutLabel: Record<string, string> = {
+                assigne: 'En attente de confirmation',
+                accepte: 'Accepté — En attente de session',
+                en_cours: 'Session en cours',
+                termine: r.resultat === 'reussi' ? 'Réussi' : r.resultat === 'echoue' ? 'Échoué' : 'Terminé',
+                refuse: 'Refusé',
+              };
+              const statutColor: Record<string, string> = {
+                assigne: 'text-amber-400',
+                accepte: 'text-sky-400',
+                en_cours: 'text-violet-400',
+                termine: r.resultat === 'reussi' ? 'text-emerald-400' : 'text-red-400',
+                refuse: 'text-red-400',
+              };
               return (
-                <div key={r.id} className="rounded border border-slate-700/60 p-3">
-                  <p className="text-slate-200 font-medium">{r.licence_code} · {r.statut}</p>
+                <div key={r.id} className="rounded border border-slate-700/60 p-3 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-slate-200 font-medium">{r.licence_code}</p>
+                    <span className={`text-xs font-semibold px-2 py-1 rounded ${statutColor[r.statut] || 'text-slate-400'}`}>
+                      {statutLabel[r.statut] || r.statut}
+                    </span>
+                  </div>
                   <p className="text-xs text-slate-500">Instructeur: {instructeur?.identifiant || 'Assignation en cours'}</p>
+                  {r.statut === 'en_cours' && (
+                    <p className="text-sm text-violet-300 mt-1">Votre session d&apos;examen est en cours. Effectuez votre vol normalement.</p>
+                  )}
                   {r.message && <p className="text-sm text-slate-400 mt-1">Demande: {r.message}</p>}
                   {r.response_note && <p className="text-sm text-sky-300 mt-1">Réponse: {r.response_note}</p>}
                 </div>
@@ -560,37 +652,266 @@ export default function InstructionClient({
             <div className="space-y-3">
               {examRequestsAssigned.map((r) => {
                 const requester = Array.isArray(r.requester) ? r.requester[0] : r.requester;
-                const edit = examStatusEdit[r.id] || { statut: r.statut, response_note: r.response_note || '' };
+                const requesterName = requester?.identifiant || r.requester_id;
                 return (
-                  <div key={r.id} className="rounded border border-slate-700/60 p-3 space-y-2">
-                    <p className="text-slate-200 font-medium">{requester?.identifiant || r.requester_id} · {r.licence_code}</p>
-                    {r.message && <p className="text-sm text-slate-400">Demande: {r.message}</p>}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                      <select
-                        className="input"
-                        value={edit.statut}
-                        onChange={(ev) => setExamStatusEdit((prev) => ({ ...prev, [r.id]: { ...edit, statut: ev.target.value } }))}
-                      >
-                        <option value="assigne">Assigné</option>
-                        <option value="accepte">Accepté</option>
-                        <option value="termine">Terminé</option>
-                        <option value="refuse">Refusé</option>
-                      </select>
-                      <input
-                        className="input md:col-span-2"
-                        value={edit.response_note}
-                        onChange={(ev) => setExamStatusEdit((prev) => ({ ...prev, [r.id]: { ...edit, response_note: ev.target.value } }))}
-                        placeholder="Réponse / note instructeur"
-                      />
+                  <div key={r.id} className="rounded-lg border border-slate-700/60 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-slate-200 font-medium">{requesterName} · {r.licence_code}</p>
+                        {r.message && <p className="text-sm text-slate-400 mt-1">Message: {r.message}</p>}
+                      </div>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                        r.statut === 'assigne' ? 'bg-amber-500/20 text-amber-300' :
+                        r.statut === 'accepte' ? 'bg-sky-500/20 text-sky-300' :
+                        r.statut === 'en_cours' ? 'bg-violet-500/20 text-violet-300' :
+                        r.statut === 'termine' && r.resultat === 'reussi' ? 'bg-emerald-500/20 text-emerald-300' :
+                        r.statut === 'termine' && r.resultat === 'echoue' ? 'bg-red-500/20 text-red-300' :
+                        'bg-slate-700/60 text-slate-400'
+                      }`}>
+                        {r.statut === 'assigne' && 'Nouvelle demande'}
+                        {r.statut === 'accepte' && 'Accepté — Prêt à démarrer'}
+                        {r.statut === 'en_cours' && 'Session en cours'}
+                        {r.statut === 'termine' && r.resultat === 'reussi' && 'Réussi'}
+                        {r.statut === 'termine' && r.resultat === 'echoue' && 'Échoué'}
+                        {r.statut === 'refuse' && 'Refusé'}
+                      </span>
                     </div>
-                    <button type="button" className="btn-primary" disabled={loading} onClick={() => updateExamRequest(r.id)}>
-                      Mettre à jour
-                    </button>
+
+                    {r.response_note && r.statut === 'termine' && (
+                      <p className="text-sm text-sky-300">Note: {r.response_note}</p>
+                    )}
+
+                    {/* Actions selon le statut */}
+                    {r.statut === 'assigne' && (
+                      <div className="flex gap-2">
+                        <button type="button" className="btn-primary" disabled={loading} onClick={() => acceptExam(r.id)}>
+                          Confirmer la demande
+                        </button>
+                        <button type="button" className="btn-secondary" disabled={loading} onClick={() => refuseExam(r.id)}>
+                          Refuser
+                        </button>
+                      </div>
+                    )}
+
+                    {r.statut === 'accepte' && (
+                      <button type="button" className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-50" disabled={loading} onClick={() => startExamSession(r.id)}>
+                        Démarrer la session d&apos;examen
+                      </button>
+                    )}
+
+                    {r.statut === 'en_cours' && (
+                      <div className="space-y-2">
+                        <p className="text-sm text-violet-300">La session est en cours. Quand le vol est terminé, validez la fin de session.</p>
+                        <button type="button" className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium transition-colors disabled:opacity-50" disabled={loading} onClick={() => openFinishDialog(r.id, requesterName, r.licence_code)}>
+                          Terminer la session
+                        </button>
+                      </div>
+                    )}
+
+                    {r.statut === 'termine' && r.resultat === 'echoue' && r.dossier_conserve && (
+                      <p className="text-xs text-slate-500">Dossier conservé — le pilote peut vous recontacter.</p>
+                    )}
                   </div>
                 );
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Dialogue de fin de session */}
+      {examFinishDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-6 space-y-5 shadow-2xl">
+
+            {examFinishDialog.step === 'choose_result' && (
+              <>
+                <h3 className="text-xl font-semibold text-slate-100">
+                  Résultat de l&apos;examen {examFinishDialog.licenceCode}
+                </h3>
+                <p className="text-sm text-slate-400">
+                  Candidat: <span className="text-slate-200">{examFinishDialog.requesterName}</span>
+                </p>
+                <p className="text-slate-300">Le candidat a-t-il réussi l&apos;examen ?</p>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    className="flex-1 px-4 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition-colors"
+                    onClick={() => setExamFinishDialog({ ...examFinishDialog, step: 'form_reussi' })}
+                  >
+                    Réussi
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-1 px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition-colors"
+                    onClick={() => setExamFinishDialog({ ...examFinishDialog, step: 'form_echoue' })}
+                  >
+                    Échoué
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="w-full text-sm text-slate-500 hover:text-slate-300"
+                  onClick={() => setExamFinishDialog(null)}
+                >
+                  Annuler
+                </button>
+              </>
+            )}
+
+            {examFinishDialog.step === 'form_reussi' && (
+              <>
+                <h3 className="text-xl font-semibold text-emerald-400">
+                  Délivrance de licence — {examFinishDialog.licenceCode}
+                </h3>
+                <p className="text-sm text-slate-400">
+                  Candidat: <span className="text-slate-200">{examFinishDialog.requesterName}</span>
+                </p>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">Date de délivrance</label>
+                    <input
+                      type="date"
+                      className="input w-full"
+                      value={examResultForm.date_delivrance}
+                      onChange={(e) => setExamResultForm((f) => ({ ...f, date_delivrance: e.target.value }))}
+                      required
+                    />
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={examResultForm.a_vie}
+                      onChange={(e) => setExamResultForm((f) => ({ ...f, a_vie: e.target.checked }))}
+                    />
+                    <span className="text-sm text-slate-300">Licence à vie</span>
+                  </label>
+
+                  {!examResultForm.a_vie && (
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Date d&apos;expiration</label>
+                      <input
+                        type="date"
+                        className="input w-full"
+                        value={examResultForm.date_expiration}
+                        onChange={(e) => setExamResultForm((f) => ({ ...f, date_expiration: e.target.value }))}
+                        required
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">Note (optionnel)</label>
+                    <textarea
+                      className="input w-full"
+                      rows={2}
+                      value={examResultForm.note}
+                      onChange={(e) => setExamResultForm((f) => ({ ...f, note: e.target.value }))}
+                      placeholder="Remarques sur l'examen..."
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    className="flex-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition-colors disabled:opacity-50"
+                    disabled={loading || !examResultForm.date_delivrance || (!examResultForm.a_vie && !examResultForm.date_expiration)}
+                    onClick={submitExamReussi}
+                  >
+                    {loading ? 'Validation...' : 'Valider et délivrer la licence'}
+                  </button>
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+                    onClick={() => setExamFinishDialog({ ...examFinishDialog, step: 'choose_result' })}
+                  >
+                    Retour
+                  </button>
+                </div>
+              </>
+            )}
+
+            {examFinishDialog.step === 'form_echoue' && (
+              <>
+                <h3 className="text-xl font-semibold text-red-400">
+                  Échec de l&apos;examen — {examFinishDialog.licenceCode}
+                </h3>
+                <p className="text-sm text-slate-400">
+                  Candidat: <span className="text-slate-200">{examFinishDialog.requesterName}</span>
+                </p>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm text-slate-300 mb-2">Que souhaitez-vous faire avec le dossier ?</label>
+                    <div className="space-y-2">
+                      <label className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors hover:bg-slate-800/50"
+                        style={{ borderColor: examEchoueKeep ? 'rgb(139 92 246 / 0.5)' : 'rgb(51 65 85 / 0.6)' }}
+                      >
+                        <input
+                          type="radio"
+                          name="dossier"
+                          checked={examEchoueKeep}
+                          onChange={() => setExamEchoueKeep(true)}
+                          className="mt-1"
+                        />
+                        <div>
+                          <p className="text-slate-200 font-medium">Garder le dossier</p>
+                          <p className="text-xs text-slate-500">Le pilote pourra vous recontacter directement pour repasser l&apos;examen.</p>
+                        </div>
+                      </label>
+                      <label className="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors hover:bg-slate-800/50"
+                        style={{ borderColor: !examEchoueKeep ? 'rgb(139 92 246 / 0.5)' : 'rgb(51 65 85 / 0.6)' }}
+                      >
+                        <input
+                          type="radio"
+                          name="dossier"
+                          checked={!examEchoueKeep}
+                          onChange={() => setExamEchoueKeep(false)}
+                          className="mt-1"
+                        />
+                        <div>
+                          <p className="text-slate-200 font-medium">Supprimer le dossier</p>
+                          <p className="text-xs text-slate-500">Le pilote devra refaire une nouvelle demande (possiblement avec un autre instructeur).</p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-1">Note pour le pilote (optionnel)</label>
+                    <textarea
+                      className="input w-full"
+                      rows={2}
+                      value={examEchoueNote}
+                      onChange={(e) => setExamEchoueNote(e.target.value)}
+                      placeholder="Raison de l'échec, conseils..."
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition-colors disabled:opacity-50"
+                    disabled={loading}
+                    onClick={submitExamEchoue}
+                  >
+                    {loading ? 'Validation...' : 'Confirmer l\'échec'}
+                  </button>
+                  <button
+                    type="button"
+                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+                    onClick={() => setExamFinishDialog({ ...examFinishDialog, step: 'choose_result' })}
+                  >
+                    Retour
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 

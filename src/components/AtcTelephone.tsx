@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { unlockAudioForIOS } from '@/lib/phone-sounds';
-import { sanitizeForSpeech } from '@/lib/utils';
+import { speakNow } from '@/lib/tts';
 import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { Room, RoomEvent, Track, ConnectionState } from 'livekit-client';
@@ -203,16 +203,8 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     }
   }, [selectedInputId, cleanupMicTestResources]);
 
-  // Messages vocaux (sanitizeForSpeech pour bug iOS 26 avec < et >)
   const playMessage = useCallback((message: string) => {
-    if ('speechSynthesis' in window) {
-      speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(sanitizeForSpeech(message));
-      utterance.lang = 'fr-FR';
-      utterance.rate = 0.9;
-      utterance.volume = 0.8;
-      speechSynthesis.speak(utterance);
-    }
+    speakNow(message);
   }, []);
 
   // Sons

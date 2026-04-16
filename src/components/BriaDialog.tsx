@@ -3,11 +3,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Phone, PhoneOff, Radio, Send } from 'lucide-react';
+import { Phone, PhoneOff, Radio, Send, Volume2, VolumeX } from 'lucide-react';
 import { toast } from 'sonner';
 import { AEROPORTS_PTFS, calculerCoefficientRemplissage, calculerCoefficientChargementCargo, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire } from '@/lib/aeroports-ptfs';
 import { playPhoneRing, playPhoneEnd } from '@/lib/phone-sounds';
-import { joinSidStarRoute, isIOS, sanitizeForSpeech } from '@/lib/utils';
+import { joinSidStarRoute, isIOS } from '@/lib/utils';
+import { speakAndWait as ttsSpeak, textePourTTS as ttsTextePourTTS, cancelSpeech } from '@/lib/tts';
 
 // ─── Types ───
 
@@ -81,41 +82,11 @@ const INITIAL_STATE: BriaState = {
   quoi_ciel: '',
 };
 
-// ─── TTS helper ───
-
-/** Remplace F$ par Félitz Dollards pour une lecture naturelle */
-function textePourTTS(text: string): string {
-  return text.replace(/F\$/g, 'Félitz Dollards').replace(/F\$\/kg/g, 'Félitz Dollards par kg');
-}
-
-const SPEECH_TIMEOUT_MS = 12000; // Timeout si la synthèse vocale ne répond pas (mobile Safari, etc.)
+// ─── TTS helper (module partagé avec AtcTelephone) ───
+const textePourTTS = ttsTextePourTTS;
 
 function speakAndWait(text: string): Promise<void> {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return Promise.resolve();
-  speechSynthesis.cancel();
-  const toSpeak = sanitizeForSpeech(textePourTTS(text));
-  return new Promise((resolve) => {
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      clearTimeout(timeout);
-      speechSynthesis.cancel();
-      resolve();
-    };
-    const timeout = setTimeout(finish, SPEECH_TIMEOUT_MS);
-    const u = new SpeechSynthesisUtterance(toSpeak);
-    u.lang = 'fr-FR';
-    u.rate = 0.9;
-    u.volume = 0.8;
-    u.onend = finish;
-    u.onerror = finish;
-    try {
-      speechSynthesis.speak(u);
-    } catch {
-      finish();
-    }
-  });
+  return ttsSpeak(text);
 }
 
 function getAeroportNom(code: string) {
@@ -267,6 +238,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(true);
   const [showSidStarPanel, setShowSidStarPanel] = useState(false);
   const [sidStarList, setSidStarList] = useState<{ id: string; nom: string; route: string }[]>([]);
   const [sidStarLoading, setSidStarLoading] = useState(false);
@@ -280,12 +252,21 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   const relaunchCountRef = useRef(0);
   const closedRef = useRef(false);
   const ringCancelRef = useRef<(() => void) | null>(null);
+  const ttsEnabledRef = useRef(true);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
   }, []);
 
-  // Add BRIA message avec annulation si raccroché
+  const toggleTts = useCallback(() => {
+    setTtsEnabled(prev => {
+      const next = !prev;
+      ttsEnabledRef.current = next;
+      if (!next) cancelSpeech();
+      return next;
+    });
+  }, []);
+
   const addBria = useCallback((text: string, delay = 600, speakText?: string) => {
     if (closedRef.current) return Promise.resolve();
     setIsTyping(true);
@@ -298,10 +279,17 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         }
         setMessages(prev => [...prev, { role: 'bria', text }]);
         scrollToBottom();
-        speakAndWait(toSpeak).finally(() => {
-          if (!closedRef.current) setIsTyping(false);
-          resolve();
-        });
+        if (ttsEnabledRef.current) {
+          speakAndWait(toSpeak).finally(() => {
+            if (!closedRef.current) setIsTyping(false);
+            resolve();
+          });
+        } else {
+          setTimeout(() => {
+            if (!closedRef.current) setIsTyping(false);
+            resolve();
+          }, 400);
+        }
       }, delay);
     });
   }, [scrollToBottom]);
@@ -331,7 +319,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
     closedRef.current = true;
     ringCancelRef.current?.();
     ringCancelRef.current = null;
-    speechSynthesis.cancel();
+    cancelSpeech();
     playPhoneEnd();
     onClose();
   }, [onClose]);
@@ -360,7 +348,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       closedRef.current = true;
       ringCancelRef.current?.();
       ringCancelRef.current = null;
-      speechSynthesis.cancel();
+      cancelSpeech();
     };
   }, [addBria]);
 
@@ -1085,6 +1073,12 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   }, [ctx, messages, addBria, addPilote, router]);
 
   // ─── Render input zone based on step ───
+  const fmsBtn = 'px-4 py-2.5 rounded font-mono text-sm font-bold tracking-wide border transition-all duration-150';
+  const fmsBtnGreen = `${fmsBtn} border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/15 hover:border-emerald-400/60 hover:shadow-[0_0_12px_rgba(16,185,129,0.15)]`;
+  const fmsBtnCyan = `${fmsBtn} border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/15 hover:border-cyan-400/60 hover:shadow-[0_0_12px_rgba(6,182,212,0.15)]`;
+  const fmsBtnRed = `${fmsBtn} border-red-500/40 text-red-300 hover:bg-red-500/15 hover:border-red-400/60`;
+  const fmsInput = 'w-full bg-black/60 border border-emerald-500/20 text-emerald-100 rounded px-4 py-2.5 text-sm font-mono placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:shadow-[0_0_8px_rgba(16,185,129,0.1)]';
+
   const renderInput = () => {
     if (isTyping || step === 'submitting' || step === 'done') return null;
 
@@ -1092,13 +1086,11 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       case 'choice':
         return (
           <div className="flex gap-3">
-            <button type="button" onClick={() => handleAnswer('intention')}
-              className="flex-1 px-4 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-semibold transition-colors">
-              Intention de vol
+            <button type="button" onClick={() => handleAnswer('intention')} className={`flex-1 ${fmsBtnCyan}`}>
+              INTENTION
             </button>
-            <button type="button" onClick={() => handleAnswer('plan')}
-              className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition-colors">
-              Plan de vol
+            <button type="button" onClick={() => handleAnswer('plan')} className={`flex-1 ${fmsBtnGreen}`}>
+              PLAN DE VOL
             </button>
           </div>
         );
@@ -1106,70 +1098,40 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       case 'confirm_aircraft':
         return (
           <div className="flex gap-3">
-            <button type="button" onClick={() => handleAnswer('oui')}
-              className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition-colors">
-              Affirm
-            </button>
-            <button type="button" onClick={() => handleAnswer('non')}
-              className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold transition-colors">
-              Négatif
-            </button>
+            <button type="button" onClick={() => handleAnswer('oui')} className={`flex-1 ${fmsBtnGreen}`}>AFFIRM</button>
+            <button type="button" onClick={() => handleAnswer('non')} className={`flex-1 ${fmsBtnRed}`}>NEGATIF</button>
           </div>
         );
 
       case 'regime_vol':
         return (
           <div className="flex gap-3">
-            <button type="button" onClick={() => handleAnswer('VFR')}
-              className="flex-1 px-4 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-semibold transition-colors">
-              VFR
-            </button>
-            <button type="button" onClick={() => handleAnswer('IFR')}
-              className="flex-1 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors">
-              IFR
-            </button>
+            <button type="button" onClick={() => handleAnswer('VFR')} className={`flex-1 ${fmsBtnCyan}`}>VFR</button>
+            <button type="button" onClick={() => handleAnswer('IFR')} className={`flex-1 ${fmsBtnGreen}`}>IFR</button>
           </div>
         );
 
       case 'vol_prive_confirm':
         return (
           <div className="flex gap-3">
-            <button type="button" onClick={() => handleAnswer('affirm')}
-              className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-sm transition-colors">
-              Affirm
-            </button>
-            <button type="button" onClick={() => handleAnswer('negatif')}
-              className="flex-1 px-4 py-2.5 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-semibold text-sm transition-colors">
-              Négatif
-            </button>
+            <button type="button" onClick={() => handleAnswer('affirm')} className={`flex-1 ${fmsBtnGreen}`}>AFFIRM</button>
+            <button type="button" onClick={() => handleAnswer('negatif')} className={`flex-1 ${fmsBtnRed}`}>NEGATIF</button>
           </div>
         );
 
       case 'vol_type':
         return (
           <div className="flex gap-3">
-            <button type="button" onClick={() => handleAnswer('commercial')}
-              className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold text-sm transition-colors">
-              Commercial
-            </button>
-            <button type="button" onClick={() => handleAnswer('ferry')}
-              className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-sm transition-colors">
-              Ferry
-            </button>
+            <button type="button" onClick={() => handleAnswer('commercial')} className={`flex-1 ${fmsBtnGreen}`}>COMMERCIAL</button>
+            <button type="button" onClick={() => handleAnswer('ferry')} className={`flex-1 ${fmsBtnCyan}`}>FERRY</button>
           </div>
         );
 
       case 'nature_transport':
         return (
           <div className="flex gap-3">
-            <button type="button" onClick={() => handleAnswer('passagers')}
-              className="flex-1 px-4 py-3 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-semibold transition-colors">
-              Passagers
-            </button>
-            <button type="button" onClick={() => handleAnswer('cargo')}
-              className="flex-1 px-4 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold transition-colors">
-              Cargo
-            </button>
+            <button type="button" onClick={() => handleAnswer('passagers')} className={`flex-1 ${fmsBtnCyan}`}>PASSAGERS</button>
+            <button type="button" onClick={() => handleAnswer('cargo')} className={`flex-1 ${fmsBtnGreen}`}>CARGO</button>
           </div>
         );
 
@@ -1177,11 +1139,11 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       case 'aeroport_arrivee':
         return (
           <select
-            className="w-full bg-slate-800 border border-slate-600 text-white rounded-lg px-4 py-3 text-sm font-mono font-bold"
+            className={`${fmsInput} cursor-pointer`}
             value={inputValue}
             onChange={(e) => { setInputValue(e.target.value); if (e.target.value) handleAnswer(e.target.value); }}
           >
-            <option value="">— Sélectionner un aéroport —</option>
+            <option value="">-- SELECT AERODROME --</option>
             {AEROPORTS_PTFS.map(a => (
               <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>
             ))}
@@ -1194,10 +1156,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         const aeroport = isSid ? ctx.aeroport_depart : ctx.aeroport_arrivee;
         const type = isSid ? 'SID' : 'STAR';
         const togglePanel = async () => {
-          if (showSidStarPanel) {
-            setShowSidStarPanel(false);
-            return;
-          }
+          if (showSidStarPanel) { setShowSidStarPanel(false); return; }
           if (!aeroport) return;
           setSidStarLoading(true);
           setShowSidStarPanel(true);
@@ -1205,64 +1164,38 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
             const res = await fetch(`/api/sid-star?aeroport=${encodeURIComponent(aeroport)}&type=${type}`);
             const data = await res.json();
             setSidStarList(Array.isArray(data) ? data : []);
-          } catch {
-            setSidStarList([]);
-          } finally {
-            setSidStarLoading(false);
-          }
+          } catch { setSidStarList([]); } finally { setSidStarLoading(false); }
         };
         return (
           <div className="space-y-2">
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={togglePanel}
-                disabled={!aeroport || sidStarLoading}
-                className="flex items-center justify-center w-12 h-12 shrink-0 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
-                title={isSid ? 'Voir les SID disponibles' : 'Voir les STAR disponibles'}
-              >
-                <svg viewBox="0 0 24 12" className="w-6 h-5 fill-current" aria-hidden>
-                  <path d="M0 0 L24 0 L12 12 Z" />
-                </svg>
+              <button type="button" onClick={togglePanel} disabled={!aeroport || sidStarLoading}
+                className={`flex items-center justify-center w-11 h-11 shrink-0 rounded ${fmsBtn} border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/15 disabled:opacity-30`}
+                title={isSid ? 'Voir les SID disponibles' : 'Voir les STAR disponibles'}>
+                <svg viewBox="0 0 24 12" className="w-5 h-4 fill-current" aria-hidden><path d="M0 0 L24 0 L12 12 Z" /></svg>
               </button>
               <form onSubmit={(e) => { e.preventDefault(); handleAnswer(inputValue); }} className="flex-1 flex gap-2">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  autoComplete="off"
-                  value={inputValue}
+                <input ref={inputRef} type="text" autoComplete="off" value={inputValue}
                   onChange={(e) => { setInputValue(e.target.value); lastActivityRef.current = Date.now(); }}
-                  placeholder={getPlaceholder(step)}
-                  disabled={lookupLoading}
-                  className="flex-1 bg-slate-800 border border-slate-600 text-white rounded-lg px-4 py-3 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  autoFocus={!isIOS()}
-                />
-                <button
-                  type="submit"
-                  disabled={!inputValue.trim() || lookupLoading}
-                  className="px-4 py-3 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg transition-colors"
-                >
+                  placeholder={getPlaceholder(step)} disabled={lookupLoading}
+                  className={fmsInput} autoFocus={!isIOS()} />
+                <button type="submit" disabled={!inputValue.trim() || lookupLoading}
+                  className="px-3 py-2.5 rounded border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/15 disabled:opacity-30 transition-colors font-mono">
                   <Send className="h-4 w-4" />
                 </button>
               </form>
             </div>
             {showSidStarPanel && (
-              <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800/95 p-2 space-y-1">
+              <div className="max-h-48 overflow-y-auto rounded border border-emerald-500/20 bg-black/80 p-1.5 space-y-0.5">
                 {sidStarLoading ? (
-                  <p className="text-slate-400 text-sm py-4 text-center">Chargement...</p>
+                  <p className="text-slate-500 text-xs font-mono py-4 text-center">LOADING...</p>
                 ) : sidStarList.length === 0 ? (
-                  <p className="text-slate-400 text-sm py-2">Aucune {type} disponible.</p>
+                  <p className="text-slate-500 text-xs font-mono py-2 px-2">NO {type} AVAILABLE</p>
                 ) : (
                   sidStarList.map((proc) => (
-                    <button
-                      key={proc.id}
-                      type="button"
-                      onClick={() => {
-                        handleAnswer(proc.nom);
-                        setShowSidStarPanel(false);
-                      }}
-                      className="w-full text-left px-3 py-2 rounded-lg text-sm font-mono hover:bg-amber-600/30 hover:text-amber-100 transition-colors"
-                    >
+                    <button key={proc.id} type="button"
+                      onClick={() => { handleAnswer(proc.nom); setShowSidStarPanel(false); }}
+                      className="w-full text-left px-3 py-1.5 rounded text-xs font-mono text-emerald-300/80 hover:bg-emerald-500/15 hover:text-emerald-200 transition-colors">
                       {proc.nom}
                     </button>
                   ))
@@ -1276,45 +1209,27 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
       case 'resume':
         return (
           <div className="flex gap-3">
-            <button type="button" onClick={submitPlan}
-              className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition-colors">
-              Affirm, déposer
-            </button>
-            <button type="button" onClick={handleClose}
-              className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold transition-colors">
-              Annuler
-            </button>
+            <button type="button" onClick={submitPlan} className={`flex-1 ${fmsBtnGreen}`}>AFFIRM / DEPOSER</button>
+            <button type="button" onClick={handleClose} className={`flex-1 ${fmsBtnRed}`}>ANNULER</button>
           </div>
         );
 
       case 'error':
         return (
-          <button type="button" onClick={handleClose}
-            className="w-full px-4 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-semibold transition-colors">
-            Fermer
-          </button>
+          <button type="button" onClick={handleClose} className={`w-full ${fmsBtnRed}`}>FERMER</button>
         );
 
       default:
         return (
           <form onSubmit={(e) => { e.preventDefault(); handleAnswer(inputValue); }} className="flex gap-2">
-            <input
-              ref={inputRef}
-              type="text"
+            <input ref={inputRef} type="text"
               inputMode={step === 'nb_personnes' || step === 'temps_vol' || step === 'autonomie' ? 'numeric' : 'text'}
-              autoComplete="off"
-              value={inputValue}
+              autoComplete="off" value={inputValue}
               onChange={(e) => { setInputValue(e.target.value); lastActivityRef.current = Date.now(); }}
-              placeholder={getPlaceholder(step)}
-              disabled={lookupLoading}
-              className="flex-1 bg-slate-800 border border-slate-600 text-white rounded-lg px-4 py-3 text-sm placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
-              autoFocus={!isIOS()}
-            />
-            <button
-              type="submit"
-              disabled={!inputValue.trim() || lookupLoading}
-              className="px-4 py-3 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg transition-colors"
-            >
+              placeholder={getPlaceholder(step)} disabled={lookupLoading}
+              className={fmsInput} autoFocus={!isIOS()} />
+            <button type="submit" disabled={!inputValue.trim() || lookupLoading}
+              className="px-3 py-2.5 rounded border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/15 disabled:opacity-30 transition-colors font-mono">
               <Send className="h-4 w-4" />
             </button>
           </form>
@@ -1323,57 +1238,80 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
   };
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center" style={{ zIndex: 99999 }}>
+    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center" style={{ zIndex: 99999 }}>
       <div
-        className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden"
+        className="bg-[#0a0f1a] border border-emerald-500/20 rounded-lg shadow-[0_0_40px_rgba(16,185,129,0.06)] w-full max-w-2xl flex flex-col overflow-hidden"
         style={isIOS() ? { height: '85dvh', maxHeight: '85dvh' } : { height: '85vh' }}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-amber-900/80 to-amber-800/80 border-b border-amber-700/50 px-5 py-4 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-600 rounded-full flex items-center justify-center">
-              <Radio className="h-5 w-5 text-white" />
+        <div className="bg-slate-950 border-b border-emerald-500/15 px-5 py-3.5 shrink-0 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center">
+                <Radio className="h-4 w-4 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-mono font-bold text-emerald-300 tracking-widest">BRIA // FPL SERVICE</h2>
+                <p className="text-[10px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
+                  {step === 'done' ? (
+                    <><span className="w-1.5 h-1.5 rounded-full bg-slate-500" />COMM TERMINATED</>
+                  ) : step === 'submitting' ? (
+                    <><span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />PROCESSING...</>
+                  ) : (
+                    <><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />ON AIR</>
+                  )}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-bold text-amber-100">B.R.I.A</h2>
-              <p className="text-xs text-amber-300/80 flex items-center gap-1">
-                <Phone className="h-3 w-3" />
-                {step === 'done' ? 'Communication terminée' : 'En communication...'}
-              </p>
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={toggleTts}
+                className={`p-2 rounded border transition-colors ${ttsEnabled ? 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10' : 'border-slate-700 text-slate-600 hover:bg-slate-800'}`}
+                title={ttsEnabled ? 'Couper la voix' : 'Activer la voix'}>
+                {ttsEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+              </button>
+              <button type="button" onClick={handleClose} disabled={step === 'submitting' || step === 'done'}
+                className="flex items-center gap-1.5 px-3 py-2 rounded border border-red-500/30 text-red-400 text-xs font-mono tracking-wide hover:bg-red-500/10 transition-colors disabled:opacity-30"
+                title="Raccrocher">
+                <PhoneOff className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">END</span>
+              </button>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleClose}
-            disabled={step === 'submitting' || step === 'done'}
-            className="flex items-center gap-2 px-3 py-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600/80"
-            title="Raccrocher"
-          >
-            <PhoneOff className="h-4 w-4" />
-            Raccrocher
-          </button>
+          {step !== 'greeting' && step !== 'done' && step !== 'error' && (
+            <div className="flex gap-0.5">
+              {(['choice', 'immat', 'regime_vol', 'heure_depart', 'aeroport_depart', 'aeroport_arrivee', 'temps_vol', 'autonomie', 'vol_type', 'altitude', 'resume'] as StepId[]).map((s, i) => {
+                const allSteps: StepId[] = ['choice', 'immat', 'confirm_aircraft', 'regime_vol', 'heure_depart', 'confirm_heure', 'aeroport_depart', 'confirm_dep', 'aeroport_arrivee', 'confirm_arr', 'temps_vol', 'confirm_temps', 'autonomie', 'confirm_autonomie', 'vol_type', 'vol_prive_confirm', 'nature_transport', 'confirm_vol_type', 'nb_personnes', 'confirm_personnes', 'sid', 'confirm_sid', 'star', 'confirm_star', 'altitude', 'confirm_altitude', 'numero_vol', 'confirm_numero', 'quoi_ciel', 'resume', 'submitting'];
+                const currentIndex = allSteps.indexOf(step);
+                const stepIndex = allSteps.indexOf(s);
+                const reached = stepIndex <= currentIndex;
+                return <div key={i} className={`h-0.5 flex-1 transition-all duration-300 ${reached ? 'bg-emerald-400' : 'bg-slate-800'}`} />;
+              })}
+            </div>
+          )}
         </div>
 
         {(step === 'submitting' || step === 'done') && (
-          <div className="px-5 py-3 bg-amber-500/20 border-b border-amber-500/40">
-            <p className="text-sm font-medium text-amber-400 text-center">
-              Attendez la fin du processus, ne quittez pas, ne changez pas de page.
+          <div className="px-5 py-2.5 bg-amber-500/5 border-b border-amber-500/20">
+            <p className="text-xs font-mono text-amber-400/80 text-center tracking-wide">
+              STANDBY — DO NOT CLOSE
             </p>
           </div>
         )}
 
-        {/* Chat area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2.5 bg-[#060a12]">
           {messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === 'bria' ? 'justify-start' : 'justify-end'}`}>
-              <div className={`max-w-[80%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-line ${
+              <div className={`max-w-[85%] rounded px-3.5 py-2 text-sm whitespace-pre-line font-mono leading-relaxed ${
                 msg.role === 'bria'
-                  ? 'bg-amber-900/60 border border-amber-700/40 text-amber-100'
-                  : 'bg-sky-700/60 border border-sky-600/40 text-sky-100'
+                  ? 'bg-emerald-950/50 border border-emerald-500/15 text-emerald-100/90'
+                  : 'bg-cyan-950/50 border border-cyan-500/15 text-cyan-100/90'
               }`}>
-                {msg.role === 'bria' && (
-                  <span className="text-xs font-bold text-amber-400 block mb-1">BRIA</span>
-                )}
+                <span className={`text-[10px] font-bold tracking-[0.2em] block mb-1 ${
+                  msg.role === 'bria' ? 'text-emerald-500/70' : 'text-cyan-500/70'
+                }`}>
+                  {msg.role === 'bria' ? 'BRIA' : 'PLT'}
+                </span>
                 {msg.text}
               </div>
             </div>
@@ -1381,12 +1319,11 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
 
           {isTyping && (
             <div className="flex justify-start">
-              <div className="bg-amber-900/60 border border-amber-700/40 rounded-xl px-4 py-2.5">
-                <span className="text-xs font-bold text-amber-400 block mb-1">BRIA</span>
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-2 h-2 bg-amber-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <div className="bg-emerald-950/50 border border-emerald-500/15 rounded px-3.5 py-2">
+                <span className="text-[10px] font-bold tracking-[0.2em] text-emerald-500/70 block mb-1.5 font-mono">BRIA</span>
+                <div className="flex items-center gap-0.5">
+                  <span className="w-1.5 h-4 bg-emerald-400 animate-pulse" />
+                  <span className="text-[10px] font-mono text-emerald-500/50 ml-1">TRANSMITTING</span>
                 </div>
               </div>
             </div>
@@ -1396,7 +1333,7 @@ export default function BriaDialog({ onClose }: BriaDialogProps) {
         </div>
 
         {/* Input zone */}
-        <div className="border-t border-slate-700 px-4 py-3 bg-slate-800/50 shrink-0">
+        <div className="border-t border-emerald-500/10 px-4 py-3 bg-slate-950/80 shrink-0">
           {renderInput()}
         </div>
       </div>

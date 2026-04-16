@@ -20,7 +20,7 @@ export async function GET() {
 
     const { data: mine, error: mineErr } = await admin
       .from('instruction_exam_requests')
-      .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, created_at, updated_at, instructeur:profiles!instruction_exam_requests_instructeur_id_fkey(identifiant)')
+      .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, resultat, dossier_conserve, licence_creee_id, created_at, updated_at, instructeur:profiles!instruction_exam_requests_instructeur_id_fkey(identifiant)')
       .eq('requester_id', user.id)
       .order('created_at', { ascending: false });
     if (mineErr) return NextResponse.json({ error: mineErr.message }, { status: 400 });
@@ -29,7 +29,7 @@ export async function GET() {
     if (canManageInstruction(me?.role)) {
       const { data: assignedRows, error: assignedErr } = await admin
         .from('instruction_exam_requests')
-        .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, created_at, updated_at, requester:profiles!instruction_exam_requests_requester_id_fkey(identifiant)')
+        .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, resultat, dossier_conserve, licence_creee_id, created_at, updated_at, requester:profiles!instruction_exam_requests_requester_id_fkey(identifiant)')
         .eq('instructeur_id', user.id)
         .order('created_at', { ascending: false });
       if (assignedErr) return NextResponse.json({ error: assignedErr.message }, { status: 400 });
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       .select('*', { count: 'exact', head: true })
       .eq('requester_id', user.id)
       .eq('licence_code', licenceCode)
-      .in('statut', ['assigne', 'accepte']);
+      .in('statut', ['assigne', 'accepte', 'en_cours']);
     if ((existingOpen ?? 0) > 0) {
       return NextResponse.json({ error: 'Une demande est déjà en cours pour cette licence.' }, { status: 400 });
     }
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
       .from('instruction_exam_requests')
       .select('instructeur_id')
       .in('instructeur_id', eligible)
-      .in('statut', ['assigne', 'accepte']);
+      .in('statut', ['assigne', 'accepte', 'en_cours']);
     for (const row of pendingAssigned || []) {
       if (!row.instructeur_id) continue;
       workload.set(row.instructeur_id, (workload.get(row.instructeur_id) || 0) + 1);
