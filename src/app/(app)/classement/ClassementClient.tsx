@@ -105,7 +105,7 @@ export default function ClassementClient({ pilotes, currentUserId }: Props) {
 
   const sorted = useMemo(() => {
     return [...pilotes]
-      .filter(p => getValue(p, activeCategory) > 0)
+      .filter(p => activeCategory === 'veteran' ? !!p.memberSince : getValue(p, activeCategory) > 0)
       .sort((a, b) => getValue(b, activeCategory) - getValue(a, activeCategory));
   }, [pilotes, activeCategory]);
 
