@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { MapPin, Plus, Trash2, Star, X } from 'lucide-react';
+import { MapPin, Plus, Trash2, Star, X, Banknote } from 'lucide-react';
 import { calculerPrixHub } from '@/lib/compagnie-utils';
 
 type Hub = {
@@ -88,9 +88,12 @@ export default function CompagnieHubsClient({ compagnieId }: { compagnieId: stri
       setConfirmDelete(null);
 
       // Message de succès détaillé
-      let msg = 'Hub supprimé.';
+      let msg = 'Hub vendu.';
+      if (d.remboursement > 0) {
+        msg += ` Remboursement : +${d.remboursement.toLocaleString('fr-FR')} F$.`;
+      }
       if (d.taxes_payees > 0) {
-        msg += ` Taxes aéroportuaires payées : ${d.taxes_payees.toLocaleString('fr-FR')} F$ (${d.avions_en_maintenance} avion(s) en maintenance).`;
+        msg += ` Taxes aéroportuaires : -${d.taxes_payees.toLocaleString('fr-FR')} F$ (${d.avions_en_maintenance} avion(s) en maintenance).`;
       }
       if (d.nouveau_principal) {
         msg += ` Nouveau hub principal : ${d.nouveau_principal}.`;
@@ -204,6 +207,9 @@ export default function CompagnieHubsClient({ compagnieId }: { compagnieId: stri
                 {h.est_hub_principal && (
                   <span className="text-xs text-emerald-400/80 font-medium">Hub principal</span>
                 )}
+                {h.prix_achat > 0 && (
+                  <span className="text-xs text-slate-500">({h.prix_achat.toLocaleString('fr-FR')} F$)</span>
+                )}
               </div>
 
               <div className="flex items-center gap-1.5">
@@ -226,17 +232,18 @@ export default function CompagnieHubsClient({ compagnieId }: { compagnieId: stri
                 {hubs.length > 1 && (
                   confirmDelete === h.id ? (
                     <div className="flex items-center gap-1">
-                      <div className="text-xs text-red-400 font-medium max-w-[200px]">
-                        <span>Supprimer ?</span>
-                        {h.est_hub_principal && <span className="block text-amber-400">Un autre hub sera auto-assigné principal.</span>}
+                      <div className="text-xs font-medium max-w-[220px]">
+                        <span className="text-amber-300">Vendre {h.aeroport_code} ?</span>
+                        {h.prix_achat > 0 && <span className="block text-emerald-400">+{h.prix_achat.toLocaleString('fr-FR')} F$</span>}
+                        {h.est_hub_principal && <span className="block text-amber-400/70">Un autre hub deviendra principal.</span>}
                       </div>
                       <button
                         type="button"
                         onClick={() => handleSupprimer(h.id)}
                         disabled={loadingAction !== null}
-                        className="px-2 py-1 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors disabled:opacity-50"
+                        className="px-2 py-1 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-md transition-colors disabled:opacity-50"
                       >
-                        {loadingAction === h.id ? '...' : 'Oui'}
+                        {loadingAction === h.id ? '...' : 'Confirmer'}
                       </button>
                       <button
                         type="button"
@@ -251,10 +258,11 @@ export default function CompagnieHubsClient({ compagnieId }: { compagnieId: stri
                       type="button"
                       onClick={() => setConfirmDelete(h.id)}
                       disabled={loadingAction !== null}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-md transition-colors disabled:opacity-50"
-                      title="Supprimer ce hub"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-amber-300 hover:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-md transition-colors disabled:opacity-50"
+                      title={`Vendre ce hub${h.prix_achat > 0 ? ` (+${h.prix_achat.toLocaleString('fr-FR')} F$)` : ''}`}
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Banknote className="h-3 w-3" />
+                      Vendre
                     </button>
                   )
                 )}

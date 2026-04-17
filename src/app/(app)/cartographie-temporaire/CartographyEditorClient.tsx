@@ -114,6 +114,7 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
   const [mode, setMode] = useState<InteractionMode>('edit');
   const [showGrid, setShowGrid] = useState(true);
   const [showOfficialBg, setShowOfficialBg] = useState(true);
+  const [visibleLayers, setVisibleLayers] = useState({ airports: true, islands: true, fir: true, waypoints: true, vors: true });
   const [viewBox, setViewBox] = useState<ViewBox>(DEFAULT_VIEWBOX);
   const [selectedIsland, setSelectedIsland] = useState<string | null>(data.islands[0]?.id ?? null);
   const [selectedFir, setSelectedFir] = useState<string | null>(data.firZones[0]?.id ?? null);
@@ -533,7 +534,7 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
               )}
               {showGrid && <rect width={SVG_W} height={SVG_H} fill="url(#cartoGrid)" />}
 
-              {data.firZones.map((fir) => (
+              {visibleLayers.fir && data.firZones.map((fir) => (
                 <g key={fir.id}>
                   <polygon
                     points={fir.points.map((point) => `${point.x},${point.y}`).join(' ')}
@@ -556,7 +557,7 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                 </g>
               ))}
 
-              {data.islands.map((island) => (
+              {visibleLayers.islands && data.islands.map((island) => (
                 <polygon
                   key={island.id}
                   points={island.points.map((point) => `${point.x},${point.y}`).join(' ')}
@@ -568,7 +569,7 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                 />
               ))}
 
-              {Object.entries(data.positions).map(([code, pos]) => {
+              {visibleLayers.airports && Object.entries(data.positions).map(([code, pos]) => {
                 const airport = AEROPORTS_PTFS.find((item) => item.code === code);
                 const x = pos.x * 10.24;
                 const y = pos.y * 7.87;
@@ -607,7 +608,7 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
               })}
 
               {/* Waypoints / VOR au-dessus des aéroports : sinon les gros disques d&apos;aéroport volent le clic (ex. MOGTA près d&apos;un hub). */}
-              {data.waypoints.map((waypoint) => {
+              {visibleLayers.waypoints && data.waypoints.map((waypoint) => {
                 const x = waypoint.x * 10.24;
                 const y = waypoint.y * 7.87;
                 const grabR = Math.max(handleRadius * 1.8, 6);
@@ -641,7 +642,7 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                 );
               })}
 
-              {data.vors.map((vor) => {
+              {visibleLayers.vors && data.vors.map((vor) => {
                 const x = vor.x * 10.24;
                 const y = vor.y * 7.87;
                 return (
@@ -674,7 +675,7 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                 );
               })}
 
-              {selectedFirData && activeLayer === 'fir' && selectedFirData.points.map((point, pointIndex) => {
+              {visibleLayers.fir && selectedFirData && activeLayer === 'fir' && selectedFirData.points.map((point, pointIndex) => {
                 const next = selectedFirData.points[(pointIndex + 1) % selectedFirData.points.length];
                 const guideStroke = Math.max(fineStroke * 1.35, 1);
                 return (
@@ -724,7 +725,7 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                 );
               })}
 
-              {selectedIslandData && activeLayer === 'islands' && selectedIslandData.points.map((point, pointIndex) => {
+              {visibleLayers.islands && selectedIslandData && activeLayer === 'islands' && selectedIslandData.points.map((point, pointIndex) => {
                 const next = selectedIslandData.points[(pointIndex + 1) % selectedIslandData.points.length];
                 const guideStroke = Math.max(fineStroke * 1.35, 1);
                 return (
@@ -795,6 +796,28 @@ export default function CartographyEditorClient({ initialDraft = null }: EditorP
                 >
                   {label}
                 </button>
+              ))}
+            </div>
+
+            <h2 className="mt-4 mb-2 text-sm font-semibold text-slate-200">Visibilité</h2>
+            <div className="space-y-1">
+              {([
+                ['airports', 'Aéroports', '#a855f7'],
+                ['islands', 'Îles', '#6ee7b7'],
+                ['fir', 'FIR', '#fbbf24'],
+                ['waypoints', 'Waypoints', '#38bdf8'],
+                ['vors', 'IFR / VOR', '#f87171'],
+              ] as const).map(([key, label, color]) => (
+                <label key={key} className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-slate-800/50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleLayers[key]}
+                    onChange={() => setVisibleLayers(prev => ({ ...prev, [key]: !prev[key] }))}
+                    className="rounded border-slate-600"
+                  />
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                  <span className="text-xs text-slate-300">{label}</span>
+                </label>
               ))}
             </div>
             <p className="mt-3 text-xs text-slate-400">

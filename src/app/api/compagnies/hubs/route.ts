@@ -263,6 +263,34 @@ export async function DELETE(request: Request) {
       nouveauPrincipal = hubAleatoire.aeroport_code;
     }
 
+    // Rembourser le prix d'achat au compte entreprise
+    let remboursement = 0;
+    const { data: hubFull } = await admin
+      .from('compagnie_hubs')
+      .select('prix_achat')
+      .eq('id', hub_id)
+      .single();
+
+    if (hubFull?.prix_achat && hubFull.prix_achat > 0) {
+      const { data: compteEntreprise } = await admin
+        .from('felitz_comptes')
+        .select('id')
+        .eq('compagnie_id', compagnie_id)
+        .eq('type', 'entreprise')
+        .single();
+
+      if (compteEntreprise) {
+        await admin.rpc('crediter_compte_safe', { p_compte_id: compteEntreprise.id, p_montant: hubFull.prix_achat });
+        await admin.from('felitz_transactions').insert({
+          compte_id: compteEntreprise.id,
+          type: 'credit',
+          montant: hubFull.prix_achat,
+          libelle: `Vente hub ${hub.aeroport_code}`,
+        });
+        remboursement = hubFull.prix_achat;
+      }
+    }
+
     // Supprimer le hub
     const { error } = await admin
       .from('compagnie_hubs')
@@ -274,6 +302,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({
       ok: true,
       taxes_payees: taxesPayees,
+      remboursement,
       avions_en_maintenance: avionsEnMaintenance?.length || 0,
       nouveau_principal: nouveauPrincipal,
     });
