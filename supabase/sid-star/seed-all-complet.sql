@@ -233,14 +233,14 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IIAB', 'SID', 'MCCONNELL 2', 'RADAR VECTORS DCT')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- ========== IGRV (Grindavik) ==========
+-- ========== IGRV (Keflavik) ==========
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IGRV', 'SID', 'CELAR 4', 'gvk dct celar'),
-  ('IGRV', 'SID', 'GRINDAVIK 1', 'gvk dct grindavik'),
+  ('IGRV', 'SID', 'KEFLAVIK 1', 'gvk dct keflavik'),
   ('IGRV', 'SID', 'HAWKN 1', 'gvk dct hawkin'),
   ('IGRV', 'SID', 'THENR 3', 'gvk dct thenr'),
   ('IGRV', 'SID', 'YOUTH 4', 'gvk dct youth'),
-  ('IGRV', 'SID', 'GRINDAVIK 2', 'RADAR VECTORS DCT')
+  ('IGRV', 'SID', 'KEFLAVIK 2', 'RADAR VECTORS DCT')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- ========== IMLR (Mellor) ==========

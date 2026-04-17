@@ -16,6 +16,16 @@ export default async function MessagerieAtcPage() {
 
   const admin = createAdminClient();
 
+  // Nettoyage auto : supprimer les messages système de plus d'1 mois (protège les chèques non encaissés)
+  const unMoisAgo = new Date();
+  unMoisAgo.setMonth(unMoisAgo.getMonth() - 1);
+  admin.from('messages')
+    .delete()
+    .neq('type_message', 'normal')
+    .lt('created_at', unMoisAgo.toISOString())
+    .or('cheque_encaisse.is.null,cheque_encaisse.eq.true')
+    .then(() => {});
+
   // Récupérer les messages reçus
   const { data: messagesRecus } = await admin.from('messages')
     .select('*, expediteur:profiles!expediteur_id(identifiant)')

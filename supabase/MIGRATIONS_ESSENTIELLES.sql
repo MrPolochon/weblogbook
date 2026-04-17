@@ -243,7 +243,7 @@ INSERT INTO public.vhf_position_frequencies (aeroport, position, frequency) VALU
   ('IMLR', 'Ground',  '121.575'),
   ('IMLR', 'APP',     '119.775'),
   ('IMLR', 'Center',  '129.375'),
-  -- IGRV (Grindavik)
+  -- IGRV (Keflavik)
   ('IGRV', 'Tower',   '119.325'),
   ('IGRV', 'Ground',  '121.850'),
   ('IGRV', 'APP',     '120.600'),
@@ -288,6 +288,9 @@ INSERT INTO public.vhf_position_frequencies (aeroport, position, frequency) VALU
   -- IUFO (UFO Base) — petit
   ('IUFO', 'Tower',   '119.550'),
   ('IUFO', 'Ground',  '121.425'),
+  -- ITEY (Pingeyri Airport) — petit
+  ('ITEY', 'Tower',   '119.125'),
+  ('ITEY', 'Ground',  '121.375'),
   -- IIAB (McConnell AFB) — militaire
   ('IIAB', 'Tower',   '118.100'),
   ('IIAB', 'Ground',  '121.300'),

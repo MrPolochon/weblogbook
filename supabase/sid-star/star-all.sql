@@ -106,7 +106,7 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('ILAR', 'STAR', 'WESTERN 1.ANYMS', 'anyms dct grass dct rents dct RADAR VECTORS DCT ILAR')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- ========== IGRV (Grindavik) ==========
+-- ========== IGRV (Keflavik) ==========
 -- GOLDN 1 et SPACE 1 : entrée unique
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IGRV', 'STAR', 'GOLDN 1', 'blank dct thenr dct goldn dct RADAR VECTORS DCT IGRV'),

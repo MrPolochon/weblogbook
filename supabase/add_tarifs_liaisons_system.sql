@@ -100,7 +100,8 @@ INSERT INTO public.aeroport_passagers (code_oaci, passagers_disponibles, passage
   ('IBTH', 4000, 4000),    -- touristique petit
   ('IUFO', 500, 500),      -- secret/petit
   ('ISAU', 8000, 8000),    -- regional
-  ('ISKP', 3000, 3000)     -- touristique petit
+  ('ISKP', 3000, 3000),    -- touristique petit
+  ('ITEY', 1000, 1000)     -- très petit (Pingeyri)
 ON CONFLICT (code_oaci) DO NOTHING;
 
 -- Fonction pour régénérer les passagers (appelée périodiquement ou par trigger)

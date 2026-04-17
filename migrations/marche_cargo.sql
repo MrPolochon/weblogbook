@@ -57,7 +57,8 @@ INSERT INTO public.aeroport_cargo (code_oaci, cargo_disponible, cargo_max) VALUE
   -- Bases militaires
   ('IIAB', 50000, 50000),
   ('IGAR', 40000, 40000),
-  ('ISCM', 35000, 35000)
+  ('ISCM', 35000, 35000),
+  ('ITEY', 5000, 5000)
 ON CONFLICT (code_oaci) DO NOTHING;
 
 -- =====================================================

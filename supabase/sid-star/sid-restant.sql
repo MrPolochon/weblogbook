@@ -15,15 +15,15 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IIAB', 'SID', 'MCCONNELL 2', 'RADAR VECTORS DCT')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- ========== IGRV (Grindavik) ==========
+-- ========== IGRV (Keflavik) ==========
 -- CELAR 4
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IGRV', 'SID', 'CELAR 4', 'gvk dct celar')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- GRINDAVIK 1
+-- KEFLAVIK 1
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
-  ('IGRV', 'SID', 'GRINDAVIK 1', 'gvk dct grindavik')
+  ('IGRV', 'SID', 'KEFLAVIK 1', 'gvk dct keflavik')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- HAWKN 1
@@ -41,9 +41,9 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IGRV', 'SID', 'YOUTH 4', 'gvk dct youth')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- GRINDAVIK 2 (omnidirectionnel, >>>>>>)
+-- KEFLAVIK 2 (omnidirectionnel, >>>>>>)
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
-  ('IGRV', 'SID', 'GRINDAVIK 2', 'RADAR VECTORS DCT')
+  ('IGRV', 'SID', 'KEFLAVIK 2', 'RADAR VECTORS DCT')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- ========== IMLR (Mellor) — Rockford FIR, variantes VIA DOCKR/DLREY et .RENDR/.DINER ==========

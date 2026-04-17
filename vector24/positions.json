@@ -18,9 +18,12 @@
         "TWR": "IPAP_TWR"
       }
     },
-    "Grindavik": {
-      "Grindavik Airport": {
+    "Keflavik": {
+      "Keflavik Airport": {
         "TWR": "IGRV_TWR"
+      },
+      "Pingeyri Airport": {
+        "TWR": "ITEY_TWR"
       },
       "Tavaro Seabase": {
         "TWR": "TVO_TWR"

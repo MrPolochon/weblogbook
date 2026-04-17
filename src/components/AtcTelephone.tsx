@@ -29,7 +29,7 @@ const AEROPORT_CODES: Record<string, string> = {
   'IJAF': '5574', 'IBLT': '5575', 'IDCS': '5576', 'IGRV': '5577',
   'IBTH': '5578', 'ISKP': '5579', 'ILKL': '5580', 'IBAR': '5581',
   'IHEN': '5582', 'ITRC': '5583', 'IBRD': '5584', 'IUFO': '5585',
-  'IIAB': '5586', 'IGAR': '5587', 'ISCM': '5588',
+  'IIAB': '5586', 'IGAR': '5587', 'ISCM': '5588', 'ITEY': '5589',
 };
 
 const CODE_TO_AEROPORT: Record<string, string> = Object.fromEntries(

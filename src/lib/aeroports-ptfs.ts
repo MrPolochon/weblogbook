@@ -33,7 +33,8 @@ export const AEROPORTS_PTFS: readonly AeroportPTFS[] = [
   
   // Petits aéroports
   { code: 'IDCS', nom: 'Saba Airport', taille: 'small', tourisme: true, passagersMax: 800, cargoMax: 2000, industriel: false },
-  { code: 'IGRV', nom: 'Grindavik Airport', taille: 'small', tourisme: true, passagersMax: 2000, cargoMax: 15000, industriel: false, vor: 'GVK', freq: '112.320' },
+  { code: 'IGRV', nom: 'Keflavik Airport', taille: 'small', tourisme: true, passagersMax: 2000, cargoMax: 15000, industriel: false, vor: 'GVK', freq: '112.320' },
+  { code: 'ITEY', nom: 'Pingeyri Airport', taille: 'small', tourisme: true, passagersMax: 1000, cargoMax: 5000, industriel: false },
   { code: 'IBTH', nom: 'Saint Barthelemy', taille: 'small', tourisme: true, passagersMax: 4000, cargoMax: 8000, industriel: false },
   { code: 'ISKP', nom: 'Skopelos Airfield', taille: 'small', tourisme: true, passagersMax: 3000, cargoMax: 10000, industriel: false },
   { code: 'ILKL', nom: 'Lukla Airport', taille: 'small', tourisme: true, passagersMax: 500, cargoMax: 3000, industriel: false },
@@ -194,7 +195,7 @@ export interface EspaceAerien {
 }
 
 export const ESPACES_AERIENS: readonly EspaceAerien[] = [
-  { code: 'GRINDAVIK', nom: 'Grindavik FIR', type: 'FIR' },
+  { code: 'KEFLAVIK', nom: 'Keflavik FIR', type: 'FIR' },
   { code: 'ROCKFORD', nom: 'Rockford FIR', type: 'FIR' },
   { code: 'SAUTHEMPTONA', nom: 'Sauthemptona FIR', type: 'FIR' },
   { code: 'LARNACA', nom: 'Larnaca FIR', type: 'FIR' },
