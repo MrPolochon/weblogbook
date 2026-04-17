@@ -18,7 +18,7 @@ function playNotificationSound(type: 'transfer' | 'cloture' | 'nouveau' | 'rappe
     const ctx = new AC();
     const vol = Math.min(0.9, 0.4 + (intensity * 0.12));
 
-    function beep(freq: number, start: number, dur: number, v?: number) {
+    const beep = (freq: number, start: number, dur: number, v?: number) => {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.connect(g); g.connect(ctx.destination);
@@ -27,7 +27,7 @@ function playNotificationSound(type: 'transfer' | 'cloture' | 'nouveau' | 'rappe
       g.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + start + dur);
       o.start(ctx.currentTime + start);
       o.stop(ctx.currentTime + start + dur);
-    }
+    };
 
     switch (type) {
       case 'transfer':
