@@ -221,7 +221,10 @@ export async function POST(req: NextRequest) {
       if (insertAvionErr) {
         console.error('Marketplace: echec insert compagnie_avions:', insertAvionErr);
         await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
-        return NextResponse.json({ error: 'Erreur lors de la creation de l\'avion. Le compte a ete recredite.' }, { status: 500 });
+        return NextResponse.json({
+          error: `Erreur lors de la création de l'avion (${insertAvionErr.code || 'unknown'}: ${insertAvionErr.message}). Le compte a été recrédité.`,
+          details: insertAvionErr,
+        }, { status: 500 });
       }
 
       // Transaction
@@ -276,7 +279,10 @@ export async function POST(req: NextRequest) {
       if (insertPersoErr) {
         console.error('Marketplace: echec insert inventaire_avions:', insertPersoErr);
         await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
-        return NextResponse.json({ error: 'Erreur lors de la creation de l\'avion. Le compte a ete recredite.' }, { status: 500 });
+        return NextResponse.json({
+          error: `Erreur lors de la création de l'avion (${insertPersoErr.code || 'unknown'}: ${insertPersoErr.message}). Le compte a été recrédité.`,
+          details: insertPersoErr,
+        }, { status: 500 });
       }
 
       // Transaction
