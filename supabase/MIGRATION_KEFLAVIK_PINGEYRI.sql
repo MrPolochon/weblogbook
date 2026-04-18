@@ -130,11 +130,11 @@ UPDATE public.vhf_position_frequencies
   SET aeroport = 'IKFL'
   WHERE aeroport = 'IGRV';
 
--- 1.h) Hubs des compagnies
+-- 1.h) Hubs des compagnies (colonne réelle = aeroport_code)
 DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables
-             WHERE table_schema='public' AND table_name='compagnie_hubs') THEN
-    UPDATE public.compagnie_hubs SET aeroport = 'IKFL' WHERE aeroport = 'IGRV';
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='compagnie_hubs' AND column_name='aeroport_code') THEN
+    UPDATE public.compagnie_hubs SET aeroport_code = 'IKFL' WHERE aeroport_code = 'IGRV';
     RAISE NOTICE '✅ Hubs : IGRV → IKFL';
   END IF;
 END $$;
@@ -166,11 +166,11 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- 1.k) NOTAMs
+-- 1.k) NOTAMs (colonne réelle = code_aeroport)
 DO $$ BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables
-             WHERE table_schema='public' AND table_name='notams') THEN
-    UPDATE public.notams SET aeroport = 'IKFL' WHERE aeroport = 'IGRV';
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='notams' AND column_name='code_aeroport') THEN
+    UPDATE public.notams SET code_aeroport = 'IKFL' WHERE code_aeroport = 'IGRV';
     RAISE NOTICE '✅ NOTAMs : IGRV → IKFL';
   END IF;
 END $$;
@@ -190,6 +190,98 @@ DO $$ BEGIN
              WHERE table_schema='public' AND table_name='siavi_sessions' AND column_name='aeroport') THEN
     UPDATE public.siavi_sessions SET aeroport = 'IKFL' WHERE aeroport = 'IGRV';
     RAISE NOTICE '✅ Sessions SIAVI : IGRV → IKFL';
+  END IF;
+END $$;
+
+-- 1.n) Plans de vol : transferts en attente + holder ATC
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='plans_vol' AND column_name='pending_transfer_aeroport') THEN
+    UPDATE public.plans_vol SET pending_transfer_aeroport = 'IKFL' WHERE pending_transfer_aeroport = 'IGRV';
+    RAISE NOTICE '✅ Plans vol pending_transfer_aeroport : IGRV → IKFL';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='plans_vol' AND column_name='current_holder_aeroport') THEN
+    UPDATE public.plans_vol SET current_holder_aeroport = 'IKFL' WHERE current_holder_aeroport = 'IGRV';
+    RAISE NOTICE '✅ Plans vol current_holder_aeroport : IGRV → IKFL';
+  END IF;
+END $$;
+
+-- 1.o) Taxes ATC en attente
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='atc_taxes_pending' AND column_name='aeroport') THEN
+    UPDATE public.atc_taxes_pending SET aeroport = 'IKFL' WHERE aeroport = 'IGRV';
+    RAISE NOTICE '✅ atc_taxes_pending : IGRV → IKFL';
+  END IF;
+END $$;
+
+-- 1.p) Plans contrôlés par les ATC
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='atc_plans_controles' AND column_name='aeroport') THEN
+    -- UNIQUE(plan_vol_id, user_id, aeroport, position) : supprimer doublons potentiels
+    DELETE FROM public.atc_plans_controles a
+      WHERE a.aeroport = 'IGRV'
+        AND EXISTS (
+          SELECT 1 FROM public.atc_plans_controles b
+          WHERE b.aeroport = 'IKFL'
+            AND b.plan_vol_id = a.plan_vol_id
+            AND b.user_id = a.user_id
+            AND b.position = a.position
+        );
+    UPDATE public.atc_plans_controles SET aeroport = 'IKFL' WHERE aeroport = 'IGRV';
+    RAISE NOTICE '✅ atc_plans_controles : IGRV → IKFL';
+  END IF;
+END $$;
+
+-- 1.q) Incidents de vol (3 colonnes)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='incidents_vol' AND column_name='aeroport_depart') THEN
+    UPDATE public.incidents_vol SET aeroport_depart = 'IKFL' WHERE aeroport_depart = 'IGRV';
+    UPDATE public.incidents_vol SET aeroport_arrivee = 'IKFL' WHERE aeroport_arrivee = 'IGRV';
+    UPDATE public.incidents_vol SET aeroport_incident = 'IKFL' WHERE aeroport_incident = 'IGRV';
+    RAISE NOTICE '✅ incidents_vol (depart/arrivee/incident) : IGRV → IKFL';
+  END IF;
+END $$;
+
+-- 1.r) ATIS Broadcast state (un seul broadcast actif à la fois)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='atis_broadcast_state' AND column_name='aeroport') THEN
+    UPDATE public.atis_broadcast_state SET aeroport = 'IKFL' WHERE aeroport = 'IGRV';
+    RAISE NOTICE '✅ atis_broadcast_state : IGRV → IKFL';
+  END IF;
+END $$;
+
+-- 1.s) AFIS sessions (SIAVI)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='afis_sessions' AND column_name='aeroport') THEN
+    UPDATE public.afis_sessions SET aeroport = 'IKFL' WHERE aeroport = 'IGRV';
+    RAISE NOTICE '✅ afis_sessions : IGRV → IKFL';
+  END IF;
+END $$;
+
+-- 1.t) Interventions SIAVI (urgences 911/112)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='siavi_interventions' AND column_name='aeroport') THEN
+    UPDATE public.siavi_interventions SET aeroport = 'IKFL' WHERE aeroport = 'IGRV';
+    RAISE NOTICE '✅ siavi_interventions : IGRV → IKFL';
+  END IF;
+END $$;
+
+-- 1.u) Taxes aéroportuaires (PK = code_oaci)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='taxes_aeroport' AND column_name='code_oaci') THEN
+    DELETE FROM public.taxes_aeroport
+      WHERE code_oaci = 'IGRV'
+        AND EXISTS (SELECT 1 FROM public.taxes_aeroport WHERE code_oaci = 'IKFL');
+    UPDATE public.taxes_aeroport SET code_oaci = 'IKFL' WHERE code_oaci = 'IGRV';
+    RAISE NOTICE '✅ taxes_aeroport : IGRV → IKFL';
   END IF;
 END $$;
 
@@ -213,52 +305,16 @@ INSERT INTO public.vhf_position_frequencies (aeroport, position, frequency) VALU
   ('ITEY', 'Ground', '121.375')
 ON CONFLICT DO NOTHING;
 
--- ============================================================
--- 3) Vérification finale
--- ============================================================
-DO $$
-DECLARE
-  v_remaining_igrv INTEGER := 0;
-  v_itey_pax INTEGER;
-  v_itey_cargo INTEGER;
-  v_itey_freq INTEGER;
-  v_keflavik_sids INTEGER;
-BEGIN
-  -- Compter les références IGRV restantes (devrait être 0)
-  SELECT COUNT(*) INTO v_remaining_igrv FROM public.sid_star WHERE aeroport = 'IGRV';
-  v_remaining_igrv := v_remaining_igrv + (SELECT COUNT(*) FROM public.aeroport_passagers WHERE code_oaci = 'IGRV');
-  v_remaining_igrv := v_remaining_igrv + (SELECT COUNT(*) FROM public.aeroport_cargo WHERE code_oaci = 'IGRV');
-  v_remaining_igrv := v_remaining_igrv + (SELECT COUNT(*) FROM public.vhf_position_frequencies WHERE aeroport = 'IGRV');
-
-  -- Vérifier ITEY
-  SELECT COUNT(*) INTO v_itey_pax FROM public.aeroport_passagers WHERE code_oaci = 'ITEY';
-  SELECT COUNT(*) INTO v_itey_cargo FROM public.aeroport_cargo WHERE code_oaci = 'ITEY';
-  SELECT COUNT(*) INTO v_itey_freq FROM public.vhf_position_frequencies WHERE aeroport = 'ITEY';
-
-  -- Vérifier les SID Keflavik
-  SELECT COUNT(*) INTO v_keflavik_sids FROM public.sid_star
-    WHERE aeroport = 'IKFL' AND nom IN ('KEFLAVIK 1', 'KEFLAVIK 2');
-
-  RAISE NOTICE '════════════════════════════════════════';
-  RAISE NOTICE '  RAPPORT DE MIGRATION';
-  RAISE NOTICE '════════════════════════════════════════';
-  RAISE NOTICE '  Références IGRV restantes : %', v_remaining_igrv;
-  RAISE NOTICE '  ITEY passagers          : %', v_itey_pax;
-  RAISE NOTICE '  ITEY cargo              : %', v_itey_cargo;
-  RAISE NOTICE '  ITEY fréquences VHF     : %', v_itey_freq;
-  RAISE NOTICE '  SID Keflavik 1/2        : %', v_keflavik_sids;
-  RAISE NOTICE '════════════════════════════════════════';
-
-  IF v_remaining_igrv > 0 THEN
-    RAISE WARNING '⚠️  Il reste % références IGRV non migrées', v_remaining_igrv;
-  ELSE
-    RAISE NOTICE '✅ Migration IGRV → IKFL complète';
-  END IF;
-END $$;
-
 COMMIT;
 
 -- ============================================================
--- FIN — Si tout est OK, le rapport ci-dessus indique 0 IGRV restant
---       et 1+ pour chaque ligne ITEY/Keflavik
+-- FIN DE LA MIGRATION
+-- ============================================================
+-- Si vous voyez tous les "✅ ... : IGRV → IKFL" ci-dessus dans l'onglet
+-- Notices/Messages et AUCUN message d'erreur rouge, alors la migration
+-- a réussi.
+--
+-- Pour vérifier qu'il ne reste vraiment plus aucune référence à IGRV,
+-- exécutez (dans une AUTRE requête SQL, pas dans le même run que cette
+-- migration) le fichier supabase/VERIF_KEFLAVIK_PINGEYRI.sql.
 -- ============================================================
