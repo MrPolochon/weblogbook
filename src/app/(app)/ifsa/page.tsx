@@ -121,7 +121,7 @@ export default async function IfsaPage() {
       </div>
 
       {/* Statistiques */}
-      <div className="grid gap-4 sm:grid-cols-6">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         <div className="rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 p-4">
           <div className="flex items-center justify-between">
             <div>

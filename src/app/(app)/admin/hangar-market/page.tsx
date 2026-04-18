@@ -73,7 +73,7 @@ export default async function AdminHangarMarketPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
         <div className="card bg-slate-700/50">
           <p className="text-sm text-slate-400">Total annonces</p>
           <p className="text-2xl font-bold text-slate-100">{totalAnnonces || 0}</p>

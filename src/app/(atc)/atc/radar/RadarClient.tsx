@@ -242,7 +242,7 @@ export default function RadarClient({ userId }: { userId: string }) {
   const utcNow = new Date().toISOString().substring(11, 19);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] bg-[#080808] text-[#00ff41] select-none overflow-hidden -mx-4 -my-6">
+    <div className="flex flex-col h-[calc(100dvh-4rem)] bg-[#080808] text-[#00ff41] select-none overflow-hidden -mx-4 -my-6">
       {stcaEnabled && stcaPairs.length > 0 && (
         <div className="bg-red-900/80 text-red-200 px-4 py-1 text-xs font-mono flex items-center gap-4 flex-shrink-0 animate-pulse">
           <span className="font-bold">⚠ STCA</span>

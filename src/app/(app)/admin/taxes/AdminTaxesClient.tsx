@@ -106,7 +106,7 @@ export default function AdminTaxesClient({ taxes }: Props) {
   return (
     <div className="space-y-6">
       {/* Formulaire d'ajout */}
-      <div className="grid gap-4 sm:grid-cols-4 items-end">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 items-end">
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-1">Code OACI</label>
           <input

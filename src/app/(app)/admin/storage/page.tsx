@@ -216,7 +216,7 @@ export default function AdminStoragePage() {
       {/* Panneau de prévisualisation */}
       {preview && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setPreview(null)}>
-          <div className="bg-slate-800 rounded-2xl border border-slate-700 max-w-2xl w-full max-h-[90vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 max-w-2xl w-full max-h-[90dvh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="p-4 border-b border-slate-700 flex items-center justify-between">
               <div>
                 <h3 className="font-medium text-slate-200">{preview.name}</h3>

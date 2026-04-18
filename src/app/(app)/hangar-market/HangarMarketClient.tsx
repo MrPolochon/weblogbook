@@ -594,7 +594,7 @@ export default function HangarMarketClient({
       {/* Modal Vendre */}
       {showVendreModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-4">
               {typeVente === 'flotte' ? 'Vendre un avion de ma flotte' : 'Créer une annonce (avion personnel)'}
             </h3>
@@ -754,7 +754,7 @@ export default function HangarMarketClient({
       {/* Modal Revente */}
       {showReventeModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full mx-4 max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-emerald-400" />
               Revente d&apos;avion — 50%
@@ -862,7 +862,7 @@ export default function HangarMarketClient({
       {/* Modal Achat */}
       {showAchatModal && selectedAnnonce && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4 max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-4">
               Acheter {selectedAnnonce.titre}
             </h3>

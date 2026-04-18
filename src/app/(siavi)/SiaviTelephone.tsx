@@ -26,7 +26,7 @@ const CODE_TO_POSITION: Record<string, string> = Object.fromEntries(
 const AEROPORT_CODES: Record<string, string> = {
   'ITKO': '5566', 'IPPH': '5567', 'ILAR': '5568', 'IPAP': '5569',
   'IRFD': '5570', 'IMLR': '5571', 'IZOL': '5572', 'ISAU': '5573',
-  'IJAF': '5574', 'IBLT': '5575', 'IDCS': '5576', 'IGRV': '5577',
+  'IJAF': '5574', 'IBLT': '5575', 'IDCS': '5576', 'IKFL': '5577',
   'IBTH': '5578', 'ISKP': '5579', 'ILKL': '5580', 'IBAR': '5581',
   'IHEN': '5582', 'ITRC': '5583', 'IBRD': '5584', 'IUFO': '5585',
   'IIAB': '5586', 'IGAR': '5587', 'ISCM': '5588', 'ITEY': '5589',
@@ -835,7 +835,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         <div ref={audioContainerRef} style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }} aria-hidden="true" />
         <div className="fixed inset-0 z-40 bg-red-600/30 animate-pulse pointer-events-none" />
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="bg-gradient-to-b from-red-800 to-red-950 rounded-3xl shadow-2xl p-8 max-w-md w-full text-center">
+          <div className="bg-gradient-to-b from-red-800 to-red-950 rounded-3xl shadow-2xl p-8 max-w-md w-full text-center mx-4 max-h-[90dvh] overflow-y-auto">
             <div className="mb-6">
               <div className="w-20 h-20 mx-auto bg-yellow-500 rounded-full flex items-center justify-center animate-pulse shadow-lg shadow-yellow-500/50">
                 <AlertTriangle className="h-10 w-10 text-red-900" />

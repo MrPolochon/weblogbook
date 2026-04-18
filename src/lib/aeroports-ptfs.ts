@@ -33,7 +33,7 @@ export const AEROPORTS_PTFS: readonly AeroportPTFS[] = [
   
   // Petits aéroports
   { code: 'IDCS', nom: 'Saba Airport', taille: 'small', tourisme: true, passagersMax: 800, cargoMax: 2000, industriel: false },
-  { code: 'IGRV', nom: 'Keflavik Airport', taille: 'small', tourisme: true, passagersMax: 2000, cargoMax: 15000, industriel: false, vor: 'GVK', freq: '112.320' },
+  { code: 'IKFL', nom: 'Keflavik Airport', taille: 'small', tourisme: true, passagersMax: 2000, cargoMax: 15000, industriel: false, vor: 'GVK', freq: '112.320' },
   { code: 'ITEY', nom: 'Pingeyri Airport', taille: 'small', tourisme: true, passagersMax: 1000, cargoMax: 5000, industriel: false },
   { code: 'IBTH', nom: 'Saint Barthelemy', taille: 'small', tourisme: true, passagersMax: 4000, cargoMax: 8000, industriel: false },
   { code: 'ISKP', nom: 'Skopelos Airfield', taille: 'small', tourisme: true, passagersMax: 3000, cargoMax: 10000, industriel: false },

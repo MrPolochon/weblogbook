@@ -115,7 +115,7 @@ export default function NouveauVolClient({
               <p className="text-xs text-slate-500 mb-3">
                 Cliquez sur un plan pour pré-remplir le formulaire.
               </p>
-              <ul className="space-y-2 max-h-[calc(100vh-16rem)] overflow-y-auto">
+              <ul className="space-y-2 max-h-[calc(100dvh-16rem)] overflow-y-auto">
                 {closedPlans.map((p) => (
                   <li key={p.id}>
                     <button

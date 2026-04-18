@@ -927,7 +927,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Aéroport de départ *</label>
           <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
@@ -947,7 +947,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           </select>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Numéro de vol *</label>
           {selectedCompagnie?.code_oaci ? (
@@ -1001,7 +1001,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       )}
       {type_vol === 'IFR' && (
         <>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">SID de départ *</label>
               {sidList.length > 0 ? (

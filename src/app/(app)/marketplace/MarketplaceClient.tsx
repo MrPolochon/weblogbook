@@ -133,7 +133,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4"
       onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
     >
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full relative z-[101] animate-in fade-in zoom-in-95 duration-200 shadow-2xl">
+      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4 max-h-[90dvh] overflow-y-auto relative z-[101] animate-in fade-in zoom-in-95 duration-200 shadow-2xl">
         <button
           onClick={closeModal}
           disabled={loading}

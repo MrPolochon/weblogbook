@@ -70,7 +70,7 @@ export default function PlanVolCloturerButton({ planId, statut }: Props) {
       {/* Modal de succès */}
       {showSuccessModal && mounted && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-slate-700 shadow-2xl">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-slate-700 shadow-2xl mx-4 max-h-[90dvh] overflow-y-auto">
             <div className="flex items-start gap-4">
               <div className="p-3 rounded-full bg-emerald-500/20">
                 <CheckCircle2 className="h-8 w-8 text-emerald-400" />

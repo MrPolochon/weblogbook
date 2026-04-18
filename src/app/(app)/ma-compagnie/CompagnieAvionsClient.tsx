@@ -827,7 +827,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
 
       {showTransferModal && allianceId && mounted && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-slate-700">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-slate-700 mx-4 max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
               <Gift className="h-5 w-5 text-emerald-400" />
               Transférer à un membre de l&apos;alliance
@@ -906,7 +906,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
 
       {showLocationModal && mounted && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-slate-700">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-slate-700 mx-4 max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-4">Mettre en location</h3>
             <div className="space-y-3">
               <div>

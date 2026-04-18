@@ -1912,7 +1912,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       {/* Modal Nouvelle Sanction */}
       {showSanctionModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
               <Gavel className="h-5 w-5 text-red-400" />
               Émettre une sanction
@@ -2100,7 +2100,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       {/* Modal Nouvelle Enquête */}
       {showEnqueteModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
               <FileSearch className="h-5 w-5 text-purple-400" />
               Ouvrir une enquête
@@ -2202,7 +2202,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       {/* Modal Détails Signalement */}
       {selectedSignalement && !showEnqueteModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-2xl w-full max-h-[90dvh] overflow-y-auto">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <span className="text-xs font-mono text-slate-500">{selectedSignalement.numero_signalement}</span>
@@ -2261,7 +2261,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       {/* Modal Détail/Édition Enquête */}
       {showEnqueteDetailModal && selectedEnquete && enqueteEditState && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-3xl w-full max-h-[90dvh] overflow-y-auto">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <span className="text-sm font-mono text-amber-400 font-semibold">{selectedEnquete.numero_dossier}</span>
@@ -2405,7 +2405,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
 
       {showVirementsModal && verificationResult && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-2xl w-full max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
               <Search className="h-5 w-5 text-sky-400" />
               Origine des virements

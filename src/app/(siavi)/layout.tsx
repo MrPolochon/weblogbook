@@ -58,7 +58,7 @@ export default async function SiaviLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-dvh flex flex-col safe-x" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <InactivityLogout />
       <AutoRefresh intervalSeconds={15} />
       <SiaviModeBg isAdmin={isAdmin} />

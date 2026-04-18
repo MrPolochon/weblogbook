@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { RefreshCw, Radio, Layers } from 'lucide-react';
+import Link from 'next/link';
+import { RefreshCw, Radio, Layers, ArrowLeft } from 'lucide-react';
 import {
   AIRPORT_TO_FIR,
   DEFAULT_FIR_ZONES,
@@ -141,6 +142,8 @@ export default function AtcMapClient() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef<{ x: number; y: number; mouseX: number; mouseY: number } | null>(null);
+  // Support tactile : pinch-zoom (2 doigts) et pan (1 doigt)
+  const pinchStartRef = useRef<{ distance: number; zoom: number } | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
   /** FIR sans Center en ligne : affichage optionnel (bleu). */
   const [showOptionalFirs, setShowOptionalFirs] = useState(false);
@@ -325,29 +328,65 @@ export default function AtcMapClient() {
     setIsPanning(false);
   }
 
+  // Gestion tactile : 1 doigt = pan, 2 doigts = pinch-zoom
+  function touchDistance(touches: React.TouchList): number {
+    if (touches.length < 2) return 0;
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  }
+
+  function handleTouchStart(e: React.TouchEvent) {
+    if (e.touches.length === 2) {
+      pinchStartRef.current = { distance: touchDistance(e.touches), zoom };
+      panStartRef.current = null;
+    } else if (e.touches.length === 1) {
+      startPan(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (e.touches.length === 2 && pinchStartRef.current) {
+      e.preventDefault();
+      const d = touchDistance(e.touches);
+      const ratio = d / pinchStartRef.current.distance;
+      updateZoom(pinchStartRef.current.zoom * ratio);
+    } else if (e.touches.length === 1 && panStartRef.current) {
+      movePan(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }
+
+  function handleTouchEnd() {
+    pinchStartRef.current = null;
+    endPan();
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
       <header className="border-b border-slate-700/50 bg-slate-900/80 backdrop-blur-sm">
-        <div className="max-w-[1600px] mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Radio className="h-6 w-6 text-emerald-400" />
-            <h1 className="text-xl font-bold text-slate-100">Carte œil du web</h1>
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border border-sky-500/40 text-sky-300/90" title="Œil du web">
+        <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Link href="/logbook" className="shrink-0 p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700" title="Retour">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+            <Radio className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 shrink-0" />
+            <h1 className="text-base sm:text-xl font-bold text-slate-100 truncate">Carte œil du web</h1>
+            <span className="hidden sm:inline text-[10px] font-mono px-1.5 py-0.5 rounded border border-sky-500/40 text-sky-300/90" title="Œil du web">
               ODW
             </span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400 border border-emerald-600/30">
-              {sessions.length} contrôleur{sessions.length > 1 ? 's' : ''} en ligne
+            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 whitespace-nowrap">
+              {sessions.length} <span className="hidden sm:inline">contrôleur{sessions.length > 1 ? 's' : ''} </span>en ligne
             </span>
           </div>
-          <button onClick={() => { setLoading(true); fetchMapData(); }} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700" title="Actualiser">
+          <button onClick={() => { setLoading(true); fetchMapData(); }} className="shrink-0 p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700" title="Actualiser">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </header>
 
-      <div className="max-w-[1600px] mx-auto p-4 flex gap-4" style={{ height: 'calc(100vh - 60px)' }}>
+      <div className="max-w-[1600px] mx-auto p-2 sm:p-4 flex flex-col md:flex-row gap-3 md:gap-4" style={{ height: 'calc(100dvh - 60px)' }}>
         {/* Carte */}
-        <div className="flex-1 relative rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden"
+        <div className="flex-1 min-h-0 relative rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden touch-none"
           ref={mapContainerRef}
           onWheel={(e) => {
             e.preventDefault();
@@ -358,6 +397,10 @@ export default function AtcMapClient() {
           onMouseMove={(e) => movePan(e.clientX, e.clientY)}
           onMouseUp={endPan}
           onMouseLeave={endPan}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
           style={{ cursor: zoom > 1 ? (isPanning ? 'grabbing' : 'grab') : 'default' }}
         >
           <div
@@ -778,7 +821,7 @@ export default function AtcMapClient() {
         </div>
 
         {/* Panneau latéral */}
-        <div className="w-80 flex-shrink-0 rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden flex flex-col">
+        <div className="w-full md:w-80 flex-shrink-0 max-h-[40dvh] md:max-h-none rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden flex flex-col">
           <div className="p-4 border-b border-slate-700/30">
             <h2 className="font-semibold text-slate-100 text-sm">Contrôleurs en ligne</h2>
           </div>

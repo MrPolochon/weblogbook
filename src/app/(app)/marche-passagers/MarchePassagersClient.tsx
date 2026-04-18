@@ -422,7 +422,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
       {/* Modal Admin */}
       {showAdminModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-sm w-full mx-4 border border-slate-700">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-sm w-full mx-4 border border-slate-700 max-h-[90dvh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-slate-100">Mode Éditeur</h3>
               <button onClick={() => { setShowAdminModal(false); setAdminError(null); }} className="text-slate-400 hover:text-slate-200" disabled={adminLoading} aria-label="Fermer">
@@ -458,7 +458,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
       {/* Modal Nouvel élément */}
       {showNewItemModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-sm w-full mx-4 border border-slate-700">
+          <div className="bg-slate-800 rounded-xl p-6 max-w-sm w-full mx-4 border border-slate-700 max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-100 mb-4">
               {adminEditMode === 'islands' ? 'Nouvelle île' : 'Nouvelle zone FIR'}
             </h3>

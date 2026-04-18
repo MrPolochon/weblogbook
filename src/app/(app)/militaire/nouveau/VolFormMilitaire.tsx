@@ -256,7 +256,7 @@ export default function VolFormMilitaire({ pilotesArmee, inventaireMilitaire = [
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Aéroport de départ *</label>
           <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required disabled={Boolean(selectedMission)}>
@@ -277,7 +277,7 @@ export default function VolFormMilitaire({ pilotesArmee, inventaireMilitaire = [
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Durée (minutes) *</label>
           <input type="number" className="input" value={duree_minutes} onChange={(e) => setDureeMinutes(e.target.value)} min={1} required />
@@ -316,7 +316,7 @@ export default function VolFormMilitaire({ pilotesArmee, inventaireMilitaire = [
 
       {!isEscadrilleOuEscadron && (
         <>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Rôle *</label>
               <select className="input" value={role_pilote} onChange={(e) => { setRolePilote(e.target.value as 'Pilote' | 'Co-pilote'); setPiloteId(''); setCopiloteId(''); }}>

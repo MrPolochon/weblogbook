@@ -441,7 +441,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   }
 
   return (
-    <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 overflow-hidden" style={{ height: 'calc(100vh - 10rem)' }}>
+    <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 overflow-hidden" style={{ height: 'calc(100dvh - 10rem)' }}>
       <div className="h-full flex">
         {/* Sidebar (desktop) / Tab bar (mobile) */}
         <div className={`${mobileShowDetail ? 'hidden lg:flex' : 'flex'} flex-col border-r border-slate-800/60 shrink-0`}>

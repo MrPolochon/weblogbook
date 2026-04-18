@@ -26,7 +26,7 @@ const CODE_TO_POSITION: Record<string, string> = Object.fromEntries(
 const AEROPORT_CODES: Record<string, string> = {
   'ITKO': '5566', 'IPPH': '5567', 'ILAR': '5568', 'IPAP': '5569',
   'IRFD': '5570', 'IMLR': '5571', 'IZOL': '5572', 'ISAU': '5573',
-  'IJAF': '5574', 'IBLT': '5575', 'IDCS': '5576', 'IGRV': '5577',
+  'IJAF': '5574', 'IBLT': '5575', 'IDCS': '5576', 'IKFL': '5577',
   'IBTH': '5578', 'ISKP': '5579', 'ILKL': '5580', 'IBAR': '5581',
   'IHEN': '5582', 'ITRC': '5583', 'IBRD': '5584', 'IUFO': '5585',
   'IIAB': '5586', 'IGAR': '5587', 'ISCM': '5588', 'ITEY': '5589',

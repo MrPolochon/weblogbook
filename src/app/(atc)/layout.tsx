@@ -88,7 +88,7 @@ export default async function AtcLayout({
 
   return (
     <AtcThemeProvider>
-      <div className="min-h-screen flex flex-col">
+      <div className="min-h-dvh flex flex-col safe-x" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <AtcSessionRealtimeGuard userId={user.id} enService={enService} />
         <InactivityLogout />
         <AutoRefresh intervalSeconds={15} />

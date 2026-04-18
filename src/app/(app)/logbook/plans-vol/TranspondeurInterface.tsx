@@ -111,10 +111,10 @@ export default function TranspondeurInterface({
   };
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl border-2 ${isEmergency ? 'border-red-500 animate-pulse' : 'border-emerald-500/50'} bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 shadow-2xl`}>
+    <div className={`relative overflow-hidden rounded-2xl border-2 ${isEmergency ? 'border-red-500 animate-pulse' : 'border-emerald-500/50'} bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 sm:p-6 shadow-2xl`}>
       {/* Fond radar animé */}
       <div className="absolute inset-0 opacity-10">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px]">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(600px,90vw)] aspect-square">
           <div className="absolute inset-0 rounded-full border border-emerald-500/30 animate-ping" style={{ animationDuration: '3s' }} />
           <div className="absolute inset-[20%] rounded-full border border-emerald-500/20" />
           <div className="absolute inset-[40%] rounded-full border border-emerald-500/10" />

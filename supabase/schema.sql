@@ -12,7 +12,7 @@
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   identifiant TEXT NOT NULL UNIQUE,
-  role TEXT NOT NULL DEFAULT 'pilote' CHECK (role IN ('admin', 'pilote')),
+  role TEXT NOT NULL DEFAULT 'pilote' CHECK (role IN ('admin', 'pilote', 'instructeur', 'atc', 'siavi', 'ifsa')),
   heures_initiales_minutes INTEGER NOT NULL DEFAULT 0,
   blocked_until TIMESTAMPTZ,
   block_reason TEXT,

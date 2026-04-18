@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   BookOpen, LayoutDashboard, FileText, User, Users, LogOut, Radio, Shield,
   ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map,
-  Store, AlertTriangle, Flame, Gauge, Wrench, Eye, Trophy,
+  Store, AlertTriangle, Flame, Gauge, Wrench, Eye, Trophy, Menu, X,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
@@ -42,15 +42,19 @@ export default function NavBar({
   const router = useRouter();
   const [, startTransition] = useTransition();
 
+  // Dropdown Pilote (desktop)
   const [menuOpen, setMenuOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   const [mounted, setMounted] = useState(false);
 
+  // Drawer mobile
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   useEffect(() => { setMounted(true); }, []);
 
-  // Ferme le menu si on clique hors du bouton ET hors du dropdown
+  // Ferme le dropdown Pilote si on clique hors
   useEffect(() => {
     function onMouseDown(e: MouseEvent) {
       const t = e.target as Node | null;
@@ -63,7 +67,18 @@ export default function NavBar({
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, []);
 
-  // Recalcule la position si la fenêtre change pendant que le menu est ouvert
+  // Ferme le drawer mobile au changement de route
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  // Bloque le scroll du body quand le drawer mobile est ouvert
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = ''; };
+    }
+  }, [mobileOpen]);
+
+  // Recalcule la position du dropdown Pilote
   useEffect(() => {
     if (!menuOpen) return;
     function reposition() {
@@ -82,7 +97,6 @@ export default function NavBar({
   function openMenu() {
     if (!triggerRef.current) return;
     const r = triggerRef.current.getBoundingClientRect();
-    // Position calculée AVANT le setState pour éviter le flash au premier rendu
     setDropdownPos({ top: r.bottom + 6, left: r.left });
     setMenuOpen(true);
   }
@@ -134,15 +148,43 @@ export default function NavBar({
 
   const totalAdminBadge = pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount;
 
+  // Badge total affiché sur le hamburger mobile
+  const totalMobileBadge =
+    volsAConfirmerCount
+    + messagesNonLusCount + invitationsCount
+    + allianceInvitationsCount
+    + (isAdmin ? totalAdminBadge : 0)
+    + ((isIfsa || isAdmin) ? signalementsNouveauxCount : 0);
+
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-slate-700/50 bg-[#0b0e1a]"
         style={{ boxShadow: '0 1px 0 rgba(255,255,255,0.04), 0 8px 32px rgba(0,0,0,0.7)' }}
       >
-        <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between gap-3 px-4">
+        <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between gap-2 px-3 sm:px-4">
 
-          {/* ── Navigation principale ──────────────────────────────────── */}
-          <nav className="flex items-center gap-1.5 min-w-0">
+          {/* ══════════════════════════════════════════════════════════════ */}
+          {/*  MOBILE : bouton hamburger                                      */}
+          {/* ══════════════════════════════════════════════════════════════ */}
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Ouvrir le menu"
+            className="md:hidden relative flex items-center gap-2 rounded-lg border border-slate-700/50 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-sky-500/50 hover:bg-sky-500/10 transition-colors shrink-0"
+          >
+            <Menu className="h-4 w-4" />
+            <span>Menu</span>
+            {totalMobileBadge > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white ring-2 ring-[#0b0e1a]">
+                {totalMobileBadge > 99 ? '99+' : totalMobileBadge}
+              </span>
+            )}
+          </button>
+
+          {/* ══════════════════════════════════════════════════════════════ */}
+          {/*  DESKTOP : Navigation principale (md+)                          */}
+          {/* ══════════════════════════════════════════════════════════════ */}
+          <nav className="hidden md:flex items-center gap-1.5 min-w-0">
 
             {/* Espace Pilote dropdown trigger */}
             <div className="relative shrink-0">
@@ -160,8 +202,8 @@ export default function NavBar({
                 )}
               >
                 <Plane className="h-3.5 w-3.5 shrink-0" />
-                <span className="hidden md:inline">Espace Pilote</span>
-                <span className="md:hidden">Pilote</span>
+                <span className="hidden lg:inline">Espace Pilote</span>
+                <span className="lg:hidden">Pilote</span>
                 <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200 shrink-0', menuOpen && 'rotate-180')} />
                 {volsAConfirmerCount > 0 && (
                   <span className="absolute -top-1 -right-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white ring-2 ring-[#0b0e1a]">
@@ -189,7 +231,7 @@ export default function NavBar({
               </Link>
             )}
 
-            <span className="mx-0.5 h-5 w-px bg-slate-700/70 shrink-0 hidden sm:block" />
+            <span className="mx-0.5 h-5 w-px bg-slate-700/70 shrink-0" />
 
             <NavLink href="/instruction" active={pathname.startsWith('/instruction')}>
               <Users className="h-3.5 w-3.5 shrink-0" />
@@ -226,9 +268,11 @@ export default function NavBar({
             </NavLink>
           </nav>
 
-          {/* ── Section droite ──────────────────────────────────────────── */}
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="mr-0.5 h-5 w-px bg-slate-700/70 hidden sm:block" />
+          {/* ══════════════════════════════════════════════════════════════ */}
+          {/*  DESKTOP : Section droite (md+)                                 */}
+          {/* ══════════════════════════════════════════════════════════════ */}
+          <div className="hidden md:flex items-center gap-1.5 shrink-0">
+            <span className="mr-0.5 h-5 w-px bg-slate-700/70" />
 
             {isAdmin && (
               <>
@@ -245,11 +289,11 @@ export default function NavBar({
               </>
             )}
 
-            <span className="mx-0.5 h-5 w-px bg-slate-700/70 hidden sm:block" />
+            <span className="mx-0.5 h-5 w-px bg-slate-700/70" />
 
             <NavLink href="/compte" active={pathname === '/compte'} title="Mon compte">
               <User className="h-3.5 w-3.5 shrink-0" />
-              <span className="hidden sm:inline">Mon compte</span>
+              <span className="hidden lg:inline">Mon compte</span>
             </NavLink>
 
             <button
@@ -259,18 +303,47 @@ export default function NavBar({
               className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold border border-slate-700/50 text-slate-400 transition-colors hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300"
             >
               <LogOut className="h-3.5 w-3.5 shrink-0" />
-              <span className="hidden sm:inline">Déconnexion</span>
+              <span className="hidden lg:inline">Déconnexion</span>
+            </button>
+          </div>
+
+          {/* ══════════════════════════════════════════════════════════════ */}
+          {/*  MOBILE : Section droite (compte + déconnexion en icônes)       */}
+          {/* ══════════════════════════════════════════════════════════════ */}
+          <div className="flex md:hidden items-center gap-1.5 shrink-0">
+            <Link
+              href="/compte"
+              title="Mon compte"
+              className={cn(
+                'flex items-center justify-center h-9 w-9 rounded-lg border transition-colors',
+                pathname === '/compte'
+                  ? 'border-sky-500/50 bg-sky-500/20 text-sky-200'
+                  : 'border-slate-700/50 text-slate-300 hover:border-slate-500/50 hover:bg-slate-800 hover:text-white',
+              )}
+            >
+              <User className="h-4 w-4" />
+            </Link>
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Se déconnecter"
+              aria-label="Se déconnecter"
+              className="flex items-center justify-center h-9 w-9 rounded-lg border border-slate-700/50 text-slate-400 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
             </button>
           </div>
         </div>
       </header>
 
-      {/* ── Dropdown portail (hors header, aucun clipping) ──────────────── */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/*  Dropdown Pilote (desktop) — portail                                */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
       {mounted && menuOpen && createPortal(
         <div
           ref={dropdownRef}
           style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
-          className="w-56 max-h-[calc(100vh-4rem)] overflow-y-auto rounded-2xl border border-slate-600/60 bg-[#0d1120] py-2 shadow-2xl scrollbar-hide"
+          className="w-56 max-h-[calc(100dvh-4rem)] overflow-y-auto rounded-2xl border border-slate-600/60 bg-[#0d1120] py-2 shadow-2xl scrollbar-hide"
         >
           {piloteMenuItems.map((item, idx) => {
             const Icon = item.icon;
@@ -304,7 +377,206 @@ export default function NavBar({
         </div>,
         document.body,
       )}
+
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/*  Drawer MOBILE : menu plein écran                                   */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {mounted && mobileOpen && createPortal(
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+          {/* Overlay */}
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+          />
+          {/* Panel */}
+          <div className="absolute inset-y-0 left-0 w-[85vw] max-w-sm bg-[#0b0e1a] border-r border-slate-700/50 shadow-2xl flex flex-col">
+            {/* Header du drawer */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
+              <span className="text-sm font-semibold text-slate-200">Navigation</span>
+              <button
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                aria-label="Fermer"
+                className="flex items-center justify-center h-9 w-9 rounded-lg border border-slate-700/50 text-slate-400 hover:border-slate-500/50 hover:text-slate-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Contenu scrollable */}
+            <div className="flex-1 overflow-y-auto py-2">
+              {/* À confirmer — bandeau rouge en haut si nécessaire */}
+              {volsAConfirmerCount > 0 && (
+                <Link
+                  href="/logbook/a-confirmer"
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    'mx-2 mb-2 flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold border transition-colors',
+                    pathname === '/logbook/a-confirmer'
+                      ? 'border-red-500/50 bg-red-500/20 text-red-200'
+                      : 'border-red-500/30 bg-red-500/10 text-red-300',
+                  )}
+                >
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span className="flex-1">Vols à confirmer</span>
+                  <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                    {volsAConfirmerCount > 99 ? '99+' : volsAConfirmerCount}
+                  </span>
+                </Link>
+              )}
+
+              {/* Section Pilote */}
+              <MobileSectionLabel>Espace pilote</MobileSectionLabel>
+              {piloteMenuItems.map((item) => (
+                <MobileItem
+                  key={item.href}
+                  href={item.href}
+                  icon={item.icon}
+                  label={item.label}
+                  badge={item.badge}
+                  active={pathname === item.href || (item.href !== '/logbook' && pathname.startsWith(item.href))}
+                  onClick={() => setMobileOpen(false)}
+                />
+              ))}
+
+              {/* Instruction */}
+              <MobileSectionLabel>Instruction</MobileSectionLabel>
+              <MobileItem
+                href="/instruction"
+                icon={Users}
+                label="Instruction"
+                active={pathname.startsWith('/instruction')}
+                onClick={() => setMobileOpen(false)}
+              />
+
+              {/* Admin */}
+              {isAdmin && (
+                <>
+                  <MobileSectionLabel>Administration</MobileSectionLabel>
+                  <MobileItem
+                    href="/admin"
+                    icon={LayoutDashboard}
+                    label="Admin"
+                    badge={totalAdminBadge}
+                    active={pathname.startsWith('/admin')}
+                    accent="purple"
+                    onClick={() => setMobileOpen(false)}
+                  />
+                </>
+              )}
+
+              {/* IFSA */}
+              {(isIfsa || isAdmin) && (
+                <MobileItem
+                  href="/ifsa"
+                  icon={Shield}
+                  label="IFSA"
+                  badge={signalementsNouveauxCount}
+                  active={pathname.startsWith('/ifsa')}
+                  accent="indigo"
+                  onClick={() => setMobileOpen(false)}
+                />
+              )}
+
+              {/* ODW — carte œil du web */}
+              <MobileItem
+                href="/carte-atc"
+                icon={Eye}
+                label="Carte œil du web"
+                active={pathname === '/carte-atc'}
+                accent="emerald"
+                onClick={() => setMobileOpen(false)}
+              />
+
+              {/* Espaces ATC & SIAVI (admin seulement) */}
+              {isAdmin && (
+                <>
+                  <MobileSectionLabel>Autres espaces</MobileSectionLabel>
+                  <MobileItem
+                    href="/atc"
+                    icon={Radio}
+                    label="Espace ATC"
+                    active={pathname.startsWith('/atc')}
+                    accent="emerald"
+                    onClick={() => setMobileOpen(false)}
+                  />
+                  <MobileItem
+                    href="/siavi"
+                    icon={Flame}
+                    label="Espace SIAVI"
+                    active={pathname.startsWith('/siavi')}
+                    accent="red"
+                    onClick={() => setMobileOpen(false)}
+                  />
+                </>
+              )}
+
+              {/* Compte */}
+              <MobileSectionLabel>Compte</MobileSectionLabel>
+              <MobileItem
+                href="/compte"
+                icon={User}
+                label="Mon compte"
+                active={pathname === '/compte'}
+                onClick={() => setMobileOpen(false)}
+              />
+              <button
+                type="button"
+                onClick={() => { setMobileOpen(false); handleLogout(); }}
+                className="w-full mx-2 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
+                style={{ width: 'calc(100% - 1rem)' }}
+              >
+                <LogOut className="h-4 w-4 shrink-0" />
+                <span className="flex-1 text-left">Déconnexion</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </>
+  );
+}
+
+/* ── Helper composants mobile ─────────────────────────────────────────── */
+
+function MobileSectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-4 pt-4 pb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+      {children}
+    </div>
+  );
+}
+
+function MobileItem({
+  href, icon: Icon, label, badge = 0, active, accent = 'default', onClick,
+}: {
+  href: string;
+  icon: typeof BookOpen;
+  label: string;
+  badge?: number;
+  active: boolean;
+  accent?: keyof typeof ACCENT;
+  onClick?: () => void;
+}) {
+  const accentClasses = active ? ACCENT[accent].active : 'text-slate-300 hover:bg-slate-800 hover:text-white border-transparent';
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className={cn(
+        'mx-2 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium border transition-colors',
+        accentClasses,
+      )}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className="flex-1 truncate">{label}</span>
+      {badge > 0 && (
+        <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
+    </Link>
   );
 }
 

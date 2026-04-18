@@ -20,7 +20,7 @@ BEGIN
   ) THEN
     ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
     ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check
-      CHECK (role IN ('admin', 'pilote', 'atc', 'ifsa', 'siavi'));
+      CHECK (role IN ('admin', 'pilote', 'instructeur', 'atc', 'siavi', 'ifsa'));
     RAISE NOTICE '✅ Contrainte role mise à jour';
   END IF;
 END $$;
@@ -243,11 +243,11 @@ INSERT INTO public.vhf_position_frequencies (aeroport, position, frequency) VALU
   ('IMLR', 'Ground',  '121.575'),
   ('IMLR', 'APP',     '119.775'),
   ('IMLR', 'Center',  '129.375'),
-  -- IGRV (Keflavik)
-  ('IGRV', 'Tower',   '119.325'),
-  ('IGRV', 'Ground',  '121.850'),
-  ('IGRV', 'APP',     '120.600'),
-  ('IGRV', 'Center',  '130.275'),
+  -- IKFL (Keflavik)
+  ('IKFL', 'Tower',   '119.325'),
+  ('IKFL', 'Ground',  '121.850'),
+  ('IKFL', 'APP',     '120.600'),
+  ('IKFL', 'Center',  '130.275'),
   -- IPAP (Paphos Intl.) — international
   ('IPAP', 'Tower',   '118.575'),
   ('IPAP', 'Ground',  '121.650'),

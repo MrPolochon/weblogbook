@@ -144,7 +144,7 @@ export default async function AppLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-dvh flex flex-col safe-x" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <InactivityLogout />
       <AutoRefresh intervalSeconds={60} />
       <AdminModeBg />
@@ -164,7 +164,7 @@ export default async function AppLayout({
           </div>
         </div>
       )}
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-5 lg:px-6 py-8">{children}</main>
+      <main className="flex-1 mx-auto w-full max-w-7xl px-3 sm:px-5 lg:px-6 py-4 sm:py-6 lg:py-8">{children}</main>
     </div>
   );
 }

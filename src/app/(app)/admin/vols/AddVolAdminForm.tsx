@@ -183,7 +183,7 @@ export default function AddVolAdminForm({
             </div>
           )}
           {role_pilote === 'Co-pilote' && type_vol !== 'Instruction' && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="label">Pilote (commandant) *</label>
                 <select className="input" value={pilote_commandid} onChange={(e) => setPiloteCommandantId(e.target.value)}>
@@ -228,7 +228,7 @@ export default function AddVolAdminForm({
               </select>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Aéroport départ *</label>
               <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)}>
@@ -248,7 +248,7 @@ export default function AddVolAdminForm({
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Durée (min) *</label>
               <input type="number" className="input" value={duree_minutes} onChange={(e) => setDureeMinutes(e.target.value)} min={1} required />
@@ -280,7 +280,7 @@ export default function AddVolAdminForm({
               })()}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Type vol *</label>
               <select className="input" value={type_vol} onChange={(e) => { const v = e.target.value as 'IFR' | 'VFR' | 'Instruction'; setTypeVol(v); if (v === 'Instruction') setRolePilote('Pilote'); }}>

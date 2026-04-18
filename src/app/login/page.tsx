@@ -749,6 +749,10 @@ function LoginPageContent() {
                 <label className="label text-slate-200">Adresse email</label>
                 <input
                   type="email"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   className="input bg-slate-900/50"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}

@@ -45,7 +45,7 @@ INSERT INTO public.aeroport_cargo (code_oaci, cargo_disponible, cargo_max) VALUE
   ('IBLT', 30000, 30000),
   -- Petits aéroports
   ('IDCS', 2000, 2000),
-  ('IGRV', 15000, 15000),
+  ('IKFL', 15000, 15000),
   ('IBTH', 8000, 8000),
   ('ISKP', 10000, 10000),
   ('ILKL', 3000, 3000),

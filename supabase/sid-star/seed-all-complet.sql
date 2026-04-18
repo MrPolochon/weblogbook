@@ -1,7 +1,7 @@
 -- =============================================================================
 -- SID/STAR COMPLET — Tout en un seul fichier
 -- Exécuter ce fichier dans Supabase SQL Editor pour créer/mettre à jour toutes
--- les procédures SID et STAR (IRFD, ITKO, IBTH, IPPH, ILAR, IIAB, IGRV, IMLR, IPAP, ISAU)
+-- les procédures SID et STAR (IRFD, ITKO, IBTH, IPPH, ILAR, IIAB, IKFL, IMLR, IPAP, ISAU)
 -- =============================================================================
 
 -- 1. Création de la table
@@ -224,7 +224,7 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- =============================================================================
--- 3. SID RESTANTS (IIAB, IGRV, IMLR, IPAP, ISAU)
+-- 3. SID RESTANTS (IIAB, IKFL, IMLR, IPAP, ISAU)
 -- =============================================================================
 
 -- ========== IIAB (McConnell AFB) ==========
@@ -233,14 +233,14 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IIAB', 'SID', 'MCCONNELL 2', 'RADAR VECTORS DCT')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- ========== IGRV (Keflavik) ==========
+-- ========== IKFL (Keflavik) ==========
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
-  ('IGRV', 'SID', 'CELAR 4', 'gvk dct celar'),
-  ('IGRV', 'SID', 'KEFLAVIK 1', 'gvk dct keflavik'),
-  ('IGRV', 'SID', 'HAWKN 1', 'gvk dct hawkin'),
-  ('IGRV', 'SID', 'THENR 3', 'gvk dct thenr'),
-  ('IGRV', 'SID', 'YOUTH 4', 'gvk dct youth'),
-  ('IGRV', 'SID', 'KEFLAVIK 2', 'RADAR VECTORS DCT')
+  ('IKFL', 'SID', 'CELAR 4', 'gvk dct celar'),
+  ('IKFL', 'SID', 'KEFLAVIK 1', 'gvk dct keflavik'),
+  ('IKFL', 'SID', 'HAWKN 1', 'gvk dct hawkin'),
+  ('IKFL', 'SID', 'THENR 3', 'gvk dct thenr'),
+  ('IKFL', 'SID', 'YOUTH 4', 'gvk dct youth'),
+  ('IKFL', 'SID', 'KEFLAVIK 2', 'RADAR VECTORS DCT')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- ========== IMLR (Mellor) ==========
@@ -414,10 +414,10 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('ILAR', 'STAR', 'WESTERN 1.ANYMS', 'anyms dct grass dct rents dct RADAR VECTORS DCT ILAR')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- IGRV
+-- IKFL
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
-  ('IGRV', 'STAR', 'GOLDN 1', 'blank dct thenr dct goldn dct RADAR VECTORS DCT IGRV'),
-  ('IGRV', 'STAR', 'SPACE 1', 'space dct celar dct RADAR VECTORS DCT IGRV')
+  ('IKFL', 'STAR', 'GOLDN 1', 'blank dct thenr dct goldn dct RADAR VECTORS DCT IKFL'),
+  ('IKFL', 'STAR', 'SPACE 1', 'space dct celar dct RADAR VECTORS DCT IKFL')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- IMLR

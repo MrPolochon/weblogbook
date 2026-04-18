@@ -213,7 +213,7 @@ export default function VolForm({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Aéroport de départ *</label>
           <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
@@ -234,7 +234,7 @@ export default function VolForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Durée (minutes) *</label>
           <input
@@ -292,7 +292,7 @@ export default function VolForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Type de vol *</label>
           <select className="input" value={type_vol} onChange={(e) => setTypeVol(e.target.value as 'IFR' | 'VFR' | 'Instruction')}>

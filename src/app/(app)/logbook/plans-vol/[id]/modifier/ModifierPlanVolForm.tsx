@@ -114,7 +114,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
           <p className="text-sm text-red-100/90 mt-1">{plan.refusal_reason}</p>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Aéroport de départ *</label>
           <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
@@ -134,7 +134,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
           </select>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Numéro de vol *</label>
           <input type="text" className="input" value={numero_vol} onChange={(e) => setNumeroVol(e.target.value)} required />
@@ -169,7 +169,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
       )}
       {type_vol === 'IFR' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">SID de départ *</label>
               <input type="text" className="input" value={sid_depart} onChange={(e) => setSidDepart(e.target.value)} required />

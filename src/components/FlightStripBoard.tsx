@@ -384,7 +384,7 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
             {isDragOver && <span className={`text-xs font-bold rounded px-2 py-1 animate-pulse shadow-sm ${isDark ? 'bg-slate-700 text-slate-100' : 'bg-white/70'}`}>Relâcher pour poser</span>}
           </div>
         </div>
-        <div className="flex-1 p-2 space-y-1 overflow-y-auto max-h-[calc(100vh-320px)]">
+        <div className="flex-1 p-2 space-y-1 overflow-y-auto max-h-[calc(100dvh-320px)]">
           {zs.length === 0 ? (
             <div className={`text-center py-8 rounded-lg border-2 border-dashed transition-all ${isDragOver ? (isDark ? 'border-sky-400 bg-sky-950/50' : 'border-sky-400 bg-sky-50') : 'border-transparent'}`}>
               <p className={`text-base font-semibold italic ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>

@@ -50,7 +50,7 @@ export default function PlanVolAnnulerButton({ planId, statut }: Props) {
 
   const modal = mounted && step > 0 ? createPortal(
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={closeModal}>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full" onClick={e => e.stopPropagation()}>
+      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4 max-h-[90dvh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         {step === 1 && (
           <>
             <h3 className="text-lg font-semibold text-slate-100 mb-3">Annuler ce vol ?</h3>

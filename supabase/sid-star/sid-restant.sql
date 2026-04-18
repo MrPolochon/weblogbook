@@ -1,4 +1,4 @@
--- SID restants (IIAB, IGRV, IMLR, IPAP, ISAU)
+-- SID restants (IIAB, IKFL, IMLR, IPAP, ISAU)
 -- Source : c:\Users\bonno\Downloads\SID RESTANT
 -- À exécuter après supabase/add_sid_star.sql
 -- Format identique à seed-all.sql (blocs séparés, variantes VIA et .TRANSITION)
@@ -15,35 +15,35 @@ INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
   ('IIAB', 'SID', 'MCCONNELL 2', 'RADAR VECTORS DCT')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
--- ========== IGRV (Keflavik) ==========
+-- ========== IKFL (Keflavik) ==========
 -- CELAR 4
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
-  ('IGRV', 'SID', 'CELAR 4', 'gvk dct celar')
+  ('IKFL', 'SID', 'CELAR 4', 'gvk dct celar')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- KEFLAVIK 1
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
-  ('IGRV', 'SID', 'KEFLAVIK 1', 'gvk dct keflavik')
+  ('IKFL', 'SID', 'KEFLAVIK 1', 'gvk dct keflavik')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- HAWKN 1
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
-  ('IGRV', 'SID', 'HAWKN 1', 'gvk dct hawkin')
+  ('IKFL', 'SID', 'HAWKN 1', 'gvk dct hawkin')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- THENR 3
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
-  ('IGRV', 'SID', 'THENR 3', 'gvk dct thenr')
+  ('IKFL', 'SID', 'THENR 3', 'gvk dct thenr')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- YOUTH 4
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
-  ('IGRV', 'SID', 'YOUTH 4', 'gvk dct youth')
+  ('IKFL', 'SID', 'YOUTH 4', 'gvk dct youth')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- KEFLAVIK 2 (omnidirectionnel, >>>>>>)
 INSERT INTO public.sid_star (aeroport, type_procedure, nom, route) VALUES
-  ('IGRV', 'SID', 'KEFLAVIK 2', 'RADAR VECTORS DCT')
+  ('IKFL', 'SID', 'KEFLAVIK 2', 'RADAR VECTORS DCT')
 ON CONFLICT (aeroport, type_procedure, nom) DO UPDATE SET route = EXCLUDED.route;
 
 -- ========== IMLR (Mellor) — Rockford FIR, variantes VIA DOCKR/DLREY et .RENDR/.DINER ==========

@@ -161,7 +161,7 @@ export default function LogsClient({ logs, actionTypes }: Props) {
           <span>IP</span>
           <span />
         </div>
-        <div className="max-h-[calc(100vh-18rem)] overflow-y-auto divide-y divide-slate-800/20">
+        <div className="max-h-[calc(100dvh-18rem)] overflow-y-auto divide-y divide-slate-800/20">
           {filtered.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-slate-600">Aucun log</p>
           ) : (

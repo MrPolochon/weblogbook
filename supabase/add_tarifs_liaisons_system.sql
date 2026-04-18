@@ -83,7 +83,7 @@ INSERT INTO public.aeroport_passagers (code_oaci, passagers_disponibles, passage
   ('ILAR', 15000, 15000),  -- international
   ('IIAB', 3000, 3000),    -- militaire
   ('IPAP', 12000, 12000),  -- international touristique
-  ('IGRV', 2000, 2000),    -- petit
+  ('IKFL', 2000, 2000),    -- petit
   ('IJAF', 5000, 5000),    -- regional
   ('IZOL', 10000, 10000),  -- international
   ('ISCM', 2000, 2000),    -- militaire petit
