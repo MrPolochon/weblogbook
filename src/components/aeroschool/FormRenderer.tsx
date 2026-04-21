@@ -101,16 +101,36 @@ export default function FormRenderer({ form }: Props) {
     })();
   }, [remainingSeconds, timeLimitMinutes, form.id, answers, router]);
 
-  const handleCheat = useCallback(async () => {
-    // Soumettre automatiquement avec cheating_detected
+  const handleCheat = useCallback(async (reason: string) => {
     try {
       await fetch(`/api/aeroschool/forms/${form.id}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers, cheating_detected: true }),
+        body: JSON.stringify({ answers, cheating_detected: true, cheat_reason: reason }),
       });
     } catch { /* ignore */ }
   }, [form.id, answers]);
+
+  /** Toast d'avertissement non bloquant (anti-triche) */
+  const [warningToast, setWarningToast] = useState<{ msg: string; key: number } | null>(null);
+  const handleWarning = useCallback((message: string) => {
+    setWarningToast({ msg: message, key: Date.now() });
+  }, []);
+  useEffect(() => {
+    if (!warningToast) return;
+    const t = setTimeout(() => {
+      setWarningToast((w) => (w && w.key === warningToast.key ? null : w));
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [warningToast]);
+
+  /** Refs miroirs des states utilisés par le handler `pagehide` (sinon stale closures). */
+  const answersRef = useRef(answers);
+  const submittedRef = useRef(false);
+  const submittingRef = useRef(false);
+  useEffect(() => { answersRef.current = answers; }, [answers]);
+  useEffect(() => { submittedRef.current = submitted; }, [submitted]);
+  useEffect(() => { submittingRef.current = submitting; }, [submitting]);
 
   // Charger les questions des blocs question_module au démarrage du test
   useEffect(() => {
@@ -161,10 +181,46 @@ export default function FormRenderer({ form }: Props) {
   const { cheatingDetected, presencePromptVisible, confirmPresence } = useAntiCheat({
     enabled: testStarted && antitricheEnabled,
     onCheatDetected: handleCheat,
+    onWarning: handleWarning,
     graceMs: 5000,
-    relaxed: true,
     allowedInteractionRootRef: antiCheatShellRef,
+    debug: process.env.NODE_ENV !== 'production',
   });
+
+  /** Ref miroir de cheatingDetected pour le handler pagehide (évite stale closure). */
+  const cheatingRef = useRef(false);
+  useEffect(() => { cheatingRef.current = cheatingDetected; }, [cheatingDetected]);
+
+  /**
+   * Fermeture du navigateur / onglet pendant le test : envoyer un signal
+   * "abandoned" au serveur via navigator.sendBeacon (garanti par le navigateur
+   * même quand la page se décharge). Le statut est distinct de "trashed"
+   * (triche) pour que l'admin puisse différencier.
+   */
+  useEffect(() => {
+    if (!testStarted || !antitricheEnabled) return;
+
+    const sendAbandonBeacon = () => {
+      if (submittedRef.current || submittingRef.current || cheatingRef.current) return;
+      const currentAnswers = answersRef.current;
+      if (!currentAnswers || Object.keys(currentAnswers).length === 0) return;
+      try {
+        const blob = new Blob(
+          [JSON.stringify({ answers: currentAnswers, status_override: 'abandoned' })],
+          { type: 'application/json' },
+        );
+        navigator.sendBeacon(`/api/aeroschool/forms/${form.id}/submit`, blob);
+      } catch { /* best effort */ }
+    };
+
+    const handlePageHide = (e: PageTransitionEvent) => {
+      if (e.persisted) return;
+      sendAbandonBeacon();
+    };
+
+    window.addEventListener('pagehide', handlePageHide);
+    return () => window.removeEventListener('pagehide', handlePageHide);
+  }, [testStarted, antitricheEnabled, form.id]);
 
   const section = form.sections[currentSection];
   const isLast = currentSection === form.sections.length - 1;
@@ -618,7 +674,20 @@ export default function FormRenderer({ form }: Props) {
         </div>
       </form>
 
-      {/* Notification flottante de confirmation de présence (anti-triche relaxé) */}
+      {/* Toast d'avertissement anti-triche (1ʳᵉ infraction ambiguë) */}
+      {antitricheEnabled && warningToast && (
+        <div
+          key={warningToast.key}
+          className="fixed top-20 left-1/2 -translate-x-1/2 z-[9999] animate-fade-in max-w-md w-[90vw]"
+        >
+          <div className="flex items-start gap-3 px-5 py-3 rounded-xl bg-amber-500/95 text-white font-medium shadow-2xl border border-amber-400 backdrop-blur-sm">
+            <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+            <span className="text-sm leading-snug">{warningToast.msg}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Notification flottante de confirmation de présence */}
       {antitricheEnabled && presencePromptVisible && confirmPresence && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9998] animate-fade-in">
           <button

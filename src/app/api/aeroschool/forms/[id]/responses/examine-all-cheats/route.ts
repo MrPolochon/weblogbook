@@ -19,12 +19,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const admin = createAdminClient();
 
     if (mode === 'all') {
-      // Supprimer les triches/trashed/time_expired
+      // Supprimer les triches/trashed/time_expired/abandoned
       const { data: toDelete } = await admin
         .from('aeroschool_responses')
         .select('id')
         .eq('form_id', formId)
-        .or('cheating_detected.eq.true,status.eq.trashed,status.eq.time_expired');
+        .or('cheating_detected.eq.true,status.eq.trashed,status.eq.time_expired,status.eq.abandoned');
 
       let deleted = 0;
       if (toDelete?.length) {
@@ -50,12 +50,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ ok: true, deleted, reviewed });
     }
 
-    // Mode par défaut : supprimer uniquement les triches
+    // Mode par défaut : supprimer uniquement les triches/abandons
     const { data: toDelete, error: selectErr } = await admin
       .from('aeroschool_responses')
       .select('id')
       .eq('form_id', formId)
-      .or('cheating_detected.eq.true,status.eq.trashed,status.eq.time_expired');
+      .or('cheating_detected.eq.true,status.eq.trashed,status.eq.time_expired,status.eq.abandoned');
 
     if (selectErr) return NextResponse.json({ error: selectErr.message }, { status: 500 });
     if (!toDelete?.length) return NextResponse.json({ ok: true, deleted: 0 });

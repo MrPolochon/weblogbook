@@ -129,10 +129,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const body = await request.json();
-    const { answers, cheating_detected, time_expired } = body;
+    const { answers, cheating_detected, time_expired, cheat_reason, status_override } = body;
 
     if (!answers || typeof answers !== 'object') {
       return NextResponse.json({ error: 'Réponses manquantes' }, { status: 400 });
+    }
+
+    if (cheating_detected && typeof cheat_reason === 'string' && cheat_reason.length <= 100) {
+      console.warn(`[AeroSchool] Triche détectée sur form ${id} — raison: ${cheat_reason}`);
+    }
+
+    const isAbandoned = status_override === 'abandoned';
+    if (isAbandoned) {
+      console.info(`[AeroSchool] Session abandonnée sur form ${id} (fermeture de page)`);
     }
 
     const admin = createAdminClient();
@@ -212,8 +221,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
     }
 
-    // Statut : temps dépassé > triche > soumis
-    const status = time_expired ? 'time_expired' : (cheating_detected ? 'trashed' : 'submitted');
+    // Statut : abandon (fermeture page) > temps dépassé > triche > soumis
+    const status = isAbandoned
+      ? 'abandoned'
+      : time_expired
+        ? 'time_expired'
+        : cheating_detected
+          ? 'trashed'
+          : 'submitted';
 
     const responseRow = {
       form_id: id,
@@ -243,8 +258,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
     }
 
-    // Mode webhook : envoyer un embed Discord puis ne pas stocker (sauf si triche)
-    if (form.delivery_mode === 'webhook' && form.webhook_url && !cheating_detected && !time_expired) {
+    // Mode webhook : envoyer un embed Discord puis ne pas stocker (sauf si triche/abandon/temps écoulé)
+    if (form.delivery_mode === 'webhook' && form.webhook_url && !cheating_detected && !time_expired && !isAbandoned) {
       try {
         const embedPayload = buildDiscordEmbed(
           form.title,

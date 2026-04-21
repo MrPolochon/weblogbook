@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { Landmark, ArrowLeft } from 'lucide-react';
+import { Landmark, ArrowLeft, Shield } from 'lucide-react';
 import Link from 'next/link';
 import FelitzBankSiaviClient from './FelitzBankSiaviClient';
 
@@ -10,11 +10,20 @@ export default async function FelitzBankSiaviPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase.from('profiles').select('role, siavi, identifiant').eq('id', user.id).single();
+  const { data: profile } = await supabase.from('profiles').select('role, siavi, identifiant, siavi_grade_id').eq('id', user.id).single();
   const canSiavi = profile?.role === 'admin' || profile?.role === 'siavi' || profile?.siavi;
   if (!canSiavi) redirect('/logbook');
 
   const admin = createAdminClient();
+
+  let isChef = profile?.role === 'admin';
+  if (!isChef && profile?.siavi_grade_id) {
+    const { data: grade } = await admin.from('siavi_grades')
+      .select('nom')
+      .eq('id', profile.siavi_grade_id)
+      .single();
+    if (grade?.nom === 'Chef de brigade SIAVI') isChef = true;
+  }
 
   // Compte personnel
   const { data: comptePerso } = await admin.from('felitz_comptes')
@@ -32,6 +41,25 @@ export default async function FelitzBankSiaviPage() {
       .order('created_at', { ascending: false })
       .limit(100);
     transactionsPerso = data || [];
+  }
+
+  // Compte SIAVI partagé (visible pour le Chef de brigade)
+  let compteSiavi: { id: string; solde: number; vban: string } | null = null;
+  let transactionsSiavi: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
+  if (isChef) {
+    const { data: cs } = await admin.from('felitz_comptes')
+      .select('id, solde, vban')
+      .eq('type', 'siavi')
+      .single();
+    compteSiavi = cs;
+    if (cs) {
+      const { data: ts } = await admin.from('felitz_transactions')
+        .select('*')
+        .eq('compte_id', cs.id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      transactionsSiavi = ts || [];
+    }
   }
 
   return (
@@ -52,6 +80,33 @@ export default async function FelitzBankSiaviPage() {
           </div>
         </div>
       </div>
+
+      {/* Compte SIAVI partagé (Chef de brigade) */}
+      {isChef && compteSiavi && (
+        <div className="rounded-xl bg-white border-2 border-red-400 shadow-sm p-6">
+          <h2 className="text-lg font-semibold text-red-900 mb-4 flex items-center gap-2">
+            <Shield className="h-5 w-5 text-red-600" />
+            Compte SIAVI (Brigade)
+          </h2>
+          <div className="space-y-4">
+            <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+              <p className="text-sm text-red-600">VBAN</p>
+              <p className="font-mono text-red-900 text-sm break-all">{compteSiavi.vban}</p>
+            </div>
+            <div className="bg-emerald-50 rounded-lg p-4 border border-emerald-200">
+              <p className="text-sm text-emerald-600">Solde Brigade SIAVI</p>
+              <p className="text-3xl font-bold text-emerald-700">
+                {Number(compteSiavi.solde).toLocaleString('fr-FR')} F$
+              </p>
+            </div>
+            <FelitzBankSiaviClient
+              compteId={compteSiavi.id}
+              solde={Number(compteSiavi.solde)}
+              transactions={transactionsSiavi}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Compte Personnel */}
       <div className="rounded-xl bg-white border border-red-200 shadow-sm p-6">

@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { rateLimit } from '@/lib/rate-limit';
+import { isChefDeBrigade, getSiaviCompte } from '@/lib/siavi/permissions';
 
 // GET - Liste des avions disponibles à l'achat
 export async function GET() {
@@ -36,13 +37,14 @@ export async function POST(req: NextRequest) {
     if (!rl.allowed) return NextResponse.json({ error: 'Trop d\'achats, réessayez dans une minute' }, { status: 429 });
 
     const body = await req.json();
-    const { type_avion_id, pour_compagnie_id, nom_personnalise, pour_armee } = body;
+    const { type_avion_id, pour_compagnie_id, nom_personnalise, pour_armee, pour_siavi } = body;
 
     if (!type_avion_id) {
       return NextResponse.json({ error: 'type_avion_id requis' }, { status: 400 });
     }
-    if (pour_armee && pour_compagnie_id) {
-      return NextResponse.json({ error: 'Choisissez soit une compagnie, soit l\'armée.' }, { status: 400 });
+    const exclusifCount = [pour_armee, pour_compagnie_id, pour_siavi].filter(Boolean).length;
+    if (exclusifCount > 1) {
+      return NextResponse.json({ error: 'Choisissez une seule destination : compagnie, armée ou SIAVI.' }, { status: 400 });
     }
 
     const admin = createAdminClient();
@@ -103,6 +105,67 @@ export async function POST(req: NextRequest) {
         type: 'debit',
         montant: avion.prix,
         libelle: `Achat armée ${avion.nom}`
+      });
+
+    } else if (pour_siavi) {
+      // Achat pour la flotte SIAVI - réservé au Chef de brigade
+      const chefOk = await isChefDeBrigade(admin, user.id);
+      if (!chefOk) {
+        return NextResponse.json({ error: 'Seul le Chef de brigade SIAVI peut acheter pour la flotte SIAVI.' }, { status: 403 });
+      }
+
+      const compteSiavi = await getSiaviCompte(admin);
+      if (!compteSiavi) {
+        return NextResponse.json({ error: 'Compte SIAVI introuvable' }, { status: 404 });
+      }
+
+      const soldeSiavi = Number(compteSiavi.solde);
+      if (soldeSiavi < avion.prix) {
+        return NextResponse.json({
+          error: `Solde SIAVI insuffisant. Solde actuel : ${soldeSiavi.toLocaleString('fr-FR')} F$, prix : ${avion.prix.toLocaleString('fr-FR')} F$.`
+        }, { status: 400 });
+      }
+
+      compteId = compteSiavi.id;
+
+      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
+      if (!debitOk) {
+        return NextResponse.json({ error: 'Solde SIAVI insuffisant (transaction concurrente)' }, { status: 400 });
+      }
+
+      const { data: immatSiavi } = await admin.rpc('generer_immatriculation', { prefixe: 'MED-' });
+      const immatriculation = immatSiavi || `MED-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
+      const { data: hubPrincipal } = await admin
+        .from('siavi_hubs')
+        .select('aeroport_oaci')
+        .eq('is_principal', true)
+        .maybeSingle();
+      const aeroportInitial = hubPrincipal?.aeroport_oaci || 'IRFD';
+
+      const { error: insertSiaviErr } = await admin.from('siavi_avions').insert({
+        type_avion_id,
+        immatriculation,
+        nom_personnalise: nom_personnalise || null,
+        aeroport_actuel: aeroportInitial,
+        usure_percent: 100,
+        statut: 'ground',
+        prix_achat: avion.prix,
+      });
+
+      if (insertSiaviErr) {
+        console.error('Marketplace: echec insert siavi_avions:', insertSiaviErr);
+        await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
+        return NextResponse.json({
+          error: `Erreur lors de la création de l'avion SIAVI. Le compte a été recrédité.`,
+        }, { status: 500 });
+      }
+
+      await admin.from('felitz_transactions').insert({
+        compte_id: compteId,
+        type: 'debit',
+        montant: avion.prix,
+        libelle: `Achat flotte SIAVI ${avion.nom}`
       });
 
     } else if (pour_compagnie_id) {
@@ -296,9 +359,11 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ 
       ok: true, 
-      message: pour_compagnie_id 
-        ? `${avion.nom} ajouté à la flotte de ${compagnieNom}` 
-        : `${avion.nom} ajouté à votre inventaire`
+      message: pour_siavi
+        ? `${avion.nom} ajouté à la flotte SIAVI`
+        : pour_compagnie_id 
+          ? `${avion.nom} ajouté à la flotte de ${compagnieNom}` 
+          : `${avion.nom} ajouté à votre inventaire`
     });
   } catch (e) {
     console.error('Marketplace POST:', e);

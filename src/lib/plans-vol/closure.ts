@@ -28,6 +28,7 @@ type PlanPaiement = {
   location_loueur_compagnie_id?: string | null;
   location_pourcentage_revenu_loueur?: number | null;
   compagnie_avion_id?: string | null;
+  siavi_avion_id?: string | null;
   current_afis_user_id?: string | null;
   strip_atd?: string | null;
 };
@@ -777,7 +778,6 @@ export async function finaliserCloturePlan(
       if (plan.accepted_at && plan.demande_cloture_at) {
         const acceptedAt = new Date(plan.accepted_at);
         const demandeCloture = new Date(plan.demande_cloture_at);
-        // L'usure utilise l'heure d'acceptation du plan (pas l'ATD du strip)
         const diffMs = demandeCloture.getTime() - acceptedAt.getTime();
         tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
       }
@@ -794,6 +794,85 @@ export async function finaliserCloturePlan(
           statut: nouveauStatut,
         })
         .eq('id', avion.id);
+    }
+  }
+
+  // -- MEDEVAC: usure flotte SIAVI + revenu --
+  if (plan.siavi_avion_id) {
+    const { data: siaviAvion } = await admin
+      .from('siavi_avions')
+      .select('id, usure_percent, immatriculation')
+      .eq('id', plan.siavi_avion_id)
+      .single();
+
+    if (siaviAvion) {
+      let tempsReelMin = plan.temps_prev_min;
+      if (plan.accepted_at && plan.demande_cloture_at) {
+        const acceptedAt = new Date(plan.accepted_at);
+        const demandeCloture = new Date(plan.demande_cloture_at);
+        const diffMs = demandeCloture.getTime() - acceptedAt.getTime();
+        tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
+      }
+
+      usureAppliquee = calculerUsureVol(tempsReelMin);
+      const nouvelleUsure = Math.max(0, Number(siaviAvion.usure_percent) - usureAppliquee);
+      const nouveauStatut = nouvelleUsure === 0 ? 'bloque' : 'ground';
+
+      await admin
+        .from('siavi_avions')
+        .update({
+          usure_percent: nouvelleUsure,
+          aeroport_actuel: plan.aeroport_arrivee,
+          statut: nouveauStatut,
+        })
+        .eq('id', siaviAvion.id);
+
+      // Calcul revenu MEDEVAC via décote exponentielle
+      const { data: config } = await admin.from('siavi_config').select('*').eq('id', 1).single();
+      if (config) {
+        const retard = Math.max(0, tempsReelMin - plan.temps_prev_min);
+        const base = Number(config.revenu_base_medevac) || 35000;
+        const k = Number(config.decote_exponentielle_k) || 0.02;
+        const plancher = Number(config.revenu_plancher) || 5000;
+        const revenu = Math.max(plancher, Math.round(base * Math.exp(-k * retard)));
+        const pctPilote = Number(config.pourcentage_salaire_pilote) || 40;
+        const salairePilote = Math.round(revenu * pctPilote / 100);
+        const revenuSiavi = revenu - salairePilote;
+
+        const { data: compteSiavi } = await admin.from('felitz_comptes')
+          .select('id')
+          .eq('type', 'siavi')
+          .single();
+
+        if (compteSiavi) {
+          await admin.rpc('crediter_compte_safe', { p_compte_id: compteSiavi.id, p_montant: revenuSiavi });
+          await admin.from('felitz_transactions').insert({
+            compte_id: compteSiavi.id,
+            type: 'credit',
+            montant: revenuSiavi,
+            libelle: `Revenu MEDEVAC vol ${plan.numero_vol || 'N/A'}`
+          });
+        }
+
+        if (salairePilote > 0) {
+          const comptePilote = await ensureComptePersonnel(admin, plan.pilote_id);
+          if (comptePilote) {
+            await admin.from('messages').insert({
+              destinataire_id: plan.pilote_id,
+              expediteur_id: null,
+              titre: `Salaire MEDEVAC - Vol ${plan.numero_vol || 'N/A'}`,
+              contenu: `Vol MEDEVAC effectué avec succès !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min\nRetard: ${retard} min\n\nRevenu total: ${revenu.toLocaleString('fr-FR')} F$\nVotre part (${pctPilote}%): ${salairePilote.toLocaleString('fr-FR')} F$`,
+              type_message: 'cheque_salaire',
+              cheque_montant: salairePilote,
+              cheque_encaisse: false,
+              cheque_destinataire_compte_id: comptePilote.id,
+              cheque_libelle: `Salaire MEDEVAC ${plan.numero_vol || ''}`,
+              cheque_numero_vol: plan.numero_vol || null,
+              cheque_pour_compagnie: false
+            });
+          }
+        }
+      }
     }
   }
 

@@ -64,7 +64,7 @@ export default function AdminResponsesPage() {
   const pendingResponses = responses.filter((r) => r.status !== 'reviewed');
   const reviewedResponses = responses.filter((r) => r.status === 'reviewed');
   const cheatsToExamine = pendingResponses.filter(
-    (r) => r.cheating_detected || r.status === 'trashed' || r.status === 'time_expired'
+    (r) => r.cheating_detected || r.status === 'trashed' || r.status === 'time_expired' || r.status === 'abandoned'
   );
 
   const load = useCallback(async () => {
@@ -158,7 +158,8 @@ export default function AdminResponsesPage() {
   };
 
   const renderResponseCard = (resp: Response) => {
-    const isFlagged = resp.cheating_detected || resp.status === 'trashed' || resp.status === 'time_expired';
+    const isAbandoned = resp.status === 'abandoned';
+    const isFlagged = resp.cheating_detected || resp.status === 'trashed' || resp.status === 'time_expired' || isAbandoned;
     const isReviewed = resp.status === 'reviewed';
 
     return (
@@ -197,6 +198,11 @@ export default function AdminResponsesPage() {
                 {!resp.cheating_detected && resp.status === 'time_expired' && (
                   <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" /> Temps dépassé
+                  </span>
+                )}
+                {!resp.cheating_detected && resp.status === 'abandoned' && (
+                  <span className="text-xs font-bold text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Abandonné
                   </span>
                 )}
                 {isReviewed && (
