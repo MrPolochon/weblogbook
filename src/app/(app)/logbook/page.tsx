@@ -31,7 +31,8 @@ export default async function LogbookPage() {
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'refuse_par_copilote').order('depart_utc', { ascending: false }),
     admin.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, instructeur:profiles!vols_instructeur_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_instructeur').order('depart_utc', { ascending: false }),
     admin.from('plans_vol').select('id').eq('pilote_id', user.id).eq('statut', 'refuse'),
-    admin.from('plans_vol').select('id, numero_vol').eq('pilote_id', user.id).eq('statut', 'cloture').not('accepted_at', 'is', null).not('cloture_at', 'is', null),
+    // Plans civils clôturés seulement : pas les MEDEVAC SIAVI (chronologie = rapport SIAVI, pas carnet via le plan)
+    admin.from('plans_vol').select('id, numero_vol').eq('pilote_id', user.id).eq('statut', 'cloture').is('siavi_avion_id', null).not('accepted_at', 'is', null).not('cloture_at', 'is', null),
   ]);
 
   const isAdmin = profile?.role === 'admin';

@@ -80,8 +80,10 @@ export default function PlanVolCloturerButton({ planId, statut, isMedevac }: Pro
                   Vol clôturé avec succès !
                 </h3>
                 <p className="text-slate-400 text-sm mb-4">
-                  {clotureDirecte 
-                    ? 'Votre vol a été clôturé. Voulez-vous l\'enregistrer dans votre logbook ?'
+                  {clotureDirecte
+                    ? (isMedevac
+                        ? 'Vol MEDEVAC clôturé. La chronologie de mission se remplit dans le rapport SIAVI (ci-dessous), pas dans le carnet de vol pilote lié au plan.'
+                        : 'Votre vol a été clôturé. Voulez-vous l\'enregistrer dans votre logbook ?')
                     : 'La demande de clôture a été envoyée à l\'ATC.'}
                 </p>
                 
@@ -96,6 +98,7 @@ export default function PlanVolCloturerButton({ planId, statut, isMedevac }: Pro
                         Rédiger le rapport MEDEVAC
                       </Link>
                     )}
+                    {!isMedevac && (
                     <Link
                       href={`/logbook/nouveau?plan=${planId}`}
                       className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white transition-colors"
@@ -103,6 +106,7 @@ export default function PlanVolCloturerButton({ planId, statut, isMedevac }: Pro
                       <Plane className="h-4 w-4" />
                       Enregistrer dans le logbook
                     </Link>
+                    )}
                     <button
                       onClick={handleCloseModal}
                       className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-700 hover:bg-slate-600 px-4 py-2 text-sm font-medium text-slate-300 transition-colors"

@@ -330,8 +330,20 @@ export async function POST(request: Request) {
     const planIdToUse = (typeof planIdBody === 'string' && planIdBody.trim()) ? planIdBody.trim() : null;
     if (planIdToUse) {
       const admin = createAdminClient();
-      const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut').eq('id', planIdToUse).single();
-      if (plan && plan.pilote_id === user.id && plan.statut === 'cloture') {
+      const { data: plan } = await admin
+        .from('plans_vol')
+        .select('id, pilote_id, statut, siavi_avion_id')
+        .eq('id', planIdToUse)
+        .single();
+      const { data: rapportLie } = await admin
+        .from('siavi_rapports_medevac')
+        .select('id')
+        .eq('plan_vol_id', planIdToUse)
+        .maybeSingle();
+      const preservePlan =
+        plan?.siavi_avion_id != null ||
+        rapportLie != null;
+      if (plan && plan.pilote_id === user.id && plan.statut === 'cloture' && !preservePlan) {
         await admin.from('plans_vol').delete().eq('id', planIdToUse);
       }
     }

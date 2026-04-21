@@ -18,7 +18,7 @@ export default async function NouveauVolPage() {
     supabase.from('compagnies').select('id, nom').order('nom'),
     supabase.from('profiles').select('id, identifiant').in('role', ['admin', 'instructeur']).order('identifiant'),
     supabase.from('profiles').select('id, identifiant').order('identifiant'),
-    admin.from('plans_vol').select('id, aeroport_depart, aeroport_arrivee, type_vol, numero_vol, accepted_at, cloture_at').eq('pilote_id', user.id).eq('statut', 'cloture').not('accepted_at', 'is', null).not('cloture_at', 'is', null).order('cloture_at', { ascending: false }),
+    admin.from('plans_vol').select('id, aeroport_depart, aeroport_arrivee, type_vol, numero_vol, accepted_at, cloture_at').eq('pilote_id', user.id).eq('statut', 'cloture').is('siavi_avion_id', null).not('accepted_at', 'is', null).not('cloture_at', 'is', null).order('cloture_at', { ascending: false }),
   ]);
 
   const autresProfiles = (allProfiles || []).filter((p) => p.id !== user.id);
