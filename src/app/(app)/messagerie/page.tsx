@@ -35,13 +35,14 @@ export default async function MessageriePage() {
       .select('id, identifiant')
       .neq('id', user.id)
       .order('identifiant'),
-    supabase.from('profiles').select('identifiant').eq('id', user.id).single(),
+    supabase.from('profiles').select('identifiant, role').eq('id', user.id).single(),
   ]);
 
   const messagesRecus = recusResult.data || [];
   const messagesEnvoyes = envoyesResult.data || [];
   const utilisateurs = utilisateursResult.data || [];
   const profile = profileResult.data;
+  const isAdmin = profile?.role === 'admin';
 
   const nonLus = messagesRecus.filter(m => !m.lu).length;
 
@@ -67,6 +68,7 @@ export default async function MessageriePage() {
         messagesEnvoyes={messagesEnvoyes}
         utilisateurs={utilisateurs}
         currentUserIdentifiant={profile?.identifiant || ''}
+        isAdmin={isAdmin}
       />
     </div>
   );

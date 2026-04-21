@@ -3,12 +3,14 @@
 import { useState, useMemo, useTransition, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Inbox, Send, CreditCard, Mail, Trash2, Loader2, Plus, X,
+  Inbox, Send, CreditCard, Mail, Trash2, Loader2, X,
   UserPlus, Check, XCircle, AlertTriangle, Banknote, CheckCheck,
   Reply, Forward, CheckSquare, Search, ArrowLeft, PenLine,
+  Megaphone, User,
 } from 'lucide-react';
 import ChequeVisuel from '@/components/ChequeVisuel';
 import MessageContent from '@/components/MessageContent';
+import BroadcastAudienceSelector, { BroadcastAudience, audienceLabel } from '@/components/BroadcastAudienceSelector';
 import { formatDateTimeUTC } from '@/lib/date-utils';
 import { toast } from 'sonner';
 
@@ -35,6 +37,8 @@ interface Message {
     sanction_id?: string;
     montant_amende?: number;
     amende_payee?: boolean;
+    broadcast_id?: string;
+    broadcast_audience?: string;
   } | null;
   expediteur?: { identifiant: string } | { identifiant: string }[] | null;
   destinataire?: { identifiant: string } | { identifiant: string }[] | null;
@@ -47,6 +51,7 @@ interface Props {
   messagesEnvoyes: Message[];
   utilisateurs: Utilisateur[];
   currentUserIdentifiant: string;
+  isAdmin?: boolean;
 }
 
 function getIdentifiant(obj: { identifiant: string } | { identifiant: string }[] | null | undefined): string {
@@ -87,7 +92,7 @@ function avatar(name: string) {
 
 type TabId = 'inbox' | 'recrutement' | 'cheques' | 'sanctions' | 'sent' | 'compose';
 
-export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant }: Props) {
+export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant, isAdmin = false }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<TabId>('inbox');
@@ -102,10 +107,13 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   const [destDropdownOpen, setDestDropdownOpen] = useState(false);
   const destRef = useRef<HTMLDivElement>(null);
   const [mobileShowDetail, setMobileShowDetail] = useState(false);
+  const [composeMode, setComposeMode] = useState<'individuel' | 'diffusion'>('individuel');
+  const [broadcastAudience, setBroadcastAudience] = useState<BroadcastAudience | null>(null);
   const CHEQUE_TYPES = useMemo(() => ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'cheque_siavi_intervention', 'cheque_siavi_taxes'], []);
   const cheques = useMemo(() => messagesRecus.filter(m => CHEQUE_TYPES.includes(m.type_message)), [messagesRecus, CHEQUE_TYPES]);
   const invitations = useMemo(() => messagesRecus.filter(m => m.type_message === 'recrutement'), [messagesRecus]);
   const sanctions = useMemo(() => messagesRecus.filter(m => ['amende_ifsa', 'relance_amende'].includes(m.type_message)), [messagesRecus]);
+  // Les messages 'broadcast' sont affichés dans l'inbox normal (avec un badge dédié)
   const messagesNormaux = useMemo(() => messagesRecus.filter(m => ![...CHEQUE_TYPES, 'recrutement', 'amende_ifsa', 'relance_amende'].includes(m.type_message)), [messagesRecus, CHEQUE_TYPES]);
   const [processingInvitation, setProcessingInvitation] = useState<string | null>(null);
   const [invitationError, setInvitationError] = useState<string | null>(null);
@@ -213,13 +221,26 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
 
   async function handleSendMessage(e: React.FormEvent) {
     e.preventDefault(); setComposeError(null);
-    if (!composeDestinataire || !composeTitre.trim() || !composeContenu.trim()) { setComposeError('Tous les champs sont requis'); return; }
+    if (!composeTitre.trim() || !composeContenu.trim()) { setComposeError('Titre et contenu requis'); return; }
+    const isBroadcast = isAdmin && composeMode === 'diffusion';
+    if (!isBroadcast && !composeDestinataire) { setComposeError('Destinataire requis'); return; }
+    if (isBroadcast && !broadcastAudience) { setComposeError('Sélectionnez une audience de diffusion'); return; }
     setComposeSending(true);
     try {
-      const res = await fetch('/api/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ destinataire_id: composeDestinataire, titre: composeTitre.trim(), contenu: composeContenu.trim() }) });
+      const payload = isBroadcast
+        ? { broadcast_audience: broadcastAudience, titre: composeTitre.trim(), contenu: composeContenu.trim() }
+        : { destinataire_id: composeDestinataire, titre: composeTitre.trim(), contenu: composeContenu.trim() };
+      const res = await fetch('/api/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error);
-      const n = selectedDestName; setComposeDestinataire(''); setComposeTitre(''); setComposeContenu(''); setDestSearch('');
-      toast.success(`Envoyé à ${n}`); setActiveTab('sent'); startTransition(() => router.refresh());
+      const destName = isBroadcast ? audienceLabel(broadcastAudience!) : selectedDestName;
+      setComposeDestinataire(''); setComposeTitre(''); setComposeContenu(''); setDestSearch('');
+      setBroadcastAudience(null); setComposeMode('individuel');
+      if (isBroadcast && data.recipients_count != null) {
+        toast.success(`Diffusion envoyée à ${data.recipients_count} destinataire${data.recipients_count > 1 ? 's' : ''} (${destName})`);
+      } else {
+        toast.success(`Envoyé à ${destName}`);
+      }
+      setActiveTab('sent'); startTransition(() => router.refresh());
     } catch (e) { setComposeError(e instanceof Error ? e.message : 'Erreur'); } finally { setComposeSending(false); }
   }
 
@@ -240,6 +261,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
     if (CHEQUE_TYPES.includes(msg.type_message)) return 'border-l-emerald-500';
     if (msg.type_message === 'recrutement') return 'border-l-teal-500';
     if (['amende_ifsa', 'relance_amende'].includes(msg.type_message)) return 'border-l-red-500';
+    if (msg.type_message === 'broadcast') return 'border-l-amber-500';
     return 'border-l-violet-500';
   }
 
@@ -249,6 +271,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
     }
     if (msg.type_message === 'recrutement') return <span className={`text-[10px] px-1.5 py-0.5 rounded ${msg.metadata?.invitation_repondue ? 'bg-slate-700/50 text-slate-500' : 'bg-teal-500/15 text-teal-400'}`}>{msg.metadata?.invitation_repondue ? 'Répondu' : 'Offre'}</span>;
     if (['amende_ifsa', 'relance_amende'].includes(msg.type_message)) return <span className={`text-[10px] px-1.5 py-0.5 rounded ${msg.metadata?.amende_payee ? 'bg-slate-700/50 text-slate-500' : 'bg-red-500/15 text-red-400'}`}>{msg.metadata?.amende_payee ? 'Payée' : `${msg.metadata?.montant_amende?.toLocaleString('fr-FR')} F$`}</span>;
+    if (msg.type_message === 'broadcast') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 inline-flex items-center gap-1"><Megaphone className="h-2.5 w-2.5" />Diffusion</span>;
     return null;
   }
 
@@ -386,36 +409,72 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   }
 
   function renderCompose() {
+    const isBroadcast = isAdmin && composeMode === 'diffusion';
+    const canSend = composeTitre.trim() && composeContenu.trim() && (isBroadcast ? !!broadcastAudience : !!composeDestinataire);
     return (
       <form onSubmit={handleSendMessage} className="h-full flex flex-col">
-        <div className="px-4 py-3 border-b border-slate-800/60 shrink-0">
+        <div className="px-4 py-3 border-b border-slate-800/60 shrink-0 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-slate-200">Nouveau message</h3>
+          {isAdmin && (
+            <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-800/60">
+              <button type="button" onClick={() => setComposeMode('individuel')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                  composeMode === 'individuel' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}>
+                <User className="h-3 w-3" />
+                Individuel
+              </button>
+              <button type="button" onClick={() => setComposeMode('diffusion')}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                  composeMode === 'diffusion' ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}>
+                <Megaphone className="h-3 w-3" />
+                Diffusion
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-          <div ref={destRef} className="relative">
-            <label className="text-xs text-slate-500 mb-1 block">À</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-600" />
-              <input type="text" value={composeDestinataire ? selectedDestName : destSearch}
-                onChange={e => { setDestSearch(e.target.value); setComposeDestinataire(''); setDestDropdownOpen(true); }}
-                onFocus={() => setDestDropdownOpen(true)}
-                placeholder="Rechercher…"
-                className="w-full pl-9 pr-8 py-2 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-200 text-sm placeholder:text-slate-600 focus:border-violet-500/40 focus:outline-none" />
-              {composeDestinataire && (
-                <button type="button" onClick={() => { setComposeDestinataire(''); setDestSearch(''); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-300"><X className="h-3 w-3" /></button>
+          {isBroadcast ? (
+            <div>
+              <label className="text-xs text-slate-500 mb-2 block flex items-center gap-1.5">
+                <Megaphone className="h-3 w-3 text-amber-400" />
+                Diffuser à
+              </label>
+              <BroadcastAudienceSelector value={broadcastAudience} onChange={setBroadcastAudience} />
+              {broadcastAudience && (
+                <p className="text-xs text-slate-400 mt-2 pl-1">
+                  Le message sera envoyé à <strong className="text-amber-300">{audienceLabel(broadcastAudience)}</strong>.
+                  Les administrateurs reçoivent toujours une copie.
+                </p>
               )}
             </div>
-            {destDropdownOpen && !composeDestinataire && (
-              <div className="absolute z-20 mt-1 w-full max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-900 shadow-xl">
-                {filteredUtilisateurs.length === 0 ? <p className="px-3 py-2 text-xs text-slate-600">Aucun résultat</p> : filteredUtilisateurs.slice(0, 50).map(u => (
-                  <button key={u.id} type="button" onClick={() => { setComposeDestinataire(u.id); setDestSearch(u.identifiant); setDestDropdownOpen(false); }}
-                    className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 transition-colors flex items-center gap-2">
-                    {avatar(u.identifiant)}<span>{u.identifiant}</span>
-                  </button>
-                ))}
+          ) : (
+            <div ref={destRef} className="relative">
+              <label className="text-xs text-slate-500 mb-1 block">À</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-600" />
+                <input type="text" value={composeDestinataire ? selectedDestName : destSearch}
+                  onChange={e => { setDestSearch(e.target.value); setComposeDestinataire(''); setDestDropdownOpen(true); }}
+                  onFocus={() => setDestDropdownOpen(true)}
+                  placeholder="Rechercher…"
+                  className="w-full pl-9 pr-8 py-2 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-200 text-sm placeholder:text-slate-600 focus:border-violet-500/40 focus:outline-none" />
+                {composeDestinataire && (
+                  <button type="button" onClick={() => { setComposeDestinataire(''); setDestSearch(''); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-300"><X className="h-3 w-3" /></button>
+                )}
               </div>
-            )}
-          </div>
+              {destDropdownOpen && !composeDestinataire && (
+                <div className="absolute z-20 mt-1 w-full max-h-40 overflow-y-auto rounded-lg border border-slate-800 bg-slate-900 shadow-xl">
+                  {filteredUtilisateurs.length === 0 ? <p className="px-3 py-2 text-xs text-slate-600">Aucun résultat</p> : filteredUtilisateurs.slice(0, 50).map(u => (
+                    <button key={u.id} type="button" onClick={() => { setComposeDestinataire(u.id); setDestSearch(u.identifiant); setDestDropdownOpen(false); }}
+                      className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 transition-colors flex items-center gap-2">
+                      {avatar(u.identifiant)}<span>{u.identifiant}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <label className="text-xs text-slate-500 mb-1 block">Objet</label>
             <input type="text" value={composeTitre} onChange={e => setComposeTitre(e.target.value)}
@@ -431,9 +490,12 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
           {composeError && <p className="text-red-400 text-xs">{composeError}</p>}
         </div>
         <div className="px-4 py-3 border-t border-slate-800/60 shrink-0">
-          <button type="submit" disabled={composeSending || !composeDestinataire}
-            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium transition-colors disabled:opacity-40">
-            {composeSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}Envoyer
+          <button type="submit" disabled={composeSending || !canSend}
+            className={`flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-40 ${
+              isBroadcast ? 'bg-amber-600 hover:bg-amber-700' : 'bg-violet-600 hover:bg-violet-700'
+            }`}>
+            {composeSending ? <Loader2 className="h-4 w-4 animate-spin" /> : (isBroadcast ? <Megaphone className="h-4 w-4" /> : <Send className="h-4 w-4" />)}
+            {isBroadcast ? 'Diffuser' : 'Envoyer'}
           </button>
         </div>
       </form>

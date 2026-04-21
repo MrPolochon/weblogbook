@@ -2,10 +2,11 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight, CheckCheck } from 'lucide-react';
+import { Inbox, Send, CreditCard, Mail, MailOpen, Trash2, Loader2, Plus, X, ChevronRight, CheckCheck, Megaphone, User } from 'lucide-react';
 import { toast } from 'sonner';
 import ChequeVisuel from '@/components/ChequeVisuel';
 import MessageContent from '@/components/MessageContent';
+import BroadcastAudienceSelector, { BroadcastAudience, audienceLabel } from '@/components/BroadcastAudienceSelector';
 import { formatDateShortUTC, formatDateTimeUTC } from '@/lib/date-utils';
 
 interface Message {
@@ -37,6 +38,7 @@ interface Props {
   messagesEnvoyes: Message[];
   utilisateurs: Utilisateur[];
   currentUserIdentifiant: string;
+  isAdmin?: boolean;
 }
 
 function getIdentifiant(obj: { identifiant: string } | { identifiant: string }[] | null | undefined): string {
@@ -45,7 +47,7 @@ function getIdentifiant(obj: { identifiant: string } | { identifiant: string }[]
   return obj.identifiant || 'Système';
 }
 
-export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant }: Props) {
+export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant, isAdmin = false }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<'inbox' | 'cheques' | 'sent' | 'compose'>('cheques');
@@ -57,6 +59,8 @@ export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, 
   const [composeContenu, setComposeContenu] = useState('');
   const [composeSending, setComposeSending] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
+  const [composeMode, setComposeMode] = useState<'individuel' | 'diffusion'>('individuel');
+  const [broadcastAudience, setBroadcastAudience] = useState<BroadcastAudience | null>(null);
 
   const cheques = messagesRecus.filter(m => ['cheque_salaire', 'cheque_siavi_intervention', 'cheque_siavi_taxes'].includes(m.type_message));
   const messagesNormaux = messagesRecus.filter(m => !['cheque_salaire', 'cheque_siavi_intervention', 'cheque_siavi_taxes'].includes(m.type_message));
@@ -128,28 +132,36 @@ export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, 
   async function handleSendMessage(e: React.FormEvent) {
     e.preventDefault();
     setComposeError(null);
-    if (!composeDestinataire || !composeTitre.trim() || !composeContenu.trim()) {
-      setComposeError('Tous les champs sont requis');
+    if (!composeTitre.trim() || !composeContenu.trim()) {
+      setComposeError('Titre et contenu requis');
       return;
     }
+    const isBroadcast = isAdmin && composeMode === 'diffusion';
+    if (!isBroadcast && !composeDestinataire) { setComposeError('Destinataire requis'); return; }
+    if (isBroadcast && !broadcastAudience) { setComposeError('Sélectionnez une audience de diffusion'); return; }
 
     setComposeSending(true);
     try {
+      const payload = isBroadcast
+        ? { broadcast_audience: broadcastAudience, titre: composeTitre.trim(), contenu: composeContenu.trim() }
+        : { destinataire_id: composeDestinataire, titre: composeTitre.trim(), contenu: composeContenu.trim() };
       const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          destinataire_id: composeDestinataire,
-          titre: composeTitre.trim(),
-          contenu: composeContenu.trim()
-        })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      
+
+      if (isBroadcast && data.recipients_count != null) {
+        toast.success(`Diffusion envoyée à ${data.recipients_count} destinataire${data.recipients_count > 1 ? 's' : ''} (${audienceLabel(broadcastAudience!)})`);
+      }
+
       setComposeDestinataire('');
       setComposeTitre('');
       setComposeContenu('');
+      setBroadcastAudience(null);
+      setComposeMode('individuel');
       setActiveTab('sent');
       startTransition(() => router.refresh());
     } catch (e) {
@@ -241,21 +253,59 @@ export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, 
         <div className="rounded-xl border border-red-200 bg-white shadow-sm overflow-hidden max-h-[600px] overflow-y-auto">
           {activeTab === 'compose' ? (
             <form onSubmit={handleSendMessage} className="p-4 space-y-4">
-              <h3 className="font-semibold text-red-900">Nouveau message</h3>
-              <div>
-                <label className="block text-sm text-red-700 mb-1">Destinataire</label>
-                <select
-                  value={composeDestinataire}
-                  onChange={e => setComposeDestinataire(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-white border border-red-200 text-slate-800 focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                  required
-                >
-                  <option value="">-- Sélectionner --</option>
-                  {utilisateurs.map(u => (
-                    <option key={u.id} value={u.id}>{u.identifiant}</option>
-                  ))}
-                </select>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-red-900">Nouveau message</h3>
+                {isAdmin && (
+                  <div className="flex items-center gap-1 p-0.5 rounded-lg bg-red-50 border border-red-200">
+                    <button type="button" onClick={() => setComposeMode('individuel')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                        composeMode === 'individuel' ? 'bg-red-600 text-white' : 'text-red-700 hover:text-red-800'
+                      }`}>
+                      <User className="h-3 w-3" />
+                      Individuel
+                    </button>
+                    <button type="button" onClick={() => setComposeMode('diffusion')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                        composeMode === 'diffusion' ? 'bg-amber-600 text-white' : 'text-red-700 hover:text-red-800'
+                      }`}>
+                      <Megaphone className="h-3 w-3" />
+                      Diffusion
+                    </button>
+                  </div>
+                )}
               </div>
+              {isAdmin && composeMode === 'diffusion' ? (
+                <div>
+                  <label className="block text-sm text-red-700 mb-2 flex items-center gap-1.5">
+                    <Megaphone className="h-3.5 w-3.5 text-amber-600" />
+                    Diffuser à
+                  </label>
+                  <div className="p-3 rounded-lg bg-slate-900/95 border border-slate-700">
+                    <BroadcastAudienceSelector value={broadcastAudience} onChange={setBroadcastAudience} />
+                  </div>
+                  {broadcastAudience && (
+                    <p className="text-xs text-red-700 mt-2">
+                      Le message sera envoyé à <strong className="text-amber-700">{audienceLabel(broadcastAudience)}</strong>.
+                      Les administrateurs reçoivent toujours une copie.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm text-red-700 mb-1">Destinataire</label>
+                  <select
+                    value={composeDestinataire}
+                    onChange={e => setComposeDestinataire(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-white border border-red-200 text-slate-800 focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    required
+                  >
+                    <option value="">-- Sélectionner --</option>
+                    {utilisateurs.map(u => (
+                      <option key={u.id} value={u.id}>{u.identifiant}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-sm text-red-700 mb-1">Sujet</label>
                 <input
@@ -280,10 +330,12 @@ export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, 
               <button
                 type="submit"
                 disabled={composeSending}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium transition-colors disabled:opacity-50"
+                className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-white font-medium transition-colors disabled:opacity-50 ${
+                  isAdmin && composeMode === 'diffusion' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-red-600 hover:bg-red-700'
+                }`}
               >
-                {composeSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                Envoyer
+                {composeSending ? <Loader2 className="h-4 w-4 animate-spin" /> : (isAdmin && composeMode === 'diffusion' ? <Megaphone className="h-4 w-4" /> : <Send className="h-4 w-4" />)}
+                {isAdmin && composeMode === 'diffusion' ? 'Diffuser' : 'Envoyer'}
               </button>
             </form>
           ) : (
@@ -344,6 +396,11 @@ export default function MessagerieSiaviClient({ messagesRecus, messagesEnvoyes, 
                             msg.cheque_encaisse ? 'bg-slate-200 text-slate-500' : 'bg-sky-100 text-sky-700'
                           }`}>
                             {msg.cheque_encaisse ? 'Encaissé' : `${msg.cheque_montant?.toLocaleString('fr-FR')} F$ salaire`}
+                          </span>
+                        )}
+                        {msg.type_message === 'broadcast' && (
+                          <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+                            <Megaphone className="h-3 w-3" />Diffusion
                           </span>
                         )}
                       </div>

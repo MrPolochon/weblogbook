@@ -114,6 +114,7 @@ export default async function MessagerieSiaviPage() {
         messagesEnvoyes={messagesEnvoyes || []}
         utilisateurs={utilisateurs || []}
         currentUserIdentifiant={profile?.identifiant || ''}
+        isAdmin={profile?.role === 'admin'}
       />
     </div>
   );
