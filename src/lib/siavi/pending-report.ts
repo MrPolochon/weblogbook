@@ -10,12 +10,16 @@ export async function getPendingMedevacReport(
   admin: AdminClient,
   userId: string
 ): Promise<string | null> {
+  // Ne considérer que le segment final d'une mission (ou un vol sans segment suivant) :
+  // après reprise d'un segment suivant, le segment précédent passe en « cloture » mais garde
+  // medevac_next_plan_id → ne pas forcer le rapport tant que la mission n'est pas terminée.
   const { data: medevacPlans } = await admin
     .from('plans_vol')
     .select('id')
     .eq('pilote_id', userId)
     .eq('statut', 'cloture')
     .not('siavi_avion_id', 'is', null)
+    .is('medevac_next_plan_id', null)
     .order('cloture_at', { ascending: false })
     .limit(10);
 

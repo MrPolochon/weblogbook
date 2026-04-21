@@ -60,20 +60,34 @@ export async function POST(request: Request) {
 
     // Vérifier que le plan de vol existe, est un MEDEVAC et est clôturé
     const { data: plan } = await admin.from('plans_vol')
-      .select('id, numero_vol, aeroport_depart, aeroport_arrivee, siavi_avion_id, statut')
+      .select('id, numero_vol, aeroport_depart, aeroport_arrivee, siavi_avion_id, statut, medevac_mission_id, medevac_next_plan_id')
       .eq('id', plan_vol_id)
       .single();
 
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable' }, { status: 404 });
     if (!plan.siavi_avion_id) return NextResponse.json({ error: 'Ce plan de vol n\'est pas un vol MEDEVAC SIAVI' }, { status: 400 });
+    if (plan.statut !== 'cloture') {
+      return NextResponse.json({ error: 'Le vol doit être clôturé avant d\'enregistrer le rapport.' }, { status: 400 });
+    }
+    // Segment intermédiaire (clôturé lors de l\'activation du segment suivant) : rapport uniquement sur le dernier segment
+    if (plan.medevac_next_plan_id) {
+      return NextResponse.json({ error: 'Le rapport MEDEVAC s\'enregistre sur le dernier segment de mission.' }, { status: 400 });
+    }
 
-    // Vérifier qu'il n'y a pas déjà un rapport
-    const { data: existing } = await admin.from('siavi_rapports_medevac')
+    let missionPlanIds = [plan.id];
+    if (plan.medevac_mission_id) {
+      const { data: missionSegs } = await admin
+        .from('plans_vol')
+        .select('id')
+        .eq('medevac_mission_id', plan.medevac_mission_id);
+      missionPlanIds = (missionSegs || []).map((r) => r.id);
+    }
+    const { data: existingAny } = await admin.from('siavi_rapports_medevac')
       .select('id')
-      .eq('plan_vol_id', plan_vol_id)
+      .in('plan_vol_id', missionPlanIds)
       .maybeSingle();
 
-    if (existing) return NextResponse.json({ error: 'Un rapport existe déjà pour ce vol' }, { status: 400 });
+    if (existingAny) return NextResponse.json({ error: 'Un rapport existe déjà pour cette mission.' }, { status: 400 });
 
     // Récupérer les infos de l'avion SIAVI
     const { data: avion } = await admin.from('siavi_avions')

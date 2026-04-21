@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { ArrowLeft, FileText } from 'lucide-react';
 import Link from 'next/link';
 import RapportMedevacForm from './RapportMedevacForm';
+import { buildSuggestedMedevacChronologieUtc } from '@/lib/siavi/medevac-chronologie-suggest';
 
 export default async function NouveauRapportPage({
   searchParams,
@@ -29,19 +30,19 @@ export default async function NouveauRapportPage({
 
   // Charger le plan de vol MEDEVAC
   const { data: plan } = await admin.from('plans_vol')
-    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, temps_prev_min, type_vol, accepted_at, cloture_at, siavi_avion_id, pilote_id, medevac_mission_id, medevac_segment_index, medevac_total_segments')
+    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, temps_prev_min, type_vol, accepted_at, cloture_at, created_at, siavi_avion_id, pilote_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, statut')
     .eq('id', planId)
     .single();
 
   if (!plan || !plan.siavi_avion_id) redirect('/siavi/rapports');
 
-  // Vérifier qu'il n'y a pas déjà un rapport
-  const { data: existing } = await admin.from('siavi_rapports_medevac')
-    .select('id')
-    .eq('plan_vol_id', planId)
-    .maybeSingle();
-
-  if (existing) redirect(`/siavi/rapports/${existing.id}`);
+  // Rapport seulement après clôture du dernier segment (pas un segment intermédiaire « cloture » lors de la reprise du suivant)
+  if (plan.statut !== 'cloture') {
+    redirect('/siavi/rapports');
+  }
+  if (plan.medevac_next_plan_id) {
+    redirect('/siavi');
+  }
 
   // Charger tous les segments de la mission si c'est un vol multi-segments
   type SegmentInfo = {
@@ -62,6 +63,18 @@ export default async function NouveauRapportPage({
     segments = (segs || []) as SegmentInfo[];
   }
 
+  // Un seul rapport par mission : détecter si un autre segment a déjà un rapport enregistré
+  const missionPlanIds = segments.length > 0 ? segments.map((s) => s.id) : [plan.id];
+  const { data: missionReport } = await admin
+    .from('siavi_rapports_medevac')
+    .select('id')
+    .in('plan_vol_id', missionPlanIds)
+    .maybeSingle();
+
+  if (missionReport) {
+    redirect(`/siavi/rapports/${missionReport.id}`);
+  }
+
   // Charger les infos de l'avion
   const { data: avion } = await admin.from('siavi_avions')
     .select('immatriculation, types_avion:type_avion_id(nom)')
@@ -76,6 +89,28 @@ export default async function NouveauRapportPage({
   const trajetComplet = isMultiSegment
     ? [segments[0].aeroport_depart, ...segments.map(s => s.aeroport_arrivee)].join(' → ')
     : `${plan.aeroport_depart} → ${plan.aeroport_arrivee}`;
+
+  const legsForChrono =
+    segments.length > 0
+      ? segments.map((s) => ({
+          aeroport_depart: s.aeroport_depart,
+          aeroport_arrivee: s.aeroport_arrivee,
+          temps_prev_min: s.temps_prev_min,
+        }))
+      : [
+          {
+            aeroport_depart: plan.aeroport_depart,
+            aeroport_arrivee: plan.aeroport_arrivee,
+            temps_prev_min: plan.temps_prev_min,
+          },
+        ];
+
+  const firstDepIso =
+    (segments[0]?.accepted_at as string | null) ||
+    plan.accepted_at ||
+    plan.created_at;
+  const firstDepartureUtc = new Date(firstDepIso || Date.now());
+  const initialChronologie = buildSuggestedMedevacChronologieUtc(legsForChrono, firstDepartureUtc);
 
   return (
     <div className="space-y-6">
@@ -131,6 +166,7 @@ export default async function NouveauRapportPage({
           aeroport_arrivee: s.aeroport_arrivee,
           segment_index: s.medevac_segment_index,
         }))}
+        initialChronologie={initialChronologie}
       />
     </div>
   );

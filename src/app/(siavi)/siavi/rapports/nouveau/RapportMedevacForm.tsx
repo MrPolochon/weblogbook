@@ -24,11 +24,14 @@ interface Props {
   aircraftType: string;
   commanderDefault: string;
   segments?: SegmentBrief[];
+  /** Suggestion serveur (UTC, alerte fictive 30–60 min avant le 1er départ) */
+  initialChronologie?: TimelineEntry[];
 }
 
 export default function RapportMedevacForm({
   planVolId, numeroVol, aeroportDepart, aeroportArrivee,
-  aircraftRegistration, aircraftType, commanderDefault, segments
+  aircraftRegistration, aircraftType, commanderDefault, segments,
+  initialChronologie,
 }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -37,8 +40,9 @@ export default function RapportMedevacForm({
   const [coPilot, setCoPilot] = useState('');
   const [medicalTeam, setMedicalTeam] = useState('');
 
-  // Timeline par défaut : si multi-segments, on pré-remplit avec toutes les escales
+  // Timeline : suggestions serveur si fournies, sinon libellés sans heures
   const defaultTimeline: TimelineEntry[] = (() => {
+    if (initialChronologie?.length) return initialChronologie;
     if (segments && segments.length > 1) {
       const entries: TimelineEntry[] = [{ heure: '', description: 'MEDEVAC alert activation' }];
       segments.forEach((s) => {
@@ -164,8 +168,13 @@ export default function RapportMedevacForm({
 
       {/* Chronologie */}
       <div className="rounded-xl bg-white border border-red-200 shadow-sm p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider">4. Chronologie de la mission (UTC)</h3>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider">4. Chronologie de la mission (UTC)</h3>
+            <p className="text-xs text-slate-500 mt-1">
+              Heures proposées automatiquement en UTC : alerte fictive entre 30 et 60 minutes avant le 1er départ, puis enchaînement selon les durées prévues par segment. À ajuster selon les heures réelles.
+            </p>
+          </div>
           <button type="button" onClick={addTimelineEntry}
             className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded-lg text-xs font-medium transition-colors">
             <Plus className="h-3.5 w-3.5" /> Ajouter
@@ -178,11 +187,11 @@ export default function RapportMedevacForm({
                 <Clock className="h-3.5 w-3.5 text-red-400" />
                 <input type="text" value={entry.heure} onChange={e => updateTimeline(idx, 'heure', e.target.value)}
                   placeholder="HH:MM"
-                  className="w-full px-2 py-1.5 rounded border border-red-300 focus:ring-2 focus:ring-red-500 font-mono text-sm bg-white" />
+                  className="w-full px-2 py-1.5 rounded border border-red-300 focus:ring-2 focus:ring-red-500 font-mono text-sm bg-white text-slate-900 placeholder-slate-400" />
               </div>
               <input type="text" value={entry.description} onChange={e => updateTimeline(idx, 'description', e.target.value)}
                 placeholder="Description de l'événement..."
-                className="flex-1 px-3 py-1.5 rounded border border-red-300 focus:ring-2 focus:ring-red-500 text-sm bg-white" />
+                className="flex-1 px-3 py-1.5 rounded border border-red-300 focus:ring-2 focus:ring-red-500 text-sm bg-white text-slate-900 placeholder-slate-400" />
               {timeline.length > 1 && (
                 <button type="button" onClick={() => removeTimelineEntry(idx)}
                   className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
