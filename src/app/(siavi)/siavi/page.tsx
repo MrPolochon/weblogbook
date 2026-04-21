@@ -246,7 +246,7 @@ export default async function SiaviPage() {
               )}
               {segmentSuivant && (
                 <Link
-                  href={`/logbook/plans-vol/${segmentSuivant.id}/reprendre`}
+                  href={`/siavi/plan/${segmentSuivant.id}/reprendre`}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium transition-colors"
                 >
                   <ArrowRight className="h-4 w-4" />

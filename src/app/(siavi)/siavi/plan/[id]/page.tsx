@@ -106,6 +106,16 @@ export default async function SiaviPlanPage({ params }: { params: Promise<{ id: 
     controleurIdentifiant = ctrl?.identifiant || null;
   }
 
+  // Si le plan est en pause, charger le segment suivant pour proposer la reprise
+  let segmentSuivantId: string | null = null;
+  if (estLePilote && plan.statut === 'en_pause' && plan.medevac_next_plan_id) {
+    const { data: next } = await admin.from('plans_vol')
+      .select('id, statut')
+      .eq('id', plan.medevac_next_plan_id)
+      .maybeSingle();
+    if (next?.statut === 'planifie_suivant') segmentSuivantId = next.id;
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -173,19 +183,30 @@ export default async function SiaviPlanPage({ params }: { params: Promise<{ id: 
         />
       )}
 
-      {/* Actions pilote : clôturer ou annuler */}
+      {/* Actions pilote : reprendre (si en pause), clôturer, annuler */}
       {estLePilote && statutOuvrable && (
         <div className="rounded-xl border border-red-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <p className="text-sm font-medium text-red-900">Actions sur votre vol</p>
               <p className="text-xs text-slate-500 mt-0.5">
-                {plan.statut === 'en_pause'
-                  ? 'Mission en pause — reprenez depuis la page "Mes plans de vol".'
+                {plan.statut === 'en_pause' && segmentSuivantId
+                  ? 'Mission en pause — activez le segment suivant pour reprendre le vol.'
+                  : plan.statut === 'en_pause'
+                  ? 'Mission en pause.'
                   : 'Clôturez ce segment quand le vol est terminé, ou annulez s\'il n\'a pas décollé.'}
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              {plan.statut === 'en_pause' && segmentSuivantId && (
+                <Link
+                  href={`/siavi/plan/${segmentSuivantId}/reprendre`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium transition-colors"
+                >
+                  <Navigation className="h-3.5 w-3.5" />
+                  Reprendre la mission
+                </Link>
+              )}
               <PlanVolCloturerButton planId={plan.id} statut={plan.statut} isMedevac={!!plan.siavi_avion_id} />
               <PlanVolAnnulerButton planId={plan.id} statut={plan.statut} />
             </div>

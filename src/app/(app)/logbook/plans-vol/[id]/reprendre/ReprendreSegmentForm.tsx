@@ -24,7 +24,13 @@ type Segment = {
 
 type ProcItem = { id: string; nom: string; route: string };
 
-export default function ReprendreSegmentForm({ segment }: { segment: Segment }) {
+interface Props {
+  segment: Segment;
+  /** URL de retour après activation du segment. Par défaut : /logbook/plans-vol. */
+  redirectTo?: string;
+}
+
+export default function ReprendreSegmentForm({ segment, redirectTo = '/logbook/plans-vol' }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const busyRef = useRef(false);
@@ -113,7 +119,7 @@ export default function ReprendreSegmentForm({ segment }: { segment: Segment }) 
       }
 
       setTimeout(() => {
-        startTransition(() => router.push('/logbook/plans-vol'));
+        startTransition(() => router.push(redirectTo));
         router.refresh();
       }, 1500);
     } catch (e) {
