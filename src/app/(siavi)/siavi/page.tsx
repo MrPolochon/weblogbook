@@ -4,7 +4,7 @@ import Link from 'next/link';
 import {
   Flame, Plane, Clock, MapPin, AlertTriangle, ArrowRight, Eye, Radio,
   HeartPulse, ClipboardList, Landmark, TrendingUp, Wrench, CheckCircle2,
-  AlertCircle, Pause, Calendar, Activity, Shield, FileText
+  AlertCircle, Pause, Calendar, Activity, Shield, FileText, Settings
 } from 'lucide-react';
 import SeMettreEnServiceSiaviForm from '../SeMettreEnServiceSiaviForm';
 import HorsServiceSiaviButton from '../HorsServiceSiaviButton';
@@ -233,14 +233,15 @@ export default async function SiaviPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {segmentActif && (
                 <Link
-                  href={`/siavi/plan/${segmentActif.id}`}
+                  href="/logbook/plans-vol"
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors"
+                  title="Transpondeur, clôture, suivi du vol"
                 >
-                  <Eye className="h-4 w-4" />
-                  Voir le vol
+                  <Settings className="h-4 w-4" />
+                  Gérer le vol
                 </Link>
               )}
               {segmentSuivant && (
