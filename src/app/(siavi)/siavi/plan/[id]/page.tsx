@@ -2,10 +2,13 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plane, Clock, FileText, Eye, Radio, Navigation, Users, Package, Ship, Building2, User, Percent, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Plane, Clock, FileText, Eye, Radio, Navigation, Users, Package, Ship, Building2, User, Percent, AlertTriangle, HeartPulse } from 'lucide-react';
 import PrendreVolAfisButton from './PrendreVolAfisButton';
 import RelacherVolAfisButton from './RelacherVolAfisButton';
 import TranspondeurBadgeAtc from '@/components/TranspondeurBadgeAtc';
+import TranspondeurInterface from '@/app/(app)/logbook/plans-vol/TranspondeurInterface';
+import PlanVolCloturerButton from '@/app/(app)/logbook/plans-vol/PlanVolCloturerButton';
+import PlanVolAnnulerButton from '@/app/(app)/logbook/plans-vol/PlanVolAnnulerButton';
 import type { PlanVol } from '@/lib/types';
 
 // Type étendu
@@ -90,6 +93,19 @@ export default async function SiaviPlanPage({ params }: { params: Promise<{ id: 
   const peutPrendre = estAfis && plan.automonitoring && !estSurveillePar && !plan.current_holder_user_id;
   const peutRelacher = estAfis && estMonVol;
 
+  // L'utilisateur est le pilote/créateur du vol : il peut le gérer directement
+  // (transpondeur, clôture, annulation) sans passer par /logbook/plans-vol.
+  const estLePilote = plan.pilote_id === user.id;
+  const statutActif = ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture', 'en_pause'].includes(plan.statut);
+  const statutOuvrable = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture', 'refuse', 'planifie_suivant', 'en_pause'].includes(plan.statut);
+
+  // Identifiant du contrôleur en charge pour l'interface transpondeur
+  let controleurIdentifiant: string | null = null;
+  if (estLePilote && plan.current_holder_user_id) {
+    const { data: ctrl } = await admin.from('profiles').select('identifiant').eq('id', plan.current_holder_user_id).single();
+    controleurIdentifiant = ctrl?.identifiant || null;
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -116,16 +132,66 @@ export default async function SiaviPlanPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
-      {/* Avertissement lecture seule */}
-      <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4">
-        <div className="flex items-center gap-3">
-          <Eye className="h-5 w-5 text-amber-600" />
-          <div>
-            <p className="font-semibold text-amber-800">Mode observation SIAVI</p>
-            <p className="text-amber-700 text-sm">Vous pouvez visualiser les informations du vol mais pas le modifier.</p>
+      {/* Bandeau contextuel : mode pilote (votre vol) OU mode observation SIAVI */}
+      {estLePilote ? (
+        <div className="rounded-xl border-2 border-red-400 bg-red-50 p-4">
+          <div className="flex items-center gap-3">
+            <HeartPulse className="h-5 w-5 text-red-600" />
+            <div>
+              <p className="font-semibold text-red-900">Votre vol MEDEVAC</p>
+              <p className="text-red-700 text-sm">Vous êtes le pilote de ce vol. Gérez le transpondeur et clôturez directement depuis cette page.</p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4">
+          <div className="flex items-center gap-3">
+            <Eye className="h-5 w-5 text-amber-600" />
+            <div>
+              <p className="font-semibold text-amber-800">Mode observation SIAVI</p>
+              <p className="text-amber-700 text-sm">Vous pouvez visualiser les informations du vol mais pas le modifier.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interface pilote complète : transpondeur (si vol actif) */}
+      {estLePilote && statutActif && plan.statut !== 'en_pause' && (
+        <TranspondeurInterface
+          planId={plan.id}
+          numeroVol={plan.numero_vol || ''}
+          aeroportDepart={plan.aeroport_depart || ''}
+          aeroportArrivee={plan.aeroport_arrivee || ''}
+          codeTranspondeur={plan.code_transpondeur ?? null}
+          modeTranspondeur={plan.mode_transpondeur || 'C'}
+          acceptedAt={plan.accepted_at ?? null}
+          statut={plan.statut}
+          controleurIdentifiant={controleurIdentifiant}
+          controleurPosition={plan.current_holder_position ?? null}
+          controleurAeroport={plan.current_holder_aeroport ?? null}
+          automonitoring={plan.automonitoring || false}
+        />
+      )}
+
+      {/* Actions pilote : clôturer ou annuler */}
+      {estLePilote && statutOuvrable && (
+        <div className="rounded-xl border border-red-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-sm font-medium text-red-900">Actions sur votre vol</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {plan.statut === 'en_pause'
+                  ? 'Mission en pause — reprenez depuis la page "Mes plans de vol".'
+                  : 'Clôturez ce segment quand le vol est terminé, ou annulez s\'il n\'a pas décollé.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <PlanVolCloturerButton planId={plan.id} statut={plan.statut} isMedevac={!!plan.siavi_avion_id} />
+              <PlanVolAnnulerButton planId={plan.id} statut={plan.statut} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Info vol principale */}
       <div className="rounded-xl border border-red-200 bg-white p-6 shadow-sm">
@@ -277,8 +343,8 @@ export default async function SiaviPlanPage({ params }: { params: Promise<{ id: 
         )}
       </div>
 
-      {/* Actions AFIS */}
-      {estEnService && estAfis && (
+      {/* Actions AFIS (uniquement si ce n'est pas son propre vol) */}
+      {estEnService && estAfis && !estLePilote && (
         <div className="rounded-xl border border-red-200 bg-white p-6 shadow-sm">
           <h3 className="font-semibold text-red-900 mb-4 flex items-center gap-2">
             <Eye className="h-5 w-5 text-red-600" />

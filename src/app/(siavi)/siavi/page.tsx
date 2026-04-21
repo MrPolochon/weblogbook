@@ -236,7 +236,7 @@ export default async function SiaviPage() {
             <div className="flex items-center gap-2 flex-wrap">
               {segmentActif && (
                 <Link
-                  href="/logbook/plans-vol"
+                  href={`/siavi/plan/${segmentActif.id}`}
                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors"
                   title="Transpondeur, clôture, suivi du vol"
                 >
