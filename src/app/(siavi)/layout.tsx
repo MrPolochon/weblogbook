@@ -7,6 +7,8 @@ import SiaviModeBg from './SiaviModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import SiaviTelephone from './SiaviTelephone';
 import InactivityLogout from '@/components/InactivityLogout';
+import { getPendingMedevacReport } from '@/lib/siavi/pending-report';
+import PendingReportGuard from './PendingReportGuard';
 export default async function SiaviLayout({
   children,
 }: {
@@ -27,6 +29,9 @@ export default async function SiaviLayout({
   if (!canAccessSiavi) redirect('/logbook');
 
   const admin = createAdminClient();
+
+  // Rapport MEDEVAC obligatoire : si l'agent a un vol clôturé sans rapport, le forcer
+  const pendingPlanId = await getPendingMedevacReport(admin, user.id);
 
   // Récupérer la session AFIS
   const { data: session } = await supabase.from('afis_sessions').select('id, aeroport, est_afis, started_at').eq('user_id', user.id).single();
@@ -59,6 +64,7 @@ export default async function SiaviLayout({
 
   return (
     <div className="min-h-dvh flex flex-col safe-x" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      {pendingPlanId && <PendingReportGuard pendingPlanId={pendingPlanId} />}
       <InactivityLogout />
       <AutoRefresh intervalSeconds={15} />
       <SiaviModeBg isAdmin={isAdmin} />

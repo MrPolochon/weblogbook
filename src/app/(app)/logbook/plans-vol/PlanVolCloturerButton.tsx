@@ -4,13 +4,13 @@ import { useState, useEffect, useTransition, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { CheckCircle2, X, Plane } from 'lucide-react';
+import { CheckCircle2, X, Plane, FileText } from 'lucide-react';
 
 const STATUTS_OUVERTS = ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
 
-type Props = { planId: string; statut: string };
+type Props = { planId: string; statut: string; isMedevac?: boolean };
 
-export default function PlanVolCloturerButton({ planId, statut }: Props) {
+export default function PlanVolCloturerButton({ planId, statut, isMedevac }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
@@ -87,6 +87,15 @@ export default function PlanVolCloturerButton({ planId, statut }: Props) {
                 
                 {clotureDirecte && (
                   <div className="flex flex-col gap-2">
+                    {isMedevac && (
+                      <Link
+                        href={`/siavi/rapports/nouveau?plan=${planId}`}
+                        className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 px-4 py-2.5 text-sm font-medium text-white transition-colors"
+                      >
+                        <FileText className="h-4 w-4" />
+                        Rédiger le rapport MEDEVAC
+                      </Link>
+                    )}
                     <Link
                       href={`/logbook/nouveau?plan=${planId}`}
                       className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white transition-colors"

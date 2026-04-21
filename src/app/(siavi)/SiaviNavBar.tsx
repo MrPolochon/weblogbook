@@ -3,7 +3,7 @@
 import { useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Flame, Radio, FileText, Mail, LogOut, Clock, Plane, MapPin, User, LayoutDashboard, Landmark, HeartPulse } from 'lucide-react';
+import { Flame, Radio, FileText, Mail, LogOut, Clock, Plane, MapPin, User, LayoutDashboard, Landmark, HeartPulse, ClipboardList } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -32,6 +32,7 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
     { href: '/siavi', label: 'Centre', icon: Flame },
     { href: '/siavi/medevac/nouveau', label: 'MEDEVAC', icon: HeartPulse },
     { href: '/siavi/flotte', label: 'Flotte', icon: Plane },
+    { href: '/siavi/rapports', label: 'Rapports', icon: ClipboardList },
     { href: '/siavi/documents', label: 'Documents', icon: FileText },
     { href: '/siavi/messagerie', label: 'Messagerie', icon: Mail },
     { href: '/siavi/felitz-bank', label: 'Banque', icon: Landmark },

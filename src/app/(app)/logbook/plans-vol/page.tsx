@@ -32,7 +32,7 @@ export default async function MesPlansVolPage() {
     supabase.from('profiles').select('role, identifiant').eq('id', user.id).single(),
     supabase
       .from('plans_vol')
-      .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring')
+      .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id')
       .eq('pilote_id', user.id)
       .order('created_at', { ascending: false }),
   ]);
@@ -249,7 +249,7 @@ export default async function MesPlansVolPage() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-3">
-                          <PlanVolCloturerButton planId={p.id} statut={p.statut} />
+                          <PlanVolCloturerButton planId={p.id} statut={p.statut} isMedevac={!!p.siavi_avion_id} />
                           <PlanVolAnnulerButton planId={p.id} statut={p.statut} />
                         </div>
                       )}

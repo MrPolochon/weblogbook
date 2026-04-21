@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
-import { Flame, Plane, Clock, MapPin, AlertTriangle, ArrowRight, Activity, Users, Eye, Radio, HeartPulse } from 'lucide-react';
+import { Flame, Plane, Clock, MapPin, AlertTriangle, ArrowRight, Activity, Users, Eye, Radio, HeartPulse, ClipboardList } from 'lucide-react';
 import SeMettreEnServiceSiaviForm from '../SeMettreEnServiceSiaviForm';
 import HorsServiceSiaviButton from '../HorsServiceSiaviButton';
 import { formatDistanceToNow } from 'date-fns';
@@ -148,8 +148,8 @@ export default async function SiaviPage() {
         </div>
       )}
 
-      {/* Actions rapides MEDEVAC & Flotte */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Actions rapides MEDEVAC, Flotte & Rapports */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Link
           href="/siavi/medevac/nouveau"
           className="group relative overflow-hidden rounded-xl border-2 border-red-300 bg-gradient-to-br from-red-50 to-rose-50 p-5 hover:border-red-500 hover:shadow-lg transition-all"
@@ -176,6 +176,21 @@ export default async function SiaviPage() {
             <div>
               <h3 className="text-lg font-bold text-red-900">Flotte SIAVI</h3>
               <p className="text-sm text-red-700">Appareils, hubs et gestion de la brigade</p>
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          href="/siavi/rapports"
+          className="group relative overflow-hidden rounded-xl border-2 border-red-300 bg-gradient-to-br from-red-50 to-rose-50 p-5 hover:border-red-500 hover:shadow-lg transition-all"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-lg bg-red-100 group-hover:bg-red-200 transition-colors">
+              <ClipboardList className="h-6 w-6 text-red-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-red-900">Rapports</h3>
+              <p className="text-sm text-red-700">Rapports de mission MEDEVAC</p>
             </div>
           </div>
         </Link>

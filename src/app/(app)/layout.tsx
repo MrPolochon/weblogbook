@@ -7,6 +7,7 @@ import NavBar from '@/components/NavBar';
 import AdminModeBg from '@/components/AdminModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import InactivityLogout from '@/components/InactivityLogout';
+import { getPendingMedevacReport } from '@/lib/siavi/pending-report';
 
 export default async function AppLayout({
   children,
@@ -22,11 +23,20 @@ export default async function AppLayout({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, armee, ifsa')
+    .select('role, armee, ifsa, siavi')
     .eq('id', uid)
     .single();
 
   if (profile?.role === 'atc') redirect('/atc');
+
+  // Rapport MEDEVAC obligatoire : rediriger vers le formulaire si un vol clôturé n'a pas de rapport
+  const isSiavi = profile?.role === 'admin' || profile?.role === 'siavi' || Boolean(profile?.siavi);
+  if (isSiavi) {
+    const pendingPlanId = await getPendingMedevacReport(admin, uid);
+    if (pendingPlanId) {
+      redirect(`/siavi/rapports/nouveau?plan=${pendingPlanId}`);
+    }
+  }
 
   const isAdmin = profile?.role === 'admin';
   const isInstructeur = profile?.role === 'instructeur';
