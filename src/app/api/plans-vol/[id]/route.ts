@@ -47,7 +47,7 @@ export async function PATCH(
 
     const admin = createAdminClient();
     const { data: plan, error: planError } = await admin.from('plans_vol')
-      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, created_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, type_cargaison_libelle, compagnie_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, created_by_atc, current_afis_user_id')
+      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, created_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, type_cargaison_libelle, compagnie_avion_id, siavi_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, created_by_atc, current_afis_user_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id')
       .eq('id', id)
       .single();
     if (planError) {
@@ -97,11 +97,15 @@ export async function PATCH(
       const closDirect = enAutoSurveillanceActive || (pasAtcAssigne && planAccepte);
       
       const demandeClotureAt = new Date();
-      const newStatut = closDirect ? 'cloture' : 'en_attente_cloture';
+      // Pour un segment MEDEVAC intermédiaire (medevac_next_plan_id défini),
+      // la clôture directe doit aboutir à 'en_pause' et non 'cloture'.
+      const estSegmentIntermediaireMedevac = closDirect && Boolean(plan.medevac_next_plan_id);
+      const statutCibleDirect = estSegmentIntermediaireMedevac ? 'en_pause' as const : 'cloture' as const;
+      const newStatut = closDirect ? statutCibleDirect : 'en_attente_cloture';
 
       // Verrouillage atomique : update conditionnel sur le statut actuel pour éviter les doubles traitements
       const lockUpdate = closDirect
-        ? { statut: 'cloture' as const, demande_cloture_at: demandeClotureAt.toISOString(), cloture_at: demandeClotureAt.toISOString() }
+        ? { statut: statutCibleDirect, demande_cloture_at: demandeClotureAt.toISOString(), cloture_at: demandeClotureAt.toISOString() }
         : { statut: 'en_attente_cloture' as const, demande_cloture_at: demandeClotureAt.toISOString() };
       const { data: locked, error: lockErr } = await admin.from('plans_vol')
         .update(lockUpdate)
@@ -116,52 +120,76 @@ export async function PATCH(
       let usureAppliquee = 0;
       
       if (closDirect) {
-        paiementResult = await envoyerChequesVol(admin, { ...plan, demande_cloture_at: demandeClotureAt.toISOString() }, demandeClotureAt);
-        if (!paiementResult.success) {
-          console.error('Erreur paiement vol:', paiementResult.message);
-          await admin
-            .from('plans_vol')
-            .update({
-              statut: plan.statut,
-              demande_cloture_at: null,
-              cloture_at: null,
-            })
-            .eq('id', id)
-            .eq('statut', 'cloture');
-          return NextResponse.json(
-            { ok: false, error: paiementResult.message || 'Paiement impossible — la clôture a été annulée.', paiement: paiementResult },
-            { status: 400 }
+        // Pour un vol MEDEVAC (en autosurveillance, sans ATC, ou segment intermédiaire),
+        // on délègue à finaliserCloturePlan qui gère correctement l'usure SIAVI,
+        // le revenu MEDEVAC, le salaire pilote et le statut final (cloture / en_pause).
+        if (plan.siavi_avion_id) {
+          const result = await finaliserCloturePlan(
+            admin,
+            { ...plan, demande_cloture_at: demandeClotureAt.toISOString() },
+            demandeClotureAt
           );
-        }
-
-        if (plan.compagnie_avion_id) {
-          const { data: avion } = await admin
-            .from('compagnie_avions')
-            .select('id, usure_percent')
-            .eq('id', plan.compagnie_avion_id)
-            .single();
-          
-          if (avion) {
-            let tempsReelMin = plan.temps_prev_min;
-            if (plan.accepted_at) {
-              const acceptedAt = new Date(plan.accepted_at);
-              const departureTime = parseStripATD(plan.strip_atd, acceptedAt) || acceptedAt;
-              const diffMs = demandeClotureAt.getTime() - departureTime.getTime();
-              tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
-            }
-            
-            usureAppliquee = calculerUsureVol(tempsReelMin);
-            const nouvelleUsure = Math.max(0, avion.usure_percent - usureAppliquee);
-            const nouveauStatut = nouvelleUsure === 0 ? 'bloque' : 'ground';
-            
+          if (!result.success) {
             await admin
-              .from('compagnie_avions')
+              .from('plans_vol')
+              .update({ statut: plan.statut, demande_cloture_at: null, cloture_at: null })
+              .eq('id', id)
+              .in('statut', ['cloture', 'en_pause']);
+            return NextResponse.json(
+              { ok: false, error: result.error || 'Clôture MEDEVAC impossible.', paiement: result.paiementResult },
+              { status: 400 }
+            );
+          }
+          paiementResult = result.paiementResult;
+          usureAppliquee = result.usureAppliquee;
+        } else {
+          paiementResult = await envoyerChequesVol(admin, { ...plan, demande_cloture_at: demandeClotureAt.toISOString() }, demandeClotureAt);
+          if (!paiementResult.success) {
+            console.error('Erreur paiement vol:', paiementResult.message);
+            await admin
+              .from('plans_vol')
               .update({
-                usure_percent: nouvelleUsure,
-                aeroport_actuel: plan.aeroport_arrivee,
-                statut: nouveauStatut,
+                statut: plan.statut,
+                demande_cloture_at: null,
+                cloture_at: null,
               })
-              .eq('id', avion.id);
+              .eq('id', id)
+              .eq('statut', 'cloture');
+            return NextResponse.json(
+              { ok: false, error: paiementResult.message || 'Paiement impossible — la clôture a été annulée.', paiement: paiementResult },
+              { status: 400 }
+            );
+          }
+
+          if (plan.compagnie_avion_id) {
+            const { data: avion } = await admin
+              .from('compagnie_avions')
+              .select('id, usure_percent')
+              .eq('id', plan.compagnie_avion_id)
+              .single();
+            
+            if (avion) {
+              let tempsReelMin = plan.temps_prev_min;
+              if (plan.accepted_at) {
+                const acceptedAt = new Date(plan.accepted_at);
+                const departureTime = parseStripATD(plan.strip_atd, acceptedAt) || acceptedAt;
+                const diffMs = demandeClotureAt.getTime() - departureTime.getTime();
+                tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
+              }
+              
+              usureAppliquee = calculerUsureVol(tempsReelMin);
+              const nouvelleUsure = Math.max(0, avion.usure_percent - usureAppliquee);
+              const nouveauStatut = nouvelleUsure === 0 ? 'bloque' : 'ground';
+              
+              await admin
+                .from('compagnie_avions')
+                .update({
+                  usure_percent: nouvelleUsure,
+                  aeroport_actuel: plan.aeroport_arrivee,
+                  statut: nouveauStatut,
+                })
+                .eq('id', avion.id);
+            }
           }
         }
       }
@@ -282,15 +310,39 @@ export async function PATCH(
           }
         }
       };
-      const remettreAvionAuSol = () => {
+      const remettreAvionAuSol = async () => {
         if (plan.compagnie_avion_id) {
-          return admin.from('compagnie_avions').update({ statut: 'ground', aeroport_actuel: plan.aeroport_depart || undefined }).eq('id', plan.compagnie_avion_id);
+          await admin.from('compagnie_avions').update({ statut: 'ground', aeroport_actuel: plan.aeroport_depart || undefined }).eq('id', plan.compagnie_avion_id);
         }
+        if (plan.siavi_avion_id) {
+          // Remettre l'avion SIAVI au sol à l'aéroport de départ du segment annulé.
+          // Si c'est une mission multi-segments, on reset au départ initial du segment courant.
+          await admin.from('siavi_avions').update({ statut: 'ground', aeroport_actuel: plan.aeroport_depart || undefined }).eq('id', plan.siavi_avion_id);
+        }
+      };
+
+      // Annulation en cascade des segments MEDEVAC futurs (planifie_suivant, en_pause)
+      // pour éviter les segments orphelins dans le système.
+      const annulerCascadeMedevac = async () => {
+        if (!plan.medevac_mission_id) return;
+        await admin.from('plans_vol')
+          .update({
+            statut: 'annule',
+            cloture_at: new Date().toISOString(),
+            current_holder_user_id: null,
+            current_holder_position: null,
+            current_holder_aeroport: null,
+            automonitoring: false,
+          })
+          .eq('medevac_mission_id', plan.medevac_mission_id)
+          .neq('id', id)
+          .in('statut', ['planifie_suivant', 'en_pause']);
       };
 
       if (isAdmin || isAtc) {
         await rembourserPaxEtCargo();
         await remettreAvionAuSol();
+        await annulerCascadeMedevac();
         const { error } = await admin.from('plans_vol').update({
           statut: 'annule',
           cloture_at: new Date().toISOString(),
@@ -324,6 +376,7 @@ export async function PATCH(
         const holderId = plan.current_holder_user_id;
         await rembourserPaxEtCargo();
         await remettreAvionAuSol();
+        await annulerCascadeMedevac();
         const { error: err } = await admin.from('plans_vol').update({
           statut: 'annule',
           cloture_at: new Date().toISOString(),

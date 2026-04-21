@@ -3,10 +3,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { formatDateHourUTC } from '@/lib/date-utils';
-import { ArrowLeft, FileText, AlertCircle, Bell, Plane, Clock, CheckCircle2, XCircle, Timer, ArrowRight, Plus, Radio } from 'lucide-react';
+import { ArrowLeft, FileText, AlertCircle, Bell, Plane, CheckCircle2, XCircle, Timer, ArrowRight, Plus, Radio } from 'lucide-react';
 import PlanVolCloturerButton from './PlanVolCloturerButton';
 import PlanVolAnnulerButton from './PlanVolAnnulerButton';
 import TranspondeurInterface from './TranspondeurInterface';
+import MedevacPauseBanner from './MedevacPauseBanner';
 import type { PlanVol } from '@/lib/types';
 
 const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
@@ -18,6 +19,8 @@ const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: str
   automonitoring: { label: 'Autosurveillance', color: 'text-purple-400', bgColor: 'bg-purple-500/20' },
   en_attente_cloture: { label: 'Clôture demandée', color: 'text-orange-400', bgColor: 'bg-orange-500/20' },
   cloture: { label: 'Clôturé', color: 'text-emerald-400', bgColor: 'bg-emerald-500/20' },
+  en_pause: { label: 'Pause mission', color: 'text-amber-300', bgColor: 'bg-amber-500/10' },
+  planifie_suivant: { label: 'Segment futur', color: 'text-slate-400', bgColor: 'bg-slate-500/10' },
 };
 
 export default async function MesPlansVolPage() {
@@ -32,21 +35,36 @@ export default async function MesPlansVolPage() {
     supabase.from('profiles').select('role, identifiant').eq('id', user.id).single(),
     supabase
       .from('plans_vol')
-      .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id')
+      .select('id, pilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id')
       .eq('pilote_id', user.id)
       .order('created_at', { ascending: false }),
   ]);
 
   if (profile?.role === 'atc') redirect('/logbook');
-  const piloteIdentifiant = profile?.identifiant || 'Pilote';
-  
-  const plans = (raw || []).filter((p: { statut: string }) => !['cloture', 'annule'].includes(p.statut));
-  const plansRefuses = plans.filter((p: { statut: string }) => p.statut === 'refuse');
-  const plansNonClotures = plans.filter((p: { statut: string }) => p.statut !== 'refuse');
-  const plansEnCours = plans.filter((p: { statut: string }) => ['en_cours', 'accepte', 'automonitoring', 'en_attente_cloture'].includes(p.statut));
-  
-  const planActif = plans.find((p: { statut: string }) => ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'].includes(p.statut)) as PlanVol | undefined;
-  const hasActivePlan = !!planActif;
+
+  const allPlans = (raw || []) as unknown as PlanVol[];
+
+  // La liste principale exclut : cloture, annule (terminés), planifie_suivant (segments futurs invisibles)
+  // et en_pause (affichés dans un encart dédié "Pause temporaire").
+  const plans = allPlans.filter(p => !['cloture', 'annule', 'planifie_suivant', 'en_pause'].includes(p.statut));
+  const plansRefuses = plans.filter(p => p.statut === 'refuse');
+  const plansNonClotures = plans.filter(p => p.statut !== 'refuse');
+  const plansEnCours = plans.filter(p => ['en_cours', 'accepte', 'automonitoring', 'en_attente_cloture'].includes(p.statut));
+
+  const planActif = plans.find(p => ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'].includes(p.statut)) as PlanVol | undefined;
+
+  // Détection d'une mission MEDEVAC en pause : segment 'en_pause' avec un segment suivant 'planifie_suivant'
+  const segmentsEnPause = allPlans.filter(p => p.statut === 'en_pause' && p.medevac_next_plan_id);
+  let medevacPause: { segmentClos: PlanVol; segmentSuivant: PlanVol } | null = null;
+  if (segmentsEnPause.length > 0) {
+    const segClos = segmentsEnPause[0];
+    const segSuiv = allPlans.find(p => p.id === segClos.medevac_next_plan_id && p.statut === 'planifie_suivant') as PlanVol | undefined;
+    if (segSuiv) {
+      medevacPause = { segmentClos: segClos, segmentSuivant: segSuiv };
+    }
+  }
+
+  const hasActivePlan = !!planActif || !!medevacPause;
 
   let controleurIdentifiant: string | null = null;
   if (planActif?.current_holder_user_id) {
@@ -125,6 +143,34 @@ export default async function MesPlansVolPage() {
           </div>
         </div>
       </div>
+
+      {/* Pause mission MEDEVAC : segment clôturé + segment suivant à activer */}
+      {medevacPause && (
+        <MedevacPauseBanner
+          segmentClos={{
+            id: medevacPause.segmentClos.id,
+            numero_vol: medevacPause.segmentClos.numero_vol,
+            aeroport_depart: medevacPause.segmentClos.aeroport_depart,
+            aeroport_arrivee: medevacPause.segmentClos.aeroport_arrivee,
+            type_vol: medevacPause.segmentClos.type_vol,
+            temps_prev_min: medevacPause.segmentClos.temps_prev_min || 0,
+            medevac_segment_index: medevacPause.segmentClos.medevac_segment_index ?? null,
+            medevac_total_segments: medevacPause.segmentClos.medevac_total_segments ?? null,
+            statut: medevacPause.segmentClos.statut,
+          }}
+          segmentSuivant={{
+            id: medevacPause.segmentSuivant.id,
+            numero_vol: medevacPause.segmentSuivant.numero_vol,
+            aeroport_depart: medevacPause.segmentSuivant.aeroport_depart,
+            aeroport_arrivee: medevacPause.segmentSuivant.aeroport_arrivee,
+            type_vol: medevacPause.segmentSuivant.type_vol,
+            temps_prev_min: medevacPause.segmentSuivant.temps_prev_min || 0,
+            medevac_segment_index: medevacPause.segmentSuivant.medevac_segment_index ?? null,
+            medevac_total_segments: medevacPause.segmentSuivant.medevac_total_segments ?? null,
+            statut: medevacPause.segmentSuivant.statut,
+          }}
+        />
+      )}
 
       {/* Interface Transpondeur - Vol actif */}
       {planActif && (

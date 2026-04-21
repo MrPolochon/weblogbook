@@ -21,10 +21,11 @@ export default async function NouveauMedevacPage() {
   const admin = createAdminClient();
 
   // Vérifier si un plan actif existe déjà pour cet agent
+  // 'en_pause' et 'planifie_suivant' indiquent une mission MEDEVAC multi-segments en cours
   const { count: plansActifs } = await admin.from('plans_vol')
     .select('*', { count: 'exact', head: true })
     .eq('pilote_id', user.id)
-    .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
+    .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture', 'en_pause', 'planifie_suivant']);
 
   if (plansActifs && plansActifs > 0) {
     redirect('/siavi?active=true');

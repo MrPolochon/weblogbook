@@ -2,7 +2,7 @@ export type Role = 'admin' | 'pilote' | 'atc' | 'ifsa' | 'siavi';
 export type VolStatut = 'en_attente' | 'validé' | 'refusé';
 export type TypeVol = 'IFR' | 'VFR';
 export type RolePilote = 'Pilote' | 'Co-pilote';
-export type PlanStatut = 'depose' | 'en_attente' | 'accepte' | 'refuse' | 'en_cours' | 'automonitoring' | 'en_attente_cloture' | 'cloture' | 'annule';
+export type PlanStatut = 'depose' | 'en_attente' | 'accepte' | 'refuse' | 'en_cours' | 'automonitoring' | 'en_attente_cloture' | 'cloture' | 'annule' | 'planifie_suivant' | 'en_pause';
 export type NatureTransport = 'passagers' | 'cargo' | 'mixte';
 export type TypeCargaison = 'generale' | 'dangereuse' | 'perissable' | 'vivante' | 'urgente';
 
@@ -23,6 +23,8 @@ export interface PlanVol {
   carburant_minutes?: number | null;
   callsign?: string | null;
   statut: PlanStatut;
+  temps_prev_min?: number;
+  refusal_reason?: string | null;
   
   // Transpondeur
   code_transpondeur?: string | null;
@@ -67,6 +69,13 @@ export interface PlanVol {
   strip_note_3?: string | null;
   strip_zone?: string | null;
   strip_order?: number;
+
+  // MEDEVAC multi-segments
+  siavi_avion_id?: string | null;
+  medevac_mission_id?: string | null;
+  medevac_segment_index?: number | null;
+  medevac_total_segments?: number | null;
+  medevac_next_plan_id?: string | null;
 
   // Relations enrichies (optionnelles)
   pilote?: { identifiant: string } | null;

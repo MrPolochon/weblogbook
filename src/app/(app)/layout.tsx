@@ -62,7 +62,7 @@ export default async function AppLayout({
       supabase.from('vols').select('*', { count: 'exact', head: true }).eq('pilote_id', uid).eq('statut', 'en_attente_confirmation_pilote'),
       supabase.from('vols').select('*', { count: 'exact', head: true }).eq('copilote_id', uid).eq('statut', 'en_attente_confirmation_copilote'),
       admin.from('vols').select('*', { count: 'exact', head: true }).eq('instructeur_id', uid).eq('statut', 'en_attente_confirmation_instructeur'),
-      supabase.from('plans_vol').select('*', { count: 'exact', head: true }).eq('pilote_id', uid).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']),
+      supabase.from('plans_vol').select('*', { count: 'exact', head: true }).eq('pilote_id', uid).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture', 'en_pause', 'planifie_suivant']),
       admin.from('messages').select('*', { count: 'exact', head: true }).eq('destinataire_id', uid).eq('lu', false),
       admin.from('compagnie_invitations').select('*', { count: 'exact', head: true }).eq('pilote_id', uid).eq('statut', 'en_attente'),
     ]),

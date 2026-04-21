@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
-import { HeartPulse, Plane, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { HeartPulse, Plane, AlertCircle, CheckCircle2, Loader2, Plus, Trash2, ArrowRight, MapPin } from 'lucide-react';
 
 interface TypeAvion {
   id: string;
@@ -36,6 +36,43 @@ function firstTypeAvion(ta: TypeAvion | TypeAvion[] | null | undefined): TypeAvi
 }
 
 const aeroports = AEROPORTS_PTFS.map(a => ({ code: a.code, nom: a.nom }));
+const MAX_SEGMENTS = 5;
+
+type ProcItem = { id: string; nom: string; route: string };
+
+type SegmentForm = {
+  aeroport_arrivee: string;
+  temps_prev_min: string;
+  type_vol: 'VFR' | 'IFR';
+  intentions_vol: string;
+  sid_depart: string;
+  star_arrivee: string;
+  route_ifr: string;
+  niveau_croisiere: string;
+  selectedSidRoute: string | null;
+  selectedStarRoute: string | null;
+  manualRoutePart: string;
+  sidCustomMode: boolean;
+  starCustomMode: boolean;
+};
+
+function emptySegment(): SegmentForm {
+  return {
+    aeroport_arrivee: '',
+    temps_prev_min: '',
+    type_vol: 'VFR',
+    intentions_vol: '',
+    sid_depart: '',
+    star_arrivee: '',
+    route_ifr: '',
+    niveau_croisiere: '',
+    selectedSidRoute: null,
+    selectedStarRoute: null,
+    manualRoutePart: '',
+    sidCustomMode: false,
+    starCustomMode: false,
+  };
+}
 
 export default function DepotPlanMedevacForm({ flotte }: Props) {
   const router = useRouter();
@@ -43,26 +80,15 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
   const submitBusyRef = useRef(false);
 
   const [aeroport_depart, setAeroportDepart] = useState('');
-  const [aeroport_arrivee, setAeroportArrivee] = useState('');
   const [numero_vol, setNumeroVol] = useState('');
-  const [temps_prev_min, setTempsPrevMin] = useState('');
-  const [type_vol, setTypeVol] = useState<'VFR' | 'IFR'>('VFR');
-  const [intentions_vol, setIntentionsVol] = useState('');
-  const [sid_depart, setSidDepart] = useState('');
-  const [star_arrivee, setStarArrivee] = useState('');
-  const [route_ifr, setRouteIfr] = useState('');
-  const [niveau_croisiere, setNiveauCroisiere] = useState('');
   const [siavi_avion_id, setSiaviAvionId] = useState('');
   const [vol_sans_atc, setVolSansAtc] = useState(false);
   const [showNoAtcConfirm, setShowNoAtcConfirm] = useState(false);
 
-  const [sidList, setSidList] = useState<{ id: string; nom: string; route: string }[]>([]);
-  const [starList, setStarList] = useState<{ id: string; nom: string; route: string }[]>([]);
-  const [selectedSidRoute, setSelectedSidRoute] = useState<string | null>(null);
-  const [selectedStarRoute, setSelectedStarRoute] = useState<string | null>(null);
-  const [manualRoutePart, setManualRoutePart] = useState('');
-  const [sidCustomMode, setSidCustomMode] = useState(false);
-  const [starCustomMode, setStarCustomMode] = useState(false);
+  const [segments, setSegments] = useState<SegmentForm[]>([emptySegment()]);
+
+  const [sidCache, setSidCache] = useState<Record<string, ProcItem[]>>({});
+  const [starCache, setStarCache] = useState<Record<string, ProcItem[]>>({});
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,45 +112,77 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
     }
   }, [aeroport_depart, flotte, siavi_avion_id]);
 
-  useEffect(() => {
-    if (!aeroport_depart || type_vol !== 'IFR') { setSidList([]); setSelectedSidRoute(null); return; }
-    fetch(`/api/sid-star?aeroport=${encodeURIComponent(aeroport_depart)}&type=SID`)
-      .then(r => r.json()).then(d => setSidList(Array.isArray(d) ? d : []))
-      .catch(() => setSidList([]));
-    setSidDepart(''); setSelectedSidRoute(null); setManualRoutePart(''); setSidCustomMode(false);
-  }, [aeroport_depart, type_vol]);
+  function segmentDepart(index: number): string {
+    if (index === 0) return aeroport_depart;
+    return segments[index - 1]?.aeroport_arrivee || '';
+  }
+
+  async function fetchSidStar(kind: 'SID' | 'STAR', aeroport: string): Promise<ProcItem[]> {
+    if (!aeroport) return [];
+    const cacheKey = aeroport.toUpperCase();
+    const cache = kind === 'SID' ? sidCache : starCache;
+    if (cache[cacheKey]) return cache[cacheKey];
+    try {
+      const r = await fetch(`/api/sid-star?aeroport=${encodeURIComponent(aeroport)}&type=${kind}`);
+      const d = await r.json();
+      const list: ProcItem[] = Array.isArray(d) ? d : [];
+      if (kind === 'SID') setSidCache(prev => ({ ...prev, [cacheKey]: list }));
+      else setStarCache(prev => ({ ...prev, [cacheKey]: list }));
+      return list;
+    } catch { return []; }
+  }
 
   useEffect(() => {
-    if (!aeroport_arrivee || type_vol !== 'IFR') { setStarList([]); setSelectedStarRoute(null); return; }
-    fetch(`/api/sid-star?aeroport=${encodeURIComponent(aeroport_arrivee)}&type=STAR`)
-      .then(r => r.json()).then(d => setStarList(Array.isArray(d) ? d : []))
-      .catch(() => setStarList([]));
-    setStarArrivee(''); setSelectedStarRoute(null); setManualRoutePart(''); setStarCustomMode(false);
-  }, [aeroport_arrivee, type_vol]);
+    segments.forEach((seg, idx) => {
+      if (seg.type_vol !== 'IFR') return;
+      const dep = idx === 0 ? aeroport_depart : segments[idx - 1]?.aeroport_arrivee;
+      if (dep) fetchSidStar('SID', dep);
+      if (seg.aeroport_arrivee) fetchSidStar('STAR', seg.aeroport_arrivee);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segments, aeroport_depart]);
 
   useEffect(() => {
-    if (type_vol !== 'IFR') return;
-    setRouteIfr(buildRouteWithManual(selectedSidRoute, manualRoutePart, selectedStarRoute));
-  }, [type_vol, selectedSidRoute, selectedStarRoute, manualRoutePart]);
+    setSegments(prev => prev.map(seg => {
+      if (seg.type_vol !== 'IFR') return seg;
+      const newRoute = buildRouteWithManual(seg.selectedSidRoute, seg.manualRoutePart, seg.selectedStarRoute);
+      if (newRoute === seg.route_ifr) return seg;
+      return { ...seg, route_ifr: newRoute };
+    }));
+  }, [segments.map(s => `${s.type_vol}|${s.selectedSidRoute}|${s.selectedStarRoute}|${s.manualRoutePart}`).join('#')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function getFormData(volSansAtc = false) {
-    return {
-      aeroport_depart,
-      aeroport_arrivee,
-      numero_vol: numero_vol.trim(),
-      temps_prev_min: parseInt(temps_prev_min, 10),
-      type_vol,
-      intentions_vol: type_vol === 'VFR' ? intentions_vol.trim() : undefined,
-      sid_depart: type_vol === 'IFR' ? sid_depart.trim() : undefined,
-      star_arrivee: type_vol === 'IFR' ? star_arrivee.trim() : undefined,
-      route_ifr: type_vol === 'IFR' && route_ifr.trim() ? stripRouteBrackets(route_ifr).trim() : undefined,
-      niveau_croisiere: type_vol === 'IFR' && niveau_croisiere.trim() ? niveau_croisiere.trim().replace(/^FL\s*/i, '') : undefined,
-      strip_route: type_vol === 'IFR' && (sid_depart.trim() || star_arrivee.trim())
-        ? (stripRouteBrackets(route_ifr).trim() || (selectedSidRoute && selectedStarRoute ? joinSidStarRoute(selectedSidRoute, selectedStarRoute) : [selectedSidRoute, selectedStarRoute].filter(Boolean).join(' ')) || 'RADAR VECTORS DCT')
-        : undefined,
-      siavi_avion_id,
-      vol_sans_atc: volSansAtc,
-    };
+  function updateSegment(index: number, patch: Partial<SegmentForm>) {
+    setSegments(prev => prev.map((s, i) => i === index ? { ...s, ...patch } : s));
+  }
+
+  function addSegment() {
+    if (segments.length >= MAX_SEGMENTS) return;
+    setSegments(prev => [...prev, emptySegment()]);
+  }
+
+  function removeSegment(index: number) {
+    if (segments.length <= 1) return;
+    setSegments(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function buildSegmentsPayload() {
+    return segments.map((seg, idx) => {
+      const dep = idx === 0 ? aeroport_depart : segments[idx - 1].aeroport_arrivee;
+      return {
+        aeroport_depart: dep.toUpperCase(),
+        aeroport_arrivee: seg.aeroport_arrivee.toUpperCase(),
+        temps_prev_min: parseInt(seg.temps_prev_min, 10),
+        type_vol: seg.type_vol,
+        intentions_vol: seg.type_vol === 'VFR' ? seg.intentions_vol.trim() : undefined,
+        sid_depart: seg.type_vol === 'IFR' ? seg.sid_depart.trim() : undefined,
+        star_arrivee: seg.type_vol === 'IFR' ? seg.star_arrivee.trim() : undefined,
+        route_ifr: seg.type_vol === 'IFR' && seg.route_ifr.trim() ? stripRouteBrackets(seg.route_ifr).trim() : undefined,
+        niveau_croisiere: seg.type_vol === 'IFR' && seg.niveau_croisiere.trim() ? seg.niveau_croisiere.trim().replace(/^FL\s*/i, '') : undefined,
+        strip_route: seg.type_vol === 'IFR' && (seg.sid_depart.trim() || seg.star_arrivee.trim())
+          ? (stripRouteBrackets(seg.route_ifr).trim() || (seg.selectedSidRoute && seg.selectedStarRoute ? joinSidStarRoute(seg.selectedSidRoute, seg.selectedStarRoute) : [seg.selectedSidRoute, seg.selectedStarRoute].filter(Boolean).join(' ')) || 'RADAR VECTORS DCT')
+          : undefined,
+      };
+    });
   }
 
   async function handleSubmit(e: React.FormEvent, forceNoAtc = false) {
@@ -132,21 +190,36 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
     if (submitBusyRef.current) return;
     setError(null); setSuccess(null);
 
-    if (!aeroport_depart || !aeroport_arrivee) { setError('Sélectionnez les aéroports.'); return; }
+    if (!aeroport_depart) { setError('Sélectionnez l\'aéroport de départ.'); return; }
     if (!numero_vol.trim() || !/^\d+$/.test(numero_vol.trim())) { setError('Numéro de vol requis (chiffres uniquement). Le préfixe MEDEVAC est ajouté automatiquement.'); return; }
-    if (!temps_prev_min || parseInt(temps_prev_min) < 1) { setError('Temps prévu invalide.'); return; }
-    if (type_vol === 'IFR' && (!sid_depart.trim() || !star_arrivee.trim())) { setError('SID et STAR requises pour IFR.'); return; }
-    if (type_vol === 'VFR' && !intentions_vol.trim()) { setError('Intentions de vol requises pour VFR.'); return; }
     if (!siavi_avion_id) { setError('Sélectionnez un avion SIAVI.'); return; }
+
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      const dep = i === 0 ? aeroport_depart : segments[i - 1].aeroport_arrivee;
+      if (!seg.aeroport_arrivee) { setError(`Segment ${i + 1} : destination requise.`); return; }
+      if (dep.toUpperCase() === seg.aeroport_arrivee.toUpperCase()) { setError(`Segment ${i + 1} : la destination doit être différente du départ (${dep}).`); return; }
+      if (!seg.temps_prev_min || parseInt(seg.temps_prev_min, 10) < 1) { setError(`Segment ${i + 1} : temps prévu invalide.`); return; }
+      if (seg.type_vol === 'IFR' && (!seg.sid_depart.trim() || !seg.star_arrivee.trim())) { setError(`Segment ${i + 1} : SID et STAR requises pour IFR.`); return; }
+      if (seg.type_vol === 'VFR' && !seg.intentions_vol.trim()) { setError(`Segment ${i + 1} : intentions de vol requises pour VFR.`); return; }
+    }
 
     submitBusyRef.current = true;
     setLoading(true);
 
     try {
+      const payload = {
+        aeroport_depart: aeroport_depart.toUpperCase(),
+        numero_vol: numero_vol.trim(),
+        siavi_avion_id,
+        vol_sans_atc: forceNoAtc || vol_sans_atc,
+        segments: buildSegmentsPayload(),
+      };
+
       const res = await fetch('/api/siavi/medevac', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(getFormData(forceNoAtc)),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
 
@@ -158,10 +231,12 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
         throw new Error(data.error || 'Erreur');
       }
 
+      const nbSeg = segments.length;
+      const suffixe = nbSeg > 1 ? ` (mission ${nbSeg} segments)` : '';
       if (data.atc_contact) {
-        setSuccess(`Vol MEDEVAC${numero_vol.trim()} déposé ! Contactez ${data.atc_contact.nom} sur ${data.atc_contact.position}${data.atc_contact.frequence ? ` (${data.atc_contact.frequence})` : ''}.`);
+        setSuccess(`Vol MEDEVAC${numero_vol.trim()} déposé${suffixe} ! Contactez ${data.atc_contact.nom} sur ${data.atc_contact.position}${data.atc_contact.frequence ? ` (${data.atc_contact.frequence})` : ''}.`);
       } else {
-        setSuccess(`Vol MEDEVAC${numero_vol.trim()} déposé en autosurveillance.`);
+        setSuccess(`Vol MEDEVAC${numero_vol.trim()} déposé en autosurveillance${suffixe}.`);
       }
 
       setTimeout(() => {
@@ -195,7 +270,7 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
         <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 space-y-3">
           <p className="text-amber-900 text-sm font-medium">Aucun ATC en ligne. Voulez-vous décoller en autosurveillance ?</p>
           <div className="flex gap-2">
-            <button type="button" onClick={(e) => { setShowNoAtcConfirm(false); handleSubmit(e as any, true); }}
+            <button type="button" onClick={(e) => { setShowNoAtcConfirm(false); handleSubmit(e as unknown as React.FormEvent, true); }}
               className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700">
               Oui, vol sans ATC
             </button>
@@ -213,7 +288,6 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
           Plan de vol MEDEVAC
         </h2>
 
-        {/* Callsign */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Indicatif d&apos;appel</label>
           <div className="flex">
@@ -231,126 +305,18 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
           </div>
         </div>
 
-        {/* Aéroports */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Aéroport de départ</label>
-            <select value={aeroport_depart} onChange={e => setAeroportDepart(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
-              <option value="">Choisir...</option>
-              {aeroports.map(a => <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Aéroport d&apos;arrivée</label>
-            <select value={aeroport_arrivee} onChange={e => setAeroportArrivee(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
-              <option value="">Choisir...</option>
-              {aeroports.map(a => <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>)}
-            </select>
-          </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">
+            <MapPin className="inline h-4 w-4 mr-1 text-red-600" />
+            Aéroport de départ initial
+          </label>
+          <select value={aeroport_depart} onChange={e => setAeroportDepart(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
+            <option value="">Choisir...</option>
+            {aeroports.map(a => <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>)}
+          </select>
         </div>
 
-        {/* Temps et type de vol */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Temps prévu (min)</label>
-            <input type="number" value={temps_prev_min} onChange={e => setTempsPrevMin(e.target.value)}
-              min="1" placeholder="30"
-              className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Type de vol</label>
-            <div className="flex gap-2">
-              {(['VFR', 'IFR'] as const).map(tv => (
-                <button key={tv} type="button" onClick={() => setTypeVol(tv)}
-                  className={`flex-1 py-2 rounded-lg border text-sm font-bold transition-all ${type_vol === tv
-                    ? 'bg-red-600 border-red-600 text-white'
-                    : 'bg-white border-red-300 text-red-700 hover:bg-red-50'}`}>
-                  {tv}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* VFR intentions */}
-        {type_vol === 'VFR' && (
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Intentions de vol</label>
-            <textarea value={intentions_vol} onChange={e => setIntentionsVol(e.target.value)}
-              rows={2} placeholder="Ex: Tour de piste, transit sud-nord..."
-              className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
-          </div>
-        )}
-
-        {/* IFR fields */}
-        {type_vol === 'IFR' && (
-          <div className="space-y-4 p-4 rounded-lg bg-red-50 border border-red-200">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">SID de départ</label>
-                {sidList.length > 0 && !sidCustomMode ? (
-                  <select
-                    value={sidList.some(s => s.nom === sid_depart) ? sid_depart : ''}
-                    onChange={e => {
-                      const v = e.target.value;
-                      if (v === '__custom__') { setSidCustomMode(true); setSidDepart(''); setSelectedSidRoute(null); return; }
-                      setSidDepart(v);
-                      const proc = sidList.find(s => s.nom === v);
-                      setSelectedSidRoute(proc?.route || null);
-                    }}
-                    className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
-                    <option value="">Choisir SID...</option>
-                    {sidList.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
-                    <option value="__custom__">Saisie libre...</option>
-                  </select>
-                ) : (
-                  <input type="text" value={sid_depart} onChange={e => setSidDepart(e.target.value)}
-                    placeholder="Ex: RADAR VECTORS"
-                    className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">STAR d&apos;arrivée</label>
-                {starList.length > 0 && !starCustomMode ? (
-                  <select
-                    value={starList.some(s => s.nom === star_arrivee) ? star_arrivee : ''}
-                    onChange={e => {
-                      const v = e.target.value;
-                      if (v === '__custom__') { setStarCustomMode(true); setStarArrivee(''); setSelectedStarRoute(null); return; }
-                      setStarArrivee(v);
-                      const proc = starList.find(s => s.nom === v);
-                      setSelectedStarRoute(proc?.route || null);
-                    }}
-                    className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
-                    <option value="">Choisir STAR...</option>
-                    {starList.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
-                    <option value="__custom__">Saisie libre...</option>
-                  </select>
-                ) : (
-                  <input type="text" value={star_arrivee} onChange={e => setStarArrivee(e.target.value)}
-                    placeholder="Ex: RADAR VECTORS"
-                    className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
-                )}
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Route IFR</label>
-              <input type="text" value={route_ifr} onChange={e => { setRouteIfr(e.target.value); setManualRoutePart(e.target.value); }}
-                placeholder="DCT VOR1 AWY VOR2..."
-                className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Niveau de croisière</label>
-              <input type="text" value={niveau_croisiere} onChange={e => setNiveauCroisiere(e.target.value)}
-                placeholder="Ex: 350 (= FL350)"
-                className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono" />
-            </div>
-          </div>
-        )}
-
-        {/* Avion SIAVI */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">
             <Plane className="inline h-4 w-4 mr-1" />
@@ -379,7 +345,170 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
         </div>
       </div>
 
-      {/* Submit */}
+      {/* Segments */}
+      {segments.map((seg, index) => {
+        const dep = segmentDepart(index);
+        const sidKey = dep.toUpperCase();
+        const starKey = seg.aeroport_arrivee.toUpperCase();
+        const sidList = sidCache[sidKey] || [];
+        const starList = starCache[starKey] || [];
+
+        return (
+          <div key={index} className="rounded-xl bg-white border border-red-200 shadow-sm p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-red-900 flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-600 text-white text-sm font-bold">
+                  {index + 1}
+                </span>
+                Segment {index + 1}
+                {dep && seg.aeroport_arrivee && (
+                  <span className="text-sm text-slate-500 font-normal">
+                    <span className="font-mono text-red-700">{dep.toUpperCase()}</span>
+                    <ArrowRight className="inline h-3 w-3 mx-1" />
+                    <span className="font-mono text-red-700">{seg.aeroport_arrivee.toUpperCase()}</span>
+                  </span>
+                )}
+              </h3>
+              {segments.length > 1 && (
+                <button type="button" onClick={() => removeSegment(index)}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-red-600 hover:bg-red-50 text-sm">
+                  <Trash2 className="h-4 w-4" />
+                  Retirer
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Départ du segment</label>
+                <div className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-mono text-sm">
+                  {dep ? `${dep.toUpperCase()}` : <span className="italic text-slate-400">Défini par le segment précédent</span>}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Destination</label>
+                <select value={seg.aeroport_arrivee} onChange={e => updateSegment(index, { aeroport_arrivee: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
+                  <option value="">Choisir...</option>
+                  {aeroports.filter(a => a.code !== dep.toUpperCase()).map(a => <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Temps prévu (min)</label>
+                <input type="number" value={seg.temps_prev_min} onChange={e => updateSegment(index, { temps_prev_min: e.target.value })}
+                  min="1" placeholder="30"
+                  className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Type de vol</label>
+                <div className="flex gap-2">
+                  {(['VFR', 'IFR'] as const).map(tv => (
+                    <button key={tv} type="button" onClick={() => updateSegment(index, { type_vol: tv })}
+                      className={`flex-1 py-2 rounded-lg border text-sm font-bold transition-all ${seg.type_vol === tv
+                        ? 'bg-red-600 border-red-600 text-white'
+                        : 'bg-white border-red-300 text-red-700 hover:bg-red-50'}`}>
+                      {tv}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {seg.type_vol === 'VFR' && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Intentions de vol</label>
+                <textarea value={seg.intentions_vol} onChange={e => updateSegment(index, { intentions_vol: e.target.value })}
+                  rows={2} placeholder="Ex: Transit sud-nord, altitude 3500 ft..."
+                  className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+              </div>
+            )}
+
+            {seg.type_vol === 'IFR' && (
+              <div className="space-y-4 p-4 rounded-lg bg-red-50 border border-red-200">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">SID de départ ({dep.toUpperCase() || '?'})</label>
+                    {sidList.length > 0 && !seg.sidCustomMode ? (
+                      <select
+                        value={sidList.some(s => s.nom === seg.sid_depart) ? seg.sid_depart : ''}
+                        onChange={e => {
+                          const v = e.target.value;
+                          if (v === '__custom__') { updateSegment(index, { sidCustomMode: true, sid_depart: '', selectedSidRoute: null }); return; }
+                          const proc = sidList.find(s => s.nom === v);
+                          updateSegment(index, { sid_depart: v, selectedSidRoute: proc?.route || null });
+                        }}
+                        className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
+                        <option value="">Choisir SID...</option>
+                        {sidList.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
+                        <option value="__custom__">Saisie libre...</option>
+                      </select>
+                    ) : (
+                      <input type="text" value={seg.sid_depart} onChange={e => updateSegment(index, { sid_depart: e.target.value })}
+                        placeholder="Ex: RADAR VECTORS"
+                        className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">STAR d&apos;arrivée ({seg.aeroport_arrivee.toUpperCase() || '?'})</label>
+                    {starList.length > 0 && !seg.starCustomMode ? (
+                      <select
+                        value={starList.some(s => s.nom === seg.star_arrivee) ? seg.star_arrivee : ''}
+                        onChange={e => {
+                          const v = e.target.value;
+                          if (v === '__custom__') { updateSegment(index, { starCustomMode: true, star_arrivee: '', selectedStarRoute: null }); return; }
+                          const proc = starList.find(s => s.nom === v);
+                          updateSegment(index, { star_arrivee: v, selectedStarRoute: proc?.route || null });
+                        }}
+                        className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
+                        <option value="">Choisir STAR...</option>
+                        {starList.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
+                        <option value="__custom__">Saisie libre...</option>
+                      </select>
+                    ) : (
+                      <input type="text" value={seg.star_arrivee} onChange={e => updateSegment(index, { star_arrivee: e.target.value })}
+                        placeholder="Ex: RADAR VECTORS"
+                        className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Route IFR</label>
+                  <input type="text" value={seg.route_ifr}
+                    onChange={e => updateSegment(index, { route_ifr: e.target.value, manualRoutePart: e.target.value })}
+                    placeholder="DCT VOR1 AWY VOR2..."
+                    className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono text-sm" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Niveau de croisière</label>
+                  <input type="text" value={seg.niveau_croisiere} onChange={e => updateSegment(index, { niveau_croisiere: e.target.value })}
+                    placeholder="Ex: 350 (= FL350)"
+                    className="w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono" />
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Bouton ajouter destination */}
+      {segments.length < MAX_SEGMENTS && (
+        <button type="button" onClick={addSegment}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-red-300 text-red-700 hover:border-red-500 hover:bg-red-50 transition-colors font-medium">
+          <Plus className="h-4 w-4" />
+          Ajouter une destination (segment {segments.length + 1}/{MAX_SEGMENTS})
+        </button>
+      )}
+
+      {segments.length > 1 && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+          <p className="font-semibold mb-1">Mission multi-segments ({segments.length} escales)</p>
+          <p>Seul le 1<sup>er</sup> segment sera envoyé à l&apos;ATC dès le dépôt. Après chaque atterrissage, clôturez le segment puis activez le suivant depuis la page « Mes plans de vol » en choisissant la SID/STAR (ou vos intentions VFR).</p>
+        </div>
+      )}
+
       <button type="submit" disabled={loading || !!success}
         className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 disabled:opacity-50 text-white rounded-xl font-bold text-lg shadow-lg transition-all">
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <HeartPulse className="h-5 w-5" />}

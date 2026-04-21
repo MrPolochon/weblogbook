@@ -13,11 +13,13 @@ export default async function DepotPlanVolPage() {
   if (profile?.role === 'atc') redirect('/logbook');
 
   // Vérifier si le pilote a déjà un plan actif (accepté, en cours, etc.)
+  // Inclure 'en_pause' et 'planifie_suivant' pour bloquer la création d'un autre plan
+  // pendant qu'une mission MEDEVAC multi-segments est en cours.
   const { data: planActif } = await supabase
     .from('plans_vol')
     .select('id, numero_vol, aeroport_depart, aeroport_arrivee, statut')
     .eq('pilote_id', user.id)
-    .in('statut', ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'])
+    .in('statut', ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture', 'en_pause', 'planifie_suivant'])
     .limit(1)
     .maybeSingle();
 

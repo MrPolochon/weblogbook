@@ -31,6 +31,13 @@ type PlanPaiement = {
   siavi_avion_id?: string | null;
   current_afis_user_id?: string | null;
   strip_atd?: string | null;
+  // Multi-segments MEDEVAC : si medevac_next_plan_id est défini,
+  // la clôture passe le plan en 'en_pause' (et non 'cloture'),
+  // l'avion SIAVI reste 'in_flight' (aeroport_actuel mis à jour).
+  medevac_mission_id?: string | null;
+  medevac_segment_index?: number | null;
+  medevac_total_segments?: number | null;
+  medevac_next_plan_id?: string | null;
 };
 
 /**
@@ -798,10 +805,14 @@ export async function finaliserCloturePlan(
   }
 
   // -- MEDEVAC: usure flotte SIAVI + revenu --
+  // Pour un segment intermédiaire (medevac_next_plan_id défini), on ne passe PAS
+  // l'avion en 'ground' : la mission continue, l'avion reste 'in_flight' mais
+  // son aeroport_actuel est mis à jour.
+  const estSegmentIntermediaire = Boolean(plan.medevac_next_plan_id);
   if (plan.siavi_avion_id) {
     const { data: siaviAvion } = await admin
       .from('siavi_avions')
-      .select('id, usure_percent, immatriculation')
+      .select('id, usure_percent, immatriculation, statut')
       .eq('id', plan.siavi_avion_id)
       .single();
 
@@ -816,7 +827,11 @@ export async function finaliserCloturePlan(
 
       usureAppliquee = calculerUsureVol(tempsReelMin);
       const nouvelleUsure = Math.max(0, Number(siaviAvion.usure_percent) - usureAppliquee);
-      const nouveauStatut = nouvelleUsure === 0 ? 'bloque' : 'ground';
+      // Si segment intermédiaire : l'avion continue de voler (reste in_flight)
+      // Si dernier segment ou vol simple : ground (ou bloque si usure=0)
+      const nouveauStatut = estSegmentIntermediaire
+        ? (siaviAvion.statut === 'in_flight' ? 'in_flight' : siaviAvion.statut)
+        : (nouvelleUsure === 0 ? 'bloque' : 'ground');
 
       await admin
         .from('siavi_avions')
@@ -876,8 +891,12 @@ export async function finaliserCloturePlan(
     }
   }
 
+  // Pour un segment MEDEVAC intermédiaire, on passe à 'en_pause' (pas 'cloture')
+  // afin que le pilote voie la page de pause + bouton "Reprendre le vol".
+  // Le statut 'cloture' sera mis au moment où le segment suivant sera activé.
+  const statutFinal = estSegmentIntermediaire ? 'en_pause' : 'cloture';
   const { error } = await admin.from('plans_vol').update({
-    statut: 'cloture',
+    statut: statutFinal,
     cloture_at: confirmationAt.toISOString()
   }).eq('id', plan.id);
 

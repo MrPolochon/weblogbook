@@ -9,6 +9,12 @@ interface TimelineEntry {
   description: string;
 }
 
+interface SegmentBrief {
+  aeroport_depart: string;
+  aeroport_arrivee: string;
+  segment_index: number | null;
+}
+
 interface Props {
   planVolId: string;
   numeroVol: string;
@@ -17,11 +23,12 @@ interface Props {
   aircraftRegistration: string;
   aircraftType: string;
   commanderDefault: string;
+  segments?: SegmentBrief[];
 }
 
 export default function RapportMedevacForm({
   planVolId, numeroVol, aeroportDepart, aeroportArrivee,
-  aircraftRegistration, aircraftType, commanderDefault
+  aircraftRegistration, aircraftType, commanderDefault, segments
 }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -29,11 +36,24 @@ export default function RapportMedevacForm({
   const [commander, setCommander] = useState(commanderDefault);
   const [coPilot, setCoPilot] = useState('');
   const [medicalTeam, setMedicalTeam] = useState('');
-  const [timeline, setTimeline] = useState<TimelineEntry[]>([
-    { heure: '', description: 'MEDEVAC alert activation' },
-    { heure: '', description: `Departure ${aeroportDepart}` },
-    { heure: '', description: `Arrival ${aeroportArrivee}` },
-  ]);
+
+  // Timeline par défaut : si multi-segments, on pré-remplit avec toutes les escales
+  const defaultTimeline: TimelineEntry[] = (() => {
+    if (segments && segments.length > 1) {
+      const entries: TimelineEntry[] = [{ heure: '', description: 'MEDEVAC alert activation' }];
+      segments.forEach((s) => {
+        entries.push({ heure: '', description: `Departure ${s.aeroport_depart}` });
+        entries.push({ heure: '', description: `Arrival ${s.aeroport_arrivee}` });
+      });
+      return entries;
+    }
+    return [
+      { heure: '', description: 'MEDEVAC alert activation' },
+      { heure: '', description: `Departure ${aeroportDepart}` },
+      { heure: '', description: `Arrival ${aeroportArrivee}` },
+    ];
+  })();
+  const [timeline, setTimeline] = useState<TimelineEntry[]>(defaultTimeline);
   const [medicalSummary, setMedicalSummary] = useState('');
   const [groundEvent, setGroundEvent] = useState('');
   const [outcome, setOutcome] = useState('');

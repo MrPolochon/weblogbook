@@ -81,8 +81,8 @@ export async function POST(request: Request) {
       .eq('id', plan.siavi_avion_id)
       .single();
 
-    const ta = avion?.types_avion;
-    const typeName = ta ? (Array.isArray(ta) ? ta[0]?.nom : ta.nom) : 'Unknown';
+    const ta = avion?.types_avion as { nom?: string } | { nom?: string }[] | null | undefined;
+    const typeName = ta ? (Array.isArray(ta) ? (ta[0]?.nom || 'Unknown') : (ta.nom || 'Unknown')) : 'Unknown';
 
     const { data: rapport, error } = await admin.from('siavi_rapports_medevac').insert({
       plan_vol_id,
