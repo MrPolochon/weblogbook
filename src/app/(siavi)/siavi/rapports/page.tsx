@@ -1,8 +1,9 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { ArrowLeft, FileText, ArrowRight, HeartPulse } from 'lucide-react';
+import { ArrowLeft, FileText, ArrowRight, HeartPulse, PenLine } from 'lucide-react';
 import Link from 'next/link';
+import { getPendingMedevacReport } from '@/lib/siavi/pending-report';
 
 export default async function RapportsListPage() {
   const supabase = await createClient();
@@ -27,6 +28,8 @@ export default async function RapportsListPage() {
     `)
     .order('numero_mission', { ascending: false });
 
+  const pendingPlanId = await getPendingMedevacReport(admin, user.id);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -45,12 +48,32 @@ export default async function RapportsListPage() {
         </div>
       </div>
 
+      {pendingPlanId && (
+        <div className="rounded-xl border border-amber-400/60 bg-amber-950/40 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-sm text-amber-100">
+            <strong>Rapport de mission à rédiger :</strong> un vol MEDEVAC que vous avez piloté est clôturé (dernier segment) mais le rapport n&apos;est pas encore enregistré.
+          </p>
+          <Link
+            href={`/siavi/rapports/nouveau?plan=${pendingPlanId}`}
+            className="inline-flex items-center justify-center gap-2 shrink-0 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-amber-950 text-sm font-semibold transition-colors"
+          >
+            <PenLine className="h-4 w-4" /> Rédiger le rapport
+          </Link>
+        </div>
+      )}
+
       {/* Liste */}
       {(!rapports || rapports.length === 0) ? (
-        <div className="text-center py-16 border-2 border-dashed border-red-200 rounded-xl">
+        <div className="text-center py-16 border-2 border-dashed border-red-200 rounded-xl px-4">
           <HeartPulse className="h-12 w-12 text-red-300 mx-auto mb-3" />
-          <p className="text-red-600 font-medium">Aucun rapport MEDEVAC</p>
-          <p className="text-red-500 text-sm mt-1">Les rapports sont créés après la clôture d&apos;un vol MEDEVAC</p>
+          <p className="text-red-600 font-medium">Aucun rapport MEDEVAC enregistré</p>
+          <p className="text-slate-600 text-sm mt-3 max-w-lg mx-auto leading-relaxed">
+            Le rapport <strong className="text-slate-800">n&apos;est pas créé automatiquement</strong> à la clôture du vol.
+            C&apos;est un <strong className="text-slate-800">compte rendu manuel</strong> (formulaire) déposé par le <strong className="text-slate-800">pilote</strong>, une fois la mission terminée — pour une mission en plusieurs segments, uniquement après clôture du <strong className="text-slate-800">dernier segment</strong>.
+          </p>
+          <p className="text-slate-500 text-sm mt-2 max-w-lg mx-auto">
+            Les personnes qui ne pilotent pas ne verront un rapport ici qu&apos;après sa saisie par le pilote.
+          </p>
         </div>
       ) : (
         <div className="rounded-xl bg-white border border-red-200 shadow-sm overflow-hidden">
