@@ -2,9 +2,17 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileText, Plus, Trash2, Clock, AlertCircle, CheckCircle2, Loader2, Send } from 'lucide-react';
+import { Plus, Trash2, Clock, AlertCircle, CheckCircle2, Loader2, Send } from 'lucide-react';
+
+function newTimelineRowKey(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `tl-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
 
 interface TimelineEntry {
+  rowKey: string;
   heure: string;
   description: string;
 }
@@ -25,7 +33,7 @@ interface Props {
   commanderDefault: string;
   segments?: SegmentBrief[];
   /** Suggestion serveur (UTC, alerte fictive 30–60 min avant le 1er départ) */
-  initialChronologie?: TimelineEntry[];
+  initialChronologie?: Array<{ heure: string; description: string }>;
 }
 
 export default function RapportMedevacForm({
@@ -40,24 +48,28 @@ export default function RapportMedevacForm({
   const [coPilot, setCoPilot] = useState('');
   const [medicalTeam, setMedicalTeam] = useState('');
 
-  // Timeline : suggestions serveur si fournies, sinon libellés sans heures
-  const defaultTimeline: TimelineEntry[] = (() => {
-    if (initialChronologie?.length) return initialChronologie;
+  // Timeline : initialiseur paresseux (une fois au montage) + clés stables par ligne
+  const [timeline, setTimeline] = useState<TimelineEntry[]>(() => {
+    const withKeys = (rows: Array<{ heure: string; description: string }>): TimelineEntry[] =>
+      rows.map((r) => ({ rowKey: newTimelineRowKey(), ...r }));
+
+    if (initialChronologie?.length) return withKeys(initialChronologie);
     if (segments && segments.length > 1) {
-      const entries: TimelineEntry[] = [{ heure: '', description: 'MEDEVAC alert activation' }];
+      const rows: Array<{ heure: string; description: string }> = [
+        { heure: '', description: 'MEDEVAC alert activation' },
+      ];
       segments.forEach((s) => {
-        entries.push({ heure: '', description: `Departure ${s.aeroport_depart}` });
-        entries.push({ heure: '', description: `Arrival ${s.aeroport_arrivee}` });
+        rows.push({ heure: '', description: `Departure ${s.aeroport_depart}` });
+        rows.push({ heure: '', description: `Arrival ${s.aeroport_arrivee}` });
       });
-      return entries;
+      return withKeys(rows);
     }
-    return [
+    return withKeys([
       { heure: '', description: 'MEDEVAC alert activation' },
       { heure: '', description: `Departure ${aeroportDepart}` },
       { heure: '', description: `Arrival ${aeroportArrivee}` },
-    ];
-  })();
-  const [timeline, setTimeline] = useState<TimelineEntry[]>(defaultTimeline);
+    ]);
+  });
   const [medicalSummary, setMedicalSummary] = useState('');
   const [groundEvent, setGroundEvent] = useState('');
   const [outcome, setOutcome] = useState('');
@@ -68,7 +80,7 @@ export default function RapportMedevacForm({
   const [success, setSuccess] = useState<string | null>(null);
 
   function addTimelineEntry() {
-    setTimeline([...timeline, { heure: '', description: '' }]);
+    setTimeline([...timeline, { rowKey: newTimelineRowKey(), heure: '', description: '' }]);
   }
 
   function removeTimelineEntry(idx: number) {
@@ -98,7 +110,9 @@ export default function RapportMedevacForm({
           commander: commander.trim(),
           co_pilot: coPilot.trim() || null,
           medical_team: medicalTeam.trim() || null,
-          mission_timeline: timeline.filter(t => t.heure.trim() || t.description.trim()),
+          mission_timeline: timeline
+            .filter((t) => t.heure.trim() || t.description.trim())
+            .map(({ heure, description }) => ({ heure, description })),
           medical_summary: medicalSummary.trim(),
           ground_event: groundEvent.trim() || null,
           outcome: outcome.trim(),
@@ -110,7 +124,10 @@ export default function RapportMedevacForm({
 
       setSuccess(`Rapport de mission n°${data.numero_mission} enregistré.`);
       setTimeout(() => {
-        startTransition(() => router.push(`/siavi/rapports/${data.id}`));
+        startTransition(() => {
+          router.refresh();
+          router.push(`/siavi/rapports/${data.id}`);
+        });
       }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -182,7 +199,7 @@ export default function RapportMedevacForm({
         </div>
         <div className="space-y-2">
           {timeline.map((entry, idx) => (
-            <div key={idx} className="flex items-center gap-2">
+            <div key={entry.rowKey} className="flex items-center gap-2">
               <div className="flex items-center gap-1 w-24 flex-shrink-0">
                 <Clock className="h-3.5 w-3.5 text-red-400" />
                 <input type="text" value={entry.heure} onChange={e => updateTimeline(idx, 'heure', e.target.value)}

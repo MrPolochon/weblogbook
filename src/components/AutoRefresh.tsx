@@ -1,16 +1,26 @@
 'use client';
 
 import { useEffect, useTransition, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 /**
  * Appelle router.refresh() périodiquement en arrière-plan via startTransition
  * pour que les données serveur se mettent à jour SANS bloquer le UI.
  * Met en pause quand l'onglet n'est pas visible.
  * Au retour sur l'onglet, un refresh immédiat est déclenché.
+ *
+ * pauseRefreshWhenPathStartsWith : aucun refresh périodique ni au retour d'onglet
+ * si le chemin commence par l'un des préfixes (ex. saisie de longs formulaires).
  */
-export default function AutoRefresh({ intervalSeconds = 30 }: { intervalSeconds?: number }) {
+export default function AutoRefresh({
+  intervalSeconds = 30,
+  pauseRefreshWhenPathStartsWith = [],
+}: {
+  intervalSeconds?: number;
+  pauseRefreshWhenPathStartsWith?: string[];
+}) {
   const router = useRouter();
+  const pathname = usePathname();
   const [, startTransition] = useTransition();
 
   const softRefresh = useCallback(() => {
@@ -19,7 +29,13 @@ export default function AutoRefresh({ intervalSeconds = 30 }: { intervalSeconds?
     });
   }, [router, startTransition]);
 
+  const isPaused =
+    pauseRefreshWhenPathStartsWith.length > 0 &&
+    pathname != null &&
+    pauseRefreshWhenPathStartsWith.some((p) => pathname.startsWith(p));
+
   useEffect(() => {
+    if (isPaused) return;
     const ms = Math.max(10, intervalSeconds) * 1000;
     const id = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
@@ -33,7 +49,7 @@ export default function AutoRefresh({ intervalSeconds = 30 }: { intervalSeconds?
       clearInterval(id);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [softRefresh, intervalSeconds]);
+  }, [softRefresh, intervalSeconds, isPaused]);
 
   return null;
 }

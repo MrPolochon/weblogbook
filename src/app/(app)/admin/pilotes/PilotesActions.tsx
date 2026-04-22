@@ -95,7 +95,6 @@ export default function PilotesActions({
       return;
     }
     await doDelete(superadminPwd);
-    if (!superadminError) setDeleting(false);
   }
 
   return (

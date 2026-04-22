@@ -354,10 +354,30 @@ export async function DELETE(
     
     await admin.from('felitz_comptes').delete().eq('proprietaire_id', id);
     await admin.from('inventaire_avions').delete().eq('proprietaire_id', id);
-    
-    // Supprimer le profil et l'utilisateur auth
-    await admin.from('profiles').delete().eq('id', id);
-    await admin.auth.admin.deleteUser(id);
+
+    // Rapports MEDEVAC rédigés par ce compte (FK created_by → profiles sans CASCADE)
+    await admin.from('siavi_rapports_medevac').delete().eq('created_by', id);
+
+    // Supprimer le profil puis l'utilisateur Auth (ordre important : le profil référence auth)
+    const { error: delProfileErr } = await admin.from('profiles').delete().eq('id', id);
+    if (delProfileErr) {
+      console.error('DELETE pilote: échec suppression profil', delProfileErr);
+      return NextResponse.json(
+        {
+          error: `Suppression du profil impossible : ${delProfileErr.message}. Vérifiez les données encore liées à ce compte.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const { error: authDelErr } = await admin.auth.admin.deleteUser(id);
+    if (authDelErr) {
+      console.error('DELETE pilote: profil supprimé mais échec auth.deleteUser', authDelErr);
+      return NextResponse.json(
+        { error: `Compte profil supprimé, mais erreur Auth Supabase : ${authDelErr.message}. Intervention manuelle recommandée.` },
+        { status: 500 }
+      );
+    }
 
     // Logger la suppression pour la protection anti-suppression massive
     await admin.from('deletion_logs').insert({

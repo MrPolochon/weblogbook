@@ -154,6 +154,7 @@ export default async function NouveauRapportPage({
       )}
 
       <RapportMedevacForm
+        key={plan.id}
         planVolId={plan.id}
         numeroVol={plan.numero_vol}
         aeroportDepart={segments[0]?.aeroport_depart || plan.aeroport_depart}

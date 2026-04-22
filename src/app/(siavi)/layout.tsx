@@ -66,7 +66,10 @@ export default async function SiaviLayout({
     <div className="min-h-dvh flex flex-col safe-x" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {pendingPlanId && <PendingReportGuard pendingPlanId={pendingPlanId} />}
       <InactivityLogout />
-      <AutoRefresh intervalSeconds={15} />
+      <AutoRefresh
+        intervalSeconds={15}
+        pauseRefreshWhenPathStartsWith={['/siavi/rapports']}
+      />
       <SiaviModeBg isAdmin={isAdmin} />
       <SiaviNavBar 
         isAdmin={isAdmin} 
