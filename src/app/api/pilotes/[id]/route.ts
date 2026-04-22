@@ -313,6 +313,10 @@ export async function DELETE(
     
     // Mettre à null l'acheteur dans les annonces du marché
     await admin.from('hangar_market').update({ acheteur_id: null }).eq('acheteur_id', id);
+
+    // Reventes hangar : admin_id → profiles sans ON DELETE (traitement par un admin)
+    await admin.from('hangar_market_reventes').update({ admin_id: null }).eq('admin_id', id);
+    // demandeur_id est en ON DELETE CASCADE : supprimé avec le profil une fois admin_id libéré
     
     // Supprimer les transactions Felitz créées par cet utilisateur (created_by est NOT NULL)
     await admin.from('felitz_transactions').delete().eq('created_by', id);
