@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getLeaderCompagnieIds } from '@/lib/co-pdg-utils';
+import { findPresidentMembership, pickHighestAllianceRoleMembership } from '@/lib/alliance-membres';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,8 +20,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .eq('alliance_id', allianceId)
     .in('compagnie_id', myCompIds);
 
-  const myMember = myMembers?.[0] ?? null;
-  if (!myMember) return NextResponse.json({ error: 'Pas membre' }, { status: 403 });
+  if (!myMembers?.length) return NextResponse.json({ error: 'Pas membre' }, { status: 403 });
+
+  const presidentMember = findPresidentMembership(myMembers);
+  const primaryMember = pickHighestAllianceRoleMembership(myMembers)!;
 
   const body = await req.json().catch(() => ({}));
   const { action, membre_id, nouveau_role } = body;
@@ -33,7 +36,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const allianceNom = alliance?.nom || 'Alliance';
 
   if (action === 'changer_role') {
-    if (myMember.role !== 'president') return NextResponse.json({ error: 'Seul le président' }, { status: 403 });
+    if (!presidentMember) return NextResponse.json({ error: 'Seul le président peut modifier les rôles' }, { status: 403 });
     if (!membre_id || !nouveau_role) return NextResponse.json({ error: 'membre_id et nouveau_role requis' }, { status: 400 });
     if (!['vice_president', 'secretaire', 'membre'].includes(nouveau_role)) {
       return NextResponse.json({ error: 'Rôle invalide' }, { status: 400 });
@@ -42,7 +45,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!target) return NextResponse.json({ error: 'Membre introuvable' }, { status: 404 });
     if (target.role === 'president') return NextResponse.json({ error: 'Impossible de rétrograder le président' }, { status: 400 });
 
-    await admin.from('alliance_membres').update({ role: nouveau_role }).eq('id', membre_id);
+    const { error: roleErr } = await admin.from('alliance_membres').update({ role: nouveau_role }).eq('id', membre_id);
+    if (roleErr) return NextResponse.json({ error: roleErr.message }, { status: 400 });
 
     const { data: targetComp } = await admin.from('compagnies').select('pdg_id, nom').eq('id', target.compagnie_id).single();
     if (targetComp) {
@@ -57,7 +61,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   if (action === 'expulser') {
-    if (myMember.role !== 'president') return NextResponse.json({ error: 'Seul le président' }, { status: 403 });
+    if (!presidentMember) return NextResponse.json({ error: 'Seul le président peut expulser un membre' }, { status: 403 });
     if (!membre_id) return NextResponse.json({ error: 'membre_id requis' }, { status: 400 });
     const { data: target } = await admin.from('alliance_membres').select('id, role, compagnie_id').eq('id', membre_id).eq('alliance_id', allianceId).single();
     if (!target) return NextResponse.json({ error: 'Membre introuvable' }, { status: 404 });
@@ -79,17 +83,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   if (action === 'transferer_presidence') {
-    if (myMember.role !== 'president') return NextResponse.json({ error: 'Seul le président' }, { status: 403 });
+    if (!presidentMember) return NextResponse.json({ error: 'Seul le président peut transférer la présidence' }, { status: 403 });
     if (!membre_id) return NextResponse.json({ error: 'membre_id requis' }, { status: 400 });
     const { data: target } = await admin.from('alliance_membres').select('id, compagnie_id').eq('id', membre_id).eq('alliance_id', allianceId).single();
     if (!target) return NextResponse.json({ error: 'Membre introuvable' }, { status: 404 });
 
     const { data: myRow } = await admin.from('alliance_membres')
-      .select('id').eq('alliance_id', allianceId).eq('compagnie_id', myMember.compagnie_id).single();
-    if (myRow) await admin.from('alliance_membres').update({ role: 'vice_president' }).eq('id', myRow.id);
-    await admin.from('alliance_membres').update({ role: 'president' }).eq('id', membre_id);
+      .select('id').eq('alliance_id', allianceId).eq('compagnie_id', presidentMember.compagnie_id).single();
+    if (myRow) {
+      const { error: stepDownErr } = await admin.from('alliance_membres').update({ role: 'vice_president' }).eq('id', myRow.id);
+      if (stepDownErr) return NextResponse.json({ error: stepDownErr.message }, { status: 400 });
+    }
+    const { error: stepUpErr } = await admin.from('alliance_membres').update({ role: 'president' }).eq('id', membre_id);
+    if (stepUpErr) return NextResponse.json({ error: stepUpErr.message }, { status: 400 });
 
-    const { data: myComp } = await admin.from('compagnies').select('nom').eq('id', myMember.compagnie_id).single();
+    const { data: myComp } = await admin.from('compagnies').select('nom').eq('id', presidentMember.compagnie_id).single();
     const { data: targetComp } = await admin.from('compagnies').select('pdg_id, nom').eq('id', target.compagnie_id).single();
 
     if (targetComp) {
@@ -104,7 +112,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const allMembres = await admin.from('alliance_membres')
       .select('compagnie_id')
       .eq('alliance_id', allianceId)
-      .neq('compagnie_id', myMember.compagnie_id)
+      .neq('compagnie_id', presidentMember.compagnie_id)
       .neq('compagnie_id', target.compagnie_id);
     if (allMembres.data && allMembres.data.length > 0) {
       const compIds = allMembres.data.map(m => m.compagnie_id);
@@ -131,7 +139,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     const targetCompagnieId = body.compagnie_id && myCompIds.includes(body.compagnie_id)
       ? body.compagnie_id
-      : myMember.compagnie_id;
+      : primaryMember.compagnie_id;
     const { error: updErr } = await admin.from('alliance_membres')
       .update({ codeshare_pourcent: pourcent })
       .eq('alliance_id', allianceId)

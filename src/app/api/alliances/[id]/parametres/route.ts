@@ -16,13 +16,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (myCompIds.length === 0) {
     return NextResponse.json({ error: 'Droits insuffisants' }, { status: 403 });
   }
-  const { data: myMember } = await admin.from('alliance_membres')
+  const { data: myMembers } = await admin.from('alliance_membres')
     .select('role')
     .eq('alliance_id', allianceId)
-    .in('compagnie_id', myCompIds)
-    .limit(1).single();
+    .in('compagnie_id', myCompIds);
 
-  if (!myMember || !['president', 'vice_president'].includes(myMember.role)) {
+  if (!myMembers?.some(m => ['president', 'vice_president'].includes(m.role))) {
     return NextResponse.json({ error: 'Droits insuffisants' }, { status: 403 });
   }
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getLeaderCompagnieIds } from '@/lib/co-pdg-utils';
+import { pickHighestAllianceRoleMembership } from '@/lib/alliance-membres';
 import {
   ensureCompteEntreprise,
   ensureComptePersonnel,
@@ -20,11 +21,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const admin = createAdminClient();
   const myCompIds = await getLeaderCompagnieIds(user.id, admin);
   if (myCompIds.length === 0) return NextResponse.json({ error: 'Pas membre' }, { status: 403 });
-  const { data: myMember } = await admin.from('alliance_membres')
+  const { data: myMembersRows } = await admin.from('alliance_membres')
     .select('role, compagnie_id')
     .eq('alliance_id', allianceId)
-    .in('compagnie_id', myCompIds)
-    .limit(1).single();
+    .in('compagnie_id', myCompIds);
+  const myMember = pickHighestAllianceRoleMembership(myMembersRows);
   if (!myMember) return NextResponse.json({ error: 'Pas membre' }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
@@ -170,13 +171,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (myCompIdsPatch.length === 0) {
     return NextResponse.json({ error: 'Droits insuffisants' }, { status: 403 });
   }
-  const { data: myMember } = await admin.from('alliance_membres')
+  const { data: myMembersPatch } = await admin.from('alliance_membres')
     .select('role')
     .eq('alliance_id', allianceId)
-    .in('compagnie_id', myCompIdsPatch)
-    .limit(1).single();
+    .in('compagnie_id', myCompIdsPatch);
 
-  if (!myMember || !['president', 'vice_president'].includes(myMember.role)) {
+  if (!myMembersPatch?.some(m => ['president', 'vice_president'].includes(m.role))) {
     return NextResponse.json({ error: 'Droits insuffisants' }, { status: 403 });
   }
 

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getLeaderCompagnieIds } from '@/lib/co-pdg-utils';
-import { dedupeAllianceMembresByCompagnie } from '@/lib/alliance-membres';
+import { dedupeAllianceMembresByCompagnie, findPresidentMembership, pickHighestAllianceRoleMembership } from '@/lib/alliance-membres';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,7 +30,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if ((!myMembers || myMembers.length === 0) && !isAdmin) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
 
   const pdgCompagnieIds = leaderCompIds;
-  const myMember = myMembers?.[0] ?? null;
+  const myMember = pickHighestAllianceRoleMembership(myMembers);
   const myAllCompagnieIds = (myMembers || []).map(m => m.compagnie_id);
   const myCompagnieIds = myAllCompagnieIds.filter(cid => pdgCompagnieIds.includes(cid));
   const myRole = myMember?.role ?? (isAdmin ? 'admin' : null);
@@ -200,16 +200,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const admin = createAdminClient();
   const myLeaderIds = await getLeaderCompagnieIds(user.id, admin);
-  const { data: myMember } = myLeaderIds.length === 0
-    ? { data: null as { role: string; compagnie_id: string } | null }
+  const { data: myMembersMeta } = myLeaderIds.length === 0
+    ? { data: null as { role: string; compagnie_id: string }[] | null }
     : await admin.from('alliance_membres')
         .select('role, compagnie_id')
         .eq('alliance_id', id)
-        .in('compagnie_id', myLeaderIds)
-        .limit(1)
-        .single();
+        .in('compagnie_id', myLeaderIds);
 
-  if (!myMember || !['president', 'vice_president'].includes(myMember.role)) {
+  if (!myMembersMeta?.some(m => ['president', 'vice_president'].includes(m.role))) {
     return NextResponse.json({ error: 'Seul le président ou VP peut modifier l\'alliance' }, { status: 403 });
   }
 
@@ -235,17 +233,15 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
   const admin = createAdminClient();
   const myLeaderIds = await getLeaderCompagnieIds(user.id, admin);
-  const { data: myMember } = myLeaderIds.length === 0
-    ? { data: null as { role: string; compagnie_id: string } | null }
+  const { data: myMembersDel } = myLeaderIds.length === 0
+    ? { data: null as { role: string; compagnie_id: string }[] | null }
     : await admin.from('alliance_membres')
         .select('role, compagnie_id')
         .eq('alliance_id', id)
-        .in('compagnie_id', myLeaderIds)
-        .limit(1)
-        .single();
+        .in('compagnie_id', myLeaderIds);
 
   const isAdmin = (await admin.from('profiles').select('role').eq('id', user.id).single()).data?.role === 'admin';
-  if ((!myMember || myMember.role !== 'president') && !isAdmin) {
+  if (!findPresidentMembership(myMembersDel ?? []) && !isAdmin) {
     return NextResponse.json({ error: 'Seul le président peut dissoudre l\'alliance' }, { status: 403 });
   }
 

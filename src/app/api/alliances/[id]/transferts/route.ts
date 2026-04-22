@@ -14,12 +14,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const admin = createAdminClient();
   const myCompIds = await getLeaderCompagnieIds(user.id, admin);
   if (myCompIds.length === 0) return NextResponse.json({ error: 'Pas membre' }, { status: 403 });
-  const { data: myMember } = await admin.from('alliance_membres')
+  const { data: myMembersRows } = await admin.from('alliance_membres')
     .select('role, compagnie_id')
     .eq('alliance_id', allianceId)
-    .in('compagnie_id', myCompIds)
-    .limit(1).single();
-  if (!myMember) return NextResponse.json({ error: 'Pas membre' }, { status: 403 });
+    .in('compagnie_id', myCompIds);
+  if (!myMembersRows?.length) return NextResponse.json({ error: 'Pas membre' }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
   const { type_transfert, compagnie_avion_id, compagnie_dest_id, prix, duree_jours } = body;
