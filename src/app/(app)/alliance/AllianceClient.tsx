@@ -467,7 +467,7 @@ function DashboardTab({ detail }: { detail: AllianceDetail }) {
         <h3 className="font-medium text-slate-200 mb-2">Membres</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {detail.membres.map(m => (
-            <div key={m.id} className="flex items-center gap-2 py-1">
+            <div key={`${m.id}-${m.compagnie_id}`} className="flex items-center gap-2 py-1">
               <Building2 className="h-4 w-4 text-slate-500" />
               <span className="text-slate-200">{m.compagnie?.nom || m.compagnie_id}</span>
               <span className={`text-xs ${ROLE_COLORS[m.role] || 'text-slate-500'}`}>{ROLE_LABELS[m.role] || m.role}</span>
@@ -520,7 +520,7 @@ function MembresTab({ detail, isPresident, isLeader, onRefresh, flash, api, busy
             : m.role === 'vice_president' ? <ShieldCheck className="h-3.5 w-3.5 text-sky-400" />
             : null;
           return (
-            <div key={m.id} className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-slate-700/20">
+            <div key={`${m.id}-${m.compagnie_id}`} className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-slate-700/20">
               <div className="flex items-center gap-2">
                 {roleIcon || <Building2 className="h-4 w-4 text-slate-500" />}
                 <span className="text-slate-200 font-medium">{m.compagnie?.nom || m.compagnie_id}</span>
@@ -767,7 +767,7 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, selectedCompagn
               <p className="text-xs font-medium text-slate-300 mb-2 uppercase tracking-wide">% de partage de chaque compagnie</p>
               <div className="space-y-1">
                 {detail.membres.map(m => (
-                  <div key={m.id} className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-slate-700/20">
+                  <div key={`${m.id}-${m.compagnie_id}`} className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-slate-700/20">
                     <div className="flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-slate-500" />
                       <span className="text-sm text-slate-200">{m.compagnie?.nom || m.compagnie_id}</span>

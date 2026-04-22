@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getLeaderCompagnieIds } from '@/lib/co-pdg-utils';
+import { dedupeAllianceMembresByCompagnie } from '@/lib/alliance-membres';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,18 +48,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     membresData = fallback as Record<string, unknown>[] | null;
   }
 
-  const membres = (membresData || []).map(m => {
+  const membres = dedupeAllianceMembresByCompagnie((membresData || []).map(m => {
     const raw = (m as Record<string, unknown>).compagnies as unknown;
     const comp = Array.isArray(raw) ? raw[0] : raw;
     return {
-      id: m.id,
-      compagnie_id: m.compagnie_id,
-      role: m.role,
-      joined_at: m.joined_at,
+      id: m.id as string,
+      compagnie_id: m.compagnie_id as string,
+      role: m.role as string,
+      joined_at: m.joined_at as string,
       codeshare_pourcent: Number((m as Record<string, unknown>).codeshare_pourcent ?? 0),
       compagnie: (comp || null) as { id: string; nom: string } | null,
     };
-  });
+  }));
 
   const { data: parametres } = await admin.from('alliance_parametres').select('*').eq('alliance_id', id).single();
 

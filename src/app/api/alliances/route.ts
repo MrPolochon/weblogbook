@@ -43,10 +43,15 @@ export async function GET(req: Request) {
   const paramMap = Object.fromEntries((params || []).map(p => [p.alliance_id, p]));
 
   const { data: allMembres } = await admin.from('alliance_membres')
-    .select('alliance_id')
+    .select('alliance_id, compagnie_id')
     .in('alliance_id', allianceIds);
   const countMap: Record<string, number> = {};
-  (allMembres || []).forEach(m => { countMap[m.alliance_id] = (countMap[m.alliance_id] || 0) + 1; });
+  const byAlliance = new Map<string, Set<string>>();
+  for (const m of allMembres || []) {
+    if (!byAlliance.has(m.alliance_id)) byAlliance.set(m.alliance_id, new Set());
+    byAlliance.get(m.alliance_id)!.add(m.compagnie_id);
+  }
+  Array.from(byAlliance.entries()).forEach(([aid, set]) => { countMap[aid] = set.size; });
 
   const compagnieIdsForNames = Array.from(new Set(membres.map(m => m.compagnie_id)));
   const { data: compagniesData } = await admin.from('compagnies').select('id, nom').in('id', compagnieIdsForNames);
