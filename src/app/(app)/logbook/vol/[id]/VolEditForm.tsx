@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMinutes, subMinutes } from 'date-fns';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { COMPAGNIE_MEDEVAC_SIAVI, isCompagnieMedevacSiavi } from '@/lib/vol-compagnie-libelle';
 
 type T = { id: string; nom: string; constructeur?: string };
 type C = { id: string; nom: string };
@@ -47,7 +48,7 @@ export default function VolEditForm({
   volId: string;
   typeAvionId: string;
   compagnieId: string | null;
-  compagnieLibelle: string;
+  compagnieLibelle: string | null;
   aeroportDepart: string;
   aeroportArrivee: string;
   dureeMinutes: number;
@@ -75,7 +76,10 @@ export default function VolEditForm({
   const [, startTransition] = useTransition();
   const [type_avion_id, setTypeAvionId] = useState(typeAvionId);
   const [compagnie_id, setCompagnieId] = useState(compagnieId || '');
-  const [pourMoiMemo, setPourMoiMemo] = useState(compagnieLibelle === 'Pour moi-même');
+  const [medevacSiavi, setMedevacSiavi] = useState(() => isCompagnieMedevacSiavi(compagnieLibelle));
+  const [pourMoiMemo, setPourMoiMemo] = useState(
+    () => (compagnieLibelle ?? '') === 'Pour moi-même' && !isCompagnieMedevacSiavi(compagnieLibelle)
+  );
   const [aeroport_depart, setAeroportDepart] = useState(aeroportDepart || '');
   const [aeroport_arrivee, setAeroportArrivee] = useState(aeroportArrivee || '');
   const [duree_minutes, setDureeMinutes] = useState(String(dureeMinutes));
@@ -155,7 +159,38 @@ export default function VolEditForm({
     }
   }
 
-  const compagnieLib = pourMoiMemo ? 'Pour moi-même' : (compagnies.find((c) => c.id === compagnie_id)?.nom ?? compagnieLibelle);
+  /** Vol soumis par un tiers : l’utilisateur ne peut rien éditer (co-pilote ou instructeur). */
+  const isReadOnlyConfirmer = Boolean(readOnly && isConfirmationMode);
+  const compagnieLib = medevacSiavi
+    ? COMPAGNIE_MEDEVAC_SIAVI
+    : pourMoiMemo
+      ? 'Pour moi-même'
+      : (compagnies.find((c) => c.id === compagnie_id)?.nom ?? (compagnieLibelle ? String(compagnieLibelle) : ''));
+
+  function resolveCompagnieForSubmit(): { compagnie_id_out: string | null; compagnie_libelle_out: string } {
+    if (medevacSiavi) {
+      return { compagnie_id_out: null, compagnie_libelle_out: COMPAGNIE_MEDEVAC_SIAVI };
+    }
+    if (pourMoiMemo) {
+      return { compagnie_id_out: null, compagnie_libelle_out: 'Pour moi-même' };
+    }
+    const fromSelect = compagnies.find((c) => c.id === compagnie_id)?.nom;
+    if (fromSelect) {
+      return { compagnie_id_out: compagnie_id, compagnie_libelle_out: fromSelect };
+    }
+    const fromServerId = compagnieId && compagnies.find((c) => c.id === compagnieId)?.nom;
+    if (fromServerId && compagnieId) {
+      return { compagnie_id_out: compagnieId, compagnie_libelle_out: fromServerId };
+    }
+    const fromPropLibelle = (compagnieLibelle && String(compagnieLibelle).trim()) || '';
+    if (fromPropLibelle) {
+      return { compagnie_id_out: compagnieId || null, compagnie_libelle_out: fromPropLibelle };
+    }
+    if (isReadOnlyConfirmer) {
+      return { compagnie_id_out: null, compagnie_libelle_out: 'Pour moi-même' };
+    }
+    return { compagnie_id_out: compagnie_id || compagnieId || null, compagnie_libelle_out: compagnieLib.trim() };
+  }
 
   function computeDepartUtc(): string {
     const d = parseUtcLocal(heure_utc);
@@ -180,7 +215,8 @@ export default function VolEditForm({
     e.preventDefault();
     setError(null);
     const d = parseInt(duree_minutes, 10);
-    if (!type_avion_id || (!pourMoiMemo && !compagnie_id) || !aeroport_depart || !aeroport_arrivee || isNaN(d) || d < 1 || !heure_utc || !commandant_bord.trim()) {
+    const { compagnie_id_out, compagnie_libelle_out } = resolveCompagnieForSubmit();
+    if (!type_avion_id || !compagnie_libelle_out.trim() || !aeroport_depart || !aeroport_arrivee || isNaN(d) || d < 1 || !heure_utc || !commandant_bord.trim()) {
       setError('Veuillez remplir tous les champs requis.');
       return;
     }
@@ -199,8 +235,8 @@ export default function VolEditForm({
     }
     const body: Record<string, unknown> = {
       type_avion_id,
-      compagnie_id: pourMoiMemo ? null : compagnie_id,
-      compagnie_libelle: pourMoiMemo ? 'Pour moi-même' : compagnieLib,
+      compagnie_id: compagnie_id_out,
+      compagnie_libelle: compagnie_libelle_out,
       aeroport_depart,
       aeroport_arrivee,
       duree_minutes: d,
@@ -251,12 +287,31 @@ export default function VolEditForm({
       </div>
       <div>
         <label className="label">Compagnie aérienne *</label>
-        <div className="flex items-center gap-2 mb-2">
-          <input type="checkbox" id="moi" checked={pourMoiMemo} onChange={(e) => { setPourMoiMemo(e.target.checked); if (e.target.checked) setCompagnieId(''); }} disabled={readOnly} />
-          <label htmlFor="moi" className="text-sm text-slate-300">Pour moi-même</label>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2">
+          <span className="flex items-center gap-2">
+            <input type="checkbox" id="moi" checked={pourMoiMemo} onChange={(e) => { setPourMoiMemo(e.target.checked); if (e.target.checked) { setCompagnieId(''); setMedevacSiavi(false); } }} disabled={readOnly} />
+            <label htmlFor="moi" className="text-sm text-slate-300">Pour moi-même</label>
+          </span>
+          <span className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="medevac"
+              checked={medevacSiavi}
+              onChange={(e) => {
+                setMedevacSiavi(e.target.checked);
+                if (e.target.checked) {
+                  setPourMoiMemo(false);
+                  setCompagnieId('');
+                }
+              }}
+              disabled={readOnly}
+            />
+            <label htmlFor="medevac" className="text-sm text-slate-300">Vol MEDEVAC (SIAVI)</label>
+          </span>
         </div>
-        {!pourMoiMemo && (
-          <select className="input" value={compagnie_id} onChange={(e) => setCompagnieId(e.target.value)} required disabled={readOnly}>
+        <p className="text-xs text-slate-500 -mt-1 mb-2">Cochez cette case si le vol ne relève pas d&apos;une compagnie de la liste (ex. mission sanitaire SIAVI).</p>
+        {!pourMoiMemo && !medevacSiavi && (
+          <select className="input" value={compagnie_id} onChange={(e) => setCompagnieId(e.target.value)} required={!readOnly} disabled={readOnly}>
             <option value="">— Choisir —</option>
             {compagnies.map((c) => (
               <option key={c.id} value={c.id}>{c.nom}</option>

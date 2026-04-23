@@ -19,6 +19,24 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     .eq('id', id).single();
   if (!demande) return NextResponse.json({ error: 'Demande introuvable' }, { status: 404 });
 
+  const { data: profileGet } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  if (profileGet?.role !== 'admin') {
+    const { data: empRep } = await admin.from('reparation_employes')
+      .select('id').eq('entreprise_id', demande.entreprise_id).eq('user_id', user.id).limit(1);
+    if (!empRep?.length) {
+      const { data: compRow } = await admin.from('compagnies').select('pdg_id').eq('id', demande.compagnie_id).single();
+      const isClientPdg =
+        compRow?.pdg_id === user.id || (await isCoPdg(user.id, demande.compagnie_id, admin));
+      if (!isClientPdg) {
+        const { data: empComp } = await admin.from('compagnie_employes')
+          .select('id').eq('compagnie_id', demande.compagnie_id).eq('pilote_id', user.id).limit(1);
+        if (!empComp?.length) {
+          return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+        }
+      }
+    }
+  }
+
   const { data: scores } = await admin.from('reparation_mini_jeux_scores')
     .select('*').eq('demande_id', id);
 
@@ -72,14 +90,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       commentaire_entreprise: body.commentaire || null,
     }).eq('id', id);
 
-    await admin.from('compagnie_avions').update({ statut: 'en_reparation' }).eq('id', demande.avion_id);
+    // Ne pas passer l'avion en en_reparation ici : sinon le vol ferry vers le hangar est refusé
+    // (voir POST /api/compagnies/vols-ferry). Le statut avion bascule à l'arrivée au hangar (ferry ou confirmation entreprise).
 
     const { data: comp } = await admin.from('compagnies').select('pdg_id, nom').eq('id', demande.compagnie_id).single();
     if (comp) {
       await admin.from('messages').insert({
         destinataire_id: comp.pdg_id,
         titre: `✅ Réparation acceptée`,
-        contenu: `Votre demande de réparation a été acceptée. L'avion est maintenant bloqué au hangar jusqu'à la fin de la réparation et le paiement.${body.commentaire ? `\nMessage : ${body.commentaire}` : ''}`,
+        contenu: `Votre demande de réparation a été acceptée. Acheminez l'avion vers le hangar (vol ferry depuis un hub, ou demandez le transfert à l'entreprise). Les vols ligne ne sont pas autorisés pendant cette phase.${body.commentaire ? `\nMessage : ${body.commentaire}` : ''}`,
         type_message: 'normal',
       });
     }

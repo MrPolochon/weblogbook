@@ -14,6 +14,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { data: entreprise } = await admin.from('entreprises_reparation').select('*').eq('id', id).single();
   if (!entreprise) return NextResponse.json({ error: 'Entreprise introuvable' }, { status: 404 });
 
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const isAdmin = profile?.role === 'admin';
+  const isPdgEnt = String(entreprise.pdg_id) === String(user.id);
+  const { data: empRow } = await admin.from('reparation_employes').select('id').eq('entreprise_id', id).eq('user_id', user.id).limit(1);
+  if (!isAdmin && !isPdgEnt && !empRow?.length) {
+    return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+  }
+
   const { data: employes } = await admin.from('reparation_employes')
     .select('id, user_id, role, specialite, date_embauche, profiles(id, identifiant, callsign)')
     .eq('entreprise_id', id);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2, Eye, Sliders, Puzzle, Gauge, Check, ArrowRight,
@@ -24,15 +24,55 @@ interface GameScore {
 import { getGamesForDemande, type GameType } from '@/lib/reparation-games';
 import { Zap, Droplets, Flame, ClipboardCheck } from 'lucide-react';
 
-const ALL_GAME_META: Record<string, { label: string; icon: typeof Eye; color: string }> = {
-  inspection: { label: 'Inspection Visuelle', icon: Eye, color: 'text-sky-400' },
-  calibrage: { label: 'Calibrage Instruments', icon: Sliders, color: 'text-amber-400' },
-  assemblage: { label: 'Assemblage Pièces', icon: Puzzle, color: 'text-emerald-400' },
-  test_moteur: { label: 'Test Moteur', icon: Gauge, color: 'text-red-400' },
-  cablage: { label: 'Câblage Électrique', icon: Zap, color: 'text-yellow-400' },
-  hydraulique: { label: 'Circuit Hydraulique', icon: Droplets, color: 'text-blue-400' },
-  soudure: { label: 'Soudure de Précision', icon: Flame, color: 'text-orange-400' },
-  diagnostic: { label: 'Diagnostic Technique', icon: ClipboardCheck, color: 'text-teal-400' },
+const ALL_GAME_META: Record<string, { label: string; icon: typeof Eye; color: string; shortHint?: string }> = {
+  inspection: {
+    label: 'Inspection Visuelle',
+    icon: Eye,
+    color: 'text-sky-400',
+    shortHint: 'Repérez les symboles discrets sur la grille (anomalies). Évitez les cases saines.',
+  },
+  calibrage: {
+    label: 'Calibrage Instruments',
+    icon: Sliders,
+    color: 'text-amber-400',
+    shortHint: 'Glissez chaque curseur pour suivre la ligne ambre (cible mobile). Vert = bonne plage.',
+  },
+  assemblage: {
+    label: 'Assemblage Pièces',
+    icon: Puzzle,
+    color: 'text-emerald-400',
+    shortHint: 'Remettez les 10 pièces dans l’ordre logique moteur (glisser-déposer ou flèches).',
+  },
+  test_moteur: {
+    label: 'Test Moteur',
+    icon: Gauge,
+    color: 'text-red-400',
+    shortHint: 'Pendant le test, ajustez les 4 curseurs pour garder les valeurs dans la zone verte.',
+  },
+  cablage: {
+    label: 'Câblage Électrique',
+    icon: Zap,
+    color: 'text-yellow-400',
+    shortHint: 'Cliquez un fil (gauche), puis le terminal (droite) qui lui correspond. 8 connexions.',
+  },
+  hydraulique: {
+    label: 'Circuit Hydraulique',
+    icon: Droplets,
+    color: 'text-blue-400',
+    shortHint: 'Maintenez le bouton pour pomper ; cliquez les fuites rouges ; restez dans la zone verte.',
+  },
+  soudure: {
+    label: 'Soudure de Précision',
+    icon: Flame,
+    color: 'text-orange-400',
+    shortHint: 'Cliquez près des points numérotés 1→12 sur la ligne en pointillés. Surveillez la chaleur.',
+  },
+  diagnostic: {
+    label: 'Diagnostic Technique',
+    icon: ClipboardCheck,
+    color: 'text-teal-400',
+    shortHint: 'Lisez les symptômes, choisissez une cause, puis Valider. 6 questions chronométrées.',
+  },
 };
 
 const GAME_COMPONENTS: Record<GameType, React.ComponentType<{ onComplete: (s: GameScore) => Promise<boolean> | boolean }>> = {
@@ -97,6 +137,19 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
   if (loading) return <div className="flex items-center justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div>;
   if (!demande) return <p className="text-red-400">{error || 'Demande introuvable'}</p>;
 
+  if (!['en_reparation', 'mini_jeux'].includes(demande.statut)) {
+    return (
+      <div className="space-y-4">
+        <p className="text-amber-400 text-sm">
+          Cette demande n&apos;est pas à l&apos;étape mini-jeux (statut : <strong>{demande.statut}</strong>). Retournez au tableau de bord réparation.
+        </p>
+        <button type="button" onClick={() => router.push('/reparation')} className="text-sm text-slate-400 hover:text-slate-200">
+          ← Retour
+        </button>
+      </div>
+    );
+  }
+
   const allCompleted = assignedGames.every(g => completedGames.has(g));
   const avgScore = allCompleted
     ? Math.round(Array.from(completedGames.values()).reduce((a, b) => a + b, 0) / completedGames.size)
@@ -149,7 +202,9 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
                   <span className="text-sm font-bold text-emerald-400">{score}/100</span>
                 </div>
               ) : (
-                <p className="text-slate-500 text-sm">Cliquez pour jouer</p>
+                <p className="text-slate-500 text-sm">
+                  {meta.shortHint || 'Cliquez pour jouer'}
+                </p>
               )}
             </button>
           );
@@ -193,7 +248,7 @@ const ZONE_LABELS = ['Aile gauche', 'Moteur gauche', 'Fuselage avant', 'Cockpit'
 function InspectionGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
   const GRID = 8;
   const TOTAL_DEFECTS = 8;
-  const TIME_LIMIT = 35;
+  const TIME_LIMIT = 40;
 
   const [defects, setDefects] = useState<Map<number, number>>(new Map());
   const [found, setFound] = useState<Set<number>>(new Set());
@@ -275,23 +330,41 @@ function InspectionGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
           style={{ width: `${timerPct}%` }} />
       </div>
 
-      <p className="text-slate-400 text-sm">
-        Trouvez les {TOTAL_DEFECTS} défauts sur l&apos;avion. Attention, chaque faux clic coûte 5 points !
-        {!started && ' Cliquez pour commencer.'}
-      </p>
+      <div className="rounded-lg border border-sky-800/40 bg-sky-950/20 px-3 py-2.5 space-y-1.5 text-sm text-slate-300">
+        <p className="font-medium text-sky-200">Comment jouer</p>
+        <ul className="list-disc list-inside text-slate-400 space-y-1 text-xs leading-relaxed">
+          <li>
+            Sur la grille (vue de dessus), des cases contiennent une <strong className="text-slate-200">anomalie</strong> : un petit symbole à peine visible, à rapprocher de la légende en bas.
+          </li>
+          <li>
+            <strong className="text-slate-200">Cliquez</strong> sur chaque case où vous voyez un symbole pour le valider. Les lignes à gauche indiquent la zone de l&apos;appareil (de l&apos;avant vers l&apos;arrière).
+          </li>
+          <li>
+            Un clic sur une case <strong className="text-slate-200">sans</strong> défaut = faux positif (−5 pts au score final). Le chrono démarre au premier clic.
+          </li>
+        </ul>
+      </div>
 
       <div className="relative">
         {/* Aircraft silhouette SVG background */}
-        <svg viewBox="0 0 320 320" className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.07]" preserveAspectRatio="xMidYMid meet">
+        <svg viewBox="0 0 320 320" className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.12]" preserveAspectRatio="xMidYMid meet">
           <path d="M160 10 L170 80 L250 140 L280 135 L280 155 L250 150 L175 200 L180 290 L210 310 L210 320 L160 300 L110 320 L110 310 L140 290 L145 200 L70 150 L40 155 L40 135 L70 140 L150 80 Z"
             fill="currentColor" className="text-slate-300" />
         </svg>
 
         <div className="relative grid gap-0.5" style={{ gridTemplateColumns: `auto repeat(${GRID}, 1fr)` }}>
+          <div className="contents">
+            <div className="w-14 shrink-0" aria-hidden />
+            {Array.from({ length: GRID }, (_, col) => (
+              <div key={`colh-${col}`} className="flex items-end justify-center pb-0.5">
+                <span className="text-[9px] font-mono text-slate-500">{col + 1}</span>
+              </div>
+            ))}
+          </div>
           {Array.from({ length: GRID }, (_, row) => (
             <div key={`row-${row}`} className="contents">
               <div className="flex items-center pr-1.5">
-                <span className="text-[9px] text-slate-600 whitespace-nowrap w-14 text-right">{ZONE_LABELS[row]}</span>
+                <span className="text-[9px] text-slate-500 whitespace-nowrap w-14 text-right leading-tight" title={ZONE_LABELS[row]}>{ZONE_LABELS[row]}</span>
               </div>
               {Array.from({ length: GRID }, (_, col) => {
                 const idx = row * GRID + col;
@@ -299,22 +372,33 @@ function InspectionGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
                 const isDefect = defType !== undefined;
                 const isFound = found.has(idx);
                 const wasClicked = clicked.has(idx);
-                const showDefect = finished && isDefect && !isFound;
+                const showMissedAfterFinish = finished && isDefect && !isFound;
+                const showFaintHint = isDefect && !isFound && !finished;
                 const isShaking = shakeCell === idx;
+                const sym = defType !== undefined ? DEFECT_TYPES[defType].symbol : '';
 
                 return (
-                  <button key={idx} onClick={() => handleClick(idx)}
-                    className={`aspect-square rounded-sm text-xs font-bold transition-all duration-150 flex items-center justify-center ${
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleClick(idx)}
+                    title={!finished && !wasClicked ? 'Contrôler cette case' : undefined}
+                    className={`aspect-square rounded-sm text-sm font-bold transition-all duration-150 flex items-center justify-center min-h-[2rem] ${
                       isFound ? 'bg-emerald-600/80 text-white scale-95 ring-1 ring-emerald-400' :
-                      showDefect ? 'bg-red-600/60 text-red-200 animate-pulse ring-1 ring-red-500' :
+                      showMissedAfterFinish ? 'bg-red-600/60 text-red-200 animate-pulse ring-1 ring-red-500' :
+                      showFaintHint ? 'bg-slate-700/50 ring-1 ring-slate-600/40 hover:bg-slate-600/55 active:scale-90' :
                       isShaking ? 'bg-red-900/30 text-red-500' :
-                      wasClicked ? 'bg-slate-800/60 text-slate-600' :
-                      'bg-slate-700/40 hover:bg-slate-600/50 text-transparent hover:text-slate-600 active:scale-90'
+                      wasClicked ? 'bg-slate-800/60 text-slate-500 line-through decoration-slate-600' :
+                      'bg-slate-700/35 hover:bg-slate-600/45 text-slate-600/30 hover:text-slate-500 active:scale-90'
                     }`}
                     style={isShaking ? { animation: 'shake 0.4s ease-in-out' } : undefined}
-                    disabled={finished}>
-                    {isFound ? DEFECT_TYPES[defType!].symbol :
-                     showDefect ? DEFECT_TYPES[defType!].symbol : ''}
+                    disabled={finished}
+                  >
+                    {isFound ? sym :
+                     showMissedAfterFinish ? sym :
+                     showFaintHint ? (
+                       <span className={`${DEFECT_TYPES[defType!].color} opacity-[0.38] select-none`} aria-hidden>{sym}</span>
+                     ) : ''}
                   </button>
                 );
               })}
@@ -324,10 +408,16 @@ function InspectionGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
       </div>
 
       {/* Defects legend */}
-      <div className="flex flex-wrap gap-3 text-xs">
-        {DEFECT_TYPES.map(dt => (
-          <span key={dt.name} className={`${dt.color} opacity-60`}>{dt.symbol} {dt.name}</span>
-        ))}
+      <div>
+        <p className="text-[11px] font-medium text-slate-400 mb-2">Légende — types d&apos;anomalies (souvent visibles en très faible contraste sur la grille)</p>
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs">
+          {DEFECT_TYPES.map(dt => (
+            <span key={dt.name} className={`${dt.color} flex items-center gap-1`}>
+              <span className="text-base opacity-90">{dt.symbol}</span>
+              <span className="text-slate-300">{dt.name}</span>
+            </span>
+          ))}
+        </div>
       </div>
 
       {finished && (
@@ -425,7 +515,14 @@ function CalibrageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
           style={{ width: `${timerPct}%` }} />
       </div>
 
-      <p className="text-slate-400 text-sm">Réglez les 5 instruments pour atteindre la cible (trait doré). La cible oscille indépendamment.</p>
+      <div className="rounded-lg border border-amber-800/40 bg-amber-950/20 px-3 py-2.5 space-y-1.5 text-xs text-slate-400">
+        <p className="font-medium text-amber-200/90">Comment jouer</p>
+        <ul className="list-disc list-inside space-y-1 leading-relaxed">
+          <li>Chaque piste a une <strong className="text-slate-200">zone verte</strong> (tolérance) et une <strong className="text-slate-200">ligne verticale ambre</strong> : c’est la valeur cible, elle <strong className="text-slate-200">bouge</strong> toute seule.</li>
+          <li>Faites glisser le curseur (invisible, toute la hauteur de la piste) pour que le <strong className="text-slate-200">curseur bleu</strong> suive la cible ambre dans la zone verte.</li>
+          <li>À la fin du temps ou en cliquant <strong className="text-slate-200">Valider le calibrage</strong>, votre score dépend de la précision sur les 5 instruments.</li>
+        </ul>
+      </div>
 
       <div className="space-y-5">
         {GAUGE_DEFS.map((g, i) => {
@@ -575,9 +672,15 @@ function AssemblageGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
           style={{ width: `${timerPct}%` }} />
       </div>
 
-      <p className="text-slate-400 text-sm">
-        Ordonnez les 10 pièces moteur. Glisser-déposer ou flèches. L&apos;indice coûte 15 points.
-      </p>
+      <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/20 px-3 py-2.5 text-xs text-slate-400 space-y-1.5">
+        <p className="font-medium text-emerald-200/90">Comment jouer</p>
+        <p className="leading-relaxed">
+          Remettez les pièces dans l&apos;<strong className="text-slate-200">ordre d&apos;assemblage moteur</strong> (de la structure vers le haut moteur). Utilisez le glisser-déposer ou les flèches ▲▼ pour échanger avec la ligne voisine.
+        </p>
+        <p className="text-slate-500">
+          <strong className="text-slate-300">Indice</strong> : affiche la liste complète dans le bon ordre et retire <strong className="text-amber-300">15 points</strong> une seule fois (au premier affichage).
+        </p>
+      </div>
 
       <div className="grid grid-cols-1 gap-1.5 max-w-lg">
         {shuffled.map((piece, idx) => {
@@ -633,7 +736,9 @@ function AssemblageGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
                 </div>
               )}
               {submitted && (
-                <span className="text-xs flex-shrink-0">{isCorrect ? '✓' : `→ ${CORRECT_ORDER[idx] + 1}`}</span>
+                <span className="text-xs flex-shrink-0 max-w-[10rem] text-right">
+                  {isCorrect ? '✓' : `→ ${ASSEMBLY_PIECES[CORRECT_ORDER[idx]]?.name ?? '?'}`}
+                </span>
               )}
             </div>
           );
@@ -646,9 +751,18 @@ function AssemblageGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
             <button onClick={doSubmit} className="px-6 py-2 rounded-lg bg-emerald-600 text-white font-medium flex items-center gap-2 hover:bg-emerald-500">
               <Check className="h-4 w-4" /> Valider
             </button>
-            <button onClick={() => { setShowHint(!showHint); setHintUsed(true); }}
-              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm flex items-center gap-1.5 hover:bg-slate-600">
-              <Eye className="h-3.5 w-3.5" /> {showHint ? 'Masquer' : 'Indice'} {!hintUsed && '(-15pts)'}
+            <button
+              type="button"
+              onClick={() => {
+                setShowHint(prev => {
+                  const next = !prev;
+                  if (next) setHintUsed(h => (h ? h : true));
+                  return next;
+                });
+              }}
+              className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm flex items-center gap-1.5 hover:bg-slate-600"
+            >
+              <Eye className="h-3.5 w-3.5" /> {showHint ? 'Masquer' : 'Indice'} {!hintUsed && '(-15 pts 1ère fois)'}
             </button>
           </>
         )}
@@ -702,11 +816,20 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
   const wireRefs = useRef<Map<number, HTMLButtonElement | null>>(new Map());
   const termRefs = useRef<Map<number, HTMLButtonElement | null>>(new Map());
   const containerRef = useRef<HTMLDivElement>(null);
+  const [lineLayoutTick, setLineLayoutTick] = useState(0);
 
   useEffect(() => {
     const order = WIRE_DEFS.map((_, i) => i).sort(() => Math.random() - 0.5);
     setShuffledTerminals(order);
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setLineLayoutTick(t => t + 1));
+    ro.observe(el);
+    return () => ro.disconnect();
   }, []);
 
   useEffect(() => {
@@ -787,9 +910,16 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
           style={{ width: `${timerPct}%` }} />
       </div>
 
-      <p className="text-slate-400 text-xs">Connectez les 8 fils aux bons terminaux. Cliquez un fil puis son terminal.</p>
+      <div className="rounded-lg border border-yellow-800/40 bg-yellow-950/15 px-3 py-2.5 text-xs text-slate-400 space-y-1.5">
+        <p className="font-medium text-yellow-200/90">Comment jouer</p>
+        <ul className="list-disc list-inside space-y-1 leading-relaxed">
+          <li>À <strong className="text-slate-200">gauche</strong> : les fils (couleur + libellé). À <strong className="text-slate-200">droite</strong> : les bornes mélangées — chaque borne correspond à <strong className="text-slate-200">un seul</strong> fil.</li>
+          <li><strong className="text-slate-200">1)</strong> Cliquez un fil (il surligne en ambre). <strong className="text-slate-200">2)</strong> Cliquez la borne dont le texte <strong className="text-slate-200">correspond logiquement</strong> à ce fil (ex. « Batterie + » → relais de démarrage, etc.).</li>
+          <li>Répétez jusqu&apos;à <strong className="text-slate-200">8/8</strong>, puis <strong className="text-slate-200">Valider le câblage</strong>. Une connexion se remplace si vous choisissez une borne déjà utilisée.</li>
+        </ul>
+      </div>
 
-      <div ref={containerRef} className="relative grid grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)] gap-2 items-start">
+      <div ref={containerRef} className="relative grid grid-cols-[minmax(0,1fr)_minmax(48px,72px)_minmax(0,1fr)] gap-2 items-start min-h-[220px]">
         {/* Left: wires */}
         <div className="space-y-1">
           <p className="text-[10px] text-slate-600 font-medium mb-1">FILS</p>
@@ -817,8 +947,8 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
           })}
         </div>
 
-        {/* Center: SVG lines */}
-        <svg className="w-full h-full absolute inset-0 pointer-events-none" style={{ zIndex: 1 }}>
+        {/* Center: SVG lines — key pour recalculer les coords après resize */}
+        <svg key={lineLayoutTick} className="w-full h-full absolute inset-0 pointer-events-none" style={{ zIndex: 1 }} aria-hidden>
           {Array.from(connections.entries()).map(([wireId, termIdx]) => {
             const coords = getLineCoords(wireId, termIdx);
             if (!coords) return null;
@@ -1018,9 +1148,14 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
           style={{ width: `${timerPct}%` }} />
       </div>
 
-      <p className="text-slate-400 text-sm">
-        Pompez pour maintenir la pression dans la zone verte. Colmatez les fuites qui apparaissent !
-      </p>
+      <div className="rounded-lg border border-blue-800/40 bg-blue-950/20 px-3 py-2.5 text-xs text-slate-400 space-y-1.5">
+        <p className="font-medium text-blue-200/90">Comment jouer</p>
+        <ul className="list-disc list-inside space-y-1 leading-relaxed">
+          <li>Cliquez <strong className="text-slate-200">Démarrer le circuit</strong>, puis <strong className="text-slate-200">maintenez enfoncé</strong> le grand bouton bleu pour pomper (souris ou doigt).</li>
+          <li>Gardez l&apos;aiguille / la pression dans la <strong className="text-slate-200">bande verte</strong> au centre (cible {TARGET_PRESSURE} PSI).</li>
+          <li>Des <strong className="text-slate-200">fuites</strong> (pastilles rouges animées sur la conduite) apparaissent : <strong className="text-slate-200">cliquez-les</strong> pour les colmater quelques secondes. Le score reflète le temps passé en zone verte.</li>
+        </ul>
+      </div>
 
       {!running && !finished && (
         <button onClick={start} className="px-6 py-3 rounded-lg bg-blue-600 text-white font-medium text-lg flex items-center gap-2 mx-auto hover:bg-blue-500">
@@ -1130,6 +1265,17 @@ function SoudureGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
     return pts;
   });
 
+  const weldSeamPathD = useMemo(() => {
+    if (pathPoints.length <= 1) return '';
+    return pathPoints.reduce((d, pt, i) => {
+      if (i === 0) return `M ${pt.x} ${pt.y}`;
+      const prev = pathPoints[i - 1];
+      const cpx = (prev.x + pt.x) / 2;
+      const cpy = (prev.y + pt.y) / 2;
+      return `${d} Q ${prev.x} ${prev.y} ${cpx} ${cpy} T ${pt.x} ${pt.y}`;
+    }, '');
+  }, [pathPoints]);
+
   const [userClicks, setUserClicks] = useState<{ x: number; y: number }[]>([]);
   const [currentTarget, setCurrentTarget] = useState(0);
   const [submitted, setSubmitted] = useState(false);
@@ -1212,15 +1358,6 @@ function SoudureGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
     onComplete({ type_jeu: 'soudure', score, duree_secondes: Math.max(duration, 10) });
   }
 
-  const pathD = pathPoints.length > 1
-    ? pathPoints.reduce((d, pt, i) => {
-        if (i === 0) return `M ${pt.x} ${pt.y}`;
-        const prev = pathPoints[i - 1];
-        const cpx = (prev.x + pt.x) / 2;
-        return `${d} Q ${prev.x + (cpx - prev.x) * 0.5 + (Math.random() - 0.5) * 10} ${prev.y} ${cpx} ${(prev.y + pt.y) / 2} T ${pt.x} ${pt.y}`;
-      }, '')
-    : '';
-
   const weldTrail = userClicks.length > 1
     ? userClicks.reduce((d, pt, i) => i === 0 ? `M ${pt.x} ${pt.y}` : `${d} L ${pt.x} ${pt.y}`, '')
     : '';
@@ -1258,10 +1395,14 @@ function SoudureGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
         </div>
       )}
 
-      <p className="text-slate-400 text-sm">
-        Soudez chaque point dans l&apos;ordre. Précision et gestion de chaleur requises !
-        {!started && ' Cliquez pour commencer.'}
-      </p>
+      <div className="rounded-lg border border-orange-800/40 bg-orange-950/15 px-3 py-2.5 text-xs text-slate-400 space-y-1.5">
+        <p className="font-medium text-orange-200/90">Comment jouer</p>
+        <ul className="list-disc list-inside space-y-1 leading-relaxed">
+          <li>Suivez la <strong className="text-slate-200">ligne grise en pointillés</strong> : des points numérotés <strong className="text-slate-200">1, 2, 3…</strong> indiquent l&apos;ordre des clics.</li>
+          <li>Cliquez <strong className="text-slate-200">près</strong> de chaque point (cercle orange = point actif). Trop loin = point rouge et score réduit.</li>
+          <li>Chaque clic <strong className="text-slate-200">chauffe</strong> l&apos;outil : si la jauge dépasse le seuil, attendez qu&apos;elle redescende avant de continuer.</li>
+        </ul>
+      </div>
 
       <div className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden">
         <svg ref={svgRef} viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
@@ -1277,7 +1418,7 @@ function SoudureGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
           <rect width={CANVAS_W} height={CANVAS_H} fill="url(#metalGrid)" />
 
           {/* Weld seam to follow */}
-          <path d={pathD} stroke="#475569" strokeWidth="3" fill="none" strokeDasharray="8 4" opacity="0.6" />
+          <path d={weldSeamPathD} stroke="#475569" strokeWidth="3" fill="none" strokeDasharray="8 4" opacity="0.6" />
 
           {/* User's weld trail */}
           {weldTrail && (
@@ -1470,6 +1611,11 @@ function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => Promise<
   const qTimerRef = useRef<ReturnType<typeof setInterval>>();
   const finishTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const submittingRef = useRef(false);
+  const answersRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
 
   useEffect(() => {
     if (showResult) return;
@@ -1499,7 +1645,7 @@ function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => Promise<
 
   function handleTimeout() {
     setShowResult(true);
-    const newAnswers = [...answers, -1];
+    const newAnswers = [...answersRef.current, -1];
     setAnswers(newAnswers);
     advanceAfterDelay(newAnswers);
   }
@@ -1513,7 +1659,7 @@ function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => Promise<
     if (selectedAnswer === null || showResult) return;
     clearInterval(qTimerRef.current);
     setShowResult(true);
-    const newAnswers = [...answers, selectedAnswer];
+    const newAnswers = [...answersRef.current, selectedAnswer];
     setAnswers(newAnswers);
     advanceAfterDelay(newAnswers);
   }
@@ -1568,6 +1714,15 @@ function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => Promise<
 
   return (
     <div className="space-y-4">
+      <div className="rounded-lg border border-teal-800/40 bg-teal-950/20 px-3 py-2.5 text-xs text-slate-400 space-y-1.5">
+        <p className="font-medium text-teal-200/90">Comment jouer</p>
+        <ul className="list-disc list-inside space-y-1 leading-relaxed">
+          <li>Lisez les <strong className="text-slate-200">symptômes</strong>, puis choisissez <strong className="text-slate-200">une</strong> réponse parmi A–D et cliquez <strong className="text-slate-200">Valider</strong>.</li>
+          <li>Chaque question est limitée dans le temps (barre teal). Si le temps expire, la question compte comme ratée.</li>
+          <li>À la fin des 6 questions, le score est <strong className="text-slate-200">enregistré automatiquement</strong> ; le bouton « Terminer » sert seulement si la sauvegarde a échoué.</li>
+        </ul>
+      </div>
+
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2"><ClipboardCheck className="h-5 w-5 text-teal-400" />Diagnostic Technique</h2>
         <div className="flex items-center gap-3">
@@ -1797,9 +1952,14 @@ function TestMoteurGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
           style={{ width: `${timerPct}%` }} />
       </div>
 
-      <p className="text-slate-400 text-sm">
-        Maintenez les 4 paramètres moteur dans la zone verte. La difficulté augmente progressivement !
-      </p>
+      <div className="rounded-lg border border-red-800/40 bg-red-950/15 px-3 py-2.5 text-xs text-slate-400 space-y-1.5">
+        <p className="font-medium text-red-200/90">Comment jouer</p>
+        <ul className="list-disc list-inside space-y-1 leading-relaxed">
+          <li>Lancez le test : les paramètres <strong className="text-slate-200">réagissent tout seuls</strong> (bruit / oscillations). Utilisez les <strong className="text-slate-200">curseurs invisibles</strong> sur chaque barre comme au calibrage : faites glisser sur toute la hauteur de la piste.</li>
+          <li>Restez dans la <strong className="text-slate-200">zone verte</strong> pour chaque grandeur (RPM, EGT, huile, carburant). Les phases <strong className="text-slate-200">Chauffe → Croisière → Stress</strong> augmentent la difficulté.</li>
+          <li>Le pourcentage en haut est une moyenne du temps passé « en vert » sur les 4 paramètres.</li>
+        </ul>
+      </div>
 
       {!running && !finished && (
         <button onClick={start} className="px-6 py-3 rounded-lg bg-red-600 text-white font-medium text-lg flex items-center gap-2 mx-auto hover:bg-red-500">

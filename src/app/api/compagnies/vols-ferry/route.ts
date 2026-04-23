@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { COUT_VOL_FERRY, calculerVolFerryAuto, calculerUsureFerry } from '@/lib/compagnie-utils';
 import { isCoPdg } from '@/lib/co-pdg-utils';
+import { advanceReparationIfFerryArrivedAtHangar } from '@/lib/reparation-after-ferry';
 
 export async function GET(request: Request) {
   try {
@@ -53,6 +54,8 @@ export async function GET(request: Request) {
             statut: nouveauStatut 
           })
           .eq('id', vol.avion_id);
+
+        await advanceReparationIfFerryArrivedAtHangar(admin, vol.avion_id, vol.aeroport_arrivee);
       }
     }
     
@@ -177,12 +180,6 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    if (avion.statut === 'en_reparation') {
-      return NextResponse.json({ 
-        error: 'L\'avion est en réparation professionnelle. Il sera libéré après paiement de la facture.' 
-      }, { status: 400 });
-    }
-
     // Règles réparation: un avion en demande de réparation active ne peut faire que le ferry vers le hangar demandé (statut acceptee).
     const { data: activeRepair } = await admin
       .from('reparation_demandes')
@@ -210,6 +207,12 @@ export async function POST(request: Request) {
           error: `Cet avion est engagé en réparation (${activeRepair.statut}). Aucun vol ferry n'est autorisé pour le moment.`
         }, { status: 400 });
       }
+    }
+
+    if (avion.statut === 'en_reparation') {
+      return NextResponse.json({ 
+        error: 'L\'avion est en réparation professionnelle. Il sera libéré après paiement de la facture.' 
+      }, { status: 400 });
     }
 
     // Vérifier qu'il n'y a pas de plan de vol en cours pour cet avion

@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMinutes, subMinutes } from 'date-fns';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { COMPAGNIE_MEDEVAC_SIAVI } from '@/lib/vol-compagnie-libelle';
 
 import type { PlanPreFill } from './NouveauVolClient';
 
@@ -41,6 +42,7 @@ export default function VolForm({
   const [, startTransition] = useTransition();
   const [type_avion_id, setTypeAvionId] = useState('');
   const [compagnie_id, setCompagnieId] = useState('');
+  const [medevacSiavi, setMedevacSiavi] = useState(false);
   const [pourMoiMemo, setPourMoiMemo] = useState(false);
   const [aeroport_depart, setAeroportDepart] = useState('');
   const [aeroport_arrivee, setAeroportArrivee] = useState('');
@@ -80,7 +82,11 @@ export default function VolForm({
     onClearPlan?.();
   }
 
-  const compagnieLibelle = pourMoiMemo ? 'Pour moi-même' : (compagnies.find((c) => c.id === compagnie_id)?.nom ?? '');
+  const compagnieLibelle = medevacSiavi
+    ? COMPAGNIE_MEDEVAC_SIAVI
+    : pourMoiMemo
+      ? 'Pour moi-même'
+      : (compagnies.find((c) => c.id === compagnie_id)?.nom ?? '');
 
   function computeDepartUtc(): string {
     const d = parseUtcLocal(heure_utc);
@@ -105,7 +111,7 @@ export default function VolForm({
     e.preventDefault();
     setError(null);
     const d = parseInt(duree_minutes, 10);
-    if (!type_avion_id || (!pourMoiMemo && !compagnie_id) || !aeroport_depart || !aeroport_arrivee || isNaN(d) || d < 1 || !heure_utc || !commandant_bord.trim()) {
+    if (!type_avion_id || (!pourMoiMemo && !medevacSiavi && !compagnie_id) || !aeroport_depart || !aeroport_arrivee || isNaN(d) || d < 1 || !heure_utc || !commandant_bord.trim()) {
       setError('Veuillez remplir tous les champs requis.');
       return;
     }
@@ -129,8 +135,8 @@ export default function VolForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type_avion_id,
-          compagnie_id: pourMoiMemo ? null : compagnie_id,
-          compagnie_libelle: pourMoiMemo ? 'Pour moi-même' : compagnieLibelle,
+          compagnie_id: pourMoiMemo || medevacSiavi ? null : compagnie_id,
+          compagnie_libelle: compagnieLibelle,
           aeroport_depart,
           aeroport_arrivee,
           duree_minutes: d,
@@ -189,16 +195,34 @@ export default function VolForm({
 
       <div>
         <label className="label">Compagnie aérienne *</label>
-        <div className="flex items-center gap-2 mb-2">
-          <input
-            type="checkbox"
-            id="moi"
-            checked={pourMoiMemo}
-            onChange={(e) => { setPourMoiMemo(e.target.checked); if (e.target.checked) setCompagnieId(''); }}
-          />
-          <label htmlFor="moi" className="text-sm text-slate-300">Pour moi-même</label>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2">
+          <span className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="moi"
+              checked={pourMoiMemo}
+              onChange={(e) => { setPourMoiMemo(e.target.checked); if (e.target.checked) { setCompagnieId(''); setMedevacSiavi(false); } }}
+            />
+            <label htmlFor="moi" className="text-sm text-slate-300">Pour moi-même</label>
+          </span>
+          <span className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="medevac"
+              checked={medevacSiavi}
+              onChange={(e) => {
+                setMedevacSiavi(e.target.checked);
+                if (e.target.checked) {
+                  setPourMoiMemo(false);
+                  setCompagnieId('');
+                }
+              }}
+            />
+            <label htmlFor="medevac" className="text-sm text-slate-300">Vol MEDEVAC (SIAVI)</label>
+          </span>
         </div>
-        {!pourMoiMemo && (
+        <p className="text-xs text-slate-500 -mt-1 mb-2">Cochez cette case si le vol ne relève pas d&apos;une compagnie de la liste (ex. mission sanitaire SIAVI).</p>
+        {!pourMoiMemo && !medevacSiavi && (
           <select
             className="input"
             value={compagnie_id}

@@ -15,6 +15,13 @@ export async function GET(req: Request) {
   if (!entrepriseId) return NextResponse.json({ error: 'entreprise_id requis' }, { status: 400 });
 
   const admin = createAdminClient();
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const { data: entRow } = await admin.from('entreprises_reparation').select('pdg_id').eq('id', entrepriseId).single();
+  if (!entRow) return NextResponse.json({ error: 'Entreprise introuvable' }, { status: 404 });
+  const { data: empH } = await admin.from('reparation_employes').select('id').eq('entreprise_id', entrepriseId).eq('user_id', user.id).limit(1);
+  const allowed = profile?.role === 'admin' || String(entRow.pdg_id) === String(user.id) || !!empH?.length;
+  if (!allowed) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+
   const { data } = await admin.from('reparation_hangars').select('*').eq('entreprise_id', entrepriseId);
   return NextResponse.json(data || []);
 }

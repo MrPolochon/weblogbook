@@ -200,7 +200,11 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    const { data: vol } = await supabase.from('vols').select('pilote_id, copilote_id, copilote_confirme_par_pilote, instructeur_id, statut, refusal_count').eq('id', id).single();
+    const { data: vol } = await supabase
+      .from('vols')
+      .select('pilote_id, copilote_id, copilote_confirme_par_pilote, instructeur_id, statut, refusal_count')
+      .eq('id', id)
+      .single();
     if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
     const isPiloteOrCopilote = vol.pilote_id === user.id || vol.copilote_id === user.id;
     const isInstructeurEnAttente = vol.instructeur_id === user.id && vol.statut === 'en_attente_confirmation_instructeur';
