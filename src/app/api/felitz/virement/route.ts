@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { rateLimit } from '@/lib/rate-limit';
+import { canVirementCompteAllianceFelitz } from '@/lib/co-pdg-utils';
 
 // POST - Effectuer un virement
 export async function POST(req: NextRequest) {
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
 
     // Vérifier que l'utilisateur a accès au compte source (sans join pour éviter les soucis avec compagnie_id null sur comptes personnels)
     const { data: compteSource } = await admin.from('felitz_comptes')
-      .select('id, solde, vban, type, proprietaire_id, compagnie_id')
+      .select('id, solde, vban, type, proprietaire_id, compagnie_id, alliance_id')
       .eq('id', compte_source_id)
       .single();
 
@@ -63,7 +64,12 @@ export async function POST(req: NextRequest) {
       isCoPdg = Boolean(emp);
     }
 
-    if (!isAdmin && !isOwner && !isPdg && !isCoPdg) {
+    let isAllianceLeader = false;
+    if (compteSource.type === 'alliance' && compteSource.alliance_id) {
+      isAllianceLeader = await canVirementCompteAllianceFelitz(user.id, compteSource.alliance_id, admin);
+    }
+
+    if (!isAdmin && !isOwner && !isPdg && !isCoPdg && !isAllianceLeader) {
       return NextResponse.json({ error: 'Non autorisé pour ce compte' }, { status: 403 });
     }
 
@@ -158,7 +164,7 @@ export async function GET(req: NextRequest) {
     const admin = createAdminClient();
     if (compteId) {
       const { data: compte } = await admin.from('felitz_comptes')
-        .select('id, proprietaire_id, compagnie_id')
+        .select('id, proprietaire_id, compagnie_id, type, alliance_id')
         .eq('id', compteId).single();
       if (!compte) return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
@@ -178,7 +184,11 @@ export async function GET(req: NextRequest) {
           .maybeSingle();
         isCoPdg = Boolean(emp);
       }
-      if (!isAdmin && !isOwner && !isPdg && !isCoPdg) {
+      let isAllianceLeader = false;
+      if (compte.type === 'alliance' && compte.alliance_id) {
+        isAllianceLeader = await canVirementCompteAllianceFelitz(user.id, compte.alliance_id, admin);
+      }
+      if (!isAdmin && !isOwner && !isPdg && !isCoPdg && !isAllianceLeader) {
         return NextResponse.json({ error: 'Non autorisé pour ce compte' }, { status: 403 });
       }
     }

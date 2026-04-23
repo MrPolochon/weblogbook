@@ -26,9 +26,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const body = await req.json().catch(() => ({}));
+  if (body.virement_vice_president_autorise !== undefined) {
+    const isPresident = myMembers.some(m => m.role === 'president');
+    if (!isPresident) {
+      return NextResponse.json({ error: 'Seul le président peut modifier cette option' }, { status: 403 });
+    }
+  }
+
   const allowed = [
     'codeshare_actif', 'codeshare_pourcent', 'taxe_alliance_actif', 'taxe_alliance_pourcent',
     'transfert_avions_actif', 'pret_avions_actif', 'don_avions_actif', 'partage_hubs_actif',
+    'virement_vice_president_autorise',
   ];
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   for (const key of allowed) {

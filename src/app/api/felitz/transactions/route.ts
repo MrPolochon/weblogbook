@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isAlliancePresidentOrVice } from '@/lib/co-pdg-utils';
 
 // GET - Récupérer les transactions d'un compte
 export async function GET(req: NextRequest) {
@@ -47,18 +48,8 @@ export async function GET(req: NextRequest) {
     }
     let isAllianceLeader = false;
     let isReparationPdg = false;
-    if (compte.alliance_id) {
-      const { data: userComp } = await admin.from('compagnies').select('id').eq('pdg_id', user.id);
-      const compIds = (userComp || []).map(c => c.id);
-      if (compIds.length > 0) {
-        const { data: amList } = await admin.from('alliance_membres')
-          .select('role')
-          .eq('alliance_id', compte.alliance_id)
-          .in('compagnie_id', compIds)
-          .limit(1);
-        const am = amList?.[0];
-        isAllianceLeader = !!am && ['president', 'vice_president'].includes(am.role || '');
-      }
+    if (compte.type === 'alliance' && compte.alliance_id) {
+      isAllianceLeader = await isAlliancePresidentOrVice(user.id, compte.alliance_id, admin);
     }
     if (compte.entreprise_reparation_id) {
       const { data: ent } = await admin.from('entreprises_reparation')

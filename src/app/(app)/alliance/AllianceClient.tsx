@@ -16,6 +16,8 @@ interface Parametres {
   pret_avions_actif: boolean;
   don_avions_actif: boolean;
   partage_hubs_actif: boolean;
+  /** Si false, seul le président peut virer depuis le compte alliance. */
+  virement_vice_president_autorise?: boolean;
 }
 
 interface Membre {
@@ -162,6 +164,11 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
 
   const isLeader = activeRole === 'president' || activeRole === 'vice_president';
   const isPresident = activeRole === 'president';
+  const isPresidentInAlliance = mesCompagnies.some(m => m.role === 'president');
+  const virementViceAutorise = detail?.parametres?.virement_vice_president_autorise !== false;
+  const canVirementCompteAlliance = mesCompagnies.some(
+    m => m.role === 'president' || (m.role === 'vice_president' && virementViceAutorise)
+  );
 
   useEffect(() => {
     fetch('/api/alliances').then(r => r.json()).then(d => setAlliances(Array.isArray(d) ? d : [])).catch(() => setAlliances([])).finally(() => setLoading(false));
@@ -341,9 +348,9 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
         {tab === 'dashboard' && <DashboardTab detail={detail} />}
         {tab === 'membres' && <MembresTab detail={detail} isPresident={!!isPresident} isLeader={!!isLeader} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} compagniesSansAlliance={compagniesSansAlliance} />}
         {tab === 'flotte' && <FlotteTab detail={detail} pdgCompagnieIds={pdgCompagnieIds} selectedCompagnieId={activeCompagnieId} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
-        {tab === 'finances' && <FinancesTab detail={detail} isLeader={!!isLeader} isPdg={isPdgOfActive} pdgCompagnieIds={pdgCompagnieIds} selectedCompagnieId={activeCompagnieId} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
+        {tab === 'finances' && <FinancesTab detail={detail} isLeader={!!isLeader} canVirementCompteAlliance={canVirementCompteAlliance} isPdg={isPdgOfActive} pdgCompagnieIds={pdgCompagnieIds} selectedCompagnieId={activeCompagnieId} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
         {tab === 'annonces' && <AnnoncesTab detail={detail} isLeader={!!isLeader} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
-        {tab === 'parametres' && <ParametresTab detail={detail} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
+        {tab === 'parametres' && <ParametresTab detail={detail} isPresidentInAlliance={isPresidentInAlliance} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
       </div>
     </div>
   );
@@ -694,8 +701,8 @@ function FlotteTab({ detail, pdgCompagnieIds, selectedCompagnieId, onRefresh, fl
   );
 }
 
-function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, selectedCompagnieId, onRefresh, flash, api, busy }: {
-  detail: AllianceDetail; isLeader: boolean; isPdg: boolean;
+function FinancesTab({ detail, isLeader, canVirementCompteAlliance, isPdg, pdgCompagnieIds, selectedCompagnieId, onRefresh, flash, api, busy }: {
+  detail: AllianceDetail; isLeader: boolean; canVirementCompteAlliance: boolean; isPdg: boolean;
   pdgCompagnieIds: string[];
   selectedCompagnieId: string | null;
   onRefresh: () => void; flash: (m: string, e?: boolean) => void;
@@ -708,6 +715,10 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, selectedCompagn
   const [fondsMotif, setFondsMotif] = useState('');
   const [showContrib, setShowContrib] = useState(false);
   const [showDemande, setShowDemande] = useState(false);
+  const [showVirementAlliance, setShowVirementAlliance] = useState(false);
+  const [virementVban, setVirementVban] = useState('');
+  const [virementMontant, setVirementMontant] = useState('');
+  const [virementLibelle, setVirementLibelle] = useState('');
 
   const activeCompId = selectedCompagnieId ?? detail.my_compagnie_ids?.[0] ?? '';
   const selectedMember = detail.membres.find(m => m.compagnie_id === activeCompId);
@@ -724,12 +735,95 @@ function FinancesTab({ detail, isLeader, isPdg, pdgCompagnieIds, selectedCompagn
   return (
     <div className="space-y-6">
       {detail.compte_alliance && (
-        <div className="p-4 rounded-lg bg-violet-900/20 border border-violet-700/30 flex items-center gap-3">
-          <Landmark className="h-6 w-6 text-violet-400" />
-          <div>
-            <p className="text-slate-200 font-semibold">{detail.compte_alliance.solde.toLocaleString('fr-FR')} F$</p>
-            <p className="text-slate-400 text-xs">VBAN : {detail.compte_alliance.vban}</p>
+        <div className="space-y-3">
+          <div className="p-4 rounded-lg bg-violet-900/20 border border-violet-700/30 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <Landmark className="h-6 w-6 text-violet-400" />
+              <div>
+                <p className="text-slate-200 font-semibold">{detail.compte_alliance.solde.toLocaleString('fr-FR')} F$</p>
+                <p className="text-slate-400 text-xs">VBAN : {detail.compte_alliance.vban}</p>
+              </div>
+            </div>
+            {canVirementCompteAlliance && (
+              <button
+                type="button"
+                onClick={() => setShowVirementAlliance(!showVirementAlliance)}
+                className="px-3 py-1.5 rounded-lg bg-violet-600/30 hover:bg-violet-600/50 text-violet-200 text-sm flex items-center gap-1.5 transition"
+              >
+                <Send className="h-4 w-4" />
+                Virement vers un VBAN
+                {showVirementAlliance ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </button>
+            )}
           </div>
+          {isLeader && !canVirementCompteAlliance && (
+            <p className="text-xs text-amber-500/90 px-1">
+              Les virements depuis le compte alliance sont réservés au président. Le président peut autoriser les vice-présidents dans l&apos;onglet Paramètres.
+            </p>
+          )}
+          {canVirementCompteAlliance && showVirementAlliance && (
+            <div className="p-4 rounded-lg bg-slate-700/30 border border-violet-600/20 space-y-3">
+              <p className="text-xs text-slate-400">
+                Vous pouvez envoyer des fonds du compte alliance vers n&apos;importe quel VBAN Felitz (compte perso, entreprise, autre alliance, etc.).
+              </p>
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-medium text-slate-300">VBAN destinataire</label>
+                <input
+                  type="text"
+                  value={virementVban}
+                  onChange={(e) => setVirementVban(e.target.value)}
+                  placeholder="MIXOU… ENTERMIXOU… MIXALLIANCE…"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 font-mono text-sm"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2 items-end">
+                <div>
+                  <label className="text-xs font-medium text-slate-300 block mb-1">Montant (F$)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={virementMontant}
+                    onChange={(e) => setVirementMontant(e.target.value)}
+                    className="w-32 px-3 py-2 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 text-sm"
+                  />
+                </div>
+                <div className="flex-1 min-w-[120px]">
+                  <label className="text-xs font-medium text-slate-300 block mb-1">Libellé (optionnel)</label>
+                  <input
+                    type="text"
+                    value={virementLibelle}
+                    onChange={(e) => setVirementLibelle(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 text-sm"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={busy || !virementVban.trim() || !virementMontant || Number(virementMontant) <= 0}
+                  onClick={async () => {
+                    try {
+                      await api('/api/felitz/virement', 'POST', {
+                        compte_source_id: detail.compte_alliance!.id,
+                        vban_destination: virementVban.trim(),
+                        montant: parseInt(virementMontant, 10),
+                        libelle: virementLibelle.trim() || undefined,
+                      });
+                      flash('Virement effectué');
+                      setVirementVban('');
+                      setVirementMontant('');
+                      setVirementLibelle('');
+                      setShowVirementAlliance(false);
+                      onRefresh();
+                    } catch (err) {
+                      flash(err instanceof Error ? err.message : 'Erreur', true);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium disabled:opacity-50"
+                >
+                  Envoyer
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -944,8 +1038,8 @@ function AnnoncesTab({ detail, isLeader, onRefresh, flash, api, busy }: {
   );
 }
 
-function ParametresTab({ detail, onRefresh, flash, api, busy }: {
-  detail: AllianceDetail; onRefresh: () => void;
+function ParametresTab({ detail, isPresidentInAlliance, onRefresh, flash, api, busy }: {
+  detail: AllianceDetail; isPresidentInAlliance: boolean; onRefresh: () => void;
   flash: (m: string, e?: boolean) => void;
   api: (u: string, m: string, b?: unknown) => Promise<unknown>; busy: boolean;
 }) {
@@ -959,6 +1053,7 @@ function ParametresTab({ detail, onRefresh, flash, api, busy }: {
     pret_avions_actif: p?.pret_avions_actif ?? false,
     don_avions_actif: p?.don_avions_actif ?? false,
     partage_hubs_actif: p?.partage_hubs_actif ?? false,
+    virement_vice_president_autorise: p?.virement_vice_president_autorise !== false,
   });
 
   const [editNom, setEditNom] = useState(detail.nom);
@@ -1023,8 +1118,28 @@ function ParametresTab({ detail, onRefresh, flash, api, busy }: {
             )}
           </div>
         ))}
+        {isPresidentInAlliance && (
+          <div className="rounded-lg bg-amber-900/10 border border-amber-700/20 px-4 py-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <span className="text-sm font-medium text-slate-200">Virements compte alliance par les vice-présidents</span>
+                <p className="text-xs text-slate-500 mt-1">Si activé, les vice-présidents peuvent effectuer des virements depuis le compte Felitz de l&apos;alliance, comme le président. Si désactivé, seul le président peut les faire.</p>
+              </div>
+              <button type="button" onClick={() => setForm(f => ({ ...f, virement_vice_president_autorise: !f.virement_vice_president_autorise }))} className={`w-10 h-5 rounded-full transition flex-shrink-0 ${form.virement_vice_president_autorise ? 'bg-amber-500' : 'bg-slate-600'} relative`}>
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition ${form.virement_vice_president_autorise ? 'left-5' : 'left-0.5'}`} />
+              </button>
+            </div>
+          </div>
+        )}
+
         <button disabled={busy} onClick={async () => {
-          try { await api(`/api/alliances/${detail.id}/parametres`, 'PATCH', form); flash('Paramètres enregistrés'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+          try {
+            const payload: Record<string, unknown> = { ...form };
+            if (!isPresidentInAlliance) delete payload.virement_vice_president_autorise;
+            await api(`/api/alliances/${detail.id}/parametres`, 'PATCH', payload);
+            flash('Paramètres enregistrés');
+            onRefresh();
+          } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
         }} className="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium disabled:opacity-50">Enregistrer les paramètres</button>
       </div>
 
