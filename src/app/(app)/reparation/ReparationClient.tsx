@@ -458,7 +458,12 @@ function DemandesTab({ detail, api, flash, busy, onRefresh, router }: {
                 <button disabled={busy} onClick={() => doAction(d.id, 'completer', { livraison: 'ferry' })} className="px-3 py-1 rounded bg-sky-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Truck className="h-3 w-3" />Ferry retour</button>
               </div>
             )}
-            {!['completee', 'refusee', 'annulee', 'facturee', 'payee'].includes(d.statut) && (
+            {d.statut === 'retour_transit' && (
+              <p className="text-xs text-sky-400 max-w-md">
+                En attente : le client doit créer un vol ferry (Ma compagnie) vers sa base. La demande se clôture à l&apos;arrivée du ferry.
+              </p>
+            )}
+            {!['completee', 'refusee', 'annulee', 'facturee', 'payee', 'retour_transit'].includes(d.statut) && (
               <button disabled={busy} onClick={() => doAction(d.id, 'annuler')} className="px-3 py-1 rounded bg-slate-700 text-slate-300 text-xs disabled:opacity-50">Annuler</button>
             )}
           </div>

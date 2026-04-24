@@ -58,7 +58,7 @@ export async function POST(req: Request) {
   if (!isLeader && !empCheck?.length) return NextResponse.json({ error: 'Seul le PDG ou un employé peut demander une réparation' }, { status: 403 });
 
   const { data: avion } = await admin.from('compagnie_avions')
-    .select('id, immatriculation, nom_bapteme, usure_percent, compagnie_id, statut, bloque_incident')
+    .select('id, immatriculation, nom_bapteme, usure_percent, compagnie_id, statut, bloque_incident, aeroport_actuel')
     .eq('id', avion_id).single();
   if (!avion) return NextResponse.json({ error: 'Avion introuvable' }, { status: 404 });
   if (avion.statut === 'detruit') return NextResponse.json({ error: 'Cet avion est détruit.' }, { status: 400 });
@@ -88,6 +88,7 @@ export async function POST(req: Request) {
     .limit(1);
   if (existingDemande?.length) return NextResponse.json({ error: 'Cet avion a déjà une demande en cours' }, { status: 409 });
 
+  const departOaci = String(avion.aeroport_actuel || '').trim().toUpperCase() || null;
   const { data: demande, error } = await admin.from('reparation_demandes').insert({
     entreprise_id,
     compagnie_id,
@@ -95,6 +96,7 @@ export async function POST(req: Request) {
     hangar_id,
     usure_avant: avion.usure_percent ?? 0,
     commentaire_compagnie: commentaire ? String(commentaire).trim() : null,
+    aeroport_depart_client: departOaci,
   }).select().single();
   if (error) {
     console.error('reparation demandes POST:', error);

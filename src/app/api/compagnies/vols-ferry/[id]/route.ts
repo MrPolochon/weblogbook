@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { calculerUsureFerry } from '@/lib/compagnie-utils';
 import { isCoPdg } from '@/lib/co-pdg-utils';
-import { advanceReparationIfFerryArrivedAtHangar } from '@/lib/reparation-after-ferry';
+import { advanceReparationIfFerryArrivedAtHangar, completeReparationReturnFerry } from '@/lib/reparation-after-ferry';
 
 export async function PATCH(
   request: Request,
@@ -78,6 +78,7 @@ export async function PATCH(
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
       await advanceReparationIfFerryArrivedAtHangar(admin, vol.avion_id, vol.aeroport_arrivee);
+      await completeReparationReturnFerry(admin, vol.avion_id, vol.aeroport_arrivee);
 
       return NextResponse.json({ ok: true, usure_appliquee: usure, nouvelle_usure: nouvelleUsure });
     }

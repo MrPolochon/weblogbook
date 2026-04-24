@@ -3,7 +3,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { COUT_VOL_FERRY, calculerVolFerryAuto, calculerUsureFerry } from '@/lib/compagnie-utils';
 import { isCoPdg } from '@/lib/co-pdg-utils';
-import { advanceReparationIfFerryArrivedAtHangar } from '@/lib/reparation-after-ferry';
+import {
+  advanceReparationIfFerryArrivedAtHangar,
+  completeReparationReturnFerry,
+  resolveAeroportBaseRetour,
+} from '@/lib/reparation-after-ferry';
 
 export async function GET(request: Request) {
   try {
@@ -56,6 +60,7 @@ export async function GET(request: Request) {
           .eq('id', vol.avion_id);
 
         await advanceReparationIfFerryArrivedAtHangar(admin, vol.avion_id, vol.aeroport_arrivee);
+        await completeReparationReturnFerry(admin, vol.avion_id, vol.aeroport_arrivee);
       }
     }
     
@@ -133,18 +138,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Seul le PDG peut créer des vols ferry' }, { status: 403 });
     }
 
-    // Vérifier que l'arrivée est un hub
-    const { data: hub } = await admin
-      .from('compagnie_hubs')
-      .select('id')
-      .eq('compagnie_id', compagnie_id)
-      .eq('aeroport_code', aa)
-      .maybeSingle();
-    
-    if (!hub) {
-      return NextResponse.json({ error: 'L\'aéroport d\'arrivée doit être un hub de la compagnie.' }, { status: 400 });
-    }
-
     // Vérifier l'avion
     const { data: avion } = await admin
       .from('compagnie_avions')
@@ -180,16 +173,17 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // Règles réparation: un avion en demande de réparation active ne peut faire que le ferry vers le hangar demandé (statut acceptee).
+    // Règles réparation: vers hangar (acceptee) ou retour base (retour_transit) ; les autres statuts bloquent.
     const { data: activeRepair } = await admin
       .from('reparation_demandes')
-      .select('id, statut, hangar_id, reparation_hangars!inner(aeroport_code)')
+      .select('id, statut, hangar_id, compagnie_id, aeroport_depart_client, reparation_hangars!inner(aeroport_code)')
       .eq('avion_id', avion_id)
       .in('statut', ['acceptee', 'en_transit', 'en_reparation', 'mini_jeux', 'terminee', 'facturee', 'payee', 'retour_transit'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
+    let skipHubCheckForRetour = false;
     if (activeRepair) {
       const hangarRow = Array.isArray(activeRepair.reparation_hangars)
         ? activeRepair.reparation_hangars[0]
@@ -197,15 +191,43 @@ export async function POST(request: Request) {
       const hangarAeroport = hangarRow?.aeroport_code;
 
       if (activeRepair.statut === 'acceptee') {
-        if (!hangarAeroport || aa !== hangarAeroport) {
+        if (!hangarAeroport || aa !== String(hangarAeroport).toUpperCase()) {
           return NextResponse.json({
             error: `Cet avion est accepté en réparation. Le seul vol ferry autorisé est vers le hangar (${hangarAeroport || 'inconnu'}).`
           }, { status: 400 });
         }
+      } else if (activeRepair.statut === 'retour_transit') {
+        const cible = await resolveAeroportBaseRetour(admin, {
+          compagnie_id: activeRepair.compagnie_id,
+          aeroport_depart_client: activeRepair.aeroport_depart_client,
+        });
+        if (!cible) {
+          return NextResponse.json({
+            error: 'Retour impossible : aéroport de base introuvable. Ajoutez un hub compagnie.',
+          }, { status: 400 });
+        }
+        if (aa !== cible) {
+          return NextResponse.json({
+            error: `Après la réparation, seul un ferry vers votre base de retour (${cible}) est autorisé.`,
+          }, { status: 400 });
+        }
+        skipHubCheckForRetour = true;
       } else {
         return NextResponse.json({
           error: `Cet avion est engagé en réparation (${activeRepair.statut}). Aucun vol ferry n'est autorisé pour le moment.`
         }, { status: 400 });
+      }
+    }
+
+    if (!skipHubCheckForRetour) {
+      const { data: hub } = await admin
+        .from('compagnie_hubs')
+        .select('id')
+        .eq('compagnie_id', compagnie_id)
+        .eq('aeroport_code', aa)
+        .maybeSingle();
+      if (!hub) {
+        return NextResponse.json({ error: 'L\'aéroport d\'arrivée doit être un hub de la compagnie.' }, { status: 400 });
       }
     }
 
