@@ -71,7 +71,9 @@ export default function InstructionClient({
 
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
+  const [rattachIdentifiant, setRattachIdentifiant] = useState('');
   const [formationLicence, setFormationLicence] = useState('PPL');
+  const [formationLicenceRattach, setFormationLicenceRattach] = useState('PPL');
   const [selectedEleveId, setSelectedEleveId] = useState('');
   const [typeAvionId, setTypeAvionId] = useState('');
   const [nomPerso, setNomPerso] = useState('');
@@ -197,6 +199,30 @@ export default function InstructionClient({
       setIdentifiant('');
       setPassword('');
       toast.success('Eleve cree et rattache a votre formation.');
+    });
+  }
+
+  async function rattachCompteExistant(e: React.FormEvent) {
+    e.preventDefault();
+    const id = rattachIdentifiant.trim();
+    if (id.length < 2) {
+      toast.error('Indiquez l’identifiant du compte existant.');
+      return;
+    }
+    await run(async () => {
+      const res = await fetch('/api/instruction/eleves', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          link_existing: true,
+          existing_identifiant: id,
+          formation_instruction_licence: formationLicenceRattach,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur rattachement');
+      setRattachIdentifiant('');
+      toast.success('Compte rattaché à votre formation. Le rôle (ex. pilote) est conservé.');
     });
   }
 
@@ -522,6 +548,9 @@ export default function InstructionClient({
         <>
           <form onSubmit={createEleve} className="card space-y-3">
             <h2 className="text-lg font-medium text-slate-200">Créer un élève</h2>
+            <p className="text-sm text-slate-500">
+              Crée un <strong className="text-slate-400">nouveau</strong> compte dédié. Pour quelqu&apos;un qui a déjà un compte pilote (ex. PPL), préférez le rattachement ci-dessous.
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <input className="input" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} placeholder="Identifiant élève" required />
               <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mot de passe temporaire" required minLength={8} />
@@ -531,6 +560,35 @@ export default function InstructionClient({
                 ))}
               </select>
               <button className="btn-primary" type="submit" disabled={loading}>Créer l&apos;élève</button>
+            </div>
+          </form>
+
+          <form onSubmit={rattachCompteExistant} className="card space-y-3">
+            <h2 className="text-lg font-medium text-slate-200">Rattacher un compte existant</h2>
+            <p className="text-sm text-slate-500">
+              Associe un pilote (ou un autre compte non administrateur) déjà inscrit sur le site à votre formation, sans doublon de compte. Son carnet et son identifiant restent les mêmes.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <input
+                className="input"
+                value={rattachIdentifiant}
+                onChange={(e) => setRattachIdentifiant(e.target.value)}
+                placeholder="Identifiant du compte (ex. pilote)"
+                autoComplete="off"
+                required
+              />
+              <select
+                className="input"
+                value={formationLicenceRattach}
+                onChange={(e) => setFormationLicenceRattach(e.target.value)}
+              >
+                {programs.map((p) => (
+                  <option key={p.licenceCode} value={p.licenceCode}>{p.label}</option>
+                ))}
+              </select>
+              <button className="btn-primary" type="submit" disabled={loading}>
+                Rattacher à ma formation
+              </button>
             </div>
           </form>
 
