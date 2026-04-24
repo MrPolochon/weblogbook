@@ -92,7 +92,9 @@ export default function InstructionClient({
 
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
-  const [rattachIdentifiant, setRattachIdentifiant] = useState('');
+  const [rattachUserId, setRattachUserId] = useState('');
+  const [rattachCandidates, setRattachCandidates] = useState<Array<{ id: string; identifiant: string }>>([]);
+  const [rattachCandidatesLoading, setRattachCandidatesLoading] = useState(false);
   const [formationLicence, setFormationLicence] = useState('PPL');
   const [formationLicenceRattach, setFormationLicenceRattach] = useState('PPL');
   const [selectedEleveId, setSelectedEleveId] = useState('');
@@ -117,6 +119,11 @@ export default function InstructionClient({
   const [examEchoueNote, setExamEchoueNote] = useState('');
   const [editById, setEditById] = useState<Record<string, { nom: string; immat: string; aeroport: string }>>({});
   const [loading, setLoading] = useState(false);
+  const [reassignCandidates, setReassignCandidates] = useState<
+    Record<string, { id: string; identifiant: string }[]>
+  >({});
+  const [reassignPick, setReassignPick] = useState<Record<string, string>>({});
+  const [reassignListLoading, setReassignListLoading] = useState<Record<string, boolean>>({});
 
   const instructionTitreOptions = useMemo(() => {
     const out: string[] = [];
@@ -185,6 +192,63 @@ export default function InstructionClient({
     }
     return map;
   }, [elevesProgression, progressionOverrides]);
+
+  const reassignableExamRequestIds = useMemo(
+    () =>
+      examRequestsAssigned
+        .filter((r) => r.statut === 'assigne' || r.statut === 'accepte')
+        .map((r) => r.id)
+        .sort()
+        .join(','),
+    [examRequestsAssigned],
+  );
+
+  useEffect(() => {
+    if (!isManager) return;
+    let cancelled = false;
+    setRattachCandidatesLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch('/api/instruction/eleves/rattach-candidates');
+        const d = (await res.json().catch(() => ({}))) as { candidates?: { id: string; identifiant: string }[] };
+        if (!cancelled && res.ok) {
+          setRattachCandidates(d.candidates ?? []);
+        }
+      } finally {
+        if (!cancelled) setRattachCandidatesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isManager]);
+
+  useEffect(() => {
+    const ids = reassignableExamRequestIds ? reassignableExamRequestIds.split(',').filter(Boolean) : [];
+    if (ids.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      for (const reqId of ids) {
+        setReassignListLoading((L) => ({ ...L, [reqId]: true }));
+        try {
+          const res = await fetch(`/api/instruction/exam-requests/${reqId}/reassign`);
+          const d = (await res.json().catch(() => ({}))) as {
+            candidates?: { id: string; identifiant: string }[];
+          };
+          if (!cancelled && res.ok) {
+            setReassignCandidates((c) => ({ ...c, [reqId]: d.candidates ?? [] }));
+          }
+        } finally {
+          if (!cancelled) {
+            setReassignListLoading((L) => ({ ...L, [reqId]: false }));
+          }
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reassignableExamRequestIds]);
 
   useEffect(() => {
     setProgressionOverrides((prev) => {
@@ -294,24 +358,25 @@ export default function InstructionClient({
 
   async function rattachCompteExistant(e: React.FormEvent) {
     e.preventDefault();
-    const id = rattachIdentifiant.trim();
-    if (id.length < 2) {
-      toast.error('Indiquez l’identifiant du compte existant.');
+    if (!rattachUserId) {
+      toast.error('Choisissez un compte dans la liste.');
       return;
     }
+    const pickedId = rattachUserId;
     await run(async () => {
       const res = await fetch('/api/instruction/eleves', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           link_existing: true,
-          existing_identifiant: id,
+          existing_user_id: pickedId,
           formation_instruction_licence: formationLicenceRattach,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur rattachement');
-      setRattachIdentifiant('');
+      setRattachUserId('');
+      setRattachCandidates((list) => list.filter((c) => c.id !== pickedId));
       toast.success('Compte rattaché à votre formation. Le rôle (ex. pilote) est conservé.');
     });
   }
@@ -481,18 +546,31 @@ export default function InstructionClient({
     await updateExamStatus(id, 'en_cours');
   }
 
-  async function reassignExamToColleague(requestId: string) {
+  async function reassignExamToColleague(requestId: string, instructeurId: string | undefined) {
+    if (!instructeurId) {
+      toast.error('Choisissez un examinateur dans la liste.');
+      return;
+    }
     if (
       !window.confirm(
-        'Transmettre cette demande à un autre examinateur (même rôle) ? Vous ne serez plus assigné. Le candidat et le nouvel examinateur recevront un message dans la messagerie. La demande repassera en « à confirmer » pour le collègue.',
+        'Transmettre cette demande à cet examinateur ? Vous ne serez plus assigné. Le candidat et le nouvel examinateur recevront un message dans la messagerie. La demande repassera en « à confirmer » pour le collègue.',
       )
     ) {
       return;
     }
     await run(async () => {
-      const res = await fetch(`/api/instruction/exam-requests/${requestId}/reassign`, { method: 'POST' });
+      const res = await fetch(`/api/instruction/exam-requests/${requestId}/reassign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instructeur_id: instructeurId }),
+      });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((d as { error?: string }).error || 'Erreur de transmission');
+      setReassignPick((p) => {
+        const next = { ...p };
+        delete next[requestId];
+        return next;
+      });
       toast.success('Demande transmise. Le nouvel examinateur doit la confirmer.');
     });
   }
@@ -879,27 +957,56 @@ export default function InstructionClient({
               Associe un pilote (ou un autre compte non administrateur) déjà inscrit sur le site à votre formation, sans doublon de compte. Son carnet et son identifiant restent les mêmes.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <input
-                className="input"
-                value={rattachIdentifiant}
-                onChange={(e) => setRattachIdentifiant(e.target.value)}
-                placeholder="Identifiant du compte (ex. pilote)"
-                autoComplete="off"
-                required
-              />
-              <select
-                className="input"
-                value={formationLicenceRattach}
-                onChange={(e) => setFormationLicenceRattach(e.target.value)}
-              >
-                {formationProgramsForCreate.map((p) => (
-                  <option key={p.licenceCode} value={p.licenceCode}>{p.label}</option>
-                ))}
-              </select>
-              <button className="btn-primary" type="submit" disabled={loading}>
-                Rattacher à ma formation
-              </button>
+              <label className="min-w-0 space-y-1 text-sm text-slate-400">
+                <span className="text-slate-500">Compte existant</span>
+                <select
+                  className="input w-full"
+                  value={rattachUserId}
+                  onChange={(e) => setRattachUserId(e.target.value)}
+                  disabled={loading || rattachCandidatesLoading}
+                  required
+                >
+                  <option value="">— Choisir un compte —</option>
+                  {rattachCandidates.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.identifiant}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="min-w-0 space-y-1 text-sm text-slate-400">
+                <span className="text-slate-500">Parcours</span>
+                <select
+                  className="input w-full"
+                  value={formationLicenceRattach}
+                  onChange={(e) => setFormationLicenceRattach(e.target.value)}
+                >
+                  {formationProgramsForCreate.map((p) => (
+                    <option key={p.licenceCode} value={p.licenceCode}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex items-end">
+                <button
+                  className="btn-primary w-full"
+                  type="submit"
+                  disabled={loading || rattachCandidatesLoading || rattachCandidates.length === 0}
+                >
+                  Rattacher à ma formation
+                </button>
+              </div>
             </div>
+            {rattachCandidatesLoading && (
+              <p className="text-xs text-slate-500">Chargement de la liste des comptes…</p>
+            )}
+            {!rattachCandidatesLoading && rattachCandidates.length === 0 && (
+              <p className="text-xs text-amber-500/90">
+                Aucun compte éligible : compte admin, déjà en formation chez un autre instructeur, ou déjà parmi vos élèves
+                actifs. Les autres comptes apparaissent ici dès qu’ils sont éligibles.
+              </p>
+            )}
           </form>
 
           {elevesForAvion.some((e) => e.formation_instruction_active) ? (
@@ -1081,15 +1188,6 @@ export default function InstructionClient({
                         <button type="button" className="btn-secondary" disabled={loading} onClick={() => refuseExam(r.id)}>
                           Refuser
                         </button>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          disabled={loading}
-                          onClick={() => reassignExamToColleague(r.id)}
-                          title="Transmettre la demande à un autre examinateur habilité"
-                        >
-                          Transmettre à un autre examinateur
-                        </button>
                       </div>
                     )}
 
@@ -1103,15 +1201,50 @@ export default function InstructionClient({
                         >
                           Démarrer la session d&apos;examen
                         </button>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          disabled={loading}
-                          onClick={() => reassignExamToColleague(r.id)}
-                          title="Transmettre la demande à un autre examinateur habilité"
-                        >
-                          Transmettre à un autre examinateur
-                        </button>
+                      </div>
+                    )}
+
+                    {(r.statut === 'assigne' || r.statut === 'accepte') && (
+                      <div className="pt-3 border-t border-slate-700/50 space-y-2">
+                        <p className="text-xs text-slate-500">Transmettre à un autre examinateur habilité (vous ne serez plus assigné à cette demande).</p>
+                        <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+                          <label className="flex-1 min-w-0 space-y-1 text-sm text-slate-400">
+                            <span className="text-slate-500">Nouvel examinateur</span>
+                            <select
+                              className="input w-full"
+                              value={reassignPick[r.id] || ''}
+                              onChange={(e) => setReassignPick((p) => ({ ...p, [r.id]: e.target.value }))}
+                              disabled={loading || reassignListLoading[r.id]}
+                            >
+                              <option value="">— Choisir un collègue —</option>
+                              {(reassignCandidates[r.id] || []).map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.identifiant}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            className="btn-secondary shrink-0 h-[42px] self-stretch sm:self-end"
+                            disabled={
+                              loading ||
+                              reassignListLoading[r.id] ||
+                              !reassignPick[r.id] ||
+                              (reassignCandidates[r.id]?.length ?? 0) === 0
+                            }
+                            onClick={() => reassignExamToColleague(r.id, reassignPick[r.id])}
+                            title="Transmettre la demande à l’examinateur choisi"
+                          >
+                            Transmettre
+                          </button>
+                        </div>
+                        {reassignListLoading[r.id] && <p className="text-xs text-slate-500">Chargement de la liste…</p>}
+                        {!reassignListLoading[r.id] &&
+                          reassignCandidates[r.id] &&
+                          reassignCandidates[r.id].length === 0 && (
+                            <p className="text-xs text-amber-500/90">Aucun autre examinateur habilité n’est disponible.</p>
+                          )}
                       </div>
                     )}
 
