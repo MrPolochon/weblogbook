@@ -7,6 +7,9 @@ import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
 
 export const dynamic = 'force-dynamic';
 
+/** Quand l’action demandée ne correspond pas au `statut` courant (évite le message peu clair « Statut invalide »). */
+const ERR_REPARATION_STATUT = 'Cette action ne correspond pas à l’étape actuelle de la demande. Actualisez la page si besoin.';
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -83,7 +86,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (action === 'accepter') {
     if (!await isEntrepriseStaff()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-    if (demande.statut !== 'demandee') return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
+    if (demande.statut !== 'demandee') return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
 
     await admin.from('reparation_demandes').update({
       statut: 'acceptee', acceptee_at: new Date().toISOString(),
@@ -107,7 +110,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (action === 'refuser') {
     if (!await isEntrepriseStaff()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-    if (demande.statut !== 'demandee') return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
+    if (demande.statut !== 'demandee') return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
 
     await admin.from('reparation_demandes').update({
       statut: 'refusee',
@@ -133,7 +136,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (action === 'ferry_arrive') {
     if (!await isEntrepriseStaff()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-    if (!['acceptee', 'en_transit'].includes(demande.statut)) return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
+    if (!['acceptee', 'en_transit'].includes(demande.statut)) return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
 
     const { data: hangar } = await admin
       .from('reparation_hangars')
@@ -231,7 +234,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (action === 'demander_transfert_hangar') {
     if (!await isCompagniePdg()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-    if (demande.statut !== 'acceptee') return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
+    if (demande.statut !== 'acceptee') return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
 
     await admin.from('reparation_demandes').update({ statut: 'en_transit' }).eq('id', id);
     return NextResponse.json({ ok: true });
@@ -239,7 +242,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (action === 'demarrer_mini_jeux') {
     if (!await isEntrepriseStaff()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-    if (demande.statut !== 'en_reparation') return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
+    if (demande.statut !== 'en_reparation') return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
 
     await admin.from('reparation_demandes').update({ statut: 'mini_jeux' }).eq('id', id);
     return NextResponse.json({ ok: true });
@@ -247,7 +250,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (action === 'terminer') {
     if (!await isEntrepriseStaff()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-    if (!['en_reparation', 'mini_jeux'].includes(demande.statut)) return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
+    if (!['en_reparation', 'mini_jeux'].includes(demande.statut)) return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
 
     const { data: scores } = await admin.from('reparation_mini_jeux_scores')
       .select('score, type_jeu').eq('demande_id', id);
@@ -342,7 +345,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (action === 'facturer') {
     if (!await isEntrepriseStaff()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-    if (demande.statut !== 'terminee') return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
+    if (demande.statut !== 'terminee') return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
 
     await admin.from('reparation_demandes').update({
       statut: 'facturee', facturee_at: new Date().toISOString(),
@@ -366,7 +369,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: demandePay } = await admin.from('reparation_demandes').select('*').eq('id', id).single();
     if (!demandePay) return NextResponse.json({ error: 'Demande introuvable' }, { status: 404 });
-    if (demandePay.statut !== 'facturee') return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
+    if (demandePay.statut !== 'facturee') return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
 
     /** Garantit l’état de l’avion après paiement (filet de sécurité si la maj à « terminer » avait échoué). */
     const appliquerUsureApresPaiement = async () => {
@@ -434,7 +437,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (action === 'completer') {
     if (!await isEntrepriseStaff()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-    if (!['payee', 'retour_transit'].includes(demande.statut)) return NextResponse.json({ error: 'Statut invalide' }, { status: 400 });
+    if (!['payee', 'retour_transit'].includes(demande.statut)) return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
 
     const livraison = body.livraison || 'parking';
 

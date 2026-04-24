@@ -134,7 +134,10 @@ export default function ReparationClient({ userId }: { userId: string }) {
 
   const loadDetail = useCallback(async (id: string) => {
     const res = await fetch(`/api/reparation/entreprises/${id}`);
-    if (res.ok) setDetail(await res.json());
+    if (res.ok) {
+      setError('');
+      setDetail(await res.json());
+    }
   }, []);
 
   useEffect(() => {
