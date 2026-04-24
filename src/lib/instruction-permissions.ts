@@ -59,10 +59,13 @@ export function buildInstructionCapabilities(
     types: licenceTypes,
     canManageFlightInstruction: isAdmin || legacyInstructeur || hasFi,
     canManageAtcInstruction: isAdmin || hasAtcFi || hasAtcFe,
-    canExamineFlight: isAdmin || legacyInstructeur || hasFe,
-    canExamineAtc: isAdmin || hasAtcFe,
+    /** Examens vol : exclusivement la licence FE (les admins n’héritent plus du droit d’examen). */
+    canExamineFlight: hasFe,
+    /** Examens ATC / AFIS : exclusivement la licence ATC FE. */
+    canExamineAtc: hasAtcFe,
     isAtcTrainingInstructor: isAdmin || hasAtcFi || hasAtcFe,
-    canViewExaminerInbox: isAdmin || legacyInstructeur || hasFe || hasAtcFe,
+    /** File examinateur reçue : dès qu’on a FE et/ou ATC FE (jamais par le seul rôle admin). */
+    canViewExaminerInbox: hasFe || hasAtcFe,
   };
 }
 
@@ -100,25 +103,18 @@ export function canAccessInstructionManagerTools(cap: InstructionCapabilities): 
 
 /**
  * Poole les examinateurs assignables pour une demande d’examen.
- * – Vol (PPL, CPL, etc.) : FE + rôle instructeur (historique) + admin
- * – ATC (CAL-ATC, etc.) : ATC FE + admin
+ * – Vol (PPL, CPL, etc.) : titulaires de la licence **FE** uniquement
+ * – ATC (CAL-ATC, etc.) : titulaires de la licence **ATC FE** uniquement
+ * Les comptes admin ne sont plus ajoutés automatiquement (ils s’ajoutent la licence en base s’il le faut).
  */
 export async function getExaminerPoolUserIds(admin: SupabaseClient, licenceCode: string): Promise<string[]> {
   const isAtc = isAtcSideExamRequest(licenceCode);
   if (isAtc) {
     const { data: atcFe } = await admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_ATC_FE);
-    const ids = new Set<string>((atcFe || []).map((r) => r.user_id as string));
-    const { data: admins } = await admin.from('profiles').select('id').eq('role', 'admin');
-    for (const a of admins || []) ids.add(a.id as string);
-    return Array.from(ids);
+    return Array.from(new Set((atcFe || []).map((r) => r.user_id as string)));
   }
   const { data: fe } = await admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_FE);
-  const ids = new Set<string>((fe || []).map((r) => r.user_id as string));
-  const { data: legacy } = await admin.from('profiles').select('id').eq('role', 'instructeur');
-  for (const r of legacy || []) ids.add(r.id as string);
-  const { data: admins } = await admin.from('profiles').select('id').eq('role', 'admin');
-  for (const a of admins || []) ids.add(a.id as string);
-  return Array.from(ids);
+  return Array.from(new Set((fe || []).map((r) => r.user_id as string)));
 }
 
 export async function userCanConcludeThisExam(
@@ -128,7 +124,6 @@ export async function userCanConcludeThisExam(
   licenceCode: string,
 ): Promise<boolean> {
   const cap = await getInstructionCapabilities(admin, userId, role);
-  if (role === 'admin') return true;
   if (isAtcSideExamRequest(licenceCode)) {
     return cap.canExamineAtc;
   }

@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logActivity, getClientIp } from '@/lib/activity-log';
 import { getExaminerPoolUserIds, userCanConcludeThisExam } from '@/lib/instruction-permissions';
+import { notifyExamInstructorReassignment } from '@/lib/instruction-exam-reassign-notify';
+import { selectExamInstructorByWorkload } from '@/lib/instruction-exam-assign';
 
 const VALID_STATUSES = ['assigne', 'accepte', 'en_cours', 'termine', 'refuse'] as const;
 
@@ -25,16 +27,17 @@ export async function PATCH(
       .eq('id', id)
       .single();
     if (!row) return NextResponse.json({ error: 'Demande introuvable.' }, { status: 404 });
-    if (me?.role !== 'admin') {
-      if (row.instructeur_id !== user.id) {
-        return NextResponse.json({ error: 'Vous n\'êtes pas l\'examinateur assigné.' }, { status: 403 });
-      }
-      if (!(await userCanConcludeThisExam(admin, user.id, me?.role, row.licence_code))) {
-        return NextResponse.json(
-          { error: 'Votre habilitation ne permet pas de conclure ce type d\'examen (FE vol / ATC FE pour examens ATC).' },
-          { status: 403 },
-        );
-      }
+    if (row.instructeur_id !== user.id) {
+      return NextResponse.json({ error: 'Vous n\'êtes pas l\'examinateur assigné.' }, { status: 403 });
+    }
+    if (!(await userCanConcludeThisExam(admin, user.id, me?.role, row.licence_code))) {
+      return NextResponse.json(
+        {
+          error:
+            'Habilitation examen requise : licence FE pour les examens vol, licence ATC FE pour les examens ATC / AFIS (y compris pour les comptes administrateur).',
+        },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();
@@ -216,21 +219,12 @@ export async function PATCH(
       const eligible = poolIds.filter((iid) => iid !== row.requester_id && !alreadyRefusedIds.has(iid));
 
       if (eligible.length > 0) {
-        const workload = new Map<string, number>();
-        for (const iid of eligible) workload.set(iid, 0);
-
-        const { data: pendingAssigned } = await admin
-          .from('instruction_exam_requests')
-          .select('instructeur_id')
-          .in('instructeur_id', eligible)
-          .in('statut', ['assigne', 'accepte', 'en_cours']);
-        for (const r of pendingAssigned || []) {
-          if (!r.instructeur_id) continue;
-          workload.set(r.instructeur_id, (workload.get(r.instructeur_id) || 0) + 1);
+        const newInstructorId = await selectExamInstructorByWorkload(admin, eligible, row.requester_id, {
+          tieBreakKey: id,
+        });
+        if (!newInstructorId) {
+          return NextResponse.json({ error: 'Aucun examinateur de remplacement disponible.' }, { status: 400 });
         }
-
-        const sorted = [...eligible].sort((a, b) => (workload.get(a) || 0) - (workload.get(b) || 0));
-        const newInstructorId = sorted[0];
 
         const { error } = await admin
           .from('instruction_exam_requests')
@@ -242,6 +236,20 @@ export async function PATCH(
           })
           .eq('id', id);
         if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+        try {
+          await notifyExamInstructorReassignment(admin, {
+            expediteurId: user.id,
+            licenceCode: row.licence_code,
+            requesterId: row.requester_id,
+            oldInstructorId: row.instructeur_id,
+            newInstructorId,
+            raison: 'refus',
+          });
+        } catch (e) {
+          console.error('notifyExamInstructorReassignment (refus):', e);
+        }
+
         return NextResponse.json({ ok: true, reassigned: true });
       }
 

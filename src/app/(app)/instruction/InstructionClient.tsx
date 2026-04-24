@@ -481,6 +481,22 @@ export default function InstructionClient({
     await updateExamStatus(id, 'en_cours');
   }
 
+  async function reassignExamToColleague(requestId: string) {
+    if (
+      !window.confirm(
+        'Transmettre cette demande à un autre examinateur (même rôle) ? Vous ne serez plus assigné. Le candidat et le nouvel examinateur recevront un message dans la messagerie. La demande repassera en « à confirmer » pour le collègue.',
+      )
+    ) {
+      return;
+    }
+    await run(async () => {
+      const res = await fetch(`/api/instruction/exam-requests/${requestId}/reassign`, { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((d as { error?: string }).error || 'Erreur de transmission');
+      toast.success('Demande transmise. Le nouvel examinateur doit la confirmer.');
+    });
+  }
+
   function openFinishDialog(requestId: string, requesterName: string, licenceCode: string) {
     setExamFinishDialog({ requestId, requesterName, licenceCode, step: 'choose_result' });
     setExamResultForm({ a_vie: false, date_delivrance: new Date().toISOString().split('T')[0], date_expiration: '', note: '' });
@@ -1058,20 +1074,45 @@ export default function InstructionClient({
 
                     {/* Actions selon le statut */}
                     {r.statut === 'assigne' && (
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button type="button" className="btn-primary" disabled={loading} onClick={() => acceptExam(r.id)}>
                           Confirmer la demande
                         </button>
                         <button type="button" className="btn-secondary" disabled={loading} onClick={() => refuseExam(r.id)}>
                           Refuser
                         </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          disabled={loading}
+                          onClick={() => reassignExamToColleague(r.id)}
+                          title="Transmettre la demande à un autre examinateur habilité"
+                        >
+                          Transmettre à un autre examinateur
+                        </button>
                       </div>
                     )}
 
                     {r.statut === 'accepte' && (
-                      <button type="button" className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-50" disabled={loading} onClick={() => startExamSession(r.id)}>
-                        Démarrer la session d&apos;examen
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-50"
+                          disabled={loading}
+                          onClick={() => startExamSession(r.id)}
+                        >
+                          Démarrer la session d&apos;examen
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          disabled={loading}
+                          onClick={() => reassignExamToColleague(r.id)}
+                          title="Transmettre la demande à un autre examinateur habilité"
+                        >
+                          Transmettre à un autre examinateur
+                        </button>
+                      </div>
                     )}
 
                     {r.statut === 'en_cours' && (

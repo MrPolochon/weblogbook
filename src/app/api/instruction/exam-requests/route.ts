@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
 import { logActivity } from '@/lib/activity-log';
 import { getInstructionCapabilities, getExaminerPoolUserIds } from '@/lib/instruction-permissions';
+import { selectExamInstructorByWorkload } from '@/lib/instruction-exam-assign';
 
 type ExamStatus = 'assigne' | 'accepte' | 'termine' | 'refuse';
 
@@ -69,45 +70,20 @@ export async function POST(request: Request) {
     const instructorIds = await getExaminerPoolUserIds(admin, licenceCode);
     if (instructorIds.length === 0) {
       return NextResponse.json(
-        { error: 'Aucun examinateur habilité pour ce type d’examen (vol : licence FE / instructeur / admin ; ATC : licence ATC FE / admin).' },
+        { error: 'Aucun examinateur habilité pour ce type d’examen (vol : licence FE uniquement ; ATC / AFIS : licence ATC FE uniquement).' },
         { status: 400 },
       );
     }
     const pool = instructorIds.filter((id) => id !== user.id);
     const eligible = pool.length > 0 ? pool : instructorIds;
 
-    const workload = new Map<string, number>();
-    for (const id of eligible) workload.set(id, 0);
-
-    const { data: pendingAssigned } = await admin
-      .from('instruction_exam_requests')
-      .select('instructeur_id')
-      .in('instructeur_id', eligible)
-      .in('statut', ['assigne', 'accepte', 'en_cours']);
-    for (const row of pendingAssigned || []) {
-      if (!row.instructeur_id) continue;
-      workload.set(row.instructeur_id, (workload.get(row.instructeur_id) || 0) + 1);
-    }
-
-    const { data: elevesActifs, error: elevesErr } = await admin
-      .from('profiles')
-      .select('instructeur_referent_id')
-      .in('instructeur_referent_id', eligible)
-      .eq('formation_instruction_active', true);
-    if (elevesErr) return NextResponse.json({ error: elevesErr.message }, { status: 400 });
-    for (const row of elevesActifs || []) {
-      const ref = row.instructeur_referent_id as string | null;
-      if (!ref) continue;
-      workload.set(ref, (workload.get(ref) || 0) + 1);
-    }
-
-    const sorted = [...eligible].sort((a, b) => {
-      const wa = workload.get(a) || 0;
-      const wb = workload.get(b) || 0;
-      if (wa !== wb) return wa - wb;
-      return a.localeCompare(b);
+    const selectedInstructorId = await selectExamInstructorByWorkload(admin, eligible, user.id, {
+      // Départage à charge identique (évite de toujours donner le même id lexicographique)
+      tieBreakKey: `${user.id}::${licenceCode}::${crypto.randomUUID()}`,
     });
-    const selectedInstructorId = sorted[0];
+    if (!selectedInstructorId) {
+      return NextResponse.json({ error: 'Impossible d’assigner un examinateur.' }, { status: 400 });
+    }
 
     const payload: { requester_id: string; licence_code: string; instructeur_id: string; statut: ExamStatus; message: string | null } = {
       requester_id: user.id,
