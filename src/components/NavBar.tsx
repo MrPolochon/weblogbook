@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  BookOpen, LayoutDashboard, FileText, User, Users, LogOut, Radio, Shield,
+  BookOpen, BookUser, LayoutDashboard, FileText, User, Users, LogOut, Radio, Shield,
   ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map,
   Store, AlertTriangle, Flame, Gauge, Wrench, Eye, Trophy, Menu, X,
 } from 'lucide-react';
@@ -238,6 +238,11 @@ export default function NavBar({
               <span className="hidden lg:inline">Instruction</span>
             </NavLink>
 
+            <NavLink href="/annuaire" active={pathname.startsWith('/annuaire')}>
+              <BookUser className="h-3.5 w-3.5 shrink-0" />
+              <span className="hidden lg:inline">Annuaire</span>
+            </NavLink>
+
             {isAdmin && (
               <NavLink href="/admin" active={pathname.startsWith('/admin')} accent="purple">
                 <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
@@ -446,6 +451,13 @@ export default function NavBar({
                 icon={Users}
                 label="Instruction"
                 active={pathname.startsWith('/instruction')}
+                onClick={() => setMobileOpen(false)}
+              />
+              <MobileItem
+                href="/annuaire"
+                icon={BookUser}
+                label="Annuaire"
+                active={pathname.startsWith('/annuaire')}
                 onClick={() => setMobileOpen(false)}
               />
 
