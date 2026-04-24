@@ -48,6 +48,7 @@ export default async function InstructionPage() {
   const isManager = canAccessInstructionManagerTools(cap);
   const canViewExaminerInbox = cap.canViewExaminerInbox;
   const isAtcTrainingInstructor = cap.isAtcTrainingInstructor;
+  const isPilotTrainingInstructor = cap.canManageFlightInstruction || cap.types.has('FE');
   const createFormationPrograms = INSTRUCTION_PROGRAMS.filter((p) => {
     if (p.licenceCode === ATC_INIT_LICENCE_CODE) return cap.canManageAtcInstruction;
     return cap.canManageFlightInstruction;
@@ -136,6 +137,45 @@ export default async function InstructionPage() {
         .order('created_at', { ascending: false })
     : { data: [] as Array<Record<string, unknown>>, error: null };
 
+  let pilotTrainingsMine: Array<Record<string, unknown>> = [];
+  let pilotTrainingsAssigned: Array<Record<string, unknown>> = [];
+  const { data: pilotMine, error: pilotMineErr } = await admin
+    .from('instruction_pilot_training_requests')
+    .select('id, requester_id, assignee_id, message, created_at, updated_at')
+    .eq('requester_id', user.id)
+    .order('created_at', { ascending: false });
+  const { data: pilotToMe, error: pilotToMeErr } = await admin
+    .from('instruction_pilot_training_requests')
+    .select('id, requester_id, assignee_id, message, created_at, updated_at')
+    .eq('assignee_id', user.id)
+    .order('created_at', { ascending: false });
+  if (pilotMineErr) errors.push(`Training pilote: ${pilotMineErr.message}`);
+  if (pilotToMeErr) errors.push(`Training pilote (assigné): ${pilotToMeErr.message}`);
+  if (!pilotMineErr && !pilotToMeErr) {
+    const paIds = new Set(
+      [...(pilotMine || []), ...(pilotToMe || [])].map((r) => r.assignee_id as string).filter(Boolean),
+    );
+    const prIds = new Set(
+      [...(pilotMine || []), ...(pilotToMe || [])].map((r) => r.requester_id as string).filter(Boolean),
+    );
+    const { data: pap } = paIds.size
+      ? await admin.from('profiles').select('id, identifiant').in('id', Array.from(paIds))
+      : { data: [] };
+    const { data: prp } = prIds.size
+      ? await admin.from('profiles').select('id, identifiant').in('id', Array.from(prIds))
+      : { data: [] };
+    const pam = new Map((pap || []).map((p) => [p.id, p.identifiant]));
+    const prm = new Map((prp || []).map((p) => [p.id, p.identifiant]));
+    pilotTrainingsMine = (pilotMine || []).map((r) => ({
+      ...r,
+      assignee_identifiant: pam.get(r.assignee_id as string) || null,
+    }));
+    pilotTrainingsAssigned = (pilotToMe || []).map((r) => ({
+      ...r,
+      requester_identifiant: prm.get(r.requester_id as string) || null,
+    }));
+  }
+
   let atcTrainingsMine: Array<Record<string, unknown>> = [];
   let atcTrainingsAssigned: Array<Record<string, unknown>> = [];
   const { data: atcMine, error: atcMineErr } = await admin
@@ -195,9 +235,12 @@ export default async function InstructionPage() {
       titresCiblesPilotes={titresCiblesPilotes}
       canViewExaminerInbox={canViewExaminerInbox}
       isAtcTrainingInstructor={isAtcTrainingInstructor}
+      isPilotTrainingInstructor={isPilotTrainingInstructor}
       programs={INSTRUCTION_PROGRAMS}
       createFormationPrograms={createFormationPrograms}
       examLicenceOptions={examLicenceOptions}
+      pilotTrainingsMine={pilotTrainingsMine as Array<Record<string, string | null | undefined>>}
+      pilotTrainingsAssigned={pilotTrainingsAssigned as Array<Record<string, string | null | undefined>>}
       atcTrainingsMine={atcTrainingsMine as Array<Record<string, string | null | undefined>>}
       atcTrainingsAssigned={atcTrainingsAssigned as Array<Record<string, string | null | undefined>>}
       myFormationActive={Boolean(viewer.formation_instruction_active)}

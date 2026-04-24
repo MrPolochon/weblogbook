@@ -175,3 +175,32 @@ export async function getAtcTrainingInstructorPoolUserIds(admin: SupabaseClient)
   for (const u of admins || []) ids.add(u.id as string);
   return Array.from(ids);
 }
+
+/**
+ * Training vol : priorité aux **FI** (+ admin / rôle instructeur historique), puis **FE** seuls.
+ * Utilisé avec la charge sur `instruction_pilot_training_requests` uniquement.
+ */
+export async function getPilotTrainingTier1UserIds(admin: SupabaseClient): Promise<string[]> {
+  const [{ data: fiRows }, { data: roleRows }] = await Promise.all([
+    admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_FI),
+    admin.from('profiles').select('id').in('role', ['admin', 'instructeur']),
+  ]);
+  const ids = new Set<string>();
+  for (const r of fiRows || []) ids.add(r.user_id as string);
+  for (const r of roleRows || []) ids.add(r.id as string);
+  return Array.from(ids);
+}
+
+/** Détenteurs **FE** qui ne sont pas déjà en tier 1 (évite double compte FI+FE). */
+export async function getPilotTrainingTier2UserIds(
+  admin: SupabaseClient,
+  tier1: Set<string>,
+): Promise<string[]> {
+  const { data: feRows } = await admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_FE);
+  const out = new Set<string>();
+  for (const r of feRows || []) {
+    const id = r.user_id as string;
+    if (!tier1.has(id)) out.add(id);
+  }
+  return Array.from(out);
+}

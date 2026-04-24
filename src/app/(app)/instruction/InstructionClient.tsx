@@ -43,9 +43,12 @@ export default function InstructionClient({
   titresCiblesPilotes,
   canViewExaminerInbox,
   isAtcTrainingInstructor,
+  isPilotTrainingInstructor,
   programs,
   createFormationPrograms,
   examLicenceOptions,
+  pilotTrainingsMine,
+  pilotTrainingsAssigned,
   atcTrainingsMine,
   atcTrainingsAssigned,
   myFormationActive,
@@ -68,9 +71,12 @@ export default function InstructionClient({
   titresCiblesPilotes: Array<{ id: string; identifiant: string }>;
   canViewExaminerInbox: boolean;
   isAtcTrainingInstructor: boolean;
+  isPilotTrainingInstructor: boolean;
   programs: InstructionProgram[];
   createFormationPrograms: InstructionProgram[];
   examLicenceOptions: string[];
+  pilotTrainingsMine: Array<Record<string, string | null | undefined>>;
+  pilotTrainingsAssigned: Array<Record<string, string | null | undefined>>;
   atcTrainingsMine: Array<Record<string, string | null | undefined>>;
   atcTrainingsAssigned: Array<Record<string, string | null | undefined>>;
   myFormationActive: boolean;
@@ -89,6 +95,7 @@ export default function InstructionClient({
   const isManager = isManagerProp;
   const formationProgramsForCreate = createFormationPrograms.length > 0 ? createFormationPrograms : programs;
   const [atcTrainingMessage, setAtcTrainingMessage] = useState('');
+  const [pilotTrainingMessage, setPilotTrainingMessage] = useState('');
 
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
@@ -286,6 +293,10 @@ export default function InstructionClient({
     return Math.round((myCompletedSet.size / myProgram.modules.length) * 100);
   }, [myProgram, myCompletedSet]);
 
+  const canRequestPilotTraining = Boolean(
+    myFormationActive && myFormationLicence && !isAtcInstructionProgram(myFormationLicence),
+  );
+
   async function run(action: () => Promise<void>) {
     setLoading(true);
     try {
@@ -315,6 +326,21 @@ export default function InstructionClient({
       setIdentifiant('');
       setPassword('');
       toast.success('Eleve cree et rattache a votre formation.');
+    });
+  }
+
+  async function requestPilotTraining(ev: React.FormEvent) {
+    ev.preventDefault();
+    await run(async () => {
+      const res = await fetch('/api/instruction/pilot-trainings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: pilotTrainingMessage.trim() || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur demande training');
+      setPilotTrainingMessage('');
+      toast.success('Demande envoyée. Un FI (prioritaire) ou FE est assigné selon la charge — convenez de la date en message privé.');
     });
   }
 
@@ -350,6 +376,29 @@ export default function InstructionClient({
   async function annuleAtcTraining(id: string) {
     await run(async () => {
       const res = await fetch(`/api/instruction/atc-trainings/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur annulation');
+      toast.success('Demande annulée.');
+    });
+  }
+
+  async function terminePilotTraining(id: string) {
+    if (!confirm('Marquer la session de training comme terminée ? Cette fiche sera effacée.')) return;
+    await run(async () => {
+      const res = await fetch(`/api/instruction/pilot-trainings/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'termine' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      toast.success('Session clôturée.');
+    });
+  }
+
+  async function annulePilotTraining(id: string) {
+    await run(async () => {
+      const res = await fetch(`/api/instruction/pilot-trainings/${id}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur annulation');
       toast.success('Demande annulée.');
@@ -864,6 +913,79 @@ export default function InstructionClient({
           </div>
         )}
       </div>
+
+      {(canRequestPilotTraining ||
+        pilotTrainingsMine.length > 0 ||
+        (isPilotTrainingInstructor && pilotTrainingsAssigned.length > 0)) && (
+        <div className="card space-y-3">
+          <h2 className="text-lg font-medium text-slate-200">Session de training (vol)</h2>
+          <p className="text-sm text-slate-500">
+            Réservé aux <strong className="text-slate-400">élèves en formation pilote</strong> (PPL, CPL, etc.). Un{' '}
+            <strong className="text-slate-400">FI</strong> est choisi en priorité, sinon un{' '}
+            <strong className="text-slate-400">FE</strong>, avec répartition équitable de la charge. Convenez d&apos;une
+            date <strong>en message privé</strong>. L&apos;instructeur clôt la fiche ici à la fin.
+          </p>
+          {canRequestPilotTraining && (
+            <form onSubmit={requestPilotTraining} className="space-y-2">
+              <input
+                className="input w-full"
+                value={pilotTrainingMessage}
+                onChange={(e) => setPilotTrainingMessage(e.target.value)}
+                placeholder="Message (optionnel) pour l’instructeur"
+              />
+              <button className="btn-primary" type="submit" disabled={loading}>
+                Demander une session de training
+              </button>
+            </form>
+          )}
+          {pilotTrainingsMine.length > 0 && (
+            <div>
+              <p className="text-sm text-slate-300 mb-2">Mes demandes en cours (vol)</p>
+              <ul className="space-y-2 text-sm text-slate-400">
+                {pilotTrainingsMine.map((t) => (
+                  <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 border border-slate-700/50 rounded p-2">
+                    <span>
+                      Assigné à <span className="text-slate-200">{t.assignee_identifiant || '—'}</span>
+                      {t.message ? <span className="block text-xs mt-1">{t.message}</span> : null}
+                    </span>
+                    <button
+                      type="button"
+                      className="text-xs text-red-400 border border-red-500/30 rounded px-2 py-1"
+                      onClick={() => annulePilotTraining(String(t.id))}
+                      disabled={loading}
+                    >
+                      Annuler
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {isPilotTrainingInstructor && pilotTrainingsAssigned.length > 0 && (
+            <div>
+              <p className="text-sm text-emerald-200/90 mb-2">Training vol à assurer (côté instructeur)</p>
+              <ul className="space-y-2 text-sm text-slate-300">
+                {pilotTrainingsAssigned.map((t) => (
+                  <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 border border-emerald-500/30 rounded p-2">
+                    <span>
+                      Avec <span className="text-slate-100">{t.requester_identifiant || '—'}</span>
+                      {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-primary text-xs py-1"
+                      onClick={() => terminePilotTraining(String(t.id))}
+                      disabled={loading}
+                    >
+                      Session terminée
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card space-y-3">
         <h2 className="text-lg font-medium text-slate-200">Session de training (ATC)</h2>
