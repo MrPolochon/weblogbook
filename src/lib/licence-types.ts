@@ -1,4 +1,5 @@
 export const ALL_LICENCE_TYPES = [
+  'FI', 'FE', 'ATC FI', 'ATC FE',
   'PPL', 'CPL', 'ATPL',
   'IR ME',
   'Qualification Type',

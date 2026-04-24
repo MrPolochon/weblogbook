@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { INSTRUCTION_PROGRAMS } from '@/lib/instruction-programs';
-
-function canManageInstruction(role: string | null | undefined): boolean {
-  return role === 'instructeur' || role === 'admin';
-}
+import {
+  canAccessInstructionManagerTools,
+  canInstructorManageEleveForFormation,
+  getInstructionCapabilities,
+} from '@/lib/instruction-permissions';
 
 function isValidModule(licenceCode: string, moduleCode: string): boolean {
   const program = INSTRUCTION_PROGRAMS.find((p) => p.licenceCode === licenceCode);
@@ -21,8 +22,9 @@ export async function PATCH(request: Request) {
 
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
-    if (!canManageInstruction(me?.role)) {
-      return NextResponse.json({ error: 'Réservé aux instructeurs.' }, { status: 403 });
+    const cap = await getInstructionCapabilities(admin, user.id, me?.role);
+    if (!canAccessInstructionManagerTools(cap)) {
+      return NextResponse.json({ error: 'Réservé aux formateurs (FI / ATC FI / …).' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -49,6 +51,9 @@ export async function PATCH(request: Request) {
     }
     if (eleve.formation_instruction_licence !== licenceCode) {
       return NextResponse.json({ error: 'Le code licence ne correspond pas à la formation de l’élève' }, { status: 400 });
+    }
+    if (me?.role !== 'admin' && !canInstructorManageEleveForFormation(cap, eleve.formation_instruction_licence)) {
+      return NextResponse.json({ error: 'Vous n’êtes pas autorisé pour ce type de parcours.' }, { status: 403 });
     }
 
     const payload = {

@@ -2,21 +2,10 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { logActivity } from '@/lib/activity-log';
+import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
+import { isInstructionTitreType, canGrantInstructionTitreType } from '@/lib/licence-titres-instruction';
 
-const TYPES_VALIDES = [
-  'PPL', 'CPL', 'ATPL',
-  'IR ME',
-  'Qualification Type',
-  'Multi Crew attestation',
-  'CAT 1', 'CAT 2', 'CAT 3', 'CAT 4', 'CAT 5', 'CAT 6',
-  'C1', 'C2', 'C3', 'C4', 'C6',
-  'CLASS-M', 'CLASS-MT', 'CLASS-MRP',
-  'IFR', 'VFR',
-  'COM 1', 'COM 2', 'COM 3', 'COM 4', 'COM 5', 'COM 6',
-  'CAL-ATC', 'CAL-AFIS',
-  'PCAL-ATC', 'PCAL-AFIS',
-  'LPAFIS', 'LATC',
-] as const;
+const TYPES_VALIDES = ALL_LICENCE_TYPES as readonly string[];
 
 const TYPES_COM = ['COM 1', 'COM 2', 'COM 3', 'COM 4', 'COM 5', 'COM 6'] as const;
 const isTypeCom = (type: string): boolean => (TYPES_COM as readonly string[]).includes(type);
@@ -64,36 +53,66 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
-    if (!profile?.ifsa && profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins et agents IFSA' }, { status: 403 });
+    if (!profile) return NextResponse.json({ error: 'Profil introuvable' }, { status: 403 });
 
     const body = await request.json();
-    const { user_id, type, type_avion_id, langue, date_delivrance, date_expiration, a_vie, note } = body;
+    const { user_id, type, type_avion_id, langue, date_delivrance, date_expiration, a_vie, note, double_confirm_instruction_titre } = body;
 
-    if (!type || !TYPES_VALIDES.includes(type)) {
+    if (!type || !TYPES_VALIDES.includes(String(type).trim())) {
       return NextResponse.json({ error: 'Type de licence invalide' }, { status: 400 });
     }
+    const typeStr = String(type).trim();
 
     if (!user_id) return NextResponse.json({ error: 'user_id requis' }, { status: 400 });
 
     const admin = createAdminClient();
+    if (isInstructionTitreType(typeStr)) {
+      const can = await canGrantInstructionTitreType(
+        admin,
+        user.id,
+        profile?.role,
+        profile?.ifsa,
+        typeStr,
+      );
+      if (!can) {
+        return NextResponse.json(
+          {
+            error:
+              'Les titres FI, FE, ATC FI et ATC FE ne peuvent être délivrés que par un administrateur ou un titulaire FE (pour FI/FE) / ATC FE (pour ATC FI / ATC FE).',
+          },
+          { status: 403 },
+        );
+      }
+      if (double_confirm_instruction_titre !== true) {
+        return NextResponse.json(
+          { error: 'Double confirmation requise pour délivrer ce titre (double_confirm_instruction_titre: true).' },
+          { status: 400 },
+        );
+      }
+    } else {
+      if (!profile?.ifsa && profile?.role !== 'admin') {
+        return NextResponse.json({ error: 'Réservé aux admins et agents IFSA' }, { status: 403 });
+      }
+    }
+
     const { data: targetUser } = await admin.from('profiles').select('id').eq('id', user_id).single();
     if (!targetUser) return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 400 });
 
     const row: any = {
       user_id: targetUser.id,
-      type: String(type).trim(),
+      type: typeStr,
       a_vie: Boolean(a_vie),
       created_by: user.id,
     };
 
-    if (type === TYPE_QUALIFICATION_TYPE) {
+    if (typeStr === TYPE_QUALIFICATION_TYPE) {
       if (!type_avion_id) return NextResponse.json({ error: 'type_avion_id requis pour Qualification Type' }, { status: 400 });
       row.type_avion_id = type_avion_id;
     } else {
       row.type_avion_id = null;
     }
 
-    if (isTypeCom(type)) {
+    if (isTypeCom(typeStr)) {
       if (!langue || !String(langue).trim()) return NextResponse.json({ error: 'langue requise pour COM' }, { status: 400 });
       row.langue = String(langue).trim();
     } else {

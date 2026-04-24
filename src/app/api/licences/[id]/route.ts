@@ -1,21 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
+import { isInstructionTitreType } from '@/lib/licence-titres-instruction';
 
-const TYPES_VALIDES = [
-  'PPL', 'CPL', 'ATPL',
-  'IR ME',
-  'Qualification Type',
-  'Multi Crew attestation',
-  'CAT 1', 'CAT 2', 'CAT 3', 'CAT 4', 'CAT 5', 'CAT 6',
-  'C1', 'C2', 'C3', 'C4', 'C6',
-  'CLASS-M', 'CLASS-MT', 'CLASS-MRP',
-  'IFR', 'VFR',
-  'COM 1', 'COM 2', 'COM 3', 'COM 4', 'COM 5', 'COM 6',
-  'CAL-ATC', 'CAL-AFIS',
-  'PCAL-ATC', 'PCAL-AFIS',
-  'LPAFIS', 'LATC',
-] as const;
+const TYPES_VALIDES = ALL_LICENCE_TYPES as readonly string[];
 
 const TYPES_COM = ['COM 1', 'COM 2', 'COM 3', 'COM 4', 'COM 5', 'COM 6'] as const;
 const isTypeCom = (type: string): boolean => (TYPES_COM as readonly string[]).includes(type);
@@ -28,7 +17,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
-    if (!profile?.ifsa && profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins et agents IFSA' }, { status: 403 });
+    if (!profile) return NextResponse.json({ error: 'Profil introuvable' }, { status: 403 });
 
     const body = await request.json();
     const { type, type_avion_id, langue, date_delivrance, date_expiration, a_vie, note } = body;
@@ -37,12 +26,35 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const { data: existing } = await admin.from('licences_qualifications').select('type, a_vie').eq('id', params.id).single();
     if (!existing) return NextResponse.json({ error: 'Licence introuvable' }, { status: 404 });
 
+    if (isInstructionTitreType(existing.type)) {
+      if (profile.role !== 'admin') {
+        return NextResponse.json(
+          { error: 'Modifier une licence FI, FE, ATC FI ou ATC FE est réservé aux administrateurs.' },
+          { status: 403 },
+        );
+      }
+    } else {
+      if (!profile.ifsa && profile.role !== 'admin') {
+        return NextResponse.json({ error: 'Réservé aux admins et agents IFSA' }, { status: 403 });
+      }
+    }
+
+    if (type !== undefined) {
+      const newType = String(type).trim();
+      if (!TYPES_VALIDES.includes(newType)) {
+        return NextResponse.json({ error: 'Type de licence invalide' }, { status: 400 });
+      }
+      if (isInstructionTitreType(newType) && profile.role !== 'admin') {
+        return NextResponse.json(
+          { error: 'Seuls les administrateurs peuvent attribuer ou modifier le type vers FI, FE, ATC FI, ATC FE.' },
+          { status: 403 },
+        );
+      }
+    }
+
     const updates: any = {};
 
     if (type !== undefined) {
-      if (!TYPES_VALIDES.includes(type)) {
-        return NextResponse.json({ error: 'Type de licence invalide' }, { status: 400 });
-      }
       updates.type = String(type).trim();
     }
 
@@ -111,9 +123,24 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
-    if (!profile?.ifsa && profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins et agents IFSA' }, { status: 403 });
+    if (!profile) return NextResponse.json({ error: 'Profil introuvable' }, { status: 403 });
 
     const admin = createAdminClient();
+    const { data: existing } = await admin.from('licences_qualifications').select('type').eq('id', params.id).single();
+    if (!existing) return NextResponse.json({ error: 'Licence introuvable' }, { status: 404 });
+    if (isInstructionTitreType(existing.type)) {
+      if (profile.role !== 'admin') {
+        return NextResponse.json(
+          { error: 'Seuls les administrateurs peuvent supprimer un titre FI, FE, ATC FI ou ATC FE.' },
+          { status: 403 },
+        );
+      }
+    } else {
+      if (!profile?.ifsa && profile?.role !== 'admin') {
+        return NextResponse.json({ error: 'Réservé aux admins et agents IFSA' }, { status: 403 });
+      }
+    }
+
     const { error } = await admin.from('licences_qualifications').delete().eq('id', params.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true });

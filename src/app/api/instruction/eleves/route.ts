@@ -4,6 +4,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { identifiantToEmail } from '@/lib/constants';
 import { ensureComptePersonnel } from '@/lib/felitz/ensure-comptes';
 import { INSTRUCTION_LICENCE_CODES } from '@/lib/instruction-programs';
+import {
+  canAccessInstructionManagerTools,
+  canOpenFormationAsInstructor,
+  getInstructionCapabilities,
+} from '@/lib/instruction-permissions';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 type InstructionLinkTarget = {
@@ -12,10 +17,6 @@ type InstructionLinkTarget = {
   instructeur_referent_id: string | null;
   formation_instruction_active: boolean;
 };
-
-function canManageInstruction(role: string | null | undefined): boolean {
-  return role === 'instructeur' || role === 'admin';
-}
 
 /** Tout compte non admin peut être inscrit en formation (ex. pilote qui reprend un PPL). */
 function canBecomeInstructionStudent(role: string | null | undefined): boolean {
@@ -77,8 +78,9 @@ export async function GET() {
 
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
-    if (!canManageInstruction(me?.role)) {
-      return NextResponse.json({ error: 'Réservé aux instructeurs.' }, { status: 403 });
+    const cap = await getInstructionCapabilities(admin, user.id, me?.role);
+    if (!canAccessInstructionManagerTools(cap)) {
+      return NextResponse.json({ error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI / ATC FE).' }, { status: 403 });
     }
 
     const { data: eleves, error } = await admin
@@ -103,8 +105,9 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
-    if (!canManageInstruction(me?.role)) {
-      return NextResponse.json({ error: 'Réservé aux instructeurs.' }, { status: 403 });
+    const cap = await getInstructionCapabilities(admin, user.id, me?.role);
+    if (!canAccessInstructionManagerTools(cap)) {
+      return NextResponse.json({ error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI / ATC FE).' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -113,6 +116,15 @@ export async function POST(request: Request) {
 
     if (!INSTRUCTION_LICENCE_CODES.includes(requestedLicence)) {
       return NextResponse.json({ error: 'Licence de formation invalide.' }, { status: 400 });
+    }
+    if (!canOpenFormationAsInstructor(cap, requestedLicence)) {
+      return NextResponse.json(
+        {
+          error:
+            'Vous n’êtes pas autorisé à ouvrir ce parcours (formation vol : FI ou rôle instructeur ; parcours ATC-INIT : ATC FI ou ATC FE).',
+        },
+        { status: 403 },
+      );
     }
 
     if (linkExisting) {

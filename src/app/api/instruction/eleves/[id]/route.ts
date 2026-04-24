@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { INSTRUCTION_LICENCE_CODES } from '@/lib/instruction-programs';
+import {
+  canInstructorManageEleveForFormation,
+  canAccessInstructionManagerTools,
+  getInstructionCapabilities,
+} from '@/lib/instruction-permissions';
 
 const STATUTS_PLANS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
-
-function canManageInstruction(role: string | null | undefined): boolean {
-  return role === 'instructeur' || role === 'admin';
-}
 
 export async function PATCH(
   request: Request,
@@ -21,18 +22,25 @@ export async function PATCH(
 
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
-    if (!canManageInstruction(me?.role)) {
-      return NextResponse.json({ error: 'Réservé aux instructeurs.' }, { status: 403 });
+    const cap = await getInstructionCapabilities(admin, user.id, me?.role);
+    if (!canAccessInstructionManagerTools(cap)) {
+      return NextResponse.json({ error: 'Réservé aux formateurs (FI / ATC FI / …).' }, { status: 403 });
     }
 
     const { data: eleve } = await admin
       .from('profiles')
-      .select('id, instructeur_referent_id, formation_instruction_active')
+      .select('id, instructeur_referent_id, formation_instruction_active, formation_instruction_licence')
       .eq('id', eleveId)
       .single();
     if (!eleve) return NextResponse.json({ error: 'Élève introuvable.' }, { status: 404 });
     if (eleve.instructeur_referent_id !== user.id && me?.role !== 'admin') {
       return NextResponse.json({ error: 'Cet élève n’est pas rattaché à vous.' }, { status: 403 });
+    }
+    if (me?.role !== 'admin' && !canInstructorManageEleveForFormation(cap, eleve.formation_instruction_licence)) {
+      return NextResponse.json(
+        { error: 'Vous n’êtes pas autorisé à gérer la formation de cet élève (type de parcours).' },
+        { status: 403 },
+      );
     }
 
     const body = await request.json();

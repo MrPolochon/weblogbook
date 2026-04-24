@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { InstructionProgram } from '@/lib/instruction-programs';
+import { isAtcInstructionProgram } from '@/lib/instruction-programs';
 
 type Eleve = {
   id: string;
@@ -36,8 +37,17 @@ export default function InstructionClient({
   loadError,
   viewerRole,
   viewerId,
+  isManager: isManagerProp,
+  canGrantTitreInstructionFlight,
+  canGrantTitreInstructionAtc,
+  titresCiblesPilotes,
+  canViewExaminerInbox,
+  isAtcTrainingInstructor,
   programs,
+  createFormationPrograms,
   examLicenceOptions,
+  atcTrainingsMine,
+  atcTrainingsAssigned,
   myFormationActive,
   myFormationLicence,
   myInstructorIdentifiant,
@@ -52,8 +62,17 @@ export default function InstructionClient({
   loadError?: string;
   viewerRole: string;
   viewerId: string;
+  isManager: boolean;
+  canGrantTitreInstructionFlight: boolean;
+  canGrantTitreInstructionAtc: boolean;
+  titresCiblesPilotes: Array<{ id: string; identifiant: string }>;
+  canViewExaminerInbox: boolean;
+  isAtcTrainingInstructor: boolean;
   programs: InstructionProgram[];
+  createFormationPrograms: InstructionProgram[];
   examLicenceOptions: string[];
+  atcTrainingsMine: Array<Record<string, string | null | undefined>>;
+  atcTrainingsAssigned: Array<Record<string, string | null | undefined>>;
   myFormationActive: boolean;
   myFormationLicence: string | null;
   myInstructorIdentifiant: string | null;
@@ -67,7 +86,9 @@ export default function InstructionClient({
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const isManager = viewerRole === 'instructeur' || viewerRole === 'admin';
+  const isManager = isManagerProp;
+  const formationProgramsForCreate = createFormationPrograms.length > 0 ? createFormationPrograms : programs;
+  const [atcTrainingMessage, setAtcTrainingMessage] = useState('');
 
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
@@ -96,8 +117,31 @@ export default function InstructionClient({
   const [examEchoueNote, setExamEchoueNote] = useState('');
   const [editById, setEditById] = useState<Record<string, { nom: string; immat: string; aeroport: string }>>({});
   const [loading, setLoading] = useState(false);
-  
-  
+
+  const instructionTitreOptions = useMemo(() => {
+    const out: string[] = [];
+    if (canGrantTitreInstructionFlight) {
+      out.push('FI', 'FE');
+    }
+    if (canGrantTitreInstructionAtc) {
+      out.push('ATC FI', 'ATC FE');
+    }
+    return out;
+  }, [canGrantTitreInstructionFlight, canGrantTitreInstructionAtc]);
+
+  const [titreUserId, setTitreUserId] = useState('');
+  const [titreType, setTitreType] = useState('FI');
+  const [titreAVie, setTitreAVie] = useState(true);
+  const [titreDateDeliv, setTitreDateDeliv] = useState(() => new Date().toISOString().split('T')[0]);
+  const [titreDateExp, setTitreDateExp] = useState('');
+  const [titreNote, setTitreNote] = useState('');
+
+  useEffect(() => {
+    if (instructionTitreOptions.length > 0 && !instructionTitreOptions.includes(titreType)) {
+      setTitreType(instructionTitreOptions[0]!);
+    }
+  }, [instructionTitreOptions, titreType]);
+
   /** Clé `eleveId::licence::module` → état affiché en avance de phase avant la réponse serveur */
   const [progressionOverrides, setProgressionOverrides] = useState<Record<string, boolean>>({});
   const [savingProgKeys, setSavingProgKeys] = useState<Set<string>>(() => new Set());
@@ -111,6 +155,14 @@ export default function InstructionClient({
     }
     return map;
   }, [avionsTemp]);
+
+  const elevesForAvion = useMemo(
+    () =>
+      eleves.filter(
+        (e) => e.formation_instruction_licence && !isAtcInstructionProgram(e.formation_instruction_licence),
+      ),
+    [eleves],
+  );
 
   const progressionByEleve = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -199,6 +251,44 @@ export default function InstructionClient({
       setIdentifiant('');
       setPassword('');
       toast.success('Eleve cree et rattache a votre formation.');
+    });
+  }
+
+  async function requestAtcTraining(ev: React.FormEvent) {
+    ev.preventDefault();
+    await run(async () => {
+      const res = await fetch('/api/instruction/atc-trainings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: atcTrainingMessage.trim() || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur demande training');
+      setAtcTrainingMessage('');
+      toast.success('Demande envoyée. Un ATC FI/FE est assigné — convenez de la date en message privé.');
+    });
+  }
+
+  async function termineAtcTraining(id: string) {
+    if (!confirm('Marquer la session de training comme terminée ? Cette fiche sera effacée.')) return;
+    await run(async () => {
+      const res = await fetch(`/api/instruction/atc-trainings/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'termine' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      toast.success('Session clôturée.');
+    });
+  }
+
+  async function annuleAtcTraining(id: string) {
+    await run(async () => {
+      const res = await fetch(`/api/instruction/atc-trainings/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur annulation');
+      toast.success('Demande annulée.');
     });
   }
 
@@ -441,6 +531,46 @@ export default function InstructionClient({
     });
   }
 
+  async function submitTitreDelivrance(e: React.FormEvent) {
+    e.preventDefault();
+    if (!titreUserId) {
+      toast.error('Choisissez un pilote.');
+      return;
+    }
+    if (
+      !window.confirm(
+        'Première confirmation : vous allez délivrer un titre FI, FE, ATC FI ou ATC FE sur le carnet du pilote. Continuer ?',
+      )
+    ) {
+      return;
+    }
+    if (
+      !window.confirm(
+        'Deuxième confirmation : enregistrement définitif. Vous ne pourrez pas retirer ce titre ici (seul un administrateur peut le faire).',
+      )
+    ) {
+      return;
+    }
+    await run(async () => {
+      const res = await fetch('/api/licences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: titreUserId,
+          type: titreType,
+          a_vie: titreAVie,
+          date_delivrance: titreDateDeliv || null,
+          date_expiration: titreAVie ? null : titreDateExp || null,
+          note: titreNote.trim() || null,
+          double_confirm_instruction_titre: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || 'Erreur délivrance titre');
+      toast.success('Titre enregistré sur le profil du pilote.');
+    });
+  }
+
   return (
     <div className="space-y-6">
       {loadError && (
@@ -454,6 +584,103 @@ export default function InstructionClient({
         <h1 className="text-2xl font-semibold text-slate-100">Instruction</h1>
         <p className="text-sm text-slate-400">Suivi de formation et demandes d&apos;examens.</p>
       </div>
+
+      {instructionTitreOptions.length > 0 && (
+        <form onSubmit={submitTitreDelivrance} className="card space-y-3">
+          <h2 className="text-lg font-medium text-slate-200">Délivrance titre FI / FE / ATC</h2>
+          <p className="text-sm text-amber-200/90">
+            Réservé aux administrateurs et aux titulaires concernés (FE pour FI et FE vol ; ATC FE pour ATC FI et
+            ATC FE). Vous ne pouvez pas retirer ces titres ici : contactez un administrateur si une erreur a été
+            enregistrée.
+          </p>
+          {titresCiblesPilotes.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              {viewerRole === 'admin'
+                ? 'Aucun profil chargé. Rechargez la page ou corrigez les droits d’accès base de données.'
+                : 'Aucun élève actif rattaché à vous comme instructeur référent. Rattachez d’abord un élève ou demandez un administrateur.'}
+            </p>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label className="space-y-1 text-sm text-slate-300">
+                  Pilote
+                  <select
+                    className="input w-full"
+                    value={titreUserId}
+                    onChange={(e) => setTitreUserId(e.target.value)}
+                    required
+                  >
+                    <option value="">—</option>
+                    {titresCiblesPilotes.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.identifiant}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm text-slate-300">
+                  Titre
+                  <select
+                    className="input w-full"
+                    value={titreType}
+                    onChange={(e) => setTitreType(e.target.value)}
+                    required
+                  >
+                    {instructionTitreOptions.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-300 md:col-span-2">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-600"
+                    checked={titreAVie}
+                    onChange={(e) => setTitreAVie(e.target.checked)}
+                  />
+                  À vie
+                </label>
+                <label className="space-y-1 text-sm text-slate-300">
+                  Date de délivrance
+                  <input
+                    type="date"
+                    className="input w-full"
+                    value={titreDateDeliv}
+                    onChange={(e) => setTitreDateDeliv(e.target.value)}
+                    required
+                  />
+                </label>
+                {!titreAVie && (
+                  <label className="space-y-1 text-sm text-slate-300">
+                    Date d’expiration
+                    <input
+                      type="date"
+                      className="input w-full"
+                      value={titreDateExp}
+                      onChange={(e) => setTitreDateExp(e.target.value)}
+                      required={!titreAVie}
+                    />
+                  </label>
+                )}
+                <label className="space-y-1 text-sm text-slate-300 md:col-span-2">
+                  Note (optionnel)
+                  <input
+                    className="input w-full"
+                    value={titreNote}
+                    onChange={(e) => setTitreNote(e.target.value)}
+                    placeholder="Réf. dossier, session…"
+                  />
+                </label>
+              </div>
+              <button className="btn-primary" type="submit" disabled={loading}>
+                Enregistrer le titre (double confirmation)
+              </button>
+            </>
+          )}
+        </form>
+      )}
 
       <form onSubmit={createExamRequest} className="card space-y-3">
         <h2 className="text-lg font-medium text-slate-200">Demander un examen</h2>
@@ -525,7 +752,7 @@ export default function InstructionClient({
                       {statutLabel[r.statut] || r.statut}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500">Instructeur: {instructeur?.identifiant || 'Assignation en cours'}</p>
+                  <p className="text-xs text-slate-500">Examinateur: {instructeur?.identifiant || 'Assignation en cours'}</p>
                   {r.statut === 'en_cours' && (
                     <p className="text-sm text-violet-300 mt-1">Votre session d&apos;examen est en cours. Effectuez votre vol normalement.</p>
                   )}
@@ -544,6 +771,73 @@ export default function InstructionClient({
         )}
       </div>
 
+      <div className="card space-y-3">
+        <h2 className="text-lg font-medium text-slate-200">Session de training (ATC)</h2>
+        <p className="text-sm text-slate-500">
+          Tout le monde peut demander un accompagnement. Un <strong className="text-slate-400">ATC FI</strong> ou{' '}
+          <strong className="text-slate-400">ATC FE</strong> est assigné automatiquement (répartition de charge) ; convenez
+          d&apos;une date <strong>en message privé</strong>. L&apos;instructeur clôt la fiche ici quand c&apos;est
+          fini (elle disparaît).
+        </p>
+        <form onSubmit={requestAtcTraining} className="space-y-2">
+          <input
+            className="input w-full"
+            value={atcTrainingMessage}
+            onChange={(e) => setAtcTrainingMessage(e.target.value)}
+            placeholder="Message (optionnel) pour l’instructeur"
+          />
+          <button className="btn-primary" type="submit" disabled={loading}>
+            Demander une session de training
+          </button>
+        </form>
+        {atcTrainingsMine.length > 0 && (
+          <div>
+            <p className="text-sm text-slate-300 mb-2">Mes demandes en cours</p>
+            <ul className="space-y-2 text-sm text-slate-400">
+              {atcTrainingsMine.map((t) => (
+                <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 border border-slate-700/50 rounded p-2">
+                  <span>
+                    Assigné à <span className="text-slate-200">{t.assignee_identifiant || '—'}</span>
+                    {t.message ? <span className="block text-xs mt-1">{t.message}</span> : null}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs text-red-400 border border-red-500/30 rounded px-2 py-1"
+                    onClick={() => annuleAtcTraining(String(t.id))}
+                    disabled={loading}
+                  >
+                    Annuler
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {isAtcTrainingInstructor && atcTrainingsAssigned.length > 0 && (
+          <div>
+            <p className="text-sm text-amber-200/90 mb-2">Training à assurer (côté instructeur)</p>
+            <ul className="space-y-2 text-sm text-slate-300">
+              {atcTrainingsAssigned.map((t) => (
+                <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 border border-amber-500/30 rounded p-2">
+                  <span>
+                    Avec <span className="text-slate-100">{t.requester_identifiant || '—'}</span>
+                    {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-primary text-xs py-1"
+                    onClick={() => termineAtcTraining(String(t.id))}
+                    disabled={loading}
+                  >
+                    Session terminée
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
       {isManager && (
         <>
           <form onSubmit={createEleve} className="card space-y-3">
@@ -555,7 +849,7 @@ export default function InstructionClient({
               <input className="input" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} placeholder="Identifiant élève" required />
               <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mot de passe temporaire" required minLength={8} />
               <select className="input" value={formationLicence} onChange={(e) => setFormationLicence(e.target.value)}>
-                {programs.map((p) => (
+                {formationProgramsForCreate.map((p) => (
                   <option key={p.licenceCode} value={p.licenceCode}>{p.label}</option>
                 ))}
               </select>
@@ -582,7 +876,7 @@ export default function InstructionClient({
                 value={formationLicenceRattach}
                 onChange={(e) => setFormationLicenceRattach(e.target.value)}
               >
-                {programs.map((p) => (
+                {formationProgramsForCreate.map((p) => (
                   <option key={p.licenceCode} value={p.licenceCode}>{p.label}</option>
                 ))}
               </select>
@@ -592,12 +886,14 @@ export default function InstructionClient({
             </div>
           </form>
 
+          {elevesForAvion.some((e) => e.formation_instruction_active) ? (
           <form onSubmit={addAvionTemp} className="card space-y-3">
             <h2 className="text-lg font-medium text-slate-200">Assigner un avion temporaire</h2>
+            <p className="text-xs text-slate-500">Réservé aux parcours <strong className="text-slate-400">vol</strong> (PPL, CPL, etc.), pas à la formation ATC-INIT.</p>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <select className="input" value={selectedEleveId} onChange={(e) => setSelectedEleveId(e.target.value)} required>
                 <option value="">Élève</option>
-                {eleves.filter((e) => e.formation_instruction_active).map((e) => (
+                {elevesForAvion.filter((e) => e.formation_instruction_active).map((e) => (
                   <option key={e.id} value={e.id}>{e.identifiant}</option>
                 ))}
               </select>
@@ -614,6 +910,11 @@ export default function InstructionClient({
             </div>
             <button className="btn-primary" type="submit" disabled={loading}>Assigner</button>
           </form>
+          ) : isManager ? (
+            <p className="text-sm text-slate-500 card py-3 px-4 border border-slate-700/40">
+              Aucun élève en formation <strong className="text-slate-400">vol</strong> actif : l’assignation d’avion temporaire ne s’applique pas aux seuls parcours ATC-INIT.
+            </p>
+          ) : null}
         </>
       )}
 
@@ -641,7 +942,7 @@ export default function InstructionClient({
                       onChange={(ev) => setEleveLicence(e.id, ev.target.value)}
                       disabled={loading}
                     >
-                      {programs.map((p) => (
+                      {formationProgramsForCreate.map((p) => (
                         <option key={p.licenceCode} value={p.licenceCode}>{p.label}</option>
                       ))}
                     </select>
@@ -717,7 +1018,7 @@ export default function InstructionClient({
         </div>
       )}
 
-      {isManager && (
+      {canViewExaminerInbox && (
         <div className="card space-y-3">
           <h2 className="text-lg font-medium text-slate-200">Demandes d&apos;examen assignées</h2>
           {examRequestsAssigned.length === 0 ? (

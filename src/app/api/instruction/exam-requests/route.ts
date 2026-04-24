@@ -3,12 +3,9 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
 import { logActivity } from '@/lib/activity-log';
+import { getInstructionCapabilities, getExaminerPoolUserIds } from '@/lib/instruction-permissions';
 
 type ExamStatus = 'assigne' | 'accepte' | 'termine' | 'refuse';
-
-function canManageInstruction(role: string | null | undefined): boolean {
-  return role === 'instructeur' || role === 'admin';
-}
 
 export async function GET() {
   try {
@@ -18,6 +15,7 @@ export async function GET() {
 
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
+    const cap = await getInstructionCapabilities(admin, user.id, me?.role);
 
     const { data: mine, error: mineErr } = await admin
       .from('instruction_exam_requests')
@@ -27,7 +25,7 @@ export async function GET() {
     if (mineErr) return NextResponse.json({ error: mineErr.message }, { status: 400 });
 
     let assigned: any[] = [];
-    if (canManageInstruction(me?.role)) {
+    if (cap.canViewExaminerInbox) {
       const { data: assignedRows, error: assignedErr } = await admin
         .from('instruction_exam_requests')
         .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, resultat, dossier_conserve, licence_creee_id, created_at, updated_at, requester:profiles!instruction_exam_requests_requester_id_fkey(identifiant)')
@@ -68,16 +66,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Une demande est déjà en cours pour cette licence.' }, { status: 400 });
     }
 
-    const { data: instructeurs, error: instErr } = await admin
-      .from('profiles')
-      .select('id')
-      .in('role', ['instructeur', 'admin']);
-    if (instErr) return NextResponse.json({ error: instErr.message }, { status: 400 });
-    if (!instructeurs || instructeurs.length === 0) {
-      return NextResponse.json({ error: 'Aucun instructeur ou administrateur disponible.' }, { status: 400 });
+    const instructorIds = await getExaminerPoolUserIds(admin, licenceCode);
+    if (instructorIds.length === 0) {
+      return NextResponse.json(
+        { error: 'Aucun examinateur habilité pour ce type d’examen (vol : licence FE / instructeur / admin ; ATC : licence ATC FE / admin).' },
+        { status: 400 },
+      );
     }
-
-    const instructorIds = instructeurs.map((i) => i.id);
     const pool = instructorIds.filter((id) => id !== user.id);
     const eligible = pool.length > 0 ? pool : instructorIds;
 

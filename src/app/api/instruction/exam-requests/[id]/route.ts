@@ -2,12 +2,9 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logActivity, getClientIp } from '@/lib/activity-log';
+import { getExaminerPoolUserIds, userCanConcludeThisExam } from '@/lib/instruction-permissions';
 
 const VALID_STATUSES = ['assigne', 'accepte', 'en_cours', 'termine', 'refuse'] as const;
-
-function canManageInstruction(role: string | null | undefined): boolean {
-  return role === 'instructeur' || role === 'admin';
-}
 
 export async function PATCH(
   request: Request,
@@ -21,9 +18,6 @@ export async function PATCH(
 
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role, identifiant').eq('id', user.id).single();
-    if (!canManageInstruction(me?.role)) {
-      return NextResponse.json({ error: 'Réservé aux instructeurs.' }, { status: 403 });
-    }
 
     const { data: row } = await admin
       .from('instruction_exam_requests')
@@ -31,8 +25,16 @@ export async function PATCH(
       .eq('id', id)
       .single();
     if (!row) return NextResponse.json({ error: 'Demande introuvable.' }, { status: 404 });
-    if (row.instructeur_id !== user.id && me?.role !== 'admin') {
-      return NextResponse.json({ error: 'Vous n\'êtes pas l\'instructeur assigné.' }, { status: 403 });
+    if (me?.role !== 'admin') {
+      if (row.instructeur_id !== user.id) {
+        return NextResponse.json({ error: 'Vous n\'êtes pas l\'examinateur assigné.' }, { status: 403 });
+      }
+      if (!(await userCanConcludeThisExam(admin, user.id, me?.role, row.licence_code))) {
+        return NextResponse.json(
+          { error: 'Votre habilitation ne permet pas de conclure ce type d\'examen (FE vol / ATC FE pour examens ATC).' },
+          { status: 403 },
+        );
+      }
     }
 
     const body = await request.json();
@@ -197,11 +199,7 @@ export async function PATCH(
         return NextResponse.json({ error: 'Seule une demande en attente peut être refusée.' }, { status: 400 });
       }
 
-      const { data: allInstructeurs } = await admin
-        .from('profiles')
-        .select('id')
-        .in('role', ['instructeur', 'admin']);
-
+      const poolIds = await getExaminerPoolUserIds(admin, row.licence_code);
       const refusedBy = user.id;
       const { data: previousRefusals } = await admin
         .from('instruction_exam_request_refusals')
@@ -215,9 +213,7 @@ export async function PATCH(
         instructeur_id: refusedBy,
       });
 
-      const eligible = (allInstructeurs || [])
-        .map((i) => i.id)
-        .filter((iid) => iid !== row.requester_id && !alreadyRefusedIds.has(iid));
+      const eligible = poolIds.filter((iid) => iid !== row.requester_id && !alreadyRefusedIds.has(iid));
 
       if (eligible.length > 0) {
         const workload = new Map<string, number>();

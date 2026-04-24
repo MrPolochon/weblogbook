@@ -4,21 +4,10 @@ import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Award, Plus, Edit2, Trash2, X, Layers } from 'lucide-react';
 import { formatDateMediumUTC } from '@/lib/date-utils';
+import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
+import { isInstructionTitreType } from '@/lib/licence-titres-instruction';
 
-const TYPES = [
-  'PPL', 'CPL', 'ATPL',
-  'IR ME',
-  'Qualification Type',
-  'Multi Crew attestation',
-  'CAT 1', 'CAT 2', 'CAT 3', 'CAT 4', 'CAT 5', 'CAT 6',
-  'C1', 'C2', 'C3', 'C4', 'C6',
-  'CLASS-M', 'CLASS-MT', 'CLASS-MRP',
-  'IFR', 'VFR',
-  'COM 1', 'COM 2', 'COM 3', 'COM 4', 'COM 5', 'COM 6',
-  'CAL-ATC', 'CAL-AFIS',
-  'PCAL-ATC', 'PCAL-AFIS',
-  'LPAFIS', 'LATC',
-] as const;
+const TYPES = ALL_LICENCE_TYPES;
 
 const TYPES_COM = ['COM 1', 'COM 2', 'COM 3', 'COM 4', 'COM 5', 'COM 6'] as const;
 type TypeCom = typeof TYPES_COM[number];
@@ -180,6 +169,18 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
       if (formData.date_expiration && !formData.a_vie) body.date_expiration = formData.date_expiration;
       if (formData.note) body.note = formData.note;
 
+      if (!editingId && isInstructionTitreType(formData.type)) {
+        if (!window.confirm('Première confirmation : vous allez délivrer un titre FI, FE, ATC FI ou ATC FE. Continuer ?')) {
+          setLoading(false);
+          return;
+        }
+        if (!window.confirm('Deuxième confirmation : confirmez la délivrance définitive de ce titre sur le carnet du pilote.')) {
+          setLoading(false);
+          return;
+        }
+        body.double_confirm_instruction_titre = true;
+      }
+
       const url = editingId ? `/api/licences/${editingId}` : '/api/licences';
       const method = editingId ? 'PATCH' : 'POST';
       const res = await fetch(url, {
@@ -213,6 +214,20 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
       return;
     }
 
+    const batchTitres = validLicences.filter((lic) => isInstructionTitreType(lic.type));
+    if (batchTitres.length > 0) {
+      if (
+        !window.confirm(
+          `Première confirmation : la liste contient un ou des titres instruction (${batchTitres.map((l) => l.type).join(', ')}). Continuer ?`
+        )
+      ) {
+        return;
+      }
+      if (!window.confirm('Deuxième confirmation : confirmez la délivrance définitive de ce(s) titre(s).')) {
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const promises = validLicences.map(async (lic) => {
@@ -236,6 +251,9 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
         if (lic.date_delivrance) body.date_delivrance = lic.date_delivrance;
         if (lic.date_expiration && !lic.a_vie) body.date_expiration = lic.date_expiration;
         if (lic.note) body.note = lic.note;
+        if (isInstructionTitreType(lic.type)) {
+          body.double_confirm_instruction_titre = true;
+        }
 
         const res = await fetch('/api/licences', {
           method: 'POST',
@@ -264,11 +282,20 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Supprimer cette licence ?')) return;
+  async function handleDelete(lic: Licence) {
+    if (isInstructionTitreType(lic.type)) {
+      if (!window.confirm('Première confirmation : supprimer un titre FI, FE, ATC FI ou ATC FE est réservé à un admin (action définitive). Continuer ?')) {
+        return;
+      }
+      if (!window.confirm('Dernière confirmation : retirer définitivement ce titre du profil ?')) {
+        return;
+      }
+    } else {
+      if (!window.confirm('Supprimer cette licence ?')) return;
+    }
     setLoading(true);
     try {
-      const res = await fetch(`/api/licences/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/licences/${lic.id}`, { method: 'DELETE' });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Erreur');
       startTransition(() => router.refresh());
@@ -379,7 +406,7 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDelete(lic.id)}
+                            onClick={() => handleDelete(lic)}
                             className="text-red-400 hover:text-red-300"
                             disabled={loading}
                           >

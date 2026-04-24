@@ -5,6 +5,7 @@ import { addMinutes, parseISO } from 'date-fns';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { NATURES_VOL_MILITAIRE } from '@/lib/avions-militaires';
 import { ARME_MISSIONS } from '@/lib/armee-missions';
+import { isQualifiedFlightInstructorInLogbook } from '@/lib/instruction-permissions';
 
 export async function POST(request: Request) {
   try {
@@ -282,8 +283,16 @@ export async function POST(request: Request) {
       if (!body.instructeur_id || !body.instruction_type || typeof body.instruction_type !== 'string' || !String(body.instruction_type).trim()) {
         return NextResponse.json({ error: 'Vol d\'instruction : instructeur et type d\'instruction requis.' }, { status: 400 });
       }
-      const { data: inst } = await supabase.from('profiles').select('id').eq('id', body.instructeur_id).in('role', ['admin', 'instructeur']).single();
-      if (!inst) return NextResponse.json({ error: 'L\'instructeur doit avoir le rôle instructeur ou administrateur.' }, { status: 400 });
+      const adminV = createAdminClient();
+      const { data: inst } = await adminV.from('profiles').select('id, role').eq('id', body.instructeur_id).single();
+      if (!inst) return NextResponse.json({ error: 'Instructeur introuvable.' }, { status: 400 });
+      const instOk = await isQualifiedFlightInstructorInLogbook(adminV, inst.id, inst.role);
+      if (!instOk) {
+        return NextResponse.json(
+          { error: 'L’instructeur de vol doit être administrateur, instructeur, ou titulaire de la licence FI (Flight instructor).' },
+          { status: 400 },
+        );
+      }
     }
 
     const depStr = /Z$/.test(String(depart_utc)) ? String(depart_utc) : String(depart_utc) + 'Z';

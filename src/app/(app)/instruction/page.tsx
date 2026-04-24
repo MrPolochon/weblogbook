@@ -2,8 +2,9 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import InstructionClient from './InstructionClient';
-import { INSTRUCTION_PROGRAMS } from '@/lib/instruction-programs';
+import { INSTRUCTION_PROGRAMS, ATC_INIT_LICENCE_CODE } from '@/lib/instruction-programs';
 import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
+import { getInstructionCapabilities, canAccessInstructionManagerTools } from '@/lib/instruction-permissions';
 
 export default async function InstructionPage() {
   const supabase = await createClient();
@@ -43,10 +44,33 @@ export default async function InstructionPage() {
     instructeur_referent_id: (meInstruction?.instructeur_referent_id as string | null) || null,
   };
 
-  const isManager = viewer.role === 'instructeur' || viewer.role === 'admin';
+  const cap = await getInstructionCapabilities(admin, user.id, viewer.role);
+  const isManager = canAccessInstructionManagerTools(cap);
+  const canViewExaminerInbox = cap.canViewExaminerInbox;
+  const isAtcTrainingInstructor = cap.isAtcTrainingInstructor;
+  const createFormationPrograms = INSTRUCTION_PROGRAMS.filter((p) => {
+    if (p.licenceCode === ATC_INIT_LICENCE_CODE) return cap.canManageAtcInstruction;
+    return cap.canManageFlightInstruction;
+  });
+  const EXAM_LICENCE_FILTER = new Set(['FI', 'FE', 'ATC FI', 'ATC FE']);
+  const examLicenceOptions = ALL_LICENCE_TYPES.filter((t) => !EXAM_LICENCE_FILTER.has(t));
+
+  const canGrantTitreInstructionFlight = viewer.role === 'admin' || cap.types.has('FE');
+  const canGrantTitreInstructionAtc = viewer.role === 'admin' || cap.types.has('ATC FE');
+  const showTitreDelivrance = canGrantTitreInstructionFlight || canGrantTitreInstructionAtc;
+  const titresCiblesPilotesQuery = showTitreDelivrance
+    ? viewer.role === 'admin'
+      ? admin.from('profiles').select('id, identifiant').order('identifiant', { ascending: true })
+      : admin
+          .from('profiles')
+          .select('id, identifiant')
+          .eq('instructeur_referent_id', user.id)
+          .eq('formation_instruction_active', true)
+          .order('identifiant', { ascending: true })
+    : Promise.resolve({ data: [] as Array<{ id: string; identifiant: string }>, error: null });
 
   // Batch all independent queries together
-  const [typesAvionResult, instructorProfileResult, examMineResult, progressionResult, elevesResult] = await Promise.all([
+  const [typesAvionResult, instructorProfileResult, examMineResult, progressionResult, elevesResult, titresCiblesResult] = await Promise.all([
     admin.from('types_avion').select('id, nom, constructeur, code_oaci').order('ordre', { ascending: true }),
     viewer.instructeur_referent_id
       ? admin.from('profiles').select('identifiant').eq('id', viewer.instructeur_referent_id).maybeSingle()
@@ -71,6 +95,7 @@ export default async function InstructionPage() {
           .eq('formation_instruction_active', true)
           .order('created_at', { ascending: false })
       : Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null }),
+    titresCiblesPilotesQuery,
   ]);
 
   if (typesAvionResult.error) errors.push(`Types avion: ${typesAvionResult.error.message}`);
@@ -78,6 +103,7 @@ export default async function InstructionPage() {
   if (examMineResult.error) errors.push(`Demandes examen: ${examMineResult.error.message}`);
   if (progressionResult.error) errors.push(`Progression: ${progressionResult.error.message}`);
   if (elevesResult.error) errors.push(`Élèves: ${elevesResult.error.message}`);
+  if (titresCiblesResult.error) errors.push(`Cibles titres instruction: ${titresCiblesResult.error.message}`);
 
   const typesAvion = typesAvionResult.data;
   const meInstructorProfile = instructorProfileResult.data;
@@ -102,13 +128,49 @@ export default async function InstructionPage() {
       ])
     : [{ data: [] as Array<Record<string, unknown>>, error: null }, { data: [] as Array<Record<string, unknown>>, error: null }];
 
-  const examAssignedResult = isManager
+  const examAssignedResult = canViewExaminerInbox
     ? await admin
         .from('instruction_exam_requests')
         .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, resultat, dossier_conserve, licence_creee_id, created_at, updated_at, requester:profiles!instruction_exam_requests_requester_id_fkey(identifiant)')
         .eq('instructeur_id', user.id)
         .order('created_at', { ascending: false })
     : { data: [] as Array<Record<string, unknown>>, error: null };
+
+  let atcTrainingsMine: Array<Record<string, unknown>> = [];
+  let atcTrainingsAssigned: Array<Record<string, unknown>> = [];
+  const { data: atcMine, error: atcMineErr } = await admin
+    .from('instruction_atc_training_requests')
+    .select('id, requester_id, assignee_id, message, created_at, updated_at')
+    .eq('requester_id', user.id)
+    .order('created_at', { ascending: false });
+  const { data: atcToMe, error: atcToMeErr } = await admin
+    .from('instruction_atc_training_requests')
+    .select('id, requester_id, assignee_id, message, created_at, updated_at')
+    .eq('assignee_id', user.id)
+    .order('created_at', { ascending: false });
+  if (atcMineErr) errors.push(`Training ATC: ${atcMineErr.message}`);
+  if (atcToMeErr) errors.push(`Training ATC (assigné): ${atcToMeErr.message}`);
+  if (!atcMineErr && !atcToMeErr) {
+    const aIds = new Set(
+      [...(atcMine || []), ...(atcToMe || [])].map((r) => r.assignee_id as string).filter(Boolean),
+    );
+    const rIds = new Set(
+      [...(atcMine || []), ...(atcToMe || [])].map((r) => r.requester_id as string).filter(Boolean),
+    );
+    const { data: ap } = aIds.size
+      ? await admin.from('profiles').select('id, identifiant').in('id', Array.from(aIds))
+      : { data: [] };
+    const { data: rp } = rIds.size
+      ? await admin.from('profiles').select('id, identifiant').in('id', Array.from(rIds))
+      : { data: [] };
+    const am = new Map((ap || []).map((p) => [p.id, p.identifiant]));
+    const rm = new Map((rp || []).map((p) => [p.id, p.identifiant]));
+    atcTrainingsMine = (atcMine || []).map((r) => ({ ...r, assignee_identifiant: am.get(r.assignee_id as string) || null }));
+    atcTrainingsAssigned = (atcToMe || []).map((r) => ({
+      ...r,
+      requester_identifiant: rm.get(r.requester_id as string) || null,
+    }));
+  }
 
   if (avionsTempResult.error) errors.push(`Avions temp: ${avionsTempResult.error.message}`);
   if (elevesProgressionResult.error) errors.push(`Progression élèves: ${elevesProgressionResult.error.message}`);
@@ -120,13 +182,24 @@ export default async function InstructionPage() {
 
   const loadError = errors.length > 0 ? errors.join(' · ') : undefined;
 
+  const titresCiblesPilotes = (titresCiblesResult.data || []) as Array<{ id: string; identifiant: string }>;
+
   return (
     <InstructionClient
       loadError={loadError}
       viewerRole={viewer.role}
       viewerId={viewer.id}
+      isManager={isManager}
+      canGrantTitreInstructionFlight={canGrantTitreInstructionFlight}
+      canGrantTitreInstructionAtc={canGrantTitreInstructionAtc}
+      titresCiblesPilotes={titresCiblesPilotes}
+      canViewExaminerInbox={canViewExaminerInbox}
+      isAtcTrainingInstructor={isAtcTrainingInstructor}
       programs={INSTRUCTION_PROGRAMS}
-      examLicenceOptions={[...ALL_LICENCE_TYPES]}
+      createFormationPrograms={createFormationPrograms}
+      examLicenceOptions={examLicenceOptions}
+      atcTrainingsMine={atcTrainingsMine as Array<Record<string, string | null | undefined>>}
+      atcTrainingsAssigned={atcTrainingsAssigned as Array<Record<string, string | null | undefined>>}
       myFormationActive={Boolean(viewer.formation_instruction_active)}
       myFormationLicence={(viewer.formation_instruction_licence as string | null) || null}
       myInstructorIdentifiant={(meInstructorProfile as { identifiant?: string } | null)?.identifiant || null}

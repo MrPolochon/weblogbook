@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getFlightInstructorProfilesForSelect } from '@/lib/instruction-permissions';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -51,11 +52,11 @@ export default async function LogbookVolEditPage({
   if (vol.statut === 'refusé' && (vol.refusal_count ?? 0) >= 3 && !isAdmin) redirect('/logbook');
 
   const client = isAdmin ? admin : supabase;
-  const [{ data: types }, { data: compagnies }, { data: instructeurs }, { data: allProfiles }] = await Promise.all([
+  const [{ data: types }, { data: compagnies }, { data: allProfiles }, instructeurs] = await Promise.all([
     client.from('types_avion').select('id, nom, constructeur').order('ordre'),
     client.from('compagnies').select('id, nom').order('nom'),
-    client.from('profiles').select('id, identifiant').in('role', ['admin', 'instructeur']).order('identifiant'),
     client.from('profiles').select('id, identifiant').order('identifiant'),
+    getFlightInstructorProfilesForSelect(admin),
   ]);
 
   const autresProfiles = (allProfiles || []).filter((p) => p.id !== user.id);

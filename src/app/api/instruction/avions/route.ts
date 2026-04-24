@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-
-function canManageInstruction(role: string | null | undefined): boolean {
-  return role === 'instructeur' || role === 'admin';
-}
+import {
+  canAccessInstructionManagerTools,
+  canInstructorManageEleveForFormation,
+  getInstructionCapabilities,
+} from '@/lib/instruction-permissions';
+import { isAtcInstructionProgram } from '@/lib/instruction-programs';
 
 function randomImmat(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -39,8 +41,24 @@ export async function GET(request: Request) {
 
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
-    if (!canManageInstruction(me?.role)) {
-      return NextResponse.json({ error: 'Réservé aux instructeurs.' }, { status: 403 });
+    const cap = await getInstructionCapabilities(admin, user.id, me?.role);
+    if (!canAccessInstructionManagerTools(cap)) {
+      return NextResponse.json({ error: 'Réservé aux formateurs (FI / ATC FI / …).' }, { status: 403 });
+    }
+
+    const { data: pEleve } = await admin
+      .from('profiles')
+      .select('instructeur_referent_id, formation_instruction_licence')
+      .eq('id', eleveId)
+      .maybeSingle();
+    if (pEleve?.instructeur_referent_id !== user.id && me?.role !== 'admin') {
+      return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 });
+    }
+    if (isAtcInstructionProgram(pEleve?.formation_instruction_licence)) {
+      return NextResponse.json([]);
+    }
+    if (me?.role !== 'admin' && pEleve && !canInstructorManageEleveForFormation(cap, pEleve.formation_instruction_licence)) {
+      return NextResponse.json({ error: 'Non autorisé pour ce type de formation.' }, { status: 403 });
     }
 
     const { data: rows, error } = await admin
@@ -67,8 +85,9 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
-    if (!canManageInstruction(me?.role)) {
-      return NextResponse.json({ error: 'Réservé aux instructeurs.' }, { status: 403 });
+    const cap = await getInstructionCapabilities(admin, user.id, me?.role);
+    if (!canAccessInstructionManagerTools(cap)) {
+      return NextResponse.json({ error: 'Réservé aux formateurs (FI / ATC FI / …).' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -83,10 +102,19 @@ export async function POST(request: Request) {
 
     const { data: eleve } = await admin
       .from('profiles')
-      .select('id, formation_instruction_active, instructeur_referent_id')
+      .select('id, formation_instruction_active, instructeur_referent_id, formation_instruction_licence')
       .eq('id', eleveId)
       .single();
     if (!eleve) return NextResponse.json({ error: 'Élève introuvable.' }, { status: 404 });
+    if (isAtcInstructionProgram(eleve.formation_instruction_licence)) {
+      return NextResponse.json(
+        { error: 'Les avions temporaires ne s’appliquent pas à la formation ATC-INIT (aucun appareil logbook ici).' },
+        { status: 400 },
+      );
+    }
+    if (me?.role !== 'admin' && !canInstructorManageEleveForFormation(cap, eleve.formation_instruction_licence)) {
+      return NextResponse.json({ error: 'Vous n’êtes pas autorisé pour ce parcours vol.' }, { status: 403 });
+    }
     if (!eleve.formation_instruction_active) {
       return NextResponse.json({ error: 'La formation de cet élève n’est pas active.' }, { status: 400 });
     }
@@ -131,8 +159,9 @@ export async function PATCH(request: Request) {
 
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
-    if (!canManageInstruction(me?.role)) {
-      return NextResponse.json({ error: 'Réservé aux instructeurs.' }, { status: 403 });
+    const cap = await getInstructionCapabilities(admin, user.id, me?.role);
+    if (!canAccessInstructionManagerTools(cap)) {
+      return NextResponse.json({ error: 'Réservé aux formateurs (FI / ATC FI / …).' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -182,8 +211,9 @@ export async function DELETE(request: Request) {
 
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
-    if (!canManageInstruction(me?.role)) {
-      return NextResponse.json({ error: 'Réservé aux instructeurs.' }, { status: 403 });
+    const cap = await getInstructionCapabilities(admin, user.id, me?.role);
+    if (!canAccessInstructionManagerTools(cap)) {
+      return NextResponse.json({ error: 'Réservé aux formateurs (FI / ATC FI / …).' }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
