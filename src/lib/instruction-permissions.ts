@@ -63,7 +63,8 @@ export function buildInstructionCapabilities(
     canExamineFlight: hasFe,
     /** Examens ATC / AFIS : exclusivement la licence ATC FE. */
     canExamineAtc: hasAtcFe,
-    isAtcTrainingInstructor: isAdmin || hasAtcFi || hasAtcFe,
+    /** Training ATC assignable / file reçue : titres ATC FI ou ATC FE uniquement (pas le seul rôle admin). */
+    isAtcTrainingInstructor: hasAtcFi || hasAtcFe,
     /** File examinateur reçue : dès qu’on a FE et/ou ATC FE (jamais par le seul rôle admin). */
     canViewExaminerInbox: hasFe || hasAtcFe,
   };
@@ -168,26 +169,86 @@ export async function isQualifiedFlightInstructorInLogbook(
   return (data?.length ?? 0) > 0;
 }
 
-export async function getAtcTrainingInstructorPoolUserIds(admin: SupabaseClient): Promise<string[]> {
-  const { data: a } = await admin.from('licences_qualifications').select('user_id').in('type', [LICENCE_ATC_FI, LICENCE_ATC_FE]);
-  const ids = new Set<string>((a || []).map((r) => r.user_id as string));
-  const { data: admins } = await admin.from('profiles').select('id').eq('role', 'admin');
-  for (const u of admins || []) ids.add(u.id as string);
+/**
+ * Charge minimale du FI le moins occupé : à partir de ce nombre de sessions ouvertes, on peut assigner
+ * un FE / ATC FE (s’il en existe) pour délester les FI.
+ */
+export const TRAINING_FE_FALLBACK_MIN_FI_OPEN_COUNT = 3;
+
+/**
+ * Choisit un assignataire : FI le moins chargé tant que cette charge reste sous le seuil ;
+ * sinon FE le moins chargé (s’il y en a). Si aucun FI, retombe sur les FE.
+ */
+export function selectTrainingAssigneeFiFirst(
+  tier1FiPool: string[],
+  tier2FePool: string[],
+  requesterId: string,
+  workload: Map<string, number>,
+): string | null {
+  const fiAvail = tier1FiPool.filter((id) => id !== requesterId);
+  const feAvail = tier2FePool.filter((id) => id !== requesterId);
+
+  const pickMin = (pool: string[]): string | null => {
+    if (pool.length === 0) return null;
+    const sorted = [...pool].sort(
+      (a, b) => (workload.get(a) || 0) - (workload.get(b) || 0) || a.localeCompare(b),
+    );
+    return sorted[0] ?? null;
+  };
+
+  if (fiAvail.length === 0) {
+    return pickMin(feAvail);
+  }
+
+  const bestFi = pickMin(fiAvail);
+  if (!bestFi) return pickMin(feAvail);
+
+  const minFiLoad = workload.get(bestFi) || 0;
+  if (minFiLoad >= TRAINING_FE_FALLBACK_MIN_FI_OPEN_COUNT && feAvail.length > 0) {
+    return pickMin(feAvail);
+  }
+
+  return bestFi;
+}
+
+/** Training ATC : **ATC FI** uniquement (admin sans titre exclu). */
+export async function getAtcTrainingTier1UserIds(admin: SupabaseClient): Promise<string[]> {
+  const { data: fiRows } = await admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_ATC_FI);
+  const ids = new Set<string>();
+  for (const r of fiRows || []) ids.add(r.user_id as string);
   return Array.from(ids);
 }
 
+/** **ATC FE** hors pool FI (évite double compte ATC FI + ATC FE). */
+export async function getAtcTrainingTier2UserIds(
+  admin: SupabaseClient,
+  tier1: Set<string>,
+): Promise<string[]> {
+  const { data: feRows } = await admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_ATC_FE);
+  const out = new Set<string>();
+  for (const r of feRows || []) {
+    const id = r.user_id as string;
+    if (!tier1.has(id)) out.add(id);
+  }
+  return Array.from(out);
+}
+
+/** Union des deux pools (ex. listes déroulantes) — l’assignation utilise les tiers + selectTrainingAssigneeFiFirst. */
+export async function getAtcTrainingInstructorPoolUserIds(admin: SupabaseClient): Promise<string[]> {
+  const t1 = await getAtcTrainingTier1UserIds(admin);
+  const t1s = new Set(t1);
+  const t2 = await getAtcTrainingTier2UserIds(admin, t1s);
+  return Array.from(new Set(t1.concat(t2)));
+}
+
 /**
- * Training vol : priorité aux **FI** (+ admin / rôle instructeur historique), puis **FE** seuls.
- * Utilisé avec la charge sur `instruction_pilot_training_requests` uniquement.
+ * Training vol : **FI** uniquement (admin / instructeur sans licence FI exclu).
+ * Charge : `instruction_pilot_training_requests`.
  */
 export async function getPilotTrainingTier1UserIds(admin: SupabaseClient): Promise<string[]> {
-  const [{ data: fiRows }, { data: roleRows }] = await Promise.all([
-    admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_FI),
-    admin.from('profiles').select('id').in('role', ['admin', 'instructeur']),
-  ]);
+  const { data: fiRows } = await admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_FI);
   const ids = new Set<string>();
   for (const r of fiRows || []) ids.add(r.user_id as string);
-  for (const r of roleRows || []) ids.add(r.id as string);
   return Array.from(ids);
 }
 

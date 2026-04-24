@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getAtcTrainingInstructorPoolUserIds } from '@/lib/instruction-permissions';
+import {
+  getAtcTrainingTier1UserIds,
+  getAtcTrainingTier2UserIds,
+  selectTrainingAssigneeFiFirst,
+} from '@/lib/instruction-permissions';
 import { logActivity } from '@/lib/activity-log';
 
 export async function GET() {
@@ -69,27 +73,29 @@ export async function POST(request: Request) {
     const body = await request.json();
     const message = body.message != null ? String(body.message).trim() : null;
 
-    const pool = (await getAtcTrainingInstructorPoolUserIds(admin)).filter((id) => id !== user.id);
-    if (pool.length === 0) {
+    const tier1 = await getAtcTrainingTier1UserIds(admin);
+    const tier1Set = new Set(tier1);
+    const tier2 = await getAtcTrainingTier2UserIds(admin, tier1Set);
+    const combinedPool = Array.from(new Set(tier1.concat(tier2)));
+    if (combinedPool.length === 0) {
       return NextResponse.json(
-        { error: 'Aucun instructeur ATC (ATC FI / ATC FE) ou administrateur disponible pour l’instant.' },
+        { error: 'Aucun titulaire des licences ATC FI ou ATC FE disponible pour l’instant.' },
         { status: 400 },
       );
     }
 
     const workload = new Map<string, number>();
-    for (const id of pool) workload.set(id, 0);
+    for (const id of combinedPool) workload.set(id, 0);
     const { data: asAssignee } = await admin
       .from('instruction_atc_training_requests')
       .select('assignee_id')
-      .in('assignee_id', pool);
+      .in('assignee_id', combinedPool);
     for (const r of asAssignee || []) {
       if (!r.assignee_id) continue;
       workload.set(r.assignee_id, (workload.get(r.assignee_id) || 0) + 1);
     }
 
-    const sorted = [...pool].sort((a, b) => (workload.get(a) || 0) - (workload.get(b) || 0) || a.localeCompare(b));
-    const assigneeId = sorted[0];
+    const assigneeId = selectTrainingAssigneeFiFirst(tier1, tier2, user.id, workload);
     if (!assigneeId) {
       return NextResponse.json({ error: 'Aucun instructeur assignable.' }, { status: 400 });
     }

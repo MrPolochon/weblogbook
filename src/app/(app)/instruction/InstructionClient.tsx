@@ -293,10 +293,6 @@ export default function InstructionClient({
     return Math.round((myCompletedSet.size / myProgram.modules.length) * 100);
   }, [myProgram, myCompletedSet]);
 
-  const canRequestPilotTraining = Boolean(
-    myFormationActive && myFormationLicence && !isAtcInstructionProgram(myFormationLicence),
-  );
-
   async function run(action: () => Promise<void>) {
     setLoading(true);
     try {
@@ -340,7 +336,7 @@ export default function InstructionClient({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur demande training');
       setPilotTrainingMessage('');
-      toast.success('Demande envoyée. Un FI (prioritaire) ou FE est assigné selon la charge — convenez de la date en message privé.');
+      toast.success('Demande envoyée. Un FI est assigné en priorité (FE si les FI sont très chargés) — convenez de la date en message privé.');
     });
   }
 
@@ -355,7 +351,7 @@ export default function InstructionClient({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur demande training');
       setAtcTrainingMessage('');
-      toast.success('Demande envoyée. Un ATC FI/FE est assigné — convenez de la date en message privé.');
+      toast.success('Demande envoyée. Un ATC FI est assigné en priorité (ATC FE si les FI sont très chargés) — convenez de la date en message privé.');
     });
   }
 
@@ -914,30 +910,26 @@ export default function InstructionClient({
         )}
       </div>
 
-      {(canRequestPilotTraining ||
-        pilotTrainingsMine.length > 0 ||
-        (isPilotTrainingInstructor && pilotTrainingsAssigned.length > 0)) && (
-        <div className="card space-y-3">
-          <h2 className="text-lg font-medium text-slate-200">Session de training (vol)</h2>
-          <p className="text-sm text-slate-500">
-            Réservé aux <strong className="text-slate-400">élèves en formation pilote</strong> (PPL, CPL, etc.). Un{' '}
-            <strong className="text-slate-400">FI</strong> est choisi en priorité, sinon un{' '}
-            <strong className="text-slate-400">FE</strong>, avec répartition équitable de la charge. Convenez d&apos;une
-            date <strong>en message privé</strong>. L&apos;instructeur clôt la fiche ici à la fin.
-          </p>
-          {canRequestPilotTraining && (
-            <form onSubmit={requestPilotTraining} className="space-y-2">
-              <input
-                className="input w-full"
-                value={pilotTrainingMessage}
-                onChange={(e) => setPilotTrainingMessage(e.target.value)}
-                placeholder="Message (optionnel) pour l’instructeur"
-              />
-              <button className="btn-primary" type="submit" disabled={loading}>
-                Demander une session de training
-              </button>
-            </form>
-          )}
+      <div className="card space-y-3 border-t-4 border-t-emerald-500/60">
+        <h2 className="text-lg font-medium text-slate-200">Session de training (vol / pilote)</h2>
+        <p className="text-sm text-slate-500">
+          <strong className="text-slate-400">Tout le monde</strong> peut demander un accompagnement vol. Un{' '}
+          <strong className="text-slate-400">FI</strong> est assigné en priorité (répartition de charge) ; un{' '}
+          <strong className="text-slate-400">FE</strong> n&apos;intervient que si les FI sont déjà très chargés.
+          Convenez d&apos;une date <strong>en message privé</strong>. L&apos;instructeur clôt la fiche ici à la fin
+          (elle disparaît).
+        </p>
+        <form onSubmit={requestPilotTraining} className="space-y-2">
+          <input
+            className="input w-full"
+            value={pilotTrainingMessage}
+            onChange={(e) => setPilotTrainingMessage(e.target.value)}
+            placeholder="Message (optionnel) pour l’instructeur"
+          />
+          <button className="btn-primary" type="submit" disabled={loading}>
+            Demander une session de training
+          </button>
+        </form>
           {pilotTrainingsMine.length > 0 && (
             <div>
               <p className="text-sm text-slate-300 mb-2">Mes demandes en cours (vol)</p>
@@ -984,16 +976,15 @@ export default function InstructionClient({
               </ul>
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       <div className="card space-y-3">
         <h2 className="text-lg font-medium text-slate-200">Session de training (ATC)</h2>
         <p className="text-sm text-slate-500">
-          Tout le monde peut demander un accompagnement. Un <strong className="text-slate-400">ATC FI</strong> ou{' '}
-          <strong className="text-slate-400">ATC FE</strong> est assigné automatiquement (répartition de charge) ; convenez
-          d&apos;une date <strong>en message privé</strong>. L&apos;instructeur clôt la fiche ici quand c&apos;est
-          fini (elle disparaît).
+          Tout le monde peut demander un accompagnement. Un <strong className="text-slate-400">ATC FI</strong> est assigné
+          en priorité (répartition de charge) ; un <strong className="text-slate-400">ATC FE</strong> n&apos;intervient
+          que si les ATC FI sont déjà très chargés. Convenez d&apos;une date <strong>en message privé</strong>.
+          L&apos;instructeur clôt la fiche ici quand c&apos;est fini (elle disparaît).
         </p>
         <form onSubmit={requestAtcTraining} className="space-y-2">
           <input

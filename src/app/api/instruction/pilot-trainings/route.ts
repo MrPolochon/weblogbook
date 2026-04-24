@@ -1,25 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { isAtcInstructionProgram } from '@/lib/instruction-programs';
 import {
   getPilotTrainingTier1UserIds,
   getPilotTrainingTier2UserIds,
+  selectTrainingAssigneeFiFirst,
 } from '@/lib/instruction-permissions';
 import { logActivity } from '@/lib/activity-log';
-
-function pickAssigneeByWorkload(
-  pool: string[],
-  requesterId: string,
-  workload: Map<string, number>,
-): string | null {
-  const filtered = pool.filter((id) => id !== requesterId);
-  if (filtered.length === 0) return null;
-  const sorted = [...filtered].sort(
-    (a, b) => (workload.get(a) || 0) - (workload.get(b) || 0) || a.localeCompare(b),
-  );
-  return sorted[0] ?? null;
-}
 
 export async function GET() {
   try {
@@ -72,24 +59,6 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const admin = createAdminClient();
-    const { data: meInstr } = await admin
-      .from('profiles')
-      .select('formation_instruction_active, formation_instruction_licence')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (!meInstr?.formation_instruction_active || !meInstr.formation_instruction_licence) {
-      return NextResponse.json(
-        { error: 'Réservé aux élèves en formation pilote active.' },
-        { status: 403 },
-      );
-    }
-    if (isAtcInstructionProgram(meInstr.formation_instruction_licence)) {
-      return NextResponse.json(
-        { error: 'Pour la formation ATC, utilisez la session de training ATC.' },
-        { status: 400 },
-      );
-    }
 
     const { count: openMine } = await admin
       .from('instruction_pilot_training_requests')
@@ -111,7 +80,7 @@ export async function POST(request: Request) {
     const combinedPool = Array.from(new Set(tier1.concat(tier2)));
     if (combinedPool.length === 0) {
       return NextResponse.json(
-        { error: 'Aucun instructeur vol (FI / FE) ou référent disponible pour l’instant.' },
+        { error: 'Aucun titulaire des licences FI ou FE disponible pour l’instant.' },
         { status: 400 },
       );
     }
@@ -127,9 +96,7 @@ export async function POST(request: Request) {
       workload.set(r.assignee_id, (workload.get(r.assignee_id) || 0) + 1);
     }
 
-    const assigneeId =
-      pickAssigneeByWorkload(tier1, user.id, workload) ??
-      pickAssigneeByWorkload(tier2, user.id, workload);
+    const assigneeId = selectTrainingAssigneeFiFirst(tier1, tier2, user.id, workload);
     if (!assigneeId) {
       return NextResponse.json({ error: 'Aucun instructeur assignable.' }, { status: 400 });
     }

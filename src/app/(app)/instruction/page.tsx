@@ -4,7 +4,12 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import InstructionClient from './InstructionClient';
 import { INSTRUCTION_PROGRAMS, ATC_INIT_LICENCE_CODE } from '@/lib/instruction-programs';
 import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
-import { getInstructionCapabilities, canAccessInstructionManagerTools } from '@/lib/instruction-permissions';
+import {
+  getInstructionCapabilities,
+  canAccessInstructionManagerTools,
+  LICENCE_FE,
+  LICENCE_FI,
+} from '@/lib/instruction-permissions';
 
 export default async function InstructionPage() {
   const supabase = await createClient();
@@ -48,7 +53,7 @@ export default async function InstructionPage() {
   const isManager = canAccessInstructionManagerTools(cap);
   const canViewExaminerInbox = cap.canViewExaminerInbox;
   const isAtcTrainingInstructor = cap.isAtcTrainingInstructor;
-  const isPilotTrainingInstructor = cap.canManageFlightInstruction || cap.types.has('FE');
+  const isPilotTrainingInstructor = cap.types.has(LICENCE_FI) || cap.types.has(LICENCE_FE);
   const createFormationPrograms = INSTRUCTION_PROGRAMS.filter((p) => {
     if (p.licenceCode === ATC_INIT_LICENCE_CODE) return cap.canManageAtcInstruction;
     return cap.canManageFlightInstruction;
