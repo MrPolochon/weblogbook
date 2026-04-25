@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAntiCheat } from '@/hooks/useAntiCheat';
+import { formatModuleAnswerKey } from '@/lib/aeroschool-module-answers';
 import { ChevronLeft, ChevronRight, Send, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock } from 'lucide-react';
 
 interface ModuleQuestion {
@@ -259,7 +260,7 @@ export default function FormRenderer({ form }: Props) {
       if (q.type === 'question_module') {
         const mqs = moduleQuestions[q.id] || [];
         for (const mq of mqs) {
-          const key = `module_${q.module_id}_${mq.id}`;
+          const key = formatModuleAnswerKey(q.id, q.module_id, mq.id);
           const ans = answers[key];
           if (!ans || (typeof ans === 'string' && !ans.trim())) {
             newErrors[key] = 'Cette question est obligatoire';
@@ -471,7 +472,7 @@ export default function FormRenderer({ form }: Props) {
                     </div>
                   )}
                   {questionsToShow.map((mq) => {
-                    const answerKey = `module_${q.module_id}_${mq.id}`;
+                    const answerKey = formatModuleAnswerKey(q.id, q.module_id, mq.id);
                     return (
                       <div key={mq.id} className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-3">
                         <h3 className="text-slate-100 font-medium">{mq.title}</h3>

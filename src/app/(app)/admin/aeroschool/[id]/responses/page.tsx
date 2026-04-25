@@ -6,6 +6,7 @@ import {
   ArrowLeft, Loader2, Trash2, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronUp,
   Check, Eye,
 } from 'lucide-react';
+import { getModuleAnswerEntries, getModuleQuestionIdFromKey } from '@/lib/aeroschool-module-answers';
 
 interface ModuleQuestion {
   id: string;
@@ -249,13 +250,9 @@ export default function AdminResponsesPage() {
                 <h4 className="text-slate-300 font-semibold text-sm border-b border-slate-700/50 pb-1">{section.title}</h4>
                 {section.questions.map((q) => {
                   if (q.type === 'question_module' && q.module_id) {
-                    const prefix = `module_${q.module_id}_`;
                     const moduleQuestions = moduleData[q.module_id] || [];
                     const byId = new Map(moduleQuestions.map((mq) => [mq.id, mq]));
-                    const moduleAnswers = Object.entries(resp.answers).filter(
-                      (entry): entry is [string, string | string[]] =>
-                        typeof entry[0] === 'string' && entry[0].startsWith(prefix)
-                    );
+                    const moduleAnswers = getModuleAnswerEntries(q, resp.answers as Record<string, unknown>) as [string, string | string[]][];
                     if (moduleAnswers.length === 0) {
                       return (
                         <div key={q.id} className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3">
@@ -270,7 +267,7 @@ export default function AdminResponsesPage() {
                           <h5 className="text-orange-300 font-medium text-sm">{q.title || 'Module à questions'}</h5>
                         )}
                         {moduleAnswers.map(([key, answer]) => {
-                          const questionId = key.slice(prefix.length);
+                          const questionId = getModuleQuestionIdFromKey(key, q);
                           const mq = byId.get(questionId);
                           const displayAnswer = Array.isArray(answer) ? answer.join(', ') : (answer || '—');
                           const correct = mq?.correct_answers || [];

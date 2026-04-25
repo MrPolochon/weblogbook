@@ -1,4 +1,9 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import {
+  formatModuleAnswerKey,
+  getModuleAnswerEntries,
+  getModuleQuestionIdFromKey,
+} from '@/lib/aeroschool-module-answers';
 import { NextResponse } from 'next/server';
 
 interface ModuleQuestion {
@@ -49,20 +54,17 @@ function buildDiscordEmbed(
 
     for (const q of questions) {
       if (q.type === 'question_module') {
-        const prefix = `module_${q.module_id}_`;
-        for (const [key, answer] of Object.entries(answers)) {
-          if (typeof key === 'string' && key.startsWith(prefix)) {
-            const questionId = key.slice(prefix.length);
-            const title = moduleQuestionTitles?.[key] || `Question ${questionId.slice(0, 8)}`;
-            const displayAnswer = answer === undefined || answer === null || answer === ''
-              ? '*Non répondu*'
-              : Array.isArray(answer) ? (answer.length > 0 ? answer.join(', ') : '*Non répondu*') : String(answer);
-            fields.push({
-              name: title.length > 256 ? title.slice(0, 253) + '...' : title,
-              value: displayAnswer.length > 1024 ? displayAnswer.slice(0, 1021) + '...' : displayAnswer,
-              inline: false,
-            });
-          }
+        for (const [key, answer] of getModuleAnswerEntries(q, answers)) {
+          const questionId = getModuleQuestionIdFromKey(key, q);
+          const title = moduleQuestionTitles?.[key] || `Question ${questionId.slice(0, 8)}`;
+          const displayAnswer = answer === undefined || answer === null || answer === ''
+            ? '*Non répondu*'
+            : Array.isArray(answer) ? (answer.length > 0 ? answer.join(', ') : '*Non répondu*') : String(answer);
+          fields.push({
+            name: title.length > 256 ? title.slice(0, 253) + '...' : title,
+            value: displayAnswer.length > 1024 ? displayAnswer.slice(0, 1021) + '...' : displayAnswer,
+            inline: false,
+          });
         }
         continue;
       }
@@ -162,18 +164,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     let score = 0;
     let maxScore = 0;
     const sections: Section[] = Array.isArray(form.sections) ? form.sections : [];
-    /** Clés de réponses module déjà comptées (évite double comptage si plusieurs blocs partagent le même module_id) */
     const processedModuleAnswerKeys = new Set<string>();
 
     for (const section of sections) {
       const questions = Array.isArray(section.questions) ? section.questions : [];
       for (const q of questions) {
         if (q.type === 'question_module' && q.module_id?.trim()) {
-          const prefix = `module_${q.module_id}_`;
-          const moduleAnswers = Object.entries(answers).filter(
-            (entry): entry is [string, string | string[]] =>
-              typeof entry[0] === 'string' && entry[0].startsWith(prefix)
-          );
+          const moduleAnswers = getModuleAnswerEntries(q, answers) as [string, string | string[]][];
           if (moduleAnswers.length === 0) continue;
 
           const { data: mod } = await admin
@@ -188,7 +185,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           for (const [key, answer] of moduleAnswers) {
             if (processedModuleAnswerKeys.has(key)) continue;
             processedModuleAnswerKeys.add(key);
-            const questionId = key.slice(prefix.length);
+            const questionId = getModuleQuestionIdFromKey(key, q);
             const mq = byId.get(questionId);
             if (!mq) continue;
             maxScore += 1;
@@ -252,7 +249,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           const modQuestions: ModuleQuestion[] = Array.isArray(mod?.questions) ? mod.questions : [];
           moduleQuestionTitles = moduleQuestionTitles || {};
           for (const mq of modQuestions) {
-            moduleQuestionTitles[`module_${q.module_id}_${mq.id}`] = mq.title || 'Question';
+            const t = mq.title || 'Question';
+            moduleQuestionTitles[formatModuleAnswerKey(q.id, q.module_id, mq.id)] = t;
+            if (q.module_id?.trim()) {
+              moduleQuestionTitles[`module_${q.module_id.trim()}_${mq.id}`] = t;
+            }
           }
         }
       }
