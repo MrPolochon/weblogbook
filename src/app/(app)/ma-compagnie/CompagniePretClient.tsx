@@ -26,6 +26,11 @@ interface Props {
   compagnieId: string;
 }
 
+/** Reste dû en F$ (entiers) : évite Math.floor(0,999…) = 0 et affichage 100% avec 1 F$ dû. */
+function restePretF$(totalDu: number, dejaRembourse: number): number {
+  return Math.max(0, Math.round(totalDu - dejaRembourse));
+}
+
 export default function CompagniePretClient({ compagnieId }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -102,28 +107,28 @@ export default function CompagniePretClient({ compagnieId }: Props) {
   }
 
   async function handleRembourserPret(montantForce?: number) {
-    const montant = Number.isFinite(montantForce)
-      ? Math.floor(montantForce as number)
-      : Number.parseInt(
-          montantRemboursement.replace(/[\s\u00A0\u202F]/g, '').replace(/[Ff]\$/g, '').replace(/\$/g, ''),
-          10
-        );
+    let montant: number;
+    if (Number.isFinite(montantForce)) {
+      // Arrondi (pas floor) : le reste peut être 0,999… à cause d’arrondis flottants
+      montant = Math.max(0, Math.round(montantForce as number));
+    } else {
+      const parsed = Number.parseInt(
+        montantRemboursement.replace(/[\s\u00A0\u202F]/g, '').replace(/[Ff]\$/g, '').replace(/\$/g, ''),
+        10
+      );
+      montant = Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : NaN;
+    }
     if (!Number.isFinite(montant) || montant <= 0) {
       setError('Montant invalide (entier positif requis).');
       return;
     }
 
     if (pretActif) {
-      const reste = pretActif.montant_total_du - pretActif.montant_rembourse;
+      const reste = restePretF$(pretActif.montant_total_du, pretActif.montant_rembourse);
       if (montant > reste) {
         setError(`Montant trop élevé. Maximum autorisé: ${reste.toLocaleString('fr-FR')} F$.`);
         return;
       }
-    }
-
-    if (!Number.isInteger(montant)) {
-      setError('Montant invalide (pas de décimales).');
-      return;
     }
 
     if (!confirm(`Rembourser ${montant.toLocaleString('fr-FR')} F$ sur le prêt ?\n\nCe montant sera débité du compte de la compagnie.`)) {
@@ -162,7 +167,7 @@ export default function CompagniePretClient({ compagnieId }: Props) {
     );
   }
 
-  const resteARembourser = pretActif ? pretActif.montant_total_du - pretActif.montant_rembourse : 0;
+  const resteARembourser = pretActif ? restePretF$(pretActif.montant_total_du, pretActif.montant_rembourse) : 0;
   const progressPct = pretActif ? Math.round((pretActif.montant_rembourse / pretActif.montant_total_du) * 100) : 0;
 
   return (

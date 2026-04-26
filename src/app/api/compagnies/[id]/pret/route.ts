@@ -82,7 +82,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Aucun prêt actif à rembourser' }, { status: 404 });
     }
 
-    const resteARembourser = pret.montant_total_du - pret.montant_rembourse;
+    // Entiers (F$) : éviter les restes 0,999… flottants qui bloquent le solde final
+    const resteARembourser = Math.max(0, Math.round(pret.montant_total_du - pret.montant_rembourse));
     if (resteARembourser <= 0) {
       await admin
         .from('prets_bancaires')
@@ -127,14 +128,17 @@ export async function PATCH(
       return NextResponse.json({ error: 'Solde insuffisant ou compte modifié' }, { status: 400 });
     }
 
-    // Mettre à jour le prêt
-    const nouveauMontantRembourse = pret.montant_rembourse + montantEffectif;
+    // Mettre à jour le prêt (plafonner au total dû pour clôturer proprement)
+    const nouveauMontantRembourse = Math.min(
+      pret.montant_rembourse + montantEffectif,
+      pret.montant_total_du
+    );
     const pretRembourse = nouveauMontantRembourse >= pret.montant_total_du;
 
     const { error: updateError } = await admin
       .from('prets_bancaires')
       .update({
-        montant_rembourse: nouveauMontantRembourse,
+        montant_rembourse: pretRembourse ? pret.montant_total_du : nouveauMontantRembourse,
         ...(pretRembourse && {
           statut: 'rembourse',
           rembourse_at: new Date().toISOString(),
