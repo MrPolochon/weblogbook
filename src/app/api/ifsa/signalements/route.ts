@@ -66,34 +66,22 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient();
 
-    // Générer le numéro de signalement
-    const year = new Date().getFullYear();
-    const { count } = await admin.from('ifsa_signalements')
-      .select('*', { count: 'exact', head: true })
-      .like('numero_signalement', `SIG-${year}-%`);
-
-    const numeroSignalement = `SIG-${year}-${String((count || 0) + 1).padStart(4, '0')}`;
-
-    const { data, error } = await admin.from('ifsa_signalements')
-      .insert({
-        numero_signalement: numeroSignalement,
-        type_signalement,
-        titre,
-        description,
-        signale_par_id: user.id,
-        pilote_signale_id: pilote_signale_id || null,
-        compagnie_signalee_id: compagnie_signalee_id || null,
-        preuves: preuves || null,
-        statut: 'nouveau'
-      })
-      .select()
-      .single();
+    const { data, error } = await admin.rpc('ifsa_signalements_create', {
+      p_type_signalement: type_signalement,
+      p_titre: titre,
+      p_description: description,
+      p_signale_par_id: user.id,
+      p_pilote_signale_id: pilote_signale_id || null,
+      p_compagnie_signalee_id: compagnie_signalee_id || null,
+      p_preuves: preuves || null,
+      p_statut: 'nouveau',
+    });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
     return NextResponse.json({ 
       ok: true, 
-      message: `Signalement ${numeroSignalement} créé`,
+      message: `Signalement ${data.numero_signalement} créé`,
       signalement: data 
     });
   } catch (e) {

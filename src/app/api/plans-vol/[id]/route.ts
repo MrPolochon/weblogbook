@@ -792,28 +792,30 @@ export async function PATCH(
         await admin.from('compagnie_avions').update({ incident_id: incident.id }).eq('id', plan.compagnie_avion_id);
       }
 
-      const sigNumData = await admin.rpc('generate_ifsa_numero', { prefix: 'SIG' });
-      const sigNum = (sigNumData.data as string) || `SIG-${new Date().getFullYear()}-AUTO`;
       const typeLabel = isCrash ? 'CRASH' : 'ATTERRISSAGE D\'URGENCE';
+      const descriptionLignes = [
+        `Incident ${typeLabel} signale par l'ATC ${profile?.identifiant || 'inconnu'} (${plan.current_holder_position || '?'}).`,
+        `Vol: ${plan.numero_vol} (${plan.aeroport_depart} -> ${plan.aeroport_arrivee}, ${plan.type_vol})`,
+        immatriculation ? `Avion: ${immatriculation} (${typeAvion || '?'})` : 'Pas d\'avion lie',
+        `Pilote: ${piloteIdentifiant || 'inconnu'}`,
+        `Aeroport incident: ${aeroportAtc}`,
+        usureAvant != null ? `Usure avant incident: ${usureAvant}%` : '',
+        incident ? `Ref incident: ${numeroIncident}` : '',
+      ].filter(Boolean).join('\n');
 
-      const { data: signalement } = await admin.from('ifsa_signalements').insert({
-        numero_signalement: sigNum,
-        type_signalement: 'incident',
-        titre: `${typeLabel} — ${plan.numero_vol}`,
-        description: [
-          `Incident ${typeLabel} signale par l'ATC ${profile?.identifiant || 'inconnu'} (${plan.current_holder_position || '?'}).`,
-          `Vol: ${plan.numero_vol} (${plan.aeroport_depart} -> ${plan.aeroport_arrivee}, ${plan.type_vol})`,
-          immatriculation ? `Avion: ${immatriculation} (${typeAvion || '?'})` : 'Pas d\'avion lie',
-          `Pilote: ${piloteIdentifiant || 'inconnu'}`,
-          `Aeroport incident: ${aeroportAtc}`,
-          usureAvant != null ? `Usure avant incident: ${usureAvant}%` : '',
-          incident ? `Ref incident: ${numeroIncident}` : '',
-        ].filter(Boolean).join('\n'),
-        signale_par_id: user.id,
-        pilote_signale_id: plan.pilote_id || null,
-        preuves: screenshotUrl || null,
-        statut: 'nouveau',
-      }).select('id').single();
+      const { data: signalement, error: signalementErr } = await admin.rpc('ifsa_signalements_create', {
+        p_type_signalement: 'incident',
+        p_titre: `${typeLabel} — ${plan.numero_vol}`,
+        p_description: descriptionLignes,
+        p_signale_par_id: user.id,
+        p_pilote_signale_id: plan.pilote_id || null,
+        p_compagnie_signalee_id: null,
+        p_preuves: screenshotUrl || null,
+        p_statut: 'nouveau',
+      });
+      if (signalementErr) {
+        console.error('ifsa_signalements_create (incident vol):', signalementErr);
+      }
 
       if (signalement && incident) {
         await admin.from('incidents_vol').update({ signalement_ifsa_id: signalement.id }).eq('id', incident.id);

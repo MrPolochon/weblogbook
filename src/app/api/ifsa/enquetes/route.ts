@@ -70,28 +70,15 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient();
 
-    // Générer le numéro de dossier
-    const year = new Date().getFullYear();
-    const { count } = await admin.from('ifsa_enquetes')
-      .select('*', { count: 'exact', head: true })
-      .like('numero_dossier', `ENQ-${year}-%`);
-
-    const numeroDossier = `ENQ-${year}-${String((count || 0) + 1).padStart(4, '0')}`;
-
-    const { data, error } = await admin.from('ifsa_enquetes')
-      .insert({
-        numero_dossier: numeroDossier,
-        titre,
-        description: description || null,
-        priorite: priorite || 'normale',
-        pilote_concerne_id: pilote_concerne_id || null,
-        compagnie_concernee_id: compagnie_concernee_id || null,
-        ouvert_par_id: user.id,
-        enqueteur_id: user.id, // Par défaut, celui qui ouvre l'enquête
-        statut: 'ouverte'
-      })
-      .select()
-      .single();
+    const { data, error } = await admin.rpc('ifsa_enquetes_create', {
+      p_titre: titre,
+      p_description: description || null,
+      p_priorite: priorite || 'normale',
+      p_pilote_concerne_id: pilote_concerne_id || null,
+      p_compagnie_concernee_id: compagnie_concernee_id || null,
+      p_ouvert_par_id: user.id,
+      p_enqueteur_id: user.id,
+    });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
@@ -109,7 +96,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ 
       ok: true, 
-      message: `Enquête ${numeroDossier} ouverte`,
+      message: `Enquête ${data.numero_dossier} ouverte`,
       enquete: data 
     });
   } catch (e) {
