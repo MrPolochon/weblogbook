@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     .select('id, nom')
     .ilike('nom', `%${q}%`)
     .is('alliance_id', null)
-    .limit(10);
+    .limit(50);
 
   return NextResponse.json(data || []);
 }
