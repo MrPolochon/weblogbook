@@ -26,9 +26,25 @@ interface Props {
   compagnieId: string;
 }
 
-/** Reste dû en F$ (entiers) : évite Math.floor(0,999…) = 0 et affichage 100% avec 1 F$ dû. */
-function restePretF$(totalDu: number, dejaRembourse: number): number {
-  return Math.max(0, Math.round(totalDu - dejaRembourse));
+/** Montant saisi par l’utilisateur (F$ entiers) : accepte espaces, F$, séparateurs . , */
+function parseMontantSaisiePret(raw: string): number | null {
+  const cleaned = raw
+    .trim()
+    .replace(/[Ff]\$/g, '')
+    .replace(/\$/g, '')
+    .replace(/[\s\u00A0\u202F]/g, '');
+  const digits = cleaned.replace(/\D/g, '');
+  if (!digits) return null;
+  const n = Number.parseInt(digits, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Montants API parfois sérialisés en string : toujours ramener à un entier F$ cohérent. */
+function restePretF$(totalDu: unknown, dejaRembourse: unknown): number {
+  const t = Number(totalDu);
+  const r = Number(dejaRembourse);
+  if (!Number.isFinite(t) || !Number.isFinite(r)) return 0;
+  return Math.max(0, Math.round(t - r));
 }
 
 export default function CompagniePretClient({ compagnieId }: Props) {
@@ -45,23 +61,24 @@ export default function CompagniePretClient({ compagnieId }: Props) {
   const [montantRemboursement, setMontantRemboursement] = useState('');
   const [remboursementEnCours, setRemboursementEnCours] = useState(false);
 
-  const loadPret = useCallback(async () => {
-    setLoading(true);
+  const loadPret = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await fetch(`/api/compagnies/${compagnieId}/pret`);
       const data = await res.json();
       if (res.ok) {
-        setPretActif(data.pretActif);
-        setHistorique(data.historique || []);
-        setOptionsPrets(data.optionsPrets || []);
-        setTauxPrelevement(data.tauxPrelevement || 30);
+        const raw = data.pretActif;
+        setPretActif(raw && typeof raw === 'object' ? (raw as Pret) : null);
+        setHistorique(Array.isArray(data.historique) ? data.historique : []);
+        setOptionsPrets(Array.isArray(data.optionsPrets) ? data.optionsPrets : []);
+        setTauxPrelevement(typeof data.tauxPrelevement === 'number' ? data.tauxPrelevement : 30);
       } else {
         setError(data.error || 'Erreur');
       }
     } catch {
       setError('Erreur de chargement');
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [compagnieId]);
 
@@ -106,18 +123,7 @@ export default function CompagniePretClient({ compagnieId }: Props) {
     }
   }
 
-  async function handleRembourserPret(montantForce?: number) {
-    let montant: number;
-    if (Number.isFinite(montantForce)) {
-      // Arrondi (pas floor) : le reste peut être 0,999… à cause d’arrondis flottants
-      montant = Math.max(0, Math.round(montantForce as number));
-    } else {
-      const parsed = Number.parseInt(
-        montantRemboursement.replace(/[\s\u00A0\u202F]/g, '').replace(/[Ff]\$/g, '').replace(/\$/g, ''),
-        10
-      );
-      montant = Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : NaN;
-    }
+  async function executeRemboursementPret(montant: number) {
     if (!Number.isFinite(montant) || montant <= 0) {
       setError('Montant invalide (entier positif requis).');
       return;
@@ -125,6 +131,10 @@ export default function CompagniePretClient({ compagnieId }: Props) {
 
     if (pretActif) {
       const reste = restePretF$(pretActif.montant_total_du, pretActif.montant_rembourse);
+      if (!Number.isFinite(reste) || reste <= 0) {
+        setError('Ce prêt est déjà entièrement remboursé. Actualisez la page si ce message est inattendu.');
+        return;
+      }
       if (montant > reste) {
         setError(`Montant trop élevé. Maximum autorisé: ${reste.toLocaleString('fr-FR')} F$.`);
         return;
@@ -145,18 +155,32 @@ export default function CompagniePretClient({ compagnieId }: Props) {
         body: JSON.stringify({ montant }),
       });
       const data = await res.json();
-      
+
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      
+
       toast.success(data.message);
       setMontantRemboursement('');
-      loadPret();
+      loadPret({ silent: true });
       startTransition(() => router.refresh());
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
+      const msg = e instanceof Error ? e.message : 'Erreur';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setRemboursementEnCours(false);
     }
+  }
+
+  async function handleRembourserPret() {
+    const parsed = parseMontantSaisiePret(montantRemboursement);
+    await executeRemboursementPret(parsed ?? NaN);
+  }
+
+  /** Toujours calculer le reliquat depuis le prêt affiché (ne pas passer par un argument optionnel ambigu). */
+  async function handleRembourserToutLeReste() {
+    if (!pretActif) return;
+    const montant = restePretF$(pretActif.montant_total_du, pretActif.montant_rembourse);
+    await executeRemboursementPret(montant);
   }
 
   if (loading) {
@@ -168,7 +192,13 @@ export default function CompagniePretClient({ compagnieId }: Props) {
   }
 
   const resteARembourser = pretActif ? restePretF$(pretActif.montant_total_du, pretActif.montant_rembourse) : 0;
-  const progressPct = pretActif ? Math.round((pretActif.montant_rembourse / pretActif.montant_total_du) * 100) : 0;
+  const resteRemboursable = Number.isFinite(resteARembourser) && resteARembourser > 0;
+  const totalDuNum = pretActif ? Number(pretActif.montant_total_du) : 0;
+  const rembourseNum = pretActif ? Number(pretActif.montant_rembourse) : 0;
+  const progressPct =
+    pretActif && Number.isFinite(totalDuNum) && totalDuNum > 0 && Number.isFinite(rembourseNum)
+      ? Math.round((rembourseNum / totalDuNum) * 100)
+      : 0;
 
   return (
     <div className="space-y-4">
@@ -298,7 +328,7 @@ export default function CompagniePretClient({ compagnieId }: Props) {
               <input
                 type="number"
                 min="1"
-                max={resteARembourser}
+                max={resteRemboursable ? resteARembourser : undefined}
                 value={montantRemboursement}
                 onChange={(e) => setMontantRemboursement(e.target.value)}
                 placeholder={`Max: ${resteARembourser.toLocaleString('fr-FR')} F$`}
@@ -314,8 +344,8 @@ export default function CompagniePretClient({ compagnieId }: Props) {
               </button>
               <button
                 type="button"
-                onClick={() => handleRembourserPret(resteARembourser)}
-                disabled={remboursementEnCours || resteARembourser <= 0}
+                onClick={handleRembourserToutLeReste}
+                disabled={remboursementEnCours || !resteRemboursable}
                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm whitespace-nowrap"
               >
                 Rembourser le reste

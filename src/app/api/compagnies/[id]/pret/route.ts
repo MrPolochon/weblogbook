@@ -4,6 +4,24 @@ import { NextResponse, NextRequest } from 'next/server';
 import { OPTIONS_PRETS, calculerMontantTotalPret, TAUX_PRELEVEMENT_PRET, getEcheanceJours } from '@/lib/compagnie-utils';
 import { isCoPdg } from '@/lib/co-pdg-utils';
 
+/** F$ entier — PostgREST peut renvoyer des BIGINT en string : jamais utiliser + avec des strings brutes. */
+function montantF$(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n);
+}
+
+function serialiserPretClient(row: Record<string, unknown> | null) {
+  if (!row) return null;
+  return {
+    ...row,
+    montant_emprunte: montantF$(row.montant_emprunte),
+    montant_total_du: montantF$(row.montant_total_du),
+    montant_rembourse: montantF$(row.montant_rembourse),
+    taux_interet: Number(row.taux_interet),
+  };
+}
+
 // PATCH - Rembourser manuellement une partie du prêt
 export async function PATCH(
   request: NextRequest,
@@ -22,8 +40,9 @@ export async function PATCH(
     // et refuse explicitement les formats ambigus/invalides.
     const parseMontant = (value: unknown): number | null => {
       if (typeof value === 'number' && Number.isFinite(value)) {
-        const n = Math.floor(value);
-        return n > 0 ? n : null;
+        const n = Math.max(0, Math.round(value));
+        if (n <= 0) return null;
+        return n;
       }
       if (typeof value !== 'string') return null;
 
@@ -33,8 +52,10 @@ export async function PATCH(
         .replace(/\$/g, '')
         .replace(/[\s\u00A0\u202F]/g, '');
 
-      if (!/^\d+$/.test(cleaned)) return null;
-      const n = Number.parseInt(cleaned, 10);
+      // Chiffres uniquement (supporte 1 000, 1.000, 1,000 en saisie)
+      const digits = cleaned.replace(/\D/g, '');
+      if (!digits) return null;
+      const n = Number.parseInt(digits, 10);
       if (!Number.isFinite(n) || n <= 0) return null;
       return n;
     };
@@ -65,7 +86,7 @@ export async function PATCH(
     const isPdg = compagnie.pdg_id === user.id || await isCoPdg(user.id, id, admin);
 
     if (!isPdg && !isAdmin) {
-      return NextResponse.json({ error: 'Seul le PDG peut rembourser le prêt' }, { status: 403 });
+      return NextResponse.json({ error: 'Seul le PDG ou le co-PDG peut rembourser le prêt' }, { status: 403 });
     }
 
     // Récupérer le prêt actif
@@ -82,12 +103,19 @@ export async function PATCH(
       return NextResponse.json({ error: 'Aucun prêt actif à rembourser' }, { status: 404 });
     }
 
-    // Entiers (F$) : éviter les restes 0,999… flottants qui bloquent le solde final
-    const resteARembourser = Math.max(0, Math.round(pret.montant_total_du - pret.montant_rembourse));
+    const totalDu = montantF$(pret.montant_total_du);
+    const dejaRembourse = montantF$(pret.montant_rembourse);
+
+    // Entiers (F$) : éviter concaténation string+number et restes flottants fantômes
+    const resteARembourser = Math.max(0, totalDu - dejaRembourse);
     if (resteARembourser <= 0) {
       await admin
         .from('prets_bancaires')
-        .update({ statut: 'rembourse', rembourse_at: new Date().toISOString() })
+        .update({
+          montant_rembourse: totalDu,
+          statut: 'rembourse',
+          rembourse_at: new Date().toISOString(),
+        })
         .eq('id', pret.id);
 
       return NextResponse.json({
@@ -105,6 +133,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Le prêt est déjà entièrement remboursé' }, { status: 400 });
     }
 
+    const montantDebitInt = Math.trunc(montantEffectif);
+
     // Vérifier le solde du compte de la compagnie
     const { data: compteCompagnie } = await admin
       .from('felitz_comptes')
@@ -117,28 +147,29 @@ export async function PATCH(
       return NextResponse.json({ error: 'Compte de la compagnie introuvable' }, { status: 404 });
     }
 
-    if (compteCompagnie.solde < montantEffectif) {
+    const soldeNum = Math.trunc(Number(compteCompagnie.solde));
+    if (!Number.isFinite(soldeNum)) {
+      return NextResponse.json({ error: 'Erreur lors de la lecture du solde du compte' }, { status: 500 });
+    }
+    if (soldeNum < montantDebitInt) {
       return NextResponse.json({ 
-        error: `Solde insuffisant. Disponible: ${compteCompagnie.solde.toLocaleString('fr-FR')} F$, requis: ${montantEffectif.toLocaleString('fr-FR')} F$` 
+        error: `Solde insuffisant. Disponible: ${soldeNum.toLocaleString('fr-FR')} F$, requis: ${montantDebitInt.toLocaleString('fr-FR')} F$` 
       }, { status: 400 });
     }
 
-    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: montantEffectif });
+    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: montantDebitInt });
     if (!debitOk) {
       return NextResponse.json({ error: 'Solde insuffisant ou compte modifié' }, { status: 400 });
     }
 
     // Mettre à jour le prêt (plafonner au total dû pour clôturer proprement)
-    const nouveauMontantRembourse = Math.min(
-      pret.montant_rembourse + montantEffectif,
-      pret.montant_total_du
-    );
-    const pretRembourse = nouveauMontantRembourse >= pret.montant_total_du;
+    const nouveauMontantRembourse = Math.min(dejaRembourse + montantDebitInt, totalDu);
+    const pretRembourse = nouveauMontantRembourse >= totalDu;
 
     const { error: updateError } = await admin
       .from('prets_bancaires')
       .update({
-        montant_rembourse: pretRembourse ? pret.montant_total_du : nouveauMontantRembourse,
+        montant_rembourse: pretRembourse ? totalDu : nouveauMontantRembourse,
         ...(pretRembourse && {
           statut: 'rembourse',
           rembourse_at: new Date().toISOString(),
@@ -147,7 +178,7 @@ export async function PATCH(
       .eq('id', pret.id);
 
     if (updateError) {
-      await admin.rpc('crediter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: montantEffectif });
+      await admin.rpc('crediter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: montantDebitInt });
       return NextResponse.json({ error: 'Erreur lors de la mise à jour du prêt' }, { status: 500 });
     }
 
@@ -155,18 +186,18 @@ export async function PATCH(
     await admin.from('felitz_transactions').insert({
       compte_id: compteCompagnie.id,
       type: 'debit',
-      montant: montantEffectif,
-      libelle: `Remboursement prêt bancaire — ${montantEffectif.toLocaleString('fr-FR')} F$`,
+      montant: montantDebitInt,
+      libelle: `Remboursement prêt bancaire — ${montantDebitInt.toLocaleString('fr-FR')} F$`,
     });
 
-    const nouveauReste = pret.montant_total_du - nouveauMontantRembourse;
+    const nouveauReste = Math.max(0, totalDu - nouveauMontantRembourse);
 
     return NextResponse.json({
       ok: true,
       message: pretRembourse 
         ? `🎉 Prêt intégralement remboursé ! Félicitations !`
-        : `✅ Remboursement de ${montantEffectif.toLocaleString('fr-FR')} F$ effectué. Reste à payer: ${nouveauReste.toLocaleString('fr-FR')} F$`,
-      montantRembourse: montantEffectif,
+        : `✅ Remboursement de ${montantDebitInt.toLocaleString('fr-FR')} F$ effectué. Reste à payer: ${nouveauReste.toLocaleString('fr-FR')} F$`,
+      montantRembourse: montantDebitInt,
       resteARembourser: nouveauReste,
       pretRembourse,
     });
@@ -228,8 +259,8 @@ export async function GET(
       .limit(10);
 
     return NextResponse.json({
-      pretActif: pret || null,
-      historique: historique || [],
+      pretActif: serialiserPretClient(pret ? { ...pret } as Record<string, unknown> : null),
+      historique: (historique ?? []).map((h) => serialiserPretClient({ ...h } as Record<string, unknown>)),
       optionsPrets: OPTIONS_PRETS,
       tauxPrelevement: TAUX_PRELEVEMENT_PRET,
     });
@@ -293,11 +324,18 @@ export async function POST(
       .maybeSingle();
 
     if (pretExistant) {
-      const resteARembourser = pretExistant.montant_total_du - pretExistant.montant_rembourse;
+      const resteARembourser = Math.max(
+        0,
+        montantF$(pretExistant.montant_total_du) - montantF$(pretExistant.montant_rembourse)
+      );
       if (resteARembourser <= 0) {
         await admin
           .from('prets_bancaires')
-          .update({ statut: 'rembourse', rembourse_at: new Date().toISOString() })
+          .update({
+            montant_rembourse: montantF$(pretExistant.montant_total_du),
+            statut: 'rembourse',
+            rembourse_at: new Date().toISOString(),
+          })
           .eq('id', pretExistant.id);
       } else {
       return NextResponse.json({ 

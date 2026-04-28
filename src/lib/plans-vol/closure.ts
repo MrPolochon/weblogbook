@@ -512,34 +512,45 @@ export async function envoyerChequesVol(
     .maybeSingle();
 
   if (pretActif && revenuCompagnie > 0) {
-    pretInfo = pretActif;
-    const resteARembourser = pretActif.montant_total_du - pretActif.montant_rembourse;
+    const totalDuVol = Math.round(Number(pretActif.montant_total_du));
+    const dejaRembourseVol = Math.round(Number(pretActif.montant_rembourse));
+    pretInfo = {
+      id: pretActif.id,
+      montant_total_du: totalDuVol,
+      montant_rembourse: dejaRembourseVol,
+    };
+    // Entiers F$ (aligné sur l’API prêt) : bigint sérialisés en string → pas de "+ avec strings"
+    const resteARembourser = Math.max(0, totalDuVol - dejaRembourseVol);
 
     if (resteARembourser > 0) {
       // Prélever TAUX_PRELEVEMENT_PRET% des revenus pour rembourser le prêt
       const prelevementMax = Math.round(revenuCompagnie * TAUX_PRELEVEMENT_PRET / 100);
       remboursementPret = Math.min(prelevementMax, resteARembourser);
 
-      // Mettre à jour le prêt
-      const nouveauMontantRembourse = pretActif.montant_rembourse + remboursementPret;
-      const pretRembourse = nouveauMontantRembourse >= pretActif.montant_total_du;
+      if (remboursementPret > 0) {
+        const nouveauMontantRembourse = Math.min(
+          dejaRembourseVol + remboursementPret,
+          totalDuVol
+        );
+        const pretRembourse = nouveauMontantRembourse >= totalDuVol;
 
-      await admin.from('prets_bancaires')
-        .update({
-          montant_rembourse: nouveauMontantRembourse,
-          statut: pretRembourse ? 'rembourse' : 'actif',
-          rembourse_at: pretRembourse ? new Date().toISOString() : null,
-        })
-        .eq('id', pretActif.id);
+        await admin.from('prets_bancaires')
+          .update({
+            montant_rembourse: pretRembourse ? totalDuVol : nouveauMontantRembourse,
+            statut: pretRembourse ? 'rembourse' : 'actif',
+            rembourse_at: pretRembourse ? new Date().toISOString() : null,
+          })
+          .eq('id', pretActif.id);
 
-      // Enregistrer la transaction de remboursement
-      const libelleRemboursement = `Remboursement prêt - Vol ${numeroVol}`;
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteCompagnie.id,
-        type: 'debit',
-        montant: remboursementPret,
-        libelle: libelleRemboursement,
-      });
+        // Enregistrer la transaction de remboursement
+        const libelleRemboursement = `Remboursement prêt - Vol ${numeroVol}`;
+        await admin.from('felitz_transactions').insert({
+          compte_id: compteCompagnie.id,
+          type: 'debit',
+          montant: remboursementPret,
+          libelle: libelleRemboursement,
+        });
+      }
     }
   }
 
