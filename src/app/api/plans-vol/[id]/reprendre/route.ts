@@ -4,7 +4,6 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
 
 const ORDRE_DEPART = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
-const ORDRE_ARRIVEE = ['Delivery', 'APP', 'DEP', 'Tower', 'Ground', 'Clairance', 'Center'] as const;
 
 /**
  * Active le segment suivant d'une mission MEDEVAC multi-segments.
@@ -161,13 +160,10 @@ export async function POST(
       return NextResponse.json({ ok: true, statut: 'accepte', vol_sans_atc: true });
     }
 
-    // Chercher un ATC en ligne (départ puis arrivée)
-    const aeroportsCibles = segment.aeroport_arrivee !== segment.aeroport_depart
-      ? [segment.aeroport_depart, segment.aeroport_arrivee]
-      : [segment.aeroport_depart];
+    // Chercher un ATC en ligne au départ du segment uniquement
     const { data: allSessions } = await admin.from('atc_sessions')
       .select('user_id, position, aeroport')
-      .in('aeroport', aeroportsCibles);
+      .eq('aeroport', segment.aeroport_depart);
 
     let holder: { user_id: string; position: string; aeroport: string } | null = null;
     if (allSessions && allSessions.length > 0) {
@@ -175,19 +171,13 @@ export async function POST(
         const session = allSessions.find(s => s.aeroport === segment.aeroport_depart && s.position === pos);
         if (session?.user_id) { holder = { user_id: session.user_id, position: pos, aeroport: segment.aeroport_depart }; break; }
       }
-      if (!holder && segment.aeroport_arrivee !== segment.aeroport_depart) {
-        for (const pos of ORDRE_ARRIVEE) {
-          const session = allSessions.find(s => s.aeroport === segment.aeroport_arrivee && s.position === pos);
-          if (session?.user_id) { holder = { user_id: session.user_id, position: pos, aeroport: segment.aeroport_arrivee }; break; }
-        }
-      }
     }
 
     const forceSansAtc = Boolean(body.force_sans_atc);
 
     if (!holder && !forceSansAtc) {
       return NextResponse.json({
-        error: 'Aucun ATC en ligne sur le départ ou l\'arrivée de ce segment. Activez "Continuer sans ATC" pour l\'autosurveillance.'
+        error: 'Aucun ATC en ligne à l\'aéroport de départ de ce segment. Activez "Continuer sans ATC" pour l\'autosurveillance.'
       }, { status: 400 });
     }
 

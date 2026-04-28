@@ -12,6 +12,9 @@ import AtcAtisButton from '@/components/AtcAtisButton';
 import AtcAtisTicker from '@/components/AtcAtisTicker';
 import InactivityLogout from '@/components/InactivityLogout';
 import AtcSessionRealtimeGuard from '@/components/AtcSessionRealtimeGuard';
+
+export const dynamic = 'force-dynamic';
+
 export default async function AtcLayout({
   children,
 }: {
@@ -60,27 +63,25 @@ export default async function AtcLayout({
   if (enService && session) {
     try {
       const admin = createAdminClient();
-      const fiveMinAgo = new Date(Date.now() - 300000).toISOString();
-      await admin.from('plans_vol').update({ pending_transfer_aeroport: null, pending_transfer_position: null, pending_transfer_at: null }).lt('pending_transfer_at', fiveMinAgo);
 
-    // Note: On ne réassigne PAS les plans orphelins aux autres ATC.
-    // Si un plan n'a pas d'ATC assigné, le pilote peut le clôturer seul.
-    // Chaque ATC ne voit que les plans qu'IL contrôle (current_holder_user_id === user.id).
-    
-    const [{ data: dataAuto }, { data: dataAccept }, { data: dataPlansAccepter }, { data: dataCloture }, { data: dataOrphelinsRaw }, { data: sessionsActive }] = await Promise.all([
-      admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('automonitoring', true).in('statut', ['accepte', 'en_cours']),
-      admin.from('plans_vol').select('id, numero_vol').eq('pending_transfer_aeroport', session.aeroport).eq('pending_transfer_position', session.position),
-      admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).in('statut', ['depose', 'en_attente']),
-      admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).eq('statut', 'en_attente_cloture'),
-      admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee, current_holder_user_id').in('statut', ['depose', 'en_attente']),
-      admin.from('atc_sessions').select('user_id'),
-    ]);
-    plansAuto = dataAuto ?? [];
-    plansAAccepter = dataAccept ?? [];
-    plansAccepter = dataPlansAccepter ?? [];
-    plansCloture = dataCloture ?? [];
-    const sessionsActives = new Set((sessionsActive ?? []).map((s) => s.user_id));
-    plansOrphelins = (dataOrphelinsRaw ?? []).filter((p) => !p.current_holder_user_id || !sessionsActives.has(p.current_holder_user_id));
+      // Note: On ne réassigne PAS les plans orphelins aux autres ATC.
+      // Si un plan n'a pas d'ATC assigné, le pilote peut le clôturer seul.
+      // Chaque ATC ne voit que les plans qu'IL contrôle (current_holder_user_id === user.id).
+
+      const [{ data: dataAuto }, { data: dataAccept }, { data: dataPlansAccepter }, { data: dataCloture }, { data: dataOrphelinsRaw }, { data: sessionsActive }] = await Promise.all([
+        admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('automonitoring', true).in('statut', ['accepte', 'en_cours']),
+        admin.from('plans_vol').select('id, numero_vol').eq('pending_transfer_aeroport', session.aeroport).eq('pending_transfer_position', session.position),
+        admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).in('statut', ['depose', 'en_attente']),
+        admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).eq('statut', 'en_attente_cloture'),
+        admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee, current_holder_user_id').in('statut', ['depose', 'en_attente']),
+        admin.from('atc_sessions').select('user_id'),
+      ]);
+      plansAuto = dataAuto ?? [];
+      plansAAccepter = dataAccept ?? [];
+      plansAccepter = dataPlansAccepter ?? [];
+      plansCloture = dataCloture ?? [];
+      const sessionsActives = new Set((sessionsActive ?? []).map((s) => s.user_id));
+      plansOrphelins = (dataOrphelinsRaw ?? []).filter((p) => !p.current_holder_user_id || !sessionsActives.has(p.current_holder_user_id));
     } catch {
       // createAdminClient ou tables manquantes
     }

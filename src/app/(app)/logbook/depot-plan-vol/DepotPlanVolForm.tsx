@@ -1166,7 +1166,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
             <div>
               <p className="font-semibold text-amber-200">Aucun ATC disponible</p>
               <p className="text-sm text-amber-300/80 mt-1">
-                Il n&apos;y a actuellement aucune fréquence ATC en ligne pour votre aéroport de départ ou d&apos;arrivée.
+                Il n&apos;y a actuellement aucune fréquence ATC en ligne à votre aéroport de départ.
               </p>
               <p className="text-sm text-slate-300 mt-2">
                 Voulez-vous effectuer ce vol sans ATC ? Votre plan sera automatiquement accepté et mis en autosurveillance. Vous serez payé normalement à la clôture.

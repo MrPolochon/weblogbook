@@ -4,12 +4,9 @@ import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire, calculerCoefficientRemplissage, calculerCoefficientChargementCargo } from '@/lib/aeroports-ptfs';
 import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
 
-// Ordre de priorité pour recevoir un nouveau plan de vol
-// AÉROPORT DE DÉPART : Delivery → Clairance → Ground → Tower → DEP → APP → Center
+// Ordre de priorité pour recevoir un nouveau plan de vol (uniquement à l’aéroport de départ)
+// Delivery → Clairance → Ground → Tower → DEP → APP → Center
 const ORDRE_DEPART = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
-
-// AÉROPORT D'ARRIVÉE (priorité APP avant Center)
-const ORDRE_ARRIVEE = ['Delivery', 'APP', 'DEP', 'Tower', 'Ground', 'Clairance', 'Center'] as const;
 
 export async function POST(request: Request) {
   try {
@@ -543,19 +540,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, id: data.id, statut: 'accepte', vol_sans_atc: true });
     }
     
-    // Sinon, chercher un ATC pour recevoir le plan
-    // OPTIMISÉ : Une seule requête pour récupérer toutes les sessions ATC actives
+    // Sinon, assigner le plan à un ATC du départ uniquement (pas d’acceptation/refus par l’arrivée)
     let holder: { user_id: string; position: string; aeroport: string } | null = null;
-    
-    // Récupérer toutes les sessions ATC des deux aéroports en UNE SEULE requête
-    const aeroportsCibles = aa !== ad ? [ad, aa] : [ad];
+
     const { data: allSessions } = await admin
       .from('atc_sessions')
       .select('user_id, position, aeroport')
-      .in('aeroport', aeroportsCibles);
-    
+      .eq('aeroport', ad);
+
     if (allSessions && allSessions.length > 0) {
-      // 1. Chercher à l'aéroport de DÉPART en priorité
       for (const pos of ORDRE_DEPART) {
         const session = allSessions.find(s => s.aeroport === ad && s.position === pos);
         if (session?.user_id) {
@@ -563,21 +556,10 @@ export async function POST(request: Request) {
           break;
         }
       }
-      
-      // 2. Si aucun ATC au départ et aéroport d'arrivée différent, chercher à l'ARRIVÉE
-      if (!holder && aa !== ad) {
-        for (const pos of ORDRE_ARRIVEE) {
-          const session = allSessions.find(s => s.aeroport === aa && s.position === pos);
-          if (session?.user_id) {
-            holder = { user_id: session.user_id, position: pos, aeroport: aa };
-            break;
-          }
-        }
-      }
     }
 
     if (!holder) {
-      return NextResponse.json({ error: 'Aucune fréquence ATC de votre aéroport de départ ou d\'arrivée est en ligne. Cochez "Voler sans ATC" pour effectuer ce vol en autosurveillance.' }, { status: 400 });
+      return NextResponse.json({ error: 'Aucune fréquence ATC à votre aéroport de départ n\'est en ligne. Cochez "Voler sans ATC" pour effectuer ce vol en autosurveillance.' }, { status: 400 });
     }
 
     const locationFields = compagnie_avion_id && compagnie_id

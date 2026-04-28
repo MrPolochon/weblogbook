@@ -6,7 +6,6 @@ import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { randomUUID } from 'crypto';
 
 const ORDRE_DEPART = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
-const ORDRE_ARRIVEE = ['Delivery', 'APP', 'DEP', 'Tower', 'Ground', 'Clairance', 'Center'] as const;
 const MAX_SEGMENTS = 5;
 
 type SegmentInput = {
@@ -254,31 +253,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, id: firstPlan.id, mission_id: missionId, statut: 'accepte', vol_sans_atc: true, segments: allIds.length });
     }
 
-    // -- Chercher un ATC pour le 1er segment --
+    // -- Chercher un ATC pour le 1er segment (départ uniquement ; pas d’acceptation initiale par l’arrivée) --
     let holder: { user_id: string; position: string; aeroport: string } | null = null;
-    const aeroportsCibles = seg0.aeroport_arrivee !== seg0.aeroport_depart
-      ? [seg0.aeroport_depart, seg0.aeroport_arrivee]
-      : [seg0.aeroport_depart];
     const { data: allSessions } = await admin.from('atc_sessions')
       .select('user_id, position, aeroport')
-      .in('aeroport', aeroportsCibles);
+      .eq('aeroport', seg0.aeroport_depart);
 
     if (allSessions && allSessions.length > 0) {
       for (const pos of ORDRE_DEPART) {
         const session = allSessions.find(s => s.aeroport === seg0.aeroport_depart && s.position === pos);
         if (session?.user_id) { holder = { user_id: session.user_id, position: pos, aeroport: seg0.aeroport_depart }; break; }
       }
-      if (!holder && seg0.aeroport_arrivee !== seg0.aeroport_depart) {
-        for (const pos of ORDRE_ARRIVEE) {
-          const session = allSessions.find(s => s.aeroport === seg0.aeroport_arrivee && s.position === pos);
-          if (session?.user_id) { holder = { user_id: session.user_id, position: pos, aeroport: seg0.aeroport_arrivee }; break; }
-        }
-      }
     }
 
     if (!holder) {
       return NextResponse.json({
-        error: 'Aucun ATC en ligne sur le départ ou l\'arrivée. Cochez "Vol sans ATC" pour l\'autosurveillance.'
+        error: 'Aucun ATC en ligne à l\'aéroport de départ. Cochez "Vol sans ATC" pour l\'autosurveillance.'
       }, { status: 400 });
     }
 

@@ -7,7 +7,7 @@ import { calculerUsureVol } from '@/lib/compagnie-utils';
 import { envoyerChequesVol, finaliserCloturePlan, parseStripATD } from '@/lib/plans-vol/closure';
 
 const STATUTS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
-// Ordre de priorité pour recevoir un plan de vol (départ puis arrivée)
+// Ordre de priorité pour recevoir un plan renvoyé : uniquement l’aéroport de départ
 const ORDRE_ACCEPTATION_PLANS = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
 
 /**
@@ -46,6 +46,7 @@ export async function PATCH(
     const { action } = body;
 
     const admin = createAdminClient();
+
     const { data: plan, error: planError } = await admin.from('plans_vol')
       .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, created_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, type_cargaison_libelle, compagnie_avion_id, siavi_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, created_by_atc, current_afis_user_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id')
       .eq('id', id)
@@ -423,14 +424,13 @@ export async function PATCH(
         if (!star_arrivee || !String(star_arrivee).trim()) return NextResponse.json({ error: 'STAR d\'arrivee requise pour IFR.' }, { status: 400 });
       }
 
-      const airportsToCheck = ad === aa ? [ad] : [ad, aa];
       let holder: { user_id: string; position: string; aeroport: string } | null = null;
-      for (const apt of airportsToCheck) {
-        for (const pos of ORDRE_ACCEPTATION_PLANS) {
-          const { data: s } = await admin.from('atc_sessions').select('user_id').eq('aeroport', apt).eq('position', pos).single();
-          if (s?.user_id) { holder = { user_id: s.user_id, position: pos, aeroport: apt }; break; }
+      for (const pos of ORDRE_ACCEPTATION_PLANS) {
+        const { data: s } = await admin.from('atc_sessions').select('user_id').eq('aeroport', ad).eq('position', pos).single();
+        if (s?.user_id) {
+          holder = { user_id: s.user_id, position: pos, aeroport: ad };
+          break;
         }
-        if (holder) break;
       }
 
       if (!holder) {
@@ -463,7 +463,7 @@ export async function PATCH(
           if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
           return NextResponse.json({ ok: true, vol_sans_atc: true });
         }
-        return NextResponse.json({ error: 'Aucune frequence ATC de votre aeroport de depart ou d\'arrivee est en ligne. Reessayez plus tard.' }, { status: 400 });
+        return NextResponse.json({ error: 'Aucune fréquence ATC à votre aéroport de départ n\'est en ligne. Réessayez plus tard ou envoyez en vol sans ATC.' }, { status: 400 });
       }
 
       // Enregistrer le nouvel ATC qui reçoit le plan
@@ -557,7 +557,7 @@ export async function PATCH(
       if (!aeroport || !position) return NextResponse.json({ error: 'Aeroport et position requis (ou automonitoring: true).' }, { status: 400 });
       if (!CODES_OACI_VALIDES.has(aeroport)) return NextResponse.json({ error: 'Aeroport invalide.' }, { status: 400 });
       if (!(ATC_POSITIONS as readonly string[]).includes(String(position))) return NextResponse.json({ error: 'Position invalide.' }, { status: 400 });
-      if (plan.pending_transfer_aeroport != null) return NextResponse.json({ error: 'Un transfert est déjà en attente. Attendez 5 min ou l\'acceptation par la position cible.' }, { status: 400 });
+      if (plan.pending_transfer_aeroport != null) return NextResponse.json({ error: 'Un transfert est déjà en attente. Attendez l\'acceptation par la position cible.' }, { status: 400 });
 
       const { data: sess } = await admin.from('atc_sessions').select('user_id').eq('aeroport', aeroport).eq('position', String(position)).single();
       if (!sess?.user_id) return NextResponse.json({ error: 'Aucun ATC en ligne a cette position pour cet aeroport.' }, { status: 400 });
@@ -595,9 +595,7 @@ export async function PATCH(
       const { data: sess } = await supabase.from('atc_sessions').select('aeroport, position').eq('user_id', user.id).single();
       if (!sess) return NextResponse.json({ error: 'Mettez-vous en service pour accepter un transfert.' }, { status: 403 });
       if (!plan.pending_transfer_aeroport || plan.pending_transfer_position !== sess.position || plan.pending_transfer_aeroport !== sess.aeroport)
-        return NextResponse.json({ error: 'Ce transfert ne vous est pas destine ou a expire.' }, { status: 403 });
-      const fiveMinAgo = new Date(Date.now() - 300000).toISOString();
-      if (plan.pending_transfer_at && plan.pending_transfer_at < fiveMinAgo) return NextResponse.json({ error: 'Ce transfert a expiré (5 min).' }, { status: 400 });
+        return NextResponse.json({ error: 'Ce transfert ne vous est pas destine.' }, { status: 403 });
 
       // Enregistrer que cet ATC a contrôlé ce vol
       await enregistrerControleATC(admin, id, user.id, sess.aeroport, sess.position);

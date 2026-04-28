@@ -208,7 +208,7 @@ export default function AtcAcceptTransfertSidebar({
 
   // Jouer les rappels sonores périodiques
   useEffect(() => {
-    const allItems = [...plansAccepter, ...plansCloture]; // Pas les transferts (timeout automatique)
+    const allItems = [...plansAccepter, ...plansCloture]; // Les transferts ont une alarme dédiée (startTransferAlarm)
     
     allItems.forEach(item => {
       const firstSeen = firstSeenRef.current.get(item.id) || currentTime;
@@ -376,7 +376,7 @@ export default function AtcAcceptTransfertSidebar({
       {/* Transferts */}
       {plansTransfert.length > 0 && (
         <div>
-          <p className={`text-[10px] font-semibold px-2 mb-1 ${isDark ? 'text-orange-400' : 'text-orange-800'}`}>Transferts (5 min)</p>
+          <p className={`text-[10px] font-semibold px-2 mb-1 ${isDark ? 'text-orange-400' : 'text-orange-800'}`}>Transferts</p>
           <ul className="space-y-1">
             {plansTransfert.map((p) => {
               const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);

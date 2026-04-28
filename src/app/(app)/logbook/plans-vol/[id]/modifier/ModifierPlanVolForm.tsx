@@ -74,7 +74,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
     try {
       const res = await submitPlan(false);
       const data = await res.json().catch(() => ({}));
-      if (!res.ok && data.error && String(data.error).includes('Aucune frequence ATC')) {
+      if (!res.ok && data.error && /aucune.*atc/i.test(String(data.error))) {
         setShowNoAtcConfirm(true);
         setLoading(false);
         return;
@@ -196,7 +196,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
         <div className="p-4 rounded-lg border-2 border-amber-500 bg-amber-500/20 space-y-3">
           <p className="font-semibold text-amber-200">Aucun ATC en ligne</p>
           <p className="text-sm text-amber-300/80">
-            Aucun contrôleur n&apos;est disponible pour votre départ ou arrivée. Voulez-vous envoyer ce plan en autosurveillance ?
+            Aucun contrôleur n&apos;est disponible à votre aéroport de départ. Voulez-vous envoyer ce plan en autosurveillance ?
           </p>
           <div className="flex gap-3 pt-2">
             <button
