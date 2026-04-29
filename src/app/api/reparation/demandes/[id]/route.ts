@@ -11,6 +11,19 @@ export const dynamic = 'force-dynamic';
 /** Quand l’action demandée ne correspond pas au `statut` courant (évite le message peu clair « Statut invalide »). */
 const ERR_REPARATION_STATUT = 'Cette action ne correspond pas à l’étape actuelle de la demande. Actualisez la page si besoin.';
 
+const LIB_ETAPES_TERMINER: Record<string, string> = {
+  demandee: 'demande en attente de réponse',
+  acceptee: 'acceptée — acheminement vers le hangar',
+  en_transit: 'transfert entreprise en cours',
+  terminee: 'réparation déjà terminée',
+  facturee: 'facturation en cours',
+  payee: 'en attente de livraison / ferry retour',
+  completee: 'déjà clôturée',
+  refusee: 'demande refusée',
+  annulee: 'demande annulée',
+  retour_transit: 'retour ferry client en cours',
+};
+
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -251,7 +264,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (action === 'terminer') {
     if (!await isEntrepriseStaff()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-    if (!['en_reparation', 'mini_jeux'].includes(demande.statut)) return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
+    if (!['en_reparation', 'mini_jeux'].includes(demande.statut)) {
+      const hint = LIB_ETAPES_TERMINER[demande.statut];
+      return NextResponse.json({
+        error: hint
+          ? `Impossible de terminer — la demande est à l’étape : ${hint}. Actualisez la page si l’affichage ne correspond pas.`
+          : ERR_REPARATION_STATUT,
+      }, { status: 400 });
+    }
 
     const { data: scores } = await admin.from('reparation_mini_jeux_scores')
       .select('score, type_jeu').eq('demande_id', id);
@@ -283,6 +303,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     else if (scoresMoyenne >= 70) usureApres = Math.min(100, Math.round(santeBefore + manque * scoresMoyenne / 100));
     else if (scoresMoyenne >= 50) usureApres = Math.min(100, Math.round(santeBefore + manque * 0.5));
     else usureApres = Math.min(100, Math.round(santeBefore + manque * 0.3));
+
+    usureApres = Math.max(0, Math.min(100, Math.round(Number(usureApres) || 0)));
+    if (!Number.isFinite(usureApres)) {
+      return NextResponse.json({ error: 'Calcul d’usure invalide après réparation.' }, { status: 500 });
+    }
 
     const { data: ent } = await admin.from('entreprises_reparation')
       .select('alliance_reparation_actif, alliance_id, prix_alliance_pourcent')
@@ -324,21 +349,50 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const pointsRepares = Math.max(0, usureApres - santeBefore);
     const prixTotal = pointsRepares * prixParPoint;
 
-    await admin.from('reparation_demandes').update({
+    const { data: avionUpdated, error: avionUpdErr } = await admin
+      .from('compagnie_avions')
+      .update({ usure_percent: usureApres, statut: 'en_reparation' })
+      .eq('id', demande.avion_id)
+      .select('id')
+      .maybeSingle();
+    if (avionUpdErr) {
+      console.error('reparation terminer: maj avion', avionUpdErr);
+      const hint = 'message' in avionUpdErr ? String((avionUpdErr as { message?: string }).message || '') : '';
+      const code = 'code' in avionUpdErr ? String((avionUpdErr as { code?: string }).code || '') : '';
+      const detailMsg =
+        code === '23514' || /check constraint|violates check/i.test(hint)
+          ? ' Contrainte base de données sur le statut ou l’usure : exécutez sur Supabase le script supabase/fix_compagnie_avions_statut_check_reparation.sql.'
+          : hint
+            ? ` (${hint})`
+            : '';
+      return NextResponse.json(
+        { error: `Mise à jour de l’avion impossible.${detailMsg}` },
+        { status: 500 },
+      );
+    }
+    if (!avionUpdated) {
+      console.error('reparation terminer: aucune ligne avion pour id', demande.avion_id);
+      return NextResponse.json({ error: 'Avion introuvable ou déjà supprimé.' }, { status: 404 });
+    }
+
+    const { error: demandeUpdErr } = await admin.from('reparation_demandes').update({
       statut: 'terminee',
       fin_reparation_at: new Date().toISOString(),
       usure_apres: usureApres,
       score_qualite: scoresMoyenne,
       prix_total: prixTotal,
     }).eq('id', id);
-
-    const { error: avionUpdErr } = await admin
-      .from('compagnie_avions')
-      .update({ usure_percent: usureApres, statut: 'en_reparation' })
-      .eq('id', demande.avion_id);
-    if (avionUpdErr) {
-      console.error('reparation terminer: maj avion', avionUpdErr);
-      return NextResponse.json({ error: 'Réparation enregistrée mais mise à jour de l’avion impossible.' }, { status: 500 });
+    if (demandeUpdErr) {
+      console.error('reparation terminer: maj demande après avion', demandeUpdErr);
+      const usureRevert = Math.max(0, Math.min(100, Math.round(santeBefore)));
+      const { error: revErr } = await admin.from('compagnie_avions').update({
+        usure_percent: usureRevert,
+      }).eq('id', demande.avion_id);
+      if (revErr) console.error('reparation terminer: rollback avion échoué', revErr);
+      return NextResponse.json(
+        { error: `L’avion a été mis à jour mais pas la demande de réparation. Contactez un admin. (${demandeUpdErr.message || 'erreur'})` },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({ ok: true, score: scoresMoyenne, usure_apres: usureApres, prix_total: prixTotal });

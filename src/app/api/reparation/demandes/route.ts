@@ -100,7 +100,24 @@ export async function POST(req: Request) {
   }).select().single();
   if (error) {
     console.error('reparation demandes POST:', error);
-    return NextResponse.json({ error: 'Erreur lors de la création de la demande' }, { status: 400 });
+    const code = 'code' in error ? String((error as { code?: string }).code || '') : '';
+    const msg = 'message' in error ? String((error as { message?: string }).message || '') : '';
+    if (code === '42703' || /aeroport_depart_client/i.test(msg) || /column .* does not exist/i.test(msg)) {
+      return NextResponse.json(
+        {
+          error:
+            'La base de données n’est pas à jour : colonne manquante (aeroport_depart_client). Appliquez le script supabase/add_reparation_aeroport_depart_client.sql sur Supabase.',
+        },
+        { status: 500 },
+      );
+    }
+    if (code === '23505') {
+      return NextResponse.json({ error: 'Une demande existe déjà pour cet avion (conflit en base).' }, { status: 409 });
+    }
+    return NextResponse.json(
+      { error: msg ? `Erreur lors de la création de la demande : ${msg}` : 'Erreur lors de la création de la demande' },
+      { status: 400 },
+    );
   }
 
   const { data: ent } = await admin.from('entreprises_reparation').select('pdg_id, nom').eq('id', entreprise_id).single();

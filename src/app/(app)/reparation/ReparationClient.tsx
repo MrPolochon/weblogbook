@@ -58,6 +58,8 @@ interface Demande {
   created_at: string;
   compagnie: { id: string; nom: string } | null;
   avion: { id: string; immatriculation: string; nom_bapteme: string | null } | null;
+  /** Présent quand statut = en_reparation | mini_jeux : les 4 jeux assignés sont complétés */
+  mini_jeux_complets?: boolean;
 }
 
 interface Detail {
@@ -446,7 +448,11 @@ function DemandesTab({ detail, api, flash, busy, onRefresh, router }: {
             {d.statut === 'mini_jeux' && (
               <>
                 <button disabled={busy} onClick={() => router.push(`/reparation/jeu/${d.id}`)} className="px-3 py-1 rounded bg-violet-600/50 text-violet-200 text-xs disabled:opacity-50 flex items-center gap-1"><Play className="h-3 w-3" />Continuer les jeux</button>
-                <button disabled={busy} onClick={() => doAction(d.id, 'terminer')} className="px-3 py-1 rounded bg-emerald-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Check className="h-3 w-3" />Terminer réparation</button>
+                {d.mini_jeux_complets ? (
+                  <button disabled={busy} onClick={() => doAction(d.id, 'terminer')} className="px-3 py-1 rounded bg-emerald-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Check className="h-3 w-3" />Terminer réparation</button>
+                ) : (
+                  <p className="text-xs text-slate-500 w-full">Complétez les 4 mini-jeux assignés avant de terminer.</p>
+                )}
               </>
             )}
             {d.statut === 'terminee' && (

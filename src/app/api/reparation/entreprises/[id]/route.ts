@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getGamesForDemande } from '@/lib/reparation-games';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,12 +54,35 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return { ...t, type_avion: type || null };
   });
 
+  const demandesPourJeux = (demandes || []).filter(d =>
+    d.statut === 'en_reparation' || d.statut === 'mini_jeux',
+  );
+  const idsJeux = demandesPourJeux.map(d => d.id);
+  const scoresByDemande = new Map<string, Set<string>>();
+  if (idsJeux.length) {
+    const { data: scoreRows } = await admin.from('reparation_mini_jeux_scores')
+      .select('demande_id, type_jeu')
+      .in('demande_id', idsJeux);
+    for (const row of scoreRows || []) {
+      const did = row.demande_id as string;
+      const tj = row.type_jeu as string;
+      if (!scoresByDemande.has(did)) scoresByDemande.set(did, new Set());
+      scoresByDemande.get(did)!.add(tj);
+    }
+  }
+
   const demandesNorm = (demandes || []).map(d => {
     const rawComp = d.compagnies as unknown;
     const comp = Array.isArray(rawComp) ? rawComp[0] : rawComp;
     const rawAvion = d.compagnie_avions as unknown;
     const avion = Array.isArray(rawAvion) ? rawAvion[0] : rawAvion;
-    return { ...d, compagnie: comp || null, avion: avion || null };
+    let mini_jeux_complets = false;
+    if (d.statut === 'en_reparation' || d.statut === 'mini_jeux') {
+      const assignes = getGamesForDemande(d.id);
+      const faits = scoresByDemande.get(d.id) || new Set<string>();
+      mini_jeux_complets = assignes.every(g => faits.has(g));
+    }
+    return { ...d, compagnie: comp || null, avion: avion || null, mini_jeux_complets };
   });
 
   const myEmploi = (employes || []).find(e => String(e.user_id) === String(user.id));
