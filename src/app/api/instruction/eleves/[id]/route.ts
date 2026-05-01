@@ -154,7 +154,9 @@ export async function PATCH(
         };
       }) ?? [];
 
-    const typeIds = [...new Set((avionsTemp || []).map((a) => a.type_avion_id).filter(Boolean))] as string[];
+    const typeIds = Array.from(
+      new Set((avionsTemp || []).map((a) => a.type_avion_id).filter(Boolean) as string[]),
+    );
     const { data: typesRows } =
       typeIds.length > 0
         ? await admin.from('types_avion').select('id, nom').in('id', typeIds)
