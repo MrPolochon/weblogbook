@@ -216,6 +216,13 @@ export async function GET() {
 
   const repairRowsAll = (repairDemandes ?? []) as RepDemRow[];
   const ferriesRows = (ferriesActifs ?? []) as FerryRow[];
+  /** Ne pas renvoyer de transit réparation déjà terminé à l’heure du serveur (évite des symboles figés à 100 % sur l’ODW). */
+  const odwNowMs = Date.now();
+  function reparationEtaEncoreOuverte(iso: string | null | undefined): boolean {
+    if (!iso) return false;
+    const t = new Date(iso).getTime();
+    return Number.isFinite(t) && t > odwNowMs;
+  }
 
   const ferryByAvion = new Set<string>(ferriesRows.map((v) => v.avion_id).filter(Boolean));
   const avionIdsRepair = Array.from(new Set(repairRowsAll.map((r) => r.avion_id)));
@@ -247,6 +254,10 @@ export async function GET() {
 
   for (const vf of ferriesRows) {
     if (!hasRepairFerryHue(vf.avion_id)) continue;
+    if (vf.automatique && vf.fin_prevue_at) {
+      const finTs = new Date(vf.fin_prevue_at).getTime();
+      if (Number.isFinite(finTs) && finTs <= odwNowMs) continue;
+    }
     const imm = avMap.get(vf.avion_id)?.immatriculation || vf.avion_id.slice(0, 6).toUpperCase();
     const pilId = vf.pilote_id ?? null;
     const dureeMin = Math.max(
@@ -277,7 +288,7 @@ export async function GET() {
   for (const rd of repairRowsAll) {
     const immShort = avMap.get(rd.avion_id)?.immatriculation || rd.avion_id.slice(0, 6).toUpperCase();
 
-    if (rd.statut === 'en_transit' && rd.entreprise_transit_eta_at && !ferryByAvion.has(rd.avion_id)) {
+    if (rd.statut === 'en_transit' && reparationEtaEncoreOuverte(rd.entreprise_transit_eta_at) && !ferryByAvion.has(rd.avion_id)) {
       const hang = normalizeHangar(rd.reparation_hangars);
       const avRow = avMap.get(rd.avion_id);
       if (!hang || !avRow?.aeroport_actuel) continue;
@@ -304,7 +315,11 @@ export async function GET() {
       continue;
     }
 
-    if (rd.statut === 'retour_transit' && rd.retour_transit_eta_at && !ferryByAvion.has(rd.avion_id)) {
+    if (
+      rd.statut === 'retour_transit' &&
+      reparationEtaEncoreOuverte(rd.retour_transit_eta_at) &&
+      !ferryByAvion.has(rd.avion_id)
+    ) {
       const hang = normalizeHangar(rd.reparation_hangars);
       const baseCible = await resolveAeroportBaseRetour(admin, {
         compagnie_id: rd.compagnie_id,

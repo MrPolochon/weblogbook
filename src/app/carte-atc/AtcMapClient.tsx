@@ -298,9 +298,16 @@ export default function AtcMapClient() {
         finished: progress >= 1,
       };
     })
-    .filter((v): v is RenderFlight => Boolean(v));
+    .filter((v): v is RenderFlight => Boolean(v))
+    /** Cacher les transits OPS réparation arrivés à 100 % (filet si l’API a encore renvoyé la ligne quelques secondes). */
+    .filter((f) => !(f.operationnel_reparation && f.finished));
 
   const selectedFlight = renderedFlights.find((f) => f.id === selectedFlightId) || null;
+
+  useEffect(() => {
+    if (!selectedFlightId || renderedFlights.some((f) => f.id === selectedFlightId)) return;
+    setSelectedFlightId(null);
+  }, [selectedFlightId, renderedFlights]);
 
   function updateZoom(next: number) {
     const clamped = Math.max(1, Math.min(10, Number(next.toFixed(2))));
