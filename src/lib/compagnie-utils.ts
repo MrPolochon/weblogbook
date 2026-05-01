@@ -73,6 +73,17 @@ export function calculerVolFerryAuto(): { cout: number; dureeMin: number } {
 
 export const FRACTION_REPARATION_HUB = 0.5;
 
+/** Statuts DB traités comme « au sol » pour la flotte compagnie (`disponible` = legacy). */
+export const STATUTS_AVION_COMPAGNIE_AU_SOL = ['ground', 'disponible'] as const;
+
+/**
+ * Avion flotte considéré « au sol » pour l’UI et les règles métier.
+ * `disponible` est une valeur legacy encore présente en base (CHECK élargi).
+ */
+export function isAvionCompagnieAuSol(statut: string): boolean {
+  return (STATUTS_AVION_COMPAGNIE_AU_SOL as readonly string[]).includes(statut);
+}
+
 // ============================================================
 // MAINTENANCE (techniciens)
 // ============================================================

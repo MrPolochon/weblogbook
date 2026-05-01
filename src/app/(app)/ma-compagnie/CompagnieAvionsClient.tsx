@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Plane, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2, Handshake, Gift } from 'lucide-react';
-import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX, FRACTION_REPARATION_HUB } from '@/lib/compagnie-utils';
+import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX, FRACTION_REPARATION_HUB, isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -388,11 +388,13 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       return { text: 'Prêt', className: 'text-emerald-400 animate-pulse' };
     }
     // Avion au sol mais à 0% d'usure = devrait être bloqué
-    if (statut === 'ground' && usure === 0) {
+    if (isAvionCompagnieAuSol(statut) && usure === 0) {
       return { text: 'À réparer', className: 'text-red-400' };
     }
     switch (statut) {
-      case 'ground': return { text: 'Au sol', className: 'text-emerald-400' };
+      case 'ground':
+      case 'disponible':
+        return { text: 'Au sol', className: 'text-emerald-400' };
       case 'in_flight': return { text: 'En vol', className: 'text-sky-400' };
       case 'maintenance': return { text: 'Maintenance', className: 'text-amber-400' };
       case 'en_reparation': return { text: 'En réparation', className: 'text-orange-400' };
@@ -409,7 +411,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
 
   const avionsBloques = avions.filter(a => a.statut === 'bloque' && a.usure_percent === 0 && a.location_status !== 'leased_out');
   const avionsEnVol = avions.filter(a => a.statut === 'in_flight').length;
-  const avionsDisponibles = avions.filter(a => a.statut === 'ground' && a.usure_percent > 0 && a.location_status !== 'leased_out').length;
+  const avionsDisponibles = avions.filter(a => isAvionCompagnieAuSol(a.statut) && a.usure_percent > 0 && a.location_status !== 'leased_out').length;
   const hasLeasedIn = avions.some((a) => a.location_status === 'leased_in');
 
   return (
@@ -512,9 +514,9 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                     : isLeasedIn
                       ? 'bg-pink-500/10'
                       : '';
-                const canRepairHub = a.statut === 'ground' && a.usure_percent < 100 && isAtHub && !isLeasedOut;
-                const canAffreter = (a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && !isLeasedOut;
-                const canDebloquer = (a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && !isLeasedOut;
+                const canRepairHub = isAvionCompagnieAuSol(a.statut) && a.usure_percent < 100 && isAtHub && !isLeasedOut;
+                const canAffreter = (a.statut === 'bloque' || (isAvionCompagnieAuSol(a.statut) && a.usure_percent === 0)) && !isLeasedOut;
+                const canDebloquer = (a.statut === 'bloque' || (isAvionCompagnieAuSol(a.statut) && a.usure_percent === 0)) && !isLeasedOut;
                 const canVerifierMaintenance = maintenancePrete && !isLeasedOut;
                 const noLeasedActions = isLeasedIn && !canRepairHub && !canAffreter && !canDebloquer && !canVerifierMaintenance;
                 const canDemanderReparationPro =
@@ -523,7 +525,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                   !isLeasedOut &&
                   !a.bloque_incident &&
                   a.statut !== 'en_reparation' &&
-                  (a.statut === 'bloque' || a.statut === 'ground');
+                  (a.statut === 'bloque' || isAvionCompagnieAuSol(a.statut));
                 const leasedReasons: string[] = [];
                 if (isLeasedIn && !isAtHub) leasedReasons.push('pas au hub');
                 if (isLeasedIn && a.usure_percent > 0 && a.usure_percent < 100) leasedReasons.push('usure > 0%');
@@ -644,7 +646,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                 </div>
                               ) : (
                                 <>
-                              {a.statut === 'ground' && !isLeasedOut && !isLeasedIn && (
+                              {isAvionCompagnieAuSol(a.statut) && !isLeasedOut && !isLeasedIn && (
                                 <button
                                   type="button"
                                   onClick={() => startEdit(a)}
@@ -654,7 +656,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   <Edit2 className="h-3.5 w-3.5" />
                                 </button>
                               )}
-                              {a.statut === 'ground' && !a.detruit && !isLeasedOut && !isLeasedIn && (
+                              {isAvionCompagnieAuSol(a.statut) && !a.detruit && !isLeasedOut && !isLeasedIn && (
                                 <>
                                   {allianceId && (
                                     <button
@@ -741,7 +743,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                 </div>
                               )}
                               {/* Avion bloqué ou au sol avec 0% d'usure = nécessite réparation */}
-                              {(a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && !isLeasedOut && (
+                              {(a.statut === 'bloque' || (isAvionCompagnieAuSol(a.statut) && a.usure_percent === 0)) && !isLeasedOut && (
                                 <>
                                   <button
                                     type="button"
@@ -788,7 +790,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                               {a.statut === 'maintenance' && a.maintenance_fin_at && !maintenancePrete && (
                                 <span className="text-xs text-slate-500">En réparation...</span>
                               )}
-                              {a.statut === 'ground' && a.usure_percent < 100 && isAtHub && !isLeasedOut && (
+                              {isAvionCompagnieAuSol(a.statut) && a.usure_percent < 100 && isAtHub && !isLeasedOut && (
                                 <button
                                   type="button"
                                   onClick={() => handleReparer(a.id)}
@@ -800,7 +802,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                   Réparer ({getCoutReparationHub(a).toLocaleString('fr-FR')} F$)
                                 </button>
                               )}
-                              {canDemanderReparationPro && !((a.statut === 'bloque' || (a.statut === 'ground' && a.usure_percent === 0)) && !isLeasedOut) && (
+                              {canDemanderReparationPro && !((a.statut === 'bloque' || (isAvionCompagnieAuSol(a.statut) && a.usure_percent === 0)) && !isLeasedOut) && (
                                 <Link
                                   href={`/reparation?demander=1&avion_id=${a.id}&compagnie_id=${compagnieId}`}
                                   className="text-xs text-orange-400 hover:underline inline-flex items-center gap-1"

@@ -9,6 +9,7 @@ import {
   ShieldCheck, XCircle, Ban, Plane, Wrench, MapPin, Hash, Calendar, Timer
 } from 'lucide-react';
 import { formatDateMediumUTC, formatTimeUTC, toLocaleDateStringUTC, toLocaleStringUTC } from '@/lib/date-utils';
+import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { formatDuree } from '@/lib/utils';
 import CarteIdentite from '@/components/CarteIdentite';
 
@@ -1474,13 +1475,13 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                   <div className="flex items-center gap-2">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                       avionData.avion.detruit ? 'bg-red-500/20 text-red-400' :
-                      avionData.avion.statut === 'ground' ? 'bg-emerald-500/20 text-emerald-400' :
+                      isAvionCompagnieAuSol(avionData.avion.statut) ? 'bg-emerald-500/20 text-emerald-400' :
                       avionData.avion.statut === 'in_flight' ? 'bg-sky-500/20 text-sky-400' :
                       avionData.avion.statut === 'maintenance' ? 'bg-amber-500/20 text-amber-400' :
                       'bg-red-500/20 text-red-400'
                     }`}>
                       {avionData.avion.detruit ? 'Détruit' :
-                       avionData.avion.statut === 'ground' ? 'Au sol' :
+                       isAvionCompagnieAuSol(avionData.avion.statut) ? 'Au sol' :
                        avionData.avion.statut === 'in_flight' ? 'En vol' :
                        avionData.avion.statut === 'maintenance' ? 'Maintenance' :
                        'Bloqué'}

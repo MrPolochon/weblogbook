@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { DELAI_DECOUVERT_JOURS, PRIX_VENTE_HUB_FORCE } from '@/lib/compagnie-utils';
+import { DELAI_DECOUVERT_JOURS, PRIX_VENTE_HUB_FORCE, STATUTS_AVION_COMPAGNIE_AU_SOL } from '@/lib/compagnie-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
       const { data: avions } = await admin.from('compagnie_avions')
         .select('id, type_avion_id, types_avion:type_avion_id(prix)')
         .eq('compagnie_id', pret.compagnie_id)
-        .eq('statut', 'ground')
+        .in('statut', [...STATUTS_AVION_COMPAGNIE_AU_SOL])
         .or('detruit.is.null,detruit.eq.false');
 
       for (const avion of avions ?? []) {

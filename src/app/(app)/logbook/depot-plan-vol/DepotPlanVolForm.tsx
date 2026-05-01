@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
+import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
 import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio, Phone } from 'lucide-react';
 import BriaDialog, { getBriaCooldownRemaining } from '@/components/BriaDialog';
@@ -142,10 +143,10 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   // Car le but du vol ferry est justement de ramener un avion bloqué/à 0% vers un hub
   const avionsDisponibles = useMemo(() => vol_ferry 
     ? avionsCompagnie.filter(a => 
-        a.statut === 'ground' // Avion au sol (débloqué)
+        isAvionCompagnieAuSol(a.statut) // Avion au sol (débloqué)
       )
     : avionsCompagnie.filter(a => 
-        a.statut === 'ground' && 
+        isAvionCompagnieAuSol(a.statut) && 
         a.usure_percent > 0 &&
         (!aeroport_depart || a.aeroport_actuel === aeroport_depart.toUpperCase())
       ),
@@ -753,8 +754,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
               {!vol_ferry && aeroport_depart && avionsDisponibles.length === 0 && avionsCompagnie.length > 0 && (
                 <p className="text-amber-400 text-sm mt-1">
                   Aucun avion disponible à {aeroport_depart.toUpperCase()}. 
-                  {avionsCompagnie.filter(a => a.statut === 'ground' && a.usure_percent > 0).length > 0 && (
-                    <span> Avions ailleurs : {avionsCompagnie.filter(a => a.statut === 'ground' && a.usure_percent > 0).map(a => `${a.immatriculation} (${a.aeroport_actuel})`).join(', ')}</span>
+                  {avionsCompagnie.filter(a => isAvionCompagnieAuSol(a.statut) && a.usure_percent > 0).length > 0 && (
+                    <span> Avions ailleurs : {avionsCompagnie.filter(a => isAvionCompagnieAuSol(a.statut) && a.usure_percent > 0).map(a => `${a.immatriculation} (${a.aeroport_actuel})`).join(', ')}</span>
                   )}
                 </p>
               )}

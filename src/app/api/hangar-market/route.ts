@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 
 // GET - Liste des annonces du Hangar Market
 export async function GET(req: NextRequest) {
@@ -128,7 +129,7 @@ export async function POST(req: NextRequest) {
         if (avionFlotte.detruit) {
           return NextResponse.json({ error: 'Impossible de vendre un avion détruit' }, { status: 400 });
         }
-        if (avionFlotte.statut !== 'ground') {
+        if (!isAvionCompagnieAuSol(avionFlotte.statut)) {
           return NextResponse.json({ error: "L'avion doit être au sol pour être mis en vente" }, { status: 400 });
         }
 

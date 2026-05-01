@@ -141,7 +141,7 @@ export async function POST(
       .from('compagnie_avions')
       .update({
         usure_percent: 100,
-        statut: avion.statut === 'maintenance' || avion.statut === 'bloque' ? 'ground' : avion.statut,
+        statut: avion.statut === 'maintenance' || avion.statut === 'bloque' || avion.statut === 'disponible' ? 'ground' : avion.statut,
       })
       .eq('id', id);
 
