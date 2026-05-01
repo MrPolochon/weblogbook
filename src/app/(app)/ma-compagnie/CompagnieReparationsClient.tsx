@@ -82,7 +82,7 @@ export default function CompagnieReparationsClient({ compagnieId, isPdg }: { com
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      toast.success('Transfert demandé à l\'entreprise de réparation');
+      toast.success('Transfert vers le hangar programmé (entre 20 min et 4 h, automatique).');
       setDemandes(prev => prev.map(dm => dm.id === demandeId ? { ...dm, statut: 'en_transit' } : dm));
       startTransition(() => router.refresh());
     } catch (e) {

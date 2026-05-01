@@ -3,8 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isCoPdg } from '@/lib/co-pdg-utils';
 import { getGamesForDemande } from '@/lib/reparation-games';
-import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
 import { resolveAeroportBaseRetour } from '@/lib/reparation-after-ferry';
+import { applyEntrepriseTransfertArriveeHangar, isoReparationTransitEtaFromNow } from '@/lib/reparation-transit';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,11 +17,11 @@ const LIB_ETAPES_TERMINER: Record<string, string> = {
   en_transit: 'transfert entreprise en cours',
   terminee: 'réparation déjà terminée',
   facturee: 'facturation en cours',
-  payee: 'en attente de livraison / ferry retour',
+  payee: 'en attente de livraison / transit retour vers la base',
   completee: 'déjà clôturée',
   refusee: 'demande refusée',
   annulee: 'demande annulée',
-  retour_transit: 'retour ferry client en cours',
+  retour_transit: 'transit automatique vers la base (ou ferry) en cours',
 };
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -166,70 +166,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .single();
     if (!avionCurrent) return NextResponse.json({ error: 'Avion introuvable' }, { status: 400 });
 
-    // Cas 1: demande de transfert entreprise => on déplace l'avion vers le hangar et on facture la compagnie
+    const hangarCode = String(hangar.aeroport_code || '').trim();
+    // Cas 1: demande de transfert entreprise => facturation + mise à jour comme `ferry_arrive` à l'échéance (ou manuel avant)
     if (demande.statut === 'en_transit') {
-      const { data: taxesData } = await admin.from('taxes_aeroport')
-        .select('taxe_pourcent')
-        .eq('code_oaci', hangar.aeroport_code)
-        .single();
-      const tauxTaxe = taxesData?.taxe_pourcent || 2;
-      const taxesTransfert = Math.round(COUT_VOL_FERRY * tauxTaxe / 100);
-      const coutTransfert = COUT_VOL_FERRY + taxesTransfert;
-
-      const { data: compteComp } = await admin.from('felitz_comptes')
-        .select('id, solde')
-        .eq('compagnie_id', demande.compagnie_id)
-        .eq('type', 'entreprise')
-        .single();
-      if (!compteComp) return NextResponse.json({ error: 'Compte entreprise introuvable' }, { status: 400 });
-      if (compteComp.solde < coutTransfert) {
-        return NextResponse.json({
-          error: `Solde insuffisant pour le transfert vers le hangar (${coutTransfert.toLocaleString('fr-FR')} F$).`
-        }, { status: 400 });
-      }
-
-      const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
-        p_compte_id: compteComp.id,
-        p_montant: coutTransfert,
-      });
-      if (!debitOk) {
-        return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente)' }, { status: 400 });
-      }
-
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteComp.id,
-        type: 'debit',
-        montant: COUT_VOL_FERRY,
-        libelle: `Transfert réparation ${avionCurrent.immatriculation} vers ${hangar.aeroport_code}`,
-      });
-      if (taxesTransfert > 0) {
-        await admin.from('felitz_transactions').insert({
-          compte_id: compteComp.id,
-          type: 'debit',
-          montant: taxesTransfert,
-          libelle: `Taxes aéroportuaires ${hangar.aeroport_code} (transfert réparation)`,
-        });
-      }
-
-      const { data: compteRep } = await admin.from('felitz_comptes')
-        .select('id')
-        .eq('entreprise_reparation_id', demande.entreprise_id)
-        .eq('type', 'reparation')
-        .maybeSingle();
-      if (compteRep?.id) {
-        await admin.rpc('crediter_compte_safe', { p_compte_id: compteRep.id, p_montant: coutTransfert });
-        await admin.from('felitz_transactions').insert({
-          compte_id: compteRep.id,
-          type: 'credit',
-          montant: coutTransfert,
-          libelle: `Transfert pris en charge pour ${avionCurrent.immatriculation}`,
-        });
-      }
-
-      await admin.from('compagnie_avions').update({
-        aeroport_actuel: hangar.aeroport_code,
-        statut: 'en_reparation',
-      }).eq('id', demande.avion_id);
+      const applied = await applyEntrepriseTransfertArriveeHangar(admin, {
+        id: demande.id,
+        avion_id: demande.avion_id,
+        compagnie_id: demande.compagnie_id,
+        entreprise_id: demande.entreprise_id,
+        hangar_id: demande.hangar_id,
+      }, hangarCode);
+      if (!applied.ok) return NextResponse.json({ error: applied.error }, { status: 400 });
+      return NextResponse.json({ ok: true });
     } else {
       // Cas 2: la compagnie a acheminé l'avion elle-même => il doit déjà être au hangar
       if (avionCurrent.aeroport_actuel !== hangar.aeroport_code) {
@@ -241,7 +189,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
 
     await admin.from('reparation_demandes').update({
-      statut: 'en_reparation', debut_reparation_at: new Date().toISOString(),
+      statut: 'en_reparation',
+      debut_reparation_at: new Date().toISOString(),
+      entreprise_transit_eta_at: null,
     }).eq('id', id);
     return NextResponse.json({ ok: true });
   }
@@ -250,7 +200,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!await isCompagniePdg()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     if (demande.statut !== 'acceptee') return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
 
-    await admin.from('reparation_demandes').update({ statut: 'en_transit' }).eq('id', id);
+    await admin.from('reparation_demandes').update({
+      statut: 'en_transit',
+      entreprise_transit_eta_at: isoReparationTransitEtaFromNow(),
+    }).eq('id', id);
     return NextResponse.json({ ok: true });
   }
 
@@ -504,7 +457,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         await admin.from('compagnie_avions').update({ aeroport_actuel: hangar.aeroport_code, statut: 'disponible' }).eq('id', demande.avion_id);
       }
       await admin.from('reparation_demandes').update({
-        statut: 'completee', completee_at: new Date().toISOString(),
+        statut: 'completee',
+        completee_at: new Date().toISOString(),
+        retour_transit_eta_at: null,
       }).eq('id', id);
 
       const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', demande.compagnie_id).single();
@@ -519,7 +474,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ ok: true });
     }
 
-    // Ferry retour : la demande reste ouverte (retour_transit) jusqu'à l'arrivée du vol ferry à la base enregistrée
+    // Transit retour : ETA aléatoire 20 min–4 h (cron) OU vol ferry avant l’ETA (voir completeReparationReturnFerry).
     const baseCible = await resolveAeroportBaseRetour(admin, {
       compagnie_id: demande.compagnie_id,
       aeroport_depart_client: (demande as { aeroport_depart_client?: string | null }).aeroport_depart_client ?? null,
@@ -535,33 +490,48 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         statut: 'disponible',
       }).eq('id', demande.avion_id);
       await admin.from('reparation_demandes').update({
-        statut: 'completee', completee_at: new Date().toISOString(),
+        statut: 'completee',
+        completee_at: new Date().toISOString(),
+        retour_transit_eta_at: null,
       }).eq('id', id);
       const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', demande.compagnie_id).single();
       if (comp) {
         await admin.from('messages').insert({
           destinataire_id: comp.pdg_id,
           titre: `✅ Réparation complète`,
-          contenu: `Votre avion est déjà sur sa base (${baseCible}).`,
+          contenu: `L'aéroport d'origine est le même que le hangar (${baseCible}). L'avion est mis au parking ici.`,
           type_message: 'normal',
         });
       }
       return NextResponse.json({ ok: true, retour_aeroport: baseCible });
     }
 
-    await admin.from('reparation_demandes').update({ statut: 'retour_transit' }).eq('id', id);
-    await admin.from('compagnie_avions').update({ statut: 'ground' }).eq('id', demande.avion_id);
+    const etaIso = isoReparationTransitEtaFromNow();
+    const etaFmt = new Date(etaIso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+
+    await admin.from('reparation_demandes').update({
+      statut: 'retour_transit',
+      retour_transit_eta_at: etaIso,
+    }).eq('id', id);
+    await admin.from('compagnie_avions').update({ statut: 'en_transit' }).eq('id', demande.avion_id);
 
     const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', demande.compagnie_id).single();
     if (comp) {
       await admin.from('messages').insert({
         destinataire_id: comp.pdg_id,
-        titre: `🔧 Réparation — retour par ferry`,
-        contenu: `Votre avion est libéré au hangar. Créez un vol ferry (Ma compagnie → Vols ferry) vers ${baseCible}. La réparation sera clôturée automatiquement à l'arrivée du ferry.`,
+        titre: `🔧 Réparation — retour automatique`,
+        contenu:
+          `L'avion part en transit roulier vers votre aéroport d'origine ${baseCible}. Arrivée estimée avant le ${etaFmt} (entre 20 min et 4 h). ` +
+          `Vous pouvez aussi faire un vol ferry vers ${baseCible} pour boucler plus vite : la réparation sera clôturée dès arrivée.`,
         type_message: 'normal',
       });
     }
-    return NextResponse.json({ ok: true, retour_aeroport: baseCible, attente_ferry: true });
+    return NextResponse.json({
+      ok: true,
+      retour_aeroport: baseCible,
+      retour_transit_eta_at: etaIso,
+      transit_automatique: true,
+    });
   }
 
   if (action === 'annuler') {

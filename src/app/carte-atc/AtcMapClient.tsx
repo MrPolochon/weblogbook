@@ -47,6 +47,8 @@ interface MapFlight {
   route: string | null;
   sid: string | null;
   star: string | null;
+  /** Déplacement lié réparation externe → symbole / trace orange sur l’ODW. */
+  operationnel_reparation?: boolean;
 }
 
 interface RenderFlight extends MapFlight {
@@ -64,6 +66,15 @@ interface RenderFlight extends MapFlight {
 }
 
 const POSITION_PRIORITY = ['Center', 'APP', 'DEP', 'Tower', 'Ground', 'Delivery', 'Clairance'] as const;
+
+const OPS_REPARATION_COLOR = '#f97316'; // orange — acheminement réparation externe (ODW)
+
+function mapFlightAccentColor(f: Pick<MapFlight, 'operationnel_reparation' | 'type_vol'>): string {
+  if (f.operationnel_reparation) return OPS_REPARATION_COLOR;
+  if (f.type_vol === 'VFR') return '#22c55e';
+  if (f.type_vol === 'MIL') return '#a855f7';
+  return '#ef4444';
+}
 
 function formatDuration(startedAt: string): string {
   const ms = Date.now() - new Date(startedAt).getTime();
@@ -582,7 +593,7 @@ export default function AtcMapClient() {
               {/* Trace (départ → position actuelle) : uniquement pour le vol sélectionné au clic (carte ou liste). */}
               {renderedFlights.map((f) => {
                 if (selectedFlightId !== f.id) return null;
-                const color = f.type_vol === 'VFR' ? '#22c55e' : f.type_vol === 'MIL' ? '#a855f7' : '#ef4444';
+                const color = mapFlightAccentColor(f);
                 return (
                   <polyline
                     key={`path-${f.id}`}
@@ -600,7 +611,7 @@ export default function AtcMapClient() {
               {/* Avions (un seul tracé de route en pointillés par vol — pas de seconde couche « parcouru » qui traversait la carte) */}
               {renderedFlights.map((f) => {
                 const isSelected = selectedFlightId === f.id;
-                const color = f.type_vol === 'VFR' ? '#22c55e' : f.type_vol === 'MIL' ? '#a855f7' : '#ef4444';
+                const color = mapFlightAccentColor(f);
                 return (
                   <g key={f.id}>
                     <g
@@ -763,12 +774,23 @@ export default function AtcMapClient() {
               <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-green-500" /> <span className="text-slate-300">Vol VFR</span></div>
               <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-red-500" /> <span className="text-slate-300">Vol IFR</span></div>
               <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-purple-500" /> <span className="text-slate-300">Vol militaire</span></div>
+              <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed" style={{ borderColor: OPS_REPARATION_COLOR }} /> <span className="text-slate-300">Opération réparation externe</span></div>
             </div>
           </div>
 
           {selectedFlight && (
             <div className="absolute top-3 left-3 max-w-[340px] rounded-lg bg-slate-900/95 border border-slate-600/40 p-3 text-xs space-y-1.5 backdrop-blur-sm">
-              <p className="text-slate-100 font-semibold text-sm">Plan de vol {selectedFlight.numero_vol}</p>
+              <p className="text-slate-100 font-semibold text-sm">
+                Plan de vol {selectedFlight.numero_vol}
+                {selectedFlight.operationnel_reparation && (
+                  <span
+                    className="ml-2 align-middle px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"
+                    style={{ backgroundColor: 'rgba(249,115,22,0.2)', color: OPS_REPARATION_COLOR }}
+                  >
+                    Réparation
+                  </span>
+                )}
+              </p>
               <p className="text-slate-300">
                 {selectedFlight.aeroport_depart} → {selectedFlight.aeroport_arrivee}
               </p>
@@ -776,17 +798,20 @@ export default function AtcMapClient() {
                 <span
                   className="px-2 py-0.5 rounded-full text-[11px] font-semibold"
                   style={{
-                    backgroundColor:
-                      selectedFlight.type_vol === 'VFR' ? 'rgba(34,197,94,0.18)' :
+                    backgroundColor: selectedFlight.operationnel_reparation
+                      ? 'rgba(249,115,22,0.2)'
+                      : selectedFlight.type_vol === 'VFR' ? 'rgba(34,197,94,0.18)' :
                       selectedFlight.type_vol === 'MIL' ? 'rgba(168,85,247,0.18)' :
                       'rgba(239,68,68,0.18)',
-                    color:
-                      selectedFlight.type_vol === 'VFR' ? '#4ade80' :
+                    color: selectedFlight.operationnel_reparation
+                      ? OPS_REPARATION_COLOR
+                      : selectedFlight.type_vol === 'VFR' ? '#4ade80' :
                       selectedFlight.type_vol === 'MIL' ? '#c084fc' :
                       '#f87171',
                   }}
                 >
-                  {selectedFlight.type_vol === 'MIL' ? 'MILITAIRE' : selectedFlight.type_vol}
+                  {selectedFlight.operationnel_reparation ? 'OPS RÉPARATION' :
+                    selectedFlight.type_vol === 'MIL' ? 'MILITAIRE' : selectedFlight.type_vol}
                 </span>
                 <span className="text-slate-400">
                   Durée prévue: {selectedFlight.temps_prev_min} min
@@ -878,19 +903,26 @@ export default function AtcMapClient() {
                     key={f.id}
                     type="button"
                     onClick={() => setSelectedFlightId((prev) => (prev === f.id ? null : f.id))}
-                    className={`w-full text-left rounded-md px-2 py-1.5 text-[11px] border transition ${
+                    className={`w-full text-left rounded-md px-2 py-1.5 text-[11px] border transition flex items-start gap-2 ${
                       selectedFlightId === f.id
                         ? 'border-emerald-500/50 bg-emerald-950/30 text-slate-100'
-                        : 'border-slate-700/50 bg-slate-800/50 text-slate-300 hover:border-slate-600'
+                        : f.operationnel_reparation
+                          ? 'border-orange-500/40 bg-orange-950/20 text-slate-300 hover:border-orange-400/55'
+                          : 'border-slate-700/50 bg-slate-800/50 text-slate-300 hover:border-slate-600'
                     }`}
                   >
+                    <span className="shrink-0 w-1 min-h-[2.25rem] rounded-full self-stretch mt-0.5" style={{ backgroundColor: mapFlightAccentColor(f) }} aria-hidden />
+
+                    <span className="min-w-0">
                     <span className="font-mono font-bold">{f.numero_vol}</span>
                     <span className="text-slate-500 mx-1">·</span>
                     <span className="text-slate-400">
                       {f.aeroport_depart} → {f.aeroport_arrivee}
                     </span>
                     <br />
-                    <span className="text-slate-500">Statut : {PHASE_LABELS_FR[f.flight_phase]}</span>
+                    <span className="text-slate-500">{f.operationnel_reparation ? 'Réparation externe · ' : ''}Statut : {PHASE_LABELS_FR[f.flight_phase]}</span>
+
+                    </span>
                   </button>
                 ))}
               </div>

@@ -54,7 +54,11 @@ export async function completeReparationReturnFerry(
 
   await admin
     .from('reparation_demandes')
-    .update({ statut: 'completee', completee_at: new Date().toISOString() })
+    .update({
+      statut: 'completee',
+      completee_at: new Date().toISOString(),
+      retour_transit_eta_at: null,
+    })
     .eq('id', d.id);
   await admin
     .from('compagnie_avions')

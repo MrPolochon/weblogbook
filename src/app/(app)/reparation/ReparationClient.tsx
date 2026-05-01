@@ -461,12 +461,12 @@ function DemandesTab({ detail, api, flash, busy, onRefresh, router }: {
             {d.statut === 'payee' && (
               <div className="flex gap-2">
                 <button disabled={busy} onClick={() => doAction(d.id, 'completer', { livraison: 'parking' })} className="px-3 py-1 rounded bg-slate-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><ParkingSquare className="h-3 w-3" />Laisser au parking</button>
-                <button disabled={busy} onClick={() => doAction(d.id, 'completer', { livraison: 'ferry' })} className="px-3 py-1 rounded bg-sky-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Truck className="h-3 w-3" />Ferry retour</button>
+                <button disabled={busy} onClick={() => doAction(d.id, 'completer', { livraison: 'ferry' })} className="px-3 py-1 rounded bg-sky-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Truck className="h-3 w-3" />Transit vers la base</button>
               </div>
             )}
             {d.statut === 'retour_transit' && (
               <p className="text-xs text-sky-400 max-w-md">
-                En attente : le client doit créer un vol ferry (Ma compagnie) vers sa base. La demande se clôture à l&apos;arrivée du ferry.
+                Transit automatique (20 min à 4 h) vers l&apos;aéroport d&apos;origine du client. Un vol ferry vers la même base clôture aussi la demande s&apos;il part avant la fin du délai.
               </p>
             )}
             {!['completee', 'refusee', 'annulee', 'facturee', 'payee', 'retour_transit'].includes(d.statut) && (
