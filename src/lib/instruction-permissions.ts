@@ -265,3 +265,26 @@ export async function getPilotTrainingTier2UserIds(
   }
   return Array.from(out);
 }
+
+/** Instructeurs pouvant être désignés comme nouveau référent pour ce parcours (FI/FÉ ou ATC FI/FÉ selon la licence). */
+export async function listProfilesEligibleAsFormationReferent(
+  admin: SupabaseClient,
+  licenceCode: string,
+): Promise<Array<{ id: string; identifiant: string }>> {
+  const idsPool = new Set<string>();
+  if (isAtcInstructionProgram(licenceCode)) {
+    const ids = await getAtcTrainingInstructorPoolUserIds(admin);
+    for (const id of ids) idsPool.add(id);
+  } else {
+    const rows = await getFlightInstructorProfilesForSelect(admin);
+    for (const r of rows) idsPool.add(r.id);
+  }
+  const ids = Array.from(idsPool);
+  if (ids.length === 0) return [];
+  const { data: profiles } = await admin
+    .from('profiles')
+    .select('id, identifiant')
+    .in('id', ids)
+    .order('identifiant');
+  return profiles || [];
+}

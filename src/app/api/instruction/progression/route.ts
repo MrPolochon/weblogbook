@@ -27,11 +27,13 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Réservé aux formateurs (FI / ATC FI / …).' }, { status: 403 });
     }
 
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, unknown>;
     const eleveId = String(body.eleve_id || '');
     const licenceCode = String(body.licence_code || '');
     const moduleCode = String(body.module_code || '');
     const completed = Boolean(body.completed);
+    const hasNoteKey = Object.prototype.hasOwnProperty.call(body, 'note');
+    const noteIncoming = hasNoteKey ? String(body.note ?? '').trim().slice(0, 4000) : undefined;
 
     if (!eleveId || !licenceCode || !moduleCode) {
       return NextResponse.json({ error: 'eleve_id, licence_code et module_code requis.' }, { status: 400 });
@@ -56,12 +58,27 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Vous n’êtes pas autorisé pour ce type de parcours.' }, { status: 403 });
     }
 
+    let noteVal: string | null | undefined = undefined;
+    if (noteIncoming !== undefined) {
+      noteVal = noteIncoming.length ? noteIncoming : null;
+    } else {
+      const { data: existingNoteRow } = await admin
+        .from('instruction_progression_items')
+        .select('note')
+        .eq('eleve_id', eleveId)
+        .eq('licence_code', licenceCode)
+        .eq('module_code', moduleCode)
+        .maybeSingle();
+      noteVal = (existingNoteRow?.note as string | null | undefined) ?? null;
+    }
+
     const payload = {
       eleve_id: eleveId,
       licence_code: licenceCode,
       module_code: moduleCode,
       completed,
       completed_at: completed ? new Date().toISOString() : null,
+      note: noteVal ?? null,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     };

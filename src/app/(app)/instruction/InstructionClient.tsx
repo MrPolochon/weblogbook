@@ -82,13 +82,13 @@ export default function InstructionClient({
   myFormationActive: boolean;
   myFormationLicence: string | null;
   myInstructorIdentifiant: string | null;
-  myProgression: Array<{ licence_code: string; module_code: string; completed: boolean }>;
+  myProgression: Array<{ licence_code: string; module_code: string; completed: boolean; note?: string | null }>;
   examRequestsMine: Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; instructeur: { identifiant: string } | { identifiant: string }[] | null }>;
   examRequestsAssigned: Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; requester: { identifiant: string } | { identifiant: string }[] | null }>;
   eleves: Eleve[];
   typesAvion: TypeAvion[];
   avionsTemp: AvionTemp[];
-  elevesProgression: Array<{ eleve_id: string; licence_code: string; module_code: string; completed: boolean }>;
+  elevesProgression: Array<{ eleve_id: string; licence_code: string; module_code: string; completed: boolean; note?: string | null }>;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -159,6 +159,27 @@ export default function InstructionClient({
   /** Clé `eleveId::licence::module` → état affiché en avance de phase avant la réponse serveur */
   const [progressionOverrides, setProgressionOverrides] = useState<Record<string, boolean>>({});
   const [savingProgKeys, setSavingProgKeys] = useState<Set<string>>(() => new Set());
+
+  function progressionToggleKey(eleveId: string, licenceCode: string, moduleCode: string) {
+    return `${eleveId}::${licenceCode}::${moduleCode}`;
+  }
+
+  const progressionNotesServer = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const row of elevesProgression) {
+      const k = `${row.eleve_id}::${row.licence_code}::${row.module_code}`;
+      m.set(k, row.note?.trim() ?? '');
+    }
+    return m;
+  }, [elevesProgression]);
+
+  const [notesDraft, setNotesDraft] = useState<Record<string, string>>({});
+  const [savingNoteKeys, setSavingNoteKeys] = useState<Set<string>>(() => new Set());
+  const [transferCandidatesByEleve, setTransferCandidatesByEleve] = useState<
+    Record<string, Array<{ id: string; identifiant: string }>>
+  >({});
+  const [transferPickByEleve, setTransferPickByEleve] = useState<Record<string, string>>({});
+  const [transferListLoading, setTransferListLoading] = useState<Record<string, boolean>>({});
 
   const avionsByEleve = useMemo(() => {
     const map = new Map<string, AvionTemp[]>();
@@ -499,12 +520,93 @@ export default function InstructionClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur fin de formation');
-      toast.success('Formation terminee: les avions temporaires ont ete retires.');
+      toast.success(
+        'Formation terminée : dossier PDF enregistré dans « DOSSIER FORMATION » (accès administrateur) et avions temporaires retirés.',
+      );
     });
   }
 
-  function progressionToggleKey(eleveId: string, licenceCode: string, moduleCode: string) {
-    return `${eleveId}::${licenceCode}::${moduleCode}`;
+  async function loadTransferCandidates(eleveId: string) {
+    if (transferListLoading[eleveId]) return;
+    setTransferListLoading((L) => ({ ...L, [eleveId]: true }));
+    try {
+      const res = await fetch(`/api/instruction/eleves/${encodeURIComponent(eleveId)}/transfer-candidates`);
+      const data = (await res.json().catch(() => ({}))) as {
+        candidates?: Array<{ id: string; identifiant: string }>;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error || 'Liste instructeurs');
+      setTransferCandidatesByEleve((prev) => ({ ...prev, [eleveId]: data.candidates ?? [] }));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setTransferListLoading((L) => ({ ...L, [eleveId]: false }));
+    }
+  }
+
+  async function transferEleve(eleveId: string, nouvelInstructeurId: string) {
+    if (!nouvelInstructeurId) return;
+    await run(async () => {
+      const res = await fetch(`/api/instruction/eleves/${encodeURIComponent(eleveId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'transfer_instructeur', nouvel_instructeur_id: nouvelInstructeurId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur transfert');
+      setTransferPickByEleve((p) => ({ ...p, [eleveId]: '' }));
+      toast.success('Élève transféré : la progression et les notes sont conservées.');
+    });
+  }
+
+  async function flushProgressionNote(
+    eleveId: string,
+    licenceCode: string,
+    moduleCode: string,
+    completedForRow: boolean,
+    draftVal: string,
+  ) {
+    const key = progressionToggleKey(eleveId, licenceCode, moduleCode);
+    const baseline = progressionNotesServer.get(key) ?? '';
+    if (draftVal === baseline) {
+      setNotesDraft((nd) => {
+        if (!Object.prototype.hasOwnProperty.call(nd, key)) return nd;
+        const next = { ...nd };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+    setSavingNoteKeys((s) => new Set(s).add(key));
+    try {
+      const res = await fetch('/api/instruction/progression', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eleve_id: eleveId,
+          licence_code: licenceCode,
+          module_code: moduleCode,
+          completed: completedForRow,
+          note: draftVal,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur enregistrement note');
+      setNotesDraft((nd) => {
+        const next = { ...nd };
+        delete next[key];
+        return next;
+      });
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setSavingNoteKeys((s) => {
+        const next = new Set(s);
+        next.delete(key);
+        return next;
+      });
+    }
   }
 
   async function toggleProgression(eleveId: string, licenceCode: string, moduleCode: string, completed: boolean) {
@@ -1171,7 +1273,7 @@ export default function InstructionClient({
                     <p className="text-slate-100 font-medium">{e.identifiant}</p>
                     <p className="text-xs text-slate-500">{e.formation_instruction_active ? 'Formation active' : 'Formation terminée'}</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     <select
                       className="input"
                       value={licenceCode}
@@ -1183,9 +1285,41 @@ export default function InstructionClient({
                       ))}
                     </select>
                     {e.formation_instruction_active && (
-                      <button className="btn-secondary" type="button" disabled={loading} onClick={() => finishFormation(e.id)}>
-                        Terminer la formation
-                      </button>
+                      <>
+                        <select
+                          className="input min-w-[11rem]"
+                          value={transferPickByEleve[e.id] ?? ''}
+                          onFocus={() => void loadTransferCandidates(e.id)}
+                          onChange={(ev) =>
+                            setTransferPickByEleve((p) => ({ ...p, [e.id]: ev.target.value }))
+                          }
+                          disabled={loading || Boolean(transferListLoading[e.id])}
+                        >
+                          <option value="">
+                            {transferListLoading[e.id] ? 'Chargement…' : '— Transférer vers —'}
+                          </option>
+                          {(transferCandidatesByEleve[e.id] ?? []).map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.identifiant}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          disabled={
+                            loading ||
+                            !(transferPickByEleve[e.id] ?? '').trim() ||
+                            Boolean(transferListLoading[e.id])
+                          }
+                          onClick={() => transferEleve(e.id, (transferPickByEleve[e.id] ?? '').trim())}
+                        >
+                          Transférer
+                        </button>
+                        <button className="btn-secondary" type="button" disabled={loading} onClick={() => finishFormation(e.id)}>
+                          Terminer la formation
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1193,18 +1327,41 @@ export default function InstructionClient({
                 {program && (
                   <div className="rounded border border-slate-700/60 p-3 space-y-2">
                     <p className="text-sm text-slate-300">Progression {program.label}</p>
+                    <p className="text-xs text-slate-500">Saisissez une note par module ; elle est enregistrée à la sortie du champ.</p>
                     {program.modules.map((m) => {
                       const checked = completedSet.has(m.code);
+                      const nk = progressionToggleKey(e.id, licenceCode, m.code);
+                      const noteVal = Object.prototype.hasOwnProperty.call(notesDraft, nk)
+                        ? (notesDraft[nk] ?? '')
+                        : progressionNotesServer.get(nk) ?? '';
                       return (
-                        <label key={m.code} className="flex items-start gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(ev) => toggleProgression(e.id, licenceCode, m.code, ev.target.checked)}
-                            disabled={loading || savingProgKeys.has(progressionToggleKey(e.id, licenceCode, m.code))}
+                        <div key={m.code} className="space-y-1 rounded border border-slate-700/40 p-2 bg-slate-900/20">
+                          <label className="flex items-start gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(ev) => toggleProgression(e.id, licenceCode, m.code, ev.target.checked)}
+                              disabled={loading || savingProgKeys.has(progressionToggleKey(e.id, licenceCode, m.code))}
+                            />
+                            <span className="text-sm text-slate-300">{m.code} — {m.title}</span>
+                          </label>
+                          <textarea
+                            className="input text-sm min-h-[4rem] w-full resize-y max-w-full"
+                            placeholder="Note instructeur (optionnel)"
+                            rows={3}
+                            value={noteVal}
+                            onChange={(ev) =>
+                              setNotesDraft((nd) => ({ ...nd, [nk]: ev.target.value }))
+                            }
+                            onBlur={(ev) =>
+                              void flushProgressionNote(e.id, licenceCode, m.code, checked, ev.target.value)
+                            }
+                            disabled={loading || savingNoteKeys.has(nk)}
                           />
-                          <span className="text-sm text-slate-300">{m.code} - {m.title}</span>
-                        </label>
+                          {savingNoteKeys.has(nk) ? (
+                            <p className="text-xs text-slate-500">Enregistrement…</p>
+                          ) : null}
+                        </div>
                       );
                     })}
                   </div>

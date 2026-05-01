@@ -89,7 +89,7 @@ export default async function InstructionPage() {
     viewer.formation_instruction_active && viewer.formation_instruction_licence
       ? admin
           .from('instruction_progression_items')
-          .select('licence_code, module_code, completed')
+          .select('licence_code, module_code, completed, note')
           .eq('eleve_id', user.id)
           .eq('licence_code', viewer.formation_instruction_licence)
       : Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null }),
@@ -129,7 +129,7 @@ export default async function InstructionPage() {
           .order('created_at', { ascending: false }),
         admin
           .from('instruction_progression_items')
-          .select('eleve_id, licence_code, module_code, completed')
+          .select('eleve_id, licence_code, module_code, completed, note')
           .in('eleve_id', eleveIds),
       ])
     : [{ data: [] as Array<Record<string, unknown>>, error: null }, { data: [] as Array<Record<string, unknown>>, error: null }];
@@ -251,13 +251,13 @@ export default async function InstructionPage() {
       myFormationActive={Boolean(viewer.formation_instruction_active)}
       myFormationLicence={(viewer.formation_instruction_licence as string | null) || null}
       myInstructorIdentifiant={(meInstructorProfile as { identifiant?: string } | null)?.identifiant || null}
-      myProgression={(myProgression || []) as Array<{ licence_code: string; module_code: string; completed: boolean }>}
+      myProgression={(myProgression || []) as Array<{ licence_code: string; module_code: string; completed: boolean; note?: string | null }>}
       examRequestsMine={(examMine || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; instructeur: { identifiant: string } | { identifiant: string }[] | null }>}
       examRequestsAssigned={(examAssigned || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; requester: { identifiant: string } | { identifiant: string }[] | null }>}
       eleves={(eleves || []) as Array<{ id: string; identifiant: string; formation_instruction_active: boolean; formation_instruction_licence: string | null; created_at: string }>}
       typesAvion={(typesAvion || []) as Array<{ id: string; nom: string; constructeur: string | null; code_oaci: string | null }>}
       avionsTemp={(avionsTemp || []) as Array<{ id: string; proprietaire_id: string; type_avion_id: string; nom_personnalise: string | null; immatriculation: string | null; aeroport_actuel: string | null; statut: string | null; usure_percent: number | null; instruction_actif: boolean }>}
-      elevesProgression={(elevesProgression || []) as Array<{ eleve_id: string; licence_code: string; module_code: string; completed: boolean }>}
+      elevesProgression={(elevesProgression || []) as Array<{ eleve_id: string; licence_code: string; module_code: string; completed: boolean; note?: string | null }>}
     />
   );
 }
