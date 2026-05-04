@@ -31,7 +31,10 @@ export async function PATCH(request: Request) {
     const eleveId = String(body.eleve_id || '');
     const licenceCode = String(body.licence_code || '');
     const moduleCode = String(body.module_code || '');
-    const completed = Boolean(body.completed);
+    // Si la clé 'completed' n'est pas dans le body, on conservera la valeur existante
+    // (un PATCH partiel sur la note ne doit pas décocher le module).
+    const hasCompletedKey = Object.prototype.hasOwnProperty.call(body, 'completed');
+    const completedIncoming = hasCompletedKey ? Boolean(body.completed) : undefined;
     const hasNoteKey = Object.prototype.hasOwnProperty.call(body, 'note');
     const noteIncoming = hasNoteKey ? String(body.note ?? '').trim().slice(0, 4000) : undefined;
 
@@ -58,27 +61,41 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Vous n’êtes pas autorisé pour ce type de parcours.' }, { status: 403 });
     }
 
-    let noteVal: string | null | undefined = undefined;
-    if (noteIncoming !== undefined) {
-      noteVal = noteIncoming.length ? noteIncoming : null;
-    } else {
-      const { data: existingNoteRow } = await admin
+    // Lire la ligne existante en une fois (utile pour la note ET pour completed).
+    type ExistingRow = { note: string | null; completed: boolean | null; completed_at: string | null } | null;
+    const needsExistingRow = noteIncoming === undefined || completedIncoming === undefined;
+    let existingRow: ExistingRow = null;
+    if (needsExistingRow) {
+      const { data } = await admin
         .from('instruction_progression_items')
-        .select('note')
+        .select('note, completed, completed_at')
         .eq('eleve_id', eleveId)
         .eq('licence_code', licenceCode)
         .eq('module_code', moduleCode)
         .maybeSingle();
-      noteVal = (existingNoteRow?.note as string | null | undefined) ?? null;
+      existingRow = (data as unknown as ExistingRow) ?? null;
     }
+
+    let noteVal: string | null;
+    if (noteIncoming !== undefined) {
+      noteVal = noteIncoming.length ? noteIncoming : null;
+    } else {
+      noteVal = existingRow?.note ?? null;
+    }
+
+    const completed: boolean = completedIncoming ?? Boolean(existingRow?.completed);
+    const completedAt: string | null =
+      completedIncoming === undefined
+        ? (existingRow?.completed_at ?? (completed ? new Date().toISOString() : null))
+        : (completed ? new Date().toISOString() : null);
 
     const payload = {
       eleve_id: eleveId,
       licence_code: licenceCode,
       module_code: moduleCode,
       completed,
-      completed_at: completed ? new Date().toISOString() : null,
-      note: noteVal ?? null,
+      completed_at: completedAt,
+      note: noteVal,
       updated_by: user.id,
       updated_at: new Date().toISOString(),
     };

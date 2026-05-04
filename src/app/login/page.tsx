@@ -11,14 +11,21 @@ const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
 
 function setPendingVerificationCookie() {
   if (typeof document !== 'undefined') {
-    document.cookie = `${PENDING_VERIFICATION_COOKIE}=1; path=/; max-age=600; SameSite=Lax`;
+    const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${PENDING_VERIFICATION_COOKIE}=1; path=/; max-age=600; SameSite=Lax${secure}`;
   }
 }
 
 function clearPendingVerificationCookie() {
   if (typeof document !== 'undefined') {
-    document.cookie = `${PENDING_VERIFICATION_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+    const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${PENDING_VERIFICATION_COOKIE}=; path=/; max-age=0; SameSite=Lax${secure}`;
   }
+}
+
+const REDIRECT_STORAGE_KEY = 'pending_login_redirect_to';
+function isSafeRedirectPath(p: string | null | undefined): p is string {
+  return typeof p === 'string' && p.startsWith('/') && !p.startsWith('//') && !p.includes('\\');
 }
 
 // Composant pour les nuages animés
@@ -201,12 +208,18 @@ function LoginPageContent() {
   useEffect(() => {
     if (loading || step !== 'form') return;
     if (searchParams.get('step') === 'verify') {
+      // On reprend le returnTo stocké lors du précédent submit (ATC/SIAVI ne tombent plus sur /logbook).
+      try {
+        const stored = typeof window !== 'undefined' ? window.sessionStorage.getItem(REDIRECT_STORAGE_KEY) : null;
+        if (isSafeRedirectPath(stored)) setRedirectTo(stored);
+      } catch { /* sessionStorage indispo */ }
       setStep('code');
       fetch('/api/auth/send-login-code', { method: 'POST', credentials: 'include' })
         .then(async (res) => {
           const d = await res.json().catch(() => ({}));
           if (res.ok && d.skipCode) {
             clearPendingVerificationCookie();
+            try { window.sessionStorage.removeItem(REDIRECT_STORAGE_KEY); } catch { /* ignore */ }
             router.replace(redirectTo);
             startTransition(() => router.refresh());
             return;
@@ -229,6 +242,7 @@ function LoginPageContent() {
 
   async function doRedirect() {
     clearPendingVerificationCookie();
+    try { window.sessionStorage.removeItem(REDIRECT_STORAGE_KEY); } catch { /* ignore */ }
     router.replace(redirectTo);
     startTransition(() => router.refresh());
   }
@@ -271,6 +285,11 @@ function LoginPageContent() {
         if (profile?.role === 'siavi') throw new Error('Ce compte est uniquement SIAVI. Sélectionnez "SIAVI" pour vous connecter.');
         setRedirectTo('/logbook');
       }
+      // Mémorise le mode/destination choisi pour qu'un /login?step=verify (déclenché par le middleware)
+      // ne fasse pas atterrir un compte ATC/SIAVI sur /logbook après vérification.
+      try {
+        if (typeof window !== 'undefined') window.sessionStorage.setItem(REDIRECT_STORAGE_KEY, targetPath);
+      } catch { /* sessionStorage indispo */ }
       if (!requireCode) {
         clearPendingVerificationCookie();
         router.replace(targetPath);

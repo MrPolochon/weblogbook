@@ -49,6 +49,9 @@ export default function VolFormMilitaire({ pilotesArmee, inventaireMilitaire = [
   const isEscadrilleOuEscadron = escadrille_ou_escadron === 'escadrille' || escadrille_ou_escadron === 'escadron';
   const selectedMission = mission_id ? ARME_MISSIONS.find((m) => m.id === mission_id) || null : null;
 
+  // Pré-remplit la mission UNIQUEMENT quand l'utilisateur change de mission.
+  // Avant, `callsign` était dans les dépendances → chaque frappe dans le callsign
+  // ré-écrasait les champs aéroport/durée/etc. saisis par l'utilisateur.
   useEffect(() => {
     if (!selectedMission) return;
     setAeroportDepart(selectedMission.aeroport_depart);
@@ -57,10 +60,9 @@ export default function VolFormMilitaire({ pilotesArmee, inventaireMilitaire = [
     setEscadrilleOuEscadron(selectedMission.escadrille_ou_escadron);
     setNatureVolMilitaire(selectedMission.nature_vol_militaire);
     setNatureVolMilitaireAutre('');
-    if (!callsign.trim()) {
-      setCallsign(`${selectedMission.callsign_prefix}${Math.floor(100 + Math.random() * 900)}`);
-    }
-  }, [selectedMission, callsign]);
+    setCallsign((prev) => (prev.trim() ? prev : `${selectedMission.callsign_prefix}${Math.floor(100 + Math.random() * 900)}`));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMission?.id]);
 
   function toggleEquipage(id: string) {
     setEquipageIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));

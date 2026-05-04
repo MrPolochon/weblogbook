@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useLayoutEffect, ReactNode } from 'react';
 
 type AtcTheme = 'light' | 'dark';
 
@@ -14,27 +14,29 @@ const AtcThemeContext = createContext<AtcThemeContextType | undefined>(undefined
 
 const STORAGE_KEY = 'atc-theme';
 
+// Lecture synchrone du thème (avant le premier render React) pour éviter le FOUC
+// (flash de thème clair quand le thème stocké est dark).
+function readInitialTheme(): AtcTheme {
+  if (typeof window === 'undefined') return 'light';
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored === 'dark' || stored === 'light') return stored;
+    if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark';
+  } catch {
+    /* localStorage indispo */
+  }
+  return 'light';
+}
+
+// useLayoutEffect côté client, useEffect côté serveur (évite warning SSR).
+const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+
 export function AtcThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<AtcTheme>('light');
-  const [mounted, setMounted] = useState(false);
+  const [theme, setThemeState] = useState<AtcTheme>(() => readInitialTheme());
 
-  // Charger le thème depuis localStorage au montage
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as AtcTheme | null;
-    if (stored === 'dark' || stored === 'light') {
-      setThemeState(stored);
-    } else {
-      // Vérifier si le système préfère le mode sombre
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      setThemeState(prefersDark ? 'dark' : 'light');
-    }
-    setMounted(true);
-  }, []);
-
-  // Appliquer la classe au body
-  useEffect(() => {
-    if (!mounted) return;
-    
+  // Applique la classe AVANT la peinture du navigateur pour qu'aucun flash ne soit visible.
+  useIsoLayoutEffect(() => {
+    if (typeof document === 'undefined') return;
     if (theme === 'dark') {
       document.body.classList.add('atc-dark');
       document.body.classList.remove('atc-light');
@@ -42,11 +44,11 @@ export function AtcThemeProvider({ children }: { children: ReactNode }) {
       document.body.classList.add('atc-light');
       document.body.classList.remove('atc-dark');
     }
-  }, [theme, mounted]);
+  }, [theme]);
 
   const setTheme = (newTheme: AtcTheme) => {
     setThemeState(newTheme);
-    localStorage.setItem(STORAGE_KEY, newTheme);
+    try { window.localStorage.setItem(STORAGE_KEY, newTheme); } catch { /* ignore */ }
   };
 
   const toggleTheme = () => {

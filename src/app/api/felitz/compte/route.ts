@@ -21,11 +21,20 @@ export async function GET(req: NextRequest) {
     let query = admin.from('felitz_comptes').select('*, compagnies(nom)');
 
     if (type) query = query.eq('type', type);
-    
-    if (isAdmin && userId) {
-      query = query.eq('proprietaire_id', userId);
-    } else if (isAdmin && compagnieId) {
-      query = query.eq('compagnie_id', compagnieId);
+
+    if (isAdmin) {
+      // Un admin doit explicitement filtrer par user_id ou compagnie_id pour éviter
+      // de récupérer la totalité des comptes Felitz du système (fuite de données).
+      if (userId) {
+        query = query.eq('proprietaire_id', userId);
+      } else if (compagnieId) {
+        query = query.eq('compagnie_id', compagnieId);
+      } else {
+        return NextResponse.json(
+          { error: 'Précisez user_id ou compagnie_id pour lister les comptes.' },
+          { status: 400 }
+        );
+      }
     } else if (!isAdmin) {
       // Non-admin : personnel + comptes des compagnies dont l’utilisateur est PDG ou co-PDG
       const { data: pdgCompagnies } = await supabase.from('compagnies').select('id').eq('pdg_id', user.id);
@@ -70,6 +79,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { type, proprietaire_id, compagnie_id, solde_initial } = body;
 
+    // Refus d'un solde initial négatif (un nombre négatif est truthy en JS,
+    // donc l'ancien `solde_initial || 0` laissait passer -1000).
+    const soldeNum = Number(solde_initial);
+    if (solde_initial !== undefined && solde_initial !== null && (!Number.isFinite(soldeNum) || soldeNum < 0)) {
+      return NextResponse.json({ error: 'Le solde initial doit être un nombre positif ou nul.' }, { status: 400 });
+    }
+    const soldeFinal = Number.isFinite(soldeNum) && soldeNum >= 0 ? Math.floor(soldeNum) : 0;
+
     const admin = createAdminClient();
 
     // Générer VBAN unique
@@ -90,7 +107,7 @@ export async function POST(req: NextRequest) {
       proprietaire_id: type === 'personnel' ? proprietaire_id : null,
       compagnie_id: type === 'entreprise' ? compagnie_id : null,
       vban,
-      solde: solde_initial || 0
+      solde: soldeFinal,
     }).select().single();
 
     if (error) return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });

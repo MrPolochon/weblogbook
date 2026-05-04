@@ -229,6 +229,11 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.3);
+        // Ferme le contexte audio après la fin du son pour éviter la fuite de
+        // ressources WebAudio (limite navigateur ~6 contextes / page).
+        osc.onended = () => {
+          try { void ctx.close(); } catch { /* ignore */ }
+        };
       } catch {
         // Ignore audio errors
       }

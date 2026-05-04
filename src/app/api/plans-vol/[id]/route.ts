@@ -155,7 +155,9 @@ export async function PATCH(
                 cloture_at: null,
               })
               .eq('id', id)
-              .eq('statut', 'cloture');
+              // Le verrou plus haut peut avoir mis le statut à 'cloture' OU 'en_pause'
+              // (cas segment MEDEVAC intermédiaire). On rollback les deux.
+              .in('statut', ['cloture', 'en_pause']);
             return NextResponse.json(
               { ok: false, error: paiementResult.message || 'Paiement impossible — la clôture a été annulée.', paiement: paiementResult },
               { status: 400 }

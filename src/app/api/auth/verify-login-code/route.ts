@@ -63,7 +63,21 @@ export async function POST(req: NextRequest) {
     const profileUpdates: { email?: string } = {};
     if (row.pending_email) profileUpdates.email = row.pending_email;
     if (Object.keys(profileUpdates).length > 0) {
-      await admin.from('profiles').update(profileUpdates).eq('id', user.id);
+      const { error: updErr } = await admin.from('profiles').update(profileUpdates).eq('id', user.id);
+      if (updErr) {
+        console.error('[verify-login-code] profile update error:', updErr);
+        // On NE supprime PAS le code pour permettre à l'utilisateur de réessayer
+        // sans bloquer son compte dans un état incohérent.
+        const isUnique = updErr.code === '23505';
+        return NextResponse.json(
+          {
+            error: isUnique
+              ? 'Cet email est déjà utilisé par un autre compte. Indiquez une autre adresse.'
+              : 'Impossible d’enregistrer votre email. Réessayez ou contactez l’administrateur.',
+          },
+          { status: 409 }
+        );
+      }
     }
 
     if (ip != null) {

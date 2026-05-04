@@ -40,7 +40,9 @@ export default async function AdminFormationArchivesPage() {
   const rowsWithUrls = await Promise.all(
     ((archives || []) as ArchiveRow[]).map(async (row) => {
       const bucket = row.storage_bucket || 'documents';
-      const { data: signed } = await adminSdk.storage.from(bucket).createSignedUrl(row.storage_path, 7200);
+      // TTL court (5 min) : ces liens admin sont consommés tout de suite ;
+      // un TTL long facilitait le partage involontaire de PDF nominatifs.
+      const { data: signed } = await adminSdk.storage.from(bucket).createSignedUrl(row.storage_path, 300);
       return { row, signedUrl: signed?.signedUrl ?? null };
     }),
   );

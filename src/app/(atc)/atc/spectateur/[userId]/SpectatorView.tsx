@@ -93,10 +93,11 @@ export default function SpectatorView({
           setLastUpdate(new Date());
           
           if (payload.eventType === 'INSERT') {
-            // Nouveau plan, enrichir et ajouter
+            // Nouveau plan, enrichir et ajouter (dédoublonné par id : un INSERT
+            // rejoué + le polling ne doivent pas dupliquer la ligne).
             const newPlan = payload.new as Plan;
             const enrichedPlan = await enrichPlan(supabase, newPlan);
-            setPlans(prev => [enrichedPlan, ...prev]);
+            setPlans(prev => prev.some(p => p.id === enrichedPlan.id) ? prev : [enrichedPlan, ...prev]);
           } else if (payload.eventType === 'UPDATE') {
             const updatedPlan = payload.new as Plan;
             // Si le plan n'appartient plus à cet ATC ou a un statut terminal, le retirer

@@ -54,7 +54,14 @@ export async function GET(request: Request) {
   const cookieStore = await cookies();
   const expectedState = cookieStore.get(DISCORD_OAUTH_STATE_COOKIE)?.value;
   const cookieReturnTo = cookieStore.get(DISCORD_OAUTH_RETURN_COOKIE)?.value || '/discord-obligatoire';
-  const returnTo = cookieReturnTo.startsWith('/') ? cookieReturnTo : '/discord-obligatoire';
+  // Empêche les open redirects : '//attaquant.com' commence par '/' mais résout sur un autre host.
+  const isSafeInternalPath = (p: string) =>
+    typeof p === 'string' &&
+    p.startsWith('/') &&
+    !p.startsWith('//') &&
+    !p.startsWith('/\\') &&
+    !p.includes('\\');
+  const returnTo = isSafeInternalPath(cookieReturnTo) ? cookieReturnTo : '/discord-obligatoire';
   if (!expectedState || expectedState !== state) return redirectWithError('state_mismatch');
 
   try {

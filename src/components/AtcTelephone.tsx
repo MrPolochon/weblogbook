@@ -311,14 +311,18 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     return () => { if (checkIntervalRef.current) clearInterval(checkIntervalRef.current); };
   }, [callState, incomingCall]);
 
-  // Attacher une track audio au DOM (évite display:none qui bloque la lecture)
+  // Attacher une track audio au DOM (évite display:none qui bloque la lecture).
+  // Dédoublonne par sid : ParticipantConnected ET TrackSubscribed peuvent tous deux
+  // chercher à attacher le même track audio → sans cette garde on aurait de l'écho
+  // (deux <audio> sur le même flux).
   const attachRemoteAudioTrack = useCallback((track: { kind: string; sid?: string; attach: () => HTMLMediaElement }, room: Room) => {
     if (track.kind !== Track.Kind.Audio) return;
+    const trackSid = (track as { sid?: string }).sid ?? `audio-fallback`;
+    if (attachedAudioElementsRef.current.has(trackSid)) return;
     const audioElement = track.attach() as HTMLAudioElement;
     const container = audioContainerRef.current ?? document.body;
     container.appendChild(audioElement);
     void applyOutputDevice(audioElement);
-    const trackSid = (track as { sid?: string }).sid ?? `audio-${Date.now()}`;
     attachedAudioElementsRef.current.set(trackSid, audioElement);
     if (!audioLevelIntervalRef.current) {
       audioLevelIntervalRef.current = setInterval(() => {

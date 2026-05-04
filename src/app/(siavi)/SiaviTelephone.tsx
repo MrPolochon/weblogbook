@@ -456,15 +456,16 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         playSound('connected');
         playMessage('Communications établie');
         
-        // Attacher les tracks audio déjà publiés (si le participant a rejoint avant nous)
+        // Attacher les tracks audio déjà publiés (si le participant a rejoint avant nous).
+        // Dédoublonné par sid pour éviter l'écho dû à un attache via TrackSubscribed.
         participant.audioTrackPublications.forEach((publication) => {
           if (publication.track && publication.isSubscribed) {
-            console.log('[LiveKit SIAVI] Attaching existing audio track from', participant.identity);
+            const trackSid = (publication.track as { sid?: string }).sid ?? 'audio-fallback';
+            if (attachedAudioElementsRef.current.has(trackSid)) return;
             const audioElement = publication.track.attach() as HTMLAudioElement;
             const container = audioContainerRef.current ?? document.body;
             container.appendChild(audioElement);
             void applyOutputDevice(audioElement);
-            const trackSid = (publication.track as { sid?: string }).sid ?? `audio-${Date.now()}`;
             attachedAudioElementsRef.current.set(trackSid, audioElement);
           }
         });
@@ -488,11 +489,12 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
         console.log('[LiveKit SIAVI] Track subscribed:', track.kind, 'from', participant.identity);
         if (track.kind === Track.Kind.Audio) {
+          const trackSid = (track as { sid?: string }).sid ?? 'audio-fallback';
+          if (attachedAudioElementsRef.current.has(trackSid)) return;
           const audioElement = track.attach() as HTMLAudioElement;
           const container = audioContainerRef.current ?? document.body;
           container.appendChild(audioElement);
           void applyOutputDevice(audioElement);
-          const trackSid = (track as { sid?: string }).sid ?? `audio-${Date.now()}`;
           attachedAudioElementsRef.current.set(trackSid, audioElement);
           
           if (!audioLevelIntervalRef.current) {
@@ -582,11 +584,12 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         existingParticipants.forEach(p => {
           p.audioTrackPublications.forEach(pub => {
             if (pub.track && pub.track.kind === Track.Kind.Audio) {
+              const trackSid = (pub.track as { sid?: string }).sid ?? 'audio-fallback';
+              if (attachedAudioElementsRef.current.has(trackSid)) return;
               const audioElement = pub.track.attach() as HTMLAudioElement;
               const container = audioContainerRef.current ?? document.body;
               container.appendChild(audioElement);
               void applyOutputDevice(audioElement);
-              const trackSid = (pub.track as { sid?: string }).sid ?? `audio-${Date.now()}`;
               attachedAudioElementsRef.current.set(trackSid, audioElement);
             }
           });

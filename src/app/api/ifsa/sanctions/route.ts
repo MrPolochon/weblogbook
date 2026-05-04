@@ -115,19 +115,13 @@ export async function POST(req: NextRequest) {
         .single();
       
       if (compteError || !compteDestination) {
-        // Essayer une recherche partielle pour aider l'utilisateur
-        const { data: comptesProches } = await admin.from('felitz_comptes')
-          .select('vban')
-          .ilike('vban', `%${vbanCleaned.slice(-8)}%`)
-          .limit(3);
-        
-        const suggestion = comptesProches && comptesProches.length > 0 
-          ? ` VBANs similaires trouvés : ${comptesProches.map(c => c.vban).join(', ')}`
-          : '';
-        
-        return NextResponse.json({ 
-          error: `VBAN "${vbanCleaned}" introuvable.${suggestion}` 
-        }, { status: 400 });
+        // On NE renvoie PAS de "VBANs similaires" : ça leakait des identifiants de
+        // comptes Felitz à n'importe quel utilisateur ayant l'autorisation IFSA.
+        // Si besoin de debug, l'admin peut chercher dans les logs serveur.
+        return NextResponse.json(
+          { error: `VBAN "${vbanCleaned}" introuvable. Vérifiez le code et réessayez.` },
+          { status: 400 }
+        );
       }
       compteDestinationId = compteDestination.id;
     }

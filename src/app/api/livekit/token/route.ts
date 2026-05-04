@@ -7,12 +7,26 @@ import { rateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
+// CORS strict : exige une origine connue (variable NEXT_PUBLIC_APP_URL).
+// On évite '*' parce que cette route délivre un JWT LiveKit sensible.
 const allowedOrigin = process.env.NEXT_PUBLIC_APP_URL || '';
 const corsHeaders = {
-  'Access-Control-Allow-Origin': allowedOrigin || '*',
+  'Access-Control-Allow-Origin': allowedOrigin || 'null',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
+
+// Liste blanche des préfixes de roomName autorisés.
+// - call-<uuid> : appels téléphoniques (vérifiés en DB plus bas)
+// - vhf-<freq>  : conférences VHF (à étendre si besoin)
+const ALLOWED_ROOM_PREFIXES = ['call-', 'vhf-'];
+
+function isValidRoomName(name: string): boolean {
+  if (!name || typeof name !== 'string') return false;
+  if (name.length > 100) return false;
+  if (!/^[A-Za-z0-9_.-]+$/.test(name)) return false;
+  return ALLOWED_ROOM_PREFIXES.some((p) => name.startsWith(p));
+}
 
 export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
@@ -33,7 +47,8 @@ export async function POST(request: NextRequest) {
       );
       const { data: { user: tokenUser }, error: tokenError } = await supabaseAdmin.auth.getUser(accessToken);
       if (tokenError) {
-        console.error('[LiveKit Token] Bearer auth failed:', tokenError.message, '- Token length:', accessToken.length);
+        // On évite de logger longueur/préfixe du token pour ne pas faciliter le profilage d'attaques.
+        console.error('[LiveKit Token] Bearer auth failed');
       }
       user = tokenUser;
     } else {
@@ -54,8 +69,10 @@ export async function POST(request: NextRequest) {
     const { roomName, participantName } = body;
 
     if (!roomName) {
-      console.error('[LiveKit Token] roomName manquant');
       return NextResponse.json({ error: 'roomName requis' }, { status: 400, headers: corsHeaders });
+    }
+    if (!isValidRoomName(roomName)) {
+      return NextResponse.json({ error: 'roomName invalide' }, { status: 400, headers: corsHeaders });
     }
 
     if (roomName.startsWith('call-')) {
@@ -71,6 +88,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Non autorisé pour cet appel' }, { status: 403, headers: corsHeaders });
       }
     }
+    // NB: pour 'vhf-<freq>', toute personne authentifiée peut publier sur la fréquence
+    // (comportement radio = auditeur libre, parlant libre). Si tu veux une autorisation
+    // par fréquence (ex. seuls les ATC), c'est à ajouter ici.
 
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;

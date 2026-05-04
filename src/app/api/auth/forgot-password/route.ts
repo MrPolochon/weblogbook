@@ -74,17 +74,34 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Réponse générique uniforme (anti-énumération de comptes) :
+    // qu'on ait trouvé ou non un compte avec email, on renvoie le même message
+    // et on n'expose plus le drapeau suggest_admin (qui leakait l'existence du compte).
     if (!userId || !profileEmail) {
       return NextResponse.json({
         ok: true,
         message: 'Si un compte avec un email enregistré correspond, un lien de réinitialisation a été envoyé.',
-        suggest_admin: !userId ? false : true,
       });
     }
 
+    // Invalide les anciens tokens encore valides pour ce compte avant d'en créer un nouveau.
+    try {
+      await admin
+        .from('password_reset_tokens')
+        .delete()
+        .eq('user_id', userId)
+        .gt('expires_at', new Date().toISOString());
+    } catch { /* ignore */ }
+
     const token = randomToken();
     const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
-    await admin.from('password_reset_tokens').insert({ token, user_id: userId, expires_at: expiresAt.toISOString() });
+    const { error: insertErr } = await admin
+      .from('password_reset_tokens')
+      .insert({ token, user_id: userId, expires_at: expiresAt.toISOString() });
+    if (insertErr) {
+      console.error('[forgot-password] insert token error:', insertErr);
+      return NextResponse.json({ error: 'Erreur serveur, réessayez plus tard.' }, { status: 500 });
+    }
 
     const baseUrl = req.headers.get('x-forwarded-proto') && req.headers.get('x-forwarded-host')
       ? `${req.headers.get('x-forwarded-proto')}://${req.headers.get('x-forwarded-host')}`
@@ -94,6 +111,12 @@ export async function POST(req: NextRequest) {
     const { ok, error } = await sendPasswordResetLinkEmail(profileEmail, resetUrl);
     if (!ok) {
       console.error('[forgot-password] Email send error:', error);
+      // Ne pas laisser un token orphelin : on supprime le token créé et on signale l'échec.
+      try { await admin.from('password_reset_tokens').delete().eq('token', token); } catch { /* ignore */ }
+      return NextResponse.json(
+        { error: "Impossible d'envoyer l'email pour le moment. Réessayez plus tard ou utilisez la demande administrateur." },
+        { status: 502 }
+      );
     }
     return NextResponse.json({
       ok: true,

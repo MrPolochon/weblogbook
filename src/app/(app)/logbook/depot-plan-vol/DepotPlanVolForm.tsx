@@ -183,44 +183,60 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     }
   }, [aeroport_depart, avionsCompagnie, compagnie_avion_id]);
 
-  // Charger les SID quand aéroport de départ change (IFR)
+  // Charger les SID quand aéroport de départ change (IFR).
+  // AbortController : si l'utilisateur change rapidement d'aéroport, l'ancienne réponse
+  // ne doit pas écraser la nouvelle (race condition → SID/STAR de la mauvaise piste).
   useEffect(() => {
     if (!aeroport_depart || type_vol !== 'IFR') {
       setSidList([]);
       setSelectedSidRoute(null);
       return;
     }
-    fetch(`/api/sid-star?aeroport=${encodeURIComponent(aeroport_depart)}&type=SID`)
+    const ctrl = new AbortController();
+    fetch(`/api/sid-star?aeroport=${encodeURIComponent(aeroport_depart)}&type=SID`, { signal: ctrl.signal })
       .then((res) => res.json())
       .then((data) => {
+        if (ctrl.signal.aborted) return;
         if (Array.isArray(data)) setSidList(data);
         else setSidList([]);
       })
-      .catch(() => setSidList([]));
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        setSidList([]);
+        toast.error('Impossible de charger les SID. Vérifiez votre connexion.');
+      });
     setSidDepart('');
     setSelectedSidRoute(null);
     setManualRoutePart('');
     setSidCustomMode(false);
+    return () => ctrl.abort();
   }, [aeroport_depart, type_vol]);
 
-  // Charger les STAR quand aéroport d'arrivée change (IFR)
+  // Charger les STAR quand aéroport d'arrivée change (IFR) — même protection AbortController.
   useEffect(() => {
     if (!aeroport_arrivee || type_vol !== 'IFR') {
       setStarList([]);
       setSelectedStarRoute(null);
       return;
     }
-    fetch(`/api/sid-star?aeroport=${encodeURIComponent(aeroport_arrivee)}&type=STAR`)
+    const ctrl = new AbortController();
+    fetch(`/api/sid-star?aeroport=${encodeURIComponent(aeroport_arrivee)}&type=STAR`, { signal: ctrl.signal })
       .then((res) => res.json())
       .then((data) => {
+        if (ctrl.signal.aborted) return;
         if (Array.isArray(data)) setStarList(data);
         else setStarList([]);
       })
-      .catch(() => setStarList([]));
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        setStarList([]);
+        toast.error('Impossible de charger les STAR. Vérifiez votre connexion.');
+      });
     setStarArrivee('');
     setSelectedStarRoute(null);
     setManualRoutePart('');
     setStarCustomMode(false);
+    return () => ctrl.abort();
   }, [aeroport_arrivee, type_vol]);
 
   // Construire route_ifr : SID et STAR viennent des sélecteurs, la partie manuelle est éditable
@@ -235,13 +251,18 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       setTarifsLiaisons([]);
       return;
     }
-    
-    fetch(`/api/tarifs-liaisons?compagnie_id=${selectedCompagnieId}`)
+    const ctrl = new AbortController();
+    fetch(`/api/tarifs-liaisons?compagnie_id=${selectedCompagnieId}`, { signal: ctrl.signal })
       .then(res => res.json())
       .then(data => {
+        if (ctrl.signal.aborted) return;
         if (Array.isArray(data)) setTarifsLiaisons(data);
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        toast.error('Impossible de charger les tarifs de la compagnie.');
+      });
+    return () => ctrl.abort();
   }, [selectedCompagnieId]);
 
   // Charger les passagers disponibles quand l'aéroport de départ change
@@ -250,13 +271,18 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       setPassagersAeroport(null);
       return;
     }
-    
-    fetch(`/api/aeroport-passagers?code_oaci=${aeroport_depart}`)
+    const ctrl = new AbortController();
+    fetch(`/api/aeroport-passagers?code_oaci=${aeroport_depart}`, { signal: ctrl.signal })
       .then(res => res.json())
       .then(data => {
+        if (ctrl.signal.aborted) return;
         if (data && data.code_oaci) setPassagersAeroport(data);
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        toast.error('Impossible de récupérer les passagers en attente.');
+      });
+    return () => ctrl.abort();
   }, [aeroport_depart]);
 
   // Charger le cargo disponible quand l'aéroport de départ change

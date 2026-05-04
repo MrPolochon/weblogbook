@@ -52,6 +52,7 @@ export async function POST(request: Request) {
     const ad = String(aeroport_depart || '').toUpperCase();
     const aa = String(aeroport_arrivee || '').toUpperCase();
     if (!CODES_OACI_VALIDES.has(ad) || !CODES_OACI_VALIDES.has(aa)) return NextResponse.json({ error: 'Aéroports invalides.' }, { status: 400 });
+    if (ad === aa) return NextResponse.json({ error: 'L’aéroport de départ et l’aéroport d’arrivée doivent être différents.' }, { status: 400 });
     if (!numero_vol || typeof numero_vol !== 'string' || !String(numero_vol).trim()) return NextResponse.json({ error: 'Numéro de vol requis.' }, { status: 400 });
     const t = parseInt(String(temps_prev_min), 10);
     if (isNaN(t) || t < 1) return NextResponse.json({ error: 'Temps prévu invalide (minutes ≥ 1).' }, { status: 400 });

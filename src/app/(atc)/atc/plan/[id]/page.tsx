@@ -99,11 +99,32 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
   const plan = { ...planData, pilote, compagnie, avion };
 
   const { data: atcSession } = await supabase.from('atc_sessions').select('aeroport, position').eq('user_id', user.id).single();
-  if (plan.automonitoring && !atcSession) redirect('/atc');
 
   const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
   const isAdmin = profile?.role === 'admin';
   const isHolder = plan.current_holder_user_id === user.id;
+  const isPilote = plan.pilote_id === user.id;
+
+  // Contrôle d'accès LECTURE :
+  // - autosurveillance : tout utilisateur connecté peut voir le plan (règle métier)
+  // - pilote du plan : OK
+  // - current_holder : OK
+  // - admin : OK
+  // - ATC avec session en service : OK (pour pouvoir reprendre/observer)
+  // - sinon : 404 (on évite "403" pour ne pas confirmer l'existence d'un plan)
+  const canView =
+    plan.automonitoring === true ||
+    isPilote ||
+    isHolder ||
+    isAdmin ||
+    Boolean(atcSession);
+  if (!canView) notFound();
+
+  // Pour les pages d'autosurveillance, un admin sans session ATC peut consulter
+  // mais ne peut pas prendre le plan. On ne redirige plus systématiquement.
+  if (plan.automonitoring && !atcSession && !isAdmin && !isPilote && !isHolder) {
+    // Lecture libre autorisée par règle métier — pas de redirect.
+  }
   let holderSessionActive = false;
   if (plan.current_holder_user_id) {
     const { data: holderSession } = await admin.from('atc_sessions')
@@ -356,13 +377,19 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
             <Radio className="h-5 w-5 text-purple-600" />
             <h3 className="font-semibold text-slate-900">Vol en autosurveillance</h3>
           </div>
-          <p className="text-slate-600 text-sm mb-4">Ce vol n&apos;est actuellement pas contrôlé. Vous pouvez le prendre en charge.</p>
-          <div className="flex items-center gap-3">
-            <PrendrePlanButton planId={plan.id} aeroport={atcSession!.aeroport} position={atcSession!.position} />
-            <Link href="/atc" className="text-sm font-medium text-slate-600 hover:text-slate-900">
-              Retour
-            </Link>
-          </div>
+          {atcSession ? (
+            <>
+              <p className="text-slate-600 text-sm mb-4">Ce vol n&apos;est actuellement pas contrôlé. Vous pouvez le prendre en charge.</p>
+              <div className="flex items-center gap-3">
+                <PrendrePlanButton planId={plan.id} aeroport={atcSession.aeroport} position={atcSession.position} />
+                <Link href="/atc" className="text-sm font-medium text-slate-600 hover:text-slate-900">
+                  Retour
+                </Link>
+              </div>
+            </>
+          ) : (
+            <p className="text-slate-600 text-sm">Ce vol n&apos;est actuellement pas contrôlé (lecture seule). Démarrez une session ATC pour le prendre en charge.</p>
+          )}
         </div>
       )}
 

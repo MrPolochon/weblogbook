@@ -28,7 +28,15 @@ export async function GET(request: Request) {
   const state = randomBytes(24).toString('hex');
   const requestUrl = new URL(request.url);
   const requestedReturnTo = requestUrl.searchParams.get('returnTo') || '/discord-obligatoire';
-  const returnTo = requestedReturnTo.startsWith('/') ? requestedReturnTo : '/discord-obligatoire';
+  // Empêche les open redirects : '//attaquant.com' commence par '/' mais résout vers un autre host.
+  // On exige un chemin relatif strict (un seul '/' initial, pas de '\').
+  const isSafeInternalPath = (p: string) =>
+    typeof p === 'string' &&
+    p.startsWith('/') &&
+    !p.startsWith('//') &&
+    !p.startsWith('/\\') &&
+    !p.includes('\\');
+  const returnTo = isSafeInternalPath(requestedReturnTo) ? requestedReturnTo : '/discord-obligatoire';
 
   const discordUrl = new URL('https://discord.com/oauth2/authorize');
   discordUrl.searchParams.set('client_id', clientId);

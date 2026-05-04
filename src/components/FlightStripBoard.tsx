@@ -72,9 +72,20 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
   const isCenter = atcPosition === 'Center';
   const [transferDialog, setTransferDialog] = useState<string | null>(null);
 
-  // État local pour mises à jour optimistes (déplacement immédiat au drop)
+  // État local pour mises à jour optimistes (déplacement immédiat au drop).
+  // On ne resync l'état local depuis les props QUE si l'identité des strips ou leur
+  // ordre/zone change réellement (sinon un nouveau tableau identique en contenu mais
+  // de référence différente déclenchait un reset et faisait revenir le strip à sa
+  // position serveur en plein drag).
   const [localStrips, setLocalStrips] = useState<StripData[]>(strips);
-  useEffect(() => { setLocalStrips(strips); }, [strips]);
+  const stripsSignature = useMemo(
+    () => strips.map(s => `${s.id}:${s.strip_zone ?? 'null'}:${s.strip_order}`).join('|'),
+    [strips]
+  );
+  useEffect(() => {
+    setLocalStrips(strips);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stripsSignature]);
 
   // ═══════════════════════════════════════════════
   //  DRAG & DROP

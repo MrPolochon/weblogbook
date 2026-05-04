@@ -21,7 +21,22 @@ export async function middleware(request: NextRequest) {
   }
 
   const authHeader = request.headers.get('authorization');
-  if (pathname.startsWith('/api/') && authHeader?.startsWith('Bearer ')) {
+  // Whitelist stricte des routes API qui peuvent être appelées avec un Bearer JWT
+  // (apps externes type radio VHF, LiveKit token, sondes ATC).
+  // Toute autre route avec Bearer doit passer par le flux session classique :
+  // sinon n'importe quel header "Authorization: Bearer xxx" bypassait toute la sécurité
+  // (security_logout, login_admin_only, blocage Discord, etc.).
+  const BEARER_BYPASS_PREFIXES = [
+    '/api/livekit/token',
+    '/api/livekit/status',
+    '/api/vhf/frequencies',
+    '/api/atc/online',
+  ];
+  if (
+    pathname.startsWith('/api/') &&
+    authHeader?.startsWith('Bearer ') &&
+    BEARER_BYPASS_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'))
+  ) {
     return NextResponse.next({ request });
   }
 
@@ -69,8 +84,9 @@ export async function middleware(request: NextRequest) {
   const discordRequired = isDiscordLinkRequired();
 
   const [securityResult, siteConfigResult, discordResult] = await Promise.all([
-    // 1) Security logout check
-    Promise.resolve(admin.from('security_logout').select('user_id').eq('user_id', user.id).maybeSingle()).catch(() => ({ data: null })),
+    // 1) Security logout check (fail-closed : en cas d'erreur DB on déconnecte par sécurité)
+    Promise.resolve(admin.from('security_logout').select('user_id').eq('user_id', user.id).maybeSingle())
+      .catch(() => ({ error: true, data: null })),
 
     // 2) Site config (admin-only login)
     Promise.resolve(admin.from('site_config').select('login_admin_only').eq('id', 1).maybeSingle()).catch(() => ({ data: null })),
@@ -87,14 +103,17 @@ export async function middleware(request: NextRequest) {
       : Promise.resolve(null),
   ]);
 
-  // Handle security logout
+  // Handle security logout (fail-closed : si erreur de lecture, on déconnecte par sécurité)
+  const securityErr = (securityResult as { error?: boolean })?.error === true;
   const logoutRow = (securityResult as { data: { user_id: string } | null })?.data;
-  if (logoutRow) {
-    await admin.from('security_logout').delete().eq('user_id', user.id);
+  if (securityErr || logoutRow) {
+    if (logoutRow) {
+      try { await admin.from('security_logout').delete().eq('user_id', user.id); } catch { /* ignore */ }
+    }
     await supabase.auth.signOut();
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    url.searchParams.set('message', 'security_logout');
+    url.searchParams.set('message', securityErr ? 'inactivity' : 'security_logout');
     return NextResponse.redirect(url);
   }
 

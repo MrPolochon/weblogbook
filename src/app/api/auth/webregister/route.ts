@@ -7,6 +7,22 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
+    // Authentification du bot Discord via secret partagé.
+    // Le bot doit envoyer le header `X-Webregister-Token` (ou `Authorization: Bearer <token>`)
+    // dont la valeur correspond à la variable d'env WEBREGISTER_BOT_TOKEN.
+    const expected = process.env.WEBREGISTER_BOT_TOKEN;
+    if (!expected) {
+      console.error('[webregister] WEBREGISTER_BOT_TOKEN non configuré côté serveur');
+      return NextResponse.json({ error: 'Endpoint désactivé (configuration manquante).' }, { status: 503 });
+    }
+    const headerToken = request.headers.get('x-webregister-token');
+    const auth = request.headers.get('authorization');
+    const bearer = auth?.startsWith('Bearer ') ? auth.slice(7).trim() : null;
+    const provided = headerToken?.trim() || bearer;
+    if (!provided || provided !== expected) {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { identifiant, password, discord_id, discord_username, discord_avatar } = body;
 

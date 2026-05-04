@@ -1,14 +1,19 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 export default function AccepterPlanButton({ planId }: { planId: string }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
+  // Garde synchrone : empêche le 2e clic d'envoyer un PATCH avant que React
+  // ait re-rendu avec disabled={loading}.
+  const busyRef = useRef(false);
 
   async function handleClick() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setLoading(true);
     try {
       const res = await fetch(`/api/plans-vol/${planId}`, {
@@ -23,6 +28,7 @@ export default function AccepterPlanButton({ planId }: { planId: string }) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoading(false);
+      busyRef.current = false;
     }
   }
 

@@ -118,7 +118,7 @@ export async function GET(
 
     const { data: plan, error } = await admin
       .from('plans_vol')
-      .select('code_transpondeur, mode_transpondeur, pilote_id, statut')
+      .select('code_transpondeur, mode_transpondeur, pilote_id, statut, current_holder_user_id, automonitoring')
       .eq('id', id)
       .single();
 
@@ -126,14 +126,15 @@ export async function GET(
       return NextResponse.json({ error: 'Plan de vol non trouvé' }, { status: 404 });
     }
 
-    // Seul le pilote du vol ou un ATC en service peut lire le transpondeur
-    if (plan.pilote_id !== user.id) {
-      const { data: atcSession } = await admin.from('atc_sessions')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      const { data: profile } = await (await createClient()).from('profiles').select('role').eq('id', user.id).single();
-      if (!atcSession && profile?.role !== 'admin') {
+    // Restreindre la lecture du code transpondeur :
+    // - pilote du vol
+    // - ATC qui contrôle actuellement ce plan (current_holder)
+    // - admin
+    // Un ATC en service mais qui ne contrôle pas ce plan ne doit PAS pouvoir
+    // lire les codes transpondeur de tous les vols.
+    if (plan.pilote_id !== user.id && plan.current_holder_user_id !== user.id) {
+      const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single();
+      if (profile?.role !== 'admin') {
         return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
       }
     }
