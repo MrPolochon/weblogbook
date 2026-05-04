@@ -7,19 +7,28 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    // Authentification du bot Discord via secret partagé.
-    // Le bot doit envoyer le header `X-Webregister-Token` (ou `Authorization: Bearer <token>`)
-    // dont la valeur correspond à la variable d'env WEBREGISTER_BOT_TOKEN.
-    const expected = process.env.WEBREGISTER_BOT_TOKEN;
-    if (!expected) {
-      console.error('[webregister] WEBREGISTER_BOT_TOKEN non configuré côté serveur');
+    // Authentification du bot ATIS via le secret partagé déjà existant
+    // ATIS_WEBHOOK_SECRET (le bot l'envoie déjà via "Authorization: Bearer <secret>"
+    // ou "X-ATIS-Secret: <secret>" pour les autres endpoints comme /api/atc/atis/bot-sync).
+    // On accepte aussi WEBREGISTER_BOT_TOKEN si défini pour rétrocompatibilité / autre bot.
+    const atisSecret = process.env.ATIS_WEBHOOK_SECRET;
+    const fallbackSecret = process.env.WEBREGISTER_BOT_TOKEN;
+    if (!atisSecret && !fallbackSecret) {
+      console.error('[webregister] Aucun secret configuré (ATIS_WEBHOOK_SECRET ou WEBREGISTER_BOT_TOKEN)');
       return NextResponse.json({ error: 'Endpoint désactivé (configuration manquante).' }, { status: 503 });
     }
-    const headerToken = request.headers.get('x-webregister-token');
     const auth = request.headers.get('authorization');
     const bearer = auth?.startsWith('Bearer ') ? auth.slice(7).trim() : null;
-    const provided = headerToken?.trim() || bearer;
-    if (!provided || provided !== expected) {
+    const xAtis = request.headers.get('x-atis-secret')?.trim() || null;
+    const xWebreg = request.headers.get('x-webregister-token')?.trim() || null;
+    const provided = bearer || xAtis || xWebreg;
+    const isValid = Boolean(
+      provided && (
+        (atisSecret && provided === atisSecret) ||
+        (fallbackSecret && provided === fallbackSecret)
+      )
+    );
+    if (!isValid) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
     }
 
