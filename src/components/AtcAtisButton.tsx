@@ -57,6 +57,10 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   const [guilds, setGuilds] = useState<{ id: string; name: string }[]>([]);
   const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
   const [savingConfig, setSavingConfig] = useState(false);
+  // Multi-bot ATIS : instance_id Discord en cours de configuration (1 ou 2).
+  // Le panneau permet a un ATC de configurer le serveur+canal de chaque bot
+  // pour que les deux puissent diffuser en parallele.
+  const [configInstanceId, setConfigInstanceId] = useState<number>(1);
   const configInitializedRef = useRef(false);
   const alarmFiredRef = useRef(false);
   const [botReachable, setBotReachable] = useState<boolean | null>(null);
@@ -72,7 +76,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       const [statusRes, dataRes, configRes, guildsRes] = await Promise.all([
         fetch('/api/atc/atis/status'),
         fetch('/api/atc/atis/atis-data'),
-        fetch('/api/atc/atis/config'),
+        fetch(`/api/atc/atis/config?instance_id=${configInstanceId}`),
         fetch('/api/atc/atis/discord-guilds'),
       ]);
       const statusData = await statusRes.json();
@@ -117,7 +121,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       setBotReachable(false);
       setBotErrorDetail('Erreur réseau');
     }
-  }, []);
+  }, [configInstanceId]);
 
   const fetchChannels = useCallback(async (guildId: string) => {
     try {
@@ -317,6 +321,16 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     }
   }, [isOpen, fetchStatus]);
 
+  // Quand l'utilisateur change l'instance configuree (Bot 1 / Bot 2), on
+  // recharge la config Discord correspondante et on remet a zero les selects.
+  useEffect(() => {
+    if (!isOpen) return;
+    configInitializedRef.current = false;
+    setSelectedGuildId('');
+    setSelectedChannelId('');
+    fetchStatus();
+  }, [configInstanceId, isOpen, fetchStatus]);
+
   const saveDiscordConfig = async () => {
     const guildId = selectedGuildId || guilds[0]?.id;
     const channelId = selectedChannelId || channels[0]?.id;
@@ -330,7 +344,13 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     try {
       await apiCall('/api/atc/atis/config', {
         method: 'PATCH',
-        body: { discord_guild_id: guildId, discord_guild_name: guildName, discord_channel_id: channelId, discord_channel_name: channelName },
+        body: {
+          instance_id: configInstanceId,
+          discord_guild_id: guildId,
+          discord_guild_name: guildName,
+          discord_channel_id: channelId,
+          discord_channel_name: channelName,
+        },
       });
       setDiscordConfig({ discord_guild_id: guildId, discord_guild_name: guildName, discord_channel_id: channelId, discord_channel_name: channelName });
     } catch (e) {
@@ -453,6 +473,33 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
           <div className={`flex items-center gap-2 mb-3 ${isDark ? 'text-slate-100' : 'text-slate-100'}`}>
             <Headphones className={`h-5 w-5 ${textMuted}`} />
             <span className="font-semibold text-base">Discord</span>
+          </div>
+          {/* Selecteur d'instance Bot ATIS (multi-bot) */}
+          <div className="mb-3">
+            <label className={`block text-sm font-medium ${textMuted} mb-1`}>Bot ATIS à configurer</label>
+            <div className="flex gap-2">
+              {[1, 2].map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setConfigInstanceId(id)}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition ${
+                    configInstanceId === id
+                      ? isDark
+                        ? 'bg-sky-600 text-white shadow-md shadow-sky-950/40'
+                        : 'bg-sky-600 text-white'
+                      : isDark
+                        ? 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700'
+                        : 'bg-slate-600 text-slate-100 border border-slate-500 hover:bg-slate-500'
+                  }`}
+                >
+                  Bot {id}
+                </button>
+              ))}
+            </div>
+            <p className={`mt-1 text-xs ${textMuted}`}>
+              Chaque bot peut diffuser un ATIS sur un canal vocal différent en parallèle.
+            </p>
           </div>
           <div className="space-y-3">
             <div>
