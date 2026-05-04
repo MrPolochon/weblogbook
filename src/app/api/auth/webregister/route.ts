@@ -70,9 +70,18 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (existingLink) {
+      // Récupère l'identifiant du compte déjà lié pour pouvoir le rappeler à l'utilisateur.
+      const { data: linkedProfile } = await admin
+        .from('profiles')
+        .select('identifiant')
+        .eq('id', existingLink.user_id)
+        .maybeSingle();
+      const linkedIdentifiant = linkedProfile?.identifiant ?? null;
+
       return NextResponse.json({
-        error: `Tu as deja un compte lie a ce Discord. Connecte-toi avec tes identifiants habituels.`,
+        error: 'Un compte est deja enregistre avec ce compte Discord.',
         already_linked: true,
+        identifiant: linkedIdentifiant,
       }, { status: 409 });
     }
 
