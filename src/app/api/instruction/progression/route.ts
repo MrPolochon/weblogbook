@@ -7,6 +7,7 @@ import {
   canInstructorManageEleveForFormation,
   getInstructionCapabilities,
 } from '@/lib/instruction-permissions';
+import { notifyUser } from '@/lib/notifications';
 
 function isValidModule(licenceCode: string, moduleCode: string): boolean {
   const program = INSTRUCTION_PROGRAMS.find((p) => p.licenceCode === licenceCode);
@@ -103,6 +104,24 @@ export async function PATCH(request: Request) {
       onConflict: 'eleve_id,licence_code,module_code',
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    // Notification : module nouvellement valide -> ping eleve.
+    const wasCompleted = Boolean(existingRow?.completed);
+    if (completed && !wasCompleted) {
+      try {
+        const program = INSTRUCTION_PROGRAMS.find((p) => p.licenceCode === licenceCode);
+        const moduleTitle = program?.modules.find((m) => m.code === moduleCode)?.title || moduleCode;
+        const { data: instr } = await admin
+          .from('profiles').select('identifiant').eq('id', user.id).maybeSingle();
+        await notifyUser(eleveId, {
+          type: 'module_validated',
+          title: `Module ${moduleCode} valide`,
+          body: `${instr?.identifiant ?? 'Votre instructeur'} a valide le module "${moduleTitle}" de votre formation ${licenceCode}.${noteVal ? `\n\nCommentaire : ${noteVal}` : ''}`,
+          link: '/instruction',
+        });
+      } catch (e) { console.error('notifyUser module_validated:', e); }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error('instruction/progression PATCH:', e);

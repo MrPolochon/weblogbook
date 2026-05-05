@@ -9,6 +9,7 @@ import {
   canOpenFormationAsInstructor,
   getInstructionCapabilities,
 } from '@/lib/instruction-permissions';
+import { notifyUser } from '@/lib/notifications';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 type InstructionLinkTarget = {
@@ -67,6 +68,18 @@ async function attachExistingStudent(
   if (!felitzExistants?.length) {
     await ensureComptePersonnel(admin, target.id);
   }
+
+  try {
+    const { data: instr } = await admin
+      .from('profiles').select('identifiant').eq('id', instructorId).maybeSingle();
+    await notifyUser(target.id, {
+      type: 'transfer_in',
+      title: `Formation ${requestedLicence} ouverte`,
+      body: `${instr?.identifiant ?? 'Un instructeur'} vous a inscrit en formation ${requestedLicence} et est votre instructeur referent.`,
+      link: '/instruction',
+    });
+  } catch (e) { console.error('notifyUser eleves attach:', e); }
+
   return NextResponse.json({ ok: true, id: target.id });
 }
 

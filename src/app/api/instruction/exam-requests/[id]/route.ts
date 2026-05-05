@@ -5,6 +5,7 @@ import { logActivity, getClientIp } from '@/lib/activity-log';
 import { getExaminerPoolUserIds, userCanConcludeThisExam } from '@/lib/instruction-permissions';
 import { notifyExamInstructorReassignment } from '@/lib/instruction-exam-reassign-notify';
 import { selectExamInstructorByWorkload } from '@/lib/instruction-exam-assign';
+import { notifyUser } from '@/lib/notifications';
 
 const VALID_STATUSES = ['assigne', 'accepte', 'en_cours', 'termine', 'refuse'] as const;
 
@@ -58,6 +59,14 @@ export async function PATCH(
         .eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       logActivity({ userId: user.id, userIdentifiant: me?.identifiant, action: 'exam_start_session', targetType: 'exam_request', targetId: id, details: { licence_code: row.licence_code, requester_id: row.requester_id }, ip: getClientIp(request) });
+      try {
+        await notifyUser(row.requester_id, {
+          type: 'exam_started',
+          title: `Examen ${row.licence_code} demarre`,
+          body: `Votre examinateur ${me?.identifiant ?? ''} a demarre la session d'examen ${row.licence_code}. Bonne chance !`,
+          link: '/instruction',
+        });
+      } catch (e) { console.error('notifyUser exam_started:', e); }
       return NextResponse.json({ ok: true });
     }
 
@@ -149,6 +158,14 @@ export async function PATCH(
         });
 
         logActivity({ userId: user.id, userIdentifiant: me?.identifiant, action: 'exam_passed', targetType: 'exam_request', targetId: id, details: { licence_code: row.licence_code, requester_id: row.requester_id, licence_id: licence.id }, ip: getClientIp(request) });
+        try {
+          await notifyUser(row.requester_id, {
+            type: 'exam_passed',
+            title: `Examen ${row.licence_code} reussi !`,
+            body: `Felicitations, vous avez obtenu votre licence ${row.licence_code}. Delivree par ${me?.identifiant ?? 'votre examinateur'}.`,
+            link: '/compte',
+          });
+        } catch (e) { console.error('notifyUser exam_passed:', e); }
         return NextResponse.json({ ok: true, licence_id: licence.id });
       }
 
@@ -193,6 +210,16 @@ export async function PATCH(
       }
 
       logActivity({ userId: user.id, userIdentifiant: me?.identifiant, action: 'exam_failed', targetType: 'exam_request', targetId: id, details: { licence_code: row.licence_code, requester_id: row.requester_id, dossier_conserve: dossierConserve }, ip: getClientIp(request) });
+      try {
+        await notifyUser(row.requester_id, {
+          type: 'exam_failed',
+          title: `Examen ${row.licence_code} echoue`,
+          body: dossierConserve
+            ? `Vous n'avez pas reussi votre examen ${row.licence_code}. Votre dossier a ete conserve : contactez ${me?.identifiant ?? 'votre examinateur'} pour repasser l'epreuve.`
+            : `Vous n'avez pas reussi votre examen ${row.licence_code}. Le dossier n'a pas ete conserve, vous pouvez refaire une nouvelle demande.`,
+          link: '/instruction',
+        });
+      } catch (e) { console.error('notifyUser exam_failed:', e); }
       return NextResponse.json({ ok: true });
     }
 
@@ -250,6 +277,26 @@ export async function PATCH(
           console.error('notifyExamInstructorReassignment (refus):', e);
         }
 
+        try {
+          const { data: req } = await admin
+            .from('profiles').select('identifiant').eq('id', row.requester_id).maybeSingle();
+          const reqIdent = req?.identifiant || 'un eleve';
+          await Promise.all([
+            notifyUser(newInstructorId, {
+              type: 'exam_reassigned_new',
+              title: `Demande d'examen ${row.licence_code} reassignee`,
+              body: `Une demande d'examen ${row.licence_code} de ${reqIdent} vous a ete reassignee suite au refus de l'instructeur precedent.`,
+              link: '/instruction',
+            }),
+            notifyUser(row.instructeur_id, {
+              type: 'exam_reassigned_old',
+              title: `Refus enregistre`,
+              body: `Vous avez refuse la demande d'examen ${row.licence_code} de ${reqIdent}. Elle a ete reassignee a un autre examinateur.`,
+              link: '/instruction',
+            }),
+          ]);
+        } catch (e) { console.error('notifyUser exam_reassigned:', e); }
+
         return NextResponse.json({ ok: true, reassigned: true });
       }
 
@@ -271,6 +318,15 @@ export async function PATCH(
         contenu: `Votre demande d'examen ${row.licence_code} n'a pas pu être assignée : tous les instructeurs ont décliné. Veuillez réessayer plus tard.`,
       });
 
+      try {
+        await notifyUser(row.requester_id, {
+          type: 'exam_unassigned',
+          title: `Examen ${row.licence_code} : aucun examinateur disponible`,
+          body: `Votre demande d'examen ${row.licence_code} n'a pas pu etre assignee : tous les examinateurs ont decline. Veuillez reessayer plus tard.`,
+          link: '/instruction',
+        });
+      } catch (e) { console.error('notifyUser exam_unassigned:', e); }
+
       return NextResponse.json({ ok: true, reassigned: false });
     }
 
@@ -285,6 +341,18 @@ export async function PATCH(
       .update(update)
       .eq('id', id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    if (statut === 'accepte') {
+      try {
+        await notifyUser(row.requester_id, {
+          type: 'exam_accepted',
+          title: `Examen ${row.licence_code} accepte`,
+          body: `${me?.identifiant ?? 'Votre examinateur'} a accepte votre demande d'examen ${row.licence_code}.${responseNote ? `\n\nNote : ${responseNote}` : ''}`,
+          link: '/instruction',
+        });
+      } catch (e) { console.error('notifyUser exam_accepted:', e); }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error('instruction/exam-requests/[id] PATCH:', e);
@@ -305,7 +373,7 @@ export async function DELETE(
     const admin = createAdminClient();
     const { data: row } = await admin
       .from('instruction_exam_requests')
-      .select('id, requester_id, statut, licence_code')
+      .select('id, requester_id, instructeur_id, statut, licence_code')
       .eq('id', id)
       .single();
     if (!row) return NextResponse.json({ error: 'Demande introuvable.' }, { status: 404 });
@@ -326,6 +394,20 @@ export async function DELETE(
     await admin.from('instruction_exam_requests').delete().eq('id', id);
 
     logActivity({ userId: user.id, action: 'cancel_exam_request', targetType: 'exam_request', targetId: id, details: { licence_code: row.licence_code } });
+
+    if (row.instructeur_id && row.instructeur_id !== user.id) {
+      try {
+        const { data: req } = await admin
+          .from('profiles').select('identifiant').eq('id', row.requester_id).maybeSingle();
+        await notifyUser(row.instructeur_id, {
+          type: 'exam_cancelled',
+          title: `Demande d'examen ${row.licence_code} annulee`,
+          body: `${req?.identifiant ?? 'L\'eleve'} a annule sa demande d'examen ${row.licence_code}.`,
+          link: '/instruction',
+        });
+      } catch (e) { console.error('notifyUser exam_cancelled:', e); }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error('instruction/exam-requests/[id] DELETE:', e);

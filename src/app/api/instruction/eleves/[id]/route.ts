@@ -10,6 +10,7 @@ import {
 } from '@/lib/instruction-permissions';
 import { DOCUMENTS_BUCKET } from '@/lib/documents-upload';
 import { buildFormationClosurePdf, formationArchiveStoragePath } from '@/lib/formation-pdf';
+import { notifyUser, notifyUsers, getAdminUserIds } from '@/lib/notifications';
 
 const STATUTS_PLANS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
 
@@ -103,6 +104,37 @@ export async function PATCH(
         .update({ instruction_instructeur_id: nouvelId })
         .eq('instruction_eleve_id', eleveId)
         .eq('instruction_actif', true);
+
+      try {
+        const [{ data: oldInstr }, { data: newInstr }] = await Promise.all([
+          eleve.instructeur_referent_id
+            ? admin.from('profiles').select('identifiant').eq('id', eleve.instructeur_referent_id).maybeSingle()
+            : Promise.resolve({ data: null }),
+          admin.from('profiles').select('identifiant').eq('id', nouvelId).maybeSingle(),
+        ]);
+        await Promise.all([
+          notifyUser(nouvelId, {
+            type: 'transfer_in',
+            title: `Nouvel eleve a former (${licenceRef})`,
+            body: `${eleve.identifiant ?? 'Un eleve'} vous a ete transfere par ${oldInstr?.identifiant ?? 'l\'ancien instructeur'} pour sa formation ${licenceRef}.`,
+            link: '/instruction',
+          }),
+          notifyUser(eleveId, {
+            type: 'transfer_in',
+            title: `Nouvel instructeur referent`,
+            body: `Votre formation ${licenceRef} est desormais suivie par ${newInstr?.identifiant ?? 'un nouvel instructeur'}.`,
+            link: '/instruction',
+          }),
+          eleve.instructeur_referent_id && eleve.instructeur_referent_id !== user.id
+            ? notifyUser(eleve.instructeur_referent_id, {
+                type: 'transfer_out',
+                title: `Eleve transfere`,
+                body: `${eleve.identifiant ?? 'Un eleve'} a ete transfere a ${newInstr?.identifiant ?? 'un autre instructeur'}.`,
+                link: '/instruction',
+              })
+            : Promise.resolve(),
+        ]);
+      } catch (e) { console.error('notifyUser transfer:', e); }
 
       return NextResponse.json({ ok: true });
     }
@@ -237,6 +269,24 @@ export async function PATCH(
       .eq('id', eleveId);
 
     if (profileErr) return NextResponse.json({ error: profileErr.message }, { status: 400 });
+
+    try {
+      await notifyUser(eleveId, {
+        type: 'formation_done_eleve',
+        title: `Formation ${licenceCode} terminee`,
+        body: `Felicitations, votre formation ${licenceLabel} est terminee. Le dossier final est archive et consultable par les administrateurs.`,
+        link: '/compte',
+      });
+      const adminIds = await getAdminUserIds();
+      const closingInstructorId = eleve.instructeur_referent_id ?? user.id;
+      await notifyUsers(adminIds.filter((aid) => aid !== eleveId && aid !== closingInstructorId), {
+        type: 'formation_done_admin',
+        title: `Formation ${licenceCode} archivee`,
+        body: `${instructeurProf?.identifiant ?? 'Un instructeur'} a cloture la formation ${licenceLabel} de ${eleve.identifiant ?? 'un eleve'}. PDF archive.`,
+        link: '/admin',
+      });
+    } catch (e) { console.error('notifyUser formation_done:', e); }
+
     return NextResponse.json({ ok: true, archive_path: storagePath });
   } catch (e) {
     console.error('instruction/eleves/[id] PATCH:', e);

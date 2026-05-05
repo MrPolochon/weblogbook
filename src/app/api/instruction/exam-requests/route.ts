@@ -5,6 +5,7 @@ import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
 import { logActivity } from '@/lib/activity-log';
 import { getInstructionCapabilities, getExaminerPoolUserIds } from '@/lib/instruction-permissions';
 import { selectExamInstructorByWorkload } from '@/lib/instruction-exam-assign';
+import { notifyUser } from '@/lib/notifications';
 
 type ExamStatus = 'assigne' | 'accepte' | 'termine' | 'refuse';
 
@@ -95,6 +96,25 @@ export async function POST(request: Request) {
     const { data, error } = await admin.from('instruction_exam_requests').insert(payload).select('id').single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     logActivity({ userId: user.id, action: 'request_exam', targetType: 'exam_request', targetId: data.id, details: { licence_code: licenceCode, instructeur_id: selectedInstructorId } });
+
+    // Notification : ping de l'instructeur examinateur attribue.
+    try {
+      const { data: requesterProfile } = await admin
+        .from('profiles')
+        .select('identifiant')
+        .eq('id', user.id)
+        .maybeSingle();
+      const requesterIdent = requesterProfile?.identifiant || 'un eleve';
+      await notifyUser(selectedInstructorId, {
+        type: 'exam_request',
+        title: `Nouvelle demande d'examen ${licenceCode}`,
+        body: `${requesterIdent} demande un examen ${licenceCode}.${message ? `\n\nMessage : ${message}` : ''}`,
+        link: '/instruction',
+      });
+    } catch (e) {
+      console.error('notifyUser exam_request:', e);
+    }
+
     return NextResponse.json({ ok: true, id: data.id });
   } catch (e) {
     console.error('instruction/exam-requests POST:', e);

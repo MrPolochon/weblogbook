@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
+import NotificationBell from '@/components/NotificationBell';
 
 interface NavBarProps {
   isAdmin: boolean;
@@ -296,6 +297,8 @@ export default function NavBar({
 
             <span className="mx-0.5 h-5 w-px bg-slate-700/70" />
 
+            <NotificationBell />
+
             <NavLink href="/compte" active={pathname === '/compte'} title="Mon compte">
               <User className="h-3.5 w-3.5 shrink-0" />
               <span className="hidden lg:inline">Mon compte</span>
@@ -316,6 +319,7 @@ export default function NavBar({
           {/*  MOBILE : Section droite (compte + déconnexion en icônes)       */}
           {/* ══════════════════════════════════════════════════════════════ */}
           <div className="flex md:hidden items-center gap-1.5 shrink-0">
+            <NotificationBell />
             <Link
               href="/compte"
               title="Mon compte"
