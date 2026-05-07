@@ -458,8 +458,11 @@ export function estimerPassagers(
   };
   const coefficient = calculerCoefficientRemplissage(codeDepart, codeArrivee, prixNettoye, ctxComplet);
 
+  // Le coefficient peut dépasser 1.0 en interne (maxRate jusqu'à 1.10) suite aux
+  // buffs cumulés. Le résultat final est néanmoins plafonné à la capacité physique
+  // de l'avion (impossible d'embarquer plus que les sièges).
   const passagersPotentiels = Math.floor(capaciteAvion * coefficient);
-  const passagers = Math.min(passagersPotentiels, passagersDisponibles);
+  const passagers = Math.min(passagersPotentiels, capaciteAvion, passagersDisponibles);
   const remplissage = capaciteAvion > 0 ? passagers / capaciteAvion : 0;
   const revenus = passagers * prixNettoye;
 
@@ -521,8 +524,11 @@ export function calculerPassagersReels(
 
   const chanceux = aleatoire > 0.05 && coefficientMoyen < 0.5;
 
+  // Plafonnement à la capacité physique de l'avion : le coefficient peut dépasser 1.0
+  // en interne (maxRate jusqu'à 1.10 + variance positive) mais on ne peut jamais
+  // embarquer plus de passagers qu'il n'y a de sièges.
   const passagersPotentiels = Math.floor(capaciteAvion * coefficientReel);
-  const passagers = Math.min(passagersPotentiels, passagersDisponibles);
+  const passagers = Math.min(passagersPotentiels, capaciteAvion, passagersDisponibles);
   const remplissage = capaciteAvion > 0 ? passagers / capaciteAvion : 0;
   const revenus = passagers * prixNettoye;
 

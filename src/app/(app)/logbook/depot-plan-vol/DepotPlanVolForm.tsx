@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AEROPORTS_PTFS, getAeroportInfo, estimerPassagers, estimerCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison, type CoefficientContext } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_PTFS, getAeroportInfo, estimerPassagers, estimerCargo, genererTypeCargaison, getCargaisonInfo, getBonusIsolement, TypeCargaison, type CoefficientContext } from '@/lib/aeroports-ptfs';
 import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
 import { Building2, Plane, Users, Weight, Shield, Radio, Phone, MapPin, Send, Navigation, Sparkles, Gauge, FileText, Route, Briefcase, CheckCircle2 } from 'lucide-react';
@@ -657,7 +657,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     {showBria && <BriaDialog onClose={() => setShowBria(false)} />}
 
     {/* ===== Bouton BRIA — appel téléphone, look cockpit ===== */}
-    <div className="max-w-2xl mb-5">
+    <div className="w-full mb-5">
       <button
         type="button"
         onClick={() => {
@@ -690,7 +690,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       </button>
     </div>
 
-    <form onSubmit={handleSubmit} className="space-y-5 max-w-2xl">
+    <form onSubmit={handleSubmit} className="space-y-5 w-full">
       {/* ===== Section : Type de mission (carte cockpit) ===== */}
       {compagniesDisponibles.length > 0 && (
         <section className="card-glow stagger-enter">
@@ -1039,20 +1039,30 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
                 const saturation = passagersAeroport && passagersAeroport.passagers_max > 0
                   ? passagersAeroport.passagers_disponibles / passagersAeroport.passagers_max
                   : 1;
+                // Bonus d'isolement basé sur la dernière arrivée à l'aéroport de destination.
+                // null => max (0.60) car aéroport "vierge".
+                const bonusIso = getBonusIsolement(lastArrivalArrivee);
+                const isHubHub = aeroportDep?.taille === 'international' && aeroportArr?.taille === 'international';
                 const badges: React.ReactNode[] = [];
+
                 if (aeroportArr?.tourisme) badges.push(
                   <span key="tour" className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-amber-300">
-                    🏖️ Destination touristique +25%
+                    🏖️ Destination touristique +25% demande
                   </span>
                 );
-                if (aeroportDep?.taille === 'international') badges.push(
-                  <span key="intl" className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-sky-300">
-                    ✈️ International
+                if (isHubHub) badges.push(
+                  <span key="hub" className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-sky-300">
+                    🌐 Hub→Hub +15% remplissage · prix moins sensible
+                  </span>
+                );
+                if (bonusIso > 0) badges.push(
+                  <span key="iso" className="inline-flex items-center gap-1 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-indigo-300">
+                    ⏳ Isolement +{Math.round(bonusIso * 100)}% demande
                   </span>
                 );
                 if (saturation < 0.5) badges.push(
                   <span key="sat" className="inline-flex items-center gap-1 rounded-full border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-orange-300">
-                    ⚠ Saturation {Math.round(saturation * 100)}%
+                    ⚠ Saturation {Math.round(saturation * 100)}% — taux × 0.50
                   </span>
                 );
                 if (badges.length === 0) return null;

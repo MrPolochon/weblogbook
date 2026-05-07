@@ -142,7 +142,7 @@ export default async function DepotPlanVolPage() {
   const nowUtc = new Date().toUTCString().slice(17, 22); // "HH:MM"
 
   return (
-    <div className="space-y-6 animate-page-reveal">
+    <div className="space-y-6 animate-page-reveal max-w-3xl mx-auto w-full">
       {/* ===== HUD Header — bandeau aviation ===== */}
       <div className="relative overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/85 to-slate-950/95 shadow-[0_22px_42px_rgba(2,6,23,0.36),inset_0_1px_0_rgba(255,255,255,0.06)]">
         {/* Grille cockpit en fond */}
