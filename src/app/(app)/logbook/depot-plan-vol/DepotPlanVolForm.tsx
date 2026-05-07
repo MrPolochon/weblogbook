@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS, getAeroportInfo, estimerPassagers, estimerCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison, type CoefficientContext } from '@/lib/aeroports-ptfs';
 import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
-import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio, Phone } from 'lucide-react';
+import { Building2, Plane, Users, Weight, Shield, Radio, Phone, MapPin, Send, Navigation, Sparkles, Gauge, FileText, Route, Briefcase, CheckCircle2 } from 'lucide-react';
 import BriaDialog, { getBriaCooldownRemaining } from '@/components/BriaDialog';
 import { unlockAudioForIOS } from '@/lib/phone-sounds';
 import { toast } from 'sonner';
@@ -648,10 +648,16 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
 
   const avionsPersonnelsDispo = inventairePersonnel.filter(i => i.disponible);
 
+  // Mode du vol pour l'UI : "personnel", "commercial" ou "ferry"
+  const flightMode: 'personnel' | 'commercial' | 'ferry' =
+    vol_commercial ? 'commercial' : vol_ferry ? 'ferry' : 'personnel';
+
   return (
     <>
     {showBria && <BriaDialog onClose={() => setShowBria(false)} />}
-    <div className="max-w-2xl mb-4">
+
+    {/* ===== Bouton BRIA — appel téléphone, look cockpit ===== */}
+    <div className="max-w-2xl mb-5">
       <button
         type="button"
         onClick={() => {
@@ -664,61 +670,84 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           }
           setShowBria(true);
         }}
-        className="w-full flex items-center justify-center gap-3 px-5 py-4 rounded-xl border-2 border-amber-500/50 bg-gradient-to-r from-amber-900/40 to-amber-800/30 hover:from-amber-900/60 hover:to-amber-800/50 text-amber-100 font-bold text-lg transition-all shadow-lg hover:shadow-amber-900/30"
+        className="group relative w-full overflow-hidden rounded-2xl border-2 border-amber-500/40 bg-gradient-to-r from-amber-950/60 via-amber-900/40 to-amber-950/60 px-5 py-4 text-amber-50 font-semibold text-lg transition-all duration-300 hover:border-amber-400/70 hover:shadow-[0_10px_38px_rgba(251,191,36,0.25)] active:scale-[0.99]"
       >
-        <Phone className="h-6 w-6 text-amber-400" />
-        Appeler le BRIA
-        <span className="text-sm font-normal text-amber-300/70 ml-2">— Remplissage assisté par conversation</span>
+        {/* Halo radar derrière l'icône */}
+        <span className="pointer-events-none absolute -left-4 top-1/2 -translate-y-1/2 h-24 w-24 rounded-full bg-amber-400/10 blur-2xl group-hover:bg-amber-400/20 transition-colors" />
+        {/* Brillance qui balaye au hover */}
+        <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-amber-300/15 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+
+        <span className="relative flex items-center justify-center gap-3">
+          <span className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-amber-400/50 bg-amber-500/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
+            <Phone className="h-5 w-5 text-amber-300" />
+            <span className="absolute inset-0 rounded-full ring-2 ring-amber-400/20 animate-pulse-soft" />
+          </span>
+          <span className="text-base sm:text-lg font-bold tracking-wide">Appeler le BRIA</span>
+          <span className="hidden sm:inline text-xs font-medium text-amber-300/70 ml-1 uppercase tracking-widest">
+            · briefing assisté
+          </span>
+        </span>
       </button>
     </div>
-    <form onSubmit={handleSubmit} className="card space-y-4 max-w-2xl">
-      {/* Type de vol (commercial ou personnel) */}
+
+    <form onSubmit={handleSubmit} className="space-y-5 max-w-2xl">
+      {/* ===== Section : Type de mission (carte cockpit) ===== */}
       {compagniesDisponibles.length > 0 && (
-        <div className="p-4 rounded-lg border border-sky-500/30 bg-sky-500/10 space-y-3">
-          <div className="flex flex-wrap gap-6">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={vol_commercial} 
-                onChange={(e) => {
-                  setVolCommercial(e.target.checked);
-                  if (e.target.checked) setVolFerry(false);
-                }}
-                className="w-5 h-5 rounded"
-              />
-              <div className="flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-sky-400" />
-                <span className="font-medium text-slate-200">Vol commercial</span>
-              </div>
-            </label>
-            
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={vol_ferry} 
-                onChange={(e) => {
-                  setVolFerry(e.target.checked);
-                  if (e.target.checked) setVolCommercial(false);
-                }}
-                className="w-5 h-5 rounded"
-              />
-              <div className="flex items-center gap-2">
-                <Plane className="h-5 w-5 text-amber-400" />
-                <span className="font-medium text-slate-200">Vol ferry (à vide)</span>
-              </div>
-            </label>
+        <section className="card-glow stagger-enter">
+          <SectionHeader
+            icon={<Briefcase className="h-4 w-4" />}
+            label="Type de mission"
+            subtitle="Choisissez la nature de votre vol"
+            accent="sky"
+          />
+
+          {/* 3 cartes cliquables : Personnel / Commercial / Ferry */}
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Personnel */}
+            <ModeCard
+              active={flightMode === 'personnel'}
+              accent="slate"
+              icon={<Plane className="h-5 w-5" />}
+              title="Personnel"
+              subtitle="Avion de votre inventaire"
+              onClick={() => { setVolCommercial(false); setVolFerry(false); }}
+            />
+            {/* Commercial */}
+            <ModeCard
+              active={flightMode === 'commercial'}
+              accent="sky"
+              icon={<Building2 className="h-5 w-5" />}
+              title="Commercial"
+              subtitle="Pax / cargo rémunérés"
+              onClick={() => { setVolCommercial(true); setVolFerry(false); }}
+            />
+            {/* Ferry */}
+            <ModeCard
+              active={flightMode === 'ferry'}
+              accent="amber"
+              icon={<Navigation className="h-5 w-5" />}
+              title="Ferry (à vide)"
+              subtitle="Repositionnement"
+              onClick={() => { setVolCommercial(false); setVolFerry(true); }}
+            />
           </div>
-          
+
           {vol_ferry && (
-            <p className="text-amber-400 text-sm">
-              Vol à vide pour déplacer un avion. Pas de passagers/cargo. Coût : 10 000 F$ + taxes aéroportuaires, débité du compte compagnie.
-            </p>
+            <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 animate-fade-in">
+              <Sparkles className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+              <p className="text-amber-200 text-sm">
+                Vol à vide pour déplacer un avion. Pas de passagers/cargo. <span className="font-semibold">Coût : 10 000 F$ + taxes aéroportuaires</span>, débité du compte compagnie.
+              </p>
+            </div>
           )}
           
           {/* Sélection de la compagnie si plusieurs disponibles */}
           {(vol_commercial || vol_ferry) && compagniesDisponibles.length > 1 && (
-            <div>
-              <label className="label">Pour quelle compagnie ? *</label>
+            <div className="mt-4 animate-fade-in">
+              <label className="label flex items-center gap-1.5">
+                <Building2 className="h-3.5 w-3.5 text-sky-400" />
+                Pour quelle compagnie ? *
+              </label>
               <select 
                 className="input w-full" 
                 value={selectedCompagnieId} 
@@ -737,24 +766,36 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           
           {/* Afficher le nom de la compagnie si une seule */}
           {(vol_commercial || vol_ferry) && compagniesDisponibles.length === 1 && selectedCompagnie && (
-            <p className="text-sm text-slate-300">
-              Vol pour <span className="font-semibold text-sky-300">{selectedCompagnie.nom}</span>
-              {selectedCompagnie.role === 'pdg' && <span className="text-amber-400 ml-1">(PDG)</span>}
-            </p>
+            <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-sm animate-fade-in">
+              <Building2 className="h-3.5 w-3.5 text-sky-400" />
+              <span className="text-slate-300">Vol pour</span>
+              <span className="font-semibold text-sky-300">{selectedCompagnie.nom}</span>
+              {selectedCompagnie.role === 'pdg' && (
+                <span className="rounded bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">PDG</span>
+              )}
+            </div>
           )}
-        </div>
+        </section>
       )}
 
-      {/* Sélection de l'appareil */}
+      {/* ===== Section : Sélection de l'appareil ===== */}
       {(vol_commercial || vol_ferry) && selectedCompagnie ? (
-        <div className="space-y-3">
+        <section className="card-glow stagger-enter">
+          <SectionHeader
+            icon={<Plane className="h-4 w-4" />}
+            label={vol_ferry ? 'Avion à déplacer' : 'Appareil de la flotte'}
+            subtitle={vol_ferry ? "L'aéroport de départ sera la position actuelle de l'avion" : `Sélectionner un appareil à ${aeroport_depart?.toUpperCase() || '...'}`}
+            accent={vol_ferry ? 'amber' : 'sky'}
+            badge={selectedAvionIndiv ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-emerald-300">
+                <CheckCircle2 className="h-3 w-3" />
+                {selectedAvionIndiv.immatriculation}
+              </span>
+            ) : null}
+          />
+          <div className="mt-4 space-y-3">
           {/* Avions individuels avec immatriculation */}
           <div>
-              <label className="label">
-                {vol_ferry ? 'Avion à déplacer *' : 'Avion *'}
-                {!vol_ferry && <span className="text-slate-500 font-normal ml-2">— sélectionner un appareil à {aeroport_depart?.toUpperCase() || '...'}</span>}
-                {vol_ferry && <span className="text-slate-500 font-normal ml-2">— l&apos;aéroport de départ sera défini par la position de l&apos;avion</span>}
-              </label>
               <select 
                 className="input w-full" 
                 value={compagnie_avion_id} 
@@ -782,136 +823,264 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
                 })}
               </select>
               {!vol_ferry && aeroport_depart && avionsDisponibles.length === 0 && avionsCompagnie.length > 0 && (
-                <p className="text-amber-400 text-sm mt-1">
+                <p className="text-amber-400 text-sm mt-2">
                   Aucun avion disponible à {aeroport_depart.toUpperCase()}. 
                   {avionsCompagnie.filter(a => isAvionCompagnieAuSol(a.statut) && a.usure_percent > 0).length > 0 && (
                     <span> Avions ailleurs : {avionsCompagnie.filter(a => isAvionCompagnieAuSol(a.statut) && a.usure_percent > 0).map(a => `${a.immatriculation} (${a.aeroport_actuel})`).join(', ')}</span>
                   )}
                 </p>
               )}
-              {selectedAvionIndiv && (
-                <p className="text-emerald-400 text-sm mt-1">
-                  ✓ Avion sélectionné : {selectedAvionIndiv.immatriculation} à {selectedAvionIndiv.aeroport_actuel}
-                  {selectedAvionIndiv.usure_percent === 0 && <span className="text-amber-400 ml-1">(À réparer - 0% d&apos;usure)</span>}
-                </p>
-              )}
+              {/* Mini-fiche aéronef sélectionné */}
+              {selectedAvionIndiv && (() => {
+                const t = premierTypeAvionDepuisEmbed(selectedAvionIndiv.types_avion);
+                const wear = selectedAvionIndiv.usure_percent;
+                const wearColor = wear === 0 ? 'text-rose-300' : wear < 30 ? 'text-amber-300' : wear < 70 ? 'text-sky-300' : 'text-emerald-300';
+                const wearBarColor = wear === 0 ? 'bg-rose-500' : wear < 30 ? 'bg-amber-500' : wear < 70 ? 'bg-sky-500' : 'bg-emerald-500';
+                return (
+                  <div className="mt-3 rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/40 to-slate-900/40 p-3 animate-fade-in">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 border border-emerald-500/30">
+                          <Plane className="h-4 w-4 text-emerald-300 -rotate-12" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-mono text-sm font-bold text-emerald-200 tracking-wide">
+                            {selectedAvionIndiv.immatriculation}
+                            {selectedAvionIndiv.nom_bapteme && <span className="ml-1.5 text-slate-400 font-normal">&laquo;&nbsp;{selectedAvionIndiv.nom_bapteme}&nbsp;&raquo;</span>}
+                          </div>
+                          <div className="text-xs text-slate-400 truncate">
+                            {t?.nom || 'Avion'}
+                            {t?.code_oaci && <span className="ml-1.5 font-mono text-slate-500">({t.code_oaci})</span>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 text-right">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-800/60 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-sky-300">
+                          <MapPin className="h-3 w-3" />
+                          {selectedAvionIndiv.aeroport_actuel}
+                        </span>
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono">
+                          <span className={wearColor}>{wear}%</span>
+                          <div className="h-1 w-12 overflow-hidden rounded-full bg-slate-700/60">
+                            <div className={`h-full ${wearBarColor} transition-all duration-700`} style={{ width: `${wear}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {wear === 0 && (
+                      <p className="mt-2 text-xs text-rose-300 flex items-center gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        À réparer — 0% d&apos;usure
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
               {avionsCompagnie.length === 0 && (
-                <p className="text-amber-400 text-sm mt-1">
+                <p className="text-amber-400 text-sm mt-2">
                   Aucun avion dans la flotte de cette compagnie. Le PDG doit acheter des avions sur le Marketplace.
                 </p>
               )}
             </div>
           
-          {/* Type de transport - masqué pour vols ferry */}
+          {/* Type de transport - masqué pour vols ferry — segmented control */}
           {!vol_ferry && (
             <div>
               <label className="label">Type de transport</label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input 
-                    type="radio" 
-                    checked={nature_transport === 'passagers'} 
-                    onChange={() => setNatureTransport('passagers')} 
-                  />
-                  <Users className="h-4 w-4 text-slate-400" />
-                  <span className="text-slate-300">Passagers</span>
-                </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="radio" 
-                  checked={nature_transport === 'cargo'} 
-                  onChange={() => setNatureTransport('cargo')} 
-                />
-                <Weight className="h-4 w-4 text-slate-400" />
-                <span className="text-slate-300">Cargo</span>
-              </label>
+              <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-700/60 bg-slate-900/40 p-1">
+                <button
+                  type="button"
+                  onClick={() => setNatureTransport('passagers')}
+                  className={`group flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
+                    nature_transport === 'passagers'
+                      ? 'bg-gradient-to-br from-sky-500/30 to-sky-600/20 text-sky-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_4px_12px_rgba(14,165,233,0.2)]'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <Users className={`h-4 w-4 ${nature_transport === 'passagers' ? 'text-sky-300' : ''}`} />
+                  Passagers
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNatureTransport('cargo')}
+                  className={`group flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
+                    nature_transport === 'cargo'
+                      ? 'bg-gradient-to-br from-amber-500/30 to-amber-600/20 text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_4px_12px_rgba(251,191,36,0.2)]'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <Weight className={`h-4 w-4 ${nature_transport === 'cargo' ? 'text-amber-300' : ''}`} />
+                  Cargo
+                </button>
+              </div>
             </div>
-          </div>
           )}
 
-          {/* Aperçu revenus - masqué pour vols ferry */}
+          {/* Aperçu revenus - masqué pour vols ferry — Style HUD instruments */}
           {!vol_ferry && compagnie_avion_id && aeroport_depart && aeroport_arrivee && (
-            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-              <div className="flex items-center gap-2 mb-2">
-                <DollarSign className="h-4 w-4 text-emerald-400" />
-                <span className="font-medium text-emerald-300">Estimation revenus</span>
+            <div className="relative overflow-hidden rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/40 via-slate-900/60 to-slate-950/60 p-4 animate-ticker-pop">
+              {/* Halo radar */}
+              <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-emerald-500/10 blur-3xl" />
+
+              <div className="relative flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-500/40 bg-emerald-500/15">
+                    <Gauge className="h-3.5 w-3.5 text-emerald-300" />
+                  </span>
+                  <div>
+                    <div className="text-xs font-mono uppercase tracking-widest text-emerald-400">Estimation revenus</div>
+                    <div className="text-[10px] text-slate-500">Charge utile prévue</div>
+                  </div>
+                </div>
+                <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-emerald-300">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-hud-blink" />
+                  Live
+                </span>
               </div>
+
+              {/* Gauge remplissage */}
+              <div className="mb-3">
+                {nature_transport === 'passagers' ? (
+                  <FillGauge
+                    label="Passagers"
+                    icon={<Users className="h-3.5 w-3.5" />}
+                    current={nbPax}
+                    max={capacitePaxMax}
+                    unit="pax"
+                    valid={remplissageValidePax}
+                    accent="sky"
+                  />
+                ) : (
+                  <FillGauge
+                    label="Cargo"
+                    icon={<Weight className="h-3.5 w-3.5" />}
+                    current={cargoKg}
+                    max={capaciteCargoMax}
+                    unit="kg"
+                    valid={remplissageValideCargo}
+                    accent="amber"
+                  />
+                )}
+              </div>
+
+              {/* Détails revenus */}
               <div className="grid grid-cols-2 gap-2 text-sm">
                 {nature_transport === 'passagers' ? (
                   <>
-                    <p className="text-slate-300">{nbPax} passagers @ {prixBilletLiaison} F$</p>
-                    <p className={`text-sm ${remplissageValidePax ? 'text-emerald-400' : 'text-red-400'}`}>
-                      Remplissage : {nbPax}/{capacitePaxMax} ({Math.round(tauxRemplissagePax * 100)}%)
+                    <p className="text-slate-300 col-span-2 text-xs">
+                      <span className="font-mono text-sky-300">{nbPax}</span> passagers
+                      <span className="mx-1.5 text-slate-500">@</span>
+                      <span className="font-mono text-slate-200">{prixBilletLiaison} F$</span>
                     </p>
                     {cargoComplementaire > 0 && (
-                      <p className="text-slate-300 col-span-2">
-                        + {cargoComplementaire.toLocaleString('fr-FR')} kg cargo complémentaire @ {prixCargo} F$/kg
-                        <span className="text-amber-300/90 text-xs ml-1">(1% chance marchandise rare +30%)</span>
+                      <p className="text-slate-400 col-span-2 text-xs">
+                        + <span className="font-mono text-amber-300">{cargoComplementaire.toLocaleString('fr-FR')} kg</span> cargo complémentaire
+                        <span className="mx-1.5 text-slate-500">@</span>
+                        <span className="font-mono">{prixCargo} F$/kg</span>
+                        <span className="text-amber-300/90 text-[10px] ml-2 inline-flex items-center gap-0.5">
+                          <Sparkles className="h-2.5 w-2.5" /> 1% rare +30%
+                        </span>
                       </p>
                     )}
                   </>
                 ) : (
                   <>
-                    <p className="text-slate-300">{cargoKg.toLocaleString('fr-FR')} kg cargo @ {selectedCompagnie?.prix_kg_cargo || 0} F$/kg</p>
-                    <p className={`text-sm ${remplissageValideCargo ? 'text-emerald-400' : 'text-red-400'}`}>
-                      Remplissage : {cargoKg.toLocaleString('fr-FR')}/{capaciteCargoMax.toLocaleString('fr-FR')} kg ({Math.round(tauxRemplissageCargo * 100)}%)
+                    <p className="text-slate-300 col-span-2 text-xs">
+                      <span className="font-mono text-amber-300">{cargoKg.toLocaleString('fr-FR')} kg</span> cargo
+                      <span className="mx-1.5 text-slate-500">@</span>
+                      <span className="font-mono text-slate-200">{selectedCompagnie?.prix_kg_cargo || 0} F$/kg</span>
                     </p>
-                    {/* Type de cargaison estimé */}
                     {(() => {
                       const cargaisonInfo = getCargaisonInfo(estimatedTypeCargaison);
                       return (
-                        <p className={`text-sm col-span-2 ${cargaisonInfo.color}`}>
-                          {cargaisonInfo.icon} Type : {cargaisonInfo.nom}
+                        <p className={`text-xs col-span-2 ${cargaisonInfo.color}`}>
+                          {cargaisonInfo.icon} <span className="font-medium">{cargaisonInfo.nom}</span>
                           {cargaisonInfo.sensibiliteRetard > 1 && (
                             <span className="text-amber-400 ml-2">⚡ Sensible au retard</span>
                           )}
                           {cargaisonInfo.bonusRevenu > 0 && (
-                            <span className="text-emerald-400 ml-2">💰 +{cargaisonInfo.bonusRevenu}% bonus</span>
+                            <span className="text-emerald-400 ml-2">💰 +{cargaisonInfo.bonusRevenu}%</span>
                           )}
                         </p>
                       );
                     })()}
                   </>
                 )}
-                <p className="text-slate-300">Revenu brut : {revenuBrut.toLocaleString('fr-FR')} F$</p>
-                <p className="text-emerald-300 col-span-2">Votre salaire ({selectedCompagnie.pourcentage_salaire}%) : {salairePilote.toLocaleString('fr-FR')} F$</p>
               </div>
+
+              {/* Stats finales : revenu brut + salaire */}
+              <div className="mt-3 grid grid-cols-2 gap-3 pt-3 border-t border-emerald-500/20">
+                <div>
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500">Revenu brut</div>
+                  <div className="font-mono text-base font-bold text-slate-100 tabular-nums">{revenuBrut.toLocaleString('fr-FR')} <span className="text-xs text-slate-400">F$</span></div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Votre salaire ({selectedCompagnie.pourcentage_salaire}%)</div>
+                  <div className="font-mono text-base font-bold text-emerald-300 tabular-nums">{salairePilote.toLocaleString('fr-FR')} <span className="text-xs text-emerald-400/70">F$</span></div>
+                </div>
+              </div>
+
               {/* Avertissement remplissage insuffisant */}
               {vol_commercial && (
                 (nature_transport === 'passagers' && !remplissageValidePax) ||
                 (nature_transport === 'cargo' && !remplissageValideCargo)
               ) && (
-                <div className="mt-2 p-2 rounded-lg bg-red-500/10 border border-red-500/30">
-                  <p className="text-red-400 text-xs">
-                    ⚠️ Remplissage insuffisant : minimum 25% requis pour déposer un plan de vol
+                <div className="mt-3 p-2.5 rounded-lg bg-red-500/15 border border-red-500/40 flex items-start gap-2 animate-fade-in">
+                  <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-500/40 text-red-100 text-[10px] font-bold mt-0.5">!</span>
+                  <p className="text-red-200 text-xs">
+                    Remplissage insuffisant : <span className="font-bold">25%</span> minimum requis pour déposer le plan
                   </p>
                 </div>
               )}
-              {/* Indicateurs de facteurs */}
-              <div className="mt-2 pt-2 border-t border-emerald-500/20 text-xs text-slate-400 space-y-1">
-                {(() => {
-                  const aeroportArr = getAeroportInfo(aeroport_arrivee);
-                  const aeroportDep = getAeroportInfo(aeroport_depart);
-                  return (
-                    <>
-                      {aeroportArr?.tourisme && <span className="text-amber-400">🏖️ Destination touristique (+15% demande)</span>}
-                      {aeroportDep?.taille === 'international' && <span className="ml-2 text-sky-400">✈️ Aéroport international (prix moins impactant)</span>}
-                      {passagersAeroport && passagersAeroport.passagers_disponibles < passagersAeroport.passagers_max * 0.5 && (
-                        <span className="block text-orange-400">⚠️ Saturation: {Math.round(passagersAeroport.passagers_disponibles / passagersAeroport.passagers_max * 100)}% de passagers disponibles</span>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
+              {/* Indicateurs de facteurs sous forme de badges */}
+              {(() => {
+                const aeroportArr = getAeroportInfo(aeroport_arrivee);
+                const aeroportDep = getAeroportInfo(aeroport_depart);
+                const saturation = passagersAeroport && passagersAeroport.passagers_max > 0
+                  ? passagersAeroport.passagers_disponibles / passagersAeroport.passagers_max
+                  : 1;
+                const badges: React.ReactNode[] = [];
+                if (aeroportArr?.tourisme) badges.push(
+                  <span key="tour" className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-amber-300">
+                    🏖️ Destination touristique +25%
+                  </span>
+                );
+                if (aeroportDep?.taille === 'international') badges.push(
+                  <span key="intl" className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-sky-300">
+                    ✈️ International
+                  </span>
+                );
+                if (saturation < 0.5) badges.push(
+                  <span key="sat" className="inline-flex items-center gap-1 rounded-full border border-orange-500/40 bg-orange-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-orange-300">
+                    ⚠ Saturation {Math.round(saturation * 100)}%
+                  </span>
+                );
+                if (badges.length === 0) return null;
+                return (
+                  <div className="mt-3 pt-3 border-t border-emerald-500/20 flex flex-wrap gap-1.5">
+                    {badges}
+                  </div>
+                );
+              })()}
             </div>
           )}
-        </div>
+          </div>
+        </section>
       ) : (
-        <div className="p-4 rounded-lg border border-slate-600 bg-slate-800/50">
-          <label className="label flex items-center gap-2">
-            <Plane className="h-4 w-4 text-slate-400" />
-            Mon appareil personnel
-          </label>
+        <section className="card-glow stagger-enter">
+          <SectionHeader
+            icon={<Plane className="h-4 w-4" />}
+            label="Mon appareil personnel"
+            subtitle="Avion de votre inventaire (vol non rémunéré)"
+            accent="slate"
+            badge={selectedInventaire ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-emerald-300">
+                <CheckCircle2 className="h-3 w-3" />
+                Sélectionné
+              </span>
+            ) : null}
+          />
+          <div className="mt-4">
           {avionsPersonnelsDispo.length > 0 ? (
             <>
               <select 
@@ -955,86 +1124,182 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
               Tous vos appareils sont actuellement en vol.
             </p>
           )}
-        </div>
+          </div>
+        </section>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="label">Aéroport de départ *</label>
-          <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
-            <option value="">— Choisir —</option>
-            {AEROPORTS_PTFS.map((a) => (
-              <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
-            ))}
-          </select>
+      {/* ===== Section : Route — départ → arrivée avec visuel ===== */}
+      <section className="card-glow stagger-enter">
+        <SectionHeader
+          icon={<Route className="h-4 w-4" />}
+          label="Route"
+          subtitle="Aéroports de départ et de destination"
+          accent="sky"
+        />
+
+        {/* Visuel route : DEP — ✈ ··· — ARR */}
+        <RouteVisual
+          depart={aeroport_depart}
+          arrivee={aeroport_arrivee}
+        />
+
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="label flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 text-sky-400" />
+              Départ <span className="text-rose-400">*</span>
+            </label>
+            <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
+              <option value="">— Choisir —</option>
+              {AEROPORTS_PTFS.map((a) => (
+                <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 text-emerald-400" />
+              Arrivée <span className="text-rose-400">*</span>
+            </label>
+            <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required>
+              <option value="">— Choisir —</option>
+              {AEROPORTS_PTFS.map((a) => (
+                <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div>
-          <label className="label">Aéroport d&apos;arrivée *</label>
-          <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required>
-            <option value="">— Choisir —</option>
-            {AEROPORTS_PTFS.map((a) => (
-              <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
-            ))}
-          </select>
+      </section>
+
+      {/* ===== Section : Détails du vol ===== */}
+      <section className="card-glow stagger-enter">
+        <SectionHeader
+          icon={<FileText className="h-4 w-4" />}
+          label="Détails du vol"
+          subtitle="Numéro, porte et durée prévue"
+          accent="indigo"
+        />
+
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="label">Numéro de vol *</label>
+            {selectedCompagnie?.code_oaci ? (
+              <div className="flex items-stretch">
+                <span className="flex items-center px-3 bg-gradient-to-br from-sky-600/40 to-indigo-600/30 text-sky-200 border border-r-0 border-sky-500/40 rounded-l-xl text-sm font-mono font-bold tracking-wider select-none">
+                  {selectedCompagnie.code_oaci}
+                </span>
+                <input
+                  type="text"
+                  className="input rounded-l-none flex-1 font-mono"
+                  value={numero_vol}
+                  onChange={(e) => setNumeroVol(e.target.value)}
+                  placeholder="2425"
+                  required
+                />
+              </div>
+            ) : (
+              <input type="text" className="input font-mono" value={numero_vol} onChange={(e) => setNumeroVol(e.target.value)} placeholder="N° de vol" required />
+            )}
+            {selectedCompagnie?.code_oaci && (
+              <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1">
+                <Sparkles className="h-3 w-3" />
+                Ex: 2425 → <span className="font-mono text-sky-400/80">{selectedCompagnie.code_oaci}2425</span> · ou callsign libre (ex: RAIDER)
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="label">Porte</label>
+            <input type="text" className="input font-mono" value={porte} onChange={(e) => setPorte(e.target.value)} placeholder="Optionnel" />
+          </div>
         </div>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="label">Numéro de vol *</label>
-          {selectedCompagnie?.code_oaci ? (
-            <div className="flex items-stretch">
-              <span className="flex items-center px-3 bg-sky-600/30 text-sky-300 border border-r-0 border-slate-600 rounded-l-lg text-sm font-mono font-bold tracking-wide select-none">
-                {selectedCompagnie.code_oaci}
-              </span>
+
+        <div className="mt-3 flex items-end gap-3">
+          <div className="flex-1 max-w-[160px]">
+            <label className="label">Temps de vol prévu *</label>
+            <div className="relative">
               <input
-                type="text"
-                className="input rounded-l-none flex-1"
-                value={numero_vol}
-                onChange={(e) => setNumeroVol(e.target.value)}
-                placeholder="2425"
+                type="number"
+                className="input w-full pr-12 font-mono"
+                value={temps_prev_min}
+                onChange={(e) => setTempsPrevMin(e.target.value)}
+                min={1}
                 required
+                placeholder="45"
               />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono uppercase tracking-widest text-slate-500">min</span>
             </div>
-          ) : (
-            <input type="text" className="input" value={numero_vol} onChange={(e) => setNumeroVol(e.target.value)} placeholder="N° de vol" required />
+          </div>
+          {temps_prev_min && parseInt(temps_prev_min, 10) > 0 && (
+            <div className="rounded-lg border border-slate-700/60 bg-slate-900/40 px-3 py-2 text-xs animate-fade-in">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500">ETA</div>
+              <div className="font-mono text-sm font-semibold text-sky-300">
+                ~{Math.floor(parseInt(temps_prev_min, 10) / 60)}h{(parseInt(temps_prev_min, 10) % 60).toString().padStart(2, '0')}
+              </div>
+            </div>
           )}
-          {selectedCompagnie?.code_oaci && (
-            <p className="text-xs text-slate-500 mt-1">Entrez le n° (ex: 2425 → {selectedCompagnie.code_oaci}2425) ou un callsign libre (ex: RAIDER)</p>
-          )}
         </div>
-        <div>
-          <label className="label">Porte</label>
-          <input type="text" className="input" value={porte} onChange={(e) => setPorte(e.target.value)} placeholder="Optionnel" />
+      </section>
+
+      {/* ===== Section : Type de vol VFR/IFR ===== */}
+      <section className="card-glow stagger-enter">
+        <SectionHeader
+          icon={<Navigation className="h-4 w-4" />}
+          label="Type de vol"
+          subtitle={type_vol === 'IFR' ? 'Vol aux instruments — SID/STAR requises' : 'Vol à vue — intentions requises'}
+          accent={type_vol === 'IFR' ? 'indigo' : 'emerald'}
+          badge={
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-widest ${
+              type_vol === 'IFR'
+                ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
+                : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+            }`}>
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${type_vol === 'IFR' ? 'bg-indigo-400' : 'bg-emerald-400'} animate-hud-blink`} />
+              {type_vol}
+            </span>
+          }
+        />
+
+        <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-slate-700/60 bg-slate-900/40 p-1">
+          <button
+            type="button"
+            onClick={() => setTypeVol('VFR')}
+            className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
+              type_vol === 'VFR'
+                ? 'bg-gradient-to-br from-emerald-500/30 to-emerald-600/20 text-emerald-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_4px_12px_rgba(52,211,153,0.2)]'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <span className="font-mono font-bold tracking-wider">VFR</span>
+            <span className="text-xs font-normal opacity-80">à vue</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTypeVol('IFR')}
+            className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
+              type_vol === 'IFR'
+                ? 'bg-gradient-to-br from-indigo-500/30 to-indigo-600/20 text-indigo-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_4px_12px_rgba(129,140,248,0.2)]'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <span className="font-mono font-bold tracking-wider">IFR</span>
+            <span className="text-xs font-normal opacity-80">instruments</span>
+          </button>
         </div>
-      </div>
-      <div>
-        <label className="label">Temps de vol prévu (minutes) *</label>
-        <input type="number" className="input w-32" value={temps_prev_min} onChange={(e) => setTempsPrevMin(e.target.value)} min={1} required />
-      </div>
-      <div>
-        <span className="label block">Type de vol *</span>
-        <div className="flex gap-4 mt-1">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="type" checked={type_vol === 'VFR'} onChange={() => setTypeVol('VFR')} />
-            <span className="text-slate-300">VFR</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="type" checked={type_vol === 'IFR'} onChange={() => setTypeVol('IFR')} />
-            <span className="text-slate-300">IFR</span>
-          </label>
-        </div>
-      </div>
+
       {type_vol === 'VFR' && (
-        <div>
+        <div className="mt-4 animate-fade-in">
           <label className="label">Intentions de vol *</label>
-          <textarea className="input min-h-[80px]" value={intentions_vol} onChange={(e) => setIntentionsVol(e.target.value)} required />
+          <textarea className="input min-h-[80px]" value={intentions_vol} onChange={(e) => setIntentionsVol(e.target.value)} required placeholder="Ex: Tour de piste, navigation locale, vols école..." />
         </div>
       )}
       {type_vol === 'IFR' && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="mt-4 space-y-3 animate-fade-in">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="label">SID de départ *</label>
+              <label className="label flex items-center gap-1.5">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-sky-400" />
+                SID de départ *
+              </label>
               {sidList.length > 0 ? (
                 <>
                   <select
@@ -1081,7 +1346,10 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
               )}
             </div>
             <div>
-              <label className="label">STAR d&apos;arrivée *</label>
+              <label className="label flex items-center gap-1.5">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-fuchsia-400" />
+                STAR d&apos;arrivée *
+              </label>
               {starList.length > 0 ? (
                 <>
                   <select
@@ -1163,59 +1431,73 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           </div>
           <div>
             <label className="label">Niveau de croisière (optionnel)</label>
-            <input
-              type="text"
-              className="input w-32 font-mono"
-              value={niveau_croisiere}
-              onChange={(e) => setNiveauCroisiere(e.target.value.replace(/\D/g, '').slice(0, 3))}
-              placeholder="Ex: 350"
-              maxLength={3}
-            />
-            <p className="text-xs text-slate-500 mt-1">Sera affiché dans la case intention du strip comme CRZ : FL XXX</p>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs uppercase tracking-widest text-slate-500">FL</span>
+              <input
+                type="text"
+                className="input w-28 font-mono"
+                value={niveau_croisiere}
+                onChange={(e) => setNiveauCroisiere(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                placeholder="350"
+                maxLength={3}
+              />
+            </div>
+            <p className="text-xs text-slate-500 mt-1.5">Sera affiché sur le strip comme <span className="font-mono text-sky-400/80">CRZ&nbsp;: FL{niveau_croisiere || 'XXX'}</span></p>
           </div>
-        </>
+        </div>
       )}
-      
-      {/* Note pour l'ATC */}
-      <div>
-        <label className="label">Note d&apos;attention pour l&apos;ATC (optionnel)</label>
-        <textarea 
-          className="input min-h-[60px]" 
-          value={note_atc} 
-          onChange={(e) => setNoteAtc(e.target.value)} 
-          placeholder="Ex: Premier vol, demande assistance..."
-          autoComplete="off"
+      </section>
+
+      {/* ===== Section : Note ATC ===== */}
+      <section className="card-glow stagger-enter">
+        <SectionHeader
+          icon={<Radio className="h-4 w-4" />}
+          label="Note pour l'ATC (optionnel)"
+          subtitle="Remarques ou instructions à transmettre au contrôleur"
+          accent="indigo"
         />
-        <p className="text-xs text-slate-500 mt-1">Instructions ou remarques pour le vol uniquement (pas d&apos;email).</p>
-      </div>
+        <div className="mt-4">
+          <textarea
+            className="input min-h-[64px]"
+            value={note_atc}
+            onChange={(e) => setNoteAtc(e.target.value)}
+            placeholder="Ex: Premier vol, demande assistance, formation en cours..."
+            autoComplete="off"
+          />
+          <p className="text-xs text-slate-500 mt-1.5">Instructions ou remarques pour le vol uniquement (pas d&apos;email).</p>
+        </div>
+      </section>
 
       {/* Confirmation vol sans ATC */}
       {showNoAtcConfirm && (
-        <div className="p-4 rounded-lg border-2 border-amber-500 bg-amber-500/20 space-y-3">
-          <div className="flex items-start gap-3">
-            <Radio className="h-6 w-6 text-amber-400 flex-shrink-0 mt-0.5" />
+        <div className="relative overflow-hidden rounded-2xl border-2 border-amber-500/60 bg-gradient-to-br from-amber-950/60 via-slate-900/70 to-slate-950/70 p-5 space-y-3 animate-zoom-bounce">
+          <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-amber-500/20 blur-3xl" />
+          <div className="relative flex items-start gap-3">
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-amber-500/50 bg-amber-500/15 animate-halo-pulse">
+              <Radio className="h-5 w-5 text-amber-300" />
+            </span>
             <div>
-              <p className="font-semibold text-amber-200">Aucun ATC disponible</p>
-              <p className="text-sm text-amber-300/80 mt-1">
+              <p className="font-bold text-amber-100 text-base">Aucun ATC disponible</p>
+              <p className="text-sm text-amber-200/80 mt-1">
                 Il n&apos;y a actuellement aucune fréquence ATC en ligne à votre aéroport de départ.
               </p>
               <p className="text-sm text-slate-300 mt-2">
-                Voulez-vous effectuer ce vol sans ATC ? Votre plan sera automatiquement accepté et mis en autosurveillance. Vous serez payé normalement à la clôture.
+                Voulez-vous effectuer ce vol <span className="font-semibold text-amber-200">sans ATC</span> ? Votre plan sera automatiquement accepté et mis en autosurveillance. Vous serez payé normalement à la clôture.
               </p>
             </div>
           </div>
-          <div className="flex gap-3 pt-2">
-            <button 
-              type="button" 
+          <div className="relative flex flex-wrap gap-3 pt-2">
+            <button
+              type="button"
               onClick={handleSubmitSansAtc}
               disabled={loading}
-              className="btn-primary bg-amber-600 hover:bg-amber-700 flex items-center gap-2"
+              className="btn-warning flex items-center gap-2"
             >
               <Radio className="h-4 w-4" />
-              {loading ? 'Envoi...' : 'Oui, voler sans ATC'}
+              {loading ? 'Envoi…' : 'Oui, voler sans ATC'}
             </button>
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={() => setShowNoAtcConfirm(false)}
               className="btn-secondary"
             >
@@ -1225,22 +1507,303 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
         </div>
       )}
       
-      {error && <p className="text-red-400 text-sm">{error}</p>}
-      <button 
-        type="submit" 
-        className="btn-primary" 
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 p-3 animate-fade-in">
+          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500/30 text-red-200 text-xs font-bold">!</span>
+          <p className="text-red-300 text-sm">{error}</p>
+        </div>
+      )}
+
+      {/* ===== Bouton submit final — décollage ===== */}
+      <SubmitButton
+        loading={loading}
         disabled={
-          loading || 
-          showNoAtcConfirm || 
+          loading ||
+          showNoAtcConfirm ||
           (vol_commercial && (
             (nature_transport === 'passagers' && !remplissageValidePax) ||
             (nature_transport === 'cargo' && !remplissageValideCargo)
           ))
         }
-      >
-        {loading ? 'Envoi…' : 'Déposer le plan de vol'}
-      </button>
+      />
     </form>
     </>
+  );
+}
+
+/* ============================================================
+ * Composants UI internes — thème aviation
+ * ============================================================ */
+
+type AccentColor = 'sky' | 'amber' | 'emerald' | 'indigo' | 'slate' | 'rose';
+
+const ACCENT_CLASSES: Record<AccentColor, { ring: string; text: string; bg: string; border: string; glow: string }> = {
+  sky:     { ring: 'ring-sky-400/40',     text: 'text-sky-300',     bg: 'bg-sky-500/15',     border: 'border-sky-500/40',     glow: 'shadow-[0_0_24px_rgba(56,189,248,0.25)]' },
+  amber:   { ring: 'ring-amber-400/40',   text: 'text-amber-300',   bg: 'bg-amber-500/15',   border: 'border-amber-500/40',   glow: 'shadow-[0_0_24px_rgba(251,191,36,0.25)]' },
+  emerald: { ring: 'ring-emerald-400/40', text: 'text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/40', glow: 'shadow-[0_0_24px_rgba(52,211,153,0.25)]' },
+  indigo:  { ring: 'ring-indigo-400/40',  text: 'text-indigo-300',  bg: 'bg-indigo-500/15',  border: 'border-indigo-500/40',  glow: 'shadow-[0_0_24px_rgba(129,140,248,0.25)]' },
+  slate:   { ring: 'ring-slate-400/40',   text: 'text-slate-200',   bg: 'bg-slate-500/15',   border: 'border-slate-500/40',   glow: 'shadow-[0_0_24px_rgba(148,163,184,0.18)]' },
+  rose:    { ring: 'ring-rose-400/40',    text: 'text-rose-300',    bg: 'bg-rose-500/15',    border: 'border-rose-500/40',    glow: 'shadow-[0_0_24px_rgba(251,113,133,0.25)]' },
+};
+
+/** Header de section : icône colorée + titre + sous-titre (style cockpit) */
+function SectionHeader({
+  icon,
+  label,
+  subtitle,
+  accent = 'sky',
+  badge,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  subtitle?: string;
+  accent?: AccentColor;
+  badge?: React.ReactNode;
+}) {
+  const c = ACCENT_CLASSES[accent];
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start gap-3">
+        <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${c.border} ${c.bg} ${c.text}`}>
+          {icon}
+        </span>
+        <div>
+          <h3 className="text-base font-semibold text-slate-100 leading-tight">{label}</h3>
+          {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+        </div>
+      </div>
+      {badge}
+    </div>
+  );
+}
+
+/** Carte cliquable pour choisir un mode de vol (Personnel / Commercial / Ferry) */
+function ModeCard({
+  active,
+  accent,
+  icon,
+  title,
+  subtitle,
+  onClick,
+}: {
+  active: boolean;
+  accent: AccentColor;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  onClick: () => void;
+}) {
+  const c = ACCENT_CLASSES[accent];
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group relative overflow-hidden rounded-xl border-2 p-3 text-left transition-all duration-200 active:scale-[0.98] ${
+        active
+          ? `${c.border} ${c.bg} ${c.glow}`
+          : 'border-slate-700/60 bg-slate-800/40 hover:border-slate-500/60 hover:bg-slate-800/70'
+      }`}
+      aria-pressed={active}
+    >
+      {/* Indicateur LED actif */}
+      {active && (
+        <span className={`absolute right-2 top-2 inline-flex h-2 w-2 rounded-full ${c.text.replace('text-', 'bg-')} animate-pulse`} />
+      )}
+      <div className="flex items-center gap-2.5">
+        <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? c.bg : 'bg-slate-700/50'} ${active ? c.text : 'text-slate-400'} transition-colors`}>
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <div className={`text-sm font-semibold leading-tight ${active ? 'text-slate-50' : 'text-slate-200'}`}>{title}</div>
+          <div className="text-[11px] text-slate-400 truncate">{subtitle}</div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+/** Visuel de route : DEP — ✈ — ARR avec ligne pointillée animée */
+function RouteVisual({ depart, arrivee }: { depart: string; arrivee: string }) {
+  const dep = depart ? getAeroportInfo(depart) : null;
+  const arr = arrivee ? getAeroportInfo(arrivee) : null;
+  const sameAirport = depart && arrivee && depart === arrivee;
+  const ready = depart && arrivee && !sameAirport;
+
+  return (
+    <div className="mt-4 relative overflow-hidden rounded-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/80 via-slate-900/40 to-slate-900/80 p-3 sm:p-4">
+      {/* Grille radar de fond */}
+      <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-50" />
+      {/* Halos d'extrémité */}
+      <div className="pointer-events-none absolute -left-8 top-1/2 -translate-y-1/2 h-20 w-20 rounded-full bg-sky-500/10 blur-2xl" />
+      <div className="pointer-events-none absolute -right-8 top-1/2 -translate-y-1/2 h-20 w-20 rounded-full bg-emerald-500/10 blur-2xl" />
+
+      <div className="relative flex items-stretch gap-2 sm:gap-3">
+        {/* Aéroport départ */}
+        <div className="flex-1 min-w-0 text-left">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-sky-400/80 mb-0.5">DEP</div>
+          <div className="font-mono text-xl sm:text-2xl font-bold text-sky-200 tabular-nums">
+            {depart || '----'}
+          </div>
+          <div className="text-[11px] text-slate-400 truncate">{dep?.nom || '—'}</div>
+          {dep?.taille && (
+            <span className="mt-1 inline-block text-[9px] font-mono uppercase tracking-widest text-sky-400/60">
+              {dep.taille}
+            </span>
+          )}
+        </div>
+
+        {/* Ligne de route avec avion */}
+        <div className="relative flex flex-col items-center justify-center min-w-[60px] sm:min-w-[120px]">
+          <svg
+            viewBox="0 0 200 30"
+            className="w-full h-6 sm:h-8"
+            aria-hidden
+          >
+            <defs>
+              <linearGradient id="route-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#38bdf8" />
+                <stop offset="50%" stopColor="#818cf8" />
+                <stop offset="100%" stopColor="#34d399" />
+              </linearGradient>
+            </defs>
+            {/* Ligne pointillée */}
+            <line
+              x1="0" y1="15" x2="200" y2="15"
+              stroke={ready ? 'url(#route-grad)' : 'rgba(148,163,184,0.3)'}
+              strokeWidth="2"
+              strokeDasharray="6 4"
+              className={ready ? 'animate-dash-flow' : ''}
+            />
+            {/* Petits points aux extrémités */}
+            <circle cx="0" cy="15" r="3" fill={ready ? '#38bdf8' : 'rgba(148,163,184,0.4)'} />
+            <circle cx="200" cy="15" r="3" fill={ready ? '#34d399' : 'rgba(148,163,184,0.4)'} />
+          </svg>
+          {/* Avion qui glisse */}
+          {ready ? (
+            <Plane className="absolute h-5 w-5 text-sky-300 -rotate-12 left-0 top-1/2 -translate-y-1/2 animate-plane-glide drop-shadow-[0_0_6px_rgba(56,189,248,0.6)]" />
+          ) : (
+            <Plane className="absolute h-5 w-5 text-slate-600 -rotate-12 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
+          )}
+          {sameAirport && (
+            <div className="mt-1 text-[10px] font-mono uppercase tracking-widest text-amber-400">
+              ⚠ identique
+            </div>
+          )}
+        </div>
+
+        {/* Aéroport arrivée */}
+        <div className="flex-1 min-w-0 text-right">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-emerald-400/80 mb-0.5">ARR</div>
+          <div className="font-mono text-xl sm:text-2xl font-bold text-emerald-200 tabular-nums">
+            {arrivee || '----'}
+          </div>
+          <div className="text-[11px] text-slate-400 truncate">{arr?.nom || '—'}</div>
+          {arr?.taille && (
+            <span className="mt-1 inline-block text-[9px] font-mono uppercase tracking-widest text-emerald-400/60">
+              {arr.taille}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Gauge de remplissage avec barre animée et indicateur de seuil 25% */
+function FillGauge({
+  label,
+  icon,
+  current,
+  max,
+  unit,
+  valid,
+  accent,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  current: number;
+  max: number;
+  unit: string;
+  valid: boolean;
+  accent: AccentColor;
+}) {
+  const c = ACCENT_CLASSES[accent];
+  const pct = max > 0 ? Math.min(100, (current / max) * 100) : 0;
+  const barColor = !valid ? 'from-rose-500 to-rose-400' : accent === 'amber' ? 'from-amber-500 to-amber-300' : 'from-sky-500 to-cyan-300';
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5 text-xs">
+        <div className={`flex items-center gap-1.5 font-mono uppercase tracking-widest ${c.text}`}>
+          {icon}
+          {label}
+        </div>
+        <div className={`font-mono font-semibold tabular-nums ${valid ? 'text-slate-200' : 'text-rose-300'}`}>
+          {current.toLocaleString('fr-FR')}<span className="text-slate-500 mx-0.5">/</span>{max.toLocaleString('fr-FR')}
+          <span className="ml-1 text-slate-500">{unit}</span>
+          <span className={`ml-2 inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold ${valid ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
+            {Math.round(pct)}%
+          </span>
+        </div>
+      </div>
+      <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-700/60">
+        {/* Marqueur seuil 25% */}
+        <div className="absolute top-0 bottom-0 w-px bg-slate-500/60" style={{ left: '25%' }} aria-hidden />
+        <div
+          className={`h-full bg-gradient-to-r ${barColor} transition-all duration-700 ease-out`}
+          style={{ width: `${pct}%`, backgroundSize: '200% 100%', animation: 'shimmer 3s ease-in-out infinite' }}
+        />
+      </div>
+      <div className="mt-1 flex items-center justify-between text-[10px] font-mono text-slate-500">
+        <span className={valid ? 'text-emerald-400' : 'text-rose-400'}>● seuil 25%</span>
+        <span>capacité max</span>
+      </div>
+    </div>
+  );
+}
+
+/** Bouton submit avec animation de décollage en loading */
+function SubmitButton({ loading, disabled }: { loading: boolean; disabled: boolean }) {
+  return (
+    <button
+      type="submit"
+      disabled={disabled}
+      className={`group relative w-full overflow-hidden rounded-2xl px-6 py-4 font-bold text-base text-white shadow-xl transition-all duration-300 ${
+        disabled
+          ? 'bg-slate-700/60 text-slate-400 cursor-not-allowed'
+          : 'bg-gradient-to-r from-sky-600 via-blue-600 to-indigo-600 hover:from-sky-500 hover:via-blue-500 hover:to-indigo-500 hover:shadow-[0_18px_48px_rgba(14,165,233,0.45)] active:scale-[0.99]'
+      }`}
+    >
+      {/* Ligne d'horizon défilante en bas (subtle) */}
+      {!disabled && (
+        <span
+          className="pointer-events-none absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-300 to-transparent opacity-70"
+          style={{ backgroundSize: '200% 100%', animation: 'shimmer 2.4s linear infinite' }}
+        />
+      )}
+      {/* Brillance qui balaye au hover */}
+      {!disabled && (
+        <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+      )}
+
+      <span className="relative flex items-center justify-center gap-3">
+        {loading ? (
+          <>
+            <span className="relative inline-flex h-5 w-5 items-center justify-center">
+              <Plane className="h-5 w-5 -rotate-12 animate-plane-takeoff" />
+            </span>
+            <span className="font-mono uppercase tracking-widest text-sm animate-pulse">Décollage en cours…</span>
+          </>
+        ) : (
+          <>
+            <Send className="h-5 w-5 transition-transform group-hover:translate-x-1 group-hover:-translate-y-0.5" />
+            <span className="tracking-wide">Déposer le plan de vol</span>
+            <span className="hidden sm:inline-flex h-5 items-center rounded-md border border-white/20 bg-white/10 px-1.5 text-[10px] font-mono uppercase tracking-widest">
+              FILE
+            </span>
+          </>
+        )}
+      </span>
+    </button>
   );
 }

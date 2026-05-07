@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plane, AlertCircle, Radio } from 'lucide-react';
+import { ArrowLeft, Plane, Radio, Compass, Navigation2 } from 'lucide-react';
 import DepotPlanVolForm from './DepotPlanVolForm';
 
 export default async function DepotPlanVolPage() {
@@ -139,17 +139,94 @@ export default async function DepotPlanVolPage() {
     }
   }
 
+  const nowUtc = new Date().toUTCString().slice(17, 22); // "HH:MM"
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/logbook" className="text-slate-400 hover:text-slate-200">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="text-2xl font-semibold text-slate-100 flex items-center gap-3">
-          <Plane className="h-7 w-7 text-sky-400" />
-          Déposer un plan de vol
-        </h1>
+    <div className="space-y-6 animate-page-reveal">
+      {/* ===== HUD Header — bandeau aviation ===== */}
+      <div className="relative overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/85 to-slate-950/95 shadow-[0_22px_42px_rgba(2,6,23,0.36),inset_0_1px_0_rgba(255,255,255,0.06)]">
+        {/* Grille cockpit en fond */}
+        <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-60" />
+        {/* Halo radar */}
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -left-16 -bottom-16 h-56 w-56 rounded-full bg-indigo-500/10 blur-3xl" />
+        {/* Avion qui glisse en arrière-plan */}
+        <Plane
+          className="pointer-events-none absolute top-3 -left-10 h-5 w-5 text-sky-400/40 animate-plane-glide"
+          style={{ animationDuration: '7s' }}
+          aria-hidden
+        />
+
+        <div className="relative flex flex-col gap-4 p-5 sm:p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-4">
+            <Link
+              href="/logbook"
+              className="mt-1 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700/60 bg-slate-800/60 text-slate-300 transition-all hover:-translate-x-0.5 hover:border-sky-500/40 hover:bg-slate-700/70 hover:text-sky-300"
+              aria-label="Retour au logbook"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div>
+              <div className="mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-sky-400/80">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)] animate-hud-blink" />
+                FLIGHT PLAN · DEPOSIT
+              </div>
+              <h1 className="flex items-center gap-3 text-2xl sm:text-3xl font-bold tracking-tight text-slate-50">
+                <span className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/30 to-indigo-500/20 border border-sky-400/30 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
+                  <Plane className="h-5 w-5 text-sky-300 -rotate-12" />
+                </span>
+                <span className="bg-gradient-to-r from-slate-50 via-sky-100 to-indigo-200 bg-clip-text text-transparent">
+                  Déposer un plan de vol
+                </span>
+              </h1>
+              <p className="mt-1 text-sm text-slate-400">
+                Renseignez votre route, votre appareil et soumettez votre plan à l&apos;ATC.
+              </p>
+            </div>
+          </div>
+
+          {/* Mini panneau d'instruments (HUD) */}
+          <div className="hidden lg:flex items-stretch gap-2 text-xs">
+            <div className="flex flex-col items-start rounded-lg border border-slate-700/60 bg-slate-900/60 px-3 py-2 backdrop-blur-md">
+              <span className="text-[10px] uppercase tracking-widest text-slate-500">UTC</span>
+              <span className="font-mono text-base font-semibold text-sky-300">{nowUtc}z</span>
+            </div>
+            <div className="flex flex-col items-start rounded-lg border border-slate-700/60 bg-slate-900/60 px-3 py-2 backdrop-blur-md">
+              <span className="text-[10px] uppercase tracking-widest text-slate-500">Status</span>
+              <span className="flex items-center gap-1.5 font-mono text-sm font-semibold text-emerald-300">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                READY
+              </span>
+            </div>
+            <div className="flex flex-col items-start rounded-lg border border-slate-700/60 bg-slate-900/60 px-3 py-2 backdrop-blur-md">
+              <span className="text-[10px] uppercase tracking-widest text-slate-500">Mode</span>
+              <span className="flex items-center gap-1.5 font-mono text-sm font-semibold text-slate-200">
+                <Compass className="h-3.5 w-3.5 text-sky-400 animate-compass-spin" />
+                FILE
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Ligne d'horizon décorative en bas */}
+        <div className="relative h-[3px] w-full overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-sky-400/60 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-indigo-400/40 to-transparent translate-x-[-50%] animate-shimmer" />
+        </div>
       </div>
+
+      {/* Mini stats inline mobile (alternative aux instruments) */}
+      <div className="flex items-center justify-between gap-3 lg:hidden">
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <Navigation2 className="h-4 w-4 text-sky-400 animate-compass-spin" />
+          <span className="font-mono uppercase tracking-wider">Préparation du briefing</span>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-emerald-300">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          Ready
+        </span>
+      </div>
+
       <DepotPlanVolForm 
         compagniesDisponibles={compagniesDisponibles}
         inventairePersonnel={inventairePersonnel}

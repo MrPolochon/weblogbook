@@ -294,6 +294,101 @@ body.atc-dark .text-red-700 {
   50% { transform: translateY(-10px); }
 }
 
+/* ========== ANIMATIONS THÈME AVIATION ========== */
+
+/* Petit avion qui glisse le long d'une ligne (route départ → arrivée) */
+@keyframes plane-glide {
+  0%   { transform: translateX(0)   rotate(8deg);  opacity: 0.6; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateX(100%) rotate(-2deg); opacity: 0.6; }
+}
+.animate-plane-glide {
+  animation: plane-glide 4.5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* Décollage : avion qui prend de l'altitude (utilisé sur le bouton submit en loading) */
+@keyframes plane-takeoff {
+  0%   { transform: translate(0, 0) rotate(0deg); }
+  60%  { transform: translate(40px, -30px) rotate(-25deg); }
+  100% { transform: translate(120px, -120px) rotate(-35deg); opacity: 0; }
+}
+.animate-plane-takeoff {
+  animation: plane-takeoff 1.2s cubic-bezier(0.55, 0, 0.7, 0.4) forwards;
+}
+
+/* Tirets en pointillé qui défilent (style chemin de vol sur carte aéronautique) */
+@keyframes dash-flow {
+  to { stroke-dashoffset: -32; }
+}
+.animate-dash-flow {
+  animation: dash-flow 1.5s linear infinite;
+}
+
+/* Balayage radar : ligne tournante autour d'un centre (subtil, en arrière-plan) */
+@keyframes radar-sweep {
+  from { transform: rotate(0deg);   opacity: 0.0; }
+  10%  { opacity: 0.45; }
+  to   { transform: rotate(360deg); opacity: 0.0; }
+}
+.animate-radar-sweep {
+  animation: radar-sweep 3.5s linear infinite;
+  transform-origin: center center;
+}
+
+/* Halo pulsant sky/cyan : pour signaler une section active ou un bonus */
+@keyframes halo-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.45), 0 0 18px rgba(56, 189, 248, 0.18); }
+  50%      { box-shadow: 0 0 0 8px rgba(56, 189, 248, 0.0),  0 0 32px rgba(56, 189, 248, 0.32); }
+}
+.animate-halo-pulse {
+  animation: halo-pulse 2.4s ease-in-out infinite;
+}
+
+/* HUD blink : LED qui clignote lentement (statut "système prêt") */
+@keyframes hud-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+.animate-hud-blink {
+  animation: hud-blink 1.6s ease-in-out infinite;
+}
+
+/* Compass spin (boussole qui tourne légèrement) */
+@keyframes compass-spin {
+  0%   { transform: rotate(-3deg); }
+  50%  { transform: rotate(3deg); }
+  100% { transform: rotate(-3deg); }
+}
+.animate-compass-spin {
+  animation: compass-spin 6s ease-in-out infinite;
+}
+
+/* Lignes d'horizon qui défilent (style ADI / artificial horizon) */
+@keyframes horizon-scroll {
+  from { background-position: 0 0; }
+  to   { background-position: 60px 0; }
+}
+
+/* Ticker numérique : revenu qui apparaît avec un léger blur+slide */
+@keyframes ticker-pop {
+  0%   { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+  100% { opacity: 1; transform: translateY(0);   filter: blur(0); }
+}
+.animate-ticker-pop {
+  animation: ticker-pop 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Pattern de cockpit : grille topographique aviation (background-image) */
+.bg-cockpit-grid {
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.04) 1px, transparent 1px),
+    radial-gradient(circle at 25% 30%, rgba(56, 189, 248, 0.10) 0%, transparent 35%),
+    radial-gradient(circle at 75% 70%, rgba(99, 102, 241, 0.10) 0%, transparent 35%);
+  background-size: 32px 32px, 32px 32px, 100% 100%, 100% 100%;
+}
+
 /* Animations d'ouverture de page */
 @keyframes page-reveal {
   0% { 
