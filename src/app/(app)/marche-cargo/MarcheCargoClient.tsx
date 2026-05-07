@@ -289,21 +289,28 @@ export default function MarcheCargoClient({ aeroports }: Props) {
                   {selectedAeroport.industriel && (
                     <div className="flex items-center gap-2 text-amber-300">
                       <Factory className="h-4 w-4" />
-                      <span>Zone industrielle: +25% cargo généré</span>
-                    </div>
-                  )}
-                  {selectedAeroport.taille === 'international' && (
-                    <div className="flex items-center gap-2 text-purple-300">
-                      <Plane className="h-4 w-4" />
-                      <span>Hub cargo: tout type accepté</span>
+                      <span>Zone industrielle : +30 % de chargement</span>
                     </div>
                   )}
                   {selectedAeroport.taille === 'military' && (
                     <div className="flex items-center gap-2 text-red-300">
                       <Package className="h-4 w-4" />
-                      <span>Cargo militaire uniquement</span>
+                      <span>Base militaire : +20 % de chargement (fret militaire)</span>
                     </div>
                   )}
+                  {selectedAeroport.taille === 'international' && (
+                    <div className="flex items-center gap-2 text-purple-300">
+                      <Plane className="h-4 w-4" />
+                      <span>Hub cargo : tout type accepté</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-cyan-300">
+                    <TrendingUp className="h-4 w-4" />
+                    <span>Isolement : +15 % à +60 % selon le délai sans vol</span>
+                  </div>
+                  <div className="text-xs text-slate-500 pt-1 border-t border-slate-700/50 mt-2">
+                    Cap cumul des bonus : +50 %. Saturation (&lt; 30 % dispo) : −50 %.
+                  </div>
                 </div>
               </div>
             </div>

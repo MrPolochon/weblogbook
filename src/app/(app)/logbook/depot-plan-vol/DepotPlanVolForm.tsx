@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AEROPORTS_PTFS, getAeroportInfo, calculerCoefficientRemplissage, estimerCargo, calculerCoefficientChargementCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_PTFS, getAeroportInfo, estimerPassagers, estimerCargo, genererTypeCargaison, getCargaisonInfo, TypeCargaison, type CoefficientContext } from '@/lib/aeroports-ptfs';
 import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
 import { Building2, Plane, Users, Weight, DollarSign, Shield, Radio, Phone } from 'lucide-react';
@@ -51,6 +51,7 @@ interface AeroportPassagers {
   code_oaci: string;
   passagers_disponibles: number;
   passagers_max: number;
+  last_flight_arrival?: string | null;
 }
 
 interface AvionIndividuel {
@@ -116,6 +117,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const [tarifsLiaisons, setTarifsLiaisons] = useState<TarifLiaison[]>([]);
   const [passagersAeroport, setPassagersAeroport] = useState<AeroportPassagers | null>(null);
   const [cargoAeroport, setCargoAeroport] = useState<{ cargo_disponible: number; cargo_max: number } | null>(null);
+  // Date du dernier vol arrivé à l'aéroport d'arrivée (pour le bonus d'isolement)
+  const [lastArrivalArrivee, setLastArrivalArrivee] = useState<Date | null>(null);
   
   const [loading, setLoading] = useState(false);
   const submitBusyRef = useRef(false);
@@ -314,6 +317,31 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       });
   }, [aeroport_depart]);
 
+  // Charger le timestamp du dernier vol arrivé à l'aéroport d'arrivée
+  // (pour calculer le bonus d'isolement)
+  useEffect(() => {
+    if (!aeroport_arrivee) {
+      setLastArrivalArrivee(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    fetch(`/api/aeroport-passagers?code_oaci=${aeroport_arrivee}`, { signal: ctrl.signal })
+      .then(res => res.json())
+      .then(data => {
+        if (ctrl.signal.aborted) return;
+        if (data && data.last_flight_arrival) {
+          setLastArrivalArrivee(new Date(data.last_flight_arrival));
+        } else {
+          setLastArrivalArrivee(null);
+        }
+      })
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        setLastArrivalArrivee(null);
+      });
+    return () => ctrl.abort();
+  }, [aeroport_arrivee]);
+
   // Trouver le prix du billet pour cette liaison
   const prixBilletLiaison = (() => {
     if (!selectedCompagnie) return 0;
@@ -355,91 +383,67 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     const prixCargo = selectedCompagnie.prix_kg_cargo || 0;
 
     // Clé unique pour régénérer seulement quand les paramètres importants changent
-    // NE PAS inclure nature_transport pour éviter la régénération en basculant entre passagers/cargo
+    // (inclut last_flight_arrival pour rafraîchir le bonus d'isolement)
     const aircraftKey = compagnie_avion_id;
-    const generationKey = `${aircraftKey}-${aeroport_depart}-${aeroport_arrivee}-${prixBilletLiaison}-${prixCargo}`;
+    const isoKey = lastArrivalArrivee?.toISOString() ?? 'null';
+    const generationKey = `${aircraftKey}-${aeroport_depart}-${aeroport_arrivee}-${prixBilletLiaison}-${prixCargo}-${isoKey}`;
     if (generationKey === lastGeneratedKey) {
       return;
     }
 
-    // Générer les valeurs UNE FOIS pour passagers ET cargo (pas de régénération en changeant le type)
+    // Contexte commun : last_flight_arrival pour le bonus d'isolement, ratios pour
+    // la saturation, capacités pour le malus petit aéroport.
+    const ratioPaxDispo = passagersAeroport && passagersAeroport.passagers_max > 0
+      ? passagersAeroport.passagers_disponibles / passagersAeroport.passagers_max
+      : undefined;
+    const ratioCargoDispo = cargoAeroport && cargoAeroport.cargo_max > 0
+      ? cargoAeroport.cargo_disponible / cargoAeroport.cargo_max
+      : undefined;
+    const ctxBase: CoefficientContext = {
+      lastArrivalAtArrivee: lastArrivalArrivee,
+      ratioPaxDispo,
+      ratioCargoDispo,
+      capacitePax,
+      capaciteCargoKg: capaciteCargo,
+    };
+
     let pax = 0;
     let cargo = 0;
 
-    // Calcul pour les PASSAGERS (toujours calculé, même si cargo sélectionné)
+    // PASSAGERS — estimation déterministe (la variance ±10% s'applique côté serveur)
     if (capacitePax > 0) {
-      // Calculer le coefficient de remplissage basé sur prix, taille aéroport et tourisme
-      const coefRemplissage = calculerCoefficientRemplissage(aeroport_depart, aeroport_arrivee, prixBilletLiaison);
-      
-      // Facteur de saturation (si beaucoup de vols ont déjà pris des passagers)
-      let coefSaturation = 1.0;
-      if (passagersAeroport && passagersAeroport.passagers_max > 0) {
-        const ratioDisponibles = passagersAeroport.passagers_disponibles / passagersAeroport.passagers_max;
-        // Si moins de 50% de passagers disponibles, le remplissage diminue
-        if (ratioDisponibles < 0.5) {
-          coefSaturation = 0.5 + ratioDisponibles; // Entre 0.5 et 1.0
-        }
-      }
-      
-      // Coefficient final (inclut les bonus/malus)
-      const coefFinal = coefRemplissage * coefSaturation;
-      
-      // Le coefficient de remplissage représente directement le taux de remplissage (0 à 1.15)
-      // On applique une variation aléatoire de ±10% pour plus de réalisme
-      const variation = 0.10;
-      const coefMin = Math.max(0, coefFinal - variation);
-      const coefMax = Math.min(1.15, coefFinal + variation);
-      
-      // Générer un coefficient aléatoire dans cette plage
-      const coefAleatoire = coefMin + Math.random() * (coefMax - coefMin);
-      
-      // Calculer les passagers directement avec ce coefficient
-      pax = Math.floor(capacitePax * coefAleatoire);
-      
-      // Limiter aux passagers disponibles dans l'aéroport
-      if (passagersAeroport) {
-        pax = Math.min(pax, passagersAeroport.passagers_disponibles);
-      }
-      // Ne jamais dépasser la capacité de l'avion
-      const paxAvantCap = pax;
-      pax = Math.min(pax, capacitePax);
-      if (paxAvantCap !== pax) {
-      }
+      const paxDispo = passagersAeroport?.passagers_disponibles ?? capacitePax;
+      const estim = estimerPassagers(
+        aeroport_depart,
+        aeroport_arrivee,
+        prixBilletLiaison,
+        capacitePax,
+        paxDispo,
+        ctxBase
+      );
+      pax = estim.passagers;
     }
 
-    // Calcul pour le CARGO (toujours calculé, même si passagers sélectionné)
+    // CARGO — estimation déterministe
     if (capaciteCargo > 0 && prixCargo > 0) {
       const cargoDisponible = cargoAeroport?.cargo_disponible ?? getAeroportInfo(aeroport_depart)?.cargoMax ?? 0;
-      
-      // Utiliser estimerCargo pour avoir une estimation réaliste basée sur le prix cargo
-      const estimation = estimerCargo(
+      const estim = estimerCargo(
         aeroport_depart,
         aeroport_arrivee,
         prixCargo,
         capaciteCargo,
-        cargoDisponible
+        cargoDisponible,
+        ctxBase
       );
-      
-      // Utiliser directement l'estimation (qui est déjà une moyenne réaliste)
-      // On peut ajouter une petite variation aléatoire pour plus de réalisme (±15%)
-      const variation = estimation.cargo * 0.15;
-      const minCargo = Math.max(0, Math.floor(estimation.cargo - variation));
-      const maxCargo = Math.min(cargoDisponible, Math.floor(estimation.cargo + variation));
-      
-      cargo = Math.floor(Math.random() * (Math.max(1, maxCargo - minCargo) + 1)) + minCargo;
-      // Ne jamais dépasser la capacité cargo de l'avion
-      const cargoAvantCap = cargo;
-      cargo = Math.min(cargo, capaciteCargo);
-      if (cargoAvantCap !== cargo) {
-      }
+      cargo = estim.cargo;
     }
 
     setGeneratedPax(pax);
     setGeneratedCargo(cargo);
-    // Générer un type de cargaison estimé (le serveur générera le vrai type)
+    // Type de cargaison provisoire (le serveur tirera le vrai type au dépôt)
     setEstimatedTypeCargaison(genererTypeCargaison());
     setLastGeneratedKey(generationKey);
-  }, [vol_commercial, vol_ferry, compagnie_avion_id, selectedCompagnie, selectedAvionIndiv, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport]);
+  }, [vol_commercial, vol_ferry, compagnie_avion_id, selectedCompagnie, selectedAvionIndiv, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport, lastArrivalArrivee]);
 
   // Revenus : passagers uniquement, cargo uniquement, ou passagers + cargo complémentaire
   const nbPax = nature_transport === 'passagers' ? generatedPax : 0;

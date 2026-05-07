@@ -130,13 +130,44 @@ export async function POST(request: Request) {
         capaciteCargo = ta?.capacite_cargo_kg ?? 0;
       }
 
+      // Récupération du contexte aéroport (last_flight_arrival + ratios dispo)
+      // pour appliquer correctement les buffs/malus côté serveur.
+      const { data: aeroportArriveeData } = await admin
+        .from('aeroports')
+        .select('last_flight_arrival, passagers_disponibles, passagers_max, cargo_disponible, cargo_max')
+        .eq('code_oaci', aa)
+        .maybeSingle();
+      const { data: aeroportDepartData } = await admin
+        .from('aeroports')
+        .select('passagers_disponibles, passagers_max, cargo_disponible, cargo_max')
+        .eq('code_oaci', ad)
+        .maybeSingle();
+
+      const lastArrivalAtArrivee = aeroportArriveeData?.last_flight_arrival
+        ? new Date(aeroportArriveeData.last_flight_arrival)
+        : null;
+      const ratioPaxDispo = aeroportDepartData && aeroportDepartData.passagers_max > 0
+        ? aeroportDepartData.passagers_disponibles / aeroportDepartData.passagers_max
+        : undefined;
+      const ratioCargoDispo = aeroportDepartData && aeroportDepartData.cargo_max > 0
+        ? aeroportDepartData.cargo_disponible / aeroportDepartData.cargo_max
+        : undefined;
+
+      const ctxBria = {
+        lastArrivalAtArrivee,
+        ratioPaxDispo,
+        ratioCargoDispo,
+        capacitePax,
+        capaciteCargoKg: capaciteCargo,
+      };
+
       const natureT = nature_transport || 'passagers';
 
       if (natureT === 'passagers' && capacitePax > 0) {
-        const coef = calculerCoefficientRemplissage(ad, aa, prixBillet);
+        const coef = calculerCoefficientRemplissage(ad, aa, prixBillet, ctxBria);
         nbPaxFinal = Math.min(Math.floor(capacitePax * Math.min(coef, 1.0)), capacitePax);
         const revPax = nbPaxFinal * prixBillet;
-        const coefCargo = calculerCoefficientChargementCargo(ad, aa, prixKgCargo);
+        const coefCargo = calculerCoefficientChargementCargo(ad, aa, prixKgCargo, ctxBria);
         const cargoComp = Math.min(Math.floor(capaciteCargo * Math.min(coefCargo, 1.0)), capaciteCargo);
         cargoGenereFinal = cargoComp;
         let revCargoComp = cargoComp * prixKgCargo;
@@ -149,7 +180,7 @@ export async function POST(request: Request) {
         revenuBrutFinal = revPax + revCargoComp;
         prixBilletFinal = prixBillet;
       } else if (natureT === 'cargo' && capaciteCargo > 0) {
-        const coefCargo = calculerCoefficientChargementCargo(ad, aa, prixKgCargo);
+        const coefCargo = calculerCoefficientChargementCargo(ad, aa, prixKgCargo, ctxBria);
         cargoGenereFinal = Math.min(Math.floor(capaciteCargo * Math.min(coefCargo, 1.0)), capaciteCargo);
         let revCargo = cargoGenereFinal * prixKgCargo;
         typeCargaisonFinal = genererTypeCargaison();

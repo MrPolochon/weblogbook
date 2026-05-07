@@ -915,5 +915,17 @@ export async function finaliserCloturePlan(
     return { success: false, paiementResult, usureAppliquee, error: error.message };
   }
 
+  // Mettre à jour last_flight_arrival sur l'aéroport d'arrivée (bonus d'isolement).
+  // S'applique à tous les vols clôturés (commerciaux, MEDEVAC, ferry, privés).
+  // On ignore les segments intermédiaires MEDEVAC (le vol n'est pas vraiment terminé).
+  if (!estSegmentIntermediaire && plan.aeroport_arrivee) {
+    try {
+      await admin.rpc('enregistrer_arrivee_vol', { p_code_oaci: plan.aeroport_arrivee });
+    } catch (e) {
+      // Non bloquant : si la RPC n'existe pas (migration non appliquée), on log et on continue
+      console.warn('enregistrer_arrivee_vol RPC indisponible:', e);
+    }
+  }
+
   return { success: true, paiementResult, usureAppliquee };
 }

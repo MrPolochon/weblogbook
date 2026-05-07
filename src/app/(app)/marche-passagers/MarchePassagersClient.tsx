@@ -1082,26 +1082,27 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium text-slate-400">Bonus & Malus</h4>
                   <div className="space-y-1 text-sm">
-                    {selectedAeroport.taille === 'international' && (
-                      <div className="flex items-center gap-2 text-purple-300">
-                        <TrendingUp className="h-4 w-4" /><span>Prix billet: -40% d&apos;impact</span>
+                    {selectedAeroport.tourisme && (
+                      <div className="flex items-center gap-2 text-amber-300">
+                        <span>🏝️</span><span>Touristique : +25 % de remplissage</span>
                       </div>
                     )}
-                    {selectedAeroport.taille === 'regional' && (
-                      <div className="flex items-center gap-2 text-sky-300">
-                        <TrendingUp className="h-4 w-4" /><span>Prix billet: -20% d&apos;impact</span>
+                    {selectedAeroport.taille === 'international' && (
+                      <div className="flex items-center gap-2 text-purple-300">
+                        <TrendingUp className="h-4 w-4" /><span>Hub-Hub : +15 % (si départ aussi international)</span>
                       </div>
                     )}
                     {selectedAeroport.taille === 'military' && (
                       <div className="flex items-center gap-2 text-red-300">
-                        <Plane className="h-4 w-4" /><span>Peu de passagers civils</span>
+                        <Plane className="h-4 w-4" /><span>Plafond civil : 20 % de remplissage max</span>
                       </div>
                     )}
-                    {selectedAeroport.tourisme && (
-                      <div className="flex items-center gap-2 text-amber-300">
-                        <span>🏝️</span><span>Touristique: +15% remplissage</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2 text-cyan-300">
+                      <TrendingUp className="h-4 w-4" /><span>Isolement : +15 % à +60 % selon le délai sans vol</span>
+                    </div>
+                    <div className="text-xs text-slate-500 pt-1 border-t border-slate-700/50 mt-2">
+                      Cap cumul des bonus : +50 %. Saturation (&lt; 30 % dispo) : −50 %.
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1168,10 +1169,9 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                       </td>
                       <td className="py-3">
                         <div className="flex items-center gap-1">
-                          {aeroport.tourisme && <span title="Touristique">🏝️</span>}
-                          {aeroport.taille === 'international' && <span className="text-[10px] px-1 py-0.5 rounded bg-purple-500/20 text-purple-300">-40%</span>}
-                          {aeroport.taille === 'regional' && <span className="text-[10px] px-1 py-0.5 rounded bg-sky-500/20 text-sky-300">-20%</span>}
-                          {aeroport.taille === 'military' && <span className="text-[10px] px-1 py-0.5 rounded bg-red-500/20 text-red-300">Mil.</span>}
+                          {aeroport.tourisme && <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Touristique +25%">🏝️ +25%</span>}
+                          {aeroport.taille === 'international' && <span className="text-[10px] px-1 py-0.5 rounded bg-purple-500/20 text-purple-300" title="Hub-Hub +15%">Hub</span>}
+                          {aeroport.taille === 'military' && <span className="text-[10px] px-1 py-0.5 rounded bg-red-500/20 text-red-300" title="Max 20% civil">Mil. max 20%</span>}
                         </div>
                       </td>
                     </tr>
