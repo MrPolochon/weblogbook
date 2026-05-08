@@ -149,13 +149,41 @@ export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
 
     submit_flight_plan: async (params: { payload: Record<string, unknown> }) => {
       const conversation = opts.getConversationLog();
+      const p = params.payload ?? {};
+
+      const sanitized: Record<string, unknown> = {
+        ...p,
+        aeroport_depart: String(p.aeroport_depart ?? '').toUpperCase(),
+        aeroport_arrivee: String(p.aeroport_arrivee ?? '').toUpperCase(),
+        numero_vol: String(p.numero_vol ?? 'BRIA001').toUpperCase(),
+        temps_prev_min: Number(p.temps_prev_min) || 30,
+        type_vol: ['VFR', 'IFR'].includes(String(p.type_vol ?? '').toUpperCase())
+          ? String(p.type_vol).toUpperCase() : 'VFR',
+        vol_commercial: Boolean(p.vol_commercial),
+        vol_sans_atc: p.vol_sans_atc !== undefined ? Boolean(p.vol_sans_atc) : true,
+        nb_pax_genere: Number(p.nb_pax_genere) || 0,
+        cargo_kg_genere: Number(p.cargo_kg_genere) || 0,
+        revenue_brut: 0,
+        prix_billet_utilise: Number(p.prix_billet_utilise) || 0,
+        bria_conversation: conversation,
+      };
+
+      if (sanitized.type_vol === 'VFR' && !sanitized.intentions_vol) {
+        sanitized.intentions_vol = 'Vol déposé via BRIA';
+      }
+
+      console.log('[BRIA] submit_flight_plan payload:', JSON.stringify(sanitized));
+
       const res = await fetch('/api/plans-vol', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...params.payload, bria_conversation: conversation }),
+        body: JSON.stringify(sanitized),
       });
       const data = await res.json();
-      if (!res.ok) return JSON.stringify({ success: false, error: data.error ?? 'Erreur soumission' });
+      if (!res.ok) {
+        console.error('[BRIA] submit error:', data.error);
+        return JSON.stringify({ success: false, error: data.error ?? 'Erreur soumission' });
+      }
       opts.router.refresh();
       return JSON.stringify({ success: true, id: data.id, statut: data.statut ?? 'accepte' });
     },
