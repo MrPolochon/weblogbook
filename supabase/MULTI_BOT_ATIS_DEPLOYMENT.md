@@ -111,10 +111,13 @@ occupé, le système assigne automatiquement le Bot 2.
 
 ## Ajouter un 3e bot (futur)
 
-La logique est générique : pour ajouter un Bot 3, il suffit de :
-- Ajouter `DISCORD_TOKEN_3` dans Render
-- Insérer manuellement les lignes `id='3'` dans `atis_broadcast_state` et
-  `atis_broadcast_config` :
+La logique est désormais **dynamique** : le frontend détecte automatiquement
+toutes les instances renvoyées par le bot (via `/webhook/overview`). Pour
+ajouter un Bot 3, il suffit de :
+
+- Ajouter `DISCORD_TOKEN_3` dans Render (et inviter le bot sur le serveur).
+- Optionnellement, insérer les lignes correspondantes côté DB (le code
+  upsert automatiquement à la première écriture) :
 
 ```sql
 INSERT INTO public.atis_broadcast_state (id, broadcasting) VALUES ('3', false)
@@ -123,5 +126,23 @@ INSERT INTO public.atis_broadcast_config (id) VALUES ('3')
   ON CONFLICT (id) DO NOTHING;
 ```
 
-- Mettre à jour le sélecteur du panel ATIS (`AtcAtisButton.tsx`, ligne
-  `[1, 2].map((id) => ...)` → `[1, 2, 3].map(...)`).
+Le panel ATIS affiche automatiquement Bot 1 / Bot 2 / Bot 3 / ... selon ce
+que renvoie le bot. **Aucune modification du frontend n'est nécessaire.**
+
+## Améliorations apportées (mai 2026)
+
+- **Endpoint consolidé `/api/atc/atis/overview`** : 1 seul appel HTTP
+  retourne l'état DB + bot live + config Discord + guilds + noms ATC
+  contrôleurs (au lieu de 4 appels parallèles).
+- **Cache server-side guilds/channels (TTL 30s)** : épargne le bot Render.
+- **Bot Python `/webhook/overview`** : status-all + guilds + meta en 1 call.
+- **Bot Python `/webhook/health`** : diagnostic complet (uptime, version,
+  instances ready, secret loaded).
+- **Démarrage avec choix du bot cible** : `POST /api/atc/atis/start` accepte
+  `instance_id` optionnel pour forcer un bot précis (UI : Auto / Bot 1 / Bot 2).
+- **Auto-détection du nombre d'instances** côté frontend : plus de hardcode.
+- **Vue multi-bots dans le panneau** : carte par instance avec nom de l'ATC
+  contrôleur, canal vocal, code ATIS, source (site/Discord), badge libre/actif.
+- **Stop partagé** : n'importe quel ATC peut arrêter n'importe quelle
+  instance via `instance_id` (utile si l'auteur s'est déconnecté).
+- **Diagnostic du bot visible** : indicateur Wifi/latence/version dans le header.

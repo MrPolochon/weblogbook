@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-import { fetchAtisBot } from '@/lib/atis-bot-api';
+import { getCachedGuilds } from '@/lib/atis-bot-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,7 +12,9 @@ export async function GET() {
   const canAtc = profile?.role === 'admin' || profile?.role === 'atc' || Boolean(profile?.atc);
   if (!canAtc) return NextResponse.json({ error: 'Accès ATC requis.' }, { status: 403 });
 
-  const result = await fetchAtisBot<{ guilds: { id: string; name: string }[] }>('/webhook/discord-guilds');
-  if (result.error) return NextResponse.json({ error: result.error }, { status: result.status });
-  return NextResponse.json(result.data ?? { guilds: [] });
+  const result = await getCachedGuilds();
+  if (result.error && result.guilds.length === 0) {
+    return NextResponse.json({ error: result.error }, { status: 503 });
+  }
+  return NextResponse.json({ guilds: result.guilds, cached: result.cached ?? false });
 }

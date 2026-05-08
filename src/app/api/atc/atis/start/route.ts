@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
-import { fetchAtisBot, getAvailableBotInstance } from '@/lib/atis-bot-api';
+import { fetchAtisBot, getAvailableBotInstance, getAllBotStatuses } from '@/lib/atis-bot-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,9 +10,16 @@ export const dynamic = 'force-dynamic';
  * POST - Démarrer le broadcast ATIS sur un bot disponible.
  *
  * Multi-instance :
- *   - Le site choisit automatiquement un bot Discord libre (instance_id 1, 2, ...).
+ *   - Le site peut auto-assigner le 1er bot libre, OU l'ATC peut cibler une
+ *     instance precise via body.instance_id (utile si chaque bot a un canal
+ *     vocal dedie, ex. "ATIS Mellor" sur Bot 1, "ATIS Refuge" sur Bot 2).
  *   - Un même aéroport ne peut être diffusé que par un seul bot à la fois.
  *   - L'ATC ne peut contrôler qu'un seul ATIS à la fois.
+ *
+ * Body :
+ *   - aeroport (string, requis) : code ICAO
+ *   - position (string, requis) : poste ATC (TWR, APP, ...)
+ *   - instance_id (number, optionnel) : si fourni, force le bot cible (sinon auto)
  */
 export async function POST(request: Request) {
   try {
@@ -31,7 +38,11 @@ export async function POST(request: Request) {
     if (!canAtc) return NextResponse.json({ error: 'Accès ATC requis.' }, { status: 403 });
 
     const body = await request.json();
-    const { aeroport, position } = body;
+    const { aeroport, position, instance_id: requestedInstance } = body as {
+      aeroport?: string;
+      position?: string;
+      instance_id?: number | string;
+    };
     if (!aeroport || !position) {
       return NextResponse.json({ error: 'aeroport et position requis' }, { status: 400 });
     }
@@ -71,18 +82,50 @@ export async function POST(request: Request) {
       );
     }
 
-    // Auto-assign : on demande au bot quelle instance est libre.
-    const { instance_id: availableInstance, error: availableErr } = await getAvailableBotInstance();
-    if (availableErr) {
-      return NextResponse.json({ error: availableErr }, { status: 503 });
-    }
-    if (!availableInstance) {
-      return NextResponse.json(
-        {
-          error: 'Tous les bots ATIS sont déjà actifs. Réessayez plus tard ou demandez à un autre ATC d\'arrêter le sien.',
-        },
-        { status: 409 }
-      );
+    // Resolution de l'instance cible : explicit (body.instance_id) ou auto.
+    let availableInstance: number | null = null;
+
+    if (requestedInstance !== undefined && requestedInstance !== null && requestedInstance !== '') {
+      const requested = parseInt(String(requestedInstance), 10);
+      if (!Number.isFinite(requested) || requested < 1) {
+        return NextResponse.json({ error: 'instance_id invalide' }, { status: 400 });
+      }
+      // Verifie que ce bot existe et qu'il n'est pas deja en broadcast.
+      const { instances, error: statusErr } = await getAllBotStatuses();
+      if (statusErr) {
+        return NextResponse.json({ error: statusErr }, { status: 503 });
+      }
+      const target = instances.find((i) => i.instance_id === requested);
+      if (!target) {
+        return NextResponse.json(
+          { error: `Bot ATIS ${requested} introuvable. Vérifiez la configuration côté Render.` },
+          { status: 400 }
+        );
+      }
+      if (target.broadcasting) {
+        return NextResponse.json(
+          {
+            error: `Le Bot ${requested} diffuse déjà l'ATIS de ${target.airport ?? '?'}. Choisissez un autre bot.`,
+          },
+          { status: 409 }
+        );
+      }
+      availableInstance = requested;
+    } else {
+      // Auto-assign : on demande au bot quelle instance est libre.
+      const { instance_id, error: availableErr } = await getAvailableBotInstance();
+      if (availableErr) {
+        return NextResponse.json({ error: availableErr }, { status: 503 });
+      }
+      if (!instance_id) {
+        return NextResponse.json(
+          {
+            error: 'Tous les bots ATIS sont déjà actifs. Réessayez plus tard ou demandez à un autre ATC d\'arrêter le sien.',
+          },
+          { status: 409 }
+        );
+      }
+      availableInstance = instance_id;
     }
 
     // Récupère la config Discord (guild + canal) de cette instance.
@@ -114,7 +157,12 @@ export async function POST(request: Request) {
     }
 
     // Démarre le broadcast sur cette instance.
-    const startRes = await fetchAtisBot<{ ok: boolean; broadcasting: boolean }>('/webhook/start', {
+    const startRes = await fetchAtisBot<{
+      ok: boolean;
+      broadcasting: boolean;
+      guild_name?: string;
+      channel_name?: string;
+    }>('/webhook/start', {
       method: 'POST',
       body: { guild_id: guildId, channel_id: channelId },
       instanceId: availableInstance,
@@ -138,7 +186,13 @@ export async function POST(request: Request) {
       { onConflict: 'id' }
     );
 
-    return NextResponse.json({ ok: true, broadcasting: true, instance_id: availableInstance });
+    return NextResponse.json({
+      ok: true,
+      broadcasting: true,
+      instance_id: availableInstance,
+      guild_name: startRes.data?.guild_name,
+      channel_name: startRes.data?.channel_name,
+    });
   } catch (e) {
     console.error('ATIS start:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

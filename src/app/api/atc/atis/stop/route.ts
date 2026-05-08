@@ -38,20 +38,21 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
-    const isAdmin = profile?.role === 'admin';
 
     // Identifie la (les) instance(s) à arrêter.
+    // - Si body.instance_id fourni : stop cible (n'importe quel ATC peut arreter
+    //   n'importe quel ATIS, c'est une "kill switch" partagee pour eviter qu'un
+    //   ATIS oublie reste actif si le proprio est offline).
+    // - Sinon : stop toutes les instances contrôlées par l'utilisateur.
     let targetInstances: number[] = [];
 
-    if (body.instance_id !== undefined && isAdmin) {
-      // Mode admin : stop ciblé d'une instance précise (kill switch).
+    if (body.instance_id !== undefined && body.instance_id !== null && body.instance_id !== '') {
       const id = Number(body.instance_id);
       if (!Number.isFinite(id)) {
         return NextResponse.json({ error: 'instance_id invalide' }, { status: 400 });
       }
       targetInstances = [id];
     } else {
-      // Mode normal : stop l'instance contrôlée par l'utilisateur.
       const { data: rows } = await admin
         .from('atis_broadcast_state')
         .select('id')

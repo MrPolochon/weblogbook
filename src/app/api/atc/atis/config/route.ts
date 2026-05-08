@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextRequest, NextResponse } from 'next/server';
+import { invalidateAtisCaches } from '@/lib/atis-bot-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -101,6 +102,9 @@ export async function PATCH(request: NextRequest) {
       },
       { onConflict: 'id' }
     );
+    // Forcer un refresh des listes Discord au prochain appel (au cas ou le bot
+    // a rejoint un nouveau serveur ou ajoute un canal vocal).
+    invalidateAtisCaches();
     return NextResponse.json({ ok: true, instance_id: instanceId });
   } catch (e) {
     console.error('ATIS config save:', e);
