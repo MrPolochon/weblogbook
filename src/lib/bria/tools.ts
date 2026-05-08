@@ -151,16 +151,27 @@ export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
       const conversation = opts.getConversationLog();
       const p = params.payload ?? {};
 
+      const dep = String(p.aeroport_depart ?? '').toUpperCase();
+
+      let atcOnline = false;
+      try {
+        const atcRes = await fetch(`/api/atc-online?aeroport=${encodeURIComponent(dep)}`);
+        if (atcRes.ok) {
+          const atcData = await atcRes.json();
+          atcOnline = Boolean(atcData.online);
+        }
+      } catch { /* ignore */ }
+
       const sanitized: Record<string, unknown> = {
         ...p,
-        aeroport_depart: String(p.aeroport_depart ?? '').toUpperCase(),
+        aeroport_depart: dep,
         aeroport_arrivee: String(p.aeroport_arrivee ?? '').toUpperCase(),
         numero_vol: String(p.numero_vol ?? 'BRIA001').toUpperCase(),
         temps_prev_min: Number(p.temps_prev_min) || 30,
         type_vol: ['VFR', 'IFR'].includes(String(p.type_vol ?? '').toUpperCase())
           ? String(p.type_vol).toUpperCase() : 'VFR',
         vol_commercial: Boolean(p.vol_commercial),
-        vol_sans_atc: p.vol_sans_atc !== undefined ? Boolean(p.vol_sans_atc) : true,
+        vol_sans_atc: !atcOnline,
         nb_pax_genere: Number(p.nb_pax_genere) || 0,
         cargo_kg_genere: Number(p.cargo_kg_genere) || 0,
         revenue_brut: 0,
