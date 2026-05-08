@@ -170,8 +170,14 @@ export async function POST(request: Request) {
     );
     if (upsertErr) {
       console.error('ATIS start upsert error:', upsertErr);
+      // Expose le vrai message Supabase pour faciliter le debug.
       return NextResponse.json(
-        { error: 'Erreur DB lors de la prise de controle' },
+        {
+          error: `Erreur DB lors de la prise de controle: ${upsertErr.message}`,
+          code: upsertErr.code,
+          details: upsertErr.details,
+          hint: upsertErr.hint,
+        },
         { status: 500 }
       );
     }
