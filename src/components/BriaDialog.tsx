@@ -106,7 +106,7 @@ function BriaInner({ onClose }: BriaInnerProps) {
       cancelled = true;
       if (inactivityRef.current) clearTimeout(inactivityRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const isMuted = conv.isMuted;
@@ -199,14 +199,14 @@ function BriaInner({ onClose }: BriaInnerProps) {
             <div key={i} className={`flex ${msg.role === 'bria' ? 'justify-start' : 'justify-end'}`}>
               <div
                 className={`max-w-[85%] rounded px-3.5 py-2 text-sm whitespace-pre-line font-mono leading-relaxed ${
-                  msg.role === 'bria'
-                    ? 'bg-emerald-950/50 border border-emerald-500/15 text-emerald-100/90'
-                    : 'bg-cyan-950/50 border border-cyan-500/15 text-cyan-100/90'
+                msg.role === 'bria'
+                  ? 'bg-emerald-950/50 border border-emerald-500/15 text-emerald-100/90'
+                  : 'bg-cyan-950/50 border border-cyan-500/15 text-cyan-100/90'
                 }`}
               >
                 <span
                   className={`text-[10px] font-bold tracking-[0.2em] block mb-1 ${
-                    msg.role === 'bria' ? 'text-emerald-500/70' : 'text-cyan-500/70'
+                  msg.role === 'bria' ? 'text-emerald-500/70' : 'text-cyan-500/70'
                   }`}
                 >
                   {msg.role === 'bria' ? 'BRIA' : 'PLT'}
