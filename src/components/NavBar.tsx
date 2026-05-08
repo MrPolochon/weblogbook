@@ -133,8 +133,7 @@ export default function NavBar({
     { href: '/logbook', label: 'Mon logbook', icon: BookOpen, badge: 0 },
     { href: '/logbook/depot-plan-vol', label: 'Déposer un plan de vol', icon: Plane, badge: 0 },
     { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText, badge: 0 },
-    { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0, separator: true },
-    { href: '/marche-cargo', label: 'Marché cargo', icon: Package, badge: 0 },
+    { href: '/marche-passagers', label: 'Marché', icon: Map, badge: 0, separator: true },
     { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount + invitationsCount, separator: true },
     ...(hasCompagnie ? [
       { href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 },
