@@ -10,6 +10,7 @@ import {
   CODE_TO_POSITION,
   AEROPORT_CODES,
   CODE_TO_AEROPORT,
+  POSITION_CODES,
   parseAtisCall,
 } from '@/lib/atc-phone-codes';
 
@@ -46,6 +47,9 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const [showAudioPanel, setShowAudioPanel] = useState(false);
   const [showAtisDirectory, setShowAtisDirectory] = useState(false);
   const [atisDirectorySearch, setAtisDirectorySearch] = useState('');
+  const [showAtcDirectory, setShowAtcDirectory] = useState(false);
+  const [atcDirectorySearch, setAtcDirectorySearch] = useState('');
+  const [atcDirectoryPositionFilter, setAtcDirectoryPositionFilter] = useState<string>('all');
   const [audioDeviceError, setAudioDeviceError] = useState<string | null>(null);
   const [isMicTestActive, setIsMicTestActive] = useState(false);
   const [micTestLevel, setMicTestLevel] = useState(0);
@@ -1072,6 +1076,17 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
             ATIS
           </button>
           <button
+            onClick={() => setShowAtcDirectory((v) => !v)}
+            className={`px-2 py-1 rounded-md text-[10px] ${
+              showAtcDirectory
+                ? 'bg-emerald-500 text-white hover:bg-emerald-400'
+                : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+            }`}
+            title="Annuaire des numéros ATC complets par aéroport et position"
+          >
+            ATC
+          </button>
+          <button
             onClick={() => { void refreshAudioDevices(); }}
             className="px-2 py-1 rounded-md text-[10px] bg-slate-700 text-slate-200 hover:bg-slate-600"
           >
@@ -1136,6 +1151,98 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
             <p className="text-slate-500 leading-snug pt-1 border-t border-slate-700/50">
               ℹ️ Click sur un aéroport puis bouton Call pour écouter l&apos;ATIS via synthèse vocale.
               Si aucun ATC ne diffuse l&apos;ATIS, l&apos;appel échoue.
+            </p>
+          </div>
+        )}
+        {showAtcDirectory && (
+          <div className="mt-2 space-y-2 text-[10px]">
+            <div className="flex items-center justify-between">
+              <p className="text-slate-300 font-semibold">Annuaire ATC</p>
+              <span className="text-slate-500">
+                {Object.keys(AEROPORT_CODES).length * Object.keys(POSITION_CODES).length} numéros
+              </span>
+            </div>
+            <p className="text-slate-500 leading-snug">
+              Format : <span className="font-mono text-slate-300">+14&lt;aéroport&gt;&lt;position&gt;</span>.
+              Numéros bruts composables. Cliquez pour pré-remplir.
+            </p>
+            <div className="flex gap-1">
+              <input
+                type="text"
+                value={atcDirectorySearch}
+                onChange={(e) => setAtcDirectorySearch(e.target.value)}
+                placeholder="ICAO, position ou numéro..."
+                className="flex-1 rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-2 py-1 placeholder-slate-500"
+              />
+              <select
+                value={atcDirectoryPositionFilter}
+                onChange={(e) => setAtcDirectoryPositionFilter(e.target.value)}
+                className="rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-1 py-1"
+              >
+                <option value="all">Toutes</option>
+                {Object.keys(POSITION_CODES).map((pos) => (
+                  <option key={pos} value={pos}>{pos}</option>
+                ))}
+              </select>
+            </div>
+            <div className="max-h-56 overflow-y-auto pr-1 space-y-0.5">
+              {(() => {
+                const q = atcDirectorySearch.trim().toUpperCase();
+                const rows: Array<{ icao: string; position: string; number: string }> = [];
+                const sortedAirports = Object.entries(AEROPORT_CODES).sort(([a], [b]) => a.localeCompare(b));
+                const positionOrder = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center', 'AFIS', 'ATIS'];
+                for (const [icao, aeroCode] of sortedAirports) {
+                  for (const pos of positionOrder) {
+                    if (atcDirectoryPositionFilter !== 'all' && atcDirectoryPositionFilter !== pos) continue;
+                    const posCode = POSITION_CODES[pos];
+                    if (!posCode) continue;
+                    const fullNumber = `+14${aeroCode}${posCode}`;
+                    if (q) {
+                      const hay = `${icao} ${pos.toUpperCase()} ${fullNumber} ${aeroCode}${posCode}`;
+                      if (!hay.includes(q)) continue;
+                    }
+                    rows.push({ icao, position: pos, number: fullNumber });
+                  }
+                }
+                if (rows.length === 0) {
+                  return <p className="text-slate-500 text-center py-2">Aucun résultat</p>;
+                }
+                return rows.map((r) => (
+                  <button
+                    key={`${r.icao}-${r.position}`}
+                    onClick={() => {
+                      setNumber(r.number);
+                      setCallState('dialing');
+                    }}
+                    disabled={
+                      callState === 'connected' ||
+                      callState === 'ringing' ||
+                      callState === 'incoming' ||
+                      callState === 'connecting' ||
+                      callState === 'atis_playing'
+                    }
+                    className="w-full grid grid-cols-[1fr_auto_auto] gap-2 items-center px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 transition-colors text-left"
+                    title={`${r.icao} ${r.position}`}
+                  >
+                    <span className="font-mono text-slate-100">{r.icao}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+                      r.position === 'ATIS' ? 'bg-sky-500/20 text-sky-300' :
+                      r.position === 'Tower' ? 'bg-amber-500/20 text-amber-300' :
+                      r.position === 'Ground' ? 'bg-emerald-500/20 text-emerald-300' :
+                      r.position === 'Center' ? 'bg-purple-500/20 text-purple-300' :
+                      'bg-slate-700 text-slate-300'
+                    }`}>{r.position}</span>
+                    <span className="font-mono text-emerald-300">{r.number}</span>
+                  </button>
+                ));
+              })()}
+            </div>
+            <p className="text-slate-500 leading-snug pt-1 border-t border-slate-700/50">
+              ℹ️ Codes locaux (même aéroport) : <span className="font-mono">*15</span> Delivery,
+              <span className="font-mono"> *16</span> Clairance, <span className="font-mono">*17</span> Ground,
+              <span className="font-mono"> *18</span> Tower, <span className="font-mono">*191</span> DEP,
+              <span className="font-mono"> *192</span> APP, <span className="font-mono">*20</span> Center.
+              Urgences : <span className="font-mono">911</span> / <span className="font-mono">112</span>.
             </p>
           </div>
         )}
