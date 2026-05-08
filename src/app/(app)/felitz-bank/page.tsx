@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { ensureComptePersonnel, getComptePersonnelCanonique } from '@/lib/felitz/ensure-comptes';
 import { redirect } from 'next/navigation';
-import { Landmark, Building2, Shield } from 'lucide-react';
+import { Landmark, Building2, Shield, Plane, Wallet, ArrowLeftRight, CreditCard } from 'lucide-react';
 import FelitzBankClient from './FelitzBankClient';
 
 type TxRow = { libelle?: string | null; [k: string]: unknown };
@@ -149,36 +149,74 @@ export default async function FelitzBankPage() {
     transactionsMilitaire = await enrichTransactionsWithVban(admin, data || []);
   }
 
+  const totalSolde = (comptePerso?.solde ?? 0) + comptesEntreprise.reduce((s, c) => s + c.solde, 0) + (compteMilitaire?.solde ?? 0);
+  const nbComptes = (comptePerso ? 1 : 0) + comptesEntreprise.length + (compteMilitaire ? 1 : 0);
+  const nbTransactions = transactionsPerso.length + Object.values(transactionsEntrepriseByCompte).reduce((s, t) => s + t.length, 0) + transactionsMilitaire.length;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Landmark className="h-8 w-8 text-emerald-400" />
-        <h1 className="text-2xl font-bold text-slate-100">Felitz Bank</h1>
+    <div className="space-y-6 animate-page-reveal">
+      {/* HUD Header */}
+      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/85 to-slate-950/95 shadow-[0_22px_42px_rgba(2,6,23,0.36),inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-60" />
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -left-16 -bottom-16 h-56 w-56 rounded-full bg-amber-500/10 blur-3xl" />
+        <Plane
+          className="pointer-events-none absolute top-3 -left-10 h-5 w-5 text-emerald-400/40 animate-plane-glide"
+          style={{ animationDuration: '7s' }}
+          aria-hidden
+        />
+        <div className="relative z-10 p-5 sm:p-7 space-y-4">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/20">
+              <Landmark className="h-7 w-7 text-emerald-400" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold text-slate-50 tracking-tight">Felitz Bank</h1>
+              <p className="text-sm text-slate-400 mt-0.5">Gérez vos comptes, effectuez des virements</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <Wallet className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-emerald-300 font-medium">{totalSolde.toLocaleString('fr-FR')} F$ total</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20">
+              <CreditCard className="h-3.5 w-3.5 text-sky-400" />
+              <span className="text-sky-300 font-medium">{nbComptes} compte{nbComptes > 1 ? 's' : ''}</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
+              <ArrowLeftRight className="h-3.5 w-3.5 text-purple-400" />
+              <span className="text-purple-300 font-medium">{nbTransactions} transaction{nbTransactions > 1 ? 's' : ''}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Compte Personnel */}
-        <div className="card">
-          <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-            <Landmark className="h-5 w-5 text-emerald-400" />
-            Compte Personnel
-          </h2>
-          
+        <div className="rounded-2xl border border-emerald-500/15 bg-slate-900/60 backdrop-blur-sm overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-emerald-500/10 bg-emerald-500/5">
+            <div className="p-2 rounded-lg bg-emerald-500/15">
+              <Landmark className="h-4 w-4 text-emerald-400" />
+            </div>
+            <h2 className="text-base font-semibold text-slate-100">Compte Personnel</h2>
+          </div>
+
           {comptePerso ? (
-            <div className="space-y-4">
-              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
-                <p className="text-sm text-slate-400">VBAN</p>
-                <p className="font-mono text-slate-200 text-sm break-all">{comptePerso.vban}</p>
+            <div className="p-5 space-y-4">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-800/60">
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">VBAN</span>
+                <span className="font-mono text-slate-300 text-xs break-all">{comptePerso.vban}</span>
               </div>
-              
-              <div className="bg-emerald-500/10 rounded-lg p-4 border border-emerald-500/30">
-                <p className="text-sm text-emerald-400">Solde disponible</p>
-                <p className="text-3xl font-bold text-emerald-300">
-                  {comptePerso.solde.toLocaleString('fr-FR')} F$
+
+              <div className="rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 p-5">
+                <p className="text-xs text-emerald-400/80 uppercase tracking-wider font-medium mb-1">Solde disponible</p>
+                <p className="text-3xl font-bold text-emerald-300 tabular-nums">
+                  {comptePerso.solde.toLocaleString('fr-FR')} <span className="text-lg text-emerald-400/60">F$</span>
                 </p>
               </div>
 
-              <FelitzBankClient 
+              <FelitzBankClient
                 compteId={comptePerso.id}
                 solde={comptePerso.solde}
                 transactions={transactionsPerso}
@@ -186,63 +224,82 @@ export default async function FelitzBankPage() {
               />
             </div>
           ) : (
-            <p className="text-slate-400">Aucun compte personnel trouvé.</p>
+            <div className="p-8 text-center">
+              <Landmark className="h-8 w-8 text-slate-700 mx-auto mb-2" />
+              <p className="text-slate-500 text-sm">Aucun compte personnel trouvé.</p>
+            </div>
           )}
         </div>
 
-        {/* Comptes Entreprise (PDG uniquement) */}
+        {/* Comptes Entreprise */}
         {comptesEntreprise.length > 0 && (
-          <div className="card">
-            <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-sky-400" />
-              Comptes Entreprise (PDG)
-            </h2>
-            
-            <div className="space-y-4">
+          <div className="rounded-2xl border border-sky-500/15 bg-slate-900/60 backdrop-blur-sm overflow-hidden">
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-sky-500/10 bg-sky-500/5">
+              <div className="p-2 rounded-lg bg-sky-500/15">
+                <Building2 className="h-4 w-4 text-sky-400" />
+              </div>
+              <h2 className="text-base font-semibold text-slate-100">Comptes Entreprise</h2>
+              <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/20">
+                PDG
+              </span>
+            </div>
+
+            <div className="p-5 space-y-5">
               {comptesEntreprise.map((compte) => (
-                <div key={compte.id} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
-                  <p className="font-semibold text-slate-200 mb-2">{compte.compagnies?.nom || 'Compagnie'}</p>
-                  <p className="text-xs text-slate-400 font-mono break-all mb-2">{compte.vban}</p>
-                  <p className="text-2xl font-bold text-sky-300">
-                    {compte.solde.toLocaleString('fr-FR')} F$
-                  </p>
-                  <FelitzBankClient 
-                    compteId={compte.id}
-                    solde={compte.solde}
-                    transactions={transactionsEntrepriseByCompte[compte.id] || []}
-                    isAdmin={isAdmin}
-                    isEntreprise
-                    compagnieNom={compte.compagnies?.nom}
-                  />
+                <div key={compte.id} className="rounded-xl border border-slate-800/50 bg-slate-800/20 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/40">
+                    <span className="font-semibold text-slate-200 text-sm">{compte.compagnies?.nom || 'Compagnie'}</span>
+                    <span className="font-mono text-[10px] text-slate-500 break-all">{compte.vban}</span>
+                  </div>
+                  <div className="px-4 py-3">
+                    <p className="text-2xl font-bold text-sky-300 tabular-nums">
+                      {compte.solde.toLocaleString('fr-FR')} <span className="text-sm text-sky-400/60">F$</span>
+                    </p>
+                  </div>
+                  <div className="px-4 pb-4">
+                    <FelitzBankClient
+                      compteId={compte.id}
+                      solde={compte.solde}
+                      transactions={transactionsEntrepriseByCompte[compte.id] || []}
+                      isAdmin={isAdmin}
+                      isEntreprise
+                      compagnieNom={compte.compagnies?.nom}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Compte Militaire (PDG Armée uniquement) */}
+        {/* Compte Militaire */}
         {compteMilitaire && (
-          <div className="card lg:col-span-2">
-            <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-              <Shield className="h-5 w-5 text-red-400" />
-              Compte de l&apos;Armée (PDG Militaire)
-            </h2>
-            
-            <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-2xl border border-red-500/15 bg-slate-900/60 backdrop-blur-sm overflow-hidden lg:col-span-2">
+            <div className="flex items-center gap-3 px-5 py-4 border-b border-red-500/10 bg-red-500/5">
+              <div className="p-2 rounded-lg bg-red-500/15">
+                <Shield className="h-4 w-4 text-red-400" />
+              </div>
+              <h2 className="text-base font-semibold text-slate-100">Compte de l&apos;Armée</h2>
+              <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/20">
+                PDG Militaire
+              </span>
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2 p-5">
               <div className="space-y-4">
-                <div className="bg-slate-800/50 rounded-lg p-4 border border-red-500/30">
-                  <p className="text-sm text-slate-400">VBAN Armée</p>
-                  <p className="font-mono text-slate-200 text-sm break-all">{compteMilitaire.vban}</p>
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/40 border border-red-500/10">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">VBAN</span>
+                  <span className="font-mono text-slate-300 text-xs break-all">{compteMilitaire.vban}</span>
                 </div>
-                
-                <div className="bg-red-500/10 rounded-lg p-4 border border-red-500/30">
-                  <p className="text-sm text-red-400">Solde disponible</p>
-                  <p className="text-3xl font-bold text-red-300">
-                    {compteMilitaire.solde.toLocaleString('fr-FR')} F$
+
+                <div className="rounded-xl bg-gradient-to-br from-red-500/10 to-red-600/5 border border-red-500/20 p-5">
+                  <p className="text-xs text-red-400/80 uppercase tracking-wider font-medium mb-1">Solde disponible</p>
+                  <p className="text-3xl font-bold text-red-300 tabular-nums">
+                    {compteMilitaire.solde.toLocaleString('fr-FR')} <span className="text-lg text-red-400/60">F$</span>
                   </p>
                 </div>
 
-                <FelitzBankClient 
+                <FelitzBankClient
                   compteId={compteMilitaire.id}
                   solde={compteMilitaire.solde}
                   transactions={transactionsMilitaire}
@@ -251,22 +308,21 @@ export default async function FelitzBankPage() {
                 />
               </div>
 
-              {/* Transactions militaires */}
-              <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700/50">
-                <h3 className="font-medium text-slate-200 mb-3">Transactions récentes</h3>
+              <div className="rounded-xl border border-slate-800/50 bg-slate-800/20 p-4">
+                <h3 className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-3">Transactions récentes</h3>
                 {transactionsMilitaire.length > 0 ? (
-                  <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                  <div className="space-y-1.5 max-h-[500px] overflow-y-auto">
                     {transactionsMilitaire.map((t) => (
-                      <div key={t.id} className="flex items-center justify-between text-sm py-1 border-b border-slate-700/30 last:border-0">
-                        <span className="text-slate-400 truncate flex-1">{t.libelle || t.description || '—'}</span>
-                        <span className={t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}>
+                      <div key={t.id} className="flex items-center justify-between text-sm py-2 px-2 rounded-lg hover:bg-slate-800/40 transition-colors">
+                        <span className="text-slate-400 truncate flex-1 text-xs">{t.libelle || t.description || '—'}</span>
+                        <span className={`font-medium tabular-nums text-xs ${t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}`}>
                           {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
                         </span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-slate-500 text-sm">Aucune transaction</p>
+                  <p className="text-slate-600 text-sm text-center py-4">Aucune transaction</p>
                 )}
               </div>
             </div>
