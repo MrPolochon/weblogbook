@@ -17,6 +17,11 @@ interface AtcTelephoneProps {
 const POSITION_CODES: Record<string, string> = {
   'Delivery': '15', 'Clairance': '16', 'Ground': '17', 'Tower': '18',
   'DEP': '191', 'APP': '192', 'Center': '20', 'AFIS': '505',
+  // 9999 = ATIS automatique de l'aeroport. Format complet : <code_aero>9999.
+  // Utilise comme indicatif dans l'annuaire ; l'appel reel n'est pas
+  // implemente cote backend (l'ATIS est diffuse en TTS sur Discord, pas
+  // par telephone), c'est juste un identifiant communique aux ATC.
+  'ATIS': '9999',
 };
 
 const CODE_TO_POSITION: Record<string, string> = Object.fromEntries(
@@ -53,6 +58,8 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const [selectedInputId, setSelectedInputId] = useState('');
   const [selectedOutputId, setSelectedOutputId] = useState('');
   const [showAudioPanel, setShowAudioPanel] = useState(false);
+  const [showAtisDirectory, setShowAtisDirectory] = useState(false);
+  const [atisDirectorySearch, setAtisDirectorySearch] = useState('');
   const [audioDeviceError, setAudioDeviceError] = useState<string | null>(null);
   const [isMicTestActive, setIsMicTestActive] = useState(false);
   const [micTestLevel, setMicTestLevel] = useState(0);
@@ -912,12 +919,83 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
             Audio
           </button>
           <button
+            onClick={() => setShowAtisDirectory((v) => !v)}
+            className={`px-2 py-1 rounded-md text-[10px] ${
+              showAtisDirectory
+                ? 'bg-sky-500 text-white hover:bg-sky-400'
+                : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
+            }`}
+            title="Annuaire des numéros ATIS par aéroport"
+          >
+            ATIS
+          </button>
+          <button
             onClick={() => { void refreshAudioDevices(); }}
             className="px-2 py-1 rounded-md text-[10px] bg-slate-700 text-slate-200 hover:bg-slate-600"
           >
             Rafraîchir
           </button>
         </div>
+        {showAtisDirectory && (
+          <div className="mt-2 space-y-2 text-[10px]">
+            <div className="flex items-center justify-between">
+              <p className="text-slate-300 font-semibold">Annuaire ATIS</p>
+              <span className="text-slate-500">{Object.keys(AEROPORT_CODES).length} aéroports</span>
+            </div>
+            <p className="text-slate-500 leading-snug">
+              Format : <span className="font-mono text-slate-300">&lt;code aéroport&gt;9999</span>.
+              Cliquez sur un aéroport pour pré-remplir le numéro.
+            </p>
+            <input
+              type="text"
+              value={atisDirectorySearch}
+              onChange={(e) => setAtisDirectorySearch(e.target.value)}
+              placeholder="Rechercher (ex: ITKO, 5566)"
+              className="w-full rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-2 py-1 placeholder-slate-500"
+            />
+            <div className="max-h-40 overflow-y-auto pr-1 space-y-0.5">
+              {Object.entries(AEROPORT_CODES)
+                .filter(([icao, code]) => {
+                  const q = atisDirectorySearch.trim().toUpperCase();
+                  if (!q) return true;
+                  return icao.includes(q) || code.includes(q);
+                })
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([icao, code]) => {
+                  const atisNumber = `${code}9999`;
+                  return (
+                    <button
+                      key={icao}
+                      onClick={() => {
+                        setNumber(atisNumber);
+                        setCallState('dialing');
+                      }}
+                      disabled={
+                        callState === 'connected' ||
+                        callState === 'ringing' ||
+                        callState === 'incoming' ||
+                        callState === 'connecting'
+                      }
+                      className="w-full flex items-center justify-between px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 transition-colors text-left"
+                    >
+                      <span className="font-mono text-slate-100">{icao}</span>
+                      <span className="font-mono text-sky-300">{atisNumber}</span>
+                    </button>
+                  );
+                })}
+              {Object.entries(AEROPORT_CODES).filter(([icao, code]) => {
+                const q = atisDirectorySearch.trim().toUpperCase();
+                return q && !icao.includes(q) && !code.includes(q);
+              }).length === Object.keys(AEROPORT_CODES).length && atisDirectorySearch.trim() && (
+                <p className="text-slate-500 text-center py-2">Aucun résultat</p>
+              )}
+            </div>
+            <p className="text-slate-500 leading-snug pt-1 border-t border-slate-700/50">
+              ℹ️ L&apos;ATIS est diffusé en vocal sur Discord, pas par téléphone.
+              Ces numéros sont fournis comme indicatif officiel.
+            </p>
+          </div>
+        )}
         {showAudioPanel && (
           <div className="mt-2 space-y-2 text-[10px]">
             <div>
