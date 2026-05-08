@@ -56,7 +56,13 @@ export default function NotificationBell({ className }: { className?: string }) 
     function reposition() {
       if (!triggerRef.current) return;
       const r = triggerRef.current.getBoundingClientRect();
-      setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
+      const vw = window.innerWidth;
+      const dropdownW = Math.min(352, vw - 16);
+      let right = Math.max(8, vw - r.right);
+      if (vw - right - dropdownW < 8) {
+        right = vw - dropdownW - 8;
+      }
+      setPos({ top: r.bottom + 6, right: Math.max(8, right) });
     }
     reposition();
     function onMouseDown(e: MouseEvent) {
@@ -166,7 +172,7 @@ export default function NotificationBell({ className }: { className?: string }) 
         <div
           ref={dropdownRef}
           style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
-          className="w-[min(22rem,calc(100vw-1rem))] max-h-[70vh] overflow-hidden rounded-2xl border border-slate-600/60 bg-[#0d1120] shadow-2xl flex flex-col"
+          className="w-[min(22rem,calc(100vw-1rem))] max-h-[min(70vh,28rem)] overflow-hidden rounded-2xl border border-slate-600/60 bg-[#0d1120] shadow-2xl flex flex-col"
         >
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-700/50">
             <div className="flex items-center gap-2">
