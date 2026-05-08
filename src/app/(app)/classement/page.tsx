@@ -28,12 +28,13 @@ export default async function ClassementPage() {
 
   const admin = createAdminClient();
 
-  const [profilesRes, volsRes, plansRes, licencesRes, comptesRes, inventaireRes] = await Promise.all([
+  const [profilesRes, volsRes, plansRes, equipageRes, licencesRes, comptesRes, inventaireRes] = await Promise.all([
     admin.from('profiles').select('id, identifiant, heures_initiales_minutes, created_at').not('identifiant', 'is', null),
-    admin.from('vols').select('pilote_id, duree_minutes, type_vol, aeroport_depart, aeroport_arrivee, type_avion_id').eq('statut', 'validé'),
+    admin.from('vols').select('id, pilote_id, copilote_id, instructeur_id, chef_escadron_id, duree_minutes, type_vol, aeroport_depart, aeroport_arrivee, type_avion_id').eq('statut', 'validé'),
     admin.from('plans_vol')
-      .select('pilote_id, temps_prev_min, type_vol, aeroport_depart, aeroport_arrivee, accepted_at, cloture_at, compagnie_avions:compagnie_avion_id(type_avion_id), inventaire_avions:inventaire_avion_id(type_avion_id)')
+      .select('id, pilote_id, temps_prev_min, type_vol, aeroport_depart, aeroport_arrivee, accepted_at, cloture_at, compagnie_avions:compagnie_avion_id(type_avion_id), inventaire_avions:inventaire_avion_id(type_avion_id)')
       .in('statut', ['cloture', 'en_pause']),
+    admin.from('vols_equipage_militaire').select('vol_id, profile_id'),
     admin.from('licences_qualifications').select('user_id'),
     admin.from('felitz_comptes').select('proprietaire_id, solde').eq('type', 'personnel'),
     admin.from('inventaire_avions').select('proprietaire_id'),
@@ -42,13 +43,56 @@ export default async function ClassementPage() {
   const profiles = profilesRes.data || [];
   const volsAnciens = volsRes.data || [];
   const plansClotures = plansRes.data || [];
+  const equipageData = equipageRes.data || [];
   const licences = licencesRes.data || [];
   const comptes = comptesRes.data || [];
   const inventaire = inventaireRes.data || [];
 
-  type VolNormalise = { pilote_id: string; duree_minutes: number; type_vol: string; aeroport_depart: string; aeroport_arrivee: string; type_avion_id: string | null };
+  type VolNormalise = { id: string; duree_minutes: number; type_vol: string; aeroport_depart: string; aeroport_arrivee: string; type_avion_id: string | null };
 
-  const plansAsVols: VolNormalise[] = plansClotures.map(p => {
+  // Dedup helper: attribute each vol to a user only once
+  const volsByUser = new Map<string, VolNormalise[]>();
+  const userVolIds = new Map<string, Set<string>>();
+
+  function addVolToUser(userId: string, vol: VolNormalise) {
+    if (!userId) return;
+    let seen = userVolIds.get(userId);
+    if (!seen) { seen = new Set(); userVolIds.set(userId, seen); }
+    if (seen.has(vol.id)) return;
+    seen.add(vol.id);
+    let arr = volsByUser.get(userId);
+    if (!arr) { arr = []; volsByUser.set(userId, arr); }
+    arr.push(vol);
+  }
+
+  // Build equipage map: vol_id → profile_ids
+  const equipageByVol = new Map<string, string[]>();
+  for (const eq of equipageData) {
+    let arr = equipageByVol.get(eq.vol_id);
+    if (!arr) { arr = []; equipageByVol.set(eq.vol_id, arr); }
+    arr.push(eq.profile_id);
+  }
+
+  // Attribute old vols to ALL participants (pilote, copilote, instructeur, chef escadron, équipage mil.)
+  for (const v of volsAnciens) {
+    const vol: VolNormalise = {
+      id: v.id,
+      duree_minutes: v.duree_minutes || 0,
+      type_vol: v.type_vol,
+      aeroport_depart: v.aeroport_depart,
+      aeroport_arrivee: v.aeroport_arrivee,
+      type_avion_id: v.type_avion_id,
+    };
+    if (v.pilote_id) addVolToUser(v.pilote_id, vol);
+    if (v.copilote_id) addVolToUser(v.copilote_id, vol);
+    if (v.instructeur_id) addVolToUser(v.instructeur_id, vol);
+    if (v.chef_escadron_id) addVolToUser(v.chef_escadron_id, vol);
+    const crew = equipageByVol.get(v.id);
+    if (crew) for (const pid of crew) addVolToUser(pid, vol);
+  }
+
+  // Attribute plans_vol to pilote only (plans don't have multi-role)
+  for (const p of plansClotures) {
     let duree = p.temps_prev_min || 0;
     if (p.accepted_at && p.cloture_at) {
       const real = Math.round((new Date(p.cloture_at).getTime() - new Date(p.accepted_at).getTime()) / 60000);
@@ -60,17 +104,15 @@ export default async function ClassementPage() {
       (Array.isArray(ca) ? ca[0]?.type_avion_id : ca?.type_avion_id) ||
       (Array.isArray(ia) ? ia[0]?.type_avion_id : ia?.type_avion_id) ||
       null;
-    return {
-      pilote_id: p.pilote_id,
+    addVolToUser(p.pilote_id, {
+      id: `plan_${p.id}`,
       duree_minutes: duree,
       type_vol: p.type_vol,
       aeroport_depart: p.aeroport_depart,
       aeroport_arrivee: p.aeroport_arrivee,
       type_avion_id: typeAvionId,
-    };
-  });
-
-  const vols: VolNormalise[] = [...volsAnciens, ...plansAsVols];
+    });
+  }
 
   const licencesByUser = new Map<string, number>();
   for (const l of licences) {
@@ -85,13 +127,6 @@ export default async function ClassementPage() {
   const avionsByUser = new Map<string, number>();
   for (const a of inventaire) {
     avionsByUser.set(a.proprietaire_id, (avionsByUser.get(a.proprietaire_id) || 0) + 1);
-  }
-
-  const volsByUser = new Map<string, typeof vols>();
-  for (const v of vols) {
-    const arr = volsByUser.get(v.pilote_id) || [];
-    arr.push(v);
-    volsByUser.set(v.pilote_id, arr);
   }
 
   const pilotes: PiloteStat[] = profiles.map(p => {
