@@ -19,10 +19,11 @@ export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
       const res = await fetch(`/api/avions/lookup?immatriculation=${encodeURIComponent(params.immatriculation)}`);
       if (!res.ok) {
         const err = await res.json().catch(() => null);
-        return JSON.stringify({ error: err?.error ?? 'Avion introuvable' });
+        return JSON.stringify({ error: err?.error ?? err?.error_detail ?? 'Avion introuvable' });
       }
       const data = await res.json();
       return JSON.stringify({
+        autorise: true,
         source: data.source,
         immatriculation: data.immatriculation,
         type: data.type_avion_nom,
@@ -35,6 +36,9 @@ export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
         statut: data.statut,
         compagnie_nom: data.compagnie_nom ?? null,
         compagnie_code_oaci: data.compagnie_code_oaci ?? null,
+        compagnie_avion_id: data.compagnie_avion_id ?? null,
+        inventaire_avion_id: data.inventaire_avion_id ?? null,
+        compagnie_id: data.compagnie_id ?? null,
         prix_billet_pax: data.prix_billet_pax ?? null,
         prix_kg_cargo: data.prix_kg_cargo ?? null,
       });
