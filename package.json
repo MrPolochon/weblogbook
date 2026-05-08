@@ -13,6 +13,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@elevenlabs/react": "^1.4.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.10",
     "date-fns": "^4.1.0",
