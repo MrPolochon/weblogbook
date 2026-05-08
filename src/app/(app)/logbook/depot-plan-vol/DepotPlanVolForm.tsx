@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS, getAeroportInfo, estimerPassagers, estimerCargo, genererTypeCargaison, getCargaisonInfo, getBonusIsolement, TypeCargaison, type CoefficientContext } from '@/lib/aeroports-ptfs';
 import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
-import { Building2, Plane, Users, Weight, Shield, Radio, Phone, MapPin, Send, Navigation, Sparkles, Gauge, FileText, Route, Briefcase, CheckCircle2 } from 'lucide-react';
+import { Building2, Plane, Users, Weight, Shield, Radio, Phone, MapPin, Send, Navigation, Sparkles, Gauge, FileText, Route, Briefcase, CheckCircle2, Circle, ClipboardCheck } from 'lucide-react';
 import BriaDialog, { getBriaCooldownRemaining } from '@/components/BriaDialog';
 import { unlockAudioForIOS } from '@/lib/phone-sounds';
 import { toast } from 'sonner';
@@ -469,6 +469,38 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const remplissageValidePax = tauxRemplissagePax >= remplissageMinRequis;
   const remplissageValideCargo = tauxRemplissageCargo >= remplissageMinRequis;
 
+  const progressPct = useMemo(() => {
+    let total = 0;
+    let done = 0;
+    total += 2; // route
+    if (aeroport_depart) done++;
+    if (aeroport_arrivee && aeroport_arrivee !== aeroport_depart) done++;
+    total += 2; // details
+    if (numero_vol.trim()) done++;
+    if (temps_prev_min && parseInt(temps_prev_min, 10) > 0) done++;
+    total++; // flight rules
+    if (type_vol === 'VFR' && intentions_vol.trim()) done++;
+    else if (type_vol === 'IFR' && sid_depart.trim() && star_arrivee.trim()) done++;
+    if (vol_commercial || vol_ferry) { total++; if (compagnie_avion_id) done++; }
+    return total > 0 ? Math.round((done / total) * 100) : 0;
+  }, [aeroport_depart, aeroport_arrivee, numero_vol, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee, vol_commercial, vol_ferry, compagnie_avion_id]);
+
+  const checklistItems = useMemo(() => {
+    const items: { label: string; ok: boolean }[] = [
+      { label: 'Aéroport de départ', ok: !!aeroport_depart },
+      { label: 'Aéroport d\'arrivée', ok: !!aeroport_arrivee && aeroport_arrivee !== aeroport_depart },
+      { label: 'Numéro de vol', ok: !!numero_vol.trim() },
+      { label: 'Durée de vol', ok: !!(temps_prev_min && parseInt(temps_prev_min, 10) > 0) },
+    ];
+    if (type_vol === 'VFR') items.push({ label: 'Intentions VFR', ok: !!intentions_vol.trim() });
+    if (type_vol === 'IFR') {
+      items.push({ label: 'SID de départ', ok: !!sid_depart.trim() });
+      items.push({ label: 'STAR d\'arrivée', ok: !!star_arrivee.trim() });
+    }
+    if (vol_commercial || vol_ferry) items.push({ label: 'Appareil sélectionné', ok: !!compagnie_avion_id });
+    return items;
+  }, [aeroport_depart, aeroport_arrivee, numero_vol, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee, vol_commercial, vol_ferry, compagnie_avion_id]);
+
   // Préparer les données du formulaire
   function getFormData(volSansAtc: boolean = false) {
     const t = parseInt(temps_prev_min, 10);
@@ -690,11 +722,15 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       </button>
     </div>
 
+    {/* ===== Barre de progression ===== */}
+    <ProgressBar percent={progressPct} />
+
     <form onSubmit={handleSubmit} className="space-y-5 w-full">
       {/* ===== Section : Type de mission (carte cockpit) ===== */}
       {compagniesDisponibles.length > 0 && (
         <section className="card-glow stagger-enter">
           <SectionHeader
+            step={1}
             icon={<Briefcase className="h-4 w-4" />}
             label="Type de mission"
             subtitle="Choisissez la nature de votre vol"
@@ -782,6 +818,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       {(vol_commercial || vol_ferry) && selectedCompagnie ? (
         <section className="card-glow stagger-enter">
           <SectionHeader
+            step={2}
             icon={<Plane className="h-4 w-4" />}
             label={vol_ferry ? 'Avion à déplacer' : 'Appareil de la flotte'}
             subtitle={vol_ferry ? "L'aéroport de départ sera la position actuelle de l'avion" : `Sélectionner un appareil à ${aeroport_depart?.toUpperCase() || '...'}`}
@@ -1079,6 +1116,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       ) : (
         <section className="card-glow stagger-enter">
           <SectionHeader
+            step={2}
             icon={<Plane className="h-4 w-4" />}
             label="Mon appareil personnel"
             subtitle="Avion de votre inventaire (vol non rémunéré)"
@@ -1141,6 +1179,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       {/* ===== Section : Route — départ → arrivée avec visuel ===== */}
       <section className="card-glow stagger-enter">
         <SectionHeader
+          step={3}
           icon={<Route className="h-4 w-4" />}
           label="Route"
           subtitle="Aéroports de départ et de destination"
@@ -1184,6 +1223,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       {/* ===== Section : Détails du vol ===== */}
       <section className="card-glow stagger-enter">
         <SectionHeader
+          step={4}
           icon={<FileText className="h-4 w-4" />}
           label="Détails du vol"
           subtitle="Numéro, porte et durée prévue"
@@ -1253,6 +1293,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       {/* ===== Section : Type de vol VFR/IFR ===== */}
       <section className="card-glow stagger-enter">
         <SectionHeader
+          step={5}
           icon={<Navigation className="h-4 w-4" />}
           label="Type de vol"
           subtitle={type_vol === 'IFR' ? 'Vol aux instruments — SID/STAR requises' : 'Vol à vue — intentions requises'}
@@ -1461,6 +1502,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       {/* ===== Section : Note ATC ===== */}
       <section className="card-glow stagger-enter">
         <SectionHeader
+          step={6}
           icon={<Radio className="h-4 w-4" />}
           label="Note pour l'ATC (optionnel)"
           subtitle="Remarques ou instructions à transmettre au contrôleur"
@@ -1524,6 +1566,9 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
         </div>
       )}
 
+      {/* ===== Pre-flight checklist ===== */}
+      <PreFlightChecklist items={checklistItems} />
+
       {/* ===== Bouton submit final — décollage ===== */}
       <SubmitButton
         loading={loading}
@@ -1556,14 +1601,16 @@ const ACCENT_CLASSES: Record<AccentColor, { ring: string; text: string; bg: stri
   rose:    { ring: 'ring-rose-400/40',    text: 'text-rose-300',    bg: 'bg-rose-500/15',    border: 'border-rose-500/40',    glow: 'shadow-[0_0_24px_rgba(251,113,133,0.25)]' },
 };
 
-/** Header de section : icône colorée + titre + sous-titre (style cockpit) */
+/** Header de section : icône colorée + titre + sous-titre + numéro d'étape */
 function SectionHeader({
+  step,
   icon,
   label,
   subtitle,
   accent = 'sky',
   badge,
 }: {
+  step?: number;
   icon: React.ReactNode;
   label: string;
   subtitle?: string;
@@ -1574,9 +1621,16 @@ function SectionHeader({
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="flex items-start gap-3">
-        <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${c.border} ${c.bg} ${c.text}`}>
-          {icon}
-        </span>
+        <div className="relative">
+          <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${c.border} ${c.bg} ${c.text}`}>
+            {icon}
+          </span>
+          {step != null && (
+            <span className="absolute -top-1.5 -left-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-600/80 bg-slate-900 text-[9px] font-mono font-bold text-slate-400 shadow-sm">
+              {String(step).padStart(2, '0')}
+            </span>
+          )}
+        </div>
         <div>
           <h3 className="text-base font-semibold text-slate-100 leading-tight">{label}</h3>
           {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
@@ -1767,6 +1821,92 @@ function FillGauge({
       <div className="mt-1 flex items-center justify-between text-[10px] font-mono text-slate-500">
         <span className={valid ? 'text-emerald-400' : 'text-rose-400'}>● seuil 25%</span>
         <span>capacité max</span>
+      </div>
+    </div>
+  );
+}
+
+/** Barre de progression du plan de vol */
+function ProgressBar({ percent }: { percent: number }) {
+  const full = percent === 100;
+  return (
+    <div className="relative mb-5 animate-fade-in">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-500 flex items-center gap-1.5">
+          <ClipboardCheck className="h-3 w-3" />
+          Complétion du plan
+        </span>
+        <span className={`text-xs font-mono font-bold tabular-nums transition-colors duration-500 ${full ? 'text-emerald-300' : 'text-sky-300'}`}>
+          {percent}%
+        </span>
+      </div>
+      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-800/80 border border-slate-700/50">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ease-out ${
+            full
+              ? 'bg-gradient-to-r from-emerald-500 via-cyan-400 to-emerald-400'
+              : 'bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500'
+          }`}
+          style={{ width: `${percent}%` }}
+        />
+        {!full && (
+          <div
+            className="absolute top-0 h-full w-8 rounded-full bg-white/20 blur-sm animate-shimmer"
+            style={{ left: `${Math.max(0, percent - 4)}%` }}
+          />
+        )}
+      </div>
+      {full && (
+        <p className="mt-1.5 text-[10px] font-mono uppercase tracking-widest text-emerald-400 flex items-center gap-1 animate-fade-in">
+          <CheckCircle2 className="h-3 w-3" />
+          Prêt pour le dépôt
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Checklist pre-flight : vérifie que chaque champ requis est rempli */
+function PreFlightChecklist({ items }: { items: { label: string; ok: boolean }[] }) {
+  const allOk = items.every(i => i.ok);
+  return (
+    <div className={`relative overflow-hidden rounded-xl border p-4 transition-all duration-500 stagger-enter ${
+      allOk
+        ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-950/30 to-slate-900/50'
+        : 'border-slate-700/50 bg-slate-900/50'
+    }`}>
+      {allOk && (
+        <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-emerald-500/10 blur-2xl" />
+      )}
+      <div className="relative flex items-center gap-2 mb-3">
+        <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border ${
+          allOk ? 'border-emerald-500/40 bg-emerald-500/15' : 'border-slate-600/60 bg-slate-800/60'
+        }`}>
+          <ClipboardCheck className={`h-3.5 w-3.5 ${allOk ? 'text-emerald-300' : 'text-slate-400'}`} />
+        </span>
+        <div>
+          <span className={`text-xs font-mono uppercase tracking-widest ${allOk ? 'text-emerald-400' : 'text-slate-400'}`}>
+            Pre-flight check
+          </span>
+          <span className={`ml-2 text-[10px] font-mono tabular-nums ${allOk ? 'text-emerald-300' : 'text-slate-500'}`}>
+            {items.filter(i => i.ok).length}/{items.length}
+          </span>
+        </div>
+      </div>
+      <div className="relative grid grid-cols-2 gap-x-4 gap-y-1.5">
+        {items.map((item, i) => (
+          <div
+            key={i}
+            className={`flex items-center gap-2 text-xs transition-all duration-300 ${item.ok ? 'text-emerald-300' : 'text-slate-500'}`}
+          >
+            {item.ok ? (
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+            ) : (
+              <Circle className="h-3.5 w-3.5 shrink-0 text-slate-600" />
+            )}
+            <span className={item.ok ? '' : 'opacity-60'}>{item.label}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

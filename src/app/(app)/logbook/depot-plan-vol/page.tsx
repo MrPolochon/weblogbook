@@ -150,6 +150,15 @@ export default async function DepotPlanVolPage() {
         {/* Halo radar */}
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" />
         <div className="pointer-events-none absolute -left-16 -bottom-16 h-56 w-56 rounded-full bg-indigo-500/10 blur-3xl" />
+        {/* Radar sweep — cercle concentrique animé */}
+        <div className="pointer-events-none absolute right-8 top-1/2 -translate-y-1/2 h-40 w-40 sm:h-56 sm:w-56 opacity-30">
+          <div className="absolute inset-0 rounded-full border border-sky-500/20" />
+          <div className="absolute inset-[25%] rounded-full border border-sky-500/15" />
+          <div className="absolute inset-[50%] rounded-full border border-sky-500/10" />
+          <div className="absolute inset-0 origin-center animate-radar-sweep">
+            <div className="absolute left-1/2 top-0 h-1/2 w-px bg-gradient-to-b from-sky-400/60 to-transparent" />
+          </div>
+        </div>
         {/* Avion qui glisse en arrière-plan */}
         <Plane
           className="pointer-events-none absolute top-3 -left-10 h-5 w-5 text-sky-400/40 animate-plane-glide"
