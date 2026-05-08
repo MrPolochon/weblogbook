@@ -3,34 +3,97 @@
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText, Mail, Moon, Sun, ChevronDown, Menu, Flame, Landmark, Radar } from 'lucide-react';
+import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText, Mail, Moon, Sun, ChevronDown, Menu, Flame, Landmark, Radar, Phone, PhoneCall } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useRef, useTransition } from 'react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
 function AtcSessionCompte({ aeroport, position, startedAt, isDark }: { aeroport: string; position: string; startedAt: string; isDark: boolean }) {
   const [now, setNow] = useState(() => new Date());
+  // Etat du telephone ATC, recu via custom event emis par AtcTelephone.
+  // Permet d'afficher une pastille animee (appel entrant) ou un highlight
+  // (en ligne) sur le bouton de la nav.
+  const [phoneState, setPhoneState] = useState<{ callState: string; isOpen: boolean }>({
+    callState: 'idle',
+    isOpen: false,
+  });
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    function onState(e: Event) {
+      const detail = (e as CustomEvent<{ callState: string; isOpen: boolean }>).detail;
+      if (detail) setPhoneState(detail);
+    }
+    window.addEventListener('atc-telephone:state', onState);
+    return () => window.removeEventListener('atc-telephone:state', onState);
   }, []);
   const elapsedSec = (now.getTime() - new Date(startedAt).getTime()) / 1000;
   const h = Math.floor(elapsedSec / 3600);
   const m = Math.floor((elapsedSec % 3600) / 60);
   const temps = h > 0 ? `${h}h ${m}min` : `${m}min`;
   const utc = now.toISOString().substring(11, 19) + ' UTC';
-  
+
   const badgeClass = isDark
     ? 'rounded-xl border border-slate-700/80 bg-slate-900/70 px-2.5 py-1 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
     : 'rounded-xl border border-slate-200 bg-slate-100 px-2.5 py-1 text-slate-800';
   const timeBadgeClass = isDark
     ? 'rounded-xl border border-sky-900/70 bg-sky-950/80 px-2.5 py-1 text-sky-200 shadow-[0_0_0_1px_rgba(56,189,248,0.06)]'
     : 'rounded-xl border border-sky-200 bg-sky-100 px-2.5 py-1 text-sky-800';
-    
+
+  const isIncoming = phoneState.callState === 'incoming';
+  const isActive =
+    phoneState.callState === 'connected' ||
+    phoneState.callState === 'connecting' ||
+    phoneState.callState === 'ringing' ||
+    phoneState.callState === 'atis_playing';
+  const phoneBtnClass = cn(
+    'relative rounded-xl border px-2.5 py-1 transition-colors flex items-center justify-center',
+    isIncoming
+      ? 'border-emerald-400/70 bg-emerald-500/20 text-emerald-200 animate-pulse'
+      : isActive
+        ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-200'
+        : phoneState.isOpen
+          ? isDark
+            ? 'border-sky-500/60 bg-sky-500/15 text-sky-200'
+            : 'border-sky-300 bg-sky-100 text-sky-700'
+          : isDark
+            ? 'border-slate-700/80 bg-slate-900/70 text-slate-200 hover:border-sky-500/40 hover:text-sky-200'
+            : 'border-slate-200 bg-slate-100 text-slate-700 hover:border-sky-300 hover:text-sky-700'
+  );
+
   return (
     <div className="flex items-center gap-3 text-sm font-semibold whitespace-nowrap flex-shrink-0">
       <span className={badgeClass}>{aeroport}</span>
       <span className={badgeClass}>{position}</span>
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new CustomEvent('atc-telephone:toggle'))}
+        className={phoneBtnClass}
+        title={
+          isIncoming
+            ? 'Appel entrant — cliquez pour ouvrir'
+            : isActive
+              ? 'Téléphone en cours — cliquez pour ouvrir'
+              : phoneState.isOpen
+                ? 'Fermer le téléphone'
+                : 'Ouvrir le téléphone ATC'
+        }
+        aria-label="Téléphone ATC"
+      >
+        {isActive || isIncoming ? (
+          <PhoneCall className="h-4 w-4" />
+        ) : (
+          <Phone className="h-4 w-4" />
+        )}
+        {isIncoming && (
+          <span className="absolute -top-1 -right-1 flex h-3 w-3">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+          </span>
+        )}
+      </button>
       <span className={timeBadgeClass}>{temps}</span>
       <span className={cn(badgeClass, 'tabular-nums')}>{utc}</span>
     </div>

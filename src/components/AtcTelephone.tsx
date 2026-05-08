@@ -80,6 +80,36 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     setIsMounted(true);
   }, []);
 
+  // Le bouton trigger principal est integre dans la nav ATC (AtcSessionCompte).
+  // On ouvre/ferme via custom event pour eviter de lifter le state ou
+  // d'introduire un context provider juste pour ce besoin.
+  useEffect(() => {
+    function handleOpen() {
+      unlockAudioForIOS();
+      setIsOpen(true);
+    }
+    function handleToggle() {
+      unlockAudioForIOS();
+      setIsOpen((v) => !v);
+    }
+    window.addEventListener('atc-telephone:open', handleOpen);
+    window.addEventListener('atc-telephone:toggle', handleToggle);
+    return () => {
+      window.removeEventListener('atc-telephone:open', handleOpen);
+      window.removeEventListener('atc-telephone:toggle', handleToggle);
+    };
+  }, []);
+
+  // Diffuse les changements d'etat du telephone pour que le bouton de la
+  // nav puisse afficher une pastille (appel entrant, en cours, etc.).
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('atc-telephone:state', {
+        detail: { callState, isOpen },
+      })
+    );
+  }, [callState, isOpen]);
+
   // Positionnement + fermeture des popovers d'annuaire (ATIS, ATC).
   // Le telephone est fixe en bas-droite (240px de large). On ouvre les panels
   // a GAUCHE du bouton trigger pour ne pas sortir de l'ecran et garder le
@@ -1038,19 +1068,11 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   }
 
   if (!isOpen) {
+    // Trigger principal integre dans la nav ATC (cf. AtcSessionCompte).
+    // On garde uniquement le conteneur audio cache car son retrait briserait
+    // les flux audio (bug unidirectionnel deja corrige). Pas de bouton flottant.
     return (
-      <>
-        {/* Conteneur audio: éviter display:none qui bloque la lecture (cf. bug unidirectionnel) */}
-        <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
-        <button onClick={() => { unlockAudioForIOS(); setIsOpen(true); }}
-          className={`fixed bottom-4 right-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl`}>
-          <div className={`p-2 rounded-xl ${isDark ? 'bg-sky-500/15' : 'bg-sky-500/20'}`}>
-            <Phone className={`h-5 w-5 ${isDark ? 'text-sky-300' : 'text-sky-400'}`} />
-          </div>
-          <span className="font-medium">Téléphone</span>
-          {callState === 'incoming' && <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-ping" />}
-        </button>
-      </>
+      <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
     );
   }
 
