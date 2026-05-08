@@ -6,40 +6,26 @@ import { speakNow } from '@/lib/tts';
 import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { Room, RoomEvent, Track, ConnectionState } from 'livekit-client';
+import {
+  CODE_TO_POSITION,
+  AEROPORT_CODES,
+  CODE_TO_AEROPORT,
+  parseAtisCall,
+} from '@/lib/atc-phone-codes';
 
-type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connecting' | 'connected';
+type CallState =
+  | 'idle'
+  | 'dialing'
+  | 'ringing'
+  | 'incoming'
+  | 'connecting'
+  | 'connected'
+  | 'atis_playing';
 
 interface AtcTelephoneProps {
   aeroport: string;
   position: string;
 }
-
-const POSITION_CODES: Record<string, string> = {
-  'Delivery': '15', 'Clairance': '16', 'Ground': '17', 'Tower': '18',
-  'DEP': '191', 'APP': '192', 'Center': '20', 'AFIS': '505',
-  // 9999 = ATIS automatique de l'aeroport. Format complet : <code_aero>9999.
-  // Utilise comme indicatif dans l'annuaire ; l'appel reel n'est pas
-  // implemente cote backend (l'ATIS est diffuse en TTS sur Discord, pas
-  // par telephone), c'est juste un identifiant communique aux ATC.
-  'ATIS': '9999',
-};
-
-const CODE_TO_POSITION: Record<string, string> = Object.fromEntries(
-  Object.entries(POSITION_CODES).map(([pos, code]) => [code, pos])
-);
-
-const AEROPORT_CODES: Record<string, string> = {
-  'ITKO': '5566', 'IPPH': '5567', 'ILAR': '5568', 'IPAP': '5569',
-  'IRFD': '5570', 'IMLR': '5571', 'IZOL': '5572', 'ISAU': '5573',
-  'IJAF': '5574', 'IBLT': '5575', 'IDCS': '5576', 'IKFL': '5577',
-  'IBTH': '5578', 'ISKP': '5579', 'ILKL': '5580', 'IBAR': '5581',
-  'IHEN': '5582', 'ITRC': '5583', 'IBRD': '5584', 'IUFO': '5585',
-  'IIAB': '5586', 'IGAR': '5587', 'ISCM': '5588', 'ITEY': '5589',
-};
-
-const CODE_TO_AEROPORT: Record<string, string> = Object.fromEntries(
-  Object.entries(AEROPORT_CODES).map(([code, num]) => [num, code])
-);
 
 export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) {
   const { theme } = useAtcTheme();
@@ -640,13 +626,107 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     });
   };
 
+  const handleAtisCall = async (airport_icao: string) => {
+    setCallState('ringing');
+    setConnectionStatus('Recherche ATIS...');
+    setCurrentCall({ to: airport_icao, toPosition: 'ATIS', callId: `atis-${airport_icao}-${Date.now()}` });
+
+    try {
+      const res = await fetch('/api/atc/telephone/call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          atis: true,
+          airport_icao,
+          number,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.atis) {
+        const reason = data?.error === 'no_atis_active'
+          ? `Aucun ATIS actif pour ${airport_icao}`
+          : data?.error === 'no_atis_text'
+            ? `ATIS de ${airport_icao} non disponible`
+            : `Erreur ATIS ${airport_icao}`;
+        playMessage(reason);
+        playSound('end');
+        setCallState('idle');
+        setCurrentCall(null);
+        setConnectionStatus('');
+        setNumber('');
+        return;
+      }
+
+      // Lecture du texte ATIS via Web Speech API. Pas de LiveKit, pas de micro.
+      const atisText: string = data.atis.atis_text;
+      const bilingual: boolean = Boolean(data.atis.bilingual);
+
+      setCallState('atis_playing');
+      setConnectionStatus(`ATIS ${data.atis.airport_icao}${data.atis.atis_code ? ` info ${data.atis.atis_code}` : ''}`);
+
+      try {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const utter = new SpeechSynthesisUtterance(atisText);
+          utter.lang = bilingual ? 'en-US' : 'en-US';
+          utter.rate = 0.9;
+          utter.pitch = 1.0;
+          utter.onend = () => {
+            // Fin naturelle de la lecture : on raccroche tout seul.
+            setCallState('idle');
+            setCurrentCall(null);
+            setConnectionStatus('');
+            setNumber('');
+          };
+          utter.onerror = () => {
+            setCallState('idle');
+            setCurrentCall(null);
+            setConnectionStatus('');
+            setNumber('');
+          };
+          window.speechSynthesis.speak(utter);
+        } else {
+          // Pas de speechSynthesis dispo : on affiche juste le texte.
+          playMessage(`ATIS ${airport_icao} indisponible : navigateur sans synthese vocale`);
+          setCallState('idle');
+          setCurrentCall(null);
+          setConnectionStatus('');
+          setNumber('');
+        }
+      } catch (err) {
+        console.error('ATIS speech error:', err);
+        setCallState('idle');
+        setCurrentCall(null);
+        setConnectionStatus('');
+        setNumber('');
+      }
+    } catch (err) {
+      console.error('ATIS call error:', err);
+      playMessage('Erreur ATIS');
+      setCallState('idle');
+      setCurrentCall(null);
+      setConnectionStatus('');
+      setNumber('');
+    }
+  };
+
   const handleCall = async () => {
     if (!number || callState !== 'dialing') return;
+
+    // Detection prioritaire : appel ATIS (XXXX9999). Pas de creation de row
+    // dans atc_calls, pas de LiveKit, juste lecture TTS du texte ATIS.
+    const atisCall = parseAtisCall(number);
+    if (atisCall) {
+      await handleAtisCall(atisCall.airport_icao);
+      return;
+    }
+
     const parsed = parseNumber(number);
     if (!parsed.position) return;
 
     setCallState('ringing');
-    
+
     try {
       const res = await fetch('/api/atc/telephone/call', {
         method: 'POST',
@@ -772,6 +852,26 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const handleHangup = async () => {
     const callId = currentCall?.callId || incomingCall?.callId;
     const wasConnected = callState === 'connected';
+    const wasAtisPlaying = callState === 'atis_playing';
+
+    // Cas appel ATIS : pas de LiveKit, pas de hangup serveur. Juste arreter
+    // la synthese vocale localement.
+    if (wasAtisPlaying) {
+      try {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+      } catch {
+        // ignore
+      }
+      playSound('end');
+      setCallState('idle');
+      setNumber('');
+      setCurrentCall(null);
+      setConnectionStatus('');
+      return;
+    }
+
     await cleanupLiveKit();
     if (callId) {
       await fetch('/api/atc/telephone/hangup', {
@@ -871,7 +971,17 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       <div className={`mx-3 mt-3 p-3 ${screenBg} rounded-xl`}>
         <div className="flex items-center justify-between mb-1">
           <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-            {callState === 'incoming' ? 'Appel entrant' : callState === 'ringing' ? 'Appel...' : callState === 'connecting' ? 'Connexion...' : callState === 'connected' ? 'En ligne' : 'Composer'}
+            {callState === 'incoming'
+              ? 'Appel entrant'
+              : callState === 'ringing'
+                ? 'Appel...'
+                : callState === 'connecting'
+                  ? 'Connexion...'
+                  : callState === 'connected'
+                    ? 'En ligne'
+                    : callState === 'atis_playing'
+                      ? 'ATIS en lecture'
+                      : 'Composer'}
           </span>
           {callState === 'connected' && (
             <div className="flex items-center gap-1">
@@ -886,6 +996,11 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
             <div className="animate-pulse">
               <p className="text-lg font-bold text-emerald-400">{incomingCall.from}</p>
               <p className="text-xs text-slate-400">{incomingCall.fromPosition}</p>
+            </div>
+          ) : callState === 'atis_playing' && currentCall ? (
+            <div>
+              <p className="text-lg font-bold text-sky-300">ATIS {currentCall.to}</p>
+              <p className="text-xs text-slate-400">Lecture en cours</p>
             </div>
           ) : callState === 'connected' && currentCall ? (
             <div>
@@ -902,8 +1017,8 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
           )}
         </div>
         
-        {connectionStatus && (callState === 'connecting' || callState === 'ringing') && (
-          <p className="text-[10px] text-center text-amber-400 mt-1">{connectionStatus}</p>
+        {connectionStatus && (callState === 'connecting' || callState === 'ringing' || callState === 'atis_playing') && (
+          <p className="text-[10px] text-center text-sky-300 mt-1">{connectionStatus}</p>
         )}
         
         {callState === 'connected' && (
@@ -974,7 +1089,8 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
                         callState === 'connected' ||
                         callState === 'ringing' ||
                         callState === 'incoming' ||
-                        callState === 'connecting'
+                        callState === 'connecting' ||
+                        callState === 'atis_playing'
                       }
                       className="w-full flex items-center justify-between px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:hover:bg-slate-800 transition-colors text-left"
                     >
@@ -991,8 +1107,8 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
               )}
             </div>
             <p className="text-slate-500 leading-snug pt-1 border-t border-slate-700/50">
-              ℹ️ L&apos;ATIS est diffusé en vocal sur Discord, pas par téléphone.
-              Ces numéros sont fournis comme indicatif officiel.
+              ℹ️ Click sur un aéroport puis bouton Call pour écouter l&apos;ATIS via synthèse vocale.
+              Si aucun ATC ne diffuse l&apos;ATIS, l&apos;appel échoue.
             </p>
           </div>
         )}
@@ -1052,7 +1168,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
           <div key={i} className="grid grid-cols-3 gap-1.5">
             {row.map(d => (
               <button key={d} onClick={() => handleNumberInput(d)}
-                disabled={callState === 'connected' || callState === 'ringing' || callState === 'incoming' || callState === 'connecting'}
+                disabled={callState === 'connected' || callState === 'ringing' || callState === 'incoming' || callState === 'connecting' || callState === 'atis_playing'}
                 className={`h-11 ${keyBg} ${keyText} rounded-xl font-semibold text-lg transition-all active:scale-95 disabled:opacity-40`}>
                 {d}
               </button>
@@ -1076,19 +1192,24 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
               className={`h-11 ${isMuted ? 'bg-red-500 hover:bg-red-400' : 'bg-sky-500 hover:bg-sky-400'} text-white rounded-xl flex items-center justify-center transition-all active:scale-95`}>
               {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
             </button>
+          ) : callState === 'atis_playing' ? (
+            <button disabled
+              className="h-11 bg-sky-500/40 text-white rounded-xl flex items-center justify-center cursor-not-allowed">
+              <Volume2 className="h-5 w-5 animate-pulse" />
+            </button>
           ) : (
             <button onClick={handleCall} disabled={!number || callState === 'ringing' || callState === 'connecting'}
               className="h-11 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl flex items-center justify-center disabled:opacity-40 transition-all active:scale-95">
               <PhoneCall className="h-5 w-5" />
             </button>
           )}
-          
+
           {callState === 'incoming' ? (
             <button onClick={handleReject}
               className="h-11 bg-red-500 hover:bg-red-400 text-white rounded-xl flex items-center justify-center transition-all active:scale-95">
               <PhoneOff className="h-5 w-5" />
             </button>
-          ) : callState === 'connected' || callState === 'ringing' || callState === 'connecting' ? (
+          ) : callState === 'connected' || callState === 'ringing' || callState === 'connecting' || callState === 'atis_playing' ? (
             <button onClick={handleHangup}
               className="h-11 bg-red-500 hover:bg-red-400 text-white rounded-xl flex items-center justify-center transition-all active:scale-95">
               <PhoneOff className="h-5 w-5" />

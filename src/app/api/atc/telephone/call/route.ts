@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getBotOverview } from '@/lib/atis-bot-api';
+import { AEROPORT_CODES } from '@/lib/atc-phone-codes';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -12,6 +14,66 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const body = await request.json();
+
+    // ------------------------------------------------------------------
+    // Branche speciale : appel ATIS (numero <code_aero>9999).
+    // Pas de creation de row dans atc_calls, pas de LiveKit. On retourne
+    // juste le texte ATIS courant pour que le client le lise via TTS.
+    // ------------------------------------------------------------------
+    if (body?.atis === true) {
+      const airport_icao = String(body.airport_icao || '').toUpperCase();
+      if (!airport_icao || !(airport_icao in AEROPORT_CODES)) {
+        return NextResponse.json(
+          { error: 'invalid_airport', message: 'Code OACI invalide' },
+          { status: 400 }
+        );
+      }
+
+      // On exige d'etre en service ATC (l'annuaire n'est pas une feature
+      // pilote pour l'instant, et evite le spam vers le bot Discord).
+      const adminAtis = createAdminClient();
+      const { data: atcSession } = await adminAtis
+        .from('atc_sessions')
+        .select('aeroport, position')
+        .eq('user_id', user.id)
+        .single();
+      if (!atcSession) {
+        return NextResponse.json({ error: 'non_en_service' }, { status: 403 });
+      }
+
+      const overview = await getBotOverview();
+      if (overview.error || !overview.data) {
+        return NextResponse.json(
+          { error: 'bot_unreachable', message: 'Bot ATIS injoignable' },
+          { status: 503 }
+        );
+      }
+      const matchingInstance = overview.data.instances.find(
+        (inst) => (inst.airport || '').toUpperCase() === airport_icao && inst.broadcasting
+      );
+      if (!matchingInstance) {
+        return NextResponse.json(
+          { error: 'no_atis_active', message: `Aucun ATIS actif pour ${airport_icao}` },
+          { status: 404 }
+        );
+      }
+      if (!matchingInstance.atis_text) {
+        return NextResponse.json(
+          { error: 'no_atis_text', message: `ATIS de ${airport_icao} non encore genere` },
+          { status: 404 }
+        );
+      }
+      return NextResponse.json({
+        atis: {
+          airport_icao,
+          atis_text: matchingInstance.atis_text,
+          atis_code: matchingInstance.atis_code ?? null,
+          bilingual: Boolean(matchingInstance.bilingual),
+          instance_id: matchingInstance.instance_id,
+        },
+      });
+    }
+
     const { to_aeroport, to_position, number } = body;
 
     if (!number || typeof number !== 'string' || !number.trim()) {
