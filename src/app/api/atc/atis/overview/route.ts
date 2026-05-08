@@ -43,8 +43,13 @@ export interface AtisInstanceOverview {
   position: string | null;
   source: 'site' | 'discord' | null;
   started_at: string | null;
-  // Etat bot
+  // Etat bot. broadcasting prefere la source vivante (bot) pour eviter
+  // les etats "zombie" ou la DB et le bot divergent.
   broadcasting: boolean;
+  // Detail des deux sources pour permettre a l'UI de detecter une desync.
+  bot_broadcasting: boolean;
+  db_broadcasting: boolean;
+  desync: boolean;
   ready: boolean;
   airport: string | null;
   airport_name: string | null;
@@ -211,13 +216,13 @@ export async function GET() {
       const dbRow = stateById.get(instance_id);
       const bot = botByInstance.get(instance_id);
       const config = configByInstance.get(instance_id);
-      const isDiscordSource = dbRow?.source === 'discord';
 
-      // En source 'site', on ne broadcast que si le bot live le confirme.
-      // En source 'discord', on fait confiance a la DB (le bot pousse les events).
-      const broadcasting = isDiscordSource
-        ? Boolean(dbRow?.broadcasting)
-        : Boolean(dbRow?.broadcasting && bot?.broadcasting);
+      // Source de verite : le bot (etat live) quand il est joignable, sinon la DB.
+      // Cela evite les etats "zombie" (bot diffuse mais DB pas a jour, ou inverse).
+      const botBroadcasting = Boolean(bot?.broadcasting);
+      const dbBroadcasting = Boolean(dbRow?.broadcasting);
+      const broadcasting = reachable ? botBroadcasting : dbBroadcasting;
+      const desync = reachable && botBroadcasting !== dbBroadcasting;
 
       const controllerProfile = dbRow?.controlling_user_id
         ? profilesById.get(dbRow.controlling_user_id)
@@ -232,6 +237,9 @@ export async function GET() {
         source: (dbRow?.source ?? null) as 'site' | 'discord' | null,
         started_at: dbRow?.started_at ?? null,
         broadcasting,
+        bot_broadcasting: botBroadcasting,
+        db_broadcasting: dbBroadcasting,
+        desync,
         ready: bot?.ready ?? false,
         airport: bot?.airport ?? null,
         airport_name: bot?.airport_name ?? null,

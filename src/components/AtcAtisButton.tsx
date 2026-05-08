@@ -49,6 +49,9 @@ interface AtisInstance {
   source: 'site' | 'discord' | null;
   started_at: string | null;
   broadcasting: boolean;
+  bot_broadcasting: boolean;
+  db_broadcasting: boolean;
+  desync: boolean;
   ready: boolean;
   airport: string | null;
   airport_name: string | null;
@@ -1230,7 +1233,8 @@ function InstanceCard({
   const isMine = inst.controlling_user_id === userId;
   const isDiscord = inst.source === 'discord';
   // N'importe quel ATC peut arreter un ATIS (cohrence avec /api/atc/atis/stop).
-  const canStop = inst.broadcasting;
+  // Stop reste utile aussi en cas de desync (bot diffuse mais DB vide).
+  const canStop = inst.broadcasting || inst.desync;
   const aptLabel = (() => {
     const code = inst.aeroport ?? inst.airport;
     if (!code) return null;
@@ -1342,6 +1346,23 @@ function InstanceCard({
           <span>
             Cible : #{inst.config.discord_channel_name ?? '?'}
             {inst.config.discord_guild_name ? ` · ${inst.config.discord_guild_name}` : ''}
+          </span>
+        </div>
+      )}
+
+      {inst.desync && (
+        <div
+          className={`text-xs px-2 py-1.5 rounded-md flex items-start gap-1.5 ${
+            isDark
+              ? 'bg-amber-500/15 text-amber-200 border border-amber-500/40'
+              : 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
+          }`}
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <span>
+            {inst.bot_broadcasting && !inst.db_broadcasting
+              ? 'Bot en diffusion mais base non synchro. Cliquez Stop pour resynchroniser.'
+              : 'Base marquée active mais bot inactif. Cliquez Stop pour nettoyer.'}
           </span>
         </div>
       )}
