@@ -109,6 +109,10 @@ export interface BotInstanceStatus {
   guild_id?: string | null;
   voice_connected?: boolean;
   atis_text?: string | null;
+  // Texte FR exposé seulement quand bilingual=true. Utilisé pour la lecture
+  // bilingue téléphonique (Web Speech API enchaîne EN puis FR avec voix
+  // française).
+  atis_text_fr?: string | null;
   atis_code?: string | null;
   bilingual?: boolean;
   last_updated?: string | null;

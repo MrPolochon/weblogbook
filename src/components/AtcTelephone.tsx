@@ -659,35 +659,62 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       }
 
       // Lecture du texte ATIS via Web Speech API. Pas de LiveKit, pas de micro.
-      const atisText: string = data.atis.atis_text;
+      const atisTextEn: string = data.atis.atis_text;
+      const atisTextFr: string | null = data.atis.atis_text_fr ?? null;
       const bilingual: boolean = Boolean(data.atis.bilingual);
 
       setCallState('atis_playing');
-      setConnectionStatus(`ATIS ${data.atis.airport_icao}${data.atis.atis_code ? ` info ${data.atis.atis_code}` : ''}`);
+      setConnectionStatus(
+        `ATIS ${data.atis.airport_icao}${data.atis.atis_code ? ` info ${data.atis.atis_code}` : ''}${
+          bilingual && atisTextFr ? ' (EN + FR)' : ''
+        }`
+      );
 
       try {
         if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
           window.speechSynthesis.cancel();
-          const utter = new SpeechSynthesisUtterance(atisText);
-          utter.lang = bilingual ? 'en-US' : 'en-US';
-          utter.rate = 0.9;
-          utter.pitch = 1.0;
-          utter.onend = () => {
-            // Fin naturelle de la lecture : on raccroche tout seul.
+
+          // Etat partage entre les utterances : la fin du DERNIER utterance
+          // (FR si bilingue, EN sinon) declenche le retour a idle.
+          const finishCall = () => {
             setCallState('idle');
             setCurrentCall(null);
             setConnectionStatus('');
             setNumber('');
           };
-          utter.onerror = () => {
-            setCallState('idle');
-            setCurrentCall(null);
-            setConnectionStatus('');
-            setNumber('');
-          };
-          window.speechSynthesis.speak(utter);
+
+          const utterEn = new SpeechSynthesisUtterance(atisTextEn);
+          utterEn.lang = 'en-US';
+          utterEn.rate = 0.9;
+          utterEn.pitch = 1.0;
+
+          if (bilingual && atisTextFr && atisTextFr.trim()) {
+            const utterFr = new SpeechSynthesisUtterance(atisTextFr);
+            utterFr.lang = 'fr-FR';
+            utterFr.rate = 0.9;
+            utterFr.pitch = 1.0;
+            utterFr.onend = finishCall;
+            utterFr.onerror = finishCall;
+            // En bilingue : EN se termine -> on demarre FR (geres en queue par
+            // le navigateur, mais on sequence explicitement pour montrer le
+            // changement de statut a l'ATC).
+            utterEn.onend = () => {
+              setConnectionStatus(
+                `ATIS ${data.atis.airport_icao}${data.atis.atis_code ? ` info ${data.atis.atis_code}` : ''} (FR)`
+              );
+              window.speechSynthesis.speak(utterFr);
+            };
+            utterEn.onerror = finishCall;
+            setConnectionStatus(
+              `ATIS ${data.atis.airport_icao}${data.atis.atis_code ? ` info ${data.atis.atis_code}` : ''} (EN)`
+            );
+          } else {
+            utterEn.onend = finishCall;
+            utterEn.onerror = finishCall;
+          }
+
+          window.speechSynthesis.speak(utterEn);
         } else {
-          // Pas de speechSynthesis dispo : on affiche juste le texte.
           playMessage(`ATIS ${airport_icao} indisponible : navigateur sans synthese vocale`);
           setCallState('idle');
           setCurrentCall(null);

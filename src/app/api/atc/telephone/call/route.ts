@@ -67,6 +67,11 @@ export async function POST(request: Request) {
         atis: {
           airport_icao,
           atis_text: matchingInstance.atis_text,
+          // Texte FR exposé seulement si le bot est en mode bilingue.
+          // Le client enchaînera la lecture EN puis FR.
+          atis_text_fr: matchingInstance.bilingual
+            ? matchingInstance.atis_text_fr ?? null
+            : null,
           atis_code: matchingInstance.atis_code ?? null,
           bilingual: Boolean(matchingInstance.bilingual),
           instance_id: matchingInstance.instance_id,
