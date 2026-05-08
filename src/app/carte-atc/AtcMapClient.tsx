@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { RefreshCw, Radio, Layers, ArrowLeft } from 'lucide-react';
+import { RefreshCw, Radio, Layers, ArrowLeft, Info, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import {
   AIRPORT_TO_FIR,
   DEFAULT_FIR_ZONES,
@@ -156,6 +156,8 @@ export default function AtcMapClient() {
   // Support tactile : pinch-zoom (2 doigts) et pan (1 doigt)
   const pinchStartRef = useRef<{ distance: number; zoom: number } | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
+  const legendRef = useRef<HTMLDivElement>(null);
   /** FIR sans Center en ligne : affichage optionnel (bleu). */
   const [showOptionalFirs, setShowOptionalFirs] = useState(false);
   const [showAirports, setShowAirports] = useState(true);
@@ -208,15 +210,18 @@ export default function AtcMapClient() {
   }, []);
 
   useEffect(() => {
-    if (!layersOpen) return;
+    if (!layersOpen && !legendOpen) return;
     function onDocMouseDown(e: MouseEvent) {
-      if (layersPanelRef.current && !layersPanelRef.current.contains(e.target as Node)) {
+      if (layersOpen && layersPanelRef.current && !layersPanelRef.current.contains(e.target as Node)) {
         setLayersOpen(false);
+      }
+      if (legendOpen && legendRef.current && !legendRef.current.contains(e.target as Node)) {
+        setLegendOpen(false);
       }
     }
     document.addEventListener('mousedown', onDocMouseDown);
     return () => document.removeEventListener('mousedown', onDocMouseDown);
-  }, [layersOpen]);
+  }, [layersOpen, legendOpen]);
 
   const { sessionsByAirport, centerAirports } = useMemo(() => {
     const map = new Map<string, AtcSession[]>();
@@ -670,31 +675,33 @@ export default function AtcMapClient() {
               >
                 <Layers className="h-4 w-4" />
               </button>
-              <div className="rounded-lg bg-slate-900/90 border border-slate-700/50 p-2 flex items-center gap-2 backdrop-blur-sm">
-            <button
-              onClick={zoomOut}
-              className="h-7 w-7 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
-              title="Dézoomer"
-              disabled={zoom <= 1}
-            >
-              -
-            </button>
-            <span className="text-xs text-slate-300 min-w-[62px] text-center">{Math.round(zoom * 100)}%</span>
-            <button
-              onClick={zoomIn}
-              className="h-7 w-7 rounded bg-slate-800 text-slate-200 hover:bg-slate-700"
-              title="Zoomer"
-              disabled={zoom >= 10}
-            >
-              +
-            </button>
-            <button
-              onClick={resetView}
-              className="h-7 px-2 rounded bg-slate-800 text-slate-200 hover:bg-slate-700 text-xs"
-              title="Réinitialiser la vue"
-            >
-              Reset
-            </button>
+              <div className="rounded-lg bg-slate-900/90 border border-slate-700/50 p-1.5 flex items-center gap-1.5 backdrop-blur-sm">
+                <button
+                  onClick={zoomOut}
+                  className="h-8 w-8 rounded-md bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-30 flex items-center justify-center transition-colors"
+                  title="Dézoomer"
+                  disabled={zoom <= 1}
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </button>
+                <span className="text-[11px] text-slate-300 min-w-[48px] text-center font-mono tabular-nums">{Math.round(zoom * 100)}%</span>
+                <button
+                  onClick={zoomIn}
+                  className="h-8 w-8 rounded-md bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-30 flex items-center justify-center transition-colors"
+                  title="Zoomer"
+                  disabled={zoom >= 10}
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </button>
+                {zoom > 1 && (
+                  <button
+                    onClick={resetView}
+                    className="h-8 w-8 rounded-md bg-slate-800 text-slate-200 hover:bg-slate-700 flex items-center justify-center transition-colors"
+                    title="Réinitialiser"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -744,45 +751,65 @@ export default function AtcMapClient() {
             )}
           </div>
 
-          {/* Légende overlay */}
-          <div className="absolute bottom-3 left-3 rounded-lg bg-slate-900/90 border border-slate-700/50 p-3 text-xs space-y-1.5 backdrop-blur-sm">
-            <p className="text-slate-400 font-semibold mb-2">Légende</p>
-            <div className="flex items-center gap-2"><span className="w-4 h-4 rounded-full border-2 border-blue-500 bg-blue-500/10" />  <span className="text-slate-300">APP (Approche)</span></div>
-            <div className="flex items-center gap-2"><span className="w-4 h-4 rounded-full border border-white/60 bg-white/5" /> <span className="text-slate-300">DEP (Départ)</span></div>
-            <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 rounded-sm border-2 border-red-500 bg-red-500/15" /> <span className="text-slate-300">TWR (Tour)</span></div>
-            <div className="flex items-center gap-2">
-              <svg viewBox="0 0 16 16" className="w-4 h-4">
-                <FourPointStar cx={8} cy={8} outerR={7} innerR={2.5} rotation={0} fill="rgba(245,158,11,0.8)" stroke="#f59e0b" strokeWidth={0.8} />
-              </svg>
-              <span className="text-slate-300">GND (Sol)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <svg viewBox="0 0 16 16" className="w-4 h-4">
-                <FourPointStar cx={8} cy={8} outerR={7} innerR={2.5} rotation={45} fill="rgba(16,185,129,0.8)" stroke="#10b981" strokeWidth={0.8} />
-              </svg>
-              <span className="text-slate-300">DEL (Clairance)</span>
-            </div>
-            <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-amber-400" /> <span className="text-slate-300">FIR contrôlé (Center)</span></div>
-            <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-blue-500" /> <span className="text-slate-300">FIR affiché manuellement</span></div>
-            <div className="flex items-center gap-2">
-              <span className="w-4 h-4 inline-flex items-center justify-center shrink-0">
-                <svg viewBox="0 0 16 16" className="w-4 h-4" aria-hidden>
-                  <circle cx="8" cy="8" r="5" fill="none" stroke="#22d3ee" strokeWidth="1.2" />
-                  <circle cx="8" cy="8" r="2" fill="#22d3ee" />
-                </svg>
-              </span>
-              <span className="text-slate-300">VOR</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-lime-400 shrink-0 ring-1 ring-lime-300/50" />
-              <span className="text-slate-300">Waypoint</span>
-            </div>
-            <div className="mt-2 border-t border-slate-700/50 pt-2 space-y-1.5">
-              <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-green-500" /> <span className="text-slate-300">Vol VFR</span></div>
-              <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-red-500" /> <span className="text-slate-300">Vol IFR</span></div>
-              <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-purple-500" /> <span className="text-slate-300">Vol militaire</span></div>
-              <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed" style={{ borderColor: OPS_REPARATION_COLOR }} /> <span className="text-slate-300">Opération réparation externe</span></div>
-            </div>
+          {/* Légende toggle */}
+          <div ref={legendRef} className="absolute bottom-3 left-3 flex flex-col items-start gap-2">
+            <button
+              type="button"
+              onClick={() => setLegendOpen(o => !o)}
+              className={`rounded-lg border p-2 backdrop-blur-sm transition-colors ${
+                legendOpen
+                  ? 'bg-sky-600/25 border-sky-500/50 text-sky-200'
+                  : 'bg-slate-900/90 border-slate-700/50 text-slate-300 hover:bg-slate-800'
+              }`}
+              title="Légende"
+            >
+              <Info className="h-4 w-4" />
+            </button>
+
+            {legendOpen && (
+              <div className="rounded-lg bg-slate-900/95 border border-slate-600/50 p-3 text-xs space-y-1.5 backdrop-blur-sm shadow-xl max-h-[60dvh] overflow-y-auto w-[210px]">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-slate-300 font-semibold">Légende</p>
+                  <button onClick={() => setLegendOpen(false)} className="text-slate-500 hover:text-slate-300 p-0.5">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2"><span className="w-4 h-4 rounded-full border-2 border-blue-500 bg-blue-500/10 shrink-0" /> <span className="text-slate-300">APP (Approche)</span></div>
+                <div className="flex items-center gap-2"><span className="w-4 h-4 rounded-full border border-white/60 bg-white/5 shrink-0" /> <span className="text-slate-300">DEP (Départ)</span></div>
+                <div className="flex items-center gap-2"><span className="w-3.5 h-3.5 rounded-sm border-2 border-red-500 bg-red-500/15 shrink-0" /> <span className="text-slate-300">TWR (Tour)</span></div>
+                <div className="flex items-center gap-2">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 shrink-0">
+                    <FourPointStar cx={8} cy={8} outerR={7} innerR={2.5} rotation={0} fill="rgba(245,158,11,0.8)" stroke="#f59e0b" strokeWidth={0.8} />
+                  </svg>
+                  <span className="text-slate-300">GND (Sol)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 shrink-0">
+                    <FourPointStar cx={8} cy={8} outerR={7} innerR={2.5} rotation={45} fill="rgba(16,185,129,0.8)" stroke="#10b981" strokeWidth={0.8} />
+                  </svg>
+                  <span className="text-slate-300">DEL (Clairance)</span>
+                </div>
+                <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-amber-400 shrink-0" /> <span className="text-slate-300">FIR contrôlé</span></div>
+                <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-blue-500 shrink-0" /> <span className="text-slate-300">FIR manuel</span></div>
+                <div className="flex items-center gap-2">
+                  <svg viewBox="0 0 16 16" className="w-4 h-4 shrink-0" aria-hidden>
+                    <circle cx="8" cy="8" r="5" fill="none" stroke="#22d3ee" strokeWidth="1.2" />
+                    <circle cx="8" cy="8" r="2" fill="#22d3ee" />
+                  </svg>
+                  <span className="text-slate-300">VOR</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-lime-400 shrink-0 ring-1 ring-lime-300/50" />
+                  <span className="text-slate-300">Waypoint</span>
+                </div>
+                <div className="border-t border-slate-700/50 pt-2 mt-2 space-y-1.5">
+                  <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-green-500 shrink-0" /> <span className="text-slate-300">Vol VFR</span></div>
+                  <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-red-500 shrink-0" /> <span className="text-slate-300">Vol IFR</span></div>
+                  <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-purple-500 shrink-0" /> <span className="text-slate-300">Vol militaire</span></div>
+                  <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed shrink-0" style={{ borderColor: OPS_REPARATION_COLOR }} /> <span className="text-slate-300">Réparation ext.</span></div>
+                </div>
+              </div>
+            )}
           </div>
 
           {selectedFlight && (
