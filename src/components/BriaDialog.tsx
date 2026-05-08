@@ -43,7 +43,7 @@ function BriaInner({ onClose }: BriaInnerProps) {
       if (!closedRef.current) {
         conv.endSession();
       }
-    }, 30_000);
+    }, 90_000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -70,6 +70,9 @@ function BriaInner({ onClose }: BriaInnerProps) {
       setMessages([...messagesRef.current]);
       resetInactivity();
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    },
+    onModeChange: () => {
+      resetInactivity();
     },
     onError: (message: string) => {
       console.error('BRIA error:', message);
