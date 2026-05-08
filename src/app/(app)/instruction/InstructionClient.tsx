@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { InstructionProgram } from '@/lib/instruction-programs';
 import { isAtcInstructionProgram } from '@/lib/instruction-programs';
+import {
+  GraduationCap, BookOpen, Users, Award, Plane, Radio,
+  Check, Clock, ClipboardList, Send, Compass,
+  UserPlus, Link2, PlaneTakeoff, FileCheck2,
+} from 'lucide-react';
+
+type TabId = 'espace' | 'formation' | 'examens';
 
 type Eleve = {
   id: string;
@@ -126,6 +133,7 @@ export default function InstructionClient({
   const [examEchoueNote, setExamEchoueNote] = useState('');
   const [editById, setEditById] = useState<Record<string, { nom: string; immat: string; aeroport: string }>>({});
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabId>('espace');
   const [reassignCandidates, setReassignCandidates] = useState<
     Record<string, { id: string; identifiant: string }[]>
   >({});
@@ -142,6 +150,8 @@ export default function InstructionClient({
     }
     return out;
   }, [canGrantTitreInstructionFlight, canGrantTitreInstructionAtc]);
+
+  const showExamensTab = canViewExaminerInbox || instructionTitreOptions.length > 0;
 
   const [titreUserId, setTitreUserId] = useState('');
   const [titreType, setTitreType] = useState('FI');
@@ -313,6 +323,15 @@ export default function InstructionClient({
     if (!myProgram || myProgram.modules.length === 0) return 0;
     return Math.round((myCompletedSet.size / myProgram.modules.length) * 100);
   }, [myProgram, myCompletedSet]);
+
+  const pendingExamsCount = useMemo(
+    () => examRequestsMine.filter(r => r.statut !== 'termine' && r.statut !== 'refuse').length,
+    [examRequestsMine],
+  );
+  const assignedExamsCount = useMemo(
+    () => examRequestsAssigned.filter(r => r.statut !== 'termine').length,
+    [examRequestsAssigned],
+  );
 
   async function run(action: () => Promise<void>) {
     setLoading(true);
@@ -813,22 +832,102 @@ export default function InstructionClient({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-page-reveal max-w-5xl mx-auto w-full">
       {loadError && (
         <div className="sticky top-0 z-10 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {loadError}
         </div>
       )}
-      
 
-      <div className="card space-y-2">
-        <h1 className="text-2xl font-semibold text-slate-100">Instruction</h1>
-        <p className="text-sm text-slate-400">Suivi de formation et demandes d&apos;examens.</p>
+      {/* ===== HUD Header aviation ===== */}
+      <div className="relative overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/85 to-slate-950/95 shadow-[0_22px_42px_rgba(2,6,23,0.36),inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-60" />
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -left-16 -bottom-16 h-56 w-56 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute right-8 top-1/2 -translate-y-1/2 h-40 w-40 sm:h-56 sm:w-56 opacity-20">
+          <div className="absolute inset-0 rounded-full border border-sky-500/20" />
+          <div className="absolute inset-[25%] rounded-full border border-sky-500/15" />
+          <div className="absolute inset-[50%] rounded-full border border-sky-500/10" />
+          <div className="absolute inset-0 origin-center animate-compass-spin">
+            <div className="absolute left-1/2 top-0 h-1/2 w-px bg-gradient-to-b from-sky-400/60 to-transparent" />
+          </div>
+        </div>
+        <Plane
+          className="pointer-events-none absolute top-3 -left-10 h-5 w-5 text-sky-400/40 animate-plane-glide"
+          style={{ animationDuration: '7s' }}
+          aria-hidden
+        />
+        <div className="relative z-10 p-5 sm:p-7 space-y-4">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-sky-500/20 to-indigo-500/20 border border-sky-500/20">
+              <GraduationCap className="h-7 w-7 text-sky-400" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold text-slate-50 tracking-tight">Centre d&apos;Instruction</h1>
+              <p className="text-sm text-slate-400 mt-0.5">Suivi de formation, examens et gestion pédagogique</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs">
+            {myFormationActive && myProgram && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <BookOpen className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="text-emerald-300 font-medium">{myProgram.label} — {myProgressPercent}%</span>
+              </div>
+            )}
+            {pendingExamsCount > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                <ClipboardList className="h-3.5 w-3.5 text-amber-400" />
+                <span className="text-amber-300 font-medium">{pendingExamsCount} examen{pendingExamsCount > 1 ? 's' : ''} en cours</span>
+              </div>
+            )}
+            {isManager && eleves.length > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20">
+                <Users className="h-3.5 w-3.5 text-sky-400" />
+                <span className="text-sky-300 font-medium">{eleves.length} élève{eleves.length > 1 ? 's' : ''} actif{eleves.length > 1 ? 's' : ''}</span>
+              </div>
+            )}
+            {assignedExamsCount > 0 && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                <FileCheck2 className="h-3.5 w-3.5 text-violet-400" />
+                <span className="text-violet-300 font-medium">{assignedExamsCount} examen{assignedExamsCount > 1 ? 's' : ''} à traiter</span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {instructionTitreOptions.length > 0 && (
-        <form onSubmit={submitTitreDelivrance} className="card space-y-3">
-          <h2 className="text-lg font-medium text-slate-200">Délivrance titre FI / FE / ATC</h2>
+      {/* ===== Tab Bar ===== */}
+      <div className="flex gap-1.5 p-1 rounded-xl bg-slate-800/40 border border-slate-800/60">
+        {([
+          { id: 'espace' as TabId, label: 'Mon Espace', icon: BookOpen, visible: true },
+          { id: 'formation' as TabId, label: 'Formation', icon: Users, visible: isManager },
+          { id: 'examens' as TabId, label: 'Examens & Titres', icon: Award, visible: showExamensTab },
+        ]).filter(t => t.visible).map(tab => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                active
+                  ? 'bg-slate-700/80 text-slate-50 shadow-lg shadow-slate-900/50 border border-slate-600/50'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              }`}
+            >
+              <Icon className={`h-4 w-4 ${active ? 'text-sky-400' : ''}`} />
+              <span className="hidden sm:inline">{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === 'examens' && instructionTitreOptions.length > 0 && (
+        <form onSubmit={submitTitreDelivrance} className="card space-y-4 border-l-4 border-l-violet-500/60">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-violet-500/10"><Award className="h-5 w-5 text-violet-400" /></div>
+            <h2 className="text-lg font-semibold text-slate-100">Délivrance titre FI / FE / ATC</h2>
+          </div>
           <p className="text-sm text-amber-200/90">
             Réservé aux administrateurs et aux titulaires concernés (FE pour FI et FE vol ; ATC FE pour ATC FI et
             ATC FE). Vous ne pouvez pas retirer ces titres ici : contactez un administrateur si une erreur a été
@@ -923,8 +1022,12 @@ export default function InstructionClient({
         </form>
       )}
 
-      <form onSubmit={createExamRequest} className="card space-y-3">
-        <h2 className="text-lg font-medium text-slate-200">Demander un examen</h2>
+      {activeTab === 'espace' && (<>
+      <form onSubmit={createExamRequest} className="card space-y-4 border-l-4 border-l-amber-500/60">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-amber-500/10"><ClipboardList className="h-5 w-5 text-amber-400" /></div>
+          <h2 className="text-lg font-semibold text-slate-100">Demander un examen</h2>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <select className="input" value={examLicence} onChange={(e) => setExamLicence(e.target.value)} required>
             {examLicenceOptions.map((licence) => (
@@ -942,19 +1045,34 @@ export default function InstructionClient({
       </form>
 
       {myFormationActive && myProgram && (
-        <div className="card space-y-3">
-          <h2 className="text-lg font-medium text-slate-200">Ma progression ({myProgram.label})</h2>
-          <p className="text-sm text-slate-400">
-            Instructeur référent: <span className="text-slate-200">{myInstructorIdentifiant || '—'}</span> · Progression: <span className="text-emerald-300">{myProgressPercent}%</span>
-          </p>
+        <div className="card space-y-4 border-l-4 border-l-emerald-500/60">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-emerald-500/10"><BookOpen className="h-5 w-5 text-emerald-400" /></div>
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-slate-100">Ma progression — {myProgram.label}</h2>
+              <p className="text-sm text-slate-400">Instructeur référent : <span className="text-slate-200">{myInstructorIdentifiant || '—'}</span></p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-emerald-400">{myProgressPercent}%</p>
+              <p className="text-xs text-slate-500">{myCompletedSet.size}/{myProgram.modules.length} modules</p>
+            </div>
+          </div>
+          <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+            <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-700" style={{ width: `${myProgressPercent}%` }} />
+          </div>
           <div className="space-y-2">
-            {myProgram.modules.map((m) => (
-              <div key={m.code} className="rounded border border-slate-700/60 p-3 flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-slate-200 font-medium">{m.code} - {m.title}</p>
-                  <p className="text-xs text-slate-500">{m.description}</p>
+            {myProgram.modules.map((m, i) => (
+              <div key={m.code} className="flex items-center gap-3 p-3 rounded-xl border border-slate-700/40 bg-slate-800/20 transition-colors hover:bg-slate-800/40">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${myCompletedSet.has(m.code) ? 'bg-emerald-500/20' : 'bg-slate-700/40'}`}>
+                  {myCompletedSet.has(m.code)
+                    ? <Check className="h-4 w-4 text-emerald-400" />
+                    : <span className="text-xs font-mono text-slate-500">{i + 1}</span>}
                 </div>
-                <span className={`text-xs px-2 py-1 rounded ${myCompletedSet.has(m.code) ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700/60 text-slate-400'}`}>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium ${myCompletedSet.has(m.code) ? 'text-emerald-200' : 'text-slate-200'}`}>{m.code} — {m.title}</p>
+                  <p className="text-xs text-slate-500 truncate">{m.description}</p>
+                </div>
+                <span className={`text-xs px-2.5 py-1 rounded-full font-medium shrink-0 ${myCompletedSet.has(m.code) ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700/60 text-slate-400'}`}>
                   {myCompletedSet.has(m.code) ? 'Validé' : 'À faire'}
                 </span>
               </div>
@@ -963,8 +1081,14 @@ export default function InstructionClient({
         </div>
       )}
 
-      <div className="card space-y-3">
-        <h2 className="text-lg font-medium text-slate-200">Mes demandes d&apos;examen</h2>
+      <div className="card space-y-4 border-l-4 border-l-sky-500/60">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-sky-500/10"><FileCheck2 className="h-5 w-5 text-sky-400" /></div>
+          <h2 className="text-lg font-semibold text-slate-100">Mes demandes d&apos;examen</h2>
+          {examRequestsMine.length > 0 && (
+            <span className="ml-auto text-xs px-2.5 py-1 rounded-full bg-sky-500/10 text-sky-300 font-medium">{examRequestsMine.length}</span>
+          )}
+        </div>
         {examRequestsMine.length === 0 ? (
           <p className="text-slate-500">Aucune demande.</p>
         ) : (
@@ -1012,8 +1136,11 @@ export default function InstructionClient({
         )}
       </div>
 
-      <div className="card space-y-3 border-t-4 border-t-emerald-500/60">
-        <h2 className="text-lg font-medium text-slate-200">Session de training (vol / pilote)</h2>
+      <div className="card space-y-4 border-l-4 border-l-teal-500/60">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-teal-500/10"><PlaneTakeoff className="h-5 w-5 text-teal-400" /></div>
+          <h2 className="text-lg font-semibold text-slate-100">Session de training (vol / pilote)</h2>
+        </div>
         <p className="text-sm text-slate-500">
           <strong className="text-slate-400">Tout le monde</strong> peut demander un accompagnement vol. Un{' '}
           <strong className="text-slate-400">FI</strong> est assigné en priorité (répartition de charge) ; un{' '}
@@ -1080,8 +1207,11 @@ export default function InstructionClient({
           )}
       </div>
 
-      <div className="card space-y-3">
-        <h2 className="text-lg font-medium text-slate-200">Session de training (ATC)</h2>
+      <div className="card space-y-4 border-l-4 border-l-indigo-500/60">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-indigo-500/10"><Radio className="h-5 w-5 text-indigo-400" /></div>
+          <h2 className="text-lg font-semibold text-slate-100">Session de training (ATC)</h2>
+        </div>
         <p className="text-sm text-slate-500">
           Tout le monde peut demander un accompagnement. Un <strong className="text-slate-400">ATC FI</strong> est assigné
           en priorité (répartition de charge) ; un <strong className="text-slate-400">ATC FE</strong> n&apos;intervient
@@ -1146,11 +1276,14 @@ export default function InstructionClient({
           </div>
         )}
       </div>
+      </>)}
 
-      {isManager && (
-        <>
-          <form onSubmit={createEleve} className="card space-y-3">
-            <h2 className="text-lg font-medium text-slate-200">Créer un élève</h2>
+      {activeTab === 'formation' && isManager && (<>
+          <form onSubmit={createEleve} className="card space-y-4 border-l-4 border-l-sky-500/60">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-sky-500/10"><UserPlus className="h-5 w-5 text-sky-400" /></div>
+              <h2 className="text-lg font-semibold text-slate-100">Créer un élève</h2>
+            </div>
             <p className="text-sm text-slate-500">
               Crée un <strong className="text-slate-400">nouveau</strong> compte dédié. Pour quelqu&apos;un qui a déjà un compte pilote (ex. PPL), préférez le rattachement ci-dessous.
             </p>
@@ -1166,8 +1299,11 @@ export default function InstructionClient({
             </div>
           </form>
 
-          <form onSubmit={rattachCompteExistant} className="card space-y-3">
-            <h2 className="text-lg font-medium text-slate-200">Rattacher un compte existant</h2>
+          <form onSubmit={rattachCompteExistant} className="card space-y-4 border-l-4 border-l-cyan-500/60">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-cyan-500/10"><Link2 className="h-5 w-5 text-cyan-400" /></div>
+              <h2 className="text-lg font-semibold text-slate-100">Rattacher un compte existant</h2>
+            </div>
             <p className="text-sm text-slate-500">
               Associe un pilote (ou un autre compte non administrateur) déjà inscrit sur le site à votre formation, sans doublon de compte. Son carnet et son identifiant restent les mêmes.
             </p>
@@ -1225,8 +1361,11 @@ export default function InstructionClient({
           </form>
 
           {elevesForAvion.some((e) => e.formation_instruction_active) ? (
-          <form onSubmit={addAvionTemp} className="card space-y-3">
-            <h2 className="text-lg font-medium text-slate-200">Assigner un avion temporaire</h2>
+          <form onSubmit={addAvionTemp} className="card space-y-4 border-l-4 border-l-lime-500/60">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-lime-500/10"><Plane className="h-5 w-5 text-lime-400" /></div>
+              <h2 className="text-lg font-semibold text-slate-100">Assigner un avion temporaire</h2>
+            </div>
             <p className="text-xs text-slate-500">Réservé aux parcours <strong className="text-slate-400">vol</strong> (PPL, CPL, etc.), pas à la formation ATC-INIT.</p>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <select className="input" value={selectedEleveId} onChange={(e) => setSelectedEleveId(e.target.value)} required>
@@ -1253,12 +1392,15 @@ export default function InstructionClient({
               Aucun élève en formation <strong className="text-slate-400">vol</strong> actif : l’assignation d’avion temporaire ne s’applique pas aux seuls parcours ATC-INIT.
             </p>
           ) : null}
-        </>
-      )}
 
-      {isManager && (
-        <div className="card space-y-4">
-          <h2 className="text-lg font-medium text-slate-200">Élèves en formation</h2>
+        <div className="card space-y-4 border-l-4 border-l-orange-500/60">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-orange-500/10"><Users className="h-5 w-5 text-orange-400" /></div>
+            <h2 className="text-lg font-semibold text-slate-100">Élèves en formation</h2>
+            {eleves.length > 0 && (
+              <span className="ml-auto text-xs px-2.5 py-1 rounded-full bg-orange-500/10 text-orange-300 font-medium">{eleves.length}</span>
+            )}
+          </div>
           {eleves.length === 0 && <p className="text-slate-500">Aucun élève rattaché.</p>}
           {eleves.map((e) => {
             const avions = avionsByEleve.get(e.id) || [];
@@ -1266,12 +1408,25 @@ export default function InstructionClient({
             const program = programs.find((p) => p.licenceCode === licenceCode) || null;
             const key = `${e.id}::${licenceCode}`;
             const completedSet = progressionByEleve.get(key) || new Set<string>();
+            const progressPct = program && program.modules.length > 0
+              ? Math.round((completedSet.size / program.modules.length) * 100)
+              : 0;
             return (
-              <div key={e.id} className="rounded-lg border border-slate-700/60 p-4 space-y-3">
+              <div key={e.id} className="rounded-xl border border-slate-700/50 bg-slate-800/20 p-5 space-y-4 transition-colors hover:border-slate-600/60">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-slate-100 font-medium">{e.identifiant}</p>
-                    <p className="text-xs text-slate-500">{e.formation_instruction_active ? 'Formation active' : 'Formation terminée'}</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-orange-500/15 text-orange-300 font-bold text-sm">
+                      {e.identifiant[0]?.toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-slate-100 font-semibold">{e.identifiant}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${e.formation_instruction_active ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700/60 text-slate-400'}`}>
+                          {e.formation_instruction_active ? 'Active' : 'Terminée'}
+                        </span>
+                        {program && <span className="text-xs text-slate-500">{program.label} — {progressPct}%</span>}
+                      </div>
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     <select
@@ -1325,8 +1480,14 @@ export default function InstructionClient({
                 </div>
 
                 {program && (
-                  <div className="rounded border border-slate-700/60 p-3 space-y-2">
-                    <p className="text-sm text-slate-300">Progression {program.label}</p>
+                  <div className="rounded-xl border border-slate-700/40 bg-slate-900/30 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium text-slate-200">Progression {program.label}</p>
+                      <span className="text-sm font-bold text-emerald-400">{progressPct}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500" style={{ width: `${progressPct}%` }} />
+                    </div>
                     <p className="text-xs text-slate-500">Saisissez une note par module ; elle est enregistrée à la sortie du champ.</p>
                     {program.modules.map((m) => {
                       const checked = completedSet.has(m.code);
@@ -1409,11 +1570,17 @@ export default function InstructionClient({
             );
           })}
         </div>
-      )}
+      </>)}
 
-      {canViewExaminerInbox && (
-        <div className="card space-y-3">
-          <h2 className="text-lg font-medium text-slate-200">Demandes d&apos;examen assignées</h2>
+      {activeTab === 'examens' && canViewExaminerInbox && (
+        <div className="card space-y-4 border-l-4 border-l-rose-500/60">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-rose-500/10"><FileCheck2 className="h-5 w-5 text-rose-400" /></div>
+            <h2 className="text-lg font-semibold text-slate-100">Demandes d&apos;examen assignées</h2>
+            {examRequestsAssigned.length > 0 && (
+              <span className="ml-auto text-xs px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-300 font-medium">{examRequestsAssigned.length}</span>
+            )}
+          </div>
           {examRequestsAssigned.length === 0 ? (
             <p className="text-slate-500">Aucune demande assignée.</p>
           ) : (

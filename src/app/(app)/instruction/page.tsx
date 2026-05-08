@@ -142,80 +142,36 @@ export default async function InstructionPage() {
         .order('created_at', { ascending: false })
     : { data: [] as Array<Record<string, unknown>>, error: null };
 
-  let pilotTrainingsMine: Array<Record<string, unknown>> = [];
-  let pilotTrainingsAssigned: Array<Record<string, unknown>> = [];
-  const { data: pilotMine, error: pilotMineErr } = await admin
-    .from('instruction_pilot_training_requests')
-    .select('id, requester_id, assignee_id, message, created_at, updated_at')
-    .eq('requester_id', user.id)
-    .order('created_at', { ascending: false });
-  const { data: pilotToMe, error: pilotToMeErr } = await admin
-    .from('instruction_pilot_training_requests')
-    .select('id, requester_id, assignee_id, message, created_at, updated_at')
-    .eq('assignee_id', user.id)
-    .order('created_at', { ascending: false });
+  const [
+    { data: pilotMine, error: pilotMineErr },
+    { data: pilotToMe, error: pilotToMeErr },
+    { data: atcMine, error: atcMineErr },
+    { data: atcToMe, error: atcToMeErr },
+  ] = await Promise.all([
+    admin.from('instruction_pilot_training_requests').select('id, requester_id, assignee_id, message, created_at, updated_at').eq('requester_id', user.id).order('created_at', { ascending: false }),
+    admin.from('instruction_pilot_training_requests').select('id, requester_id, assignee_id, message, created_at, updated_at').eq('assignee_id', user.id).order('created_at', { ascending: false }),
+    admin.from('instruction_atc_training_requests').select('id, requester_id, assignee_id, message, created_at, updated_at').eq('requester_id', user.id).order('created_at', { ascending: false }),
+    admin.from('instruction_atc_training_requests').select('id, requester_id, assignee_id, message, created_at, updated_at').eq('assignee_id', user.id).order('created_at', { ascending: false }),
+  ]);
+
   if (pilotMineErr) errors.push(`Training pilote: ${pilotMineErr.message}`);
   if (pilotToMeErr) errors.push(`Training pilote (assigné): ${pilotToMeErr.message}`);
-  if (!pilotMineErr && !pilotToMeErr) {
-    const paIds = new Set(
-      [...(pilotMine || []), ...(pilotToMe || [])].map((r) => r.assignee_id as string).filter(Boolean),
-    );
-    const prIds = new Set(
-      [...(pilotMine || []), ...(pilotToMe || [])].map((r) => r.requester_id as string).filter(Boolean),
-    );
-    const { data: pap } = paIds.size
-      ? await admin.from('profiles').select('id, identifiant').in('id', Array.from(paIds))
-      : { data: [] };
-    const { data: prp } = prIds.size
-      ? await admin.from('profiles').select('id, identifiant').in('id', Array.from(prIds))
-      : { data: [] };
-    const pam = new Map((pap || []).map((p) => [p.id, p.identifiant]));
-    const prm = new Map((prp || []).map((p) => [p.id, p.identifiant]));
-    pilotTrainingsMine = (pilotMine || []).map((r) => ({
-      ...r,
-      assignee_identifiant: pam.get(r.assignee_id as string) || null,
-    }));
-    pilotTrainingsAssigned = (pilotToMe || []).map((r) => ({
-      ...r,
-      requester_identifiant: prm.get(r.requester_id as string) || null,
-    }));
-  }
-
-  let atcTrainingsMine: Array<Record<string, unknown>> = [];
-  let atcTrainingsAssigned: Array<Record<string, unknown>> = [];
-  const { data: atcMine, error: atcMineErr } = await admin
-    .from('instruction_atc_training_requests')
-    .select('id, requester_id, assignee_id, message, created_at, updated_at')
-    .eq('requester_id', user.id)
-    .order('created_at', { ascending: false });
-  const { data: atcToMe, error: atcToMeErr } = await admin
-    .from('instruction_atc_training_requests')
-    .select('id, requester_id, assignee_id, message, created_at, updated_at')
-    .eq('assignee_id', user.id)
-    .order('created_at', { ascending: false });
   if (atcMineErr) errors.push(`Training ATC: ${atcMineErr.message}`);
   if (atcToMeErr) errors.push(`Training ATC (assigné): ${atcToMeErr.message}`);
-  if (!atcMineErr && !atcToMeErr) {
-    const aIds = new Set(
-      [...(atcMine || []), ...(atcToMe || [])].map((r) => r.assignee_id as string).filter(Boolean),
-    );
-    const rIds = new Set(
-      [...(atcMine || []), ...(atcToMe || [])].map((r) => r.requester_id as string).filter(Boolean),
-    );
-    const { data: ap } = aIds.size
-      ? await admin.from('profiles').select('id, identifiant').in('id', Array.from(aIds))
-      : { data: [] };
-    const { data: rp } = rIds.size
-      ? await admin.from('profiles').select('id, identifiant').in('id', Array.from(rIds))
-      : { data: [] };
-    const am = new Map((ap || []).map((p) => [p.id, p.identifiant]));
-    const rm = new Map((rp || []).map((p) => [p.id, p.identifiant]));
-    atcTrainingsMine = (atcMine || []).map((r) => ({ ...r, assignee_identifiant: am.get(r.assignee_id as string) || null }));
-    atcTrainingsAssigned = (atcToMe || []).map((r) => ({
-      ...r,
-      requester_identifiant: rm.get(r.requester_id as string) || null,
-    }));
-  }
+
+  const allTrainingRows = [...(pilotMine || []), ...(pilotToMe || []), ...(atcMine || []), ...(atcToMe || [])];
+  const trainingProfileIds = new Set(
+    allTrainingRows.flatMap(r => [r.assignee_id as string, r.requester_id as string]).filter(Boolean),
+  );
+  const { data: trainingProfiles } = trainingProfileIds.size
+    ? await admin.from('profiles').select('id, identifiant').in('id', Array.from(trainingProfileIds))
+    : { data: [] as Array<{ id: string; identifiant: string }> };
+  const tpMap = new Map((trainingProfiles || []).map(p => [p.id, p.identifiant]));
+
+  let pilotTrainingsMine: Array<Record<string, unknown>> = (pilotMine || []).map(r => ({ ...r, assignee_identifiant: tpMap.get(r.assignee_id as string) || null }));
+  let pilotTrainingsAssigned: Array<Record<string, unknown>> = (pilotToMe || []).map(r => ({ ...r, requester_identifiant: tpMap.get(r.requester_id as string) || null }));
+  let atcTrainingsMine: Array<Record<string, unknown>> = (atcMine || []).map(r => ({ ...r, assignee_identifiant: tpMap.get(r.assignee_id as string) || null }));
+  let atcTrainingsAssigned: Array<Record<string, unknown>> = (atcToMe || []).map(r => ({ ...r, requester_identifiant: tpMap.get(r.requester_id as string) || null }));
 
   if (avionsTempResult.error) errors.push(`Avions temp: ${avionsTempResult.error.message}`);
   if (elevesProgressionResult.error) errors.push(`Progression élèves: ${elevesProgressionResult.error.message}`);
