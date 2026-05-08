@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   BookOpen, BookUser, LayoutDashboard, FileText, User, Users, LogOut, Radio, Shield,
   ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map,
-  Store, AlertTriangle, Flame, Gauge, Wrench, Eye, Trophy, Menu, X,
+  Store, AlertTriangle, Flame, Gauge, Wrench, Eye, Trophy, Menu, X, Clock,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
@@ -54,6 +54,19 @@ export default function NavBar({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
+
+  const [utcTime, setUtcTime] = useState('');
+  useEffect(() => {
+    function tick() {
+      const now = new Date();
+      setUtcTime(
+        `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}z`
+      );
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Ferme le dropdown Pilote si on clique hors
   useEffect(() => {
@@ -297,6 +310,13 @@ export default function NavBar({
 
             <span className="mx-0.5 h-5 w-px bg-slate-700/70" />
 
+            {utcTime && (
+              <div className="flex items-center gap-1.5 rounded-lg border border-sky-500/20 bg-sky-500/5 px-2.5 py-1.5 select-none" title="Heure UTC">
+                <Clock className="h-3 w-3 text-sky-400/70" />
+                <span className="text-xs font-mono font-bold text-sky-300 tracking-wider">{utcTime}</span>
+              </div>
+            )}
+
             <NotificationBell />
 
             <NavLink href="/compte" active={pathname === '/compte'} title="Mon compte">
@@ -319,6 +339,11 @@ export default function NavBar({
           {/*  MOBILE : Section droite (compte + déconnexion en icônes)       */}
           {/* ══════════════════════════════════════════════════════════════ */}
           <div className="flex md:hidden items-center gap-1.5 shrink-0">
+            {utcTime && (
+              <div className="flex items-center gap-1 rounded-lg border border-sky-500/20 bg-sky-500/5 px-2 py-1.5" title="UTC">
+                <span className="text-[11px] font-mono font-bold text-sky-300 tracking-wider">{utcTime}</span>
+              </div>
+            )}
             <NotificationBell />
             <Link
               href="/compte"
