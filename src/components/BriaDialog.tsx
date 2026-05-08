@@ -43,7 +43,7 @@ function BriaInner({ onClose }: BriaInnerProps) {
       if (!closedRef.current) {
         conv.endSession();
       }
-    }, 90_000);
+    }, 5 * 60_000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
