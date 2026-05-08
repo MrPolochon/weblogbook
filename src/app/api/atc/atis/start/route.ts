@@ -5,6 +5,10 @@ import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { fetchAtisBot, getAvailableBotInstance, getAllBotStatuses } from '@/lib/atis-bot-api';
 
 export const dynamic = 'force-dynamic';
+// Render gratuit peut mettre 30-60s a repondre apres inactivite. On etend
+// la limite Vercel a 60s pour eviter qu'un cold start coupe l'orchestration
+// avant qu'on ait pu ecrire le DB row de l'utilisateur (cause des etats zombie).
+export const maxDuration = 60;
 
 /**
  * POST - Démarrer le broadcast ATIS sur un bot disponible.
@@ -145,6 +149,33 @@ export async function POST(request: Request) {
       );
     }
 
+    // ETAPE CRITIQUE : on ecrit le DB row AVANT d'appeler le bot.
+    // Raison : si Render est lent (cold start) et que Vercel coupe la fonction
+    // a 60s, le bot peut quand meme avoir demarre derriere mais on aurait
+    // perdu l'info "qui controle". En ecrivant d'abord, on a au moins le
+    // bon controlling_user_id si le timeout survient.
+    const nowIso = new Date().toISOString();
+    const { error: upsertErr } = await admin.from('atis_broadcast_state').upsert(
+      {
+        id: String(availableInstance),
+        controlling_user_id: user.id,
+        aeroport: aeroportCode,
+        position: String(position),
+        broadcasting: true,
+        source: 'site',
+        started_at: nowIso,
+        updated_at: nowIso,
+      },
+      { onConflict: 'id' }
+    );
+    if (upsertErr) {
+      console.error('ATIS start upsert error:', upsertErr);
+      return NextResponse.json(
+        { error: 'Erreur DB lors de la prise de controle' },
+        { status: 500 }
+      );
+    }
+
     // Patch les données ATIS de cette instance (aéroport).
     const apt = AEROPORTS_PTFS.find((a) => a.code === aeroportCode);
     const patchRes = await fetchAtisBot('/webhook/atis-data', {
@@ -153,6 +184,19 @@ export async function POST(request: Request) {
       instanceId: availableInstance,
     });
     if (patchRes.error && patchRes.status !== 503) {
+      // Revert DB pour ne pas laisser de fausse "ownership".
+      await admin
+        .from('atis_broadcast_state')
+        .update({
+          controlling_user_id: null,
+          aeroport: null,
+          position: null,
+          broadcasting: false,
+          source: null,
+          started_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', String(availableInstance));
       return NextResponse.json({ error: patchRes.error }, { status: patchRes.status });
     }
 
@@ -168,23 +212,21 @@ export async function POST(request: Request) {
       instanceId: availableInstance,
     });
     if (startRes.error) {
+      // Revert DB pour eviter le zombie inverse (DB pense broadcast, bot non).
+      await admin
+        .from('atis_broadcast_state')
+        .update({
+          controlling_user_id: null,
+          aeroport: null,
+          position: null,
+          broadcasting: false,
+          source: null,
+          started_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', String(availableInstance));
       return NextResponse.json({ error: startRes.error }, { status: startRes.status });
     }
-
-    // Met à jour la state row de cette instance.
-    await admin.from('atis_broadcast_state').upsert(
-      {
-        id: String(availableInstance),
-        controlling_user_id: user.id,
-        aeroport: aeroportCode,
-        position: String(position),
-        broadcasting: true,
-        source: 'site',
-        started_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'id' }
-    );
 
     return NextResponse.json({
       ok: true,

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { fetchAtisBot } from '@/lib/atis-bot-api';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 /**
  * POST - Arrêter le broadcast ATIS contrôlé par l'utilisateur courant.
