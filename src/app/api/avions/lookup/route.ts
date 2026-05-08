@@ -9,16 +9,29 @@ export async function GET(request: Request) {
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    const immat = searchParams.get('immatriculation')?.trim().toUpperCase();
-    if (!immat) return NextResponse.json({ error: 'Immatriculation requise' }, { status: 400 });
+    const immatRaw = searchParams.get('immatriculation')?.trim().toUpperCase();
+    if (!immatRaw) return NextResponse.json({ error: 'Immatriculation requise' }, { status: 400 });
+
+    const immat = immatRaw;
+    const immatNoDash = immatRaw.replace(/-/g, '');
+    const immatWithDash = immatNoDash.length >= 2 && !immatRaw.includes('-')
+      ? `${immatNoDash[0]}-${immatNoDash.slice(1)}`
+      : null;
 
     const admin = createAdminClient();
 
-    // Chercher dans les avions de compagnie
-    const { data: compAvion, error: compAvionErr } = await admin.from('compagnie_avions')
+    // Chercher dans les avions de compagnie (exact, puis fallback avec/sans tiret)
+    let { data: compAvion, error: compAvionErr } = await admin.from('compagnie_avions')
       .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion:type_avion_id(id, nom, constructeur, code_oaci, capacite_pax, capacite_cargo_kg)')
       .ilike('immatriculation', immat)
       .maybeSingle();
+
+    if (!compAvion && !compAvionErr && immatWithDash) {
+      ({ data: compAvion, error: compAvionErr } = await admin.from('compagnie_avions')
+        .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion:type_avion_id(id, nom, constructeur, code_oaci, capacite_pax, capacite_cargo_kg)')
+        .ilike('immatriculation', immatWithDash)
+        .maybeSingle());
+    }
 
     if (compAvionErr) console.error('avions/lookup compAvion error:', compAvionErr.message);
 
@@ -112,10 +125,17 @@ export async function GET(request: Request) {
     }
 
     // Chercher dans l'inventaire personnel
-    const { data: persoAvion } = await admin.from('inventaire_avions')
+    let { data: persoAvion } = await admin.from('inventaire_avions')
       .select('id, proprietaire_id, immatriculation, nom_personnalise, aeroport_actuel, statut, usure_percent, types_avion:type_avion_id(id, nom, constructeur, code_oaci, capacite_pax, capacite_cargo_kg)')
       .ilike('immatriculation', immat)
       .maybeSingle();
+
+    if (!persoAvion && immatWithDash) {
+      ({ data: persoAvion } = await admin.from('inventaire_avions')
+        .select('id, proprietaire_id, immatriculation, nom_personnalise, aeroport_actuel, statut, usure_percent, types_avion:type_avion_id(id, nom, constructeur, code_oaci, capacite_pax, capacite_cargo_kg)')
+        .ilike('immatriculation', immatWithDash)
+        .maybeSingle());
+    }
 
     if (persoAvion) {
       if (persoAvion.proprietaire_id !== user.id) {
