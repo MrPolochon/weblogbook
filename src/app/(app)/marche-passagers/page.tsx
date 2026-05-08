@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { Map, Package, ArrowRight } from 'lucide-react';
+import { Package, ArrowRight, Plane, Users, MapPin, Palmtree, Radio } from 'lucide-react';
 import Link from 'next/link';
 import MarchePassagersClient from './MarchePassagersClient';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
@@ -41,58 +41,85 @@ export default async function MarchePassagersPage() {
     };
   });
 
+  const totalPax = aeroportsData.reduce((s, a) => s + a.passagers_disponibles, 0);
+  const nbInternational = aeroportsData.filter(a => a.taille === 'international').length;
+  const nbTourisme = aeroportsData.filter(a => a.tourisme).length;
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Map className="h-8 w-8 text-emerald-400" />
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100">Marché des passagers</h1>
-          <p className="text-slate-400 text-sm">Vue en temps réel de la disponibilité des passagers par aéroport</p>
+    <div className="space-y-6 animate-page-reveal">
+      {/* ===== HUD Header ===== */}
+      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/85 to-slate-950/95 shadow-[0_22px_42px_rgba(2,6,23,0.36),inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-60" />
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -left-16 -bottom-16 h-56 w-56 rounded-full bg-sky-500/10 blur-3xl" />
+        <Plane
+          className="pointer-events-none absolute top-3 -left-10 h-5 w-5 text-emerald-400/40 animate-plane-glide"
+          style={{ animationDuration: '7s' }}
+          aria-hidden
+        />
+        <div className="relative z-10 p-5 sm:p-7 space-y-4">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/20">
+              <Users className="h-7 w-7 text-emerald-400" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold text-slate-50 tracking-tight">Marché des passagers</h1>
+              <p className="text-sm text-slate-400 mt-0.5">Vue en temps réel de la disponibilité par aéroport</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <Users className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-emerald-300 font-medium">{totalPax.toLocaleString('fr-FR')} pax disponibles</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
+              <MapPin className="h-3.5 w-3.5 text-purple-400" />
+              <span className="text-purple-300 font-medium">{nbInternational} hub{nbInternational > 1 ? 's' : ''}</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <Palmtree className="h-3.5 w-3.5 text-amber-400" />
+              <span className="text-amber-300 font-medium">{nbTourisme} touristique{nbTourisme > 1 ? 's' : ''}</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20">
+              <Radio className="h-3.5 w-3.5 text-sky-400" />
+              <span className="text-sky-300 font-medium">{aeroportsData.length} aéroports</span>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Légende */}
-      <div className="card bg-slate-800/50">
-        <div className="flex flex-wrap gap-6 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-purple-500"></div>
-            <span className="text-slate-300">International</span>
-            <span className="text-slate-500 text-xs">(prix -40% impact)</span>
+      <div className="flex flex-wrap gap-2 px-1">
+        {[
+          { color: 'bg-purple-500', border: 'border-purple-500/40', label: 'International', detail: 'prix -40%' },
+          { color: 'bg-sky-500', border: 'border-sky-500/40', label: 'Régional', detail: 'prix -20%' },
+          { color: 'bg-emerald-500', border: 'border-emerald-500/40', label: 'Small', detail: 'prix normal' },
+          { color: 'bg-red-500', border: 'border-red-500/40', label: 'Militaire', detail: 'peu de civils' },
+        ].map(l => (
+          <div key={l.label} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${l.border} bg-slate-800/40 text-xs`}>
+            <div className={`w-2.5 h-2.5 rounded-full ${l.color}`} />
+            <span className="text-slate-200 font-medium">{l.label}</span>
+            <span className="text-slate-500">{l.detail}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-sky-500"></div>
-            <span className="text-slate-300">Régional</span>
-            <span className="text-slate-500 text-xs">(prix -20% impact)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-emerald-500"></div>
-            <span className="text-slate-300">Small</span>
-            <span className="text-slate-500 text-xs">(prix normal)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full bg-red-500"></div>
-            <span className="text-slate-300">Militaire</span>
-            <span className="text-slate-500 text-xs">(peu de civils)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-amber-400">🏝️</span>
-            <span className="text-slate-300">Touristique</span>
-            <span className="text-slate-500 text-xs">(+15% remplissage)</span>
-          </div>
+        ))}
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-amber-500/40 bg-slate-800/40 text-xs">
+          <Palmtree className="h-3 w-3 text-amber-400" />
+          <span className="text-slate-200 font-medium">Touristique</span>
+          <span className="text-slate-500">+25% remplissage</span>
         </div>
       </div>
 
       <MarchePassagersClient aeroports={aeroportsData} />
 
       {/* Lien vers marché cargo */}
-      <div className="flex justify-center pt-4">
+      <div className="flex justify-center pt-2">
         <Link
           href="/marche-cargo"
-          className="flex items-center gap-2 px-4 py-2 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 rounded-lg text-sm transition-colors border border-amber-500/30"
+          className="group flex items-center gap-2 px-5 py-2.5 bg-amber-500/10 hover:bg-amber-500/15 text-amber-400 rounded-xl text-sm font-medium transition-all border border-amber-500/25 hover:border-amber-500/40"
         >
           <Package className="h-4 w-4" />
           Voir le marché du fret
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </Link>
       </div>
     </div>

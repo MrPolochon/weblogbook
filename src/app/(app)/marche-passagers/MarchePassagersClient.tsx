@@ -489,23 +489,23 @@ export default function MarchePassagersClient({ aeroports }: Props) {
 
       {/* Contrôles */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex gap-2">
+        <div className="flex p-1 rounded-xl bg-slate-800/40 border border-slate-800/60">
           <button
             onClick={() => setViewMode('carte')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              viewMode === 'carte' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+              viewMode === 'carte' ? 'bg-slate-700/80 text-slate-50 shadow-lg shadow-slate-900/50 border border-slate-600/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
-            <MapPin className="h-4 w-4 inline mr-2" />
+            <MapPin className="h-4 w-4" />
             Carte
           </button>
           <button
             onClick={() => setViewMode('liste')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              viewMode === 'liste' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+              viewMode === 'liste' ? 'bg-slate-700/80 text-slate-50 shadow-lg shadow-slate-900/50 border border-slate-600/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
-            <Users className="h-4 w-4 inline mr-2" />
+            <Users className="h-4 w-4" />
             Liste
           </button>
         </div>
@@ -985,7 +985,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
           </div>
 
           {/* Panel détails */}
-          <div className="card">
+          <div className="card backdrop-blur-sm bg-slate-900/60 border-slate-800/50">
             {isAdminMode ? (
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-purple-300">Instructions</h3>
@@ -1040,138 +1040,157 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                 </div>
               </div>
             ) : selectedAeroport ? (
-              <div className="space-y-4">
+              <div className="space-y-4 animate-fade-in">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h3 className="text-xl font-bold text-slate-100 font-mono">{selectedAeroport.code}</h3>
-                    <p className="text-slate-400">{selectedAeroport.nom}</p>
-                  </div>
-                  {selectedAeroport.tourisme && <span className="text-2xl">🏝️</span>}
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${TAILLE_COLORS[selectedAeroport.taille].split(' ')[0]}`}></div>
-                  <span className="text-slate-300">{TAILLE_LABELS[selectedAeroport.taille]}</span>
-                </div>
-                {selectedAeroport.vor && (
-                  <div className="p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
-                    <div className="flex items-center gap-2 text-cyan-300">
-                      <Radio className="h-4 w-4" />
-                      <span className="font-mono font-bold">{selectedAeroport.vor}</span>
-                      {selectedAeroport.freq && <span className="text-cyan-400/70">{selectedAeroport.freq} MHz</span>}
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={`w-3 h-3 rounded-full ${TAILLE_COLORS[selectedAeroport.taille].split(' ')[0]}`} />
+                      <span className="text-xs text-slate-500 uppercase tracking-wider font-medium">{TAILLE_LABELS[selectedAeroport.taille]}</span>
                     </div>
+                    <h3 className="text-2xl font-bold text-slate-50 font-mono tracking-wider">{selectedAeroport.code}</h3>
+                    <p className="text-slate-400 text-sm">{selectedAeroport.nom}</p>
+                  </div>
+                  {selectedAeroport.tourisme && (
+                    <div className="px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium">
+                      🏝️ Tourisme
+                    </div>
+                  )}
+                </div>
+
+                {selectedAeroport.vor && (
+                  <div className="flex items-center gap-2.5 p-3 rounded-xl bg-cyan-500/5 border border-cyan-500/20">
+                    <Radio className="h-4 w-4 text-cyan-400" />
+                    <span className="font-mono font-bold text-cyan-300">{selectedAeroport.vor}</span>
+                    {selectedAeroport.freq && <span className="text-cyan-500/70 text-sm">{selectedAeroport.freq} MHz</span>}
                   </div>
                 )}
-                <div className={`p-4 rounded-lg ${getPassagerBgColor(getPassagerRatio(selectedAeroport))}`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Users className="h-5 w-5 text-slate-400" />
-                    <span className="text-slate-300 font-medium">Passagers disponibles</span>
+
+                <div className="rounded-xl border border-slate-800/50 bg-slate-800/20 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500 uppercase tracking-wide font-medium">Passagers</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      getPassagerRatio(selectedAeroport) >= 0.7 ? 'bg-emerald-500/15 text-emerald-400' :
+                      getPassagerRatio(selectedAeroport) >= 0.4 ? 'bg-amber-500/15 text-amber-400' : 'bg-red-500/15 text-red-400'
+                    }`}>
+                      {Math.round(getPassagerRatio(selectedAeroport) * 100)}%
+                    </span>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className={`text-3xl font-bold ${getPassagerColor(getPassagerRatio(selectedAeroport))}`}>
+                    <span className={`text-3xl font-bold tabular-nums ${getPassagerColor(getPassagerRatio(selectedAeroport))}`}>
                       {selectedAeroport.passagers_disponibles.toLocaleString('fr-FR')}
                     </span>
-                    <span className="text-slate-500">/ {selectedAeroport.passagers_max.toLocaleString('fr-FR')}</span>
+                    <span className="text-slate-500 text-sm">/ {selectedAeroport.passagers_max.toLocaleString('fr-FR')}</span>
                   </div>
-                  <div className="mt-3 h-2 bg-slate-700 rounded-full overflow-hidden">
-                    <div className={`h-full transition-all ${
-                      getPassagerRatio(selectedAeroport) >= 0.7 ? 'bg-emerald-500' :
-                      getPassagerRatio(selectedAeroport) >= 0.4 ? 'bg-amber-500' : 'bg-red-500'
-                    }`} style={{ width: `${getPassagerRatio(selectedAeroport) * 100}%` }}></div>
+                  <div className="h-2 bg-slate-700/60 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        getPassagerRatio(selectedAeroport) >= 0.7 ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' :
+                        getPassagerRatio(selectedAeroport) >= 0.4 ? 'bg-gradient-to-r from-amber-600 to-amber-400' : 'bg-gradient-to-r from-red-600 to-red-400'
+                      }`}
+                      style={{ width: `${getPassagerRatio(selectedAeroport) * 100}%` }}
+                    />
                   </div>
                 </div>
+
                 <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-slate-400">Bonus & Malus</h4>
-                  <div className="space-y-1 text-sm">
+                  <h4 className="text-xs text-slate-500 uppercase tracking-wide font-medium">Bonus & Malus</h4>
+                  <div className="space-y-1.5">
                     {selectedAeroport.tourisme && (
-                      <div className="flex items-center gap-2 text-amber-300">
+                      <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/15 text-amber-300">
                         <span>🏝️</span><span>Touristique : +25 % de remplissage</span>
                       </div>
                     )}
                     {selectedAeroport.taille === 'international' && (
-                      <div className="flex items-center gap-2 text-purple-300">
-                        <TrendingUp className="h-4 w-4" /><span>Hub-Hub : +15 % (si départ aussi international)</span>
+                      <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-purple-500/5 border border-purple-500/15 text-purple-300">
+                        <TrendingUp className="h-3.5 w-3.5" /><span>Hub-Hub : +15 % (si départ aussi international)</span>
                       </div>
                     )}
                     {selectedAeroport.taille === 'military' && (
-                      <div className="flex items-center gap-2 text-red-300">
-                        <Plane className="h-4 w-4" /><span>Plafond civil : 20 % de remplissage max</span>
+                      <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-red-500/5 border border-red-500/15 text-red-300">
+                        <Plane className="h-3.5 w-3.5" /><span>Plafond civil : 20 % de remplissage max</span>
                       </div>
                     )}
-                    <div className="flex items-center gap-2 text-cyan-300">
-                      <TrendingUp className="h-4 w-4" /><span>Isolement : +15 % à +60 % selon le délai sans vol</span>
+                    <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-cyan-500/5 border border-cyan-500/15 text-cyan-300">
+                      <TrendingUp className="h-3.5 w-3.5" /><span>Isolement : +15 % à +60 % selon le délai sans vol</span>
                     </div>
-                    <div className="text-xs text-slate-500 pt-1 border-t border-slate-700/50 mt-2">
+                    <p className="text-[10px] text-slate-600 px-1 pt-1.5">
                       Cap cumul des bonus : +50 %. Saturation (&lt; 30 % dispo) : −50 %.
-                    </div>
+                    </p>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="text-center py-8">
-                <MapPin className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-                <p className="text-slate-400">Cliquez sur un aéroport</p>
-                <p className="text-slate-500 text-sm mt-1">pour voir les détails</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="p-4 rounded-2xl bg-slate-800/40 border border-slate-700/30 mb-4">
+                  <MapPin className="h-8 w-8 text-slate-600" />
+                </div>
+                <p className="text-slate-400 font-medium">Sélectionnez un aéroport</p>
+                <p className="text-slate-600 text-xs mt-1">Cliquez sur un point de la carte</p>
               </div>
             )}
           </div>
         </div>
       ) : (
-        <div className="card">
+        <div className="card backdrop-blur-sm bg-slate-900/60 border-slate-800/50">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-700 text-left text-slate-400">
-                  <th className="pb-3 pr-4">Aéroport</th>
-                  <th className="pb-3 pr-4">Type</th>
-                  <th className="pb-3 pr-4">VOR</th>
-                  <th className="pb-3 pr-4">Passagers</th>
-                  <th className="pb-3 pr-4">Remplissage</th>
-                  <th className="pb-3">Bonus</th>
+                <tr className="border-b border-slate-700/60 text-left">
+                  <th className="pb-3 pr-4 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Aéroport</th>
+                  <th className="pb-3 pr-4 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Type</th>
+                  <th className="pb-3 pr-4 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">VOR</th>
+                  <th className="pb-3 pr-4 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Passagers</th>
+                  <th className="pb-3 pr-4 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Remplissage</th>
+                  <th className="pb-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Bonus</th>
                 </tr>
               </thead>
               <tbody>
-                {aeroportsTries.map((aeroport) => {
+                {aeroportsTries.map((aeroport, i) => {
                   const ratio = getPassagerRatio(aeroport);
                   return (
-                    <tr key={aeroport.code} className="border-b border-slate-700/50 last:border-0 hover:bg-slate-800/50 cursor-pointer"
-                      onClick={() => { setSelectedAeroport(aeroport); setViewMode('carte'); }}>
+                    <tr
+                      key={aeroport.code}
+                      className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/40 cursor-pointer transition-colors"
+                      style={{ animationDelay: `${i * 25}ms` }}
+                      onClick={() => { setSelectedAeroport(aeroport); setViewMode('carte'); }}
+                    >
                       <td className="py-3 pr-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-green-400">{aeroport.code}</span>
-                          <span className="text-slate-400 truncate max-w-[150px]">{aeroport.nom}</span>
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-2 h-2 rounded-full ${TAILLE_COLORS[aeroport.taille].split(' ')[0]}`} />
+                          <span className="font-mono font-bold text-emerald-400">{aeroport.code}</span>
+                          <span className="text-slate-500 text-xs truncate max-w-[140px]">{aeroport.nom}</span>
                         </div>
                       </td>
                       <td className="py-3 pr-4">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${TAILLE_COLORS[aeroport.taille].split(' ')[0]}`}></div>
-                          <span className="text-slate-300 text-xs">{TAILLE_LABELS[aeroport.taille]}</span>
-                        </div>
+                        <span className="text-slate-400 text-xs">{TAILLE_LABELS[aeroport.taille]}</span>
                       </td>
                       <td className="py-3 pr-4">
                         {aeroport.vor ? (
-                          <span className="font-mono text-cyan-400 text-xs">{aeroport.vor} {aeroport.freq}</span>
-                        ) : <span className="text-slate-600">-</span>}
+                          <span className="font-mono text-cyan-400/80 text-xs">{aeroport.vor} <span className="text-cyan-500/50">{aeroport.freq}</span></span>
+                        ) : <span className="text-slate-700">—</span>}
                       </td>
                       <td className="py-3 pr-4">
-                        <span className={`font-bold ${getPassagerColor(ratio)}`}>
+                        <span className={`font-bold tabular-nums ${getPassagerColor(ratio)}`}>
                           {aeroport.passagers_disponibles.toLocaleString('fr-FR')}
                         </span>
-                        <span className="text-slate-500 text-xs"> / {aeroport.passagers_max.toLocaleString('fr-FR')}</span>
+                        <span className="text-slate-600 text-xs"> / {aeroport.passagers_max.toLocaleString('fr-FR')}</span>
                       </td>
                       <td className="py-3 pr-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
-                            <div className={`h-full ${ratio >= 0.7 ? 'bg-emerald-500' : ratio >= 0.4 ? 'bg-amber-500' : 'bg-red-500'}`}
-                              style={{ width: `${ratio * 100}%` }}></div>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-20 h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${ratio >= 0.7 ? 'bg-emerald-500' : ratio >= 0.4 ? 'bg-amber-500' : 'bg-red-500'}`}
+                              style={{ width: `${ratio * 100}%` }}
+                            />
                           </div>
-                          <span className={`text-xs ${getPassagerColor(ratio)}`}>{Math.round(ratio * 100)}%</span>
+                          <span className={`text-xs tabular-nums font-medium ${getPassagerColor(ratio)}`}>{Math.round(ratio * 100)}%</span>
                         </div>
                       </td>
                       <td className="py-3">
                         <div className="flex items-center gap-1">
-                          {aeroport.tourisme && <span className="text-[10px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Touristique +25%">🏝️ +25%</span>}
-                          {aeroport.taille === 'international' && <span className="text-[10px] px-1 py-0.5 rounded bg-purple-500/20 text-purple-300" title="Hub-Hub +15%">Hub</span>}
-                          {aeroport.taille === 'military' && <span className="text-[10px] px-1 py-0.5 rounded bg-red-500/20 text-red-300" title="Max 20% civil">Mil. max 20%</span>}
+                          {aeroport.tourisme && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/15">🏝️ +25%</span>}
+                          {aeroport.taille === 'international' && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/15">Hub</span>}
+                          {aeroport.taille === 'military' && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/10 text-red-300 border border-red-500/15">Mil.</span>}
                         </div>
                       </td>
                     </tr>
@@ -1184,23 +1203,21 @@ export default function MarchePassagersClient({ aeroports }: Props) {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="card bg-purple-500/10 border-purple-500/30">
-          <p className="text-sm text-purple-300">Internationaux</p>
-          <p className="text-2xl font-bold text-purple-400">{aeroports.filter(a => a.taille === 'international').length}</p>
-        </div>
-        <div className="card bg-emerald-500/10 border-emerald-500/30">
-          <p className="text-sm text-emerald-300">Passagers disponibles</p>
-          <p className="text-2xl font-bold text-emerald-400">{aeroports.reduce((sum, a) => sum + a.passagers_disponibles, 0).toLocaleString('fr-FR')}</p>
-        </div>
-        <div className="card bg-amber-500/10 border-amber-500/30">
-          <p className="text-sm text-amber-300">Touristiques</p>
-          <p className="text-2xl font-bold text-amber-400">{aeroports.filter(a => a.tourisme).length}</p>
-        </div>
-        <div className="card bg-cyan-500/10 border-cyan-500/30">
-          <p className="text-sm text-cyan-300">Avec VOR/DME</p>
-          <p className="text-2xl font-bold text-cyan-400">{aeroports.filter(a => a.vor).length}</p>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Internationaux', value: aeroports.filter(a => a.taille === 'international').length, color: 'purple', icon: '✈️' },
+          { label: 'Passagers dispo.', value: aeroports.reduce((sum, a) => sum + a.passagers_disponibles, 0).toLocaleString('fr-FR'), color: 'emerald', icon: '👥' },
+          { label: 'Touristiques', value: aeroports.filter(a => a.tourisme).length, color: 'amber', icon: '🏝️' },
+          { label: 'Avec VOR/DME', value: aeroports.filter(a => a.vor).length, color: 'cyan', icon: '📡' },
+        ].map(stat => (
+          <div key={stat.label} className={`rounded-xl border border-${stat.color}-500/25 bg-${stat.color}-500/5 p-4 transition-all hover:border-${stat.color}-500/40`}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm">{stat.icon}</span>
+              <p className={`text-xs text-${stat.color}-300 font-medium uppercase tracking-wide`}>{stat.label}</p>
+            </div>
+            <p className={`text-2xl font-bold text-${stat.color}-400`}>{stat.value}</p>
+          </div>
+        ))}
       </div>
     </div>
   );
