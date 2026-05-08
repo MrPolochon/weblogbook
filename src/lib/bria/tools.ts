@@ -148,55 +148,60 @@ export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
     },
 
     submit_flight_plan: async (params: { payload: Record<string, unknown> }) => {
-      const conversation = opts.getConversationLog();
-      const p = params.payload ?? {};
-
-      const dep = String(p.aeroport_depart ?? '').toUpperCase();
-
-      let atcOnline = false;
       try {
-        const atcRes = await fetch(`/api/atc-online?aeroport=${encodeURIComponent(dep)}`);
-        if (atcRes.ok) {
-          const atcData = await atcRes.json();
-          atcOnline = Boolean(atcData.online);
+        const conversation = opts.getConversationLog();
+        const p = params.payload ?? {};
+
+        const dep = String(p.aeroport_depart ?? '').toUpperCase();
+
+        let atcOnline = false;
+        try {
+          const atcRes = await fetch(`/api/atc-online?aeroport=${encodeURIComponent(dep)}`);
+          if (atcRes.ok) {
+            const atcData = await atcRes.json();
+            atcOnline = Boolean(atcData.online);
+          }
+        } catch { /* ignore */ }
+
+        const sanitized: Record<string, unknown> = {
+          ...p,
+          aeroport_depart: dep,
+          aeroport_arrivee: String(p.aeroport_arrivee ?? '').toUpperCase(),
+          numero_vol: String(p.numero_vol ?? 'BRIA001').toUpperCase(),
+          temps_prev_min: Number(p.temps_prev_min) || 30,
+          type_vol: ['VFR', 'IFR'].includes(String(p.type_vol ?? '').toUpperCase())
+            ? String(p.type_vol).toUpperCase() : 'VFR',
+          vol_commercial: Boolean(p.vol_commercial),
+          vol_sans_atc: !atcOnline,
+          nb_pax_genere: Number(p.nb_pax_genere) || 0,
+          cargo_kg_genere: Number(p.cargo_kg_genere) || 0,
+          revenue_brut: 0,
+          prix_billet_utilise: Number(p.prix_billet_utilise) || 0,
+          bria_conversation: conversation,
+        };
+
+        if (sanitized.type_vol === 'VFR' && !sanitized.intentions_vol) {
+          sanitized.intentions_vol = 'Vol déposé via BRIA';
         }
-      } catch { /* ignore */ }
 
-      const sanitized: Record<string, unknown> = {
-        ...p,
-        aeroport_depart: dep,
-        aeroport_arrivee: String(p.aeroport_arrivee ?? '').toUpperCase(),
-        numero_vol: String(p.numero_vol ?? 'BRIA001').toUpperCase(),
-        temps_prev_min: Number(p.temps_prev_min) || 30,
-        type_vol: ['VFR', 'IFR'].includes(String(p.type_vol ?? '').toUpperCase())
-          ? String(p.type_vol).toUpperCase() : 'VFR',
-        vol_commercial: Boolean(p.vol_commercial),
-        vol_sans_atc: !atcOnline,
-        nb_pax_genere: Number(p.nb_pax_genere) || 0,
-        cargo_kg_genere: Number(p.cargo_kg_genere) || 0,
-        revenue_brut: 0,
-        prix_billet_utilise: Number(p.prix_billet_utilise) || 0,
-        bria_conversation: conversation,
-      };
+        console.log('[BRIA] submit_flight_plan payload:', JSON.stringify(sanitized));
 
-      if (sanitized.type_vol === 'VFR' && !sanitized.intentions_vol) {
-        sanitized.intentions_vol = 'Vol déposé via BRIA';
+        const res = await fetch('/api/plans-vol', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sanitized),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          console.error('[BRIA] submit error:', data.error);
+          return JSON.stringify({ success: false, error: data.error ?? 'Erreur soumission' });
+        }
+        setTimeout(() => opts.router.refresh(), 100);
+        return JSON.stringify({ success: true, id: data.id, statut: data.statut ?? 'accepte' });
+      } catch (err) {
+        console.error('[BRIA] submit_flight_plan exception:', err);
+        return JSON.stringify({ success: false, error: 'Erreur technique lors de la soumission' });
       }
-
-      console.log('[BRIA] submit_flight_plan payload:', JSON.stringify(sanitized));
-
-      const res = await fetch('/api/plans-vol', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sanitized),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        console.error('[BRIA] submit error:', data.error);
-        return JSON.stringify({ success: false, error: data.error ?? 'Erreur soumission' });
-      }
-      opts.router.refresh();
-      return JSON.stringify({ success: true, id: data.id, statut: data.statut ?? 'accepte' });
     },
   };
 }
