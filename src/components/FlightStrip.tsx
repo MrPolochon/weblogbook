@@ -709,8 +709,13 @@ export default function FlightStrip({
   const lbl = isDark ? darkLbl : lightLbl;
 
   return (
-    <div 
-          className={`border ${border} rounded shadow-sm select-none overflow-hidden`}
+    <div
+          // Largeur fixe : evite le redimensionnement quand on drop la strip
+          // dans une zone plus etroite/large. Calcul interne :
+          //   drag(20) + LEFT min(390) + bar(3) + RIGHT(280) = 693px minimum.
+          // 720px laisse une petite marge pour la cellule "NOTE" (flex-1).
+          // flex-shrink-0 empeche tout ecrasement par un parent flex.
+          className={`w-[720px] flex-shrink-0 border ${border} rounded shadow-sm select-none overflow-hidden`}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, strip.id); }}
       style={isClotureRequested ? {
         animation: 'pulse-red 1.5s ease-in-out infinite',
