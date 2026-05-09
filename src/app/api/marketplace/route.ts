@@ -88,24 +88,29 @@ export async function POST(req: NextRequest) {
 
       compteId = compteMilitaire.id;
 
-      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
-      if (!debitOk) {
+      const { debiterFelitzAvecTrace, crediterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+      const debitRes = await debiterFelitzAvecTrace(admin, {
+        compteId,
+        montant: avion.prix,
+        libelle: `Achat armée ${avion.nom}`,
+      });
+      if (!debitRes.ok) {
         return NextResponse.json({ error: 'Solde militaire insuffisant (transaction concurrente)' }, { status: 400 });
       }
 
-      // Ajouter à l'inventaire de l'armée
-      await admin.from('armee_avions').insert({
+      // Ajouter à l'inventaire de l'armée ; rollback avec trace si échec.
+      const { error: insertArmeeErr } = await admin.from('armee_avions').insert({
         type_avion_id,
-        nom_personnalise: nom_personnalise || null
+        nom_personnalise: nom_personnalise || null,
       });
-
-      // Transaction
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteId,
-        type: 'debit',
-        montant: avion.prix,
-        libelle: `Achat armée ${avion.nom}`
-      });
+      if (insertArmeeErr) {
+        await crediterFelitzAvecTrace(admin, {
+          compteId,
+          montant: avion.prix,
+          libelle: `Annulation achat armée ${avion.nom} (échec création)`,
+        });
+        return NextResponse.json({ error: 'Erreur lors de la création de l\'avion armée. Le compte a été recrédité.' }, { status: 500 });
+      }
 
     } else if (pour_siavi) {
       // Achat pour la flotte SIAVI - réservé au Chef de brigade
@@ -128,8 +133,13 @@ export async function POST(req: NextRequest) {
 
       compteId = compteSiavi.id;
 
-      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
-      if (!debitOk) {
+      const { debiterFelitzAvecTrace, crediterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+      const debitRes = await debiterFelitzAvecTrace(admin, {
+        compteId,
+        montant: avion.prix,
+        libelle: `Achat flotte SIAVI ${avion.nom}`,
+      });
+      if (!debitRes.ok) {
         return NextResponse.json({ error: 'Solde SIAVI insuffisant (transaction concurrente)' }, { status: 400 });
       }
 
@@ -155,18 +165,15 @@ export async function POST(req: NextRequest) {
 
       if (insertSiaviErr) {
         console.error('Marketplace: echec insert siavi_avions:', insertSiaviErr);
-        await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
+        await crediterFelitzAvecTrace(admin, {
+          compteId,
+          montant: avion.prix,
+          libelle: `Annulation achat flotte SIAVI ${avion.nom} (échec création)`,
+        });
         return NextResponse.json({
           error: `Erreur lors de la création de l'avion SIAVI. Le compte a été recrédité.`,
         }, { status: 500 });
       }
-
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteId,
-        type: 'debit',
-        montant: avion.prix,
-        libelle: `Achat flotte SIAVI ${avion.nom}`
-      });
 
     } else if (pour_compagnie_id) {
       // Achat pour une compagnie - vérifier que l'utilisateur est PDG
@@ -251,8 +258,13 @@ export async function POST(req: NextRequest) {
       compteId = compteEntreprise.id;
       compagnieNom = compagnie.nom;
 
-      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
-      if (!debitOk) {
+      const { debiterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+      const debitRes = await debiterFelitzAvecTrace(admin, {
+        compteId,
+        montant: avion.prix,
+        libelle: `Achat ${avion.nom}`,
+      });
+      if (!debitRes.ok) {
         return NextResponse.json({ error: 'Solde entreprise insuffisant (transaction concurrente)' }, { status: 400 });
       }
 
@@ -283,20 +295,17 @@ export async function POST(req: NextRequest) {
 
       if (insertAvionErr) {
         console.error('Marketplace: echec insert compagnie_avions:', insertAvionErr);
-        await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
+        const { crediterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+        await crediterFelitzAvecTrace(admin, {
+          compteId,
+          montant: avion.prix,
+          libelle: `Annulation achat ${avion.nom} (échec création avion)`,
+        });
         return NextResponse.json({
           error: `Erreur lors de la création de l'avion (${insertAvionErr.code || 'unknown'}: ${insertAvionErr.message}). Le compte a été recrédité.`,
           details: insertAvionErr,
         }, { status: 500 });
       }
-
-      // Transaction
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteId,
-        type: 'debit',
-        montant: avion.prix,
-        libelle: `Achat ${avion.nom}`
-      });
 
     } else {
       // Achat personnel (limit 1 pour éviter erreur si doublons)
@@ -320,8 +329,13 @@ export async function POST(req: NextRequest) {
 
       compteId = comptePerso.id;
 
-      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
-      if (!debitOk) {
+      const { debiterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+      const debitRes = await debiterFelitzAvecTrace(admin, {
+        compteId,
+        montant: avion.prix,
+        libelle: `Achat ${avion.nom}`,
+      });
+      if (!debitRes.ok) {
         return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente)' }, { status: 400 });
       }
 
@@ -341,20 +355,17 @@ export async function POST(req: NextRequest) {
 
       if (insertPersoErr) {
         console.error('Marketplace: echec insert inventaire_avions:', insertPersoErr);
-        await admin.rpc('crediter_compte_safe', { p_compte_id: compteId, p_montant: avion.prix });
+        const { crediterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+        await crediterFelitzAvecTrace(admin, {
+          compteId,
+          montant: avion.prix,
+          libelle: `Annulation achat ${avion.nom} (échec création avion)`,
+        });
         return NextResponse.json({
           error: `Erreur lors de la création de l'avion (${insertPersoErr.code || 'unknown'}: ${insertPersoErr.message}). Le compte a été recrédité.`,
           details: insertPersoErr,
         }, { status: 500 });
       }
-
-      // Transaction
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteId,
-        type: 'debit',
-        montant: avion.prix,
-        libelle: `Achat ${avion.nom}`
-      });
     }
 
     return NextResponse.json({ 

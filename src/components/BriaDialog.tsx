@@ -26,12 +26,21 @@ function BriaInner({ onClose }: BriaInnerProps) {
   const messagesRef = useRef<BriaMessage[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const closedRef = useRef(false);
+  // Conserve une ref vers conv pour pouvoir raccrocher depuis les outils
+  // (callback appelé après soumission réussie d'un plan de vol).
+  const convRef = useRef<{ endSession: () => void } | null>(null);
 
   const tools = useMemo(
     () =>
       createBriaClientTools({
         getConversationLog: () => messagesRef.current,
         router,
+        onPlanSubmitted: () => {
+          // Raccroche puis redirige vers la page plans-vol (transpondeur).
+          try { convRef.current?.endSession(); } catch { /* noop */ }
+          router.push('/logbook/plans-vol');
+          router.refresh();
+        },
       }),
     [router],
   );
@@ -66,6 +75,10 @@ function BriaInner({ onClose }: BriaInnerProps) {
       handleEnd();
     },
   });
+
+  useEffect(() => {
+    convRef.current = { endSession: () => conv.endSession() };
+  }, [conv]);
 
   useEffect(() => {
     let cancelled = false;

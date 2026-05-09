@@ -9,6 +9,7 @@ import {
   getCompteEntrepriseCanonique,
   getComptePersonnelCanonique,
 } from '@/lib/felitz/ensure-comptes';
+import { debiterFelitzAvecTrace, crediterFelitzAvecTrace } from '@/lib/felitz/atomic';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,18 +81,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (comptePerso.solde < amt) return NextResponse.json({ error: 'Fonds personnels insuffisants' }, { status: 400 });
       vbanSource = comptePerso.vban || '';
 
-      const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
-        p_compte_id: comptePerso.id,
-        p_montant: amt,
-      });
-      if (!debitOk) return NextResponse.json({ error: 'Fonds personnels insuffisants' }, { status: 400 });
-
-      await admin.from('felitz_transactions').insert({
-        compte_id: comptePerso.id,
-        type: 'debit',
+      const debitRes = await debiterFelitzAvecTrace(admin, {
+        compteId: comptePerso.id,
         montant: amt,
         libelle: `Contribution alliance (perso)`,
       });
+      if (!debitRes.ok) return NextResponse.json({ error: 'Fonds personnels insuffisants' }, { status: 400 });
     } else {
       let cc = await getCompteEntrepriseCanonique(admin, contribCompagnieId);
       if (!cc) cc = await ensureCompteEntreprise(admin, contribCompagnieId);
@@ -105,47 +100,44 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (compteComp.solde < amt) return NextResponse.json({ error: 'Fonds compagnie insuffisants' }, { status: 400 });
       vbanSource = compteComp.vban || '';
 
-      const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
-        p_compte_id: compteComp.id,
-        p_montant: amt,
-      });
-      if (!debitOk) return NextResponse.json({ error: 'Fonds compagnie insuffisants' }, { status: 400 });
-
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteComp.id,
-        type: 'debit',
+      const debitRes = await debiterFelitzAvecTrace(admin, {
+        compteId: compteComp.id,
         montant: amt,
         libelle: `Contribution alliance`,
       });
+      if (!debitRes.ok) return NextResponse.json({ error: 'Fonds compagnie insuffisants' }, { status: 400 });
     }
-    const { data: allianceAccount } = await admin.from('felitz_comptes').select('id').eq('alliance_id', allianceId).eq('type', 'alliance').single();
-    if (!allianceAccount) {
+    const { data: allianceAccount } = await admin.from('felitz_comptes').select('id').eq('alliance_id', allianceId).eq('type', 'alliance').maybeSingle();
+
+    // Helper pour rollback avec trace de compensation (au lieu d'un crédit
+    // silencieux qui laisserait le débit initial visible dans l'historique).
+    const refundSourceWithTrace = async (motif: string) => {
       const sourceCompteId = isPersonnel
         ? (await getComptePersonnelCanonique(admin, user!.id))?.id
         : (await getCompteEntrepriseCanonique(admin, contribCompagnieId))?.id;
       if (sourceCompteId) {
-        await admin.rpc('crediter_compte_safe', { p_compte_id: sourceCompteId, p_montant: amt });
+        await crediterFelitzAvecTrace(admin, {
+          compteId: sourceCompteId,
+          montant: amt,
+          libelle: `Annulation contribution alliance — ${motif}`,
+        });
       }
+    };
+
+    if (!allianceAccount) {
+      await refundSourceWithTrace('compte alliance introuvable');
       return NextResponse.json({ error: 'Compte alliance introuvable, debit annule' }, { status: 400 });
     }
 
-    const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: allianceAccount.id, p_montant: amt });
-    if (!creditOk) {
-      const sourceCompteId = isPersonnel
-        ? (await getComptePersonnelCanonique(admin, user!.id))?.id
-        : (await getCompteEntrepriseCanonique(admin, contribCompagnieId))?.id;
-      if (sourceCompteId) {
-        await admin.rpc('crediter_compte_safe', { p_compte_id: sourceCompteId, p_montant: amt });
-      }
-      return NextResponse.json({ error: 'Erreur credit alliance, debit annule' }, { status: 500 });
-    }
-
-    await admin.from('felitz_transactions').insert({
-      compte_id: allianceAccount.id,
-      type: 'credit',
+    const creditRes = await crediterFelitzAvecTrace(admin, {
+      compteId: allianceAccount.id,
       montant: amt,
       libelle: `Contribution${isPersonnel ? ' (personnel)' : ''} — ${vbanSource}`,
     });
+    if (!creditRes.ok) {
+      await refundSourceWithTrace('échec crédit alliance');
+      return NextResponse.json({ error: 'Erreur credit alliance, debit annule' }, { status: 500 });
+    }
 
     await admin.from('alliance_contributions').insert({
       alliance_id: allianceId,
@@ -211,34 +203,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const allianceVban = allianceAccount.vban || '';
   const destVban = compteDestComp.vban || '?';
 
-  const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
-    p_compte_id: allianceAccount.id,
-    p_montant: demande.montant,
-  });
-  if (!debitOk) return NextResponse.json({ error: 'Fonds alliance insuffisants' }, { status: 400 });
-
-  await admin.from('felitz_transactions').insert({
-    compte_id: allianceAccount.id,
-    type: 'debit',
+  const debitRes = await debiterFelitzAvecTrace(admin, {
+    compteId: allianceAccount.id,
     montant: demande.montant,
     libelle: `Demande fonds — vers ${destVban} : ${demande.motif}`,
   });
+  if (!debitRes.ok) return NextResponse.json({ error: 'Fonds alliance insuffisants' }, { status: 400 });
 
-  const { data: creditOk } = await admin.rpc('crediter_compte_safe', {
-    p_compte_id: compteDestComp.id,
-    p_montant: demande.montant,
-  });
-  if (!creditOk) {
-    await admin.rpc('crediter_compte_safe', { p_compte_id: allianceAccount.id, p_montant: demande.montant });
-    return NextResponse.json({ error: 'Erreur credit destinataire, debit annule' }, { status: 500 });
-  }
-
-  await admin.from('felitz_transactions').insert({
-    compte_id: compteDestComp.id,
-    type: 'credit',
+  const creditRes = await crediterFelitzAvecTrace(admin, {
+    compteId: compteDestComp.id,
     montant: demande.montant,
     libelle: `Fonds alliance — de ${allianceVban} : ${demande.motif}`,
   });
+  if (!creditRes.ok) {
+    // Rollback avec trace de compensation (pas un simple credit silencieux)
+    await crediterFelitzAvecTrace(admin, {
+      compteId: allianceAccount.id,
+      montant: demande.montant,
+      libelle: `Annulation demande fonds — échec crédit destinataire ${destVban}`,
+    });
+    return NextResponse.json({ error: 'Erreur credit destinataire, debit annule' }, { status: 500 });
+  }
 
   await admin.from('alliance_demandes_fonds').update({
     statut: 'acceptee', traite_par: user.id, traite_at: new Date().toISOString(),

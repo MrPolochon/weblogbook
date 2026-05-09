@@ -370,69 +370,66 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Compte vendeur introuvable' }, { status: 400 });
       }
 
-      const { data: debitOk, error: debitErr } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteAcheteurId, p_montant: prixTotal });
-      if (debitErr || !debitOk) {
-        return NextResponse.json({ error: 'Solde insuffisant ou erreur de débit' }, { status: 400 });
+      // ─── Pré-vérification : l'avion existe-t-il encore avant tout mouvement
+      // financier ? Évite les "achats fantômes" si l'avion a été vendu ailleurs
+      // entre temps (l'audit a remonté ce bug).
+      const typesAvion = annonce.types_avion as { nom: string } | null;
+      const avionNom = typesAvion?.nom || 'Avion';
+
+      if (annonce.compagnie_avion_id) {
+        const { data: avionFlotteCheck } = await admin.from('compagnie_avions')
+          .select('id').eq('id', annonce.compagnie_avion_id).maybeSingle();
+        if (!avionFlotteCheck) {
+          return NextResponse.json({ error: 'Cet avion n\'est plus disponible (annonce expirée ou déjà traitée).' }, { status: 409 });
+        }
+      } else if (annonce.inventaire_avion_id) {
+        const { data: avionPersoCheck } = await admin.from('inventaire_avions')
+          .select('id').eq('id', annonce.inventaire_avion_id).maybeSingle();
+        if (!avionPersoCheck) {
+          return NextResponse.json({ error: 'Cet avion n\'est plus disponible (annonce expirée ou déjà traitée).' }, { status: 409 });
+        }
+      } else if (annonce.flotte_avion_id) {
+        return NextResponse.json({ error: 'Cette annonce utilise l\'ancien système de flotte qui n\'est plus supporté.' }, { status: 400 });
       }
 
-      const { error: creditErr } = await admin.rpc('crediter_compte_safe', { p_compte_id: compteVendeurId, p_montant: annonce.prix });
-      if (creditErr) {
-        await admin.rpc('crediter_compte_safe', { p_compte_id: compteAcheteurId, p_montant: prixTotal });
+      // ─── Mouvements financiers : helpers atomiques (UPDATE solde + INSERT
+      // trace dans une seule transaction PG). On ne peut PAS utiliser
+      // virer_avec_trace ici car le montant débité (prix + taxe) diffère du
+      // montant crédité (prix seul). On utilise donc débit + crédit séparés
+      // avec rollback symétrique en cas d'échec.
+      const { debiterFelitzAvecTrace, crediterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+      const debitRes = await debiterFelitzAvecTrace(admin, {
+        compteId: compteAcheteurId,
+        montant: prixTotal,
+        libelle: `Achat ${avionNom} (Hangar Market) - Taxe: ${taxe.toLocaleString('fr-FR')} F$`,
+      });
+      if (!debitRes.ok) {
+        return NextResponse.json({ error: 'Solde insuffisant ou erreur de débit' }, { status: 400 });
+      }
+      const creditRes = await crediterFelitzAvecTrace(admin, {
+        compteId: compteVendeurId,
+        montant: annonce.prix,
+        libelle: `Vente ${avionNom} (Hangar Market)`,
+      });
+      if (!creditRes.ok) {
+        // Rollback symétrique avec trace inverse (pas de ligne fantôme)
+        await crediterFelitzAvecTrace(admin, {
+          compteId: compteAcheteurId,
+          montant: prixTotal,
+          libelle: `Annulation achat ${avionNom} (échec crédit vendeur)`,
+        });
         return NextResponse.json({ error: 'Erreur lors du crédit vendeur' }, { status: 500 });
       }
 
-      // Transactions
-      const typesAvion = annonce.types_avion as { nom: string } | null;
-      const avionNom = typesAvion?.nom || 'Avion';
-      
-      await admin.from('felitz_transactions').insert([
-        {
-          compte_id: compteAcheteurId,
-          type: 'debit',
-          montant: prixTotal,
-          libelle: `Achat ${avionNom} (Hangar Market) - Taxe: ${taxe.toLocaleString('fr-FR')} F$`
-        },
-        {
-          compte_id: compteVendeurId,
-          type: 'credit',
-          montant: annonce.prix,
-          libelle: `Vente ${avionNom} (Hangar Market)`
-        }
-      ]);
-
-      // Transférer l'avion — on vérifie d'abord qu'il existe toujours
+      // Transférer l'avion (déjà vérifié existant ci-dessus)
       if (annonce.compagnie_avion_id) {
-        // Avion de flotte : vérifier qu'il existe encore (pas supprimé par une revente directe simultanée)
-        const { data: avionFlotteCheck } = await admin.from('compagnie_avions')
-          .select('id')
-          .eq('id', annonce.compagnie_avion_id)
-          .single();
-        if (!avionFlotteCheck) {
-          // Rembourser l'acheteur
-          await admin.rpc('crediter_compte_safe', { p_compte_id: compteAcheteurId, p_montant: prixTotal });
-          await admin.rpc('debiter_compte_safe', { p_compte_id: compteVendeurId, p_montant: annonce.prix });
-          return NextResponse.json({ error: 'Cet avion n\'est plus disponible (annonce expirée ou déjà traitée).' }, { status: 409 });
-        }
         await admin.from('compagnie_avions')
           .update({ compagnie_id: compagnie_acheteur_id, prix_achat: annonce.prix })
           .eq('id', annonce.compagnie_avion_id);
       } else if (annonce.inventaire_avion_id) {
-        // Avion personnel : vérifier qu'il existe encore
-        const { data: avionPersoCheck } = await admin.from('inventaire_avions')
-          .select('id, proprietaire_id')
-          .eq('id', annonce.inventaire_avion_id)
-          .single();
-        if (!avionPersoCheck) {
-          // Rembourser l'acheteur
-          await admin.rpc('crediter_compte_safe', { p_compte_id: compteAcheteurId, p_montant: prixTotal });
-          await admin.rpc('debiter_compte_safe', { p_compte_id: compteVendeurId, p_montant: annonce.prix });
-          return NextResponse.json({ error: 'Cet avion n\'est plus disponible (annonce expirée ou déjà traitée).' }, { status: 409 });
-        }
         await admin.from('inventaire_avions')
           .update({ proprietaire_id: user.id, prix_achat: annonce.prix })
           .eq('id', annonce.inventaire_avion_id);
-      } else if (annonce.flotte_avion_id) {
-        return NextResponse.json({ error: 'Cette annonce utilise l\'ancien système de flotte qui n\'est plus supporté.' }, { status: 400 });
       }
 
       // Marquer comme vendu

@@ -72,27 +72,29 @@ export async function POST(
       return NextResponse.json({ error: 'Compte de la compagnie introuvable' }, { status: 404 });
     }
 
-    const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: montant });
-    if (!creditOk) {
+    const { crediterFelitzAvecTrace, debiterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+    const creditRes = await crediterFelitzAvecTrace(admin, {
+      compteId: compteCompagnie.id,
+      montant,
+      libelle: `Vente pièces détachées ${avion.immatriculation}${avion.nom_bapteme ? ` "${avion.nom_bapteme}"` : ''}`,
+    });
+    if (!creditRes.ok) {
       return NextResponse.json({ error: 'Erreur lors du crédit' }, { status: 500 });
     }
 
-    // Enregistrer la transaction
-    await admin.from('felitz_transactions').insert({
-      compte_id: compteCompagnie.id,
-      type: 'credit',
-      montant: montant,
-      libelle: `Vente pièces détachées ${avion.immatriculation}${avion.nom_bapteme ? ` "${avion.nom_bapteme}"` : ''}`,
-    });
-
-    // Supprimer l'avion de la base de données
+    // Supprimer l'avion ; en cas d'échec, débit avec trace de compensation
+    // (au lieu d'un débit silencieux qui laissait le crédit orphelin).
     const { error: deleteError } = await admin
       .from('compagnie_avions')
       .delete()
       .eq('id', id);
 
     if (deleteError) {
-      await admin.rpc('debiter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: montant });
+      await debiterFelitzAvecTrace(admin, {
+        compteId: compteCompagnie.id,
+        montant,
+        libelle: `Annulation vente pièces ${avion.immatriculation} (échec suppression avion)`,
+      });
       return NextResponse.json({ error: 'Erreur lors de la suppression de l\'avion' }, { status: 500 });
     }
 

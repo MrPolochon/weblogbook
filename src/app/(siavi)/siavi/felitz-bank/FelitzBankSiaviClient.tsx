@@ -1,18 +1,9 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { ArrowUpRight, ArrowDownLeft, Send, RefreshCw } from 'lucide-react';
+import { Send, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { toLocaleDateStringUTC } from '@/lib/date-utils';
-
-interface Transaction {
-  id: string;
-  type: string;
-  montant: number;
-  libelle: string;
-  description?: string | null;
-  created_at: string;
-}
+import FelitzTransactionsHistory, { type FelitzTransaction as Transaction } from '@/components/FelitzTransactionsHistory';
 
 interface Props {
   compteId: string;
@@ -63,16 +54,6 @@ export default function FelitzBankSiaviClient({ compteId, transactions }: Props)
     } finally {
       setLoading(false);
     }
-  }
-
-  function formatDate(dateStr: string) {
-    return toLocaleDateStringUTC(dateStr, {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }) + ' UTC';
   }
 
   return (
@@ -144,34 +125,10 @@ export default function FelitzBankSiaviClient({ compteId, transactions }: Props)
       )}
 
       {/* Historique des transactions */}
-      {transactions.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-sm font-semibold text-red-800 mb-3">Dernières transactions</h3>
-          <div className="space-y-2 max-h-[500px] overflow-y-auto">
-            {transactions.map((t) => (
-              <div 
-                key={t.id} 
-                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white rounded-lg p-3 border border-red-200"
-              >
-                <div className="flex items-start gap-3 min-w-0">
-                  {t.type === 'credit' ? (
-                    <ArrowDownLeft className="h-4 w-4 text-emerald-600" />
-                  ) : (
-                    <ArrowUpRight className="h-4 w-4 text-red-600" />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-sm text-slate-800 break-all">{t.libelle || t.description || '—'}</p>
-                    <p className="text-xs text-slate-500">{formatDate(t.created_at)}</p>
-                  </div>
-                </div>
-                <span className={`font-semibold ${t.type === 'credit' ? 'text-emerald-600' : 'text-red-600'} sm:whitespace-nowrap`}>
-                  {t.type === 'credit' ? '+' : '-'}{t.montant.toLocaleString('fr-FR')} F$
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="mt-6">
+        <h3 className="text-sm font-semibold text-red-800 mb-3">Dernières transactions</h3>
+        <FelitzTransactionsHistory transactions={transactions} light maxHeight="500px" />
+      </div>
     </div>
   );
 }

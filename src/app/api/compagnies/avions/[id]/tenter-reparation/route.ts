@@ -73,19 +73,17 @@ export async function POST(
       }, { status: 400 });
     }
 
-    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: COUT_TENTATIVE_REPARATION });
-    if (!debitOk) {
-      return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente)' }, { status: 400 });
-    }
-
-    // Enregistrer la transaction
-    const { error: txError } = await admin.from('felitz_transactions').insert({
-      compte_id: compteCompagnie.id,
-      type: 'debit',
+    // Débit atomique (UPDATE solde + INSERT trace en une seule transaction PG :
+    // si le INSERT échoue, le UPDATE est rollback automatiquement).
+    const { debiterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+    const debitRes = await debiterFelitzAvecTrace(admin, {
+      compteId: compteCompagnie.id,
       montant: COUT_TENTATIVE_REPARATION,
       libelle: `Tentative de réparation avion détruit ${avion.immatriculation}`,
     });
-    if (txError) console.error('Erreur transaction tentative réparation:', txError);
+    if (!debitRes.ok) {
+      return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente)' }, { status: 400 });
+    }
 
     // Tirer au sort : 0.5% de chance de succès
     const random = Math.random();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare, AlertTriangle, Flame, PlaneLanding, ArrowRightLeft } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
@@ -634,7 +634,7 @@ function Cell({ children, className = '' }: { children: React.ReactNode; classNa
   └──────┴──────────┴───────────────╨──────────┴─────────────────────┘
   ⠿ drag handle on the left
 */
-export default function FlightStrip({
+function FlightStripImpl({
   strip, onRefresh, onContextMenu, onTransferRequest,
 }: {
   strip: StripData;
@@ -925,3 +925,10 @@ export default function FlightStrip({
     </div>
   );
 }
+
+// React.memo : évite les re-renders inutiles des strips lors d'un drag
+// (changements de dropTarget/draggedId dans le parent FlightStripBoard).
+// Tant que l'objet `strip` garde la même référence et que les callbacks
+// parents sont stables (useCallback), le composant ne re-render pas.
+const FlightStrip = memo(FlightStripImpl);
+export default FlightStrip;

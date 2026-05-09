@@ -121,9 +121,20 @@ export async function applyEntrepriseTransfertArriveeHangar(
     .select('id');
 
   if (!demandeLiee?.length) {
-    await admin.rpc('crediter_compte_safe', { p_compte_id: compteComp.id, p_montant: coutTransfert });
+    // Rollback avec traces de compensation (au lieu de mouvements silencieux
+    // qui laissaient les lignes débit/crédit initiales sans contrepartie).
+    const { crediterFelitzAvecTrace, debiterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+    await crediterFelitzAvecTrace(admin, {
+      compteId: compteComp.id,
+      montant: coutTransfert,
+      libelle: `Annulation transit réparation (statut incompatible)`,
+    });
     if (repairCredited && compteRepId) {
-      await admin.rpc('debiter_compte_safe', { p_compte_id: compteRepId, p_montant: coutTransfert });
+      await debiterFelitzAvecTrace(admin, {
+        compteId: compteRepId,
+        montant: coutTransfert,
+        libelle: `Annulation crédit transit (statut incompatible)`,
+      });
     }
     return {
       ok: false,

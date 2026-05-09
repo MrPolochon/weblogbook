@@ -48,10 +48,15 @@ Copier `env.example.txt` vers `.env.local` et remplir. En production (ex. Vercel
 4. **`supabase/add_site_config.sql`**  
    Table `site_config` (option “Connexions réservées aux admins” dans Admin > Sécurité).
 
+### Felitz Bank — intégrité débit/crédit
+
+5. **`supabase/add_felitz_atomic_helpers.sql`**  
+   Crée les RPC `debiter_avec_trace`, `crediter_avec_trace`, `virer_avec_trace` qui font le mouvement de solde **et** l'insertion dans `felitz_transactions` dans une **seule transaction PG**. Tout le code TS est désormais migré vers ces helpers, ce qui élimine toute possibilité de "débit fantôme" / "crédit sans trace" sur les chemins de rollback.
+
 ### Scripts one-shot (si besoin)
 
-- **`supabase/revoke_admin_except_mrpolochon.sql`** – Retirer le rôle admin à tous sauf `mrpolochon` (à lancer uniquement si tu veux faire ce nettoyage).
-- **`supabase/reset_economie_felitz.sql`** – Remet tous les soldes Felitz à 0 et vide l’historique (uniquement si tu veux reset l’économie).
+- **`supabase/archive/revoke_admin_except_mrpolochon.sql`** – Retirer le rôle admin à tous sauf `mrpolochon` (à lancer uniquement si tu veux faire ce nettoyage).
+- **`supabase/archive/reset_economie_felitz.sql`** – Remet tous les soldes Felitz à 0 et vide l’historique (uniquement si tu veux reset l’économie).
 
 ---
 
@@ -79,6 +84,7 @@ add_login_ip_security.sql
 add_login_email_verification.sql
 add_login_pending_email.sql
 add_site_config.sql
+add_felitz_atomic_helpers.sql
 ```
 
 Les autres scripts du dossier `supabase/` dépendent de ton état de base déjà migrée ; suivre l’ordre des migrations existantes si tu pars de zéro.

@@ -4,6 +4,7 @@ import { ensureComptePersonnel, getComptePersonnelCanonique } from '@/lib/felitz
 import { redirect } from 'next/navigation';
 import { Landmark, Building2, Shield, Plane, Wallet, ArrowLeftRight, CreditCard } from 'lucide-react';
 import FelitzBankClient from './FelitzBankClient';
+import FelitzTransactionsHistory from '@/components/FelitzTransactionsHistory';
 
 type TxRow = { libelle?: string | null; [k: string]: unknown };
 
@@ -16,19 +17,26 @@ async function enrichTransactionsWithVban<T extends TxRow>(
   raw.forEach((t) => {
     (t.libelle || '').match(UUID_REGEX)?.forEach((u) => toResolve.add(u));
   });
+  if (toResolve.size === 0) return raw;
+
+  const ids = Array.from(toResolve);
+  const cols = ['compagnie_id', 'proprietaire_id', 'alliance_id', 'entreprise_reparation_id'] as const;
+
+  // Toutes les requêtes en parallèle (au lieu d'un await séquentiel par colonne).
+  const [byIdRes, ...byColsRes] = await Promise.all([
+    admin.from('felitz_comptes').select('id, vban').in('id', ids),
+    ...cols.map((col) => admin.from('felitz_comptes').select(`${col}, vban`).in(col, ids)),
+  ]);
+
   const vbanByUuid: Record<string, string> = {};
-  if (toResolve.size > 0) {
-    const ids = Array.from(toResolve);
-    const { data: byId } = await admin.from('felitz_comptes').select('id, vban').in('id', ids);
-    (byId || []).forEach((r: Record<string, string>) => { if (r.id) vbanByUuid[r.id] = r.vban; });
-    const cols = ['compagnie_id', 'proprietaire_id', 'alliance_id', 'entreprise_reparation_id'] as const;
-    for (const col of cols) {
-      const { data: rows } = await admin.from('felitz_comptes').select(`${col}, vban`).in(col, ids);
-      (rows || []).forEach((r: Record<string, string>) => {
-        if (r[col]) vbanByUuid[r[col]] = r.vban;
-      });
-    }
-  }
+  (byIdRes.data || []).forEach((r: Record<string, string>) => { if (r.id) vbanByUuid[r.id] = r.vban; });
+  byColsRes.forEach((res, idx) => {
+    const col = cols[idx];
+    (res.data || []).forEach((r: Record<string, string>) => {
+      if (r[col]) vbanByUuid[r[col]] = r.vban;
+    });
+  });
+
   return raw.map((t) => {
     let libelle = t.libelle || '';
     for (const [uuid, vban] of Object.entries(vbanByUuid)) {
@@ -46,31 +54,39 @@ export default async function FelitzBankPage() {
 
   const admin = createAdminClient();
 
-  // Récupérer le profil
-  const { data: profile } = await supabase.from('profiles').select('role, identifiant').eq('id', user.id).single();
+  // S'assure que le compte personnel existe avant de paralléliser les lectures.
+  await ensureComptePersonnel(admin, user.id);
+
+  // Toutes les lectures indépendantes en parallèle.
+  const [
+    { data: profile },
+    comptePersoCanon,
+    { data: compagniesPdg },
+    { data: coPdgEmps },
+    { data: compteMilitaire },
+  ] = await Promise.all([
+    supabase.from('profiles').select('role, identifiant').eq('id', user.id).single(),
+    getComptePersonnelCanonique(admin, user.id),
+    admin.from('compagnies').select('id, nom, vban').eq('pdg_id', user.id),
+    admin.from('compagnie_employes').select('compagnie_id').eq('pilote_id', user.id).eq('role', 'co_pdg'),
+    // maybeSingle() : pas d'exception si l'utilisateur n'est pas PDG militaire.
+    admin.from('felitz_comptes').select('*').eq('type', 'militaire').eq('proprietaire_id', user.id).maybeSingle(),
+  ]);
+
   const isAdmin = profile?.role === 'admin';
 
-  // Compte personnel référent (created_at le plus ancien si doublons ; création si manquant)
-  await ensureComptePersonnel(admin, user.id);
-  const comptePersoCanon = await getComptePersonnelCanonique(admin, user.id);
-  const { data: comptePerso } = comptePersoCanon
-    ? await admin.from('felitz_comptes').select('*').eq('id', comptePersoCanon.id).maybeSingle()
-    : { data: null };
-
-  // Compagnies dont l'utilisateur est PDG ou co-PDG
-  const { data: compagniesPdg } = await admin.from('compagnies')
-    .select('id, nom, vban')
-    .eq('pdg_id', user.id);
-  const { data: coPdgEmps } = await admin.from('compagnie_employes')
-    .select('compagnie_id')
-    .eq('pilote_id', user.id)
-    .eq('role', 'co_pdg');
+  // Détails compte personnel + co-PDG en parallèle.
   const coPdgIds = (coPdgEmps || []).map(e => e.compagnie_id);
-  let compagniesCoPdg: Array<{ id: string; nom: string; vban: string | null }> = [];
-  if (coPdgIds.length > 0) {
-    const { data } = await admin.from('compagnies').select('id, nom, vban').in('id', coPdgIds);
-    compagniesCoPdg = data || [];
-  }
+  const [comptePersoRes, compagniesCoPdgRes] = await Promise.all([
+    comptePersoCanon
+      ? admin.from('felitz_comptes').select('*').eq('id', comptePersoCanon.id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    coPdgIds.length > 0
+      ? admin.from('compagnies').select('id, nom, vban').in('id', coPdgIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const comptePerso = comptePersoRes.data;
+  const compagniesCoPdg = (compagniesCoPdgRes.data || []) as Array<{ id: string; nom: string; vban: string | null }>;
   const allLeaderComps = [...(compagniesPdg || []), ...compagniesCoPdg];
 
   // Comptes entreprises
@@ -120,34 +136,24 @@ export default async function FelitzBankPage() {
     });
   }
 
-  // Compte militaire (si l'utilisateur est PDG militaire)
-  const { data: compteMilitaire } = await admin.from('felitz_comptes')
-    .select('*')
-    .eq('type', 'militaire')
-    .eq('proprietaire_id', user.id)
-    .single();
+  // Transactions perso et militaire en parallèle.
+  const [persoTxRes, militaireTxRes] = await Promise.all([
+    comptePerso
+      ? admin.from('felitz_transactions').select('*').eq('compte_id', comptePerso.id).order('created_at', { ascending: false }).limit(100)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    compteMilitaire
+      ? admin.from('felitz_transactions').select('*').eq('compte_id', compteMilitaire.id).order('created_at', { ascending: false }).limit(100)
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+  ]);
 
-  // Transactions récentes pour le compte personnel
-  let transactionsPerso: Array<{ id: string; type: string; montant: number; libelle: string; created_at: string }> = [];
-  if (comptePerso) {
-    const { data } = await admin.from('felitz_transactions')
-      .select('*')
-      .eq('compte_id', comptePerso.id)
-      .order('created_at', { ascending: false })
-      .limit(100);
-    transactionsPerso = await enrichTransactionsWithVban(admin, data || []);
-  }
-
-  // Transactions pour le compte militaire
-  let transactionsMilitaire: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
-  if (compteMilitaire) {
-    const { data } = await admin.from('felitz_transactions')
-      .select('*')
-      .eq('compte_id', compteMilitaire.id)
-      .order('created_at', { ascending: false })
-      .limit(100);
-    transactionsMilitaire = await enrichTransactionsWithVban(admin, data || []);
-  }
+  // Enrichissement VBAN également en parallèle.
+  const [transactionsPerso, transactionsMilitaire] = await Promise.all([
+    enrichTransactionsWithVban(admin, persoTxRes.data || []),
+    enrichTransactionsWithVban(admin, militaireTxRes.data || []),
+  ]) as [
+    Array<{ id: string; type: string; montant: number; libelle: string; created_at: string }>,
+    Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }>,
+  ];
 
   const totalSolde = (comptePerso?.solde ?? 0) + comptesEntreprise.reduce((s, c) => s + c.solde, 0) + (compteMilitaire?.solde ?? 0);
   const nbComptes = (comptePerso ? 1 : 0) + comptesEntreprise.length + (compteMilitaire ? 1 : 0);
@@ -310,20 +316,7 @@ export default async function FelitzBankPage() {
 
               <div className="rounded-xl border border-slate-800/50 bg-slate-800/20 p-4">
                 <h3 className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-3">Transactions récentes</h3>
-                {transactionsMilitaire.length > 0 ? (
-                  <div className="space-y-1.5 max-h-[500px] overflow-y-auto">
-                    {transactionsMilitaire.map((t) => (
-                      <div key={t.id} className="flex items-center justify-between text-sm py-2 px-2 rounded-lg hover:bg-slate-800/40 transition-colors">
-                        <span className="text-slate-400 truncate flex-1 text-xs">{t.libelle || t.description || '—'}</span>
-                        <span className={`font-medium tabular-nums text-xs ${t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-slate-600 text-sm text-center py-4">Aucune transaction</p>
-                )}
+                <FelitzTransactionsHistory transactions={transactionsMilitaire} maxHeight="500px" />
               </div>
             </div>
           </div>

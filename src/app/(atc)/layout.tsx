@@ -5,7 +5,6 @@ import AtcNavBar from '@/components/AtcNavBar';
 import AtcModeBg from '@/components/AtcModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import AtcAcceptTransfertSidebar from './AtcAcceptTransfertSidebar';
-import AtcLeftSidebar from './AtcLeftSidebar';
 import { AtcThemeProvider } from '@/contexts/AtcThemeContext';
 import AtcTelephone from '@/components/AtcTelephone';
 import AtcAtisButton from '@/components/AtcAtisButton';
@@ -55,8 +54,6 @@ export default async function AtcLayout({
     // Env admin manquant ou table messages absente
   }
 
-  let plansAuto: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
-  let plansOrphelins: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansAAccepter: { id: string; numero_vol: string }[] = [];
   let plansAccepter: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansCloture: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
@@ -64,24 +61,17 @@ export default async function AtcLayout({
     try {
       const admin = createAdminClient();
 
-      // Note: On ne réassigne PAS les plans orphelins aux autres ATC.
-      // Si un plan n'a pas d'ATC assigné, le pilote peut le clôturer seul.
-      // Chaque ATC ne voit que les plans qu'IL contrôle (current_holder_user_id === user.id).
-
-      const [{ data: dataAuto }, { data: dataAccept }, { data: dataPlansAccepter }, { data: dataCloture }, { data: dataOrphelinsRaw }, { data: sessionsActive }] = await Promise.all([
-        admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('automonitoring', true).in('statut', ['accepte', 'en_cours']),
+      // Note: les plans en autosurveillance et orphelins sont désormais affichés
+      // sous le tableau de strips dans la page ATC (composant AtcNonControlesPanel),
+      // donc pas besoin de les charger ici.
+      const [{ data: dataAccept }, { data: dataPlansAccepter }, { data: dataCloture }] = await Promise.all([
         admin.from('plans_vol').select('id, numero_vol').eq('pending_transfer_aeroport', session.aeroport).eq('pending_transfer_position', session.position),
         admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).in('statut', ['depose', 'en_attente']),
         admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).eq('statut', 'en_attente_cloture'),
-        admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee, current_holder_user_id').in('statut', ['depose', 'en_attente']),
-        admin.from('atc_sessions').select('user_id'),
       ]);
-      plansAuto = dataAuto ?? [];
       plansAAccepter = dataAccept ?? [];
       plansAccepter = dataPlansAccepter ?? [];
       plansCloture = dataCloture ?? [];
-      const sessionsActives = new Set((sessionsActive ?? []).map((s) => s.user_id));
-      plansOrphelins = (dataOrphelinsRaw ?? []).filter((p) => !p.current_holder_user_id || !sessionsActives.has(p.current_holder_user_id));
     } catch {
       // createAdminClient ou tables manquantes
     }
@@ -97,9 +87,6 @@ export default async function AtcLayout({
         <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
         <AtcAtisTicker />
         <div className="flex flex-1 w-full min-h-0">
-          {enService && session && (
-            <AtcLeftSidebar plansAuto={plansAuto} plansOrphelins={plansOrphelins} sessionAeroport={session.aeroport} sessionPosition={session.position} />
-          )}
           <main className="flex-1 min-w-0 w-full px-4 sm:px-5 lg:px-6 py-6 overflow-x-auto">{children}</main>
           {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} />}
         </div>

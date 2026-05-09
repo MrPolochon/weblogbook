@@ -104,18 +104,15 @@ export async function POST(
       }, { status: 400 });
     }
 
-    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compte.id, p_montant: COUT_AFFRETER_TECHNICIENS });
-    if (!debitOk) {
-      return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente).' }, { status: 400 });
-    }
-
-    // Créer une transaction
-    await admin.from('felitz_transactions').insert({
-      compte_id: compte.id,
-      type: 'debit',
+    const { debiterFelitzAvecTrace, crediterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+    const debitRes = await debiterFelitzAvecTrace(admin, {
+      compteId: compte.id,
       montant: COUT_AFFRETER_TECHNICIENS,
       libelle: `Affrètement techniciens pour ${avion.aeroport_actuel}`,
     });
+    if (!debitRes.ok) {
+      return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente).' }, { status: 400 });
+    }
 
     // Calculer la durée de maintenance (aléatoire entre 30 et 90 min)
     const dureeMaintenance = calculerDureeMaintenance();
@@ -131,7 +128,12 @@ export async function POST(
       .eq('id', id);
 
     if (avionErr) {
-      await admin.rpc('crediter_compte_safe', { p_compte_id: compte.id, p_montant: COUT_AFFRETER_TECHNICIENS });
+      // Remboursement avec trace de compensation
+      await crediterFelitzAvecTrace(admin, {
+        compteId: compte.id,
+        montant: COUT_AFFRETER_TECHNICIENS,
+        libelle: `Annulation affrètement (échec mise en maintenance)`,
+      });
       return NextResponse.json({ error: 'Erreur lors de la mise en maintenance.' }, { status: 500 });
     }
 

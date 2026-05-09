@@ -69,38 +69,48 @@ export async function POST(req: NextRequest) {
         }, { status: 400 });
       }
 
-      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteSiavi.id, p_montant: prix });
-      if (!debitOk) {
+      const { debiterFelitzAvecTrace, crediterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+      const debitRes = await debiterFelitzAvecTrace(admin, {
+        compteId: compteSiavi.id,
+        montant: prix,
+        libelle: `Achat hub SIAVI ${code}`,
+      });
+      if (!debitRes.ok) {
         return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente)' }, { status: 400 });
       }
 
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteSiavi.id,
-        type: 'debit',
-        montant: prix,
-        libelle: `Achat hub SIAVI ${code}`
-      });
-    }
-
-    if (is_principal) {
-      await admin.from('siavi_hubs').update({ is_principal: false }).eq('is_principal', true);
-    }
-
-    const makePrincipal = is_principal || (nbHubs || 0) === 0;
-
-    const { error: insertErr } = await admin.from('siavi_hubs').insert({
-      aeroport_oaci: code,
-      is_principal: makePrincipal,
-    });
-
-    if (insertErr) {
-      if (prix > 0) {
-        const compteSiavi = await getSiaviCompte(admin);
-        if (compteSiavi) {
-          await admin.rpc('crediter_compte_safe', { p_compte_id: compteSiavi.id, p_montant: prix });
-        }
+      // Insertion du hub APRÈS le débit. Si elle échoue, on rembourse avec
+      // une trace de compensation (au lieu d'un crédit silencieux qui
+      // laissait un débit orphelin dans l'historique).
+      if (is_principal) {
+        await admin.from('siavi_hubs').update({ is_principal: false }).eq('is_principal', true);
       }
-      return NextResponse.json({ error: 'Erreur création hub' }, { status: 500 });
+      const makePrincipal = is_principal || (nbHubs || 0) === 0;
+      const { error: insertErr } = await admin.from('siavi_hubs').insert({
+        aeroport_oaci: code,
+        is_principal: makePrincipal,
+      });
+      if (insertErr) {
+        await crediterFelitzAvecTrace(admin, {
+          compteId: compteSiavi.id,
+          montant: prix,
+          libelle: `Annulation achat hub SIAVI ${code} (échec création)`,
+        });
+        return NextResponse.json({ error: 'Erreur création hub' }, { status: 500 });
+      }
+    } else {
+      // Hub gratuit (premier hub) : pas de mouvement financier
+      if (is_principal) {
+        await admin.from('siavi_hubs').update({ is_principal: false }).eq('is_principal', true);
+      }
+      const makePrincipal = is_principal || (nbHubs || 0) === 0;
+      const { error: insertErr } = await admin.from('siavi_hubs').insert({
+        aeroport_oaci: code,
+        is_principal: makePrincipal,
+      });
+      if (insertErr) {
+        return NextResponse.json({ error: 'Erreur création hub' }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ ok: true, message: `Hub ${code} créé${prix > 0 ? ` (${prix.toLocaleString('fr-FR')} F$)` : ' (gratuit)'}` });

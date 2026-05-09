@@ -542,14 +542,11 @@ export async function envoyerChequesVol(
           })
           .eq('id', pretActif.id);
 
-        // Enregistrer la transaction de remboursement
-        const libelleRemboursement = `Remboursement prêt - Vol ${numeroVol}`;
-        await admin.from('felitz_transactions').insert({
-          compte_id: compteCompagnie.id,
-          type: 'debit',
-          montant: remboursementPret,
-          libelle: libelleRemboursement,
-        });
+        // NB : on n'insère PAS de ligne `felitz_transactions` ici car le
+        // chèque crédité plus bas (`cheque_montant`) est déjà NET du
+        // remboursement prêt. Insérer un débit séparé créerait un décalage
+        // entre la somme des lignes Felitz et le mouvement réel du solde.
+        // Le remboursement reste tracé dans la table `prets_bancaires`.
       }
     }
   }

@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useTransition, useEffect } from 'react';
-import { ArrowUpRight, ArrowDownLeft, Send, RefreshCw, History, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowUpRight, Send, RefreshCw, History, ChevronDown, ChevronUp } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
+import FelitzTransactionsHistory from '@/components/FelitzTransactionsHistory';
 
 interface Transaction {
   id: string;
@@ -27,13 +28,27 @@ interface Props {
   compteId: string;
   solde: number;
   transactions: Transaction[];
-  isAdmin: boolean;
+  // Conservé pour compat avec les appelants ; non utilisé dans le rendu actuel.
+  isAdmin?: boolean;
   isEntreprise?: boolean;
   isMilitaire?: boolean;
   compagnieNom?: string;
 }
 
-export default function FelitzBankClient({ compteId, transactions, isAdmin, isEntreprise, isMilitaire }: Props) {
+// Tailwind ne supporte pas les classes interpolées dynamiquement (`bg-${color}-600`).
+// On utilise des maps statiques pour que le compilateur les détecte.
+const ACCENT_BTN: Record<'emerald' | 'sky' | 'red', string> = {
+  emerald: 'bg-emerald-600/80 hover:bg-emerald-600 shadow-emerald-900/20',
+  sky: 'bg-sky-600/80 hover:bg-sky-600 shadow-sky-900/20',
+  red: 'bg-red-600/80 hover:bg-red-600 shadow-red-900/20',
+};
+const ACCENT_BTN_SECONDARY: Record<'emerald' | 'sky' | 'red', string> = {
+  emerald: 'bg-emerald-600/80 hover:bg-emerald-600',
+  sky: 'bg-sky-600/80 hover:bg-sky-600',
+  red: 'bg-red-600/80 hover:bg-red-600',
+};
+
+export default function FelitzBankClient({ compteId, transactions, isEntreprise, isMilitaire }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [showVirement, setShowVirement] = useState(false);
@@ -98,7 +113,7 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
     }) + ' UTC';
   }
 
-  const accentColor = isMilitaire ? 'red' : isEntreprise ? 'sky' : 'emerald';
+  const accentColor: 'emerald' | 'sky' | 'red' = isMilitaire ? 'red' : isEntreprise ? 'sky' : 'emerald';
 
   return (
     <div className="space-y-3 mt-3">
@@ -108,7 +123,7 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
         className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all ${
           showVirement
             ? 'bg-slate-800/60 text-slate-300 border border-slate-700/50'
-            : `bg-${accentColor}-600/80 hover:bg-${accentColor}-600 text-white shadow-lg shadow-${accentColor}-900/20`
+            : `text-white shadow-lg ${ACCENT_BTN[accentColor]}`
         }`}
       >
         <Send className="h-4 w-4" />
@@ -166,7 +181,7 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
             <button
               type="submit"
               disabled={loading}
-              className={`flex-1 px-4 py-2.5 bg-${accentColor}-600/80 hover:bg-${accentColor}-600 disabled:opacity-50 text-white rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2`}
+              className={`flex-1 px-4 py-2.5 disabled:opacity-50 text-white rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 ${ACCENT_BTN_SECONDARY[accentColor]}`}
             >
               {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Confirmer le virement
@@ -218,42 +233,14 @@ export default function FelitzBankClient({ compteId, transactions, isAdmin, isEn
       )}
 
       {/* Historique des transactions */}
-      {!isMilitaire && transactions.length > 0 && (
+      {!isMilitaire && (
         <div>
           <div className="flex items-center gap-2 px-1 mb-2">
             <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Transactions</span>
             <span className="text-[10px] text-slate-600 tabular-nums">{transactions.length}</span>
           </div>
-          <div className="space-y-0.5 max-h-[400px] overflow-y-auto rounded-xl border border-slate-800/40 bg-slate-800/10">
-            {transactions.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-slate-800/30 transition-colors border-b border-slate-800/20 last:border-0"
-              >
-                <div className="flex items-start gap-2.5 min-w-0">
-                  <div className={`mt-0.5 p-1 rounded-md ${t.type === 'credit' ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
-                    {t.type === 'credit' ? (
-                      <ArrowDownLeft className="h-3 w-3 text-emerald-400" />
-                    ) : (
-                      <ArrowUpRight className="h-3 w-3 text-red-400" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-slate-300 break-all leading-relaxed">{t.libelle || t.description || '—'}</p>
-                    <p className="text-[10px] text-slate-600">{formatDate(t.created_at)}</p>
-                  </div>
-                </div>
-                <span className={`font-medium text-xs tabular-nums whitespace-nowrap ${t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {t.type === 'credit' ? '+' : '-'}{t.montant.toLocaleString('fr-FR')} F$
-                </span>
-              </div>
-            ))}
-          </div>
+          <FelitzTransactionsHistory transactions={transactions} maxHeight="400px" />
         </div>
-      )}
-
-      {!isMilitaire && transactions.length === 0 && (
-        <p className="text-xs text-slate-600 text-center py-2">Aucune transaction</p>
       )}
     </div>
   );

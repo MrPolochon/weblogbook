@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { rateLimit } from '@/lib/rate-limit';
 import { canVirementCompteAllianceFelitz } from '@/lib/co-pdg-utils';
+import { virerFelitzAvecTrace } from '@/lib/felitz/atomic';
 
 // POST - Effectuer un virement
 export async function POST(req: NextRequest) {
@@ -34,40 +35,35 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient();
 
-    // Vérifier que l'utilisateur a accès au compte source (sans join pour éviter les soucis avec compagnie_id null sur comptes personnels)
-    const { data: compteSource } = await admin.from('felitz_comptes')
-      .select('id, solde, vban, type, proprietaire_id, compagnie_id, alliance_id')
-      .eq('id', compte_source_id)
-      .single();
+    // Compte source + profil en parallèle (indépendants).
+    const [{ data: compteSource }, { data: profile }] = await Promise.all([
+      admin.from('felitz_comptes')
+        .select('id, solde, vban, type, proprietaire_id, compagnie_id, alliance_id')
+        .eq('id', compte_source_id)
+        .maybeSingle(),
+      supabase.from('profiles').select('role').eq('id', user.id).single(),
+    ]);
 
     if (!compteSource) {
       return NextResponse.json({ error: 'Compte source introuvable' }, { status: 404 });
     }
-
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     const isAdmin = profile?.role === 'admin';
-
-    // Vérifier autorisation : propriétaire (personnel) ou PDG (entreprise)
     const isOwner = compteSource.proprietaire_id === user.id;
-    let isPdg = false;
-    let isCoPdg = false;
-    if (compteSource.compagnie_id) {
-      const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', compteSource.compagnie_id).single();
-      isPdg = comp?.pdg_id === user.id;
-      const { data: emp } = await admin
-        .from('compagnie_employes')
-        .select('id')
-        .eq('compagnie_id', compteSource.compagnie_id)
-        .eq('pilote_id', user.id)
-        .eq('role', 'co_pdg')
-        .maybeSingle();
-      isCoPdg = Boolean(emp);
-    }
 
-    let isAllianceLeader = false;
-    if (compteSource.type === 'alliance' && compteSource.alliance_id) {
-      isAllianceLeader = await canVirementCompteAllianceFelitz(user.id, compteSource.alliance_id, admin);
-    }
+    // Toutes les vérifs PDG / co-PDG / alliance en parallèle.
+    const [pdgRes, coPdgRes, isAllianceLeader] = await Promise.all([
+      compteSource.compagnie_id
+        ? admin.from('compagnies').select('pdg_id').eq('id', compteSource.compagnie_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+      compteSource.compagnie_id
+        ? admin.from('compagnie_employes').select('id').eq('compagnie_id', compteSource.compagnie_id).eq('pilote_id', user.id).eq('role', 'co_pdg').maybeSingle()
+        : Promise.resolve({ data: null }),
+      compteSource.type === 'alliance' && compteSource.alliance_id
+        ? canVirementCompteAllianceFelitz(user.id, compteSource.alliance_id, admin)
+        : Promise.resolve(false),
+    ]);
+    const isPdg = pdgRes.data?.pdg_id === user.id;
+    const isCoPdg = Boolean(coPdgRes.data);
 
     if (!isAdmin && !isOwner && !isPdg && !isCoPdg && !isAllianceLeader) {
       return NextResponse.json({ error: 'Non autorisé pour ce compte' }, { status: 403 });
@@ -78,11 +74,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Solde insuffisant' }, { status: 400 });
     }
 
-    // Trouver le compte destination
+    // Trouver le compte destination — maybeSingle() pour 404 propre.
     const { data: compteDest } = await admin.from('felitz_comptes')
       .select('id, solde, vban')
       .eq('vban', normalizedVbanDestination)
-      .single();
+      .maybeSingle();
 
     if (!compteDest) {
       return NextResponse.json({ error: 'VBAN destination introuvable' }, { status: 404 });
@@ -93,41 +89,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Virement vers le même compte impossible' }, { status: 400 });
     }
 
-    // Débit atomique via RPC (SET solde = solde - montant WHERE solde >= montant)
-    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compte_source_id, p_montant: montant });
-    if (!debitOk) {
-      return NextResponse.json({ error: 'Solde insuffisant' }, { status: 400 });
-    }
-
-    // Crédit atomique via RPC (SET solde = solde + montant)
-    const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: compteDest.id, p_montant: montant });
-    if (!creditOk) {
-      // Rollback le débit
-      await admin.rpc('crediter_compte_safe', { p_compte_id: compte_source_id, p_montant: montant });
-      return NextResponse.json({ error: 'Erreur lors du crédit. Virement annulé.' }, { status: 500 });
-    }
-
-    // Créer les transactions
+    // Virement atomique (débit + crédit + 2 lignes d'historique dans une seule
+    // transaction PG). Si quoi que ce soit échoue, tout est rollback : impossible
+    // d'avoir un solde modifié sans trace correspondante.
     const libelleVirement = libelle || 'Virement';
-    
-    const { error: txError } = await admin.from('felitz_transactions').insert([
-      {
-        compte_id: compte_source_id,
-        type: 'debit',
-        montant,
-        libelle: `${libelleVirement} vers ${normalizedVbanDestination}`
-      },
-      {
-        compte_id: compteDest.id,
-        type: 'credit',
-        montant,
-        libelle: `${libelleVirement} de ${compteSource.vban}`
-      }
-    ]);
-
-    if (txError) {
-      console.error('Erreur création transactions:', txError);
-      // Ne pas rollback ici car l'argent a déjà été transféré
+    const transferRes = await virerFelitzAvecTrace(admin, {
+      compteSourceId: compte_source_id,
+      compteDestId: compteDest.id,
+      montant,
+      libelleSource: `${libelleVirement} vers ${normalizedVbanDestination}`,
+      libelleDest: `${libelleVirement} de ${compteSource.vban}`,
+    });
+    if (!transferRes.ok) {
+      return NextResponse.json(
+        { error: transferRes.error || 'Solde insuffisant ou virement impossible' },
+        { status: 400 },
+      );
     }
 
     // Enregistrer le virement
@@ -163,31 +140,30 @@ export async function GET(req: NextRequest) {
 
     const admin = createAdminClient();
     if (compteId) {
-      const { data: compte } = await admin.from('felitz_comptes')
-        .select('id, proprietaire_id, compagnie_id, type, alliance_id')
-        .eq('id', compteId).single();
+      const [{ data: compte }, { data: profile }] = await Promise.all([
+        admin.from('felitz_comptes')
+          .select('id, proprietaire_id, compagnie_id, type, alliance_id')
+          .eq('id', compteId).maybeSingle(),
+        supabase.from('profiles').select('role').eq('id', user.id).single(),
+      ]);
       if (!compte) return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
       const isAdmin = profile?.role === 'admin';
       const isOwner = compte.proprietaire_id === user.id;
-      let isPdg = false;
-      let isCoPdg = false;
-      if (compte.compagnie_id) {
-        const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', compte.compagnie_id).single();
-        isPdg = comp?.pdg_id === user.id;
-        const { data: emp } = await admin
-          .from('compagnie_employes')
-          .select('id')
-          .eq('compagnie_id', compte.compagnie_id)
-          .eq('pilote_id', user.id)
-          .eq('role', 'co_pdg')
-          .maybeSingle();
-        isCoPdg = Boolean(emp);
-      }
-      let isAllianceLeader = false;
-      if (compte.type === 'alliance' && compte.alliance_id) {
-        isAllianceLeader = await canVirementCompteAllianceFelitz(user.id, compte.alliance_id, admin);
-      }
+
+      const [pdgRes, coPdgRes, isAllianceLeader] = await Promise.all([
+        compte.compagnie_id
+          ? admin.from('compagnies').select('pdg_id').eq('id', compte.compagnie_id).maybeSingle()
+          : Promise.resolve({ data: null }),
+        compte.compagnie_id
+          ? admin.from('compagnie_employes').select('id').eq('compagnie_id', compte.compagnie_id).eq('pilote_id', user.id).eq('role', 'co_pdg').maybeSingle()
+          : Promise.resolve({ data: null }),
+        compte.type === 'alliance' && compte.alliance_id
+          ? canVirementCompteAllianceFelitz(user.id, compte.alliance_id, admin)
+          : Promise.resolve(false),
+      ]);
+      const isPdg = pdgRes.data?.pdg_id === user.id;
+      const isCoPdg = Boolean(coPdgRes.data);
+
       if (!isAdmin && !isOwner && !isPdg && !isCoPdg && !isAllianceLeader) {
         return NextResponse.json({ error: 'Non autorisé pour ce compte' }, { status: 403 });
       }

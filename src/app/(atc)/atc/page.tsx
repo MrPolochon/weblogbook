@@ -8,6 +8,7 @@ import HorsServiceButton from '../HorsServiceButton';
 import PlansEnAttenteModal from '@/components/PlansEnAttenteModal';
 import AtcEnLigneModal from '@/components/AtcEnLigneModal';
 import FlightStripBoardWrapper from '@/components/FlightStripBoardWrapper';
+import AtcNonControlesPanel from '@/components/AtcNonControlesPanel';
 import { getTypeWake } from '@/lib/wake-turbulence';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -24,12 +25,21 @@ export default async function AtcPage() {
   // D'abord récupérer la session pour l'utiliser dans les requêtes suivantes
   const { data: session } = await supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single();
   
-  const [{ data: plansChezMoiRaw }, { data: sessionsEnService }, { data: plansEnAttente }, { data: afisEnService }] = await Promise.all([
+  const [{ data: plansChezMoiRaw }, { data: sessionsEnService }, { data: plansEnAttente }, { data: afisEnService }, { data: dataAuto }, { data: dataOrphelinsRaw }, { data: sessionsActiveRaw }] = await Promise.all([
     admin.from('plans_vol').select('*').eq('current_holder_user_id', user.id).is('pending_transfer_aeroport', null).in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente']).order('created_at', { ascending: false }),
     admin.from('atc_sessions').select('aeroport, position, user_id, profiles!atc_sessions_user_id_fkey(identifiant)').order('aeroport').order('position'),
     admin.from('plans_vol').select('id').in('statut', ['depose', 'en_attente']),
     admin.from('afis_sessions').select('aeroport, est_afis, user_id, profiles!afis_sessions_user_id_fkey(identifiant)').order('aeroport'),
+    session ? admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('automonitoring', true).in('statut', ['accepte', 'en_cours']) : Promise.resolve({ data: [] }),
+    session ? admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee, current_holder_user_id').in('statut', ['depose', 'en_attente']) : Promise.resolve({ data: [] }),
+    session ? admin.from('atc_sessions').select('user_id') : Promise.resolve({ data: [] }),
   ]);
+
+  const plansAuto = (dataAuto ?? []) as { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[];
+  const sessionsActivesSet = new Set(((sessionsActiveRaw ?? []) as { user_id: string }[]).map((s) => s.user_id));
+  const plansOrphelins = ((dataOrphelinsRaw ?? []) as { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string; current_holder_user_id: string | null }[])
+    .filter((p) => !p.current_holder_user_id || !sessionsActivesSet.has(p.current_holder_user_id))
+    .map((p) => ({ id: p.id, numero_vol: p.numero_vol, aeroport_depart: p.aeroport_depart, aeroport_arrivee: p.aeroport_arrivee }));
 
   // Enrichir les plans avec les données pilote, compagnie et avion (pour strips)
   const plansChezMoi: StripData[] = await Promise.all((plansChezMoiRaw || []).map(async (plan) => {
@@ -253,6 +263,16 @@ export default async function AtcPage() {
               onlineSessions={sessionsEnServiceSafe.map(s => ({ aeroport: s.aeroport, position: s.position, user_id: s.user_id }))}
             />
           )}
+
+          {/* Vols en autosurveillance et plans orphelins (sous les strips non assignés) */}
+          <div className="mt-3">
+            <AtcNonControlesPanel
+              plansAuto={plansAuto}
+              plansOrphelins={plansOrphelins}
+              sessionAeroport={session.aeroport}
+              sessionPosition={session.position}
+            />
+          </div>
         </div>
       )}
 

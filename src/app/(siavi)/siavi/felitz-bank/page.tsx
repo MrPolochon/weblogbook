@@ -16,50 +16,41 @@ export default async function FelitzBankSiaviPage() {
 
   const admin = createAdminClient();
 
-  let isChef = profile?.role === 'admin';
-  if (!isChef && profile?.siavi_grade_id) {
-    const { data: grade } = await admin.from('siavi_grades')
-      .select('nom')
-      .eq('id', profile.siavi_grade_id)
-      .single();
-    if (grade?.nom === 'Chef de brigade SIAVI') isChef = true;
-  }
+  // Récupération du grade + compte perso en parallèle (la promotion "Chef de brigade"
+  // est résolue après, mais on n'attend pas pour fetch les autres données).
+  const [
+    gradeRes,
+    comptePersoRes,
+  ] = await Promise.all([
+    profile?.siavi_grade_id
+      ? admin.from('siavi_grades').select('nom').eq('id', profile.siavi_grade_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    admin.from('felitz_comptes').select('*').eq('proprietaire_id', user.id).eq('type', 'personnel').maybeSingle(),
+  ]);
 
-  // Compte personnel
-  const { data: comptePerso } = await admin.from('felitz_comptes')
-    .select('*')
-    .eq('proprietaire_id', user.id)
-    .eq('type', 'personnel')
-    .single();
+  const isChef = profile?.role === 'admin' || gradeRes.data?.nom === 'Chef de brigade SIAVI';
+  const comptePerso = comptePersoRes.data;
 
-  // Transactions récentes pour le compte personnel
-  let transactionsPerso: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
-  if (comptePerso) {
-    const { data } = await admin.from('felitz_transactions')
+  // Transactions perso + compte SIAVI (si Chef) en parallèle.
+  const [persoTxRes, compteSiaviRes] = await Promise.all([
+    comptePerso
+      ? admin.from('felitz_transactions').select('*').eq('compte_id', comptePerso.id).order('created_at', { ascending: false }).limit(100)
+      : Promise.resolve({ data: [] }),
+    isChef
+      ? admin.from('felitz_comptes').select('id, solde, vban').eq('type', 'siavi').maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const transactionsPerso = (persoTxRes.data || []) as Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }>;
+  const compteSiavi = compteSiaviRes.data as { id: string; solde: number; vban: string } | null;
+
+  let transactionsSiavi: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
+  if (compteSiavi) {
+    const { data: ts } = await admin.from('felitz_transactions')
       .select('*')
-      .eq('compte_id', comptePerso.id)
+      .eq('compte_id', compteSiavi.id)
       .order('created_at', { ascending: false })
       .limit(100);
-    transactionsPerso = data || [];
-  }
-
-  // Compte SIAVI partagé (visible pour le Chef de brigade)
-  let compteSiavi: { id: string; solde: number; vban: string } | null = null;
-  let transactionsSiavi: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
-  if (isChef) {
-    const { data: cs } = await admin.from('felitz_comptes')
-      .select('id, solde, vban')
-      .eq('type', 'siavi')
-      .single();
-    compteSiavi = cs;
-    if (cs) {
-      const { data: ts } = await admin.from('felitz_transactions')
-        .select('*')
-        .eq('compte_id', cs.id)
-        .order('created_at', { ascending: false })
-        .limit(100);
-      transactionsSiavi = ts || [];
-    }
+    transactionsSiavi = ts || [];
   }
 
   return (

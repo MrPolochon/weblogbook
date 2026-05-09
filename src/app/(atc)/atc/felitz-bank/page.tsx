@@ -16,12 +16,12 @@ export default async function FelitzBankAtcPage() {
 
   const admin = createAdminClient();
 
-  // Compte personnel
+  // Compte personnel — maybeSingle() pour ne pas lever d'exception si absent.
   const { data: comptePerso } = await admin.from('felitz_comptes')
     .select('*')
     .eq('proprietaire_id', user.id)
     .eq('type', 'personnel')
-    .single();
+    .maybeSingle();
 
   // Transactions récentes pour le compte personnel
   let transactionsPerso: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];

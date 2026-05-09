@@ -11,6 +11,10 @@ export type BriaMessage = { role: 'bria' | 'pilote'; text: string };
 interface CreateBriaClientToolsOpts {
   getConversationLog: () => BriaMessage[];
   router: AppRouterInstance;
+  // Appelé après une soumission réussie : permet au composant parent
+  // (BriaDialog) de raccrocher l'appel et rediriger le pilote vers
+  // l'interface transpondeur (page plans-vol).
+  onPlanSubmitted?: (planId: string) => void;
 }
 
 export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
@@ -240,7 +244,13 @@ export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
           console.error('[BRIA] submit error:', data.error);
           return JSON.stringify({ success: false, error: data.error ?? 'Erreur soumission' });
         }
-        setTimeout(() => opts.router.refresh(), 100);
+        // Notifie le parent : raccrochage + redirection vers la page transpondeur.
+        // Léger délai pour laisser BRIA terminer sa phrase de confirmation vocale.
+        if (opts.onPlanSubmitted) {
+          setTimeout(() => opts.onPlanSubmitted?.(data.id), 1500);
+        } else {
+          setTimeout(() => opts.router.refresh(), 100);
+        }
         return JSON.stringify({ success: true, id: data.id, statut: data.statut ?? 'accepte' });
       } catch (err) {
         console.error('[BRIA] submit_flight_plan exception:', err);

@@ -111,29 +111,50 @@ export async function POST(request: Request) {
         }, { status: 400 });
       }
 
-      const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compte.id, p_montant: prix });
-      if (!debitOk) {
-        return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente).' }, { status: 400 });
-      }
-
-      // Transaction
-      await admin.from('felitz_transactions').insert({
-        compte_id: compte.id,
-        type: 'debit',
+      const { debiterFelitzAvecTrace, crediterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+      const debitRes = await debiterFelitzAvecTrace(admin, {
+        compteId: compte.id,
         montant: prix,
         libelle: `Achat hub ${ac}`,
       });
+      if (!debitRes.ok) {
+        return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente).' }, { status: 400 });
+      }
+
+      // Insertion du hub APRÈS le débit. En cas d'échec on rembourse avec
+      // trace de compensation (sinon l'historique gardait un débit orphelin).
+      const { data: hub, error } = await admin
+        .from('compagnie_hubs')
+        .insert({
+          compagnie_id,
+          aeroport_code: ac,
+          est_hub_principal: estPrincipal,
+          prix_achat: prix,
+          achat_le: new Date().toISOString(),
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        await crediterFelitzAvecTrace(admin, {
+          compteId: compte.id,
+          montant: prix,
+          libelle: `Annulation achat hub ${ac} (échec création)`,
+        });
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, id: hub.id, prix });
     }
 
-    // Insérer le hub
+    // Hub gratuit (pas de mouvement financier)
     const { data: hub, error } = await admin
       .from('compagnie_hubs')
       .insert({
         compagnie_id,
         aeroport_code: ac,
         est_hub_principal: estPrincipal,
-        prix_achat: prix,
-        achat_le: prix > 0 ? new Date().toISOString() : null,
+        prix_achat: 0,
+        achat_le: null,
       })
       .select('id')
       .single();
@@ -239,16 +260,18 @@ export async function DELETE(request: Request) {
         .single();
 
       if (compte) {
-        await admin.rpc('debiter_compte_safe', { p_compte_id: compte.id, p_montant: totalTaxes });
-
-        await admin.from('felitz_transactions').insert({
-          compte_id: compte.id,
-          type: 'debit',
+        // Débit atomique : si le solde est insuffisant, debitRes.ok=false et
+        // aucune ligne de trace n'est insérée (au lieu d'un débit silencieux
+        // suivi d'une ligne fantôme dans l'historique).
+        const { debiterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+        const debitRes = await debiterFelitzAvecTrace(admin, {
+          compteId: compte.id,
           montant: totalTaxes,
           libelle: `Taxes aéroportuaires retrait hub ${hub.aeroport_code} (${avionsEnMaintenance.length} avion(s) en maintenance)`,
         });
-
-        taxesPayees = totalTaxes;
+        if (debitRes.ok) {
+          taxesPayees = totalTaxes;
+        }
       }
     }
 

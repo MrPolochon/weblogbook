@@ -157,8 +157,13 @@ export async function PATCH(
       }, { status: 400 });
     }
 
-    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: montantDebitInt });
-    if (!debitOk) {
+    const { debiterFelitzAvecTrace, crediterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+    const debitRes = await debiterFelitzAvecTrace(admin, {
+      compteId: compteCompagnie.id,
+      montant: montantDebitInt,
+      libelle: `Remboursement prêt bancaire — ${montantDebitInt.toLocaleString('fr-FR')} F$`,
+    });
+    if (!debitRes.ok) {
       return NextResponse.json({ error: 'Solde insuffisant ou compte modifié' }, { status: 400 });
     }
 
@@ -178,17 +183,14 @@ export async function PATCH(
       .eq('id', pret.id);
 
     if (updateError) {
-      await admin.rpc('crediter_compte_safe', { p_compte_id: compteCompagnie.id, p_montant: montantDebitInt });
+      // Rollback avec trace de compensation
+      await crediterFelitzAvecTrace(admin, {
+        compteId: compteCompagnie.id,
+        montant: montantDebitInt,
+        libelle: `Annulation remboursement prêt (échec maj prêt)`,
+      });
       return NextResponse.json({ error: 'Erreur lors de la mise à jour du prêt' }, { status: 500 });
     }
-
-    // Enregistrer la transaction
-    await admin.from('felitz_transactions').insert({
-      compte_id: compteCompagnie.id,
-      type: 'debit',
-      montant: montantDebitInt,
-      libelle: `Remboursement prêt bancaire — ${montantDebitInt.toLocaleString('fr-FR')} F$`,
-    });
 
     const nouveauReste = Math.max(0, totalDu - nouveauMontantRembourse);
 
