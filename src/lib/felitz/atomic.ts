@@ -7,6 +7,9 @@
 // Ces helpers garantissent que le solde et la ligne `felitz_transactions`
 // bougent ENSEMBLE (transaction PG) — terminé les "debit fantôme" /
 // "credit sans trace" sur les chemins d'erreur.
+//
+// La table `felitz_transactions` n'a pas de colonne `description` ; tout
+// est stocké dans `libelle`.
 // ============================================================
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -14,11 +17,11 @@ type AdminClient = SupabaseClient;
 
 /**
  * Débite atomiquement un compte Felitz et insère la ligne d'historique.
- * @returns true si le débit a réussi, false si solde insuffisant ou compte inexistant.
+ * @returns ok=true si le débit a réussi, ok=false si solde insuffisant ou compte inexistant.
  */
 export async function debiterFelitzAvecTrace(
   admin: AdminClient,
-  args: { compteId: string; montant: number; libelle: string; description?: string | null },
+  args: { compteId: string; montant: number; libelle: string },
 ): Promise<{ ok: boolean; error?: string }> {
   if (!Number.isFinite(args.montant) || args.montant <= 0) {
     return { ok: false, error: 'Montant invalide' };
@@ -27,7 +30,6 @@ export async function debiterFelitzAvecTrace(
     p_compte_id: args.compteId,
     p_montant: args.montant,
     p_libelle: args.libelle,
-    p_description: args.description ?? null,
   });
   if (error) {
     console.error('[felitz] debiter_avec_trace error:', error);
@@ -41,7 +43,7 @@ export async function debiterFelitzAvecTrace(
  */
 export async function crediterFelitzAvecTrace(
   admin: AdminClient,
-  args: { compteId: string; montant: number; libelle: string; description?: string | null },
+  args: { compteId: string; montant: number; libelle: string },
 ): Promise<{ ok: boolean; error?: string }> {
   if (!Number.isFinite(args.montant) || args.montant <= 0) {
     return { ok: false, error: 'Montant invalide' };
@@ -50,7 +52,6 @@ export async function crediterFelitzAvecTrace(
     p_compte_id: args.compteId,
     p_montant: args.montant,
     p_libelle: args.libelle,
-    p_description: args.description ?? null,
   });
   if (error) {
     console.error('[felitz] crediter_avec_trace error:', error);

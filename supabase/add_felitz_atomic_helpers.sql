@@ -9,26 +9,27 @@
 --   const { data: ok, error } = await admin.rpc('debiter_avec_trace', {
 --     p_compte_id: compteId,
 --     p_montant: 1000,
---     p_libelle: 'Achat avion XYZ',
---     p_description: null
+--     p_libelle: 'Achat avion XYZ'
 --   });
 --   if (error || ok === false) { ... gestion solde insuffisant ... }
 --
--- Les deux fonctions :
+-- Les fonctions :
 --   - exécutent l'UPDATE solde + l'INSERT transaction dans la MÊME
 --     transaction Postgres (atomique : si l'INSERT échoue, le UPDATE
 --     est rollback automatiquement)
 --   - retournent BOOLEAN (true = succès, false = solde insuffisant
 --     pour le débit / compte introuvable)
---   - SECURITY DEFINER pour pouvoir s'utiliser depuis tous les contextes
+--   - SECURITY DEFINER pour s'utiliser depuis tous les contextes
 --
+-- Schéma de `felitz_transactions` ciblé :
+--   (id, compte_id, type, montant, libelle, created_at)
+--   PAS de colonne `description`.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.debiter_avec_trace(
   p_compte_id UUID,
   p_montant   BIGINT,
-  p_libelle   TEXT,
-  p_description TEXT DEFAULT NULL
+  p_libelle   TEXT
 )
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -36,7 +37,6 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  -- Validation basique
   IF p_montant IS NULL OR p_montant <= 0 THEN
     RETURN FALSE;
   END IF;
@@ -51,10 +51,10 @@ BEGIN
     RETURN FALSE;
   END IF;
 
-  -- Trace systématique. Si l'INSERT échoue (ex: contrainte de clé),
-  -- la fonction throw → rollback transactionnel du UPDATE ci-dessus.
-  INSERT INTO public.felitz_transactions (compte_id, type, montant, libelle, description)
-  VALUES (p_compte_id, 'debit', p_montant, p_libelle, p_description);
+  -- Trace systématique. Si l'INSERT échoue, la fonction throw → rollback
+  -- transactionnel du UPDATE ci-dessus.
+  INSERT INTO public.felitz_transactions (compte_id, type, montant, libelle)
+  VALUES (p_compte_id, 'debit', p_montant, p_libelle);
 
   RETURN TRUE;
 END;
@@ -64,8 +64,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.crediter_avec_trace(
   p_compte_id UUID,
   p_montant   BIGINT,
-  p_libelle   TEXT,
-  p_description TEXT DEFAULT NULL
+  p_libelle   TEXT
 )
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -85,8 +84,8 @@ BEGIN
     RETURN FALSE;
   END IF;
 
-  INSERT INTO public.felitz_transactions (compte_id, type, montant, libelle, description)
-  VALUES (p_compte_id, 'credit', p_montant, p_libelle, p_description);
+  INSERT INTO public.felitz_transactions (compte_id, type, montant, libelle)
+  VALUES (p_compte_id, 'credit', p_montant, p_libelle);
 
   RETURN TRUE;
 END;
@@ -138,7 +137,6 @@ BEGIN
     RAISE EXCEPTION 'Compte destination introuvable';
   END IF;
 
-  -- Traces (atomiques avec les UPDATE)
   INSERT INTO public.felitz_transactions (compte_id, type, montant, libelle)
   VALUES
     (p_compte_source_id, 'debit',  p_montant, p_libelle_source),
@@ -149,7 +147,14 @@ END;
 $$;
 
 
+-- Si d'anciennes versions des fonctions avec un paramètre `p_description`
+-- existent (du brouillon initial), on les supprime pour éviter toute
+-- ambiguïté de surcharge lors des appels RPC.
+DROP FUNCTION IF EXISTS public.debiter_avec_trace(UUID, BIGINT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.crediter_avec_trace(UUID, BIGINT, TEXT, TEXT);
+
+
 -- Permissions : exécutables par les rôles habituels
-GRANT EXECUTE ON FUNCTION public.debiter_avec_trace(UUID, BIGINT, TEXT, TEXT) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.crediter_avec_trace(UUID, BIGINT, TEXT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.debiter_avec_trace(UUID, BIGINT, TEXT) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.crediter_avec_trace(UUID, BIGINT, TEXT) TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.virer_avec_trace(UUID, UUID, BIGINT, TEXT, TEXT) TO anon, authenticated, service_role;
