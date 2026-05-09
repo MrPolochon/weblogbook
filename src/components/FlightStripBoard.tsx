@@ -372,25 +372,17 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
     );
   };
 
-  // ─── Render a zone ───
-  const renderZone = (zone: ZoneId, zs: StripData[]) => {
+  // ─── Render a zone (mode "actif" : la zone contient des strips) ───
+  const renderActiveZone = (zone: ZoneId, zs: StripData[]) => {
     const isDragOver = !!draggedId && dropTarget?.zone === zone;
     const ZONE_COLORS = isDark ? ZONE_COLORS_DARK : ZONE_COLORS_LIGHT;
     const ZONE_HEADER = isDark ? ZONE_HEADER_DARK : ZONE_HEADER_LIGHT;
     const ZONE_DROP = isDark ? ZONE_DROP_DARK : ZONE_DROP_LIGHT;
 
-    // Les zones vides occupent juste la place minimale (~280px) et laissent
-    // le reste aux zones avec contenu, qui peuvent alors étaler les strips
-    // sur plusieurs colonnes via flex-wrap.
-    const isEmpty = zs.length === 0;
-    const sizingClass = isEmpty
-      ? 'flex-[0_0_280px] min-w-[280px]'
-      : 'flex-[1_1_740px] min-w-[740px]';
-
     return (
       <div
         key={zone}
-        className={`${sizingClass} border-2 rounded-lg flex flex-col transition-all duration-200 ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
+        className={`flex-[1_1_0%] min-w-[480px] border-2 rounded-lg flex flex-col transition-all duration-200 ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
         onDragEnter={(e) => handleZoneDragEnter(e, zone)}
         onDragLeave={(e) => handleZoneDragLeave(e, zone)}
         onDragOver={handleZoneDragOver}
@@ -403,27 +395,82 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
             {isDragOver && <span className={`text-xs font-bold rounded px-2 py-1 animate-pulse shadow-sm ${isDark ? 'bg-slate-700 text-slate-100' : 'bg-white/70'}`}>Relâcher pour poser</span>}
           </div>
         </div>
-        <div className="flex-1 p-2 flex flex-wrap gap-2 content-start overflow-y-auto max-h-[calc(100dvh-320px)]">
-          {zs.length === 0 ? (
-            <div className={`w-full text-center py-8 rounded-lg border-2 border-dashed transition-all ${isDragOver ? (isDark ? 'border-sky-400 bg-sky-950/50' : 'border-sky-400 bg-sky-50') : 'border-transparent'}`}>
-              <p className={`text-base font-semibold italic ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                {isDragOver ? 'Relâcher ici' : 'Aucun strip'}
-              </p>
-            </div>
-          ) : zs.map((s) => renderStripItem(s, zone))}
+        {/* Strips empilés en COLONNE : l'ordre vertical reflète l'ordre des
+            départs / arrivées, pas de wrap horizontal sinon on perd la
+            séquence. (Le wrap n'est autorisé que pour la zone "Non assignés"
+            tout en bas du board.) */}
+        <div className="flex-1 p-2 flex flex-col gap-2 overflow-y-auto max-h-[calc(100dvh-320px)]">
+          {zs.map((s) => renderStripItem(s, zone))}
         </div>
       </div>
     );
   };
 
+  // ─── Render a zone (mode "compact" : zone vide, devient une colonne étroite
+  // empilée verticalement dans une sidebar à droite, pour ne plus gaspiller
+  // l'espace horizontal quand plusieurs zones sont vides). ───
+  const renderCompactZone = (zone: ZoneId) => {
+    const isDragOver = !!draggedId && dropTarget?.zone === zone;
+    const ZONE_COLORS = isDark ? ZONE_COLORS_DARK : ZONE_COLORS_LIGHT;
+    const ZONE_HEADER = isDark ? ZONE_HEADER_DARK : ZONE_HEADER_LIGHT;
+    const ZONE_DROP = isDark ? ZONE_DROP_DARK : ZONE_DROP_LIGHT;
+
+    return (
+      <div
+        key={zone}
+        className={`flex-1 min-h-[80px] border-2 rounded-lg flex flex-col transition-all duration-200 ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
+        onDragEnter={(e) => handleZoneDragEnter(e, zone)}
+        onDragLeave={(e) => handleZoneDragLeave(e, zone)}
+        onDragOver={handleZoneDragOver}
+        onDrop={(e) => handleDrop(e, zone)}
+      >
+        <div className={`px-2 py-1.5 text-xs font-bold uppercase tracking-wider ${ZONE_HEADER[zone]} rounded-t-md flex items-center justify-between`}>
+          <span className="truncate">{ZONE_LABELS[zone]}</span>
+          <span className={`text-[10px] font-semibold ml-1 ${isDark ? 'text-slate-200' : 'opacity-80'}`}>0</span>
+        </div>
+        <div className={`flex-1 flex items-center justify-center px-2 py-3 text-center text-[11px] italic font-medium border-2 border-dashed rounded-b-md transition-all ${
+          isDragOver
+            ? (isDark ? 'border-sky-400 bg-sky-950/50 text-sky-200' : 'border-sky-400 bg-sky-50 text-sky-700')
+            : (isDark ? 'border-transparent text-slate-500' : 'border-transparent text-slate-500')
+        }`}>
+          {isDragOver ? 'Relâcher ici' : 'Vide'}
+        </div>
+      </div>
+    );
+  };
+
+  // Sépare zones actives (avec strips) et zones vides : les vides sont
+  // empilées verticalement dans une colonne étroite à droite, libérant tout
+  // l'espace horizontal pour les zones actives.
+  const allZones: Array<{ id: ZoneId; strips: StripData[] }> = [
+    { id: 'sol', strips: solStrips },
+    { id: 'depart', strips: departStrips },
+    ...(isCenter ? [{ id: 'transit' as ZoneId, strips: transitStrips }] : []),
+    { id: 'arrivee', strips: arriveeStrips },
+  ];
+  const activeZones = allZones.filter((z) => z.strips.length > 0);
+  const emptyZones = allZones.filter((z) => z.strips.length === 0);
+  // Cas particulier : si toutes les zones sont vides, on les affiche toutes
+  // en mode "actif" pour conserver la lisibilité initiale (pas de sidebar
+  // de zones vides toute seule en plein écran).
+  const showAllAsActive = activeZones.length === 0;
+
   return (
     <div className="flex flex-col gap-4 h-full">
       {/* Zones */}
       <div className="flex gap-3 flex-1 min-h-0 overflow-x-auto pb-1">
-        {renderZone('sol', solStrips)}
-        {renderZone('depart', departStrips)}
-        {isCenter && renderZone('transit', transitStrips)}
-        {renderZone('arrivee', arriveeStrips)}
+        {showAllAsActive
+          ? allZones.map((z) => renderActiveZone(z.id, z.strips))
+          : (
+            <>
+              {activeZones.map((z) => renderActiveZone(z.id, z.strips))}
+              {emptyZones.length > 0 && (
+                <div className="flex flex-col gap-2 flex-[0_0_180px] min-w-[180px] max-w-[220px]">
+                  {emptyZones.map((z) => renderCompactZone(z.id))}
+                </div>
+              )}
+            </>
+          )}
       </div>
 
       {/* Unassigned */}
