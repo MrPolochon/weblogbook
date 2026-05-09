@@ -1,7 +1,6 @@
-'use client';
+﻿?'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { unlockAudioForIOS } from '@/lib/phone-sounds';
 import { speakNow } from '@/lib/tts';
 import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX } from 'lucide-react';
@@ -11,7 +10,6 @@ import {
   CODE_TO_POSITION,
   AEROPORT_CODES,
   CODE_TO_AEROPORT,
-  POSITION_CODES,
   parseAtisCall,
 } from '@/lib/atc-phone-codes';
 
@@ -46,19 +44,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const [selectedInputId, setSelectedInputId] = useState('');
   const [selectedOutputId, setSelectedOutputId] = useState('');
   const [showAudioPanel, setShowAudioPanel] = useState(false);
-  const [showAtisDirectory, setShowAtisDirectory] = useState(false);
-  const [atisDirectorySearch, setAtisDirectorySearch] = useState('');
-  const [showAtcDirectory, setShowAtcDirectory] = useState(false);
-  const [atcDirectorySearch, setAtcDirectorySearch] = useState('');
-  const [atcDirectoryPositionFilter, setAtcDirectoryPositionFilter] = useState<string>('all');
-  // Popover flottants ancres aux boutons ATIS / ATC (pattern NotificationBell).
-  // Evite que les annuaires ecrasent le clavier du telephone in-place.
-  const [atisPopoverPos, setAtisPopoverPos] = useState({ top: 0, left: 0 });
-  const [atcPopoverPos, setAtcPopoverPos] = useState({ top: 0, left: 0 });
-  const atisBtnRef = useRef<HTMLButtonElement>(null);
-  const atcBtnRef = useRef<HTMLButtonElement>(null);
-  const atisPopoverRef = useRef<HTMLDivElement>(null);
-  const atcPopoverRef = useRef<HTMLDivElement>(null);
   const [audioDeviceError, setAudioDeviceError] = useState<string | null>(null);
   const [isMicTestActive, setIsMicTestActive] = useState(false);
   const [micTestLevel, setMicTestLevel] = useState(0);
@@ -80,96 +65,32 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     setIsMounted(true);
   }, []);
 
-  // Le bouton trigger principal est integre dans la nav ATC (AtcSessionCompte).
-  // On ouvre/ferme via custom event pour eviter de lifter le state ou
-  // d'introduire un context provider juste pour ce besoin.
+  // L'annuaire ATC dans la nav (AtcPhonebookButton) compose un numero via
+  // l'event 'atc-telephone:dial' : on ouvre le telephone, pre-remplit le
+  // dialer et on passe en 'dialing'. L'utilisateur n'a plus qu'a appuyer
+  // sur Call. Bloque si un appel est en cours pour ne pas ecraser un
+  // dialogue actif.
   useEffect(() => {
-    function handleOpen() {
+    function handleDial(e: Event) {
+      const detail = (e as CustomEvent<{ number: string }>).detail;
+      if (!detail?.number) return;
+      if (
+        callState === 'connected' ||
+        callState === 'ringing' ||
+        callState === 'incoming' ||
+        callState === 'connecting' ||
+        callState === 'atis_playing'
+      ) {
+        return;
+      }
       unlockAudioForIOS();
       setIsOpen(true);
+      setNumber(detail.number);
+      setCallState('dialing');
     }
-    function handleToggle() {
-      unlockAudioForIOS();
-      setIsOpen((v) => !v);
-    }
-    window.addEventListener('atc-telephone:open', handleOpen);
-    window.addEventListener('atc-telephone:toggle', handleToggle);
-    return () => {
-      window.removeEventListener('atc-telephone:open', handleOpen);
-      window.removeEventListener('atc-telephone:toggle', handleToggle);
-    };
-  }, []);
-
-  // Diffuse les changements d'etat du telephone pour que le bouton de la
-  // nav puisse afficher une pastille (appel entrant, en cours, etc.).
-  useEffect(() => {
-    window.dispatchEvent(
-      new CustomEvent('atc-telephone:state', {
-        detail: { callState, isOpen },
-      })
-    );
-  }, [callState, isOpen]);
-
-  // Positionnement + fermeture des popovers d'annuaire (ATIS, ATC).
-  // Le telephone est fixe en bas-droite (240px de large). On ouvre les panels
-  // a GAUCHE du bouton trigger pour ne pas sortir de l'ecran et garder le
-  // clavier visible.
-  useEffect(() => {
-    if (!showAtisDirectory && !showAtcDirectory) return;
-
-    const POPOVER_WIDTH = 320;
-    const GAP = 8;
-    function reposition() {
-      if (showAtisDirectory && atisBtnRef.current) {
-        const r = atisBtnRef.current.getBoundingClientRect();
-        const left = Math.max(8, r.left - POPOVER_WIDTH - GAP);
-        setAtisPopoverPos({ top: Math.max(8, r.top), left });
-      }
-      if (showAtcDirectory && atcBtnRef.current) {
-        const r = atcBtnRef.current.getBoundingClientRect();
-        const left = Math.max(8, r.left - POPOVER_WIDTH - GAP);
-        setAtcPopoverPos({ top: Math.max(8, r.top), left });
-      }
-    }
-    reposition();
-
-    function onMouseDown(e: MouseEvent) {
-      const t = e.target as Node | null;
-      if (!t) return;
-      if (showAtisDirectory) {
-        if (atisBtnRef.current?.contains(t) || atisPopoverRef.current?.contains(t)) {
-          // ne ferme pas si click sur le trigger ou dans le popover
-        } else {
-          setShowAtisDirectory(false);
-        }
-      }
-      if (showAtcDirectory) {
-        if (atcBtnRef.current?.contains(t) || atcPopoverRef.current?.contains(t)) {
-          // idem
-        } else {
-          setShowAtcDirectory(false);
-        }
-      }
-    }
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        setShowAtisDirectory(false);
-        setShowAtcDirectory(false);
-      }
-    }
-
-    window.addEventListener('resize', reposition);
-    window.addEventListener('scroll', reposition, true);
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('resize', reposition);
-      window.removeEventListener('scroll', reposition, true);
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [showAtisDirectory, showAtcDirectory]);
+    window.addEventListener('atc-telephone:dial', handleDial);
+    return () => window.removeEventListener('atc-telephone:dial', handleDial);
+  }, [callState]);
 
   const refreshAudioDevices = useCallback(async () => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
@@ -1068,11 +989,19 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   }
 
   if (!isOpen) {
-    // Trigger principal integre dans la nav ATC (cf. AtcSessionCompte).
-    // On garde uniquement le conteneur audio cache car son retrait briserait
-    // les flux audio (bug unidirectionnel deja corrige). Pas de bouton flottant.
     return (
-      <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
+      <>
+        {/* Conteneur audio: éviter display:none qui bloque la lecture (cf. bug unidirectionnel) */}
+        <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
+        <button onClick={() => { unlockAudioForIOS(); setIsOpen(true); }}
+          className={`fixed bottom-4 right-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl`}>
+          <div className={`p-2 rounded-xl ${isDark ? 'bg-sky-500/15' : 'bg-sky-500/20'}`}>
+            <Phone className={`h-5 w-5 ${isDark ? 'text-sky-300' : 'text-sky-400'}`} />
+          </div>
+          <span className="font-medium">Téléphone</span>
+          {callState === 'incoming' && <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-ping" />}
+        </button>
+      </>
     );
   }
 
@@ -1157,44 +1086,14 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
             Audio
           </button>
           <button
-            ref={atisBtnRef}
-            onClick={() => {
-              setShowAtisDirectory((v) => !v);
-              setShowAtcDirectory(false);
-            }}
-            className={`px-2 py-1 rounded-md text-[10px] ${
-              showAtisDirectory
-                ? 'bg-sky-500 text-white hover:bg-sky-400'
-                : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
-            }`}
-            title="Annuaire des numéros ATIS par aéroport"
-          >
-            ATIS
-          </button>
-          <button
-            ref={atcBtnRef}
-            onClick={() => {
-              setShowAtcDirectory((v) => !v);
-              setShowAtisDirectory(false);
-            }}
-            className={`px-2 py-1 rounded-md text-[10px] ${
-              showAtcDirectory
-                ? 'bg-emerald-500 text-white hover:bg-emerald-400'
-                : 'bg-slate-700 text-slate-200 hover:bg-slate-600'
-            }`}
-            title="Annuaire des numéros ATC complets par aéroport et position"
-          >
-            ATC
-          </button>
-          <button
             onClick={() => { void refreshAudioDevices(); }}
             className="px-2 py-1 rounded-md text-[10px] bg-slate-700 text-slate-200 hover:bg-slate-600"
           >
             Rafraîchir
           </button>
         </div>
-        {/* Annuaires ATIS et ATC : rendus via createPortal en bas du fichier
-            (popovers flottants ancres aux boutons trigger). Voir la fin du JSX. */}
+        {/* Annuaires ATIS et ATC : deplaces dans la nav ATC (AtcPhonebookButton).
+            Le telephone ecoute l'event 'atc-telephone:dial' pour pre-remplir. */}
         {showAudioPanel && (
           <div className="mt-2 space-y-2 text-[10px]">
             <div>
@@ -1306,207 +1205,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
         </div>
       </div>
     </div>
-    {/* === Popover ANNUAIRE ATIS (portal) === */}
-    {isMounted && showAtisDirectory && createPortal(
-      <div
-        ref={atisPopoverRef}
-        style={{
-          position: 'fixed',
-          top: atisPopoverPos.top,
-          left: atisPopoverPos.left,
-          width: 320,
-          zIndex: 9999,
-        }}
-        className="rounded-2xl border border-sky-500/40 bg-[#0d1120] shadow-2xl flex flex-col max-h-[min(70vh,28rem)] overflow-hidden"
-      >
-        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/60 bg-sky-500/10">
-          <div className="flex items-center gap-2">
-            <Volume2 className="h-4 w-4 text-sky-300" />
-            <span className="text-xs font-semibold text-sky-100">Annuaire ATIS</span>
-            <span className="text-[10px] text-slate-400">{Object.keys(AEROPORT_CODES).length} aéroports</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowAtisDirectory(false)}
-            aria-label="Fermer"
-            className="flex items-center justify-center h-6 w-6 rounded-md text-slate-400 hover:bg-slate-700/60 hover:text-slate-200"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div className="px-3 py-2 space-y-2 overflow-y-auto text-[11px]">
-          <p className="text-slate-500 leading-snug">
-            Format : <span className="font-mono text-slate-300">&lt;code aéroport&gt;9999</span>.
-            Cliquez pour pré-remplir.
-          </p>
-          <input
-            type="text"
-            value={atisDirectorySearch}
-            onChange={(e) => setAtisDirectorySearch(e.target.value)}
-            placeholder="Rechercher (ex: ITKO, 5566)"
-            className="w-full rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-2 py-1 placeholder-slate-500"
-          />
-          <div className="space-y-0.5">
-            {(() => {
-              const q = atisDirectorySearch.trim().toUpperCase();
-              const filtered = Object.entries(AEROPORT_CODES)
-                .filter(([icao, code]) => !q || icao.includes(q) || code.includes(q))
-                .sort(([a], [b]) => a.localeCompare(b));
-              if (filtered.length === 0) {
-                return <p className="text-slate-500 text-center py-2">Aucun résultat</p>;
-              }
-              return filtered.map(([icao, code]) => {
-                const atisNumber = `${code}9999`;
-                const disabled =
-                  callState === 'connected' ||
-                  callState === 'ringing' ||
-                  callState === 'incoming' ||
-                  callState === 'connecting' ||
-                  callState === 'atis_playing';
-                return (
-                  <button
-                    key={icao}
-                    onClick={() => {
-                      setNumber(atisNumber);
-                      setCallState('dialing');
-                      setShowAtisDirectory(false);
-                    }}
-                    disabled={disabled}
-                    className="w-full flex items-center justify-between px-2 py-1.5 rounded bg-slate-800 hover:bg-sky-500/20 hover:border-sky-500/40 border border-transparent disabled:opacity-40 disabled:hover:bg-slate-800 transition-colors text-left"
-                  >
-                    <span className="font-mono text-slate-100">{icao}</span>
-                    <span className="font-mono text-sky-300">{atisNumber}</span>
-                  </button>
-                );
-              });
-            })()}
-          </div>
-          <p className="text-slate-500 leading-snug pt-1 border-t border-slate-700/50">
-            ℹ️ Click sur un aéroport puis bouton Call pour écouter l&apos;ATIS via synthèse vocale.
-            Si aucun ATC ne diffuse l&apos;ATIS, l&apos;appel échoue.
-          </p>
-        </div>
-      </div>,
-      document.body,
-    )}
-    {/* === Popover ANNUAIRE ATC (portal) === */}
-    {isMounted && showAtcDirectory && createPortal(
-      <div
-        ref={atcPopoverRef}
-        style={{
-          position: 'fixed',
-          top: atcPopoverPos.top,
-          left: atcPopoverPos.left,
-          width: 320,
-          zIndex: 9999,
-        }}
-        className="rounded-2xl border border-emerald-500/40 bg-[#0d1120] shadow-2xl flex flex-col max-h-[min(75vh,32rem)] overflow-hidden"
-      >
-        <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/60 bg-emerald-500/10">
-          <div className="flex items-center gap-2">
-            <PhoneCall className="h-4 w-4 text-emerald-300" />
-            <span className="text-xs font-semibold text-emerald-100">Annuaire ATC</span>
-            <span className="text-[10px] text-slate-400">
-              {Object.keys(AEROPORT_CODES).length * Object.keys(POSITION_CODES).length} numéros
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowAtcDirectory(false)}
-            aria-label="Fermer"
-            className="flex items-center justify-center h-6 w-6 rounded-md text-slate-400 hover:bg-slate-700/60 hover:text-slate-200"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        <div className="px-3 py-2 space-y-2 overflow-y-auto text-[11px]">
-          <p className="text-slate-500 leading-snug">
-            Format : <span className="font-mono text-slate-300">+14&lt;aéroport&gt;&lt;position&gt;</span>.
-            Cliquez pour pré-remplir.
-          </p>
-          <div className="flex gap-1">
-            <input
-              type="text"
-              value={atcDirectorySearch}
-              onChange={(e) => setAtcDirectorySearch(e.target.value)}
-              placeholder="ICAO, position ou numéro..."
-              className="flex-1 rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-2 py-1 placeholder-slate-500"
-            />
-            <select
-              value={atcDirectoryPositionFilter}
-              onChange={(e) => setAtcDirectoryPositionFilter(e.target.value)}
-              className="rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-1 py-1 max-w-[80px]"
-            >
-              <option value="all">Toutes</option>
-              {Object.keys(POSITION_CODES).map((pos) => (
-                <option key={pos} value={pos}>{pos}</option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-0.5">
-            {(() => {
-              const q = atcDirectorySearch.trim().toUpperCase();
-              const rows: Array<{ icao: string; position: string; number: string }> = [];
-              const sortedAirports = Object.entries(AEROPORT_CODES).sort(([a], [b]) => a.localeCompare(b));
-              const positionOrder = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center', 'AFIS', 'ATIS'];
-              for (const [icao, aeroCode] of sortedAirports) {
-                for (const pos of positionOrder) {
-                  if (atcDirectoryPositionFilter !== 'all' && atcDirectoryPositionFilter !== pos) continue;
-                  const posCode = POSITION_CODES[pos];
-                  if (!posCode) continue;
-                  const fullNumber = `+14${aeroCode}${posCode}`;
-                  if (q) {
-                    const hay = `${icao} ${pos.toUpperCase()} ${fullNumber} ${aeroCode}${posCode}`;
-                    if (!hay.includes(q)) continue;
-                  }
-                  rows.push({ icao, position: pos, number: fullNumber });
-                }
-              }
-              if (rows.length === 0) {
-                return <p className="text-slate-500 text-center py-2">Aucun résultat</p>;
-              }
-              const disabled =
-                callState === 'connected' ||
-                callState === 'ringing' ||
-                callState === 'incoming' ||
-                callState === 'connecting' ||
-                callState === 'atis_playing';
-              return rows.map((r) => (
-                <button
-                  key={`${r.icao}-${r.position}`}
-                  onClick={() => {
-                    setNumber(r.number);
-                    setCallState('dialing');
-                    setShowAtcDirectory(false);
-                  }}
-                  disabled={disabled}
-                  className="w-full grid grid-cols-[1fr_auto_auto] gap-2 items-center px-2 py-1.5 rounded bg-slate-800 hover:bg-emerald-500/20 hover:border-emerald-500/40 border border-transparent disabled:opacity-40 disabled:hover:bg-slate-800 transition-colors text-left"
-                  title={`${r.icao} ${r.position}`}
-                >
-                  <span className="font-mono text-slate-100">{r.icao}</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
-                    r.position === 'ATIS' ? 'bg-sky-500/20 text-sky-300' :
-                    r.position === 'Tower' ? 'bg-amber-500/20 text-amber-300' :
-                    r.position === 'Ground' ? 'bg-emerald-500/20 text-emerald-300' :
-                    r.position === 'Center' ? 'bg-purple-500/20 text-purple-300' :
-                    'bg-slate-700 text-slate-300'
-                  }`}>{r.position}</span>
-                  <span className="font-mono text-emerald-300">{r.number}</span>
-                </button>
-              ));
-            })()}
-          </div>
-          <p className="text-slate-500 leading-snug pt-1 border-t border-slate-700/50">
-            ℹ️ Codes locaux (même aéroport) : <span className="font-mono">*15</span> Delivery,
-            <span className="font-mono"> *16</span> Clairance, <span className="font-mono">*17</span> Ground,
-            <span className="font-mono"> *18</span> Tower, <span className="font-mono">*191</span> DEP,
-            <span className="font-mono"> *192</span> APP, <span className="font-mono">*20</span> Center.
-            Urgences : <span className="font-mono">911</span> / <span className="font-mono">112</span>.
-          </p>
-        </div>
-      </div>,
-      document.body,
-    )}
     </>
   );
 }
