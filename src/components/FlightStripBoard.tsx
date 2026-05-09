@@ -379,10 +379,18 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
     const ZONE_HEADER = isDark ? ZONE_HEADER_DARK : ZONE_HEADER_LIGHT;
     const ZONE_DROP = isDark ? ZONE_DROP_DARK : ZONE_DROP_LIGHT;
 
+    // Les zones vides occupent juste la place minimale (~280px) et laissent
+    // le reste aux zones avec contenu, qui peuvent alors étaler les strips
+    // sur plusieurs colonnes via flex-wrap.
+    const isEmpty = zs.length === 0;
+    const sizingClass = isEmpty
+      ? 'flex-[0_0_280px] min-w-[280px]'
+      : 'flex-[1_1_740px] min-w-[740px]';
+
     return (
       <div
         key={zone}
-        className={`flex-1 min-w-[740px] border-2 rounded-lg flex flex-col transition-all duration-200 ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
+        className={`${sizingClass} border-2 rounded-lg flex flex-col transition-all duration-200 ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
         onDragEnter={(e) => handleZoneDragEnter(e, zone)}
         onDragLeave={(e) => handleZoneDragLeave(e, zone)}
         onDragOver={handleZoneDragOver}
@@ -395,9 +403,9 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
             {isDragOver && <span className={`text-xs font-bold rounded px-2 py-1 animate-pulse shadow-sm ${isDark ? 'bg-slate-700 text-slate-100' : 'bg-white/70'}`}>Relâcher pour poser</span>}
           </div>
         </div>
-        <div className="flex-1 p-2 space-y-1 overflow-y-auto max-h-[calc(100dvh-320px)]">
+        <div className="flex-1 p-2 flex flex-wrap gap-2 content-start overflow-y-auto max-h-[calc(100dvh-320px)]">
           {zs.length === 0 ? (
-            <div className={`text-center py-8 rounded-lg border-2 border-dashed transition-all ${isDragOver ? (isDark ? 'border-sky-400 bg-sky-950/50' : 'border-sky-400 bg-sky-50') : 'border-transparent'}`}>
+            <div className={`w-full text-center py-8 rounded-lg border-2 border-dashed transition-all ${isDragOver ? (isDark ? 'border-sky-400 bg-sky-950/50' : 'border-sky-400 bg-sky-50') : 'border-transparent'}`}>
               <p className={`text-base font-semibold italic ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 {isDragOver ? 'Relâcher ici' : 'Aucun strip'}
               </p>
@@ -436,9 +444,9 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
                 {isDragOverNull && <span className={`text-xs font-bold rounded px-2 py-1 animate-pulse shadow-sm ${isDark ? 'bg-slate-600 text-slate-100' : 'bg-white/70'}`}>Relâcher pour poser</span>}
               </div>
             </div>
-            <div className="p-2 space-y-1 max-h-60 overflow-y-auto">
+            <div className="p-2 flex flex-wrap gap-2 content-start max-h-60 overflow-y-auto">
               {unassigned.length === 0 ? (
-                <div className={`text-center py-6 rounded-lg border-2 border-dashed transition-all ${isDragOverNull ? (isDark ? 'border-sky-400 bg-sky-950/50' : 'border-sky-400 bg-sky-50') : 'border-transparent'}`}>
+                <div className={`w-full text-center py-6 rounded-lg border-2 border-dashed transition-all ${isDragOverNull ? (isDark ? 'border-sky-400 bg-sky-950/50' : 'border-sky-400 bg-sky-50') : 'border-transparent'}`}>
                   <p className={`text-base font-semibold italic ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{isDragOverNull ? 'Relâcher ici' : 'Tous assignés.'}</p>
                 </div>
               ) : unassigned.map((s) => renderStripItem(s, null))}
