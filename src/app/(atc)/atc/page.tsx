@@ -49,6 +49,8 @@ export default async function AtcPage() {
     let piloteIdentifiant: string | null = null;
     let callsignTelephonie: string | null = null;
 
+    let typeAvionId: string | null = null;
+
     if (plan.compagnie_avion_id) {
       const { data: avionData } = await admin.from('compagnie_avions')
         .select('immatriculation, type_avion_id')
@@ -56,17 +58,50 @@ export default async function AtcPage() {
         .single();
       if (avionData) {
         immatriculation = avionData.immatriculation;
-        if (avionData.type_avion_id) {
-          const { data: typeData } = await admin.from('types_avion')
-            .select('nom, code_oaci')
-            .eq('id', avionData.type_avion_id)
-            .single();
-          if (typeData) {
-            typeAvionCodeOaci = typeData.code_oaci;
-            typeAvionNom = typeData.nom;
-          }
-        }
+        typeAvionId = avionData.type_avion_id ?? null;
       }
+    }
+
+    // Fallback : avion personnel (inventaire pilote)
+    if (!typeAvionId && plan.inventaire_avion_id) {
+      const { data: invData } = await admin.from('inventaire_avions')
+        .select('immatriculation, type_avion_id')
+        .eq('id', plan.inventaire_avion_id)
+        .single();
+      if (invData) {
+        if (!immatriculation) immatriculation = invData.immatriculation ?? null;
+        typeAvionId = invData.type_avion_id ?? null;
+      }
+    }
+
+    // Fallback : avion institutionnel SIAVI (MEDEVAC, etc.)
+    if (!typeAvionId && plan.siavi_avion_id) {
+      const { data: siaviData } = await admin.from('siavi_avions')
+        .select('immatriculation, type_avion_id')
+        .eq('id', plan.siavi_avion_id)
+        .single();
+      if (siaviData) {
+        if (!immatriculation) immatriculation = siaviData.immatriculation ?? null;
+        typeAvionId = siaviData.type_avion_id ?? null;
+      }
+    }
+
+    if (typeAvionId) {
+      const { data: typeData } = await admin.from('types_avion')
+        .select('nom, code_oaci')
+        .eq('id', typeAvionId)
+        .single();
+      if (typeData) {
+        typeAvionCodeOaci = typeData.code_oaci;
+        typeAvionNom = typeData.nom;
+      }
+    }
+
+    // Dernier filet : si l'ATC a saisi manuellement strip_type_wake (ex: "B738/M"),
+    // on en extrait le code OACI pour que la cellule TYPE/W ne reste pas "?/?"
+    if (!typeAvionCodeOaci && plan.strip_type_wake) {
+      const code = String(plan.strip_type_wake).split('/')[0]?.trim();
+      if (code) typeAvionCodeOaci = code.toUpperCase();
     }
 
     if (plan.pilote_id) {
