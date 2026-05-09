@@ -33,6 +33,7 @@ export default function CreerPlanAtcForm({ sessionAeroport, sessionPosition }: P
   const [numero_vol, setNumeroVol] = useState('');
   const [porte, setPorte] = useState('');
   const [temps_prev_min, setTempsPrevMin] = useState('');
+  const [heure_depart, setHeureDepart] = useState('');
   const [type_vol, setTypeVol] = useState<'VFR' | 'IFR'>('VFR');
   const [intentions_vol, setIntentionsVol] = useState('');
   const [sid_depart, setSidDepart] = useState('');
@@ -116,6 +117,7 @@ export default function CreerPlanAtcForm({ sessionAeroport, sessionPosition }: P
           numero_vol: numero_vol.trim(),
           porte: porte.trim() || null,
           temps_prev_min: tempsMin,
+          heure_depart: heure_depart.trim() || undefined,
           type_vol,
           intentions_vol: type_vol === 'VFR' ? intentions_vol.trim() : null,
           sid_depart: type_vol === 'IFR' ? sid_depart.trim() : null,
@@ -137,6 +139,7 @@ export default function CreerPlanAtcForm({ sessionAeroport, sessionPosition }: P
       setNumeroVol('');
       setPorte('');
       setTempsPrevMin('');
+      setHeureDepart('');
       setIntentionsVol('');
       setSidDepart('');
       setStarArrivee('');
@@ -301,6 +304,26 @@ export default function CreerPlanAtcForm({ sessionAeroport, sessionPosition }: P
               className="input w-full"
               disabled={loading}
             />
+          </div>
+          <div>
+            <label className="label flex items-center gap-1">
+              <Clock className="h-4 w-4" />
+              Heure de départ (UTC)
+            </label>
+            <div className="relative">
+              <input
+                type="time"
+                value={heure_depart}
+                onChange={(e) => setHeureDepart(e.target.value)}
+                placeholder="14:30"
+                className="input w-full pr-10 font-mono tabular-nums"
+                disabled={loading}
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono uppercase tracking-widest text-slate-400">UTC</span>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+              Affichée dans la case <span className="font-mono text-sky-400/80">CTOT</span> du strip.
+            </p>
           </div>
           <div>
             <label className="label">Type de vol</label>

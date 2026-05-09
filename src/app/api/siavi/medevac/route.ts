@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { canAccessSiavi } from '@/lib/siavi/permissions';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
+import { heureDepartToIso } from '@/lib/heure-depart';
 import { randomUUID } from 'crypto';
 
 const ORDRE_DEPART = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
@@ -21,22 +22,6 @@ type SegmentInput = {
   niveau_croisiere?: string;
   strip_route?: string;
 };
-
-function heureDepartToIso(hhmm: string | undefined | null): string | null {
-  if (!hhmm) return null;
-  const m = String(hhmm).trim().match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return null;
-  const h = parseInt(m[1], 10);
-  const min = parseInt(m[2], 10);
-  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
-  const now = new Date();
-  const candidate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, min, 0, 0));
-  // Si l'heure est passée de plus de 4h, on suppose qu'il s'agit du lendemain (UTC)
-  if (candidate.getTime() < now.getTime() - 4 * 3600 * 1000) {
-    candidate.setUTCDate(candidate.getUTCDate() + 1);
-  }
-  return candidate.toISOString();
-}
 
 function validateSegment(seg: unknown, index: number): { ok: true; seg: SegmentInput } | { ok: false; error: string } {
   if (!seg || typeof seg !== 'object') return { ok: false, error: `Segment ${index + 1} invalide.` };

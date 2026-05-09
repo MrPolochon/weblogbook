@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
+import { heureDepartToIso } from '@/lib/heure-depart';
 
 export async function POST(request: Request) {
   try {
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
       numero_vol,
       porte,
       temps_prev_min,
+      heure_depart,
       type_vol,
       intentions_vol,
       niveau_croisiere,
@@ -98,6 +100,7 @@ export async function POST(request: Request) {
       numero_vol: String(numero_vol).trim(),
       porte: (porte != null && String(porte).trim() !== '') ? String(porte).trim() : null,
       temps_prev_min: t,
+      heure_depart_estimee: heureDepartToIso(typeof heure_depart === 'string' ? heure_depart : null),
       type_vol: String(type_vol),
       intentions_vol: type_vol === 'VFR' ? String(intentions_vol).trim() : null,
       sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
+import { heureDepartToIso } from '@/lib/heure-depart';
 
 const ORDRE_DEPART = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
 
@@ -37,10 +38,13 @@ export async function POST(
       route_ifr,
       niveau_croisiere,
       intentions_vol,
+      heure_depart,
       selected_sid_route,
       selected_star_route,
       manual_route_part,
     } = body || {};
+
+    const heureDepartIso = heureDepartToIso(typeof heure_depart === 'string' ? heure_depart : null);
 
     // Charger le segment à reprendre
     const { data: segment, error: segErr } = await admin.from('plans_vol')
@@ -126,6 +130,10 @@ export async function POST(
       }
     } else {
       nav.intentions_vol = String(intentions_vol).trim();
+    }
+
+    if (heureDepartIso) {
+      nav.heure_depart_estimee = heureDepartIso;
     }
 
     // Finaliser le segment précédent (en_pause → cloture)

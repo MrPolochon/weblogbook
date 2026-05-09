@@ -5,6 +5,7 @@ import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
 import { calculerUsureVol } from '@/lib/compagnie-utils';
 import { envoyerChequesVol, finaliserCloturePlan, parseStripATD } from '@/lib/plans-vol/closure';
+import { heureDepartToIso } from '@/lib/heure-depart';
 
 const STATUTS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
 // Ordre de priorité pour recevoir un plan renvoyé : uniquement l’aéroport de départ
@@ -412,7 +413,8 @@ export async function PATCH(
       if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
       if (plan.statut !== 'refuse') return NextResponse.json({ error: 'Seul un plan refuse peut etre modifie et renvoye.' }, { status: 400 });
 
-      const { aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, intentions_vol, niveau_croisiere, sid_depart, star_arrivee, vol_sans_atc } = body;
+      const { aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, heure_depart, intentions_vol, niveau_croisiere, sid_depart, star_arrivee, vol_sans_atc } = body;
+      const heureDepartIso = heureDepartToIso(typeof heure_depart === 'string' ? heure_depart : null);
       const ad = String(aeroport_depart || '').toUpperCase();
       const aa = String(aeroport_arrivee || '').toUpperCase();
       if (!CODES_OACI_VALIDES.has(ad) || !CODES_OACI_VALIDES.has(aa)) return NextResponse.json({ error: 'Aeroports invalides.' }, { status: 400 });
@@ -443,6 +445,7 @@ export async function PATCH(
             numero_vol: String(numero_vol).trim(),
             porte: (porte != null && String(porte).trim() !== '') ? String(porte).trim() : null,
             temps_prev_min: t,
+            heure_depart_estimee: heureDepartIso,
             type_vol: String(type_vol),
             intentions_vol: type_vol === 'VFR' ? String(intentions_vol).trim() : null,
             niveau_croisiere: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,
@@ -477,6 +480,7 @@ export async function PATCH(
         numero_vol: String(numero_vol).trim(),
         porte: (porte != null && String(porte).trim() !== '') ? String(porte).trim() : null,
         temps_prev_min: t,
+        heure_depart_estimee: heureDepartIso,
         type_vol: String(type_vol),
         intentions_vol: type_vol === 'VFR' ? String(intentions_vol).trim() : null,
         niveau_croisiere: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,

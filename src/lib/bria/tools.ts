@@ -141,6 +141,24 @@ export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
       });
     },
 
+    get_current_utc_time: async () => {
+      const now = new Date();
+      const hh = String(now.getUTCHours()).padStart(2, '0');
+      const mm = String(now.getUTCMinutes()).padStart(2, '0');
+      const ss = String(now.getUTCSeconds()).padStart(2, '0');
+      const yyyy = now.getUTCFullYear();
+      const mo = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(now.getUTCDate()).padStart(2, '0');
+      return JSON.stringify({
+        utc_time: `${hh}:${mm}`,
+        utc_time_with_seconds: `${hh}:${mm}:${ss}`,
+        utc_date: `${yyyy}-${mo}-${dd}`,
+        utc_iso: now.toISOString(),
+        unix_seconds: Math.floor(now.getTime() / 1000),
+        spoken: `${hh} heures ${mm} UTC`,
+      });
+    },
+
     get_ats_status: async (params: { code_oaci_depart: string }) => {
       const res = await fetch(`/api/atc-online?aeroport=${encodeURIComponent(params.code_oaci_depart.toUpperCase())}`);
       if (!res.ok) return JSON.stringify({ online: false, position: null, controllers: [] });
@@ -163,14 +181,40 @@ export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
           }
         } catch { /* ignore */ }
 
+        // Normalise l'heure de depart eventuellement fournie par l'agent BRIA :
+        // accepte "HH:MM", "HHhMM", "HHMM", "1430Z", etc. Renvoie "HH:MM" UTC ou ''.
+        const rawHeure = String(
+          p.heure_depart ?? p.heure_depart_estimee ?? p.departure_time ?? ''
+        ).trim().toUpperCase();
+        const heureMatch = rawHeure.match(/^(\d{1,2})[:H ]?(\d{2})Z?$/);
+        const heureDepart = heureMatch
+          ? `${String(Math.min(23, parseInt(heureMatch[1], 10))).padStart(2, '0')}:${String(Math.min(59, parseInt(heureMatch[2], 10))).padStart(2, '0')}`
+          : '';
+
+        // Normalise le niveau de croisiere : "FL350", "350", "FL 350", "35000FT" -> "350"
+        const rawFl = String(p.niveau_croisiere ?? p.cruise_level ?? p.altitude ?? '').trim().toUpperCase();
+        let niveauCroisiere = '';
+        const flMatch = rawFl.match(/FL\s*(\d{2,3})/);
+        if (flMatch) niveauCroisiere = flMatch[1];
+        else {
+          const ftMatch = rawFl.match(/(\d{3,5})\s*(FT|FEET)?/);
+          if (ftMatch) {
+            const n = parseInt(ftMatch[1], 10);
+            if (n >= 1000) niveauCroisiere = String(Math.round(n / 100)).padStart(3, '0');
+            else if (n >= 10 && n <= 600) niveauCroisiere = String(n).padStart(3, '0');
+          }
+        }
+
         const sanitized: Record<string, unknown> = {
           ...p,
           aeroport_depart: dep,
           aeroport_arrivee: String(p.aeroport_arrivee ?? '').toUpperCase(),
           numero_vol: String(p.numero_vol ?? 'BRIA001').toUpperCase(),
           temps_prev_min: Number(p.temps_prev_min) || 30,
+          heure_depart: heureDepart || undefined,
           type_vol: ['VFR', 'IFR'].includes(String(p.type_vol ?? '').toUpperCase())
             ? String(p.type_vol).toUpperCase() : 'VFR',
+          niveau_croisiere: niveauCroisiere || undefined,
           vol_commercial: Boolean(p.vol_commercial),
           vol_sans_atc: !atcOnline,
           nb_pax_genere: Number(p.nb_pax_genere) || 0,

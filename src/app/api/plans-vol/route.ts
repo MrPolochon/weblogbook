@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire, calculerCoefficientRemplissage, calculerCoefficientChargementCargo } from '@/lib/aeroports-ptfs';
 import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
+import { heureDepartToIso } from '@/lib/heure-depart';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol (uniquement à l’aéroport de départ)
 // Delivery → Clairance → Ground → Tower → DEP → APP → Center
@@ -48,21 +49,7 @@ export async function POST(request: Request) {
       nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote, prix_billet_utilise,
       vol_sans_atc, vol_ferry, bria_conversation
     } = body;
-    // heure_depart au format "HH:MM" (UTC) -> ISO TIMESTAMPTZ pour aujourd'hui.
-    // Si l'heure est passee de plus de 4h, on bascule sur demain (cas vol de
-    // nuit depose tard pour le jour suivant). Tolere null/format invalide.
-    const heureDepartIso: string | null = (() => {
-      if (!heure_depart || typeof heure_depart !== 'string') return null;
-      const m = heure_depart.trim().match(/^(\d{1,2}):(\d{2})$/);
-      if (!m) return null;
-      const hh = Math.min(23, Math.max(0, parseInt(m[1], 10)));
-      const mm = Math.min(59, Math.max(0, parseInt(m[2], 10)));
-      const d = new Date();
-      d.setUTCHours(hh, mm, 0, 0);
-      const diffH = (d.getTime() - Date.now()) / 3_600_000;
-      if (diffH < -4) d.setUTCDate(d.getUTCDate() + 1);
-      return d.toISOString();
-    })();
+    const heureDepartIso = heureDepartToIso(typeof heure_depart === 'string' ? heure_depart : null);
     const prixBilletUtilise = typeof prix_billet_utilise === 'number' ? prix_billet_utilise : parseInt(String(prix_billet_utilise || 0), 10) || 0;
     
     const ad = String(aeroport_depart || '').toUpperCase();

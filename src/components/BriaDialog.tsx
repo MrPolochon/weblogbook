@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { PhoneOff, Radio, Mic, MicOff } from 'lucide-react';
@@ -24,7 +24,6 @@ function BriaInner({ onClose }: BriaInnerProps) {
   const [messages, setMessages] = useState<BriaMessage[]>([]);
   const [phase, setPhase] = useState<'ringing' | 'connected' | 'ended'>('ringing');
   const messagesRef = useRef<BriaMessage[]>([]);
-  const inactivityRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const closedRef = useRef(false);
 
@@ -37,20 +36,9 @@ function BriaInner({ onClose }: BriaInnerProps) {
     [router],
   );
 
-  const resetInactivity = useCallback(() => {
-    if (inactivityRef.current) clearTimeout(inactivityRef.current);
-    inactivityRef.current = setTimeout(() => {
-      if (!closedRef.current) {
-        conv.endSession();
-      }
-    }, 5 * 60_000);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   function handleEnd() {
     if (closedRef.current) return;
     closedRef.current = true;
-    if (inactivityRef.current) clearTimeout(inactivityRef.current);
     playPhoneEnd();
     setBriaCooldown();
     setPhase('ended');
@@ -61,18 +49,13 @@ function BriaInner({ onClose }: BriaInnerProps) {
     clientTools: tools,
     onConnect: () => {
       setPhase('connected');
-      resetInactivity();
     },
     onMessage: (payload: { message: string; role: 'user' | 'agent' }) => {
       const role: 'bria' | 'pilote' = payload.role === 'agent' ? 'bria' : 'pilote';
       const entry: BriaMessage = { role, text: payload.message };
       messagesRef.current = [...messagesRef.current, entry];
       setMessages([...messagesRef.current]);
-      resetInactivity();
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-    },
-    onModeChange: () => {
-      resetInactivity();
     },
     onError: (message: string) => {
       console.error('BRIA error:', message);
@@ -104,7 +87,6 @@ function BriaInner({ onClose }: BriaInnerProps) {
     })();
     return () => {
       cancelled = true;
-      if (inactivityRef.current) clearTimeout(inactivityRef.current);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

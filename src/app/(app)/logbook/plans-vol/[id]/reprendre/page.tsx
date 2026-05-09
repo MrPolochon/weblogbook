@@ -17,7 +17,7 @@ export default async function ReprendreSegmentPage({ params }: { params: Promise
   const admin = createAdminClient();
   const { data: segment } = await admin
     .from('plans_vol')
-    .select('id, pilote_id, statut, aeroport_depart, aeroport_arrivee, numero_vol, type_vol, temps_prev_min, intentions_vol, niveau_croisiere, sid_depart, star_arrivee, route_ifr, medevac_mission_id, medevac_segment_index, medevac_total_segments, vol_sans_atc')
+    .select('id, pilote_id, statut, aeroport_depart, aeroport_arrivee, numero_vol, type_vol, temps_prev_min, intentions_vol, niveau_croisiere, sid_depart, star_arrivee, route_ifr, medevac_mission_id, medevac_segment_index, medevac_total_segments, vol_sans_atc, heure_depart_estimee')
     .eq('id', id)
     .single();
 

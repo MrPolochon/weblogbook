@@ -20,7 +20,17 @@ type Segment = {
   medevac_segment_index: number | null;
   medevac_total_segments: number | null;
   vol_sans_atc: boolean | null;
+  heure_depart_estimee?: string | null;
 };
+
+function isoToHHMM(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
 
 type ProcItem = { id: string; nom: string; route: string };
 
@@ -40,6 +50,7 @@ export default function ReprendreSegmentForm({ segment, redirectTo = '/logbook/p
   const [star_arrivee, setStarArrivee] = useState(segment.star_arrivee || '');
   const [route_ifr, setRouteIfr] = useState(segment.route_ifr || '');
   const [niveau_croisiere, setNiveauCroisiere] = useState(segment.niveau_croisiere || '');
+  const [heure_depart, setHeureDepart] = useState(isoToHHMM(segment.heure_depart_estimee));
 
   const [sidList, setSidList] = useState<ProcItem[]>([]);
   const [starList, setStarList] = useState<ProcItem[]>([]);
@@ -95,6 +106,7 @@ export default function ReprendreSegmentForm({ segment, redirectTo = '/logbook/p
       } else {
         body.intentions_vol = intentions_vol.trim();
       }
+      if (heure_depart.trim()) body.heure_depart = heure_depart.trim();
       if (forceNoAtc) body.force_sans_atc = true;
 
       const res = await fetch(`/api/plans-vol/${segment.id}/reprendre`, {
@@ -184,6 +196,25 @@ export default function ReprendreSegmentForm({ segment, redirectTo = '/logbook/p
             <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">Temps prévu</p>
             <p className="text-slate-200">{segment.temps_prev_min} min</p>
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-1">
+            Heure de départ (UTC) <span className="text-slate-500 font-normal">(optionnel)</span>
+          </label>
+          <div className="relative max-w-[180px]">
+            <input
+              type="time"
+              value={heure_depart}
+              onChange={e => setHeureDepart(e.target.value)}
+              placeholder="14:30"
+              className="w-full px-3 py-2 pr-10 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono tabular-nums"
+            />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono uppercase tracking-widest text-slate-400">UTC</span>
+          </div>
+          <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+            Affichée dans la case <span className="font-mono text-red-400/80">CTOT</span> du strip ATC.
+          </p>
         </div>
 
         {segment.type_vol === 'VFR' && (

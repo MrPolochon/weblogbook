@@ -17,7 +17,17 @@ type Plan = {
   sid_depart: string | null;
   star_arrivee: string | null;
   refusal_reason: string | null;
+  heure_depart_estimee?: string | null;
 };
+
+function isoToHHMM(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const hh = String(d.getUTCHours()).padStart(2, '0');
+  const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
 
 export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
   const router = useRouter();
@@ -27,6 +37,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
   const [numero_vol, setNumeroVol] = useState(plan.numero_vol || '');
   const [porte, setPorte] = useState(plan.porte || '');
   const [temps_prev_min, setTempsPrevMin] = useState(String(plan.temps_prev_min || ''));
+  const [heure_depart, setHeureDepart] = useState(isoToHHMM(plan.heure_depart_estimee));
   const [type_vol, setTypeVol] = useState<'VFR' | 'IFR'>(plan.type_vol || 'VFR');
   const [intentions_vol, setIntentionsVol] = useState(plan.intentions_vol || '');
   const [niveau_croisiere, setNiveauCroisiere] = useState(plan.niveau_croisiere || '');
@@ -48,6 +59,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
         numero_vol: numero_vol.trim(),
         porte: porte.trim() || undefined,
         temps_prev_min: t,
+        heure_depart: heure_depart.trim() || undefined,
         type_vol,
         intentions_vol: type_vol === 'VFR' ? intentions_vol.trim() : undefined,
         niveau_croisiere: type_vol === 'IFR' && niveau_croisiere.trim() ? niveau_croisiere.trim().replace(/^FL\s*/i, '') : undefined,
@@ -144,9 +156,27 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
           <input type="text" className="input" value={porte} onChange={(e) => setPorte(e.target.value)} placeholder="Optionnel" />
         </div>
       </div>
-      <div>
-        <label className="label">Temps de vol prévu (minutes) *</label>
-        <input type="number" className="input w-32" value={temps_prev_min} onChange={(e) => setTempsPrevMin(e.target.value)} min={1} required />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="label">Temps de vol prévu (minutes) *</label>
+          <input type="number" className="input w-32" value={temps_prev_min} onChange={(e) => setTempsPrevMin(e.target.value)} min={1} required />
+        </div>
+        <div>
+          <label className="label">Heure de départ (UTC)</label>
+          <div className="relative max-w-[160px]">
+            <input
+              type="time"
+              className="input w-full pr-10 font-mono tabular-nums"
+              value={heure_depart}
+              onChange={(e) => setHeureDepart(e.target.value)}
+              placeholder="14:30"
+            />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono uppercase tracking-widest text-slate-500">UTC</span>
+          </div>
+          <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+            Affichée dans la case <span className="font-mono text-sky-400/80">CTOT</span> du strip ATC.
+          </p>
+        </div>
       </div>
       <div>
         <span className="label block">Type de vol *</span>
