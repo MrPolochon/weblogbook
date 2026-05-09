@@ -212,6 +212,49 @@ export async function GET() {
       if (Number.isFinite(id)) stateById.set(id, r);
     }
 
+    // Auto-heal des "fantomes DB" : si le bot est joignable et indique
+    // broadcasting=false alors que la DB pense broadcasting=true, on nettoie
+    // la ligne DB pour eviter de bloquer l'utilisateur sur le message
+    // "Base marquee active mais bot inactif. Cliquez Stop pour nettoyer".
+    // Ce filet de securite couvre les cas ou le bot a perdu sa session vocale
+    // (kick Discord, salon supprime, redeploy...) sans pouvoir notifier le site.
+    const ghostInstanceIds: string[] = [];
+    for (const r of stateRows) {
+      const id = parseInt(r.id, 10);
+      if (!Number.isFinite(id)) continue;
+      const bot = botByInstance.get(id);
+      if (reachable && r.broadcasting && !bot?.broadcasting) {
+        ghostInstanceIds.push(r.id);
+      }
+    }
+    if (ghostInstanceIds.length > 0) {
+      const nowIso = new Date().toISOString();
+      await admin
+        .from('atis_broadcast_state')
+        .update({
+          controlling_user_id: null,
+          aeroport: null,
+          position: null,
+          broadcasting: false,
+          source: null,
+          started_at: null,
+          updated_at: nowIso,
+        })
+        .in('id', ghostInstanceIds);
+      // Reflete le nettoyage dans la map utilisee plus bas pour le payload.
+      for (const ghostId of ghostInstanceIds) {
+        const r = stateById.get(parseInt(ghostId, 10));
+        if (r) {
+          r.broadcasting = false;
+          r.controlling_user_id = null;
+          r.aeroport = null;
+          r.position = null;
+          r.source = null;
+          r.started_at = null;
+        }
+      }
+    }
+
     const instances: AtisInstanceOverview[] = sortedIds.map((instance_id) => {
       const dbRow = stateById.get(instance_id);
       const bot = botByInstance.get(instance_id);

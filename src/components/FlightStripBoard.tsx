@@ -382,7 +382,7 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
     return (
       <div
         key={zone}
-        className={`flex-[1_1_0%] min-w-[480px] border-2 rounded-lg flex flex-col transition-all duration-200 ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
+        className={`flex-[1_1_0%] min-w-[760px] border-2 rounded-lg flex flex-col transition-all duration-200 ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
         onDragEnter={(e) => handleZoneDragEnter(e, zone)}
         onDragLeave={(e) => handleZoneDragLeave(e, zone)}
         onDragOver={handleZoneDragOver}
