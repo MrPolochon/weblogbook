@@ -88,6 +88,10 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const [numero_vol, setNumeroVol] = useState('');
   const [porte, setPorte] = useState('');
   const [temps_prev_min, setTempsPrevMin] = useState('');
+  // Heure de depart prevue (UTC) au format HH:MM. Sera enregistree dans
+  // plans_vol.heure_depart_estimee (TIMESTAMPTZ : on prend la date du jour).
+  // Affichee dans la cellule CTOT du strip cote ATC.
+  const [heure_depart, setHeureDepart] = useState('');
   const [type_vol, setTypeVol] = useState<'VFR' | 'IFR'>('VFR');
   const [intentions_vol, setIntentionsVol] = useState('');
   const [sid_depart, setSidDepart] = useState('');
@@ -510,6 +514,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       numero_vol: numero_vol.trim(),
       porte: porte.trim() || undefined,
       temps_prev_min: t,
+      heure_depart: heure_depart.trim() || undefined,
       type_vol,
       intentions_vol: type_vol === 'VFR' ? intentions_vol.trim() : undefined,
       sid_depart: type_vol === 'IFR' ? sid_depart.trim() : undefined,
@@ -1263,7 +1268,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           </div>
         </div>
 
-        <div className="mt-3 flex items-end gap-3">
+        <div className="mt-3 flex items-end gap-3 flex-wrap">
           <div className="flex-1 max-w-[160px]">
             <label className="label">Temps de vol prévu *</label>
             <div className="relative">
@@ -1279,11 +1284,39 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono uppercase tracking-widest text-slate-500">min</span>
             </div>
           </div>
+          <div className="flex-1 max-w-[160px]">
+            <label className="label">Heure de départ (UTC)</label>
+            <div className="relative">
+              <input
+                type="time"
+                className="input w-full pr-10 font-mono tabular-nums"
+                value={heure_depart}
+                onChange={(e) => setHeureDepart(e.target.value)}
+                placeholder="14:30"
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono uppercase tracking-widest text-slate-500">UTC</span>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+              Affichée dans la case <span className="font-mono text-sky-400/80">CTOT</span> du strip ATC.
+            </p>
+          </div>
           {temps_prev_min && parseInt(temps_prev_min, 10) > 0 && (
             <div className="rounded-lg border border-slate-700/60 bg-slate-900/40 px-3 py-2 text-xs animate-fade-in">
-              <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500">ETA</div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
+                {heure_depart ? 'ETA' : 'Durée'}
+              </div>
               <div className="font-mono text-sm font-semibold text-sky-300">
-                ~{Math.floor(parseInt(temps_prev_min, 10) / 60)}h{(parseInt(temps_prev_min, 10) % 60).toString().padStart(2, '0')}
+                {(() => {
+                  const t = parseInt(temps_prev_min, 10);
+                  if (heure_depart && /^\d{2}:\d{2}$/.test(heure_depart)) {
+                    const [hh, mm] = heure_depart.split(':').map(Number);
+                    const total = hh * 60 + mm + t;
+                    const ehh = Math.floor((total / 60) % 24).toString().padStart(2, '0');
+                    const emm = (total % 60).toString().padStart(2, '0');
+                    return `${ehh}:${emm} UTC`;
+                  }
+                  return `~${Math.floor(t / 60)}h${(t % 60).toString().padStart(2, '0')}`;
+                })()}
               </div>
             </div>
           )}

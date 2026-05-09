@@ -39,14 +39,30 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { 
-      aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol, 
+    const {
+      aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol,
+      heure_depart,
       intentions_vol, niveau_croisiere, sid_depart, star_arrivee, route_ifr, strip_route, note_atc,
       vol_commercial, compagnie_id, nature_transport, inventaire_avion_id,
       compagnie_avion_id,
       nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote, prix_billet_utilise,
       vol_sans_atc, vol_ferry, bria_conversation
     } = body;
+    // heure_depart au format "HH:MM" (UTC) -> ISO TIMESTAMPTZ pour aujourd'hui.
+    // Si l'heure est passee de plus de 4h, on bascule sur demain (cas vol de
+    // nuit depose tard pour le jour suivant). Tolere null/format invalide.
+    const heureDepartIso: string | null = (() => {
+      if (!heure_depart || typeof heure_depart !== 'string') return null;
+      const m = heure_depart.trim().match(/^(\d{1,2}):(\d{2})$/);
+      if (!m) return null;
+      const hh = Math.min(23, Math.max(0, parseInt(m[1], 10)));
+      const mm = Math.min(59, Math.max(0, parseInt(m[2], 10)));
+      const d = new Date();
+      d.setUTCHours(hh, mm, 0, 0);
+      const diffH = (d.getTime() - Date.now()) / 3_600_000;
+      if (diffH < -4) d.setUTCDate(d.getUTCDate() + 1);
+      return d.toISOString();
+    })();
     const prixBilletUtilise = typeof prix_billet_utilise === 'number' ? prix_billet_utilise : parseInt(String(prix_billet_utilise || 0), 10) || 0;
     
     const ad = String(aeroport_depart || '').toUpperCase();
@@ -492,6 +508,7 @@ export async function POST(request: Request) {
         numero_vol: numeroVolFinal,
         porte: (porte != null && String(porte).trim() !== '') ? String(porte).trim() : null,
         temps_prev_min: t,
+        heure_depart_estimee: heureDepartIso,
         type_vol: String(type_vol),
         intentions_vol: type_vol === 'VFR' ? String(intentions_vol).trim() : null,
         sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,
@@ -612,6 +629,7 @@ export async function POST(request: Request) {
       numero_vol: numeroVolFinal,
       porte: (porte != null && String(porte).trim() !== '') ? String(porte).trim() : null,
       temps_prev_min: t,
+      heure_depart_estimee: heureDepartIso,
       type_vol: String(type_vol),
       intentions_vol: type_vol === 'VFR' ? String(intentions_vol).trim() : null,
       sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,

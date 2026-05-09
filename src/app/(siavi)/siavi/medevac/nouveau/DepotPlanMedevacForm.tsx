@@ -43,6 +43,7 @@ type ProcItem = { id: string; nom: string; route: string };
 type SegmentForm = {
   aeroport_arrivee: string;
   temps_prev_min: string;
+  heure_depart: string;
   type_vol: 'VFR' | 'IFR';
   intentions_vol: string;
   sid_depart: string;
@@ -60,6 +61,7 @@ function emptySegment(): SegmentForm {
   return {
     aeroport_arrivee: '',
     temps_prev_min: '',
+    heure_depart: '',
     type_vol: 'VFR',
     intentions_vol: '',
     sid_depart: '',
@@ -172,6 +174,7 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
         aeroport_depart: dep.toUpperCase(),
         aeroport_arrivee: seg.aeroport_arrivee.toUpperCase(),
         temps_prev_min: parseInt(seg.temps_prev_min, 10),
+        heure_depart: seg.heure_depart.trim() || undefined,
         type_vol: seg.type_vol,
         intentions_vol: seg.type_vol === 'VFR' ? seg.intentions_vol.trim() : undefined,
         sid_depart: seg.type_vol === 'IFR' ? seg.sid_depart.trim() : undefined,
@@ -395,12 +398,30 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Temps prévu (min)</label>
                 <input type="number" value={seg.temps_prev_min} onChange={e => updateSegment(index, { temps_prev_min: e.target.value })}
                   min="1" placeholder="30"
                   className="w-full px-3 py-2 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Heure de départ (UTC) <span className="text-slate-400 font-normal">(optionnel)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="time"
+                    value={seg.heure_depart}
+                    onChange={e => updateSegment(index, { heure_depart: e.target.value })}
+                    placeholder="14:30"
+                    className="w-full px-3 py-2 pr-10 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono tabular-nums"
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono uppercase tracking-widest text-slate-400">UTC</span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+                  Affichée dans la case <span className="font-mono text-red-600/80">CTOT</span> du strip ATC.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Type de vol</label>

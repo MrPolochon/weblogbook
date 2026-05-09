@@ -40,6 +40,9 @@ export type StripData = {
   pilote_identifiant?: string | null;
   intentions_vol?: string | null;
   niveau_croisiere?: string | null;
+  // Heure de depart prevue saisie par le pilote au depot (TIMESTAMPTZ).
+  // Utilisee pour la cellule CTOT du strip (sinon fallback created_at).
+  heure_depart_estimee?: string | null;
   instructions_atc?: string | null;
   automonitoring?: boolean;
   isManual?: boolean;
@@ -825,7 +828,7 @@ export default function FlightStrip({
               </Cell>
               <Cell className={`w-[100px] border-r ${sep}`}>
                 <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>CTOT</div>
-                <span className={`text-base font-mono font-bold ${txt}`}>{formatCtot(strip.created_at)}</span>
+                <span className={`text-base font-mono font-bold ${txt}`}>{formatCtot(strip.heure_depart_estimee || strip.created_at)}</span>
               </Cell>
               <Cell className="flex-1">
                 <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>TAIL</div>

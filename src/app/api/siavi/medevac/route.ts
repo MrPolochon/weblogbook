@@ -12,6 +12,7 @@ type SegmentInput = {
   aeroport_depart: string;
   aeroport_arrivee: string;
   temps_prev_min: number;
+  heure_depart?: string;
   type_vol: 'VFR' | 'IFR';
   intentions_vol?: string;
   sid_depart?: string;
@@ -20,6 +21,22 @@ type SegmentInput = {
   niveau_croisiere?: string;
   strip_route?: string;
 };
+
+function heureDepartToIso(hhmm: string | undefined | null): string | null {
+  if (!hhmm) return null;
+  const m = String(hhmm).trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  const now = new Date();
+  const candidate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, min, 0, 0));
+  // Si l'heure est passée de plus de 4h, on suppose qu'il s'agit du lendemain (UTC)
+  if (candidate.getTime() < now.getTime() - 4 * 3600 * 1000) {
+    candidate.setUTCDate(candidate.getUTCDate() + 1);
+  }
+  return candidate.toISOString();
+}
 
 function validateSegment(seg: unknown, index: number): { ok: true; seg: SegmentInput } | { ok: false; error: string } {
   if (!seg || typeof seg !== 'object') return { ok: false, error: `Segment ${index + 1} invalide.` };
@@ -53,6 +70,7 @@ function validateSegment(seg: unknown, index: number): { ok: true; seg: SegmentI
       aeroport_depart: ad,
       aeroport_arrivee: aa,
       temps_prev_min: Math.round(t),
+      heure_depart: s.heure_depart ? String(s.heure_depart).trim() : undefined,
       type_vol: typeVol as 'VFR' | 'IFR',
       intentions_vol: typeVol === 'VFR' ? String(s.intentions_vol || '').trim() : undefined,
       sid_depart: typeVol === 'IFR' ? String(s.sid_depart || '').trim() : undefined,
@@ -171,6 +189,7 @@ export async function POST(request: Request) {
       aeroport_arrivee: seg.aeroport_arrivee,
       numero_vol: numeroVolFinal,
       temps_prev_min: seg.temps_prev_min,
+      heure_depart_estimee: heureDepartToIso(seg.heure_depart),
       type_vol: seg.type_vol,
       intentions_vol: seg.type_vol === 'VFR' ? seg.intentions_vol || null : null,
       sid_depart: seg.type_vol === 'IFR' ? seg.sid_depart || null : null,
