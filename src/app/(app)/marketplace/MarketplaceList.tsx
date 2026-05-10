@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Plane, Users, Weight, Filter, X, Package, Shield } from 'lucide-react';
+import { Search, Plane, Users, Weight, Filter, X, Package, Shield, CheckCircle2, Sparkles } from 'lucide-react';
 import MarketplaceClient from './MarketplaceClient';
 
 interface Avion {
@@ -108,6 +108,8 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
 
   const hasActiveFilters = searchTerm || selectedCategorie || showOnlyAffordable || sortBy !== 'prix_asc';
 
+  const nbAffordable = useMemo(() => avions.filter(a => a.prix <= maxSolde).length, [avions, maxSolde]);
+
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -117,6 +119,12 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
           <span className="text-sm font-normal text-slate-500">
             ({avionsFiltres.length} / {avions.length})
           </span>
+          {nbAffordable > 0 && (
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30 inline-flex items-center gap-1">
+              <Sparkles className="h-3 w-3" />
+              {nbAffordable} accessible{nbAffordable > 1 ? 's' : ''}
+            </span>
+          )}
         </h2>
         {hasActiveFilters && (
           <button
@@ -151,17 +159,19 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
           <div className="flex flex-wrap gap-1">
             {categoriesPresentes.map(cat => {
               const config = CATEGORIES[cat] || { label: cat, color: 'bg-slate-500/20 text-slate-400' };
+              const count = avions.filter(a => a.categorie === cat).length;
               return (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategorie(selectedCategorie === cat ? null : cat)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all hover:-translate-y-0.5 ${
                     selectedCategorie === cat
-                      ? config.color + ' ring-1 ring-current'
+                      ? config.color + ' ring-1 ring-current scale-105'
                       : 'bg-slate-800/50 text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   {config.label}
+                  <span className="ml-1.5 text-[10px] opacity-70 tabular-nums">{count}</span>
                 </button>
               );
             })}
@@ -198,20 +208,35 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
       </div>
       
       {avionsFiltres.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 stagger-enter">
           {avionsFiltres.map((avion) => {
             const catConfig = CATEGORIES[avion.categorie || ''] || { label: avion.categorie, color: 'bg-slate-500/20 text-slate-400' };
+            const affordable = avion.prix <= maxSolde;
+            const ratio = maxSolde > 0 ? Math.min(1, maxSolde / avion.prix) : 0;
             return (
-              <div 
-                key={avion.id} 
-                className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-purple-500/50 transition-colors"
+              <div
+                key={avion.id}
+                className={`group relative bg-slate-800/50 rounded-xl p-4 border transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
+                  affordable
+                    ? 'border-emerald-500/30 hover:border-emerald-400/60 hover:shadow-emerald-500/10'
+                    : 'border-slate-700/50 hover:border-purple-500/50 hover:shadow-purple-500/10'
+                }`}
               >
+                {affordable && (
+                  <div className="absolute top-2 right-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30 text-[10px] font-medium">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Accessible
+                  </div>
+                )}
+
                 <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold text-slate-200">{avion.nom}</h3>
-                    <div className="flex items-center gap-2 mt-1">
+                  <div className="min-w-0 pr-16">
+                    <h3 className="font-semibold text-slate-100 truncate">{avion.nom}</h3>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
                       {avion.code_oaci && (
-                        <span className="text-xs text-slate-500 font-mono">{avion.code_oaci}</span>
+                        <span className="text-xs text-slate-500 font-mono bg-slate-900/60 px-1.5 py-0.5 rounded">
+                          {avion.code_oaci}
+                        </span>
                       )}
                       {avion.categorie && (
                         <span className={`text-xs px-1.5 py-0.5 rounded ${catConfig.color}`}>
@@ -220,38 +245,56 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
                       )}
                     </div>
                   </div>
-                  <Plane className="h-8 w-8 text-slate-600" />
+                  <Plane className="h-8 w-8 text-slate-600 group-hover:text-purple-400 group-hover:rotate-12 transition-all duration-300 absolute top-9 right-3" />
                 </div>
-                
+
                 <div className="space-y-1.5 mb-4">
                   {avion.constructeur && (
-                    <p className="text-xs text-slate-500">{avion.constructeur}</p>
+                    <p className="text-xs text-slate-500 italic">{avion.constructeur}</p>
                   )}
                   {avion.capacite_pax > 0 && (
                     <div className="flex items-center gap-2 text-sm text-slate-400">
-                      <Users className="h-4 w-4" />
+                      <Users className="h-4 w-4 text-sky-400/70" />
                       <span>{avion.capacite_pax} passagers</span>
                     </div>
                   )}
                   {avion.capacite_cargo_kg > 0 && (
                     <div className="flex items-center gap-2 text-sm text-slate-400">
-                      <Weight className="h-4 w-4" />
+                      <Weight className="h-4 w-4 text-amber-400/70" />
                       <span>{avion.capacite_cargo_kg.toLocaleString('fr-FR')} kg cargo</span>
                     </div>
                   )}
                   {avion.est_militaire && (
                     <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 rounded px-2 py-1 mt-2">
                       <Shield className="h-3 w-3" />
-                      <span>Utilisable dans l&apos;espace militaire ou vols personnels</span>
+                      <span>Espace militaire ou vols personnels</span>
                     </div>
                   )}
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <p className={`text-xl font-bold ${avion.prix <= maxSolde ? 'text-purple-300' : 'text-slate-500'}`}>
-                    {avion.prix.toLocaleString('fr-FR')} F$
-                  </p>
-                  <MarketplaceClient 
+                {/* Barre d'accessibilité au prix */}
+                {!affordable && maxSolde > 0 && (
+                  <div className="mb-3">
+                    <div className="h-1 rounded-full bg-slate-900/60 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-amber-400 to-amber-200 transition-all duration-500"
+                        style={{ width: `${Math.max(2, ratio * 100)}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-amber-300/70 mt-1 tabular-nums">
+                      {Math.round(ratio * 100)}% du prix couvert · manque {(avion.prix - maxSolde).toLocaleString('fr-FR')} F$
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className={`text-xl font-bold tabular-nums ${affordable ? 'text-emerald-300' : 'text-slate-400'}`}>
+                      {avion.prix.toLocaleString('fr-FR')}
+                    </p>
+                    <p className="text-[10px] text-slate-500 -mt-0.5">F$</p>
+                  </div>
+                  <MarketplaceClient
                     avionId={avion.id}
                     avionNom={avion.nom}
                     prix={avion.prix}
@@ -266,13 +309,17 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
           })}
         </div>
       ) : (
-        <div className="text-center py-8">
-          <Search className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-          <p className="text-slate-400">Aucun avion ne correspond à votre recherche.</p>
+        <div className="text-center py-12 animate-fade-in">
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-slate-800/60 ring-1 ring-slate-700/60 mb-4">
+            <Search className="h-8 w-8 text-slate-500" />
+          </div>
+          <p className="text-slate-300 font-medium">Aucun avion ne correspond à votre recherche.</p>
+          <p className="text-sm text-slate-500 mt-1">Essayez un autre filtre ou réinitialisez la sélection.</p>
           <button
             onClick={clearFilters}
-            className="mt-3 text-sm text-purple-400 hover:text-purple-300"
+            className="mt-4 inline-flex items-center gap-1.5 text-sm text-purple-300 hover:text-purple-200 px-4 py-2 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 transition-colors ring-1 ring-purple-500/30"
           >
+            <X className="h-4 w-4" />
             Réinitialiser les filtres
           </button>
         </div>

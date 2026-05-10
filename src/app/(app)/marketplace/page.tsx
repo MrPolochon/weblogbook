@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { Package } from 'lucide-react';
+import { Package, User, Building2, Shield, Plane, Tag } from 'lucide-react';
 import MarketplaceList from './MarketplaceList';
 import HubsMapSection from './HubsMapSection';
 
@@ -57,46 +57,94 @@ export default async function MarketplacePage() {
     .gt('prix', 0)
     .order('prix', { ascending: true });
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Package className="h-8 w-8 text-purple-400" />
-        <h1 className="text-2xl font-bold text-slate-100">Marketplace</h1>
-      </div>
+  const soldePerso = Number(comptePerso?.solde ?? 0);
+  const totalAvions = avions?.length ?? 0;
+  const prixMin = avions && avions.length > 0 ? Math.min(...avions.map(a => a.prix)) : 0;
+  const prixMax = avions && avions.length > 0 ? Math.max(...avions.map(a => a.prix)) : 0;
 
-      {/* Soldes */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="card bg-emerald-500/10 border-emerald-500/30">
-          <p className="text-sm text-emerald-400">Mon solde personnel</p>
-          <p className="text-2xl font-bold text-emerald-300">
-            {Number(comptePerso?.solde ?? 0).toLocaleString('fr-FR')} F$
-          </p>
+  return (
+    <div className="space-y-6 animate-fade-in stagger-enter">
+      {/* === HERO HEADER === */}
+      <header className="card overflow-hidden p-0 border-purple-700/40 transition-shadow hover:shadow-xl hover:shadow-purple-500/10">
+        <div className="bg-gradient-to-br from-purple-500/15 via-slate-800/10 to-fuchsia-500/10 p-5 sm:p-6">
+          <div className="flex items-start justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="h-14 w-14 rounded-xl bg-purple-500/20 ring-2 ring-purple-500/40 flex items-center justify-center shrink-0">
+                <Package className="h-7 w-7 text-purple-300 animate-pulse-soft" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-100">Marketplace</h1>
+                <p className="text-slate-400 text-sm mt-0.5">
+                  Achetez des avions pour votre flotte personnelle, votre compagnie ou l&apos;armée.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col items-end text-right">
+              <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                <Plane className="h-3.5 w-3.5" /> Catalogue
+              </p>
+              <p className="text-2xl font-bold text-purple-300 tabular-nums">{totalAvions}</p>
+              <p className="text-[10px] text-slate-500">avion{totalAvions > 1 ? 's' : ''} disponible{totalAvions > 1 ? 's' : ''}</p>
+            </div>
+          </div>
         </div>
-        {compagniesWithSolde.map((c) => (
-          <div key={c.id} className="card bg-sky-500/10 border-sky-500/30">
-            <p className="text-sm text-sky-400">{c.nom}</p>
-            <p className="text-2xl font-bold text-sky-300">
-              {c.solde.toLocaleString('fr-FR')} F$
+
+        {/* Strip des soldes */}
+        <div className="grid border-t border-slate-700/40 divide-x divide-slate-700/40 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <User className="h-3.5 w-3.5" /> Personnel
+            </p>
+            <p className={`mt-1 text-xl font-bold tabular-nums ${soldePerso > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {soldePerso.toLocaleString('fr-FR')} <span className="text-sm font-medium">F$</span>
+            </p>
+            <p className="text-[10px] text-slate-500">
+              {prixMin > 0 && soldePerso < prixMin ? 'insuffisant pour le moins cher' : 'mon compte'}
             </p>
           </div>
-        ))}
-        {armeeCompte && (
-          <div className="card bg-red-500/10 border-red-500/30">
-            <p className="text-sm text-red-400">Compte Armée</p>
-            <p className="text-2xl font-bold text-red-300">
-              {armeeCompte.solde.toLocaleString('fr-FR')} F$
-            </p>
+          {compagniesWithSolde.map((c) => (
+            <div key={c.id} className="p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5 truncate">
+                <Building2 className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{c.nom}</span>
+              </p>
+              <p className={`mt-1 text-xl font-bold tabular-nums ${c.solde > 0 ? 'text-sky-300' : 'text-red-400'}`}>
+                {c.solde.toLocaleString('fr-FR')} <span className="text-sm font-medium">F$</span>
+              </p>
+              <p className="text-[10px] text-slate-500">entreprise</p>
+            </div>
+          ))}
+          {armeeCompte && (
+            <div className="p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                <Shield className="h-3.5 w-3.5" /> Armée
+              </p>
+              <p className="mt-1 text-xl font-bold tabular-nums text-red-300">
+                {armeeCompte.solde.toLocaleString('fr-FR')} <span className="text-sm font-medium">F$</span>
+              </p>
+              <p className="text-[10px] text-slate-500">militaire</p>
+            </div>
+          )}
+        </div>
+
+        {/* Plage de prix */}
+        {totalAvions > 0 && (
+          <div className="px-4 sm:px-6 py-2.5 border-t border-slate-700/40 bg-slate-900/40 text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+            <Tag className="h-3.5 w-3.5 text-slate-600" />
+            <span>De <span className="text-emerald-300 font-semibold tabular-nums">{prixMin.toLocaleString('fr-FR')} F$</span></span>
+            <span className="text-slate-600">→</span>
+            <span><span className="text-purple-300 font-semibold tabular-nums">{prixMax.toLocaleString('fr-FR')} F$</span></span>
           </div>
         )}
-      </div>
+      </header>
 
       {/* Carte des hubs par aéroport */}
       <HubsMapSection />
 
       {/* Liste des avions avec recherche */}
-      <MarketplaceList 
-        avions={avions || []} 
-        soldePerso={Number(comptePerso?.solde ?? 0)} 
+      <MarketplaceList
+        avions={avions || []}
+        soldePerso={soldePerso}
         compagnies={compagniesWithSolde}
         armeeCompte={armeeCompte}
       />
