@@ -71,10 +71,10 @@ export default async function MessageriePage() {
     if (ident) identByUser.set(m.destinataire_id, ident);
   }
   const photoByIdentifiant: Record<string, string | null> = {};
-  for (const [uid, url] of photosByUser) {
+  photosByUser.forEach((url, uid) => {
     const ident = identByUser.get(uid);
     if (ident) photoByIdentifiant[ident] = url;
-  }
+  });
 
   return (
     <div className="space-y-4">

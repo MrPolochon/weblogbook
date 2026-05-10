@@ -59,10 +59,10 @@ export async function getUserPhotosByIdentifiant(
     }
     if (ids.length === 0) return out;
     const byUser = await getUserPhotosMap(admin, ids);
-    for (const [uid, url] of byUser) {
+    byUser.forEach((url, uid) => {
       const ident = idToIdent.get(uid);
       if (ident) out.set(ident, url);
-    }
+    });
   } catch (e) {
     console.error('getUserPhotosByIdentifiant:', e);
   }
