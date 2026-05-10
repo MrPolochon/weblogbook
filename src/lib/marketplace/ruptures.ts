@@ -41,7 +41,7 @@ export async function refreshMarketplaceRuptures(admin: SupabaseClient): Promise
     if (error || !avions) return;
 
     const now = Date.now();
-    const updates: Array<Promise<unknown>> = [];
+    const updates: Array<PromiseLike<unknown>> = [];
 
     for (const a of avions as AvionRow[]) {
       const finAt = a.rupture_fin_at ? new Date(a.rupture_fin_at).getTime() : 0;
