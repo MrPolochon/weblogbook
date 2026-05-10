@@ -8,6 +8,7 @@ import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
 import { Building2, Plane, Users, Weight, Shield, Radio, Phone, MapPin, Send, Navigation, Sparkles, Gauge, FileText, Route, Briefcase, CheckCircle2, Circle, ClipboardCheck } from 'lucide-react';
 import BriaDialog, { getBriaCooldownRemaining } from '@/components/BriaDialog';
+import NotamsAirportWarning from '@/components/NotamsAirportWarning';
 import { unlockAudioForIOS } from '@/lib/phone-sounds';
 import { toast } from 'sonner';
 
@@ -1223,6 +1224,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
             </select>
           </div>
         </div>
+
+        <NotamsAirportWarning aeroportDepart={aeroport_depart} aeroportArrivee={aeroport_arrivee} />
       </section>
 
       {/* ===== Section : Détails du vol ===== */}
