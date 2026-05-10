@@ -248,9 +248,9 @@ BEGIN
   UPDATE public.felitz_comptes SET solde = solde + 15000 WHERE id = v_compte_id;
   
   -- Enregistrer la transaction
-  INSERT INTO public.felitz_transactions (compte_id, type, montant, libelle, description)
-  VALUES (v_compte_id, 'credit', 15000, 'Intervention urgence SIAVI', 
-          'Prime d''intervention urgence 911/112 - ' || p_aeroport);
+  INSERT INTO public.felitz_transactions (compte_id, type, montant, libelle)
+  VALUES (v_compte_id, 'credit', 15000,
+          'Intervention urgence SIAVI - Prime 911/112 - ' || p_aeroport);
   
   -- Envoyer un message/chèque
   INSERT INTO public.messages (
@@ -298,9 +298,9 @@ BEGIN
   UPDATE public.felitz_comptes SET solde = solde + p_montant WHERE id = v_compte_id;
   
   -- Enregistrer la transaction
-  INSERT INTO public.felitz_transactions (compte_id, type, montant, libelle, description)
-  VALUES (v_compte_id, 'credit', p_montant, 'Taxes aéroportuaires AFIS', 
-          'Taxes vol ' || COALESCE(v_numero_vol, 'N/A') || ' - ' || p_aeroport);
+  INSERT INTO public.felitz_transactions (compte_id, type, montant, libelle)
+  VALUES (v_compte_id, 'credit', p_montant,
+          'Taxes AFIS - Vol ' || COALESCE(v_numero_vol, 'N/A') || ' - ' || p_aeroport);
   
   -- Envoyer un message/chèque
   INSERT INTO public.messages (

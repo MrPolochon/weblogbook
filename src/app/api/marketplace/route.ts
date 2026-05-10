@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { rateLimit } from '@/lib/rate-limit';
 import { isChefDeBrigade, getSiaviCompte } from '@/lib/siavi/permissions';
+import { refreshMarketplaceRuptures, isTypeAvionEnRupture } from '@/lib/marketplace/ruptures';
 
 // GET - Liste des avions disponibles à l'achat
 export async function GET() {
@@ -12,6 +13,7 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const admin = createAdminClient();
+    await refreshMarketplaceRuptures(admin);
     const { data, error } = await admin.from('types_avion')
       .select('*')
       .gt('prix', 0)
@@ -57,6 +59,16 @@ export async function POST(req: NextRequest) {
 
     if (!avion || avion.prix <= 0) {
       return NextResponse.json({ error: 'Avion non disponible à la vente' }, { status: 400 });
+    }
+
+    // Verrou rupture de stock : empeche tout achat tant que la rupture en cours
+    // n'est pas expiree (verifie sur la base, pas sur le payload client).
+    const rupture = await isTypeAvionEnRupture(admin, type_avion_id);
+    if (rupture.enRupture && rupture.finAt) {
+      const fin = new Date(rupture.finAt);
+      return NextResponse.json({
+        error: `Rupture de stock : ${avion.nom} indisponible jusqu'au ${fin.toLocaleString('fr-FR')}.`,
+      }, { status: 409 });
     }
 
     let compteId: string;

@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { Package, User, Building2, Shield, Plane, Tag } from 'lucide-react';
 import MarketplaceList from './MarketplaceList';
 import HubsMapSection from './HubsMapSection';
+import { refreshMarketplaceRuptures } from '@/lib/marketplace/ruptures';
 
 export default async function MarketplacePage() {
   const supabase = await createClient();
@@ -11,6 +12,9 @@ export default async function MarketplacePage() {
   if (!user) redirect('/login');
 
   const admin = createAdminClient();
+
+  // Rafraichit les ruptures de stock aleatoires (lazy refresh).
+  await refreshMarketplaceRuptures(admin);
 
   // Profil et solde
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();

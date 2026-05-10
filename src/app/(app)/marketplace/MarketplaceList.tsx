@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, Plane, Users, Weight, Filter, X, Package, Shield, CheckCircle2, Sparkles } from 'lucide-react';
+import { Search, Plane, Users, Weight, Filter, X, Package, Shield, CheckCircle2, Sparkles, Ban, Clock } from 'lucide-react';
 import MarketplaceClient from './MarketplaceClient';
 
 interface Avion {
@@ -15,6 +15,24 @@ interface Avion {
   capacite_cargo_kg: number;
   est_militaire: boolean;
   est_cargo: boolean;
+  rupture_fin_at?: string | null;
+}
+
+function formatRuptureCountdown(finAt: string): string {
+  const ms = new Date(finAt).getTime() - Date.now();
+  if (ms <= 0) return '';
+  const h = Math.floor(ms / (60 * 60 * 1000));
+  if (h >= 24) {
+    const j = Math.floor(h / 24);
+    const reste = h % 24;
+    return reste > 0 ? `${j}j ${reste}h` : `${j}j`;
+  }
+  if (h >= 1) {
+    const m = Math.floor((ms % (60 * 60 * 1000)) / (60 * 1000));
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  }
+  const m = Math.floor(ms / (60 * 1000));
+  return `${m}m`;
 }
 
 interface Compagnie {
@@ -109,6 +127,10 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
   const hasActiveFilters = searchTerm || selectedCategorie || showOnlyAffordable || sortBy !== 'prix_asc';
 
   const nbAffordable = useMemo(() => avions.filter(a => a.prix <= maxSolde).length, [avions, maxSolde]);
+  const nbEnRupture = useMemo(() => {
+    const now = Date.now();
+    return avions.filter(a => a.rupture_fin_at && new Date(a.rupture_fin_at).getTime() > now).length;
+  }, [avions]);
 
   return (
     <div className="card">
@@ -123,6 +145,12 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30 inline-flex items-center gap-1">
               <Sparkles className="h-3 w-3" />
               {nbAffordable} accessible{nbAffordable > 1 ? 's' : ''}
+            </span>
+          )}
+          {nbEnRupture > 0 && (
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30 inline-flex items-center gap-1">
+              <Ban className="h-3 w-3" />
+              {nbEnRupture} en rupture
             </span>
           )}
         </h2>
@@ -213,16 +241,24 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
             const catConfig = CATEGORIES[avion.categorie || ''] || { label: avion.categorie, color: 'bg-slate-500/20 text-slate-400' };
             const affordable = avion.prix <= maxSolde;
             const ratio = maxSolde > 0 ? Math.min(1, maxSolde / avion.prix) : 0;
+            const enRupture = !!avion.rupture_fin_at && new Date(avion.rupture_fin_at).getTime() > Date.now();
             return (
               <div
                 key={avion.id}
                 className={`group relative bg-slate-800/50 rounded-xl p-4 border transition-all duration-200 hover:-translate-y-1 hover:shadow-lg ${
-                  affordable
-                    ? 'border-emerald-500/30 hover:border-emerald-400/60 hover:shadow-emerald-500/10'
-                    : 'border-slate-700/50 hover:border-purple-500/50 hover:shadow-purple-500/10'
+                  enRupture
+                    ? 'border-rose-500/40 hover:border-rose-400/60 hover:shadow-rose-500/10 opacity-80 grayscale-[20%]'
+                    : affordable
+                      ? 'border-emerald-500/30 hover:border-emerald-400/60 hover:shadow-emerald-500/10'
+                      : 'border-slate-700/50 hover:border-purple-500/50 hover:shadow-purple-500/10'
                 }`}
               >
-                {affordable && (
+                {enRupture ? (
+                  <div className="absolute top-2 right-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-200 ring-1 ring-rose-500/40 text-[10px] font-medium animate-pulse-soft">
+                    <Ban className="h-3 w-3" />
+                    Rupture
+                  </div>
+                ) : affordable && (
                   <div className="absolute top-2 right-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30 text-[10px] font-medium">
                     <CheckCircle2 className="h-3 w-3" />
                     Accessible
@@ -272,8 +308,24 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
                   )}
                 </div>
 
+                {/* Bandeau rupture de stock */}
+                {enRupture && avion.rupture_fin_at && (
+                  <div className="mb-3 rounded-lg bg-rose-500/10 border border-rose-500/30 p-2.5 flex items-start gap-2">
+                    <Clock className="h-4 w-4 text-rose-300 shrink-0 mt-0.5 animate-pulse-soft" />
+                    <div className="min-w-0 text-xs">
+                      <p className="text-rose-200 font-semibold">Indisponible</p>
+                      <p className="text-rose-200/70">
+                        Retour estimé dans <span className="font-semibold text-rose-100 tabular-nums">{formatRuptureCountdown(avion.rupture_fin_at)}</span>
+                      </p>
+                      <p className="text-rose-200/40 text-[10px] mt-0.5">
+                        ({new Date(avion.rupture_fin_at).toLocaleString('fr-FR')})
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Barre d'accessibilité au prix */}
-                {!affordable && maxSolde > 0 && (
+                {!enRupture && !affordable && maxSolde > 0 && (
                   <div className="mb-3">
                     <div className="h-1 rounded-full bg-slate-900/60 overflow-hidden">
                       <div
@@ -289,20 +341,32 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
 
                 <div className="flex items-center justify-between gap-2">
                   <div>
-                    <p className={`text-xl font-bold tabular-nums ${affordable ? 'text-emerald-300' : 'text-slate-400'}`}>
+                    <p className={`text-xl font-bold tabular-nums ${enRupture ? 'text-rose-300/70 line-through' : affordable ? 'text-emerald-300' : 'text-slate-400'}`}>
                       {avion.prix.toLocaleString('fr-FR')}
                     </p>
                     <p className="text-[10px] text-slate-500 -mt-0.5">F$</p>
                   </div>
-                  <MarketplaceClient
-                    avionId={avion.id}
-                    avionNom={avion.nom}
-                    prix={avion.prix}
-                    estMilitaire={avion.est_militaire}
-                    soldePerso={soldePerso}
-                    compagnies={compagnies}
-                    armeeCompte={armeeCompte}
-                  />
+                  {enRupture ? (
+                    <button
+                      type="button"
+                      disabled
+                      title="Cet avion est en rupture de stock"
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-rose-500/10 text-rose-300/70 ring-1 ring-rose-500/30 cursor-not-allowed inline-flex items-center gap-1.5"
+                    >
+                      <Ban className="h-3.5 w-3.5" />
+                      Indisponible
+                    </button>
+                  ) : (
+                    <MarketplaceClient
+                      avionId={avion.id}
+                      avionNom={avion.nom}
+                      prix={avion.prix}
+                      estMilitaire={avion.est_militaire}
+                      soldePerso={soldePerso}
+                      compagnies={compagnies}
+                      armeeCompte={armeeCompte}
+                    />
+                  )}
                 </div>
               </div>
             );
