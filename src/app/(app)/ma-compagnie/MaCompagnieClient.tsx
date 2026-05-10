@@ -346,71 +346,189 @@ export default function MaCompagnieClient({
     }
   }
 
+  // Sections de la barre d'ancrage. On les filtre dynamiquement selon le role
+  // (un employe simple n'a pas acces aux sections finances PDG, etc.).
+  const navSections: { id: string; label: string; icon: typeof Users; show: boolean }[] = [
+    { id: 'equipe',     label: 'Equipe',     icon: Users,         show: true },
+    { id: 'finances',   label: 'Finances',   icon: DollarSign,    show: isLeader },
+    { id: 'flotte',     label: 'Flotte',     icon: Plane,         show: true },
+    { id: 'operations', label: 'Operations', icon: Route,         show: true },
+  ];
+
+  const totalPilotes = employes.length;
+  const totalHeuresMin = employes.reduce((s, e) => s + (e.heures || 0), 0);
+  const totalHeuresAffichees = formatHeures(totalHeuresMin);
+
   return (
     <div className="space-y-6 animate-fade-in stagger-enter">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <Building2 className="h-8 w-8 text-sky-400 animate-pulse-soft" />
-          {compagniesDisponibles.length > 1 ? (
-            <select
-              value={selectedCompagnieId}
-              onChange={handleCompagnieChange}
-              className="text-2xl font-bold text-slate-100 bg-transparent border-none cursor-pointer hover:text-sky-300 transition-colors appearance-none pr-8"
-              style={{ backgroundImage: 'none' }}
-            >
-              {compagniesDisponibles.map(c => (
-                <option key={c.id} value={c.id} className="bg-slate-800 text-slate-100">
-                  {c.nom} {c.role === 'pdg' ? '(PDG)' : ''}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <h1 className="text-2xl font-bold text-slate-100">{compagnie.nom}</h1>
-          )}
-          {compagniesDisponibles.length > 1 && (
-            <ChevronDown className="h-5 w-5 text-slate-400 -ml-6 pointer-events-none" />
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {isLeader && (
-            <>
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  showSettings 
-                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50' 
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-              >
-                <Settings className="h-4 w-4" />
-                Paramètres
-              </button>
-              {compagnie.alliance_id && (
+      {/* === HERO HEADER === */}
+      <header className="card overflow-hidden p-0 border-slate-700/60 transition-shadow hover:shadow-xl hover:shadow-slate-950/40">
+        <div className="bg-gradient-to-br from-sky-500/10 via-slate-800/10 to-emerald-500/10 p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="relative shrink-0">
+                {logoUrl ? (
+                  <Image
+                    src={logoUrl}
+                    alt={`Logo ${compagnie.nom}`}
+                    width={64}
+                    height={64}
+                    className="h-16 w-16 rounded-xl border border-slate-600 object-contain bg-white p-1 ring-2 ring-sky-500/20"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded-xl bg-slate-800/80 ring-2 ring-sky-500/20 flex items-center justify-center">
+                    <Building2 className="h-8 w-8 text-sky-400 animate-pulse-soft" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {compagniesDisponibles.length > 1 ? (
+                    <div className="relative inline-flex items-center">
+                      <select
+                        value={selectedCompagnieId}
+                        onChange={handleCompagnieChange}
+                        className="text-2xl sm:text-3xl font-bold text-slate-100 bg-transparent border-none cursor-pointer hover:text-sky-300 transition-colors appearance-none pr-7"
+                        style={{ backgroundImage: 'none' }}
+                      >
+                        {compagniesDisponibles.map(c => (
+                          <option key={c.id} value={c.id} className="bg-slate-800 text-slate-100">
+                            {c.nom} {c.role === 'pdg' ? '(PDG)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="h-5 w-5 text-slate-400 -ml-6 pointer-events-none" />
+                    </div>
+                  ) : (
+                    <h1 className="text-2xl sm:text-3xl font-bold text-slate-100 truncate">{compagnie.nom}</h1>
+                  )}
+                  {isLeader && (
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 transition-all hover:scale-105 ${isPdg ? 'bg-amber-500/20 text-amber-300 ring-amber-400/30' : 'bg-sky-500/20 text-sky-300 ring-sky-400/30'}`}>
+                      <Crown className={`h-3.5 w-3.5 ${isPdg ? 'animate-pulse-soft' : ''}`} />
+                      {isPdg ? 'PDG' : 'Co-PDG'}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 flex items-center gap-2 flex-wrap text-sm text-slate-400">
+                  {compagnie.code_oaci && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 text-xs font-mono ring-1 ring-sky-400/30">
+                      {compagnie.code_oaci}
+                    </span>
+                  )}
+                  {compagnie.callsign_telephonie && (
+                    <span className="inline-flex items-center gap-1 text-slate-300">
+                      <Radio className="h-3.5 w-3.5 text-sky-400" />
+                      {compagnie.callsign_telephonie}
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1">
+                    <Crown className="h-3.5 w-3.5 text-amber-400" />
+                    {compagnie.pdg_identifiant}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {isLeader && (
                 <>
-                  <Link href="/alliance" className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-700 text-slate-300 hover:bg-slate-600">
-                    <Users className="h-4 w-4" />
-                    Alliance
-                  </Link>
-                  {isPdg && (
-                    <button
-                      onClick={handleQuitterAlliance}
-                      disabled={quittingAlliance}
-                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-900/30 text-red-300 hover:bg-red-900/50 disabled:opacity-50"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      {quittingAlliance ? 'En cours…' : 'Quitter l\'alliance'}
-                    </button>
+                  <button
+                    onClick={() => setShowSettings(!showSettings)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                      showSettings
+                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-md shadow-sky-500/10'
+                        : 'bg-slate-700/70 text-slate-300 hover:bg-slate-600 hover:scale-[1.02]'
+                    }`}
+                  >
+                    <Settings className={`h-4 w-4 transition-transform ${showSettings ? 'rotate-90' : ''}`} />
+                    Paramètres
+                  </button>
+                  {compagnie.alliance_id && (
+                    <>
+                      <Link href="/alliance" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-700/70 text-slate-300 hover:bg-slate-600 transition-all hover:scale-[1.02]">
+                        <Users className="h-4 w-4" />
+                        Alliance
+                      </Link>
+                      {isPdg && (
+                        <button
+                          onClick={handleQuitterAlliance}
+                          disabled={quittingAlliance}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-900/30 text-red-300 hover:bg-red-900/50 disabled:opacity-50 transition-all"
+                        >
+                          <LogOut className="h-4 w-4" />
+                          {quittingAlliance ? 'En cours…' : "Quitter l'alliance"}
+                        </button>
+                      )}
+                    </>
                   )}
                 </>
               )}
-              <span className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ring-1 transition-all hover:scale-105 ${isPdg ? 'bg-amber-500/20 text-amber-300 ring-amber-400/30' : 'bg-sky-500/20 text-sky-300 ring-sky-400/30'}`}>
-                <Crown className={`h-4 w-4 ${isPdg ? 'animate-pulse-soft' : ''}`} />
-                {isPdg ? 'PDG' : 'Co-PDG'}
-              </span>
-            </>
-          )}
+            </div>
+          </div>
         </div>
-      </div>
+
+        {/* Hero stats KPI */}
+        {isLeader && (
+          <div className="grid grid-cols-2 md:grid-cols-4 border-t border-slate-700/40 divide-x divide-slate-700/40">
+            <Link href="/felitz-bank" className="group p-4 transition-colors hover:bg-emerald-500/5">
+              <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                <DollarSign className="h-3.5 w-3.5" /> Solde
+              </p>
+              <p className={`mt-1 text-xl font-bold tabular-nums ${soldeCompagnie > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {soldeCompagnie.toLocaleString('fr-FR')} <span className="text-sm font-medium">F$</span>
+              </p>
+              <p className="text-[10px] text-slate-500 group-hover:text-emerald-300 transition-colors">Voir les transactions →</p>
+            </Link>
+            <div className="p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" /> Equipe
+              </p>
+              <p className="mt-1 text-xl font-bold text-sky-300 tabular-nums">{totalPilotes}</p>
+              <p className="text-[10px] text-slate-500">{totalHeuresAffichees} cumulees</p>
+            </div>
+            <div className="p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                <DollarSign className="h-3.5 w-3.5" /> Salaire pilotes
+              </p>
+              <p className="mt-1 text-xl font-bold text-amber-300 tabular-nums">{compagnie.pourcentage_salaire}%</p>
+              <p className="text-[10px] text-slate-500">du revenu vol</p>
+            </div>
+            <div className="p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                <Plane className="h-3.5 w-3.5" /> Tarifs
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-200 tabular-nums">
+                <span className="text-sky-300">{compagnie.prix_billet_pax}</span>
+                <span className="text-slate-500 text-xs"> F$/pax · </span>
+                <span className="text-amber-300">{compagnie.prix_kg_cargo}</span>
+                <span className="text-slate-500 text-xs"> F$/kg</span>
+              </p>
+              <p className="text-[10px] text-slate-500">par defaut</p>
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* === BARRE DE NAVIGATION ANCRES === */}
+      <nav className="sticky top-0 z-20 -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 py-2 bg-slate-950/80 backdrop-blur-md border-y border-slate-800/60">
+        <div className="flex gap-2 overflow-x-auto scrollbar-thin">
+          {navSections.filter(s => s.show).map((s) => {
+            const Icon = s.icon;
+            return (
+              <a
+                key={s.id}
+                href={`#${s.id}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-slate-800/60 text-slate-300 ring-1 ring-slate-700 hover:bg-sky-500/15 hover:text-sky-300 hover:ring-sky-500/40 transition-all"
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {s.label}
+              </a>
+            );
+          })}
+        </div>
+      </nav>
 
       {/* Paramètres PDG / Co-PDG */}
       {isLeader && showSettings && (
@@ -573,6 +691,8 @@ export default function MaCompagnieClient({
         </div>
       )}
 
+      {/* === SECTION : EQUIPE === */}
+      <section id="equipe" className="space-y-6 scroll-mt-20">
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Infos compagnie */}
         <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-sky-500/5">
@@ -762,7 +882,7 @@ export default function MaCompagnieClient({
         </div>
       )}
 
-      {/* Section Recrutement */}
+      {/* Section Recrutement (toujours dans la section Equipe) */}
       {isLeader && showRecrutement && (
         <div className="card border-emerald-500/30 bg-emerald-500/5 animate-slide-up">
           <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
@@ -909,76 +1029,54 @@ export default function MaCompagnieClient({
         </div>
       )}
 
-      {/* Solde compagnie */}
+      </section>
+      {/* === FIN SECTION EQUIPE === */}
+
+      {/* === SECTION : FINANCES === */}
       {isLeader && (
-        <div className="card bg-gradient-to-r from-emerald-500/10 to-sky-500/10 border-emerald-500/20 transition-all duration-200 hover:border-emerald-400/40 hover:shadow-lg hover:shadow-emerald-500/10">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-400">Solde de la compagnie</p>
-              <p className={`text-2xl font-bold ${soldeCompagnie > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {soldeCompagnie.toLocaleString('fr-FR')} F$
-              </p>
+        <section id="finances" className="space-y-6 scroll-mt-20">
+          <CompagniePretClient compagnieId={compagnie.id} />
+
+          <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-amber-500/5">
+            <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+              <Route className="h-5 w-5 text-amber-400" />
+              Tarifs par liaison
+            </h2>
+            <TarifsLiaisonsClient
+              compagnieId={compagnie.id}
+              prixBilletDefaut={compagnie.prix_billet_pax}
+            />
+          </div>
+
+          <Link
+            href="/felitz-bank"
+            className="card group flex items-center gap-4 transition-all duration-200 hover:bg-slate-800/70 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5"
+          >
+            <div className="p-3 rounded-lg bg-emerald-500/20 transition-transform duration-200 group-hover:scale-110">
+              <DollarSign className="h-6 w-6 text-emerald-400 group-hover:animate-pulse-soft" />
             </div>
-            <Link
-              href="/felitz-bank"
-              className="text-sm text-sky-400 hover:text-sky-300"
-            >
-              Voir les transactions →
-            </Link>
-          </div>
-        </div>
+            <div className="flex-1">
+              <p className="font-semibold text-slate-200">Gérer les finances</p>
+              <p className="text-sm text-slate-400">Accéder au compte Felitz Bank de la compagnie</p>
+            </div>
+            <span className="text-emerald-400 text-xl group-hover:translate-x-1 transition-transform">→</span>
+          </Link>
+        </section>
       )}
 
-      {/* Prêt bancaire */}
-      {isLeader && <CompagniePretClient compagnieId={compagnie.id} />}
+      {/* === SECTION : FLOTTE === */}
+      <section id="flotte" className="space-y-6 scroll-mt-20">
+        {isLeader && <CompagnieLocationsClient compagnieId={compagnie.id} />}
+        {isLeader && <CompagnieHubsClient compagnieId={compagnie.id} />}
+        <CompagnieAutorisationsClient compagnieId={compagnie.id} isPdg={isLeader} />
+        <CompagnieAvionsClient compagnieId={compagnie.id} soldeCompagnie={soldeCompagnie} isPdg={isLeader} allianceId={compagnie.alliance_id} />
+      </section>
 
-      {/* Locations d'avions */}
-      {isLeader && <CompagnieLocationsClient compagnieId={compagnie.id} />}
-
-      {/* Hubs */}
-      {isLeader && <CompagnieHubsClient compagnieId={compagnie.id} />}
-
-      {/* Autorisations d'exploitation */}
-      <CompagnieAutorisationsClient compagnieId={compagnie.id} isPdg={isLeader} />
-
-      {/* Reparations en cours */}
-      <CompagnieReparationsClient compagnieId={compagnie.id} isPdg={isLeader} />
-
-      {/* Flotte individuelle */}
-      <CompagnieAvionsClient compagnieId={compagnie.id} soldeCompagnie={soldeCompagnie} isPdg={isLeader} allianceId={compagnie.alliance_id} />
-
-      {/* Vols Ferry */}
-      {isLeader && <CompagnieVolsFerryClient compagnieId={compagnie.id} />}
-
-      {/* Tarifs par liaison */}
-      {isLeader && (
-        <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-amber-500/5">
-          <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-            <Route className="h-5 w-5 text-amber-400" />
-            Tarifs par liaison
-          </h2>
-          <TarifsLiaisonsClient 
-            compagnieId={compagnie.id} 
-            prixBilletDefaut={compagnie.prix_billet_pax} 
-          />
-        </div>
-      )}
-
-      {/* Lien vers Felitz Bank */}
-      {isLeader && (
-        <Link 
-          href="/felitz-bank"
-          className="card group flex items-center gap-4 transition-all duration-200 hover:bg-slate-800/70 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5"
-        >
-          <div className="p-3 rounded-lg bg-emerald-500/20 transition-transform duration-200 group-hover:scale-110">
-            <DollarSign className="h-6 w-6 text-emerald-400 group-hover:animate-pulse-soft" />
-          </div>
-          <div>
-            <p className="font-semibold text-slate-200">Gérer les finances</p>
-            <p className="text-sm text-slate-400">Accéder au compte Felitz Bank de la compagnie</p>
-          </div>
-        </Link>
-      )}
+      {/* === SECTION : OPERATIONS === */}
+      <section id="operations" className="space-y-6 scroll-mt-20">
+        <CompagnieReparationsClient compagnieId={compagnie.id} isPdg={isLeader} />
+        {isLeader && <CompagnieVolsFerryClient compagnieId={compagnie.id} />}
+      </section>
     </div>
   );
 }
