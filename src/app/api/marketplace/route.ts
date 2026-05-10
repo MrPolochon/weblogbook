@@ -204,11 +204,14 @@ export async function POST(req: NextRequest) {
         }, { status: 403 });
       }
 
-      // Récupérer le compte entreprise (limit 1 pour éviter erreur si doublons)
+      // Recuperer le compte entreprise (canonique = le plus ancien si doublons,
+      // pour rester coherent avec marketplace/page.tsx et eviter qu'un LIMIT 1
+      // sans ordre selectionne une ligne differente entre l'affichage et le debit).
       let compteEntreprise = (await admin.from('felitz_comptes')
         .select('id, solde')
         .eq('compagnie_id', pour_compagnie_id)
         .eq('type', 'entreprise')
+        .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle()).data;
 
@@ -265,7 +268,21 @@ export async function POST(req: NextRequest) {
         libelle: `Achat ${avion.nom}`,
       });
       if (!debitRes.ok) {
-        return NextResponse.json({ error: 'Solde entreprise insuffisant (transaction concurrente)' }, { status: 400 });
+        // Diagnostic precis : on relit le solde reel pour distinguer
+        // "vraiment pas assez" / "RPC a renvoye une erreur" / "compte introuvable".
+        const { data: rcheck } = await admin.from('felitz_comptes')
+          .select('solde').eq('id', compteId).maybeSingle();
+        const realSolde = Number(rcheck?.solde ?? NaN);
+        let userMsg: string;
+        if (Number.isFinite(realSolde) && realSolde < avion.prix) {
+          userMsg = `Solde entreprise insuffisant. Solde actuel : ${realSolde.toLocaleString('fr-FR')} F$, prix : ${avion.prix.toLocaleString('fr-FR')} F$.`;
+        } else if (debitRes.error) {
+          userMsg = `Echec du debit : ${debitRes.error}`;
+        } else {
+          userMsg = `Echec du debit (solde verifie : ${Number.isFinite(realSolde) ? realSolde.toLocaleString('fr-FR') + ' F$' : 'inconnu'}). Reessayez ; si le probleme persiste contactez un admin.`;
+        }
+        console.error('[marketplace] debit entreprise echoue', { compteId, montant: avion.prix, realSolde, rpcError: debitRes.error });
+        return NextResponse.json({ error: userMsg }, { status: 400 });
       }
 
       // Générer une immatriculation unique
@@ -308,11 +325,12 @@ export async function POST(req: NextRequest) {
       }
 
     } else {
-      // Achat personnel (limit 1 pour éviter erreur si doublons)
+      // Achat personnel (canonique = le plus ancien si doublons).
       const { data: comptePerso } = await admin.from('felitz_comptes')
         .select('id, solde')
         .eq('proprietaire_id', user.id)
         .eq('type', 'personnel')
+        .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
 
@@ -336,7 +354,19 @@ export async function POST(req: NextRequest) {
         libelle: `Achat ${avion.nom}`,
       });
       if (!debitRes.ok) {
-        return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente)' }, { status: 400 });
+        const { data: rcheck } = await admin.from('felitz_comptes')
+          .select('solde').eq('id', compteId).maybeSingle();
+        const realSolde = Number(rcheck?.solde ?? NaN);
+        let userMsg: string;
+        if (Number.isFinite(realSolde) && realSolde < avion.prix) {
+          userMsg = `Solde insuffisant. Solde actuel : ${realSolde.toLocaleString('fr-FR')} F$, prix : ${avion.prix.toLocaleString('fr-FR')} F$.`;
+        } else if (debitRes.error) {
+          userMsg = `Echec du debit : ${debitRes.error}`;
+        } else {
+          userMsg = `Echec du debit (solde verifie : ${Number.isFinite(realSolde) ? realSolde.toLocaleString('fr-FR') + ' F$' : 'inconnu'}). Reessayez ; si le probleme persiste contactez un admin.`;
+        }
+        console.error('[marketplace] debit personnel echoue', { compteId, montant: avion.prix, realSolde, rpcError: debitRes.error });
+        return NextResponse.json({ error: userMsg }, { status: 400 });
       }
 
       // Générer une immatriculation unique

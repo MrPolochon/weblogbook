@@ -34,6 +34,7 @@ export default async function MarketplacePage() {
         .select('solde')
         .eq('compagnie_id', c.id)
         .eq('type', 'entreprise')
+        .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle();
       return { ...c, solde: Number(compte?.solde ?? 0) };

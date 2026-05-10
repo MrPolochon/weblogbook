@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { isCoPdg } from '@/lib/co-pdg-utils';
+import { processDueRetourTransits, processDueEntrepriseTransits } from '@/lib/reparation-transit';
 
 export async function GET(request: Request) {
   try {
@@ -14,7 +15,20 @@ export async function GET(request: Request) {
     if (!compagnie_id) return NextResponse.json({ error: 'compagnie_id requis' }, { status: 400 });
 
     const admin = createAdminClient();
-    
+
+    // Auto-heal : si des reparation_demandes sont en transit avec une eta
+    // depassee (cron non execute, etc.), on les traite avant de renvoyer la
+    // flotte. Les fonctions sont idempotentes (UPDATE conditionnel sur le
+    // statut) et bornees a 50 lignes a chaque appel ; couts negligeables.
+    try {
+      await Promise.all([
+        processDueRetourTransits(admin),
+        processDueEntrepriseTransits(admin),
+      ]);
+    } catch (e) {
+      console.error('[avions] auto-heal transit reparation:', e);
+    }
+
     const nowIso = new Date().toISOString();
 
     // Charger les locations actives (loueur ou locataire)
