@@ -218,7 +218,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
 
   if (!detail && alliances.length === 0) {
     return (
-      <div className="space-y-8">
+      <div className="space-y-8 animate-fade-in">
         <Header />
         {error && <Alert type="error">{error}</Alert>}
         {success && <Alert type="success">{success}</Alert>}
@@ -240,7 +240,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
 
   if (!detail && alliances.length > 0) {
     return (
-      <div className="space-y-8">
+      <div className="space-y-8 animate-fade-in stagger-enter">
         <Header />
         <PendingInvitations pdgCompagnieIds={pdgCompagnieIds} onAccepted={async (allianceId) => {
           const res = await fetch('/api/alliances');
@@ -250,7 +250,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
           if (allianceId) await loadDetail(allianceId);
         }} />
         {alliances.map(a => (
-          <button key={a.id} onClick={() => loadDetail(a.id)} className="w-full text-left rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 hover:bg-slate-800/50 transition flex items-center justify-between">
+          <button key={a.id} onClick={() => loadDetail(a.id)} className="group w-full text-left rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-all duration-200 hover:bg-slate-800/50 hover:border-violet-500/40 hover:shadow-lg hover:shadow-violet-500/5 hover:-translate-y-0.5 flex items-center justify-between">
             <div>
               <span className="font-semibold text-slate-100">{a.nom}</span>
               <span className="ml-2 text-xs text-slate-500">{a.nb_membres} membre{(a.nb_membres || 0) > 1 ? 's' : ''}</span>
@@ -269,8 +269,22 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
 
   const isPdgOfActive = activeCompagnieId ? pdgCompagnieIds.includes(activeCompagnieId) : false;
 
+  // KPIs derives pour le strip du header
+  const transfertsEnCours = detail.transferts.filter(t => !['accepte', 'refuse', 'annule', 'termine', 'completee'].includes(t.statut)).length;
+  const demandesFondsEnAttente = detail.demandes_fonds.filter(d => d.statut === 'en_attente').length;
+  const annoncesImportantes = detail.annonces.filter(a => a.important).length;
+  const invitationsEnAttente = detail.invitations_en_attente?.length ?? 0;
+
+  // Map de compteurs par onglet pour les badges
+  const tabCounts: Partial<Record<TabKey, number>> = {
+    membres: invitationsEnAttente,
+    flotte: transfertsEnCours,
+    finances: demandesFondsEnAttente,
+    annonces: annoncesImportantes,
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in stagger-enter">
       {alliances.length > 1 && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm text-slate-500">Alliance :</span>
@@ -288,19 +302,89 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
           </select>
         </div>
       )}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-            <Users className="h-7 w-7 text-violet-400" />
-            {detail.nom}
-          </h1>
-          {detail.description && <p className="text-slate-400 mt-1">{detail.description}</p>}
-          {detail.devise && <p className="text-slate-500 text-sm italic">&laquo; {detail.devise} &raquo;</p>}
+
+      {/* === HERO HEADER === */}
+      <header className="card overflow-hidden p-0 border-violet-700/40 transition-shadow hover:shadow-xl hover:shadow-violet-500/10">
+        <div className="bg-gradient-to-br from-violet-500/15 via-slate-800/10 to-fuchsia-500/10 p-5 sm:p-6">
+          <div className="flex items-start justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="relative shrink-0">
+                {detail.logo_url ? (
+                  <img
+                    src={detail.logo_url}
+                    alt={`Logo ${detail.nom}`}
+                    width={64}
+                    height={64}
+                    loading="lazy"
+                    className="h-16 w-16 rounded-xl border border-slate-600 object-contain bg-white p-1 ring-2 ring-violet-500/30"
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded-xl bg-violet-500/15 ring-2 ring-violet-500/30 flex items-center justify-center">
+                    <Users className="h-8 w-8 text-violet-300 animate-pulse-soft" />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-100 truncate">{detail.nom}</h1>
+                {detail.description && <p className="text-slate-400 text-sm mt-0.5 line-clamp-2 max-w-xl">{detail.description}</p>}
+                {detail.devise && <p className="text-slate-500 text-xs italic mt-1">« {detail.devise} »</p>}
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              {activeRole && (
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ${ROLE_COLORS[activeRole] || 'text-slate-300'} bg-slate-800/80 ring-slate-700/60`}>
+                  {activeRole === 'president' && <Crown className="h-3.5 w-3.5 animate-pulse-soft" />}
+                  {activeRole === 'vice_president' && <ShieldCheck className="h-3.5 w-3.5" />}
+                  {ROLE_LABELS[activeRole] || activeRole}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-        <span className={`px-3 py-1 rounded-full text-sm font-medium ${ROLE_COLORS[activeRole || ''] || ''} bg-slate-800`}>
-          {ROLE_LABELS[activeRole || ''] || activeRole}
-        </span>
-      </div>
+
+        {/* Strip KPI */}
+        <div className="grid grid-cols-2 md:grid-cols-4 border-t border-slate-700/40 divide-x divide-slate-700/40">
+          <button type="button" onClick={() => setTab('membres')} className="p-4 text-left transition-colors hover:bg-violet-500/5">
+            <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5" /> Membres
+            </p>
+            <p className="mt-1 text-xl font-bold text-violet-300 tabular-nums">{detail.membres.length}</p>
+            <p className="text-[10px] text-slate-500">
+              {invitationsEnAttente > 0 ? <span className="text-amber-400">{invitationsEnAttente} invitation{invitationsEnAttente > 1 ? 's' : ''} en attente</span> : 'compagnie' + (detail.membres.length > 1 ? 's' : '')}
+            </p>
+          </button>
+          {detail.compte_alliance && (
+            <button type="button" onClick={() => setTab('finances')} className="p-4 text-left transition-colors hover:bg-emerald-500/5">
+              <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                <Wallet className="h-3.5 w-3.5" /> Compte alliance
+              </p>
+              <p className={`mt-1 text-xl font-bold tabular-nums ${detail.compte_alliance.solde > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {detail.compte_alliance.solde.toLocaleString('fr-FR')} <span className="text-sm font-medium">F$</span>
+              </p>
+              <p className="text-[10px] text-slate-500 font-mono truncate">VBAN: {detail.compte_alliance.vban}</p>
+            </button>
+          )}
+          <button type="button" onClick={() => setTab('flotte')} className="p-4 text-left transition-colors hover:bg-sky-500/5">
+            <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <Plane className="h-3.5 w-3.5" /> Flotte alliance
+            </p>
+            <p className="mt-1 text-xl font-bold text-sky-300 tabular-nums">
+              {transfertsEnCours}
+              {transfertsEnCours > 0 && <span className="ml-1 text-xs text-amber-400 animate-pulse">en cours</span>}
+            </p>
+            <p className="text-[10px] text-slate-500">transfert{transfertsEnCours > 1 ? 's' : ''} actif{transfertsEnCours > 1 ? 's' : ''}</p>
+          </button>
+          <button type="button" onClick={() => setTab('annonces')} className="p-4 text-left transition-colors hover:bg-amber-500/5">
+            <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <Megaphone className="h-3.5 w-3.5" /> Annonces
+            </p>
+            <p className="mt-1 text-xl font-bold text-amber-300 tabular-nums">{detail.annonces.length}</p>
+            <p className="text-[10px] text-slate-500">
+              {annoncesImportantes > 0 ? <span className="text-amber-400">{annoncesImportantes} importante{annoncesImportantes > 1 ? 's' : ''}</span> : 'message' + (detail.annonces.length > 1 ? 's' : '')}
+            </p>
+          </button>
+        </div>
+      </header>
 
       {mesCompagnies.length > 1 && (
         <div className="flex items-center gap-2 flex-wrap">
@@ -312,9 +396,9 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
               <button
                 key={m.compagnie_id}
                 onClick={() => setSelectedCompagnieId(m.compagnie_id)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition border ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
                   isActive
-                    ? 'bg-violet-600/20 border-violet-500/50 text-violet-300 shadow-sm shadow-violet-500/10'
+                    ? 'bg-violet-600/20 border-violet-500/50 text-violet-300 shadow-sm shadow-violet-500/10 scale-[1.02]'
                     : 'bg-slate-800/50 border-slate-700/50 text-slate-400 hover:text-slate-200 hover:border-slate-600'
                 }`}
               >
@@ -332,19 +416,38 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
       {error && <Alert type="error">{error}</Alert>}
       {success && <Alert type="success">{success}</Alert>}
 
-      <nav className="flex gap-1 overflow-x-auto border-b border-slate-700 pb-px">
-        {TABS.filter(t => t.key !== 'parametres' || isLeader || isAdmin).map(t => {
-          const Icon = t.icon;
-          return (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-t-lg whitespace-nowrap transition ${tab === t.key ? 'bg-slate-800 text-violet-400 border-b-2 border-violet-400' : 'text-slate-400 hover:text-slate-200'}`}>
-              <Icon className="h-4 w-4" />{t.label}
-            </button>
-          );
-        })}
+      {/* === NAV TABS PILLS STICKY === */}
+      <nav className="sticky top-0 z-20 -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 py-2 bg-slate-950/80 backdrop-blur-md border-y border-slate-800/60">
+        <div className="flex gap-2 overflow-x-auto scrollbar-thin">
+          {TABS.filter(t => t.key !== 'parametres' || isLeader || isAdmin).map(t => {
+            const Icon = t.icon;
+            const isActive = tab === t.key;
+            const count = tabCounts[t.key] ?? 0;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ring-1 transition-all duration-200 ${
+                  isActive
+                    ? 'bg-violet-500/20 text-violet-300 ring-violet-400/40 shadow-md shadow-violet-500/10 scale-[1.03]'
+                    : 'bg-slate-800/60 text-slate-300 ring-slate-700 hover:bg-slate-700/60 hover:text-slate-100'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {t.label}
+                {count > 0 && (
+                  <span className={`ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold ${isActive ? 'bg-slate-950/60 text-violet-200' : 'bg-violet-600 text-white'}`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
-      <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-6">
+      <div key={tab} className="card animate-fade-in">
         {tab === 'dashboard' && <DashboardTab detail={detail} />}
         {tab === 'membres' && <MembresTab detail={detail} isPresident={!!isPresident} isLeader={!!isLeader} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} compagniesSansAlliance={compagniesSansAlliance} />}
         {tab === 'flotte' && <FlotteTab detail={detail} pdgCompagnieIds={pdgCompagnieIds} selectedCompagnieId={activeCompagnieId} onRefresh={() => loadDetail(detail.id)} flash={flash} api={api} busy={busy} />}
@@ -358,9 +461,14 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
 
 function Header() {
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2"><Users className="h-7 w-7 text-violet-400" />Alliance</h1>
-      <p className="text-slate-400 mt-1">Créez ou rejoignez une alliance pour collaborer entre compagnies.</p>
+    <div className="flex items-start gap-3">
+      <div className="h-12 w-12 rounded-xl bg-violet-500/15 ring-2 ring-violet-500/30 flex items-center justify-center shrink-0">
+        <Users className="h-6 w-6 text-violet-300 animate-pulse-soft" />
+      </div>
+      <div>
+        <h1 className="text-2xl font-bold text-slate-100">Alliance</h1>
+        <p className="text-slate-400 mt-1 text-sm">Créez ou rejoignez une alliance pour collaborer entre compagnies.</p>
+      </div>
     </div>
   );
 }
