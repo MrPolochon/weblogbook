@@ -1,0 +1,361 @@
+-- ============================================================================
+-- Seed : 30 NOTAMs PTFS (mai-juin 2026)
+--   - 15 NOTAMs en anglais (identifiants A0001/26 .. A0015/26)
+--   - 15 NOTAMs en francais correspondants (identifiants F0001/26 .. F0015/26)
+-- Sur chaque NOTAM anglais, reference_fr pointe vers l'identifiant du NOTAM
+-- francais equivalent (ex. "IRFD-F0001/26").
+-- Reutilisable : ON CONFLICT (identifiant) DO NOTHING.
+-- Toutes les heures sont en UTC.
+-- ============================================================================
+
+INSERT INTO public.notams
+  (identifiant, code_aeroport, du_at, au_at, champ_a, champ_e, champ_q, priorite, reference_fr, annule)
+VALUES
+-- ============================================================================
+-- VERSIONS ANGLAISES (A0001/26 .. A0015/26)
+-- ============================================================================
+
+-- 01 IRFD - RWY CLSD ---------------------------------------------------------
+(
+  'IRFD-A0001/26', 'IRFD',
+  '2026-05-10 12:00:00+00', '2026-05-14 18:00:00+00',
+  'IRFD',
+  E'RWY 25L CLSD DUE TO RESURFACING WORKS.\nDEP/ARR ON RWY 25C AND 25R ONLY.\nEXPECT DELAYS. CONTACT GND FOR TAXI ROUTING.',
+  'PTFS/QMRLC/IV/NBO/A/000/999/IRFD',
+  'A',
+  'IRFD-F0001/26',
+  false
+),
+-- 02 IPPH - TWY CLSD ---------------------------------------------------------
+(
+  'IPPH-A0002/26', 'IPPH',
+  '2026-05-10 14:00:00+00', '2026-05-17 14:00:00+00',
+  'IPPH',
+  E'TWY B CLSD BTN APRON AND RWY 21 DUE TO MAINTENANCE.\nUSE TWY A AS ALTERNATIVE ROUTING.\nMAX TAXI SPEED 20KT IN AFFECTED AREA.',
+  'PTFS/QMXLC/IV/NBO/A/000/999/IPPH',
+  'B',
+  'IPPH-F0002/26',
+  false
+),
+-- 03 ITKO - OBST -------------------------------------------------------------
+(
+  'ITKO-A0003/26', 'ITKO',
+  '2026-05-12 08:00:00+00', '2026-05-20 08:00:00+00',
+  'ITKO',
+  E'CRANE ERECTED WITHIN 300M NORTH OF RWY 13 THR.\nHGT 85FT AGL. LGT RED OBS LIGHT INSTALLED.\nCAUTION ADVISED ON APCH RWY 13.',
+  'PTFS/QOBCE/IV/NBO/A/000/010/ITKO',
+  'B',
+  'ITKO-F0003/26',
+  false
+),
+-- 04 IKEF - AD INFO (FUEL) ---------------------------------------------------
+(
+  'IKEF-A0004/26', 'IKEF',
+  '2026-05-11 06:00:00+00', '2026-05-18 06:00:00+00',
+  'IKEF',
+  E'FUEL UNAVAILABLE AT KEFLAVIK AD.\nPILOTS PLAN ACCORDINGLY.\nESTIMATED RETURN TO SERVICE 18 MAY 2026 0600Z.',
+  'PTFS/QFAXX/IV/NBO/A/000/999/IKEF',
+  'A',
+  'IKEF-F0004/26',
+  false
+),
+-- 05 ILMR - NAV (ILS U/S) ----------------------------------------------------
+(
+  'ILMR-A0005/26', 'ILMR',
+  '2026-05-13 09:00:00+00', '2026-05-22 09:00:00+00',
+  'ILMR',
+  E'ILS RWY 09 U/S DUE TO CALIBRATION.\nVFR APPROACHES ONLY DURING THIS PERIOD.\nVOR APPROACH AVAILABLE AS ALTERNATIVE.',
+  'PTFS/QILXX/IV/NBO/A/000/999/ILMR',
+  'A',
+  'ILMR-F0005/26',
+  false
+),
+-- 06 IZOL - AD INFO (EXERCICE) -----------------------------------------------
+(
+  'IZOL-A0006/26', 'IZOL',
+  '2026-05-14 10:00:00+00', '2026-05-21 10:00:00+00',
+  'IZOL',
+  E'EMERGENCY SERVICES EXERCISE IN PROGRESS.\nACFT MAY EXPERIENCE DELAYS ON DEPARTURE.\nEXPECT HOLD MAX 5 MIN. CTAF FREQ IN USE.',
+  'PTFS/QAAXX/IV/NBO/A/000/999/IZOL',
+  'B',
+  'IZOL-F0006/26',
+  false
+),
+-- 07 IRFD - BIRD ACTIVITY ----------------------------------------------------
+(
+  'IRFD-A0007/26', 'IRFD',
+  '2026-05-15 05:00:00+00', '2026-05-22 08:00:00+00',
+  'IRFD',
+  E'INTENSE BIRD ACTIVITY REPORTED ARND RWY 07L/25R.\nBIRDS DISPERSED ON REQ. PILOTS REPORT SIGHTINGS\nTO TWR IMMEDIATELY.',
+  'PTFS/QFAHW/IV/NBO/A/000/005/IRFD',
+  'B',
+  'IRFD-F0007/26',
+  false
+),
+-- 08 IDCS - RWY COND ---------------------------------------------------------
+(
+  'IDCS-A0008/26', 'IDCS',
+  '2026-05-16 12:00:00+00', '2026-05-23 12:00:00+00',
+  'IDCS',
+  E'RWY SURFACE WET AND SLIPPERY DUE TO DRAINAGE WORKS.\nBRAKING ACTION POOR. ADD 30% TO LANDING DISTANCE.\nACFT ABOVE 5700KG NOT RECOMMENDED.',
+  'PTFS/QMRXX/IV/NBO/A/000/999/IDCS',
+  'A',
+  'IDCS-F0008/26',
+  false
+),
+-- 09 ILAR - AIRSPACE ---------------------------------------------------------
+(
+  'ILAR-A0009/26', 'ILAR',
+  '2026-05-17 07:00:00+00', '2026-05-24 19:00:00+00',
+  'ILAR',
+  E'TEMPORARY RESTRICTED AREA ACTIVE NE OF LARNACA.\nRADIUS 5NM, SFC TO FL050. MILITARY EXERCISE.\nACFT OBTAIN CLEARANCE PRIOR TO ENTRY.',
+  'PTFS/QRTCA/IV/NBO/E/000/050/ILAR',
+  'A',
+  'ILAR-F0009/26',
+  false
+),
+-- 10 IPPH - APRON CLSD -------------------------------------------------------
+(
+  'IPPH-A0010/26', 'IPPH',
+  '2026-05-18 13:00:00+00', '2026-05-25 13:00:00+00',
+  'IPPH',
+  E'APRON STANDS 4 TO 7 CLSD FOR REPAINT.\nALL HEAVY ACFT REROUTED TO REMOTE STANDS.\nFOLLOW GROUND MARSHALLER GUIDANCE.',
+  'PTFS/QMPXX/IV/NBO/A/000/999/IPPH',
+  'B',
+  'IPPH-F0010/26',
+  false
+),
+-- 11 ISCM - AD CLSD (MIL) ----------------------------------------------------
+(
+  'ISCM-A0011/26', 'ISCM',
+  '2026-05-19 06:00:00+00', '2026-05-26 06:00:00+00',
+  'ISCM',
+  E'RAF SCAMPTON CLSD TO CIV ACFT DURING MILITARY OPS.\nMIL ACFT ONLY AUTHORISED. TRANSIENT CIV ACFT\nDIVERT TO IZOL OR IRFD.',
+  'PTFS/QAAXX/IV/MIL/A/000/999/ISCM',
+  'A',
+  'ISCM-F0011/26',
+  false
+),
+-- 12 ITKO - TWR COMM ---------------------------------------------------------
+(
+  'ITKO-A0012/26', 'ITKO',
+  '2026-05-20 08:00:00+00', '2026-05-27 08:00:00+00',
+  'ITKO',
+  E'TOKYO TWR PRIMARY FREQ DEGRADED.\nUSE SECONDARY FREQ FOR ATC COMM.\nEXPECT INCREASED SPACING AND DELAYS.',
+  'PTFS/QSCAC/IV/NBO/A/000/999/ITKO',
+  'A',
+  'ITKO-F0012/26',
+  false
+),
+-- 13 IBAR - RWY LGT ----------------------------------------------------------
+(
+  'IBAR-A0013/26', 'IBAR',
+  '2026-05-21 18:00:00+00', '2026-05-28 22:00:00+00',
+  'IBAR',
+  E'RWY EDGE LIGHTING U/S ON RWY 09/27.\nNIGHT OPS SUSPENDED UNTIL FURTHER NOTICE.\nDAY VFR ONLY. PAPI FUNCTIONAL.',
+  'PTFS/QMRLC/IV/NBO/A/000/999/IBAR',
+  'A',
+  'IBAR-F0013/26',
+  false
+),
+-- 14 IRFD - TAXIWAY ----------------------------------------------------------
+(
+  'IRFD-A0014/26', 'IRFD',
+  '2026-05-24 07:00:00+00', '2026-06-01 07:00:00+00',
+  'IRFD',
+  E'TWY C CLSD BTN HOLDING POINT RWY 07C AND APRON.\nACFT DEP RWY 07C USE TWY D AND TWY E.\nGND CONTROL WILL ISSUE REVISED ROUTING.',
+  'PTFS/QMXLC/IV/NBO/A/000/999/IRFD',
+  'B',
+  'IRFD-F0014/26',
+  false
+),
+-- 15 IKEF - AIRSPACE (AIRSHOW) -----------------------------------------------
+(
+  'IKEF-A0015/26', 'IKEF',
+  '2026-05-27 10:00:00+00', '2026-06-01 10:00:00+00',
+  'IKEF',
+  E'AIRSHOW EVENT AT KEFLAVIK. ACFT NOT PARTICIPATING\nAVOID AREA 10NM RADIUS SFC TO FL080.\nDISPLAY ACFT OPS 1000Z TO 1700Z DAILY.',
+  'PTFS/QRTCA/IV/NBO/E/000/080/IKEF',
+  'A',
+  'IKEF-F0015/26',
+  false
+),
+
+-- ============================================================================
+-- VERSIONS FRANCAISES (F0001/26 .. F0015/26)
+-- ============================================================================
+
+-- 01 IRFD - PISTE FERMEE -----------------------------------------------------
+(
+  'IRFD-F0001/26', 'IRFD',
+  '2026-05-10 12:00:00+00', '2026-05-14 18:00:00+00',
+  'IRFD',
+  E'PISTE 25L FERMEE POUR TRAVAUX DE RESURFACAGE.\nDEPARTS/ARRIVEES SUR PISTES 25C ET 25R UNIQUEMENT.\nDELAIS A PREVOIR. CONTACTER LE SOL POUR LE CHEMINEMENT AU ROULAGE.',
+  'PTFS/QMRLC/IV/NBO/A/000/999/IRFD',
+  'A',
+  NULL,
+  false
+),
+-- 02 IPPH - VOIE DE CIRCULATION FERMEE ---------------------------------------
+(
+  'IPPH-F0002/26', 'IPPH',
+  '2026-05-10 14:00:00+00', '2026-05-17 14:00:00+00',
+  'IPPH',
+  E'VOIE DE CIRCULATION B FERMEE ENTRE L''AIRE DE TRAFIC ET LA PISTE 21 POUR MAINTENANCE.\nUTILISER LA VOIE A COMME ITINERAIRE ALTERNATIF.\nVITESSE DE ROULAGE MAX 20 KT DANS LA ZONE CONCERNEE.',
+  'PTFS/QMXLC/IV/NBO/A/000/999/IPPH',
+  'B',
+  NULL,
+  false
+),
+-- 03 ITKO - OBSTACLE ---------------------------------------------------------
+(
+  'ITKO-F0003/26', 'ITKO',
+  '2026-05-12 08:00:00+00', '2026-05-20 08:00:00+00',
+  'ITKO',
+  E'GRUE ERIGEE A MOINS DE 300 M AU NORD DU SEUIL DE PISTE 13.\nHAUTEUR 85 FT AGL. BALISAGE OBSTACLE LUMINEUX ROUGE INSTALLE.\nPRUDENCE RECOMMANDEE EN APPROCHE PISTE 13.',
+  'PTFS/QOBCE/IV/NBO/A/000/010/ITKO',
+  'B',
+  NULL,
+  false
+),
+-- 04 IKEF - INFO AERODROME (CARBURANT) ---------------------------------------
+(
+  'IKEF-F0004/26', 'IKEF',
+  '2026-05-11 06:00:00+00', '2026-05-18 06:00:00+00',
+  'IKEF',
+  E'CARBURANT INDISPONIBLE SUR L''AERODROME DE KEFLAVIK.\nLES PILOTES DOIVENT PLANIFIER EN CONSEQUENCE.\nREMISE EN SERVICE ESTIMEE LE 18 MAI 2026 A 06:00 UTC.',
+  'PTFS/QFAXX/IV/NBO/A/000/999/IKEF',
+  'A',
+  NULL,
+  false
+),
+-- 05 ILMR - NAVIGATION (ILS HS) ----------------------------------------------
+(
+  'ILMR-F0005/26', 'ILMR',
+  '2026-05-13 09:00:00+00', '2026-05-22 09:00:00+00',
+  'ILMR',
+  E'ILS DE LA PISTE 09 HORS SERVICE POUR CALIBRATION.\nAPPROCHES VFR UNIQUEMENT PENDANT CETTE PERIODE.\nAPPROCHE VOR DISPONIBLE COMME ALTERNATIVE.',
+  'PTFS/QILXX/IV/NBO/A/000/999/ILMR',
+  'A',
+  NULL,
+  false
+),
+-- 06 IZOL - INFO AERODROME (EXERCICE) ----------------------------------------
+(
+  'IZOL-F0006/26', 'IZOL',
+  '2026-05-14 10:00:00+00', '2026-05-21 10:00:00+00',
+  'IZOL',
+  E'EXERCICE DES SERVICES DE SECURITE EN COURS.\nLES AERONEFS PEUVENT SUBIR DES RETARDS AU DEPART.\nATTENTE MAX 5 MIN A PREVOIR. FREQUENCE CTAF UTILISEE.',
+  'PTFS/QAAXX/IV/NBO/A/000/999/IZOL',
+  'B',
+  NULL,
+  false
+),
+-- 07 IRFD - ACTIVITE AVIAIRE -------------------------------------------------
+(
+  'IRFD-F0007/26', 'IRFD',
+  '2026-05-15 05:00:00+00', '2026-05-22 08:00:00+00',
+  'IRFD',
+  E'ACTIVITE AVIAIRE INTENSE SIGNALEE AUTOUR DE LA PISTE 07L/25R.\nDISPERSION DES OISEAUX SUR DEMANDE. LES PILOTES SIGNALENT TOUTE\nOBSERVATION A LA TOUR IMMEDIATEMENT.',
+  'PTFS/QFAHW/IV/NBO/A/000/005/IRFD',
+  'B',
+  NULL,
+  false
+),
+-- 08 IDCS - ETAT DE PISTE ----------------------------------------------------
+(
+  'IDCS-F0008/26', 'IDCS',
+  '2026-05-16 12:00:00+00', '2026-05-23 12:00:00+00',
+  'IDCS',
+  E'SURFACE DE PISTE MOUILLEE ET GLISSANTE EN RAISON DE TRAVAUX DE DRAINAGE.\nFREINAGE MEDIOCRE. AJOUTER 30% A LA DISTANCE D''ATTERRISSAGE.\nAERONEFS DE PLUS DE 5700 KG NON RECOMMANDES.',
+  'PTFS/QMRXX/IV/NBO/A/000/999/IDCS',
+  'A',
+  NULL,
+  false
+),
+-- 09 ILAR - ESPACE AERIEN ----------------------------------------------------
+(
+  'ILAR-F0009/26', 'ILAR',
+  '2026-05-17 07:00:00+00', '2026-05-24 19:00:00+00',
+  'ILAR',
+  E'ZONE REGLEMENTEE TEMPORAIRE ACTIVE AU NORD-EST DE LARNACA.\nRAYON 5 NM, DU SOL JUSQU''AU FL050. EXERCICE MILITAIRE.\nLES AERONEFS DOIVENT OBTENIR UNE CLAIRANCE AVANT D''ENTRER.',
+  'PTFS/QRTCA/IV/NBO/E/000/050/ILAR',
+  'A',
+  NULL,
+  false
+),
+-- 10 IPPH - AIRE DE TRAFIC FERMEE --------------------------------------------
+(
+  'IPPH-F0010/26', 'IPPH',
+  '2026-05-18 13:00:00+00', '2026-05-25 13:00:00+00',
+  'IPPH',
+  E'POSTES DE STATIONNEMENT 4 A 7 FERMES POUR PEINTURE.\nTOUS LES GROS PORTEURS REDIRIGES VERS LES POSTES ELOIGNES.\nSUIVRE LES INDICATIONS DU PLACEUR AU SOL.',
+  'PTFS/QMPXX/IV/NBO/A/000/999/IPPH',
+  'B',
+  NULL,
+  false
+),
+-- 11 ISCM - AERODROME FERME (MIL) --------------------------------------------
+(
+  'ISCM-F0011/26', 'ISCM',
+  '2026-05-19 06:00:00+00', '2026-05-26 06:00:00+00',
+  'ISCM',
+  E'RAF SCAMPTON FERME AUX AERONEFS CIVILS PENDANT LES OPERATIONS MILITAIRES.\nAERONEFS MILITAIRES SEULS AUTORISES. AERONEFS CIVILS DE PASSAGE\nDEROUTES VERS IZOL OU IRFD.',
+  'PTFS/QAAXX/IV/MIL/A/000/999/ISCM',
+  'A',
+  NULL,
+  false
+),
+-- 12 ITKO - COMMUNICATIONS TOUR ----------------------------------------------
+(
+  'ITKO-F0012/26', 'ITKO',
+  '2026-05-20 08:00:00+00', '2026-05-27 08:00:00+00',
+  'ITKO',
+  E'FREQUENCE PRINCIPALE DE LA TOUR DE TOKYO DEGRADEE.\nUTILISER LA FREQUENCE SECONDAIRE POUR LES COMMUNICATIONS ATC.\nESPACEMENT ACCRU ET DELAIS A PREVOIR.',
+  'PTFS/QSCAC/IV/NBO/A/000/999/ITKO',
+  'A',
+  NULL,
+  false
+),
+-- 13 IBAR - BALISAGE PISTE ---------------------------------------------------
+(
+  'IBAR-F0013/26', 'IBAR',
+  '2026-05-21 18:00:00+00', '2026-05-28 22:00:00+00',
+  'IBAR',
+  E'BALISAGE LATERAL DE PISTE HORS SERVICE SUR LA PISTE 09/27.\nOPERATIONS DE NUIT SUSPENDUES JUSQU''A NOUVEL AVIS.\nVFR DE JOUR UNIQUEMENT. PAPI OPERATIONNEL.',
+  'PTFS/QMRLC/IV/NBO/A/000/999/IBAR',
+  'A',
+  NULL,
+  false
+),
+-- 14 IRFD - VOIE DE CIRCULATION ----------------------------------------------
+(
+  'IRFD-F0014/26', 'IRFD',
+  '2026-05-24 07:00:00+00', '2026-06-01 07:00:00+00',
+  'IRFD',
+  E'VOIE DE CIRCULATION C FERMEE ENTRE LE POINT D''ATTENTE PISTE 07C ET L''AIRE DE TRAFIC.\nLES AERONEFS DECOLLANT DE LA PISTE 07C UTILISENT LES VOIES D ET E.\nLE CONTROLE SOL FOURNIRA UN CHEMINEMENT REVISE.',
+  'PTFS/QMXLC/IV/NBO/A/000/999/IRFD',
+  'B',
+  NULL,
+  false
+),
+-- 15 IKEF - ESPACE AERIEN (MEETING) ------------------------------------------
+(
+  'IKEF-F0015/26', 'IKEF',
+  '2026-05-27 10:00:00+00', '2026-06-01 10:00:00+00',
+  'IKEF',
+  E'MEETING AERIEN A KEFLAVIK. LES AERONEFS NON PARTICIPANTS\nEVITENT LA ZONE DE 10 NM DE RAYON DU SOL JUSQU''AU FL080.\nOPERATIONS DES AERONEFS DE DEMONSTRATION DE 10:00 A 17:00 UTC QUOTIDIENNEMENT.',
+  'PTFS/QRTCA/IV/NBO/E/000/080/IKEF',
+  'A',
+  NULL,
+  false
+)
+ON CONFLICT (identifiant) DO NOTHING;
+
+-- ============================================================================
+-- Verification rapide
+-- ============================================================================
+-- SELECT identifiant, code_aeroport, du_at, au_at, priorite, reference_fr
+-- FROM public.notams
+-- WHERE identifiant LIKE '%/26'
+-- ORDER BY identifiant;
