@@ -158,52 +158,101 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
   if (currentGame) {
     const GameComponent = GAME_COMPONENTS[currentGame as GameType];
     return (
-      <div className="space-y-4">
-        <button onClick={() => setCurrentGame(null)} className="text-sm text-slate-400 hover:text-slate-200">← Retour aux jeux</button>
+      <div className="space-y-4 animate-fade-in">
+        <button onClick={() => setCurrentGame(null)} className="text-sm text-slate-400 hover:text-slate-200 transition-colors">← Retour aux jeux</button>
         {GameComponent && <GameComponent onComplete={submitScore} />}
       </div>
     );
   }
 
+  const completedCount = completedGames.size;
+  const totalCount = assignedGames.length;
+  const overallPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-          <Puzzle className="h-7 w-7 text-violet-400" />
-          Mini-jeux de réparation
-        </h1>
-        <p className="text-slate-400 mt-1">
-          {demande.avion?.immatriculation} ({demande.avion?.nom_bapteme || 'sans nom'}) — {demande.entreprise?.nom}
-        </p>
-      </div>
+    <div className="space-y-6 animate-fade-in stagger-enter">
+      {/* === HERO HEADER === */}
+      <header className="card overflow-hidden p-0 border-violet-700/30">
+        <div className="bg-gradient-to-br from-violet-500/15 via-slate-800/10 to-fuchsia-500/10 p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="h-14 w-14 rounded-xl bg-violet-500/20 ring-2 ring-violet-500/40 flex items-center justify-center shrink-0">
+                <Puzzle className="h-7 w-7 text-violet-300 animate-pulse-soft" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-100">Mini-jeux de réparation</h1>
+                <p className="text-slate-400 text-sm mt-0.5 truncate">
+                  <span className="font-mono text-slate-300">{demande.avion?.immatriculation}</span>
+                  {demande.avion?.nom_bapteme && <span className="italic"> ({demande.avion.nom_bapteme})</span>}
+                  <span className="mx-2 text-slate-600">·</span>
+                  {demande.entreprise?.nom}
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Progression</p>
+              <p className="text-2xl font-bold text-violet-300 tabular-nums">{completedCount}<span className="text-slate-500 text-base font-medium">/{totalCount}</span></p>
+            </div>
+          </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+          {/* Barre de progression globale */}
+          <div className="mt-4 h-2 rounded-full bg-slate-800/80 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-amber-400 transition-all duration-500 ease-out"
+              style={{ width: `${overallPct}%` }}
+            />
+          </div>
+        </div>
+      </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {error && <p className="text-red-400 text-sm animate-fade-in">{error}</p>}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 stagger-enter">
         {assignedGames.map(key => {
           const meta = ALL_GAME_META[key];
           if (!meta) return null;
           const done = completedGames.has(key);
-          const score = completedGames.get(key);
+          const score = completedGames.get(key) ?? 0;
           const Icon = meta.icon;
+          const scoreColor = score >= 90 ? 'text-emerald-400' : score >= 70 ? 'text-sky-400' : score >= 50 ? 'text-amber-400' : 'text-red-400';
+          const scoreBg = score >= 90 ? 'bg-emerald-500' : score >= 70 ? 'bg-sky-500' : score >= 50 ? 'bg-amber-500' : 'bg-red-500';
           return (
-            <button key={key} onClick={() => !done && setCurrentGame(key)} disabled={done}
-              className={`p-6 rounded-xl border transition text-left ${done ? 'border-emerald-700/30 bg-emerald-900/10 cursor-default' : 'border-slate-700/50 bg-slate-800/30 hover:bg-slate-800/50 cursor-pointer'}`}>
+            <button
+              key={key}
+              onClick={() => !done && setCurrentGame(key)}
+              disabled={done}
+              className={`group relative p-6 rounded-xl border text-left transition-all duration-200 overflow-hidden ${
+                done
+                  ? 'border-emerald-700/40 bg-gradient-to-br from-emerald-900/15 to-slate-800/30 cursor-default'
+                  : 'border-slate-700/50 bg-slate-800/30 cursor-pointer hover:bg-slate-800/60 hover:border-violet-500/40 hover:shadow-lg hover:shadow-violet-500/10 hover:-translate-y-0.5'
+              }`}
+            >
+              {done && (
+                <div className="absolute top-2 right-2 h-7 w-7 rounded-full bg-emerald-500/20 ring-1 ring-emerald-400/40 flex items-center justify-center animate-fade-in">
+                  <Check className="h-4 w-4 text-emerald-300" />
+                </div>
+              )}
               <div className="flex items-center gap-3 mb-2">
-                <Icon className={`h-6 w-6 ${done ? 'text-emerald-400' : meta.color}`} />
+                <div className={`h-10 w-10 rounded-lg flex items-center justify-center ring-1 transition-transform ${done ? 'bg-emerald-500/15 ring-emerald-500/30' : 'bg-slate-700/40 ring-slate-600/40 group-hover:scale-110'}`}>
+                  <Icon className={`h-5 w-5 ${done ? 'text-emerald-300' : meta.color}`} />
+                </div>
                 <span className="font-semibold text-slate-100">{meta.label}</span>
-                {done && <Check className="h-5 w-5 text-emerald-400 ml-auto" />}
               </div>
               {done ? (
                 <div className="flex items-center gap-2">
                   <div className="flex-1 h-2 rounded-full bg-slate-700 overflow-hidden">
-                    <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${score}%` }} />
+                    <div className={`h-full rounded-full ${scoreBg} transition-all duration-700`} style={{ width: `${score}%` }} />
                   </div>
-                  <span className="text-sm font-bold text-emerald-400">{score}/100</span>
+                  <span className={`text-sm font-bold tabular-nums ${scoreColor}`}>{score}/100</span>
                 </div>
               ) : (
-                <p className="text-slate-500 text-sm">
+                <p className="text-slate-500 text-xs leading-relaxed">
                   {meta.shortHint || 'Cliquez pour jouer'}
+                </p>
+              )}
+              {!done && (
+                <p className="mt-3 text-[11px] font-semibold text-violet-300/80 group-hover:text-violet-200 transition-colors flex items-center gap-1">
+                  Lancer le jeu <ArrowRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
                 </p>
               )}
             </button>
@@ -212,18 +261,25 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
       </div>
 
       {allCompleted && (
-        <div className="rounded-xl border border-violet-700/30 bg-violet-900/10 p-6 text-center space-y-3">
-          <Trophy className="h-12 w-12 text-amber-400 mx-auto" />
-          <h2 className="text-xl font-bold text-slate-100">Réparation terminée !</h2>
-          <p className="text-3xl font-bold text-violet-400">{avgScore}/100</p>
-          <p className="text-slate-400 text-sm">
-            {avgScore! >= 90 ? 'Excellent travail ! Réparation parfaite.' :
-             avgScore! >= 70 ? 'Bon travail ! Réparation de qualité.' :
-             avgScore! >= 50 ? 'Travail correct. Réparation acceptable.' :
-             'Résultat médiocre. La réparation est partielle.'}
+        <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-violet-500/10 to-fuchsia-500/10 p-8 text-center space-y-4 animate-slide-up shadow-xl shadow-amber-500/10">
+          <div className="inline-flex items-center justify-center h-20 w-20 rounded-full bg-amber-500/20 ring-2 ring-amber-400/40 animate-pulse-soft">
+            <Trophy className="h-10 w-10 text-amber-300" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-100">Réparation terminée !</h2>
+          <p className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-violet-300 to-fuchsia-400 tabular-nums">
+            {avgScore}<span className="text-2xl text-slate-500">/100</span>
           </p>
-          <button onClick={() => router.push('/reparation')} className="px-6 py-2 rounded-lg bg-violet-600 text-white font-medium">
-            Retour au dashboard
+          <p className="text-slate-300 text-sm max-w-md mx-auto">
+            {avgScore! >= 90 ? '🌟 Excellent travail ! Réparation parfaite.' :
+             avgScore! >= 70 ? '👍 Bon travail ! Réparation de qualité.' :
+             avgScore! >= 50 ? '✓ Travail correct. Réparation acceptable.' :
+             '⚠ Résultat médiocre. La réparation est partielle.'}
+          </p>
+          <button
+            onClick={() => router.push('/reparation')}
+            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-medium transition-all hover:scale-105 hover:shadow-lg hover:shadow-violet-500/20"
+          >
+            Retour au dashboard <ArrowRight className="h-4 w-4" />
           </button>
         </div>
       )}

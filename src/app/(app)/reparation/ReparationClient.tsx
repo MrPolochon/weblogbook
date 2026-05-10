@@ -167,30 +167,43 @@ export default function ReparationClient({ userId }: { userId: string }) {
   if (demander && avionId && compagnieId) {
     const selectedEnt = selectedEntId ? catalogue.find(e => e.id === selectedEntId) : null;
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2"><Wrench className="h-7 w-7 text-orange-400" />Demander une réparation</h1>
-          <p className="text-slate-400 mt-1">Choisissez une entreprise et un hangar pour envoyer votre avion en réparation.</p>
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-start gap-3">
+          <div className="h-12 w-12 rounded-xl bg-orange-500/15 ring-2 ring-orange-500/30 flex items-center justify-center shrink-0">
+            <Wrench className="h-6 w-6 text-orange-400 animate-pulse-soft" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-100">Demander une réparation</h1>
+            <p className="text-slate-400 mt-1 text-sm">Choisissez une entreprise et un hangar pour envoyer votre avion en réparation.</p>
+          </div>
         </div>
-        {error && <p className="text-red-400 text-sm">{error}</p>}
-        {success && <p className="text-emerald-400 text-sm">{success}</p>}
+        {error && <p className="text-red-400 text-sm animate-fade-in">{error}</p>}
+        {success && <p className="text-emerald-400 text-sm animate-fade-in">{success}</p>}
 
         {!selectedEntId ? (
-          <div className="space-y-3">
+          <div className="space-y-3 animate-slide-up">
             <h2 className="text-lg font-medium text-slate-200">Sélectionner une entreprise</h2>
             {catalogue.length === 0 ? (
               <p className="text-slate-500">Aucune entreprise de réparation disponible.</p>
             ) : (
-              <div className="grid gap-3">
+              <div className="grid gap-3 stagger-enter">
                 {catalogue.map(e => (
                   <button
                     key={e.id}
                     onClick={() => { setSelectedEntId(e.id); setSelectedHangarId(null); }}
-                    className="w-full text-left rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 hover:bg-slate-800/50 transition"
+                    className="group w-full text-left rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-all duration-200 hover:bg-slate-800/50 hover:border-orange-500/40 hover:shadow-lg hover:shadow-orange-500/5 hover:-translate-y-0.5"
                   >
-                    <span className="font-semibold text-slate-100">{e.nom}</span>
-                    {e.description && <p className="text-slate-400 text-sm mt-1">{e.description}</p>}
-                    <p className="text-xs text-slate-500 mt-1">{e.hangars.length} hangar(s)</p>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="font-semibold text-slate-100 group-hover:text-orange-300 transition-colors">{e.nom}</span>
+                        {e.description && <p className="text-slate-400 text-sm mt-1 line-clamp-2">{e.description}</p>}
+                        <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+                          <Warehouse className="h-3 w-3" />
+                          {e.hangars.length} hangar{e.hangars.length > 1 ? 's' : ''}
+                        </p>
+                      </div>
+                      <span className="text-orange-400 text-xl opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all">→</span>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -272,14 +285,36 @@ export default function ReparationClient({ userId }: { userId: string }) {
 
   if (!detail && entreprises.length > 0) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2"><Wrench className="h-7 w-7 text-orange-400" />Mes entreprises</h1>
-        {entreprises.map(e => (
-          <button key={e.id} onClick={() => loadDetail(e.id)} className="w-full text-left rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 hover:bg-slate-800/50 transition">
-            <span className="font-semibold text-slate-100">{e.nom}</span>
-            <span className="ml-2 text-xs text-slate-500">{e.my_role}</span>
-          </button>
-        ))}
+      <div className="space-y-4 animate-fade-in">
+        <div className="flex items-start gap-3">
+          <div className="h-12 w-12 rounded-xl bg-orange-500/15 ring-2 ring-orange-500/30 flex items-center justify-center shrink-0">
+            <Wrench className="h-6 w-6 text-orange-400 animate-pulse-soft" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-100">Mes entreprises</h1>
+            <p className="text-slate-400 text-sm mt-1">Sélectionnez une entreprise pour accéder à son tableau de bord.</p>
+          </div>
+        </div>
+        <div className="grid gap-3 stagger-enter">
+          {entreprises.map(e => (
+            <button
+              key={e.id}
+              onClick={() => loadDetail(e.id)}
+              className="group w-full text-left rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-all duration-200 hover:bg-slate-800/50 hover:border-orange-500/40 hover:shadow-lg hover:shadow-orange-500/5 hover:-translate-y-0.5"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Building2 className="h-5 w-5 text-orange-400 shrink-0 group-hover:scale-110 transition-transform" />
+                  <div className="min-w-0">
+                    <span className="font-semibold text-slate-100 group-hover:text-orange-300 transition-colors">{e.nom}</span>
+                    <p className="text-xs text-slate-500 mt-0.5 capitalize">{e.my_role}</p>
+                  </div>
+                </div>
+                <span className="text-orange-400 text-xl opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all">→</span>
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
@@ -296,8 +331,11 @@ export default function ReparationClient({ userId }: { userId: string }) {
     ...(isPdg ? [{ key: 'parametres' as Tab, label: 'Paramètres', icon: Settings }] : []),
   ];
 
+  const demandesEnCours = detail.demandes.filter(d => !['completee', 'refusee', 'annulee'].includes(d.statut)).length;
+  const demandesAvalider = detail.demandes.filter(d => d.statut === 'demandee').length;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in stagger-enter">
       {entreprises.length > 1 && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm text-slate-500">Entreprise :</span>
@@ -312,43 +350,109 @@ export default function ReparationClient({ userId }: { userId: string }) {
           </select>
           <button
             onClick={() => setDetail(null)}
-            className="text-sm text-slate-400 hover:text-slate-300"
+            className="text-sm text-slate-400 hover:text-slate-300 transition-colors"
           >
             ← Voir la liste
           </button>
         </div>
       )}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2"><Wrench className="h-7 w-7 text-orange-400" />{detail.nom}</h1>
-          {detail.description && <p className="text-slate-400 mt-1">{detail.description}</p>}
-        </div>
-        {detail.compte && (
-          <div className="text-right">
-            <p className="text-lg font-bold text-emerald-400">{detail.compte.solde.toLocaleString('fr-FR')} F$</p>
-            <p className="text-xs text-slate-500 font-mono">VBAN: {detail.compte.vban}</p>
+
+      {/* === HERO HEADER === */}
+      <header className="card overflow-hidden p-0 border-slate-700/60 transition-shadow hover:shadow-xl hover:shadow-orange-500/5">
+        <div className="bg-gradient-to-br from-orange-500/10 via-slate-800/10 to-amber-500/10 p-5 sm:p-6">
+          <div className="flex items-start justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="h-14 w-14 rounded-xl bg-orange-500/15 ring-2 ring-orange-500/30 flex items-center justify-center shrink-0">
+                <Wrench className="h-7 w-7 text-orange-400 animate-pulse-soft" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-100 truncate">{detail.nom}</h1>
+                {detail.description && <p className="text-slate-400 text-sm mt-0.5 line-clamp-2 max-w-xl">{detail.description}</p>}
+              </div>
+            </div>
+            {isPdg && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/30">
+                <Settings className="h-3.5 w-3.5" /> PDG
+              </span>
+            )}
           </div>
-        )}
-      </div>
+        </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
-      {success && <p className="text-emerald-400 text-sm">{success}</p>}
+        {/* KPIs */}
+        <div className="grid grid-cols-2 md:grid-cols-4 border-t border-slate-700/40 divide-x divide-slate-700/40">
+          {detail.compte && (
+            <div className="p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                <CreditCard className="h-3.5 w-3.5" /> Solde
+              </p>
+              <p className={`mt-1 text-xl font-bold tabular-nums ${detail.compte.solde > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {detail.compte.solde.toLocaleString('fr-FR')} <span className="text-sm font-medium">F$</span>
+              </p>
+              <p className="text-[10px] text-slate-500 font-mono truncate">VBAN: {detail.compte.vban}</p>
+            </div>
+          )}
+          <button type="button" onClick={() => setTab('demandes')} className="p-4 text-left transition-colors hover:bg-orange-500/5">
+            <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <ClipboardList className="h-3.5 w-3.5" /> Demandes
+            </p>
+            <p className="mt-1 text-xl font-bold text-orange-300 tabular-nums">
+              {demandesEnCours}
+              {demandesAvalider > 0 && <span className="ml-2 text-xs text-amber-400 animate-pulse">+{demandesAvalider} à valider</span>}
+            </p>
+            <p className="text-[10px] text-slate-500">en cours · {detail.demandes.length} total</p>
+          </button>
+          <button type="button" onClick={() => setTab('hangars')} className="p-4 text-left transition-colors hover:bg-orange-500/5">
+            <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <Warehouse className="h-3.5 w-3.5" /> Hangars
+            </p>
+            <p className="mt-1 text-xl font-bold text-sky-300 tabular-nums">{detail.hangars.length}</p>
+            <p className="text-[10px] text-slate-500">{detail.hangars.reduce((s, h) => s + h.capacite, 0)} places cumulees</p>
+          </button>
+          <button type="button" onClick={() => setTab('employes')} className="p-4 text-left transition-colors hover:bg-orange-500/5">
+            <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5" /> Equipe
+            </p>
+            <p className="mt-1 text-xl font-bold text-violet-300 tabular-nums">{detail.employes.length}</p>
+            <p className="text-[10px] text-slate-500">technicien{detail.employes.length > 1 ? 's' : ''}</p>
+          </button>
+        </div>
+      </header>
 
-      <nav className="flex gap-1 overflow-x-auto border-b border-slate-700 pb-px">
-        {tabs.map(t => {
-          const Icon = t.icon;
-          const count = t.key === 'demandes' ? detail.demandes.filter(d => !['completee', 'refusee', 'annulee'].includes(d.statut)).length : 0;
-          return (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-t-lg whitespace-nowrap transition ${tab === t.key ? 'bg-slate-800 text-orange-400 border-b-2 border-orange-400' : 'text-slate-400 hover:text-slate-200'}`}>
-              <Icon className="h-4 w-4" />{t.label}
-              {count > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs bg-orange-600 text-white">{count}</span>}
-            </button>
-          );
-        })}
+      {error && <p className="text-red-400 text-sm animate-fade-in">{error}</p>}
+      {success && <p className="text-emerald-400 text-sm animate-fade-in">{success}</p>}
+
+      {/* === NAV TABS PILLS === */}
+      <nav className="sticky top-0 z-20 -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 py-2 bg-slate-950/80 backdrop-blur-md border-y border-slate-800/60">
+        <div className="flex gap-2 overflow-x-auto scrollbar-thin">
+          {tabs.map(t => {
+            const Icon = t.icon;
+            const count = t.key === 'demandes' ? demandesEnCours : 0;
+            const isActive = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap ring-1 transition-all duration-200 ${
+                  isActive
+                    ? 'bg-orange-500/20 text-orange-300 ring-orange-400/40 shadow-md shadow-orange-500/10 scale-[1.03]'
+                    : 'bg-slate-800/60 text-slate-300 ring-slate-700 hover:bg-slate-700/60 hover:text-slate-100'
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {t.label}
+                {count > 0 && (
+                  <span className={`ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold ${isActive ? 'bg-slate-950/60 text-orange-200' : 'bg-orange-600 text-white'}`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </nav>
 
-      <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-6">
+      <div key={tab} className="card animate-fade-in">
         {tab === 'dashboard' && <DashboardTab detail={detail} />}
         {tab === 'demandes' && <DemandesTab detail={detail} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} router={router} />}
         {tab === 'hangars' && <HangarsTab detail={detail} isPdg={isPdg} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
