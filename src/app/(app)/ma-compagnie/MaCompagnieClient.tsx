@@ -347,10 +347,10 @@ export default function MaCompagnieClient({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in stagger-enter">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
-          <Building2 className="h-8 w-8 text-sky-400" />
+          <Building2 className="h-8 w-8 text-sky-400 animate-pulse-soft" />
           {compagniesDisponibles.length > 1 ? (
             <select
               value={selectedCompagnieId}
@@ -403,8 +403,8 @@ export default function MaCompagnieClient({
                   )}
                 </>
               )}
-              <span className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${isPdg ? 'bg-amber-500/20 text-amber-300' : 'bg-sky-500/20 text-sky-300'}`}>
-                <Crown className="h-4 w-4" />
+              <span className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ring-1 transition-all hover:scale-105 ${isPdg ? 'bg-amber-500/20 text-amber-300 ring-amber-400/30' : 'bg-sky-500/20 text-sky-300 ring-sky-400/30'}`}>
+                <Crown className={`h-4 w-4 ${isPdg ? 'animate-pulse-soft' : ''}`} />
                 {isPdg ? 'PDG' : 'Co-PDG'}
               </span>
             </>
@@ -414,7 +414,7 @@ export default function MaCompagnieClient({
 
       {/* Paramètres PDG / Co-PDG */}
       {isLeader && showSettings && (
-        <div className="card border-sky-500/30 bg-sky-500/5">
+        <div className="card border-sky-500/30 bg-sky-500/5 animate-slide-up">
           <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
             <Settings className="h-5 w-5 text-sky-400" />
             Paramètres de la compagnie
@@ -575,7 +575,7 @@ export default function MaCompagnieClient({
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Infos compagnie */}
-        <div className="card">
+        <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-sky-500/5">
           <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
             <Building2 className="h-5 w-5 text-sky-400" />
             Informations
@@ -637,7 +637,7 @@ export default function MaCompagnieClient({
         </div>
 
         {/* Liste des pilotes */}
-        <div className="card">
+        <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-sky-500/5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
               <Users className="h-5 w-5 text-sky-400" />
@@ -658,11 +658,11 @@ export default function MaCompagnieClient({
             )}
           </div>
           {employes.length > 0 ? (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
+            <div className="space-y-2 max-h-64 overflow-y-auto stagger-enter">
               {employes.map((emp) => (
                 <div 
                   key={emp.id} 
-                  className="flex items-center justify-between bg-slate-800/30 rounded-lg p-3 border border-slate-700/30"
+                  className="flex items-center justify-between bg-slate-800/30 rounded-lg p-3 border border-slate-700/30 transition-all duration-200 hover:bg-slate-800/50 hover:border-slate-600/40 hover:translate-x-0.5"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-slate-200 font-medium">{emp.identifiant}</span>
@@ -719,8 +719,8 @@ export default function MaCompagnieClient({
 
       {/* Modal licenciement double confirmation */}
       {fireConfirm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setFireConfirm(null)}>
-          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4 max-h-[90dvh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in" onClick={() => setFireConfirm(null)}>
+          <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4 max-h-[90dvh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
             {fireConfirm.step === 1 && (
               <>
                 <h3 className="text-lg font-semibold text-slate-100 mb-3">Licencier {fireConfirm.identifiant} ?</h3>
@@ -764,7 +764,7 @@ export default function MaCompagnieClient({
 
       {/* Section Recrutement */}
       {isLeader && showRecrutement && (
-        <div className="card border-emerald-500/30 bg-emerald-500/5">
+        <div className="card border-emerald-500/30 bg-emerald-500/5 animate-slide-up">
           <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
             <UserPlus className="h-5 w-5 text-emerald-400" />
             Recruter un pilote
@@ -911,7 +911,7 @@ export default function MaCompagnieClient({
 
       {/* Solde compagnie */}
       {isLeader && (
-        <div className="card bg-gradient-to-r from-emerald-500/10 to-sky-500/10 border-emerald-500/20">
+        <div className="card bg-gradient-to-r from-emerald-500/10 to-sky-500/10 border-emerald-500/20 transition-all duration-200 hover:border-emerald-400/40 hover:shadow-lg hover:shadow-emerald-500/10">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-400">Solde de la compagnie</p>
@@ -952,7 +952,7 @@ export default function MaCompagnieClient({
 
       {/* Tarifs par liaison */}
       {isLeader && (
-        <div className="card">
+        <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-amber-500/5">
           <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
             <Route className="h-5 w-5 text-amber-400" />
             Tarifs par liaison
@@ -968,10 +968,10 @@ export default function MaCompagnieClient({
       {isLeader && (
         <Link 
           href="/felitz-bank"
-          className="card hover:bg-slate-800/70 transition-colors flex items-center gap-4"
+          className="card group flex items-center gap-4 transition-all duration-200 hover:bg-slate-800/70 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5"
         >
-          <div className="p-3 rounded-lg bg-emerald-500/20">
-            <DollarSign className="h-6 w-6 text-emerald-400" />
+          <div className="p-3 rounded-lg bg-emerald-500/20 transition-transform duration-200 group-hover:scale-110">
+            <DollarSign className="h-6 w-6 text-emerald-400 group-hover:animate-pulse-soft" />
           </div>
           <div>
             <p className="font-semibold text-slate-200">Gérer les finances</p>
