@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { ArrowLeft, Mail } from 'lucide-react';
 import Link from 'next/link';
+import { getUserPhotosMap } from '@/lib/user-photos';
 import MessagerieClient from './MessagerieClient';
 
 export default async function MessageriePage() {
@@ -46,6 +47,35 @@ export default async function MessageriePage() {
 
   const nonLus = messagesRecus.filter(m => !m.lu).length;
 
+  // Charge les photos officielles (carte d'identite) pour tous les contacts +
+  // expediteurs/destinataires apparaissant dans les messages, indexees par
+  // identifiant pour faciliter le rendu (on n'a pas toujours l'UUID cote UI).
+  const allUserIds = new Set<string>();
+  for (const u of utilisateurs) allUserIds.add(u.id);
+  for (const m of messagesRecus) { if (m.expediteur_id) allUserIds.add(m.expediteur_id); }
+  for (const m of messagesEnvoyes) { allUserIds.add(m.destinataire_id); }
+  const photosByUser = await getUserPhotosMap(admin, Array.from(allUserIds));
+  const identByUser = new Map<string, string>();
+  for (const u of utilisateurs) identByUser.set(u.id, u.identifiant);
+  const pickIdent = (rel: unknown): string | null => {
+    if (!rel) return null;
+    if (Array.isArray(rel)) return (rel[0] as { identifiant?: string } | undefined)?.identifiant ?? null;
+    return (rel as { identifiant?: string }).identifiant ?? null;
+  };
+  for (const m of messagesRecus) {
+    const ident = pickIdent(m.expediteur);
+    if (m.expediteur_id && ident) identByUser.set(m.expediteur_id, ident);
+  }
+  for (const m of messagesEnvoyes) {
+    const ident = pickIdent(m.destinataire);
+    if (ident) identByUser.set(m.destinataire_id, ident);
+  }
+  const photoByIdentifiant: Record<string, string | null> = {};
+  for (const [uid, url] of photosByUser) {
+    const ident = identByUser.get(uid);
+    if (ident) photoByIdentifiant[ident] = url;
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
@@ -69,6 +99,7 @@ export default async function MessageriePage() {
         utilisateurs={utilisateurs}
         currentUserIdentifiant={profile?.identifiant || ''}
         isAdmin={isAdmin}
+        photoByIdentifiant={photoByIdentifiant}
       />
     </div>
   );

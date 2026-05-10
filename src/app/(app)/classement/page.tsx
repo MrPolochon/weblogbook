@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
+import { getUserPhotosMap } from '@/lib/user-photos';
 import ClassementClient from './ClassementClient';
 
 type PiloteStat = {
@@ -19,6 +20,7 @@ type PiloteStat = {
   solde: number;
   nbAvions: number;
   memberSince: string;
+  photoUrl: string | null;
 };
 
 export default async function ClassementPage() {
@@ -129,6 +131,8 @@ export default async function ClassementPage() {
     avionsByUser.set(a.proprietaire_id, (avionsByUser.get(a.proprietaire_id) || 0) + 1);
   }
 
+  const photosByUser = await getUserPhotosMap(admin, profiles.map(p => p.id));
+
   const pilotes: PiloteStat[] = profiles.map(p => {
     const userVols = volsByUser.get(p.id) || [];
     const totalMinutes = (p.heures_initiales_minutes || 0) + userVols.reduce((s, v) => s + (v.duree_minutes || 0), 0);
@@ -162,6 +166,7 @@ export default async function ClassementPage() {
       solde: soldeByUser.get(p.id) || 0,
       nbAvions: avionsByUser.get(p.id) || 0,
       memberSince: p.created_at,
+      photoUrl: photosByUser.get(p.id) ?? null,
     };
   });
 

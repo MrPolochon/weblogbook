@@ -5,6 +5,7 @@ import {
   Trophy, Clock, Plane, Award, MapPin, Layers, Navigation, Cloud,
   GraduationCap, Shield, Timer, Banknote, Warehouse, CalendarDays, Crown,
 } from 'lucide-react';
+import UserAvatar from '@/components/UserAvatar';
 
 type PiloteStat = {
   id: string;
@@ -22,6 +23,8 @@ type PiloteStat = {
   solde: number;
   nbAvions: number;
   memberSince: string;
+  /** Photo de la carte d'identite (cartes_identite.photo_url). */
+  photoUrl: string | null;
 };
 
 interface Props {
@@ -172,8 +175,14 @@ export default function ClassementClient({ pilotes, currentUserId }: Props) {
             const isMe = p.id === currentUserId;
             return (
               <div key={p.id} className={`flex flex-col items-center p-4 rounded-xl border ${medalBg(rank)} ${rank === 0 ? 'order-2 -mt-2' : rank === 1 ? 'order-1 mt-2' : 'order-3 mt-2'}`}>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${rank === 0 ? 'bg-amber-400/20' : rank === 1 ? 'bg-slate-400/10' : 'bg-amber-700/10'}`}>
-                  <Crown className={`h-5 w-5 ${medalColor(rank)}`} />
+                <div className="relative mb-2">
+                  <UserAvatar
+                    identifiant={p.identifiant}
+                    photoUrl={p.photoUrl}
+                    size={rank === 0 ? 'xl' : 'lg'}
+                    className={rank === 0 ? 'ring-2 ring-amber-400/60' : rank === 1 ? 'ring-2 ring-slate-300/40' : 'ring-2 ring-amber-700/40'}
+                  />
+                  <Crown className={`absolute -top-2 -right-2 h-4 w-4 ${medalColor(rank)} drop-shadow`} />
                 </div>
                 <p className="text-[10px] text-slate-500 font-mono">#{rank + 1}</p>
                 <p className={`text-sm font-semibold truncate max-w-full ${isMe ? 'text-violet-300' : 'text-slate-200'}`}>{p.identifiant}</p>
@@ -213,11 +222,12 @@ export default function ClassementClient({ pilotes, currentUserId }: Props) {
                     {i + 1}
                   </span>
                   <div className="min-w-0 flex items-center gap-2">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                      isMe ? 'bg-violet-500/20 text-violet-300' : 'bg-slate-800 text-slate-400'
-                    }`}>
-                      {p.identifiant[0]?.toUpperCase()}
-                    </div>
+                    <UserAvatar
+                      identifiant={p.identifiant}
+                      photoUrl={p.photoUrl}
+                      size="sm"
+                      className={isMe ? 'ring-2 ring-violet-500/60' : ''}
+                    />
                     <div className="min-w-0 flex-1">
                       <p className={`text-sm truncate ${isMe ? 'font-semibold text-violet-200' : 'text-slate-300'}`}>{p.identifiant}</p>
                       <div className="mt-1 h-1 rounded-full bg-slate-800 overflow-hidden">

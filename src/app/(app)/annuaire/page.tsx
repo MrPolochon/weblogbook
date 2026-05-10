@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { INSTRUCTION_TITRE_TYPES } from '@/lib/licence-titres-instruction';
+import { getUserPhotosMap } from '@/lib/user-photos';
 import AnnuaireClient, { type AnnuaireEntry } from './AnnuaireClient';
 
 export default async function AnnuairePage() {
@@ -73,6 +74,7 @@ export default async function AnnuairePage() {
 
   const discordMap = new Map((discordRes.data || []).map((d) => [d.user_id as string, d.discord_username as string]));
   const profileById = new Map((profilesRes.data || []).map((p) => [p.id as string, p]));
+  const photosByUser = await getUserPhotosMap(admin, allIds);
 
   const entries: AnnuaireEntry[] = [];
   for (const id of allIds) {
@@ -86,6 +88,7 @@ export default async function AnnuairePage() {
       isAdmin: p.role === 'admin',
       titres: [...titresUser],
       discord: discordMap.get(id) ?? null,
+      photoUrl: photosByUser.get(id) ?? null,
     });
   }
 

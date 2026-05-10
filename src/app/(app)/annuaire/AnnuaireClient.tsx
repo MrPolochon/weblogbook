@@ -6,6 +6,7 @@ import {
   BookUser, Search, Shield, GraduationCap, Award, Radio, TowerControl,
   Plane,
 } from 'lucide-react';
+import UserAvatar from '@/components/UserAvatar';
 
 export type AnnuaireEntry = {
   id: string;
@@ -13,6 +14,8 @@ export type AnnuaireEntry = {
   isAdmin: boolean;
   titres: string[];
   discord: string | null;
+  /** Photo officielle issue de la carte d'identite (cartes_identite.photo_url). */
+  photoUrl: string | null;
 };
 
 type FilterKey = 'admin' | 'FI' | 'FE' | 'ATC FI' | 'ATC FE';
@@ -152,17 +155,14 @@ export default function AnnuaireClient({ entries }: { entries: AnnuaireEntry[] }
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 stagger-enter">
           {filtered.map((e) => {
             const primaryBadge = e.isAdmin ? BADGE_STYLE.admin : (e.titres.length > 0 ? BADGE_STYLE[e.titres[0]] : null);
-            const avatarBg = primaryBadge ? primaryBadge.bg : 'bg-slate-700/40';
-            const avatarColor = primaryBadge ? primaryBadge.color : 'text-slate-400';
+            const ringClass = primaryBadge ? `ring-2 ${primaryBadge.border.replace('border-', 'ring-')}` : '';
             return (
               <div
                 key={e.id}
                 className="group rounded-xl border border-slate-700/50 bg-slate-800/20 p-4 space-y-3 transition-all duration-200 hover:border-slate-600/60 hover:bg-slate-800/30 hover:shadow-lg hover:shadow-slate-900/30"
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${avatarBg} ${avatarColor} font-bold text-sm shrink-0`}>
-                    {e.identifiant[0]?.toUpperCase()}
-                  </div>
+                  <UserAvatar identifiant={e.identifiant} photoUrl={e.photoUrl} size="lg" className={ringClass} />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-100 truncate">{e.identifiant}</p>
                     {e.discord ? (

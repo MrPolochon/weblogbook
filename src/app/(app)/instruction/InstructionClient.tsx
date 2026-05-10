@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { InstructionProgram } from '@/lib/instruction-programs';
@@ -10,6 +10,7 @@ import {
   Check, Clock, ClipboardList, Send, Compass,
   UserPlus, Link2, PlaneTakeoff, FileCheck2,
 } from 'lucide-react';
+import UserAvatar from '@/components/UserAvatar';
 
 type TabId = 'espace' | 'formation' | 'examens';
 
@@ -19,6 +20,8 @@ type Eleve = {
   formation_instruction_active: boolean;
   formation_instruction_licence: string | null;
   created_at: string;
+  /** Photo de la carte d'identite (cartes_identite.photo_url). */
+  photoUrl?: string | null;
 };
 
 type TypeAvion = {
@@ -190,6 +193,10 @@ export default function InstructionClient({
   >({});
   const [transferPickByEleve, setTransferPickByEleve] = useState<Record<string, string>>({});
   const [transferListLoading, setTransferListLoading] = useState<Record<string, boolean>>({});
+  // Vrai si la liste a deja ete chargee avec succes (meme si vide). Permet de
+  // distinguer "pas encore charge" de "charge mais aucun candidat eligible"
+  // pour afficher le bon message dans le menu deroulant.
+  const [transferLoadedByEleve, setTransferLoadedByEleve] = useState<Record<string, boolean>>({});
 
   const avionsByEleve = useMemo(() => {
     const map = new Map<string, AvionTemp[]>();
@@ -545,23 +552,52 @@ export default function InstructionClient({
     });
   }
 
-  async function loadTransferCandidates(eleveId: string) {
-    if (transferListLoading[eleveId]) return;
-    setTransferListLoading((L) => ({ ...L, [eleveId]: true }));
-    try {
-      const res = await fetch(`/api/instruction/eleves/${encodeURIComponent(eleveId)}/transfer-candidates`);
-      const data = (await res.json().catch(() => ({}))) as {
-        candidates?: Array<{ id: string; identifiant: string }>;
-        error?: string;
-      };
-      if (!res.ok) throw new Error(data.error || 'Liste instructeurs');
-      setTransferCandidatesByEleve((prev) => ({ ...prev, [eleveId]: data.candidates ?? [] }));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erreur');
-    } finally {
-      setTransferListLoading((L) => ({ ...L, [eleveId]: false }));
+  const loadTransferCandidates = useCallback(
+    async (eleveId: string, opts?: { silent?: boolean }) => {
+      setTransferListLoading((L) => (L[eleveId] ? L : { ...L, [eleveId]: true }));
+      try {
+        const res = await fetch(`/api/instruction/eleves/${encodeURIComponent(eleveId)}/transfer-candidates`);
+        const data = (await res.json().catch(() => ({}))) as {
+          candidates?: Array<{ id: string; identifiant: string }>;
+          error?: string;
+        };
+        if (!res.ok) throw new Error(data.error || 'Liste instructeurs');
+        setTransferCandidatesByEleve((prev) => ({ ...prev, [eleveId]: data.candidates ?? [] }));
+        setTransferLoadedByEleve((prev) => ({ ...prev, [eleveId]: true }));
+      } catch (e) {
+        if (!opts?.silent) toast.error(e instanceof Error ? e.message : 'Erreur');
+      } finally {
+        setTransferListLoading((L) => {
+          if (!L[eleveId]) return L;
+          const next = { ...L };
+          delete next[eleveId];
+          return next;
+        });
+      }
+    },
+    [],
+  );
+
+  // Pre-charge automatiquement la liste des instructeurs eligibles pour chaque
+  // eleve en formation active des le rendu, plutot que d'attendre que l'utilisateur
+  // ouvre le <select>. Sans ca, le bouton "Transferer" reste grise sans qu'on
+  // sache pourquoi (liste de candidats vide silencieuse).
+  useEffect(() => {
+    if (!isManager) return;
+    const activeIds = eleves
+      .filter((e) => e.formation_instruction_active)
+      .map((e) => e.id);
+    for (const id of activeIds) {
+      if (transferLoadedByEleve[id] || transferListLoading[id]) continue;
+      void loadTransferCandidates(id, { silent: true });
     }
-  }
+    // Nettoyage : si un eleve n'est plus dans la liste, on peut purger son etat.
+    setTransferLoadedByEleve((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const id of activeIds) if (prev[id]) next[id] = true;
+      return next;
+    });
+  }, [eleves, isManager, loadTransferCandidates, transferLoadedByEleve, transferListLoading]);
 
   async function transferEleve(eleveId: string, nouvelInstructeurId: string) {
     if (!nouvelInstructeurId) return;
@@ -1415,9 +1451,7 @@ export default function InstructionClient({
               <div key={e.id} className="rounded-xl border border-slate-700/50 bg-slate-800/20 p-5 space-y-4 transition-colors hover:border-slate-600/60">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-orange-500/15 text-orange-300 font-bold text-sm">
-                      {e.identifiant[0]?.toUpperCase()}
-                    </div>
+                    <UserAvatar identifiant={e.identifiant} photoUrl={e.photoUrl} size="lg" className="ring-2 ring-orange-500/30" />
                     <div>
                       <p className="text-slate-100 font-semibold">{e.identifiant}</p>
                       <div className="flex items-center gap-2 mt-0.5">
@@ -1439,43 +1473,67 @@ export default function InstructionClient({
                         <option key={p.licenceCode} value={p.licenceCode}>{p.label}</option>
                       ))}
                     </select>
-                    {e.formation_instruction_active && (
-                      <>
-                        <select
-                          className="input min-w-[11rem]"
-                          value={transferPickByEleve[e.id] ?? ''}
-                          onFocus={() => void loadTransferCandidates(e.id)}
-                          onChange={(ev) =>
-                            setTransferPickByEleve((p) => ({ ...p, [e.id]: ev.target.value }))
-                          }
-                          disabled={loading || Boolean(transferListLoading[e.id])}
-                        >
-                          <option value="">
-                            {transferListLoading[e.id] ? 'Chargement…' : '— Transférer vers —'}
-                          </option>
-                          {(transferCandidatesByEleve[e.id] ?? []).map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.identifiant}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          disabled={
-                            loading ||
-                            !(transferPickByEleve[e.id] ?? '').trim() ||
-                            Boolean(transferListLoading[e.id])
-                          }
-                          onClick={() => transferEleve(e.id, (transferPickByEleve[e.id] ?? '').trim())}
-                        >
-                          Transférer
-                        </button>
-                        <button className="btn-secondary" type="button" disabled={loading} onClick={() => finishFormation(e.id)}>
-                          Terminer la formation
-                        </button>
-                      </>
-                    )}
+                    {e.formation_instruction_active && (() => {
+                      const cands = transferCandidatesByEleve[e.id] ?? [];
+                      const isLoading = Boolean(transferListLoading[e.id]);
+                      const isLoaded = Boolean(transferLoadedByEleve[e.id]);
+                      const noCandidates = isLoaded && cands.length === 0;
+                      const pick = (transferPickByEleve[e.id] ?? '').trim();
+                      const isAtcInit = isAtcInstructionProgram(e.formation_instruction_licence || '');
+                      return (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-col">
+                            <select
+                              className="input min-w-[11rem]"
+                              value={transferPickByEleve[e.id] ?? ''}
+                              onFocus={() => {
+                                if (!isLoaded && !isLoading) void loadTransferCandidates(e.id);
+                              }}
+                              onChange={(ev) =>
+                                setTransferPickByEleve((p) => ({ ...p, [e.id]: ev.target.value }))
+                              }
+                              disabled={loading || isLoading || noCandidates}
+                            >
+                              <option value="">
+                                {isLoading
+                                  ? 'Chargement…'
+                                  : noCandidates
+                                    ? 'Aucun autre instructeur éligible'
+                                    : '— Transférer vers —'}
+                              </option>
+                              {cands.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.identifiant}
+                                </option>
+                              ))}
+                            </select>
+                            {noCandidates && (
+                              <span className="text-[11px] text-amber-400 mt-1 max-w-[15rem] leading-tight">
+                                Vous êtes le seul {isAtcInit ? 'ATC FI / ATC FE' : 'FI / instructeur'} disponible. Un autre référent doit être créé pour permettre le transfert.
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={loading || !pick || isLoading || noCandidates}
+                            title={
+                              noCandidates
+                                ? 'Aucun autre instructeur éligible pour ce parcours.'
+                                : !pick
+                                  ? 'Choisissez un instructeur dans la liste.'
+                                  : undefined
+                            }
+                            onClick={() => transferEleve(e.id, pick)}
+                          >
+                            Transférer
+                          </button>
+                          <button className="btn-secondary" type="button" disabled={loading} onClick={() => finishFormation(e.id)}>
+                            Terminer la formation
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 

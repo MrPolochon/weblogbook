@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import ChequeVisuel from '@/components/ChequeVisuel';
 import MessageContent from '@/components/MessageContent';
+import UserAvatar from '@/components/UserAvatar';
 import BroadcastAudienceSelector, { BroadcastAudience, audienceLabel } from '@/components/BroadcastAudienceSelector';
 import { formatDateTimeUTC } from '@/lib/date-utils';
 import { toast } from 'sonner';
@@ -52,6 +53,8 @@ interface Props {
   utilisateurs: Utilisateur[];
   currentUserIdentifiant: string;
   isAdmin?: boolean;
+  /** Map identifiant -> URL photo (cartes_identite.photo_url). */
+  photoByIdentifiant?: Record<string, string | null>;
 }
 
 function getIdentifiant(obj: { identifiant: string } | { identifiant: string }[] | null | undefined): string {
@@ -83,16 +86,14 @@ function truncate(text: string, max: number): string {
   return oneLine.length <= max ? oneLine : oneLine.slice(0, max) + '…';
 }
 
-function avatar(name: string) {
-  const letter = (name || '?')[0].toUpperCase();
-  const colors = ['bg-violet-500/20 text-violet-300', 'bg-emerald-500/20 text-emerald-300', 'bg-sky-500/20 text-sky-300', 'bg-amber-500/20 text-amber-300', 'bg-rose-500/20 text-rose-300', 'bg-teal-500/20 text-teal-300'];
-  const idx = name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % colors.length;
-  return <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${colors[idx]}`}>{letter}</div>;
+function avatar(name: string, photoByIdentifiant?: Record<string, string | null>) {
+  const photoUrl = photoByIdentifiant ? photoByIdentifiant[name] ?? null : null;
+  return <UserAvatar identifiant={name} photoUrl={photoUrl} size="md" />;
 }
 
 type TabId = 'inbox' | 'recrutement' | 'cheques' | 'sanctions' | 'sent' | 'compose';
 
-export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant, isAdmin = false }: Props) {
+export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant, isAdmin = false, photoByIdentifiant = {} }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<TabId>('inbox');
@@ -287,7 +288,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
         className={`w-full text-left flex items-center gap-3 px-4 py-2.5 transition-colors border-l-2 ${
           sel ? `bg-violet-500/8 ${typeBorderColor(msg)}` : unread ? 'border-l-transparent bg-slate-800/30 hover:bg-slate-800/50' : 'border-l-transparent hover:bg-slate-800/30'
         }`}>
-        {avatar(name)}
+        {avatar(name, photoByIdentifiant)}
         <div className="flex-1 min-w-0 flex items-center gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -338,7 +339,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
         <div className={`px-6 py-4 border-b border-slate-800/40 border-l-4 ${typeBorderColor(m)} shrink-0`}>
           <h2 className="text-lg font-semibold text-slate-100 break-words">{m.titre}</h2>
           <div className="flex items-center gap-2 mt-2">
-            {avatar(activeTab === 'sent' ? getIdentifiant(m.destinataire) : getIdentifiant(m.expediteur))}
+            {avatar(activeTab === 'sent' ? getIdentifiant(m.destinataire) : getIdentifiant(m.expediteur), photoByIdentifiant)}
             <div>
               <p className="text-sm text-slate-300">{activeTab === 'sent' ? `À : ${getIdentifiant(m.destinataire)}` : getIdentifiant(m.expediteur)}</p>
               <p className="text-xs text-slate-500">{formatDateTimeUTC(m.created_at)}</p>
@@ -468,7 +469,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                   {filteredUtilisateurs.length === 0 ? <p className="px-3 py-2 text-xs text-slate-600">Aucun résultat</p> : filteredUtilisateurs.slice(0, 50).map(u => (
                     <button key={u.id} type="button" onClick={() => { setComposeDestinataire(u.id); setDestSearch(u.identifiant); setDestDropdownOpen(false); }}
                       className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 transition-colors flex items-center gap-2">
-                      {avatar(u.identifiant)}<span>{u.identifiant}</span>
+                      {avatar(u.identifiant, photoByIdentifiant)}<span>{u.identifiant}</span>
                     </button>
                   ))}
                 </div>
