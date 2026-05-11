@@ -10,7 +10,6 @@ import PilotesActions from './PilotesActions';
 import GenerateAllCardsButton from './GenerateAllCardsButton';
 import RefreshAllCardsButton from './RefreshAllCardsButton';
 import InactivityWarningBadge, { WarnAllInactiveButton, InactivityLegend } from './InactivityWarningBadge';
-import TestDmInactiviteForm from './TestDmInactiviteForm';
 
 const UN_MOIS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -173,8 +172,6 @@ export default async function AdminPilotesPage() {
       </div>
 
       <InactivityLegend />
-
-      <TestDmInactiviteForm />
 
       <div className="card">
         <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
