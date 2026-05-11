@@ -40,7 +40,9 @@ export default function InactivityWarningBadge({ userId, identifiant, status, wa
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data?.error || 'Erreur lors de l\'envoi');
+        toast.error(data?.error || 'Erreur lors de l\'envoi', {
+          duration: data?.code === 'MIGRATION_MISSING' ? 15000 : 5000,
+        });
         return;
       }
       const r = data?.results?.[0];
@@ -49,7 +51,7 @@ export default function InactivityWarningBadge({ userId, identifiant, status, wa
       } else if (r?.status === 'dm_failed') {
         toast.error(`DM echoue : ${r.error ?? 'inconnu'}`);
       } else {
-        toast.info('Aucun avertissement envoye (deja averti ou compte non eligible)');
+        toast.info(data?.message || 'Aucun avertissement envoye (deja averti)');
       }
       startTransition(() => router.refresh());
     } catch {
@@ -114,10 +116,16 @@ export function WarnAllInactiveButton({ count }: { count: number }) {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data?.error || 'Erreur lors de l\'envoi');
+        toast.error(data?.error || 'Erreur lors de l\'envoi', {
+          duration: data?.code === 'MIGRATION_MISSING' ? 15000 : 5000,
+        });
         return;
       }
-      toast.success(`${data.warned} averti(s) — ${data.failed} echec(s) DM`);
+      if ((data.warned ?? 0) === 0 && (data.failed ?? 0) === 0) {
+        toast.warning(data?.message || 'Aucun utilisateur averti (filtre vide cote API)', { duration: 8000 });
+      } else {
+        toast.success(`${data.warned} averti(s) — ${data.failed} echec(s) DM`);
+      }
       startTransition(() => router.refresh());
     } catch {
       toast.error('Erreur reseau');

@@ -55,9 +55,20 @@ export async function POST(req: Request) {
   // Resoudre la liste des cibles
   let targetIds: string[] = [];
 
+  /**
+   * Helper : detecte une erreur Postgrest "colonne inactivity_* manquante"
+   * (migration add_inactivity_warnings.sql non encore appliquee).
+   */
+  const isMissingMigrationError = (err: { code?: string; message?: string } | null) => {
+    if (!err) return false;
+    const code = err.code;
+    const msg = (err.message ?? '').toLowerCase();
+    return code === '42703' || code === 'PGRST204' || msg.includes('inactivity_');
+  };
+
   if (parsed.data.all_inactive) {
     const seuilIso = new Date(Date.now() - INACTIVITY_THRESHOLD_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const [{ data: profiles }, { data: tracking }] = await Promise.all([
+    const [profilesRes, trackingRes] = await Promise.all([
       admin.from('profiles')
         .select('id, created_at, role, inactivity_warning_status')
         .neq('role', 'admin')
@@ -65,28 +76,64 @@ export async function POST(req: Request) {
       admin.from('user_login_tracking').select('user_id, last_login_at'),
     ]);
 
-    const lastByUser = new Map<string, string | null>();
-    for (const t of tracking ?? []) lastByUser.set(t.user_id as string, t.last_login_at as string | null);
+    if (profilesRes.error) {
+      if (isMissingMigrationError(profilesRes.error)) {
+        return NextResponse.json({
+          error: 'Migration SQL non appliquee. Va sur Supabase > SQL Editor et execute le contenu de "supabase/add_inactivity_warnings.sql", puis reessaie.',
+          code: 'MIGRATION_MISSING',
+        }, { status: 503 });
+      }
+      return NextResponse.json({ error: profilesRes.error.message }, { status: 500 });
+    }
 
-    targetIds = (profiles ?? [])
+    const profiles = profilesRes.data ?? [];
+    const tracking = trackingRes.data ?? [];
+
+    const lastByUser = new Map<string, string | null>();
+    for (const t of tracking) lastByUser.set(t.user_id as string, t.last_login_at as string | null);
+
+    targetIds = profiles
       .filter((p) => {
         const last = lastByUser.get(p.id as string) ?? null;
         const ref = last ?? (p.created_at as string);
         return ref < seuilIso;
       })
       .map((p) => p.id as string);
+
+    if (targetIds.length === 0) {
+      return NextResponse.json({
+        ok: true, warned: 0, failed: 0, results: [],
+        message: `Aucun inactif (>${INACTIVITY_THRESHOLD_DAYS}j) sans avertissement actuel. Les ${profiles.length} comptes deja tous avertis ou recents.`,
+      });
+    }
   } else if (parsed.data.user_ids?.length) {
-    // Filtrer ceux qui ont deja un statut pour ne pas spam
-    const { data } = await admin
+    const res = await admin
       .from('profiles')
       .select('id')
       .in('id', parsed.data.user_ids)
       .is('inactivity_warning_status', null);
-    targetIds = (data ?? []).map((p) => p.id as string);
-  }
 
-  if (targetIds.length === 0) {
-    return NextResponse.json({ ok: true, warned: 0, failed: 0, results: [], message: 'Aucun utilisateur a avertir.' });
+    if (res.error) {
+      if (isMissingMigrationError(res.error)) {
+        return NextResponse.json({
+          error: 'Migration SQL non appliquee. Va sur Supabase > SQL Editor et execute le contenu de "supabase/add_inactivity_warnings.sql", puis reessaie.',
+          code: 'MIGRATION_MISSING',
+        }, { status: 503 });
+      }
+      return NextResponse.json({ error: res.error.message }, { status: 500 });
+    }
+    targetIds = (res.data ?? []).map((p) => p.id as string);
+
+    if (targetIds.length === 0) {
+      return NextResponse.json({
+        ok: true, warned: 0, failed: 0, results: [],
+        message: 'Ces utilisateurs ont deja un avertissement (statut warned ou dm_failed). Pour le ressayer, supprime d\'abord le statut en BDD.',
+      });
+    }
+  } else {
+    return NextResponse.json({
+      error: 'Body invalide : fournir user_ids ou all_inactive=true',
+    }, { status: 400 });
   }
 
   // Recuperer les identifiants pour personnaliser les DM
