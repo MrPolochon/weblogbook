@@ -51,11 +51,17 @@ function buildDmContent(identifiant: string, deleteAfter: Date): string {
  * Reservee aux admins.
  */
 export async function POST(req: Request) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Non authentifie' }, { status: 401 });
-  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-  if (me?.role !== 'admin') return NextResponse.json({ error: 'Reserve aux admins' }, { status: 403 });
+  // Auth : admin connecte OU header x-cron-secret valide (pour appel depuis SQL pg_net)
+  const cronSecret = req.headers.get('x-cron-secret');
+  const isCronAuth = cronSecret && cronSecret === process.env.CRON_SECRET;
+
+  if (!isCronAuth) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'Non authentifie' }, { status: 401 });
+    const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    if (me?.role !== 'admin') return NextResponse.json({ error: 'Reserve aux admins' }, { status: 403 });
+  }
 
   let body: unknown;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Body JSON invalide' }, { status: 400 }); }
