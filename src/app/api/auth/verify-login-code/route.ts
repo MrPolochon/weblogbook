@@ -89,6 +89,22 @@ export async function POST(req: NextRequest) {
     }
     await admin.from('login_verification_codes').delete().eq('user_id', user.id);
 
+    // Reset l'avertissement d'inactivite : l'utilisateur s'est reconnecte a temps.
+    try {
+      await admin
+        .from('profiles')
+        .update({
+          inactivity_warning_status: null,
+          inactivity_warning_error: null,
+          inactivity_warned_at: null,
+          inactivity_delete_after: null,
+        })
+        .eq('id', user.id)
+        .not('inactivity_warning_status', 'is', null);
+    } catch {
+      // Migration add_inactivity_warnings.sql peut ne pas etre encore appliquee
+    }
+
     if (ip) {
       try {
         await admin.from('login_ip_history').insert({

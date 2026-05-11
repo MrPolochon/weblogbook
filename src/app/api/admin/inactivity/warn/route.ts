@@ -1,0 +1,113 @@
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { warnUserOfInactivity, INACTIVITY_THRESHOLD_DAYS } from '@/lib/admin/inactivity-warning';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
+const BodySchema = z.object({
+  user_ids: z.array(z.string().uuid()).optional(),
+  /** Si true, ignore user_ids et avertit TOUS les inactifs sans avertissement actuel. */
+  all_inactive: z.boolean().optional(),
+});
+
+async function requireAdmin() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: NextResponse.json({ error: 'Non authentifie' }, { status: 401 }) } as const;
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  if (profile?.role !== 'admin') {
+    return { error: NextResponse.json({ error: 'Reserve aux admins' }, { status: 403 }) } as const;
+  }
+  return { user } as const;
+}
+
+/**
+ * POST /api/admin/inactivity/warn
+ *
+ * Body : { user_ids?: uuid[], all_inactive?: boolean }
+ *
+ * - Si `user_ids` : avertit ces utilisateurs (skip ceux deja warned/dm_failed pour ne pas double-DM).
+ * - Si `all_inactive=true` : avertit tous les utilisateurs inactifs depuis >30j non encore avertis.
+ *
+ * Retourne le detail par utilisateur.
+ */
+export async function POST(req: Request) {
+  const auth = await requireAdmin();
+  if (auth.error) return auth.error;
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Body JSON invalide' }, { status: 400 });
+  }
+
+  const parsed = BodySchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Donnees invalides' }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+
+  // Resoudre la liste des cibles
+  let targetIds: string[] = [];
+
+  if (parsed.data.all_inactive) {
+    const seuilIso = new Date(Date.now() - INACTIVITY_THRESHOLD_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const [{ data: profiles }, { data: tracking }] = await Promise.all([
+      admin.from('profiles')
+        .select('id, created_at, role, inactivity_warning_status')
+        .neq('role', 'admin')
+        .is('inactivity_warning_status', null),
+      admin.from('user_login_tracking').select('user_id, last_login_at'),
+    ]);
+
+    const lastByUser = new Map<string, string | null>();
+    for (const t of tracking ?? []) lastByUser.set(t.user_id as string, t.last_login_at as string | null);
+
+    targetIds = (profiles ?? [])
+      .filter((p) => {
+        const last = lastByUser.get(p.id as string) ?? null;
+        const ref = last ?? (p.created_at as string);
+        return ref < seuilIso;
+      })
+      .map((p) => p.id as string);
+  } else if (parsed.data.user_ids?.length) {
+    // Filtrer ceux qui ont deja un statut pour ne pas spam
+    const { data } = await admin
+      .from('profiles')
+      .select('id')
+      .in('id', parsed.data.user_ids)
+      .is('inactivity_warning_status', null);
+    targetIds = (data ?? []).map((p) => p.id as string);
+  }
+
+  if (targetIds.length === 0) {
+    return NextResponse.json({ ok: true, warned: 0, failed: 0, results: [], message: 'Aucun utilisateur a avertir.' });
+  }
+
+  // Recuperer les identifiants pour personnaliser les DM
+  const { data: profilesInfo } = await admin
+    .from('profiles')
+    .select('id, identifiant')
+    .in('id', targetIds);
+
+  const idtById = new Map<string, string | null>();
+  for (const p of profilesInfo ?? []) idtById.set(p.id as string, (p.identifiant as string | null) ?? null);
+
+  // Sequentiel pour ne pas saturer le bot Discord (rate limit)
+  const results = [];
+  let warned = 0;
+  let failed = 0;
+  for (const uid of targetIds) {
+    const r = await warnUserOfInactivity(admin, uid, idtById.get(uid) ?? null);
+    results.push(r);
+    if (r.status === 'warned') warned++;
+    else failed++;
+  }
+
+  return NextResponse.json({ ok: true, warned, failed, results });
+}

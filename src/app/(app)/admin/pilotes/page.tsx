@@ -9,6 +9,7 @@ import CreatePiloteForm from './CreatePiloteForm';
 import PilotesActions from './PilotesActions';
 import GenerateAllCardsButton from './GenerateAllCardsButton';
 import RefreshAllCardsButton from './RefreshAllCardsButton';
+import InactivityWarningBadge, { WarnAllInactiveButton, InactivityLegend } from './InactivityWarningBadge';
 
 const UN_MOIS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -18,6 +19,8 @@ function isInactif1Mois(createdAt: string, lastLoginAt: string | null): boolean 
   if (lastLoginAt) return new Date(lastLoginAt).getTime() < seuil;
   return new Date(createdAt).getTime() < seuil;
 }
+
+type InactivityStatus = 'warned' | 'dm_failed' | null;
 
 export default async function AdminPilotesPage() {
   const supabase = await createClient();
@@ -29,27 +32,64 @@ export default async function AdminPilotesPage() {
   const admin = createAdminClient();
 
   // Profiles + login tracking in parallel
-  const [{ data: profiles }, trackingResult] = await Promise.all([
+  // Defensive : on tente d'inclure les colonnes inactivity_*, fallback sans
+  // si la migration add_inactivity_warnings.sql n'est pas encore appliquee.
+  const [profilesRes, trackingResult] = await Promise.all([
     admin
       .from('profiles')
-      .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc, ifsa')
+      .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc, ifsa, inactivity_warning_status, inactivity_warned_at, inactivity_delete_after, inactivity_warning_error')
       .order('identifiant'),
     Promise.resolve(admin.from('user_login_tracking').select('user_id, last_login_at')).then(r => r.data).catch(() => null),
   ]);
+
+  let profiles: unknown[] | null = profilesRes.data;
+  if (profilesRes.error) {
+    // Fallback : selecte sans les colonnes inactivity_*
+    const fallback = await admin
+      .from('profiles')
+      .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc, ifsa')
+      .order('identifiant');
+    profiles = fallback.data;
+  }
 
   const lastLoginByUser: Record<string, string | null> = {};
   if (trackingResult) {
     for (const t of trackingResult) lastLoginByUser[t.user_id] = t.last_login_at;
   }
 
-  const withInactif = (profiles || []).map((p) => ({
+  type ProfileRow = {
+    id: string;
+    identifiant: string;
+    role: string | null;
+    heures_initiales_minutes: number | null;
+    blocked_until: string | null;
+    created_at: string;
+    armee: boolean | null;
+    atc: boolean | null;
+    ifsa: boolean | null;
+    inactivity_warning_status?: InactivityStatus;
+    inactivity_warned_at?: string | null;
+    inactivity_delete_after?: string | null;
+    inactivity_warning_error?: string | null;
+  };
+
+  const withInactif = ((profiles || []) as ProfileRow[]).map((p) => ({
     ...p,
     last_login_at: lastLoginByUser[p.id] ?? null,
     inactif1Mois: isInactif1Mois(p.created_at, lastLoginByUser[p.id] ?? null),
+    warningStatus: (p.inactivity_warning_status ?? null) as InactivityStatus,
+    warnedAt: p.inactivity_warned_at ?? null,
+    deleteAfter: p.inactivity_delete_after ?? null,
+    warningError: p.inactivity_warning_error ?? null,
   }));
 
   const pilotes = withInactif.filter((p) => p.role !== 'admin');
   const admins = withInactif.filter((p) => p.role === 'admin');
+
+  // Compteur des inactifs PAS ENCORE avertis (= ceux qui doivent recevoir un DM)
+  const inactifsNonAvertisCount = pilotes.filter(
+    (p) => p.inactif1Mois && !p.warningStatus
+  ).length;
 
   const renderRow = (p: (typeof pilotes)[number] | (typeof admins)[number], isAdminRole: boolean) => {
     const blocked = p.blocked_until ? new Date(p.blocked_until) > new Date() : false;
@@ -69,7 +109,21 @@ export default async function AdminPilotesPage() {
         key={p.id}
         className={`border-b border-slate-700/50 ${p.inactif1Mois ? 'bg-red-500/15' : ''}`}
       >
-        <td className="py-3 pr-4 font-medium text-slate-200">{p.identifiant}</td>
+        <td className="py-3 pr-4 font-medium text-slate-200">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span>{p.identifiant}</span>
+            {p.inactif1Mois && !isAdminRole && (
+              <InactivityWarningBadge
+                userId={p.id}
+                identifiant={p.identifiant}
+                status={p.warningStatus}
+                warnedAt={p.warnedAt}
+                deleteAfter={p.deleteAfter}
+                errorMsg={p.warningError}
+              />
+            )}
+          </div>
+        </td>
         <td className="py-3 pr-4 text-slate-300">{roleLabel}</td>
         <td className="py-3 pr-4 text-slate-300">{p.armee ? 'Oui' : '—'}</td>
         <td className="py-3 pr-4 text-slate-300">{p.atc ? 'Oui' : '—'}</td>
@@ -95,7 +149,7 @@ export default async function AdminPilotesPage() {
           {formatDateMediumUTC(p.created_at)}
         </td>
         <td className="py-3">
-          <PilotesActions piloteId={p.id} identifiant={p.identifiant} isAdmin={isAdminRole} role={p.role} />
+          <PilotesActions piloteId={p.id} identifiant={p.identifiant} isAdmin={isAdminRole} role={p.role ?? undefined} />
         </td>
       </tr>
     );
@@ -117,8 +171,13 @@ export default async function AdminPilotesPage() {
         <RefreshAllCardsButton />
       </div>
 
+      <InactivityLegend />
+
       <div className="card">
-        <h2 className="text-lg font-medium text-slate-200 mb-4">Pilotes</h2>
+        <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+          <h2 className="text-lg font-medium text-slate-200">Pilotes</h2>
+          <WarnAllInactiveButton count={inactifsNonAvertisCount} />
+        </div>
         {pilotes.length === 0 ? (
           <p className="text-slate-500">Aucun pilote.</p>
         ) : (
