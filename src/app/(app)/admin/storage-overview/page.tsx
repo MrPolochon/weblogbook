@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   HardDrive, Loader2, Database, FolderOpen, File, ArrowRight,
-  Lock, Globe, RefreshCw,
+  Lock, Globe, RefreshCw, FileWarning,
 } from 'lucide-react';
 
 interface FolderStats {
@@ -99,13 +99,22 @@ export default function StorageOverviewPage() {
           </h1>
           <p className="text-slate-400 text-sm mt-1">Vue d&apos;ensemble de tout le stockage Supabase</p>
         </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors"
-        >
-          <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/storage/orphans"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-amber-300 border border-amber-500/40 hover:bg-amber-500/10 transition-colors"
+          >
+            <FileWarning className="h-4 w-4" /> Fichiers orphelins
+          </Link>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors"
+            aria-label="Actualiser"
+          >
+            <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Stats globales */}

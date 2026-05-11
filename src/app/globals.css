@@ -938,3 +938,53 @@ thead th {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
+
+/* ==========================================================================
+   Carte d'identite : effets visuels (tilt 3D + shine au hover)
+   ========================================================================== */
+.carte-interactive > div {
+  transform-style: preserve-3d;
+  transition: transform 350ms cubic-bezier(0.2, 0, 0, 1), box-shadow 350ms ease-out;
+}
+.carte-interactive:hover > div {
+  transform: rotateX(3deg) rotateY(-6deg) translateY(-4px) scale(1.015);
+  box-shadow:
+    0 30px 60px -20px rgba(0, 0, 0, 0.7),
+    0 8px 24px -8px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+.carte-shine {
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.18) 48%,
+    rgba(255, 255, 255, 0.32) 50%,
+    rgba(255, 255, 255, 0.18) 52%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
+  transition: transform 900ms cubic-bezier(0.2, 0, 0, 1);
+}
+.carte-interactive:hover .carte-shine {
+  transform: translateX(100%);
+}
+
+/* ==========================================================================
+   Accessibilite : respecter prefers-reduced-motion sur TOUTES les animations
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .carte-interactive:hover > div {
+    transform: none !important;
+  }
+  .carte-shine {
+    display: none !important;
+  }
+}

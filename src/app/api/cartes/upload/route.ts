@@ -53,15 +53,17 @@ export async function POST(request: Request) {
 
     // Récupérer l'ancienne URL pour la supprimer après
     let oldUrl: string | null = null;
+    const { data: carteAvant } = await admin
+      .from('cartes_identite')
+      .select('logo_url, photo_url')
+      .eq('user_id', userId)
+      .maybeSingle();
     if (type === 'photo') {
-      const { data: carte } = await admin
-        .from('cartes_identite')
-        .select('photo_url')
-        .eq('user_id', userId)
-        .single();
-      oldUrl = carte?.photo_url || null;
+      oldUrl = carteAvant?.photo_url || null;
+    } else if (type === 'logo') {
+      oldUrl = carteAvant?.logo_url || null;
     }
-    
+
     // Nom du fichier unique
     const ext = file.name.split('.').pop() || 'png';
     const fileName = `${userId}/${type}-${Date.now()}.${ext}`;
@@ -85,17 +87,38 @@ export async function POST(request: Request) {
       .from('cartes-identite')
       .getPublicUrl(fileName);
 
-    // Supprimer l'ancienne photo de Storage pour économiser l'espace
-    if (oldUrl && type === 'photo') {
+    // Si on uploade un logo via cette route admin/IFSA, c'est un logo manuel
+    // (l'admin force un logo pour cet utilisateur, qui ne sera plus recalcule en auto)
+    if (type === 'logo') {
+      await admin
+        .from('cartes_identite')
+        .update({
+          logo_url: publicUrl,
+          logo_source: 'manuel',
+          logo_compagnie_id: null,
+        })
+        .eq('user_id', userId);
+    } else if (type === 'photo') {
+      await admin
+        .from('cartes_identite')
+        .update({ photo_url: publicUrl })
+        .eq('user_id', userId);
+    }
+
+    // Supprimer l'ancien fichier de Storage pour economiser l'espace
+    if (oldUrl) {
       try {
         const urlParts = oldUrl.split('/cartes-identite/');
         if (urlParts.length >= 2) {
           const oldPath = urlParts[1];
-          await admin.storage.from('cartes-identite').remove([oldPath]);
+          // Ne pas supprimer si c'est dans le dossier 'logos/' partage
+          if (!oldPath.startsWith('logos/')) {
+            await admin.storage.from('cartes-identite').remove([oldPath]);
+          }
         }
       } catch (e) {
-        console.error('Erreur suppression ancienne photo:', e);
-        // On continue même si la suppression échoue
+        console.error('Erreur suppression ancien fichier:', e);
+        // On continue meme si la suppression echoue
       }
     }
 

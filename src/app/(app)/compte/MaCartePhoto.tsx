@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Camera, Loader2, Sparkles } from 'lucide-react';
+import { Camera, Loader2, Sparkles, Check } from 'lucide-react';
+import { toast } from 'sonner';
 import CarteIdentite from '@/components/CarteIdentite';
+import MonLogoSelector from '@/components/MonLogoSelector';
 
 type CarteData = {
   couleur_fond: string;
@@ -28,13 +30,10 @@ export default function MaCartePhoto({ initialCarte, identifiant }: Props) {
   const [carte, setCarte] = useState<CarteData | null>(initialCarte);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleGenerate() {
     setGenerating(true);
-    setError(null);
     try {
       const res = await fetch('/api/cartes/auto-generate', {
         method: 'POST',
@@ -44,14 +43,12 @@ export default function MaCartePhoto({ initialCarte, identifiant }: Props) {
       const data = await res.json();
       if (data.data) {
         setCarte(data.data);
-        setSuccess(true);
-        setTimeout(() => setSuccess(false), 3000);
+        toast.success('Carte générée avec succès');
       } else if (data.error) {
-        setError(data.error);
+        toast.error(data.error);
       }
-    } catch (e) {
-      setError('Erreur lors de la génération');
-      console.error(e);
+    } catch {
+      toast.error('Erreur lors de la génération');
     } finally {
       setGenerating(false);
     }
@@ -62,9 +59,6 @@ export default function MaCartePhoto({ initialCarte, identifiant }: Props) {
     if (!file) return;
 
     setUploading(true);
-    setError(null);
-    setSuccess(false);
-
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -79,39 +73,43 @@ export default function MaCartePhoto({ initialCarte, identifiant }: Props) {
         throw new Error(data.error || 'Erreur lors de l\'upload');
       }
 
-      // Mettre à jour la carte locale
-      setCarte(prev => prev 
-        ? { ...prev, photo_url: data.url }
-        : {
-            couleur_fond: '#DC2626',
-            logo_url: null,
-            photo_url: data.url,
-            titre: 'IFSA',
-            sous_titre: null,
-            nom_affiche: null,
-            organisation: null,
-            numero_carte: null,
-            date_delivrance: null,
-            date_expiration: null,
-            cases_haut: [],
-            cases_bas: [],
-          }
+      setCarte((prev) =>
+        prev
+          ? { ...prev, photo_url: data.url }
+          : {
+              couleur_fond: '#1E3A8A',
+              logo_url: null,
+              photo_url: data.url,
+              titre: 'IFSA',
+              sous_titre: null,
+              nom_affiche: null,
+              organisation: null,
+              numero_carte: null,
+              date_delivrance: null,
+              date_expiration: null,
+              cases_haut: [],
+              cases_bas: [],
+            }
       );
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      toast.success('Photo mise à jour');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setUploading(false);
-      // Reset input
       e.target.value = '';
     }
   }
 
+  function handleLogoChange(newLogoUrl: string | null) {
+    setCarte((prev) => (prev ? { ...prev, logo_url: newLogoUrl } : prev));
+  }
+
   return (
-    <div className="flex flex-col gap-2">
-      <CarteIdentite carte={carte} identifiant={identifiant} size="md" />
-      
+    <div className="flex flex-col gap-3 items-center md:items-stretch">
+      <div className="flex justify-center">
+        <CarteIdentite carte={carte} identifiant={identifiant} size="md" interactive />
+      </div>
+
       <input
         ref={fileInputRef}
         type="file"
@@ -125,47 +123,46 @@ export default function MaCartePhoto({ initialCarte, identifiant }: Props) {
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors text-xs disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.97] text-white rounded-lg transition-all text-sm font-medium disabled:opacity-50 shadow-md shadow-emerald-900/30"
           >
             {generating ? (
               <>
-                <Loader2 className="h-3 w-3 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Génération...
               </>
             ) : (
               <>
-                <Sparkles className="h-3 w-3" />
+                <Sparkles className="h-4 w-4" />
                 Générer ma carte
               </>
             )}
           </button>
         )}
-        
+
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          className={`flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors text-xs disabled:opacity-50 ${!carte ? 'flex-1' : 'w-full'}`}
+          className={`flex items-center justify-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 active:scale-[0.97] text-slate-100 rounded-lg transition-all text-sm font-medium disabled:opacity-50 ${
+            !carte ? 'flex-1' : 'w-full'
+          }`}
         >
           {uploading ? (
             <>
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               Upload...
             </>
           ) : (
             <>
-              <Camera className="h-3 w-3" />
-              Changer ma photo
+              <Camera className="h-4 w-4" />
+              {carte?.photo_url ? 'Changer ma photo' : 'Ajouter ma photo'}
+              {carte?.photo_url && <Check className="h-3.5 w-3.5 text-emerald-400" />}
             </>
           )}
         </button>
       </div>
 
-      {error && (
-        <p className="text-red-400 text-xs text-center">{error}</p>
-      )}
-      {success && (
-        <p className="text-emerald-400 text-xs text-center">Carte mise à jour !</p>
-      )}
+      {/* Selecteur de logo de compagnie */}
+      {carte && <MonLogoSelector onChange={handleLogoChange} />}
     </div>
   );
 }

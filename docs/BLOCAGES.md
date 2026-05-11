@@ -30,4 +30,29 @@ Format: une entree par blocage, avec date, contexte, erreur, decision.
 - **Decision** : Flag desactive pour Phase 1. La correction sera traitee par un effort dedie (Phase 2 ou tache parallele) avec un PR par lot de modules (lib/ d'abord, puis api/, puis components/).
 - **Suite** : Voir Phase 2 du plan. Considerer `as const` plus large + helpers safe-access pour reduire l'amplitude.
 
+### 2026-05-10 - Refonte cartes d'identite + selecteur logo compagnie
+
+- **Tache** : Amelioration cartes d'identite (demande utilisateur)
+- **Contexte** : Permettre a un utilisateur dans plusieurs compagnies de choisir le logo affiche sur sa carte ; refonte visuelle ; nettoyage code mort.
+- **Changements** :
+  - Migration SQL `supabase/add_carte_logo_source.sql` -> ajoute `logo_source` (auto/compagnie/manuel/aucun) et `logo_compagnie_id` a `cartes_identite`.
+  - Nouveau helper `src/lib/cartes/logo-resolver.ts` -> centralise le calcul de logo et liste les compagnies de l'user (PDG / co-PDG / employe).
+  - Nouvelles routes :
+    - `GET  /api/cartes/mes-logos-disponibles` (liste compagnies + choix actuel)
+    - `PATCH /api/cartes/mon-logo` (change auto/compagnie/aucun, valide rattachement)
+  - Routes mises a jour :
+    - `auto-generate` : pose `logo_source='auto'` + utilise le helper.
+    - `refresh-all` : respecte `logo_source` ; ne touche pas au logo si `manuel`.
+    - `upload` : un upload de logo par admin/IFSA bascule `logo_source='manuel'` + supprime l'ancien fichier perso (jamais ceux du dossier `logos/` partage).
+  - UI :
+    - `CarteIdentite.tsx` refondu (degrade, halo, grille subtile, photo encadree, bande STAFF doree, mode `interactive` avec tilt 3D + shine au hover).
+    - Nouveau `MonLogoSelector.tsx` (cards radio par compagnie avec role et logo, options Auto/Aucun, prise en charge mode `manuel` lock).
+    - `MaCartePhoto.tsx` integre le selecteur + utilise `sonner` au lieu d'etats locaux.
+  - Cleanup :
+    - `src/app/api/cartes/photo/` et `src/app/api/cartes/refresh-daily/` -> dossiers vides supprimes.
+    - `delete-user.ts` -> ajoute `purgeUserStorageFolder('cartes-identite', userId)` pour supprimer les fichiers perso de l'utilisateur lors du delete (evite les futurs orphelins).
+  - Accessibilite : globals.css ajoute un bloc `prefers-reduced-motion: reduce` qui desactive transitions, animations, tilt 3D et shine.
+- **Verification** : `npx tsc --noEmit` OK, `npm run lint` OK (warnings pre-existants uniquement sur `<img>`). Build local KO -> bug OneDrive deja documente, non lie a ces changements.
+- **A faire avant deploiement** : appliquer la migration SQL `add_carte_logo_source.sql` dans Supabase.
+
 

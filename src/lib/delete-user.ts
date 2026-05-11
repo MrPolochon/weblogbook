@@ -1,6 +1,29 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { stopAtisIfController } from '@/lib/atis-bot-api';
 
+/**
+ * Supprime tout le contenu d'un dossier utilisateur dans un bucket Storage.
+ * Tolerant aux erreurs : on log mais on ne fait pas planter le delete user.
+ */
+async function purgeUserStorageFolder(
+  admin: ReturnType<typeof createAdminClient>,
+  bucket: string,
+  folder: string
+): Promise<void> {
+  try {
+    const { data: files } = await admin.storage.from(bucket).list(folder, { limit: 1000 });
+    if (!files || files.length === 0) return;
+    const paths = files
+      .filter((f) => f.name && !f.name.startsWith('.'))
+      .map((f) => `${folder}/${f.name}`);
+    if (paths.length > 0) {
+      await admin.storage.from(bucket).remove(paths);
+    }
+  } catch (e) {
+    console.error(`[delete-user] purgeUserStorageFolder ${bucket}/${folder}:`, e);
+  }
+}
+
 export async function deleteUserAccount(userId: string) {
   const admin = createAdminClient();
 
@@ -97,6 +120,11 @@ export async function deleteUserAccount(userId: string) {
   await admin.from('prets_bancaires').delete().eq('demandeur_id', userId);
   await admin.from('felitz_comptes').delete().eq('proprietaire_id', userId);
   await admin.from('inventaire_avions').delete().eq('proprietaire_id', userId);
+
+  // Nettoyage Storage : supprimer les fichiers personnels de l'utilisateur
+  // (photos de carte d'identite, eventuels logos uploades pour son compte).
+  // Le dossier `cartes-identite/<userId>/` regroupe ses uploads personnels.
+  await purgeUserStorageFolder(admin, 'cartes-identite', userId);
 
   await admin.from('profiles').delete().eq('id', userId);
   await admin.auth.admin.deleteUser(userId);
