@@ -15,18 +15,46 @@ export default async function ComptePage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase
+  const admin = createAdminClient();
+
+  // On utilise l'admin client pour bypass RLS / colonnes non lisibles par anon ;
+  // resilient : si une colonne n'existe pas dans certains environnements, on
+  // retombe sur un select minimal pour ne pas vider tout le header.
+  type Profile = {
+    identifiant: string | null;
+    role: string | null;
+    armee: boolean | null;
+    email: string | null;
+    ifsa: boolean | null;
+    atc: boolean | null;
+    siavi: boolean | null;
+    roblox_username: string | null;
+  };
+  let profile: Profile | null = null;
+
+  const profileFull = await admin
     .from('profiles')
     .select('identifiant, role, armee, email, ifsa, atc, siavi, roblox_username')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
-  const admin = createAdminClient();
+  if (profileFull.data) {
+    profile = profileFull.data as unknown as Profile;
+  } else {
+    const profileMin = await admin
+      .from('profiles')
+      .select('identifiant, role, armee, email')
+      .eq('id', user.id)
+      .maybeSingle();
+    profile = profileMin.data
+      ? { ...(profileMin.data as Pick<Profile, 'identifiant' | 'role' | 'armee' | 'email'>), ifsa: null, atc: null, siavi: null, roblox_username: null }
+      : null;
+  }
 
   // Carte d'identite + statut Discord en parallele
   const [carteRes, discordRes] = await Promise.all([
-    admin.from('cartes_identite').select('*').eq('user_id', user.id).single(),
-    admin.from('discord_links').select('discord_user_id').eq('profile_id', user.id).maybeSingle(),
+    admin.from('cartes_identite').select('*').eq('user_id', user.id).maybeSingle(),
+    admin.from('discord_links').select('discord_user_id').eq('user_id', user.id).maybeSingle(),
   ]);
   const carte = carteRes.data ?? null;
   const discordLie = Boolean(discordRes.data?.discord_user_id);

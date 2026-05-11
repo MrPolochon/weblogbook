@@ -29,13 +29,16 @@ const ROLE_META: Record<string, { label: string; Icon: typeof Crown; classes: st
 };
 
 function getInitials(identifiant: string): string {
-  const parts = identifiant.trim().split(/[\s_.-]+/).filter(Boolean);
+  const cleaned = identifiant.replace(/[—–-]/g, '').trim();
+  if (!cleaned) return '?';
+  const parts = cleaned.split(/[\s_.]+/).filter(Boolean);
   if (parts.length === 0) return '?';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 export default function CompteHeader({ identifiant, role, flags, status }: Props) {
+  const displayIdentifiant = identifiant?.trim() && identifiant.trim() !== '—' ? identifiant : 'Pilote sans identifiant';
   const initials = getInitials(identifiant);
 
   const badges: Array<{ key: string; label: string; Icon: typeof Crown; classes: string }> = [];
@@ -96,7 +99,7 @@ export default function CompteHeader({ identifiant, role, flags, status }: Props
           </div>
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-widest text-slate-400">Identifiant pilote</p>
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-50 leading-tight truncate">{identifiant}</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-50 leading-tight truncate">{displayIdentifiant}</h1>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {badges.map((b) => (
                 <span

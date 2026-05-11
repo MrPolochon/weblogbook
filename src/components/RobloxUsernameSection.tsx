@@ -48,7 +48,7 @@ export default function RobloxUsernameSection({ variant = 'default' }: Props) {
       .eq('id', user.id);
 
     if (error) {
-      setMessage({ type: 'err', text: 'Erreur lors de la sauvegarde.' });
+      setMessage({ type: 'err', text: error.message || 'Erreur lors de la sauvegarde.' });
     } else {
       setSaved(trimmed ?? '');
       setMessage({ type: 'ok', text: 'Pseudo Roblox enregistré.' });
