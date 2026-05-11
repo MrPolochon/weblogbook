@@ -24,9 +24,11 @@ type CarteData = {
 type Props = {
   initialCarte: CarteData | null;
   identifiant: string;
+  /** Si true (defaut), affiche le selecteur de logo sous la carte. */
+  embedLogoSelector?: boolean;
 };
 
-export default function MaCartePhoto({ initialCarte, identifiant }: Props) {
+export default function MaCartePhoto({ initialCarte, identifiant, embedLogoSelector = true }: Props) {
   const [carte, setCarte] = useState<CarteData | null>(initialCarte);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -161,8 +163,8 @@ export default function MaCartePhoto({ initialCarte, identifiant }: Props) {
         </button>
       </div>
 
-      {/* Selecteur de logo de compagnie */}
-      {carte && <MonLogoSelector onChange={handleLogoChange} />}
+      {/* Selecteur de logo de compagnie (peut etre rendu ailleurs via embedLogoSelector=false) */}
+      {embedLogoSelector && carte && <MonLogoSelector onChange={handleLogoChange} />}
     </div>
   );
 }

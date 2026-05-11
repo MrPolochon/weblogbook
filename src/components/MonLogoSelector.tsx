@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Building2, Check, Loader2, Sparkles, XCircle, Crown, Shield, User } from 'lucide-react';
 import { toast } from 'sonner';
@@ -29,6 +30,8 @@ const ROLE_META: Record<Compagnie['role_user'], { label: string; Icon: typeof Cr
 };
 
 export default function MonLogoSelector({ onChange }: Props) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
   const [compagnies, setCompagnies] = useState<Compagnie[]>([]);
   const [current, setCurrent] = useState<Current | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,6 +76,8 @@ export default function MonLogoSelector({ onChange }: Props) {
       });
       onChange?.(data.logo_url ?? null);
       toast.success('Logo de carte mis à jour');
+      // Rafraichit le SSR pour que la carte (rendue ailleurs sur la page) reflete le nouveau logo
+      startTransition(() => router.refresh());
     } catch {
       toast.error('Erreur réseau');
     } finally {

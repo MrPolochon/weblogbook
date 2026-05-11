@@ -5,6 +5,7 @@ import { Lock, Link2, Settings2, IdCard } from 'lucide-react';
 import CompteForm from './CompteForm';
 import LicencesSection from '@/components/LicencesSection';
 import MaCartePhoto from './MaCartePhoto';
+import MonLogoSelector from '@/components/MonLogoSelector';
 import RadarBetaSection from '@/components/RadarBetaSection';
 import DiscordLinkSection from '@/components/DiscordLinkSection';
 import RobloxUsernameSection from '@/components/RobloxUsernameSection';
@@ -77,14 +78,18 @@ export default async function ComptePage() {
         }}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(320px,360px)] gap-6 items-start">
-        {/* Colonne droite (DOM-first pour mobile) : carte d'identite */}
-        <aside className="lg:order-2 lg:sticky lg:top-20 space-y-3">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(300px,340px)] gap-6 items-start">
+        {/* Colonne droite (DOM-first pour mobile) : carte d'identite seule = compacte = sticky propre */}
+        <aside className="lg:order-2 lg:sticky lg:top-20 space-y-3 self-start">
           <div className="flex items-center gap-2 text-slate-300">
             <IdCard className="h-4 w-4 text-sky-400" />
             <h2 className="text-sm font-semibold uppercase tracking-wider">Ma carte d&apos;identité</h2>
           </div>
-          <MaCartePhoto initialCarte={carte} identifiant={profile?.identifiant ?? '—'} />
+          <MaCartePhoto
+            initialCarte={carte}
+            identifiant={profile?.identifiant ?? '—'}
+            embedLogoSelector={false}
+          />
         </aside>
 
         {/* Colonne gauche : sections de configuration */}
@@ -98,6 +103,10 @@ export default async function ComptePage() {
             />
             <DiscordLinkSection variant="default" />
             <RobloxUsernameSection variant="default" />
+          </Section>
+
+          <Section title="Personnalisation de la carte" Icon={IdCard} description="Choisis le logo de la compagnie affiché sur ta carte d'identité (parmi celles auxquelles tu es rattaché).">
+            <MonLogoSelector />
           </Section>
 
           <Section title="Sécurité" Icon={Lock} description="Mot de passe et accès privilégiés liés à votre compte.">

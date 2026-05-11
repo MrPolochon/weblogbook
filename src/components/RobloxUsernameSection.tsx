@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Gamepad2, Check, Loader2 } from 'lucide-react';
+import { Gamepad2, Check, Loader2, AlertTriangle } from 'lucide-react';
 
 interface Props {
   variant?: 'default' | 'atc' | 'siavi';
@@ -15,17 +15,23 @@ export default function RobloxUsernameSection({ variant = 'default' }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [columnMissing, setColumnMissing] = useState(false);
 
   useEffect(() => {
     async function load() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('roblox_username')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
+      if (error && (error.code === 'PGRST204' || error.code === '42703' || /roblox_username/.test(error.message))) {
+        setColumnMissing(true);
+        setLoading(false);
+        return;
+      }
       const val = data?.roblox_username ?? '';
       setUsername(val);
       setSaved(val);
@@ -48,7 +54,11 @@ export default function RobloxUsernameSection({ variant = 'default' }: Props) {
       .eq('id', user.id);
 
     if (error) {
-      setMessage({ type: 'err', text: error.message || 'Erreur lors de la sauvegarde.' });
+      if (error.code === 'PGRST204' || error.code === '42703' || /roblox_username/.test(error.message)) {
+        setColumnMissing(true);
+      } else {
+        setMessage({ type: 'err', text: error.message || 'Erreur lors de la sauvegarde.' });
+      }
     } else {
       setSaved(trimmed ?? '');
       setMessage({ type: 'ok', text: 'Pseudo Roblox enregistré.' });
@@ -69,6 +79,27 @@ export default function RobloxUsernameSection({ variant = 'default' }: Props) {
     : 'btn-primary disabled:opacity-50';
 
   if (loading) return null;
+
+  if (columnMissing) {
+    return (
+      <div className={cardCl}>
+        <div className="flex items-center gap-2 mb-2">
+          <Gamepad2 className={`h-4 w-4 ${mutedCl}`} />
+          <h2 className={`text-sm font-bold ${titleCl}`}>Pseudo Roblox</h2>
+        </div>
+        <div className={`flex items-start gap-2 rounded-lg border ${isAtcOrSiavi ? 'border-amber-300 bg-amber-50' : 'border-amber-500/30 bg-amber-500/10'} p-3`}>
+          <AlertTriangle className={`h-4 w-4 flex-shrink-0 mt-0.5 ${isAtcOrSiavi ? 'text-amber-600' : 'text-amber-300'}`} />
+          <div className={`text-xs ${isAtcOrSiavi ? 'text-amber-800' : 'text-amber-200'}`}>
+            <p className="font-medium">Fonctionnalité non activée sur cette base</p>
+            <p className="mt-1 opacity-90">
+              La colonne <code className="font-mono px-1 rounded bg-black/20">profiles.roblox_username</code> n&apos;existe pas. Demande à un admin d&apos;exécuter
+              <code className="font-mono px-1 rounded bg-black/20 mx-1">supabase/add_roblox_username.sql</code> dans l&apos;éditeur SQL Supabase.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cardCl}>

@@ -725,9 +725,13 @@ hr {
 
 /* ========== VIEW TRANSITIONS & PAGE SMOOTHNESS ========== */
 
-/* Smooth page content transitions */
+/* Smooth page content transitions
+   NOTE : animation-fill-mode = backwards (et NON `both`) pour ne PAS conserver
+   `transform` apres l'animation. Sinon, n'importe quel `position: sticky`
+   imbrique cesse de fonctionner (un transform sur un ancestor cree un
+   containing block qui casse sticky). */
 main {
-  animation: page-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: page-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 @keyframes page-enter {
@@ -737,7 +741,7 @@ main {
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
