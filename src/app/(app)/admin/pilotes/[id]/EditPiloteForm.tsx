@@ -48,6 +48,7 @@ export default function EditPiloteForm({
   const [superadminStep, setSuperadminStep] = useState<'password' | 'code' | null>(null);
   const [superadminPassword, setSuperadminPassword] = useState('');
   const [superadminCode, setSuperadminCode] = useState('');
+  const [superadminEmailMasked, setSuperadminEmailMasked] = useState<string | null>(null);
   const [resetPasswordStep, setResetPasswordStep] = useState<'code' | null>(null);
   const [resetPasswordCode, setResetPasswordCode] = useState('');
   const [loadingDirectReset, setLoadingDirectReset] = useState(false);
@@ -192,6 +193,7 @@ export default function EditPiloteForm({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
+      setSuperadminEmailMasked(typeof data.emailMasked === 'string' ? data.emailMasked : null);
       setSuperadminStep('code');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -560,6 +562,11 @@ export default function EditPiloteForm({
             )}
             {superadminStep === 'code' && (
               <>
+                {superadminEmailMasked && (
+                  <p className="text-emerald-300 text-sm">
+                    Code envoyé à <span className="font-mono">{superadminEmailMasked}</span>. Vérifiez votre boîte mail (et le dossier <strong>SPAM</strong>).
+                  </p>
+                )}
                 <input
                   type="text"
                   inputMode="numeric"
