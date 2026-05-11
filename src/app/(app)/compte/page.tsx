@@ -1,12 +1,14 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
+import { Lock, Link2, Settings2, IdCard } from 'lucide-react';
 import CompteForm from './CompteForm';
 import LicencesSection from '@/components/LicencesSection';
 import MaCartePhoto from './MaCartePhoto';
 import RadarBetaSection from '@/components/RadarBetaSection';
 import DiscordLinkSection from '@/components/DiscordLinkSection';
 import RobloxUsernameSection from '@/components/RobloxUsernameSection';
+import CompteHeader from './CompteHeader';
 
 export default async function ComptePage() {
   const supabase = await createClient();
@@ -15,44 +17,101 @@ export default async function ComptePage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('identifiant, role, armee, email')
+    .select('identifiant, role, armee, email, ifsa, atc, siavi, roblox_username')
     .eq('id', user.id)
     .single();
 
-  // Récupérer la carte d'identité
   const admin = createAdminClient();
-  const { data: carte } = await admin
-    .from('cartes_identite')
-    .select('*')
-    .eq('user_id', user.id)
-    .single();
+
+  // Carte d'identite + statut Discord en parallele
+  const [carteRes, discordRes] = await Promise.all([
+    admin.from('cartes_identite').select('*').eq('user_id', user.id).single(),
+    admin.from('discord_links').select('discord_user_id').eq('profile_id', user.id).maybeSingle(),
+  ]);
+  const carte = carteRes.data ?? null;
+  const discordLie = Boolean(discordRes.data?.discord_user_id);
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <h1 className="text-2xl font-semibold text-slate-100">Mon compte</h1>
-      
-      <div className="flex flex-col md:flex-row gap-6">
-        {/* Informations compte */}
-        <div className="flex-1 space-y-6">
-          <div className="card">
-            <p className="text-slate-400 text-sm">Identifiant</p>
-            <p className="text-slate-100 font-medium">{profile?.identifiant ?? '—'}</p>
-          </div>
-          <RobloxUsernameSection variant="default" />
-          <DiscordLinkSection variant="default" />
-          <CompteForm armee={Boolean(profile?.armee)} isAdmin={profile?.role === 'admin'} initialEmail={profile?.email ?? ''} />
-          <RadarBetaSection variant="default" />
-          <LicencesSection userId={user.id} variant="default" />
-        </div>
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <CompteHeader
+        identifiant={profile?.identifiant ?? '—'}
+        role={profile?.role ?? null}
+        flags={{
+          armee: Boolean(profile?.armee),
+          ifsa: Boolean(profile?.ifsa),
+          atc: Boolean(profile?.atc),
+          siavi: Boolean(profile?.siavi),
+        }}
+        status={{
+          emailRenseigne: Boolean(profile?.email),
+          discordLie,
+          robloxRenseigne: Boolean(profile?.roblox_username),
+        }}
+      />
 
-        {/* Carte d'identité à droite */}
-        <div className="flex-shrink-0 order-first md:order-last">
-          <MaCartePhoto 
-            initialCarte={carte} 
-            identifiant={profile?.identifiant ?? '—'} 
-          />
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(320px,360px)] gap-6 items-start">
+        {/* Colonne droite (DOM-first pour mobile) : carte d'identite */}
+        <aside className="lg:order-2 lg:sticky lg:top-20 space-y-3">
+          <div className="flex items-center gap-2 text-slate-300">
+            <IdCard className="h-4 w-4 text-sky-400" />
+            <h2 className="text-sm font-semibold uppercase tracking-wider">Ma carte d&apos;identité</h2>
+          </div>
+          <MaCartePhoto initialCarte={carte} identifiant={profile?.identifiant ?? '—'} />
+        </aside>
+
+        {/* Colonne gauche : sections de configuration */}
+        <div className="space-y-8 min-w-0 lg:order-1">
+          <Section title="Identité & connexions" Icon={Link2} description="Adresse email, liaison Discord et pseudo Roblox utilisés pour vous identifier sur le site et le radar.">
+            <CompteForm
+              armee={Boolean(profile?.armee)}
+              isAdmin={profile?.role === 'admin'}
+              initialEmail={profile?.email ?? ''}
+              showOnlyEmail
+            />
+            <DiscordLinkSection variant="default" />
+            <RobloxUsernameSection variant="default" />
+          </Section>
+
+          <Section title="Sécurité" Icon={Lock} description="Mot de passe et accès privilégiés liés à votre compte.">
+            <CompteForm
+              armee={Boolean(profile?.armee)}
+              isAdmin={profile?.role === 'admin'}
+              initialEmail={profile?.email ?? ''}
+              showOnlyPassword
+            />
+          </Section>
+
+          <Section title="Outils & accès" Icon={Settings2} description="Radar ATC, qualifications et licences.">
+            <RadarBetaSection variant="default" />
+            <LicencesSection userId={user.id} variant="default" />
+          </Section>
         </div>
       </div>
     </div>
+  );
+}
+
+function Section({
+  title,
+  description,
+  Icon,
+  children,
+}: {
+  title: string;
+  description?: string;
+  Icon: typeof Lock;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-4">
+      <header className="border-l-2 border-sky-500/50 pl-3 sm:pl-4">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-100">
+          <Icon className="h-5 w-5 text-sky-400" />
+          {title}
+        </h2>
+        {description && <p className="mt-1 text-sm text-slate-400">{description}</p>}
+      </header>
+      <div className="space-y-4">{children}</div>
+    </section>
   );
 }

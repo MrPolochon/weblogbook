@@ -4,7 +4,28 @@ import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
-export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'default', showArmee = true, initialEmail = '' }: { armee: boolean; isAdmin: boolean; variant?: 'default' | 'atc' | 'siavi'; showArmee?: boolean; initialEmail?: string }) {
+export default function CompteForm({
+  armee: armeeInitial,
+  isAdmin,
+  variant = 'default',
+  showArmee = true,
+  initialEmail = '',
+  showOnlyEmail = false,
+  showOnlyPassword = false,
+}: {
+  armee: boolean;
+  isAdmin: boolean;
+  variant?: 'default' | 'atc' | 'siavi';
+  showArmee?: boolean;
+  initialEmail?: string;
+  /** Affiche UNIQUEMENT le bloc email (utile pour decoupler la page compte). */
+  showOnlyEmail?: boolean;
+  /** Affiche UNIQUEMENT le bloc mot de passe (+ armee si autorise). */
+  showOnlyPassword?: boolean;
+}) {
+  const showEmail = !showOnlyPassword;
+  const showPassword = !showOnlyEmail;
+  const showArmeeBlock = !showOnlyEmail && isAdmin && showArmee;
   const isSiavi = variant === 'siavi';
   const isAtc = variant === 'atc';
   const isAtcOrSiavi = isAtc || isSiavi;
@@ -113,8 +134,12 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
 
   return (
     <>
+      {showEmail && (
       <div className={cardClass}>
-        <h2 className={`text-lg font-medium mb-4 ${isSiavi ? 'text-slate-800' : textTitle}`}>Adresse email (vérification à chaque connexion)</h2>
+        <h2 className={`text-lg font-bold mb-2 flex items-center gap-2 ${isSiavi ? 'text-slate-800' : textTitle}`}>
+          <span aria-hidden="true">📧</span>
+          Adresse email
+        </h2>
         <p className={`${textMuted} text-sm mb-3`}>Un code à 6 chiffres est envoyé à cette adresse à chaque connexion pour confirmer votre identité.</p>
         <form onSubmit={handleEmailSubmit} className="space-y-4">
           <input
@@ -135,7 +160,8 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
           </button>
         </form>
       </div>
-      {isAdmin && showArmee && (
+      )}
+      {showArmeeBlock && (
         <div className={cardClass}>
           <h2 className={`text-lg font-medium mb-4 ${textTitle}`}>Rôle Armée (Espace militaire)</h2>
           <p className={`${textMuted} text-sm mb-3`}>En tant qu&apos;admin, vous pouvez vous attribuer le rôle Armée pour accéder à l&apos;Espace militaire. Le rôle Armée requiert l&apos;accès à l&apos;espace pilote.</p>
@@ -153,6 +179,7 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
           </form>
         </div>
       )}
+      {showPassword && (
       <div className={cardClass}>
       <h2 className={`text-lg font-bold mb-4 ${isSiavi ? 'text-slate-800' : textTitle}`}>Changer le mot de passe</h2>
       <p className={`${textMuted} text-sm mb-3`}>Saisissez votre mot de passe actuel, puis le nouveau mot de passe deux fois.</p>
@@ -202,6 +229,7 @@ export default function CompteForm({ armee: armeeInitial, isAdmin, variant = 'de
         </button>
       </form>
     </div>
+      )}
     </>
   );
 }
