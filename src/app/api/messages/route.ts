@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { logActivity, getClientIp } from '@/lib/activity-log';
+import { applyRateLimit } from '@/lib/rate-limit';
 
 // GET - Récupérer les messages de l'utilisateur
 export async function GET(req: NextRequest) {
@@ -118,6 +119,14 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+
+    const rl = applyRateLimit(req, 'messages', user.id);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Trop de messages envoyés. Réessayez dans une minute.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+      );
+    }
 
     const body = await req.json();
     const { destinataire_id, broadcast_audience, titre, contenu } = body;

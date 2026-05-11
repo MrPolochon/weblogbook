@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { applyRateLimit } from '@/lib/rate-limit';
 
 /**
  * GET /api/notifications
@@ -13,6 +14,14 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+
+    const rl = applyRateLimit(request, 'notifications', user.id);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Trop de requêtes' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+      );
+    }
 
     const url = new URL(request.url);
     const limitRaw = parseInt(url.searchParams.get('limit') || '20', 10);

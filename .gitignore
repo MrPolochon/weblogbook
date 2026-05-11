@@ -35,3 +35,10 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# build artefacts
+build_output*.txt
+
+# analyse / radar capture outputs
+.analysis/
+radar-capture/output/

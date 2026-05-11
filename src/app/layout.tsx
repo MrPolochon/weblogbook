@@ -1,8 +1,15 @@
 import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
+import { Inter } from 'next/font/google';
 import NavigationProgress from '@/components/NavigationProgress';
 import { Toaster } from 'sonner';
 import './globals.css';
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'weblogbook',
@@ -23,8 +30,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr">
-      <body className="antialiased">
+    <html lang="fr" className={inter.variable}>
+      <body className="antialiased font-sans">
         <Suspense fallback={null}>
           <NavigationProgress />
         </Suspense>
