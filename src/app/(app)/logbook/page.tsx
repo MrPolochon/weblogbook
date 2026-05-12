@@ -6,6 +6,7 @@ import { formatDateMediumUTC, formatTimeUTC } from '@/lib/date-utils';
 import { Plus, BookOpen, Plane, FileText, Clock, CheckCircle2, XCircle, Timer, TrendingUp, ArrowRight } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
 import NePasEnregistrerPlanButton from './NePasEnregistrerPlanButton';
+import ExportLogbookButton from './ExportLogbookButton';
 
 export default async function LogbookPage() {
   const supabase = await createClient();
@@ -52,70 +53,95 @@ export default async function LogbookPage() {
   const heures = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
 
+  // Types de vol uniques pour le filtre PDF
+  const typesVolUniques = Array.from(
+    new Set(
+      (vols || [])
+        .map((v) => (v.type_vol ?? '').trim())
+        .filter((t): t is string => Boolean(t))
+    )
+  ).sort();
+
   return (
     <div className="space-y-6">
       {/* Header avec gradient */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-sky-600 via-sky-700 to-indigo-800 p-6 shadow-xl">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-30"></div>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-sky-600 via-sky-700 to-indigo-800 p-6 shadow-xl animate-reveal-blur">
+        <div className="absolute inset-0 bg-cockpit-grid opacity-30 pointer-events-none"></div>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-3 left-0 right-0 h-6 overflow-hidden opacity-30"
+        >
+          <div className="animate-plane-glide text-white/60 text-xs">✈</div>
+        </div>
         <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 rounded-xl bg-white/10 backdrop-blur">
-                <BookOpen className="h-6 w-6 text-white" />
+              <div className="relative">
+                <div className="absolute inset-0 rounded-xl bg-sky-300/30 blur-lg animate-halo-pulse" aria-hidden></div>
+                <div className="relative p-2.5 rounded-xl bg-white/10 backdrop-blur border border-white/20">
+                  <BookOpen className="h-6 w-6 text-white" />
+                </div>
               </div>
-              <h1 className="text-2xl font-bold text-white">Mon Logbook</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Mon Logbook</h1>
             </div>
-            <p className="text-sky-100/80 text-sm">Gérez vos vols et suivez votre progression</p>
+            <p className="text-sky-100/80 text-sm">Gérez vos vols, suivez votre progression et exportez votre carnet en PDF.</p>
+            <p className="text-sky-200/70 text-xs mt-2 flex items-center gap-1.5">
+              <span className="status-dot status-dot-success animate-hud-blink"></span>
+              {totalValides.length} vol{totalValides.length > 1 ? 's' : ''} validé{totalValides.length > 1 ? 's' : ''} · {heures}h{minutes.toString().padStart(2, '0')} de vol cumulé
+            </p>
           </div>
-          {!blocked && (
-            <div className="flex flex-wrap gap-2">
-              <Link 
-                href="/logbook/plans-vol" 
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 text-white text-sm font-medium transition-all"
-              >
-                <FileText className="h-4 w-4" />
-                Plans de vol
-                {(plansVolRefuses?.length ?? 0) > 0 && (
-                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold">
-                    {plansVolRefuses!.length}
-                  </span>
-                )}
-              </Link>
-              <Link 
-                href="/logbook/depot-plan-vol" 
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 text-white text-sm font-medium transition-all"
-              >
-                <Plane className="h-4 w-4" />
-                Déposer un plan
-              </Link>
-              <Link 
-                href="/logbook/nouveau" 
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-sky-50 text-sky-700 text-sm font-bold transition-all shadow-lg"
-              >
-                <Plus className="h-4 w-4" />
-                Nouveau vol
-              </Link>
-            </div>
-          )}
-          {blocked && (
-            <div className="px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-400/30 text-amber-200 text-sm">
-              Vous ne pouvez pas ajouter de vol pour le moment.
-            </div>
-          )}
+          <div className="flex flex-wrap gap-2 items-start">
+            <ExportLogbookButton typesVolDisponibles={typesVolUniques} />
+            {!blocked && (
+              <>
+                <Link
+                  href="/logbook/plans-vol"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 text-white text-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <FileText className="h-4 w-4" />
+                  Plans de vol
+                  {(plansVolRefuses?.length ?? 0) > 0 && (
+                    <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold animate-pulse-soft">
+                      {plansVolRefuses!.length}
+                    </span>
+                  )}
+                </Link>
+                <Link
+                  href="/logbook/depot-plan-vol"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 text-white text-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <Plane className="h-4 w-4" />
+                  Déposer un plan
+                </Link>
+                <Link
+                  href="/logbook/nouveau"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-sky-50 text-sky-700 text-sm font-bold transition-all shadow-lg hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <Plus className="h-4 w-4" />
+                  Nouveau vol
+                </Link>
+              </>
+            )}
+            {blocked && (
+              <div className="px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-400/30 text-amber-200 text-sm">
+                Vous ne pouvez pas ajouter de vol pour le moment.
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Statistiques */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 p-5 transition-all hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 stagger-enter">
+        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 p-5 transition-all duration-300 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-emerald-400/80 text-sm font-medium">Temps de vol total</p>
-              <p className="text-3xl font-bold text-emerald-400 mt-1">
+              <p className="text-emerald-400/80 text-xs font-semibold uppercase tracking-wider">Temps de vol total</p>
+              <p className="text-3xl font-bold text-emerald-400 mt-1 tabular-nums animate-ticker-pop">
                 {heures}<span className="text-lg">h</span>{minutes.toString().padStart(2, '0')}
               </p>
             </div>
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors group-hover:scale-110 duration-300">
               <Clock className="h-5 w-5 text-emerald-400" />
             </div>
           </div>
@@ -124,28 +150,34 @@ export default async function LogbookPage() {
           </div>
         </div>
 
-        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-sky-500/10 to-sky-600/5 border border-sky-500/20 p-5 transition-all hover:border-sky-500/40 hover:shadow-lg hover:shadow-sky-500/5">
+        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-sky-500/10 to-sky-600/5 border border-sky-500/20 p-5 transition-all duration-300 hover:border-sky-500/40 hover:shadow-lg hover:shadow-sky-500/10 hover:-translate-y-0.5">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sky-400/80 text-sm font-medium">Vols validés</p>
-              <p className="text-3xl font-bold text-sky-400 mt-1">{totalValides.length}</p>
+              <p className="text-sky-400/80 text-xs font-semibold uppercase tracking-wider">Vols validés</p>
+              <p className="text-3xl font-bold text-sky-400 mt-1 tabular-nums animate-ticker-pop">{totalValides.length}</p>
             </div>
-            <div className="p-2.5 rounded-xl bg-sky-500/10 group-hover:bg-sky-500/20 transition-colors">
+            <div className="p-2.5 rounded-xl bg-sky-500/10 group-hover:bg-sky-500/20 transition-colors group-hover:scale-110 duration-300">
               <CheckCircle2 className="h-5 w-5 text-sky-400" />
             </div>
           </div>
           <div className="mt-3 pt-3 border-t border-sky-500/10">
-            <p className="text-xs text-slate-500">Vols comptabilisés dans le logbook</p>
+            <p className="text-xs text-slate-500">Comptabilisés dans le logbook</p>
           </div>
         </div>
 
-        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 p-5 transition-all hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/5">
+        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 p-5 transition-all duration-300 hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/10 hover:-translate-y-0.5">
+          {volsEnAttente.length > 0 && (
+            <span aria-hidden className="absolute top-3 right-3 inline-flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 animate-ping"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+            </span>
+          )}
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-amber-400/80 text-sm font-medium">En attente</p>
-              <p className="text-3xl font-bold text-amber-400 mt-1">{volsEnAttente.length}</p>
+              <p className="text-amber-400/80 text-xs font-semibold uppercase tracking-wider">En attente</p>
+              <p className="text-3xl font-bold text-amber-400 mt-1 tabular-nums animate-ticker-pop">{volsEnAttente.length}</p>
             </div>
-            <div className="p-2.5 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors">
+            <div className="p-2.5 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors group-hover:scale-110 duration-300">
               <Timer className="h-5 w-5 text-amber-400" />
             </div>
           </div>
@@ -154,18 +186,24 @@ export default async function LogbookPage() {
           </div>
         </div>
 
-        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 p-5 transition-all hover:border-purple-500/40 hover:shadow-lg hover:shadow-purple-500/5">
+        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 p-5 transition-all duration-300 hover:border-purple-500/40 hover:shadow-lg hover:shadow-purple-500/10 hover:-translate-y-0.5">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-purple-400/80 text-sm font-medium">Total vols</p>
-              <p className="text-3xl font-bold text-purple-400 mt-1">{vols?.length || 0}</p>
+              <p className="text-purple-400/80 text-xs font-semibold uppercase tracking-wider">Total vols</p>
+              <p className="text-3xl font-bold text-purple-400 mt-1 tabular-nums animate-ticker-pop">{vols?.length || 0}</p>
             </div>
-            <div className="p-2.5 rounded-xl bg-purple-500/10 group-hover:bg-purple-500/20 transition-colors">
+            <div className="p-2.5 rounded-xl bg-purple-500/10 group-hover:bg-purple-500/20 transition-colors group-hover:scale-110 duration-300">
               <TrendingUp className="h-5 w-5 text-purple-400" />
             </div>
           </div>
-          <div className="mt-3 pt-3 border-t border-purple-500/10">
-            <p className="text-xs text-slate-500">Tous statuts confondus</p>
+          <div className="mt-3 pt-3 border-t border-purple-500/10 flex items-center justify-between gap-2 text-xs text-slate-500">
+            <span>Tous statuts</span>
+            {volsRefuses.length > 0 && (
+              <span className="text-red-400/80 inline-flex items-center gap-1">
+                <XCircle className="h-3 w-3" />
+                {volsRefuses.length} refusé{volsRefuses.length > 1 ? 's' : ''}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -300,18 +338,30 @@ export default async function LogbookPage() {
         </div>
       )}
 
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-medium text-slate-200">Vols</h2>
-          {vols && vols.length > 0 && (
-            <span className="text-xs text-slate-500">{vols.length} vol{vols.length > 1 ? 's' : ''}</span>
-          )}
+      <div className="card animate-fade-in">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h2 className="text-lg font-medium text-slate-200 flex items-center gap-2">
+            <BookOpen className="h-5 w-5 text-sky-400" />
+            Vols
+            {vols && vols.length > 0 && (
+              <span className="text-xs font-medium text-slate-500 bg-slate-800/70 px-2 py-0.5 rounded-full">
+                {vols.length}
+              </span>
+            )}
+          </h2>
         </div>
         {!vols || vols.length === 0 ? (
-          <div className="text-center py-12">
-            <Plane className="h-12 w-12 text-slate-700 mx-auto mb-3" />
-            <p className="text-slate-500">Aucun vol enregistre.</p>
-            <Link href="/logbook/nouveau" className="text-sky-400 text-sm hover:underline mt-2 inline-block">
+          <div className="text-center py-12 animate-fade-in">
+            <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-slate-800/60 border border-slate-700/60 mb-4 animate-float">
+              <Plane className="h-8 w-8 text-slate-500" />
+            </div>
+            <p className="text-slate-400 text-base font-medium">Aucun vol enregistré</p>
+            <p className="text-slate-500 text-sm mt-1">Commencez par déposer un plan de vol ou enregistrez un vol directement.</p>
+            <Link
+              href="/logbook/nouveau"
+              className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Plus className="h-4 w-4" />
               Enregistrer votre premier vol
             </Link>
           </div>
