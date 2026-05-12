@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useMemo, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { 
-  AlertTriangle, FileSearch, Gavel, Plus, X, Check, Loader2, 
-  Clock, User, Building2, ChevronRight, Search, Eye, CheckCircle2, BookOpen, Landmark,
-  ShieldCheck, XCircle, Ban, Plane, Wrench, MapPin, Hash, Calendar, Timer
+import { toast } from 'sonner';
+import {
+  AlertTriangle, FileSearch, Gavel, Plus, X, Check, Loader2,
+  Clock, User, Building2, Search, Eye, CheckCircle2, BookOpen, Landmark,
+  ShieldCheck, XCircle, Ban, Plane, Wrench, MapPin, Hash, Calendar, Timer,
+  Filter, Inbox, Sparkles
 } from 'lucide-react';
 import { formatDateMediumUTC, formatTimeUTC, toLocaleDateStringUTC, toLocaleStringUTC } from '@/lib/date-utils';
 import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
@@ -198,9 +200,15 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   const [, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<'signalements' | 'enquetes' | 'sanctions' | 'donnees' | 'autorisations' | 'avion'>('signalements');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [dataError, setDataError] = useState('');
+
+  // Filtres pour les listes
+  const [signalementSearch, setSignalementSearch] = useState('');
+  const [signalementStatutFilter, setSignalementStatutFilter] = useState<string>('all');
+  const [enqueteSearch, setEnqueteSearch] = useState('');
+  const [enqueteStatutFilter, setEnqueteStatutFilter] = useState<string>('actives');
+  const [sanctionSearch, setSanctionSearch] = useState('');
+  const [sanctionStatutFilter, setSanctionStatutFilter] = useState<string>('actives');
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -353,7 +361,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
         })));
       }
     } catch {
-      setError('Erreur chargement autorisations');
+      toast.error('Erreur lors du chargement des autorisations');
     } finally {
       setLoadingAutorisations(false);
     }
@@ -361,7 +369,6 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
 
   async function handleTraiterAutorisation(id: string, action: 'approuver' | 'refuser' | 'revoquer') {
     setLoading(true);
-    setError('');
     try {
       const res = await fetch('/api/autorisations-exploitation', {
         method: 'PATCH',
@@ -370,16 +377,20 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      setSuccess(data.message || 'Action effectuée');
+      const labels: Record<typeof action, string> = {
+        approuver: 'Autorisation approuvée',
+        refuser: 'Autorisation refusée',
+        revoquer: 'Autorisation révoquée',
+      };
+      toast.success(data.message || labels[action]);
       setAutorisationMotifReponse('');
       loadAutorisationsExploit();
       fetch('/api/autorisations-exploitation?toutes=true&statut=en_attente')
         .then(res => res.ok ? res.json() : [])
         .then(d => setAutorisationsEnAttenteCount(Array.isArray(d) ? d.length : 0))
         .catch(() => {});
-      setTimeout(() => setSuccess(''), 5000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : 'Erreur lors du traitement');
     } finally {
       setLoading(false);
     }
@@ -418,18 +429,16 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
 
   async function handleCreerSanction() {
     if (!sanctionCibleId || !sanctionMotif) {
-      setError('Cible et motif requis');
+      toast.error('Cible et motif requis');
       return;
     }
 
-    // Vérifier que le VBAN est renseigné pour les amendes
     if (sanctionType === 'amende' && !sanctionVbanDestination.trim()) {
-      setError('Le VBAN du compte destinataire est requis pour les amendes');
+      toast.error('Le VBAN du compte destinataire est requis pour les amendes');
       return;
     }
 
     setLoading(true);
-    setError('');
 
     try {
       const res = await fetch('/api/ifsa/sanctions', {
@@ -451,12 +460,12 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
-      setSuccess('Sanction émise avec succès');
+      toast.success('Sanction émise avec succès');
       setShowSanctionModal(false);
       resetSanctionForm();
       startTransition(() => router.refresh());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setLoading(false);
     }
@@ -476,10 +485,10 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
-      setSuccess('Sanction levée');
+      toast.success('Sanction levée');
       startTransition(() => router.refresh());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setLoading(false);
     }
@@ -487,12 +496,11 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
 
   async function handleCreerEnquete(signalementId?: string) {
     if (!enqueteTitre) {
-      setError('Titre requis');
+      toast.error('Titre requis');
       return;
     }
 
     setLoading(true);
-    setError('');
 
     try {
       const res = await fetch('/api/ifsa/enquetes', {
@@ -511,13 +519,13 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
-      setSuccess(`Enquête ${data.enquete.numero_dossier} ouverte`);
+      toast.success(`Enquête ${data.enquete.numero_dossier} ouverte`);
       setShowEnqueteModal(false);
       setSelectedSignalement(null);
       resetEnqueteForm();
       startTransition(() => router.refresh());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setLoading(false);
     }
@@ -535,11 +543,11 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
-      setSuccess('Enquête mise à jour');
+      toast.success('Enquête mise à jour');
       setSelectedEnquete(null);
       startTransition(() => router.refresh());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setLoading(false);
     }
@@ -557,11 +565,11 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
-      setSuccess('Signalement mis à jour');
+      toast.success('Signalement mis à jour');
       setSelectedSignalement(null);
       startTransition(() => router.refresh());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setLoading(false);
     }
@@ -629,13 +637,13 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
-      setSuccess('Enquête mise à jour');
+      toast.success('Enquête mise à jour');
       setShowEnqueteDetailModal(false);
       setSelectedEnquete(null);
       setEnqueteEditState(null);
       startTransition(() => router.refresh());
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setLoading(false);
     }
@@ -738,103 +746,147 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
     }
   }
 
+  // Filtres avec useMemo pour optimisation
+  const filteredSignalements = useMemo(() => {
+    const search = signalementSearch.trim().toLowerCase();
+    return signalements.filter((s) => {
+      if (signalementStatutFilter !== 'all' && s.statut !== signalementStatutFilter) return false;
+      if (!search) return true;
+      const haystack = [
+        s.numero_signalement,
+        s.titre,
+        s.description,
+        s.type_signalement,
+        s.signale_par?.identifiant,
+        s.pilote_signale?.identifiant,
+        s.compagnie_signalee?.nom,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(search);
+    });
+  }, [signalements, signalementSearch, signalementStatutFilter]);
+
+  const filteredEnquetes = useMemo(() => {
+    const search = enqueteSearch.trim().toLowerCase();
+    return enquetes.filter((e) => {
+      if (enqueteStatutFilter === 'actives') {
+        if (!['ouverte', 'en_cours'].includes(e.statut)) return false;
+      } else if (enqueteStatutFilter !== 'all' && e.statut !== enqueteStatutFilter) {
+        return false;
+      }
+      if (!search) return true;
+      const haystack = [
+        e.numero_dossier,
+        e.titre,
+        e.description,
+        e.conclusion,
+        e.enqueteur?.identifiant,
+        e.pilote_concerne?.identifiant,
+        e.compagnie_concernee?.nom,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(search);
+    });
+  }, [enquetes, enqueteSearch, enqueteStatutFilter]);
+
+  const filteredSanctions = useMemo(() => {
+    const search = sanctionSearch.trim().toLowerCase();
+    return sanctions.filter((s) => {
+      if (sanctionStatutFilter === 'actives' && !s.actif) return false;
+      if (sanctionStatutFilter === 'levees' && s.actif) return false;
+      if (sanctionStatutFilter === 'amendes_impayees' && (!s.actif || s.type_sanction !== 'amende')) return false;
+      if (!search) return true;
+      const haystack = [
+        s.type_sanction,
+        s.motif,
+        s.details,
+        s.cible_pilote?.identifiant,
+        s.cible_compagnie?.nom,
+        s.emis_par?.identifiant,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(search);
+    });
+  }, [sanctions, sanctionSearch, sanctionStatutFilter]);
+
+  const tabs: Array<{
+    id: typeof activeTab;
+    label: string;
+    icon: typeof AlertTriangle;
+    badge?: number;
+    badgeColor?: string;
+    onSelect?: () => void;
+  }> = [
+    {
+      id: 'signalements',
+      label: 'Signalements',
+      icon: AlertTriangle,
+      badge: signalements.filter(s => s.statut === 'nouveau').length,
+      badgeColor: 'bg-red-500/90',
+    },
+    { id: 'enquetes', label: 'Enquêtes', icon: FileSearch },
+    {
+      id: 'sanctions',
+      label: 'Sanctions',
+      icon: Gavel,
+      badge: sanctions.filter(s => s.actif).length,
+      badgeColor: 'bg-rose-500/80',
+    },
+    {
+      id: 'autorisations',
+      label: 'Autorisations',
+      icon: ShieldCheck,
+      badge: autorisationsEnAttenteCount,
+      badgeColor: 'bg-amber-500/90',
+      onSelect: () => loadAutorisationsExploit(),
+    },
+    { id: 'avion', label: 'Recherche avion', icon: Plane },
+    { id: 'donnees', label: 'Données IFSA', icon: Landmark },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Messages */}
-      {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-3 text-red-300">
-          <X className="h-5 w-5" />
-          <p>{error}</p>
-          <button onClick={() => setError('')} className="ml-auto"><X className="h-4 w-4" /></button>
-        </div>
-      )}
-      {success && (
-        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg flex items-center gap-3 text-emerald-300">
-          <Check className="h-5 w-5" />
-          <p>{success}</p>
-          <button onClick={() => setSuccess('')} className="ml-auto"><X className="h-4 w-4" /></button>
-        </div>
-      )}
-
       {/* Tabs */}
-      <div className="flex gap-2 flex-wrap">
-        <button
-          onClick={() => setActiveTab('signalements')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'signalements' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-          }`}
-        >
-          <AlertTriangle className="h-4 w-4 inline mr-2" />
-          Signalements
-          {signalements.filter(s => s.statut === 'nouveau').length > 0 && (
-            <span className="ml-2 px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
-              {signalements.filter(s => s.statut === 'nouveau').length}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab('enquetes')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'enquetes' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-          }`}
-        >
-          <FileSearch className="h-4 w-4 inline mr-2" />
-          Enquêtes
-        </button>
-        <button
-          onClick={() => setActiveTab('sanctions')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'sanctions' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-          }`}
-        >
-          <Gavel className="h-4 w-4 inline mr-2" />
-          Sanctions
-        </button>
-        <button
-          onClick={() => { setActiveTab('autorisations'); loadAutorisationsExploit(); }}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'autorisations' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-          }`}
-        >
-          <ShieldCheck className="h-4 w-4 inline mr-2" />
-          Autorisations
-          {autorisationsEnAttenteCount > 0 && (
-            <span className="ml-2 px-1.5 py-0.5 bg-amber-500 text-white text-xs rounded-full">
-              {autorisationsEnAttenteCount}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab('avion')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'avion' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-          }`}
-        >
-          <Plane className="h-4 w-4 inline mr-2" />
-          Recherche Avion
-        </button>
-        <button
-          onClick={() => setActiveTab('donnees')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            activeTab === 'donnees' ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-          }`}
-        >
-          <Landmark className="h-4 w-4 inline mr-2" />
-          Données IFSA
-        </button>
+      <div className="flex gap-2 flex-wrap items-center">
+        <div className="inline-flex flex-wrap gap-1 p-1 rounded-2xl bg-slate-900/60 border border-slate-700/60 backdrop-blur-sm shadow-inner">
+          {tabs.map((t) => {
+            const Icon = t.icon;
+            const isActive = activeTab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setActiveTab(t.id);
+                  t.onSelect?.();
+                }}
+                aria-pressed={isActive}
+                className={`relative inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                  isActive
+                    ? 'bg-gradient-to-br from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-900/40 scale-[1.02]'
+                    : 'text-slate-300 hover:bg-slate-700/60 hover:text-slate-100'
+                }`}
+              >
+                <Icon className={`h-4 w-4 ${isActive ? 'text-white' : 'text-slate-400'} transition-colors`} />
+                <span>{t.label}</span>
+                {(t.badge ?? 0) > 0 && (
+                  <span className={`relative inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1.5 rounded-full text-[10px] font-bold text-white ${t.badgeColor || 'bg-red-500'} animate-pulse-soft`}>
+                    {t.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
         {activeTab !== 'donnees' && activeTab !== 'autorisations' && activeTab !== 'avion' && (
           <div className="ml-auto flex gap-2">
             <button
               onClick={() => setShowEnqueteModal(true)}
-              className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+              className="inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white rounded-xl text-sm font-medium shadow-md shadow-purple-900/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
               <Plus className="h-4 w-4" />
               Nouvelle enquête
             </button>
             <button
               onClick={() => setShowSanctionModal(true)}
-              className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium flex items-center gap-2"
+              className="inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-br from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl text-sm font-medium shadow-md shadow-red-900/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
               <Plus className="h-4 w-4" />
               Nouvelle sanction
@@ -845,40 +897,96 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
 
       {/* Contenu des tabs */}
       {activeTab === 'signalements' && (
-        <div className="card">
-          <h2 className="text-lg font-semibold text-slate-100 mb-4">Signalements reçus</h2>
-          {signalements.length === 0 ? (
-            <p className="text-slate-400">Aucun signalement.</p>
+        <div className="card animate-fade-in">
+          <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+            <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-blue-400" />
+              Signalements reçus
+              <span className="text-xs font-medium text-slate-500 bg-slate-800/70 px-2 py-0.5 rounded-full">
+                {filteredSignalements.length} / {signalements.length}
+              </span>
+            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={signalementSearch}
+                  onChange={(e) => setSignalementSearch(e.target.value)}
+                  placeholder="Rechercher…"
+                  className="input pl-10 py-1.5 text-sm w-48"
+                />
+              </div>
+              <div className="inline-flex p-0.5 rounded-lg bg-slate-900/60 border border-slate-700/60">
+                {(['all', 'nouveau', 'en_examen', 'enquete_ouverte', 'classe', 'rejete'] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setSignalementStatutFilter(f)}
+                    className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                      signalementStatutFilter === f
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {f === 'all' ? 'Tous' : (STATUTS_SIGNALEMENT[f as keyof typeof STATUTS_SIGNALEMENT]?.label || f)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {filteredSignalements.length === 0 ? (
+            <EmptyState
+              icon={Inbox}
+              title={signalements.length === 0 ? 'Aucun signalement reçu' : 'Aucun résultat'}
+              description={signalements.length === 0
+                ? 'Lorsqu\'un pilote signalera un comportement suspect, il apparaîtra ici.'
+                : 'Modifiez votre recherche ou changez le filtre de statut.'}
+            />
           ) : (
-            <div className="space-y-3">
-              {signalements.map((sig) => {
+            <div className="space-y-3 stagger-enter">
+              {filteredSignalements.map((sig) => {
                 const statutInfo = STATUTS_SIGNALEMENT[sig.statut as keyof typeof STATUTS_SIGNALEMENT] || STATUTS_SIGNALEMENT.nouveau;
+                const isNouveau = sig.statut === 'nouveau';
                 return (
-                  <div key={sig.id} className="p-4 bg-slate-800/50 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors">
+                  <div
+                    key={sig.id}
+                    className={`group relative p-4 rounded-xl border transition-all duration-300 hover:-translate-y-0.5 ${
+                      isNouveau
+                        ? 'bg-blue-500/5 border-blue-500/30 hover:border-blue-400/60 hover:shadow-md hover:shadow-blue-900/30'
+                        : 'bg-slate-800/40 border-slate-700/70 hover:border-slate-500'
+                    }`}
+                  >
+                    {isNouveau && (
+                      <span aria-hidden className="absolute top-3 right-3 inline-flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75 animate-ping"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-400"></span>
+                      </span>
+                    )}
                     <div className="flex items-start justify-between gap-4 flex-wrap">
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <span className="text-xs font-mono text-slate-500">{sig.numero_signalement}</span>
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded ${statutInfo.color}`}>
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statutInfo.color}`}>
                             {statutInfo.label}
                           </span>
                           <span className="text-xs text-slate-500 capitalize">{sig.type_signalement}</span>
                         </div>
-                        <h3 className="font-medium text-slate-200">{sig.titre}</h3>
+                        <h3 className="font-medium text-slate-100">{sig.titre}</h3>
                         <p className="text-sm text-slate-400 mt-1 line-clamp-2">{sig.description}</p>
                         <div className="flex items-center gap-4 mt-2 text-xs text-slate-500 flex-wrap">
                           <span className="flex items-center gap-1">
                             <User className="h-3 w-3" />
-                            Par: {sig.signale_par?.identifiant || 'Anonyme'}
+                            Par: <span className="text-slate-300">{sig.signale_par?.identifiant || 'Anonyme'}</span>
                           </span>
                           {sig.pilote_signale && (
-                            <span className="flex items-center gap-1 text-red-400">
+                            <span className="flex items-center gap-1 text-red-300">
                               <User className="h-3 w-3" />
                               Contre: {sig.pilote_signale.identifiant}
                             </span>
                           )}
                           {sig.compagnie_signalee && (
-                            <span className="flex items-center gap-1 text-red-400">
+                            <span className="flex items-center gap-1 text-red-300">
                               <Building2 className="h-3 w-3" />
                               Contre: {sig.compagnie_signalee.nom}
                             </span>
@@ -889,18 +997,19 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {sig.statut === 'nouveau' && (
                           <>
                             <button
                               onClick={() => handleUpdateSignalement(sig.id, { statut: 'en_examen' })}
-                              className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-medium"
+                              disabled={loading}
+                              className="px-2.5 py-1 bg-amber-600/90 hover:bg-amber-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
                             >
                               Examiner
                             </button>
                             <button
                               onClick={() => openEnqueteFromSignalement(sig)}
-                              className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs font-medium"
+                              className="px-2.5 py-1 bg-purple-600/90 hover:bg-purple-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95"
                             >
                               Ouvrir enquête
                             </button>
@@ -910,19 +1019,21 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                           <>
                             <button
                               onClick={() => openEnqueteFromSignalement(sig)}
-                              className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs font-medium"
+                              className="px-2.5 py-1 bg-purple-600/90 hover:bg-purple-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95"
                             >
                               Ouvrir enquête
                             </button>
                             <button
                               onClick={() => handleUpdateSignalement(sig.id, { statut: 'classe' })}
-                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-medium"
+                              disabled={loading}
+                              className="px-2.5 py-1 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
                             >
                               Classer
                             </button>
                             <button
                               onClick={() => handleUpdateSignalement(sig.id, { statut: 'rejete' })}
-                              className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium"
+                              disabled={loading}
+                              className="px-2.5 py-1 bg-red-600/90 hover:bg-red-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
                             >
                               Rejeter
                             </button>
@@ -930,7 +1041,8 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                         )}
                         <button
                           onClick={() => setSelectedSignalement(sig)}
-                          className="p-1 text-slate-400 hover:text-slate-200"
+                          className="p-1.5 text-slate-400 hover:text-sky-300 hover:bg-slate-700/50 rounded-md transition-colors"
+                          aria-label="Voir détails"
                         >
                           <Eye className="h-4 w-4" />
                         </button>
@@ -945,52 +1057,112 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       )}
 
       {activeTab === 'enquetes' && (
-        <div className="card">
-          <h2 className="text-lg font-semibold text-slate-100 mb-4">Enquêtes en cours</h2>
-          {enquetes.length === 0 ? (
-            <p className="text-slate-400">Aucune enquête.</p>
+        <div className="card animate-fade-in">
+          <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+            <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+              <FileSearch className="h-5 w-5 text-purple-400" />
+              Enquêtes en cours
+              <span className="text-xs font-medium text-slate-500 bg-slate-800/70 px-2 py-0.5 rounded-full">
+                {filteredEnquetes.length} / {enquetes.length}
+              </span>
+            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={enqueteSearch}
+                  onChange={(e) => setEnqueteSearch(e.target.value)}
+                  placeholder="Rechercher…"
+                  className="input pl-10 py-1.5 text-sm w-48"
+                />
+              </div>
+              <div className="inline-flex p-0.5 rounded-lg bg-slate-900/60 border border-slate-700/60">
+                {(['actives', 'all', 'ouverte', 'en_cours', 'cloturee', 'classee'] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setEnqueteStatutFilter(f)}
+                    className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                      enqueteStatutFilter === f
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {f === 'all' ? 'Toutes' : f === 'actives' ? 'Actives' : (STATUTS_ENQUETE[f as keyof typeof STATUTS_ENQUETE]?.label || f)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {filteredEnquetes.length === 0 ? (
+            <EmptyState
+              icon={FileSearch}
+              title={enquetes.length === 0 ? 'Aucune enquête ouverte' : 'Aucun résultat'}
+              description={enquetes.length === 0
+                ? 'Ouvrez une nouvelle enquête depuis un signalement ou via le bouton « Nouvelle enquête ».'
+                : 'Modifiez votre recherche ou changez le filtre.'}
+            />
           ) : (
-            <div className="space-y-4">
-              {enquetes.map((enq) => {
+            <div className="space-y-4 stagger-enter">
+              {filteredEnquetes.map((enq) => {
                 const statutInfo = STATUTS_ENQUETE[enq.statut as keyof typeof STATUTS_ENQUETE] || STATUTS_ENQUETE.ouverte;
                 const prioriteInfo = PRIORITES[enq.priorite as keyof typeof PRIORITES] || PRIORITES.normale;
+                const isUrgente = enq.priorite === 'urgente';
+                const isHaute = enq.priorite === 'haute';
                 return (
-                  <div 
-                    key={enq.id} 
-                    className="p-5 bg-slate-800/50 rounded-lg border border-slate-700 hover:border-slate-500 transition-colors cursor-pointer"
+                  <div
+                    key={enq.id}
+                    className={`group relative p-5 rounded-xl border transition-all duration-300 cursor-pointer hover:-translate-y-0.5 hover:shadow-lg ${
+                      isUrgente
+                        ? 'bg-red-500/5 border-red-500/30 hover:border-red-400/60 hover:shadow-red-900/30'
+                        : isHaute
+                        ? 'bg-orange-500/5 border-orange-500/30 hover:border-orange-400/60 hover:shadow-orange-900/30'
+                        : 'bg-slate-800/40 border-slate-700/70 hover:border-purple-400/50 hover:shadow-purple-900/20'
+                    }`}
                     onClick={() => openEnqueteDetail(enq)}
                   >
-                    {/* En-tête */}
+                    {isUrgente && (
+                      <span aria-hidden className="pointer-events-none absolute top-3 right-3 inline-flex h-3 w-3">
+                        <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                      </span>
+                    )}
+
                     <div className="flex items-start justify-between gap-4 flex-wrap mb-3">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-mono text-amber-400 font-semibold">{enq.numero_dossier}</span>
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded ${statutInfo.color}`}>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statutInfo.color}`}>
                           {statutInfo.label}
                         </span>
-                        <span className={`text-xs font-semibold ${prioriteInfo.color}`}>
+                        <span className={`text-xs font-semibold ${prioriteInfo.color} inline-flex items-center gap-1`}>
+                          {(isUrgente || isHaute) && <span className="status-dot status-dot-danger"></span>}
                           {prioriteInfo.label}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
                         {(enq.statut === 'ouverte' || enq.statut === 'en_cours') && (
                           <>
                             {enq.statut === 'ouverte' && (
                               <button
                                 onClick={() => handleUpdateEnquete(enq.id, { statut: 'en_cours' })}
-                                className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-medium"
+                                disabled={loading}
+                                className="px-2.5 py-1 bg-amber-600/90 hover:bg-amber-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
                               >
                                 Démarrer
                               </button>
                             )}
                             <button
                               onClick={() => handleUpdateEnquete(enq.id, { statut: 'cloturee' })}
-                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-medium"
+                              disabled={loading}
+                              className="px-2.5 py-1 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
                             >
                               Clôturer
                             </button>
                             <button
                               onClick={() => handleUpdateEnquete(enq.id, { statut: 'classee' })}
-                              className="px-2 py-1 bg-slate-600 hover:bg-slate-500 text-white rounded text-xs font-medium"
+                              disabled={loading}
+                              className="px-2.5 py-1 bg-slate-600/90 hover:bg-slate-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
                             >
                               Classer
                             </button>
@@ -999,26 +1171,25 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                       </div>
                     </div>
 
-                    {/* Titre */}
-                    <h3 className="text-lg font-semibold text-slate-100 mb-2">{enq.titre}</h3>
-                    
-                    {/* Description */}
+                    <h3 className="text-lg font-semibold text-slate-100 mb-2 group-hover:text-purple-200 transition-colors">{enq.titre}</h3>
+
                     {enq.description && (
-                      <div className="mb-3 p-3 bg-slate-900/50 rounded-lg">
-                        <p className="text-sm text-slate-300 whitespace-pre-wrap">{enq.description}</p>
-                      </div>
-                    )}
-                    
-                    {/* Conclusion (si clôturée) */}
-                    {enq.conclusion && (
-                      <div className="mb-3 p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
-                        <p className="text-xs text-emerald-400 mb-1 font-semibold">Conclusion</p>
-                        <p className="text-sm text-emerald-300 whitespace-pre-wrap">{enq.conclusion}</p>
+                      <div className="mb-3 p-3 bg-slate-900/50 rounded-lg border border-slate-800">
+                        <p className="text-sm text-slate-300 whitespace-pre-wrap line-clamp-3">{enq.description}</p>
                       </div>
                     )}
 
-                    {/* Métadonnées */}
-                    <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap border-t border-slate-700 pt-3 mt-3">
+                    {enq.conclusion && (
+                      <div className="mb-3 p-3 bg-emerald-500/10 rounded-lg border border-emerald-500/30">
+                        <p className="text-xs text-emerald-400 mb-1 font-semibold flex items-center gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Conclusion
+                        </p>
+                        <p className="text-sm text-emerald-200 whitespace-pre-wrap line-clamp-3">{enq.conclusion}</p>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-4 text-xs text-slate-500 flex-wrap border-t border-slate-700/70 pt-3 mt-3">
                       <span className="flex items-center gap-1">
                         <User className="h-3 w-3" />
                         Enquêteur: <span className="text-slate-300">{enq.enqueteur?.identifiant || 'Non assigné'}</span>
@@ -1047,7 +1218,10 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                       )}
                     </div>
 
-                    <p className="text-xs text-slate-600 mt-2 italic">Cliquer pour modifier</p>
+                    <p className="text-[11px] text-slate-600 mt-2 italic flex items-center gap-1.5 group-hover:text-purple-400 transition-colors">
+                      <Sparkles className="h-3 w-3" />
+                      Cliquer pour modifier
+                    </p>
                   </div>
                 );
               })}
@@ -1057,9 +1231,12 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       )}
 
       {activeTab === 'donnees' && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6 lg:grid-cols-2 animate-fade-in">
           <div className="card">
-            <h2 className="text-lg font-semibold text-slate-100 mb-4">Compagnies</h2>
+            <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-purple-400" />
+              Compagnies
+            </h2>
             <div className="space-y-3">
               <select
                 value={selectedCompagnieId}
@@ -1080,8 +1257,19 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                 })}
               </select>
 
-              {loadingCompagnie && <p className="text-sm text-slate-400">Chargement…</p>}
-              {dataError && <p className="text-sm text-red-400">{dataError}</p>}
+              {loadingCompagnie && (
+                <div className="space-y-3 animate-fade-in">
+                  <div className="skeleton h-12 w-full"></div>
+                  <div className="skeleton h-32 w-full"></div>
+                  <div className="skeleton h-24 w-full"></div>
+                </div>
+              )}
+              {dataError && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm flex items-center gap-2 animate-fade-in">
+                  <XCircle className="h-4 w-4" />
+                  {dataError}
+                </div>
+              )}
 
               {compagnieData && (
                 <div className="space-y-4">
@@ -1228,7 +1416,10 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
           </div>
 
           <div className="card">
-            <h2 className="text-lg font-semibold text-slate-100 mb-4">Pilotes</h2>
+            <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+              <User className="h-5 w-5 text-emerald-400" />
+              Pilotes
+            </h2>
             <div className="space-y-3">
               <select
                 value={selectedPiloteId}
@@ -1261,8 +1452,19 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                 </div>
               )}
 
-              {loadingPilote && <p className="text-sm text-slate-400">Chargement…</p>}
-              {dataError && <p className="text-sm text-red-400">{dataError}</p>}
+              {loadingPilote && (
+                <div className="space-y-3 animate-fade-in">
+                  <div className="skeleton h-32 w-full"></div>
+                  <div className="skeleton h-32 w-full"></div>
+                  <div className="skeleton h-24 w-full"></div>
+                </div>
+              )}
+              {dataError && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm flex items-center gap-2 animate-fade-in">
+                  <XCircle className="h-4 w-4" />
+                  {dataError}
+                </div>
+              )}
 
               {piloteData && (
                 <div className="space-y-4">
@@ -1421,15 +1623,15 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       )}
 
       {activeTab === 'avion' && (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-fade-in">
           {/* Barre de recherche */}
           <div className="card">
             <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
               <Plane className="h-5 w-5 text-sky-400" />
               Recherche par immatriculation
             </h2>
-            <div className="flex gap-3">
-              <div className="relative flex-1">
+            <div className="flex gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[240px]">
                 <Hash className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
                   type="text"
@@ -1437,28 +1639,52 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                   onChange={(e) => setAvionSearchImmat(e.target.value.toUpperCase())}
                   onKeyDown={(e) => { if (e.key === 'Enter') searchAvion(); }}
                   placeholder="Ex: F-HZUK, IR-A320-01..."
-                  className="input w-full pl-10 font-mono"
+                  className="input w-full pl-10 font-mono uppercase"
                 />
               </div>
               <button
                 onClick={searchAvion}
                 disabled={loadingAvion}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium flex items-center gap-2 disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-5 py-2 bg-gradient-to-br from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white rounded-lg font-medium shadow-md shadow-indigo-900/30 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100"
               >
                 {loadingAvion ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                 Rechercher
               </button>
             </div>
             {avionError && (
-              <p className="text-sm text-red-400 mt-2">{avionError}</p>
+              <div className="mt-3 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm flex items-center gap-2 animate-fade-in">
+                <XCircle className="h-4 w-4" />
+                {avionError}
+              </div>
+            )}
+            {!avionData && !loadingAvion && !avionError && (
+              <p className="text-xs text-slate-500 mt-3 flex items-center gap-1.5">
+                <Sparkles className="h-3 w-3" />
+                Entrez une immatriculation pour consulter la fiche complète : type, propriétaire, historique de vols, état mécanique et réparations.
+              </p>
             )}
           </div>
 
+          {loadingAvion && (
+            <div className="card animate-fade-in">
+              <div className="space-y-4">
+                <div className="skeleton h-12 w-2/3"></div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="skeleton h-16"></div>
+                  <div className="skeleton h-16"></div>
+                  <div className="skeleton h-16"></div>
+                  <div className="skeleton h-16"></div>
+                </div>
+                <div className="skeleton h-48 w-full"></div>
+              </div>
+            </div>
+          )}
+
           {/* Résultats */}
-          {avionData && (
+          {avionData && !loadingAvion && (
             <>
               {/* Fiche avion */}
-              <div className="card">
+              <div className="card animate-reveal-blur">
                 <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
                   <div>
                     <div className="flex items-center gap-3 mb-1">
@@ -1698,19 +1924,22 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       )}
 
       {activeTab === 'autorisations' && (
-        <div className="card">
+        <div className="card animate-fade-in">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-sky-400" />
               Autorisations d&apos;exploitation
+              <span className="text-xs font-medium text-slate-500 bg-slate-800/70 px-2 py-0.5 rounded-full">
+                {autorisationsExploit.length}
+              </span>
             </h2>
-            <div className="flex gap-2">
+            <div className="inline-flex p-0.5 rounded-lg bg-slate-900/60 border border-slate-700/60">
               {(['en_attente', 'approuvee', 'toutes'] as const).map(f => (
                 <button
                   key={f}
                   onClick={() => { setAutorisationFilter(f); loadAutorisationsExploit(f); }}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    autorisationFilter === f ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    autorisationFilter === f ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-300 hover:bg-slate-700/60'
                   }`}
                 >
                   {f === 'en_attente' ? 'En attente' : f === 'approuvee' ? 'Approuvées' : 'Toutes'}
@@ -1720,33 +1949,46 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
           </div>
 
           {loadingAutorisations ? (
-            <div className="flex items-center gap-2 text-slate-400 text-sm py-6 justify-center">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Chargement...
+            <div className="space-y-3">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="skeleton h-24 w-full"></div>
+              ))}
             </div>
           ) : autorisationsExploit.length === 0 ? (
-            <p className="text-slate-400 text-center py-6">Aucune demande d&apos;autorisation.</p>
+            <EmptyState
+              icon={ShieldCheck}
+              title="Aucune demande d'autorisation"
+              description={autorisationFilter === 'en_attente'
+                ? 'Toutes les demandes ont été traitées. Belle journée !'
+                : 'Aucune autorisation n\'a encore été enregistrée pour ce filtre.'}
+            />
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 stagger-enter">
               {autorisationsExploit.map((auth) => {
                 const isEnAttente = auth.statut === 'en_attente';
                 const isApprouvee = auth.statut === 'approuvee';
                 return (
                   <div
                     key={auth.id}
-                    className={`p-4 rounded-lg border ${
+                    className={`group relative p-4 rounded-xl border transition-all duration-300 hover:-translate-y-0.5 ${
                       isEnAttente
-                        ? 'bg-amber-500/5 border-amber-500/30'
+                        ? 'bg-amber-500/5 border-amber-500/30 hover:border-amber-400/60 hover:shadow-md hover:shadow-amber-900/30'
                         : isApprouvee
-                        ? 'bg-emerald-500/5 border-emerald-500/30'
-                        : 'bg-slate-800/50 border-slate-700 opacity-60'
+                        ? 'bg-emerald-500/5 border-emerald-500/30 hover:border-emerald-400/60 hover:shadow-md hover:shadow-emerald-900/30'
+                        : 'bg-slate-800/40 border-slate-700/50 opacity-70 hover:opacity-100'
                     }`}
                   >
+                    {isEnAttente && (
+                      <span aria-hidden className="absolute top-3 right-3 inline-flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 animate-ping"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                      </span>
+                    )}
                     <div className="flex items-start justify-between gap-4 flex-wrap">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <Plane className="h-4 w-4 text-sky-400 flex-shrink-0" />
-                          <span className="text-sm font-medium text-slate-200">
+                          <Plane className={`h-4 w-4 flex-shrink-0 ${isEnAttente ? 'text-amber-300' : isApprouvee ? 'text-emerald-300' : 'text-sky-400'}`} />
+                          <span className="text-sm font-semibold text-slate-100">
                             {auth.type_avion?.nom || 'Type inconnu'}
                           </span>
                           {auth.type_avion?.constructeur && (
@@ -1846,56 +2088,118 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       )}
 
       {activeTab === 'sanctions' && (
-        <div className="card">
-          <h2 className="text-lg font-semibold text-slate-100 mb-4">Sanctions</h2>
-          {sanctions.length === 0 ? (
-            <p className="text-slate-400">Aucune sanction.</p>
-          ) : (
-            <div className="space-y-3">
-              {sanctions.map((sanc) => {
-                const typeInfo = TYPES_SANCTIONS.find(t => t.value === sanc.type_sanction);
-                return (
-                  <div 
-                    key={sanc.id} 
-                    className={`p-4 rounded-lg border ${
-                      sanc.actif 
-                        ? 'bg-red-500/10 border-red-500/30' 
-                        : 'bg-slate-800/50 border-slate-700 opacity-60'
+        <div className="card animate-fade-in">
+          <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+            <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+              <Gavel className="h-5 w-5 text-red-400" />
+              Sanctions
+              <span className="text-xs font-medium text-slate-500 bg-slate-800/70 px-2 py-0.5 rounded-full">
+                {filteredSanctions.length} / {sanctions.length}
+              </span>
+            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={sanctionSearch}
+                  onChange={(e) => setSanctionSearch(e.target.value)}
+                  placeholder="Rechercher…"
+                  className="input pl-10 py-1.5 text-sm w-48"
+                />
+              </div>
+              <div className="inline-flex p-0.5 rounded-lg bg-slate-900/60 border border-slate-700/60">
+                {(['actives', 'all', 'amendes_impayees', 'levees'] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setSanctionStatutFilter(f)}
+                    className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                      sanctionStatutFilter === f
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
+                    {f === 'all' ? 'Toutes' : f === 'actives' ? 'Actives' : f === 'amendes_impayees' ? 'Amendes impayées' : 'Levées'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {filteredSanctions.length === 0 ? (
+            <EmptyState
+              icon={Gavel}
+              title={sanctions.length === 0 ? 'Aucune sanction émise' : 'Aucun résultat'}
+              description={sanctions.length === 0
+                ? 'Émettez une nouvelle sanction depuis le bouton « Nouvelle sanction » en haut à droite.'
+                : 'Modifiez votre recherche ou changez le filtre.'}
+            />
+          ) : (
+            <div className="space-y-3 stagger-enter">
+              {filteredSanctions.map((sanc) => {
+                const typeInfo = TYPES_SANCTIONS.find(t => t.value === sanc.type_sanction);
+                const isAmendeImpayee = sanc.type_sanction === 'amende' && sanc.actif;
+                return (
+                  <div
+                    key={sanc.id}
+                    className={`group relative p-4 rounded-xl border transition-all duration-300 hover:-translate-y-0.5 ${
+                      isAmendeImpayee
+                        ? 'bg-amber-500/5 border-amber-500/40 hover:border-amber-400/60 hover:shadow-md hover:shadow-amber-900/30'
+                        : sanc.actif
+                        ? 'bg-red-500/5 border-red-500/30 hover:border-red-400/60 hover:shadow-md hover:shadow-red-900/30'
+                        : 'bg-slate-800/30 border-slate-700/50 opacity-70 hover:opacity-100'
+                    }`}
+                  >
+                    {sanc.actif && (
+                      <span aria-hidden className="absolute top-3 right-3 inline-flex h-2 w-2">
+                        <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${isAmendeImpayee ? 'bg-amber-400' : 'bg-red-400'}`}></span>
+                        <span className={`relative inline-flex rounded-full h-2 w-2 ${isAmendeImpayee ? 'bg-amber-400' : 'bg-red-400'}`}></span>
+                      </span>
+                    )}
                     <div className="flex items-start justify-between gap-4 flex-wrap">
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className={`text-sm font-medium ${typeInfo?.color || 'text-slate-400'}`}>
+                          <span className={`text-sm font-semibold ${typeInfo?.color || 'text-slate-400'}`}>
                             {typeInfo?.label || sanc.type_sanction}
                           </span>
                           {!sanc.actif && (
-                            <span className="text-xs font-medium px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 inline-flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3" />
                               Levée
                             </span>
                           )}
+                          {isAmendeImpayee && (
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 animate-pulse-soft">
+                              Impayée
+                            </span>
+                          )}
                         </div>
-                        <p className="text-slate-200 font-medium">{sanc.motif}</p>
+                        <p className="text-slate-100 font-medium">{sanc.motif}</p>
                         {sanc.details && (
                           <p className="text-sm text-slate-400 mt-1">{sanc.details}</p>
                         )}
                         <div className="flex items-center gap-4 mt-2 text-xs text-slate-500 flex-wrap">
-                          <span>
-                            Cible: {sanc.cible_pilote?.identifiant || sanc.cible_compagnie?.nom || 'Inconnu'}
+                          <span className="inline-flex items-center gap-1">
+                            {sanc.cible_compagnie ? <Building2 className="h-3 w-3" /> : <User className="h-3 w-3" />}
+                            Cible: <span className="text-slate-300">{sanc.cible_pilote?.identifiant || sanc.cible_compagnie?.nom || 'Inconnu'}</span>
                           </span>
-                          <span>Par: {sanc.emis_par?.identifiant || 'Système'}</span>
-                          {sanc.duree_jours && <span>Durée: {sanc.duree_jours} jours</span>}
-                          {sanc.montant_amende && <span>Amende: {sanc.montant_amende} F$</span>}
+                          <span>Par: <span className="text-slate-300">{sanc.emis_par?.identifiant || 'Système'}</span></span>
+                          {sanc.duree_jours && <span className="text-orange-300">Durée: {sanc.duree_jours} j</span>}
+                          {sanc.montant_amende && <span className="text-amber-300 font-semibold">{sanc.montant_amende.toLocaleString('fr-FR')} F$</span>}
                           {sanc.cleared_by && (
                             <span className="text-emerald-400">Levée par: {sanc.cleared_by.identifiant}</span>
                           )}
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {toLocaleDateStringUTC(sanc.created_at)}
+                          </span>
                         </div>
                       </div>
                       {sanc.actif && (
                         <button
                           onClick={() => handleLeverSanction(sanc.id)}
                           disabled={loading}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-sm font-medium flex items-center gap-1"
+                          className="px-3 py-1.5 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 shadow-md shadow-emerald-900/30"
                         >
                           <CheckCircle2 className="h-4 w-4" />
                           Lever
@@ -2449,6 +2753,26 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
         </div>,
         document.body
       )}
+    </div>
+  );
+}
+
+function EmptyState({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: typeof AlertTriangle;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="py-12 px-4 text-center animate-fade-in">
+      <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-slate-800/60 border border-slate-700/60 mb-4 animate-float">
+        <Icon className="h-8 w-8 text-slate-500" />
+      </div>
+      <h3 className="text-base font-semibold text-slate-300">{title}</h3>
+      <p className="text-sm text-slate-500 mt-1.5 max-w-sm mx-auto">{description}</p>
     </div>
   );
 }
