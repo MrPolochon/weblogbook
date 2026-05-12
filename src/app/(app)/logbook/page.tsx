@@ -64,16 +64,15 @@ export default async function LogbookPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header avec gradient */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-sky-600 via-sky-700 to-indigo-800 p-6 shadow-xl animate-reveal-blur">
-        <div className="absolute inset-0 bg-cockpit-grid opacity-30 pointer-events-none"></div>
-        <div
-          aria-hidden
-          className="pointer-events-none absolute top-3 left-0 right-0 h-6 overflow-hidden opacity-30"
-        >
-          <div className="animate-plane-glide text-white/60 text-xs">✈</div>
+      {/* Header : fond décoratif dans un calque overflow-hidden pour ne pas couper le menu PDF */}
+      <div className="relative z-0 rounded-2xl shadow-xl animate-reveal-blur">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl bg-gradient-to-br from-sky-600 via-sky-700 to-indigo-800">
+          <div className="absolute inset-0 bg-cockpit-grid opacity-30"></div>
+          <div aria-hidden className="absolute top-3 left-0 right-0 h-6 overflow-hidden opacity-30">
+            <div className="animate-plane-glide text-white/60 text-xs">✈</div>
+          </div>
         </div>
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
+        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4 p-6">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 mb-2">
               <div className="relative">
@@ -338,7 +337,7 @@ export default async function LogbookPage() {
         </div>
       )}
 
-      <div className="card animate-fade-in">
+      <div className="card animate-fade-in border-slate-700/40 shadow-lg shadow-black/10">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <h2 className="text-lg font-medium text-slate-200 flex items-center gap-2">
             <BookOpen className="h-5 w-5 text-sky-400" />
@@ -369,7 +368,7 @@ export default async function LogbookPage() {
           <div className="overflow-x-auto -mx-5 sm:-mx-6 px-5 sm:px-6">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-600/50">
+                <tr className="border-b border-slate-600/50 bg-slate-800/20">
                   <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Date</th>
                   <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Route</th>
                   <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Appareil</th>
@@ -382,7 +381,10 @@ export default async function LogbookPage() {
               </thead>
               <tbody className="divide-y divide-slate-700/30">
                 {vols.map((v) => (
-                  <tr key={v.id} className="group hover:bg-slate-700/20 transition-colors">
+                  <tr
+                    key={v.id}
+                    className="group border-l-2 border-transparent hover:border-sky-500/40 hover:bg-slate-800/35 transition-[background-color,border-color,box-shadow] duration-200"
+                  >
                     <td className="py-3 pr-4">
                       {(v.statut === 'refusé' && (v.refusal_count ?? 0) < 3) || v.statut === 'en_attente' ? (
                         <Link href={`/logbook/vol/${v.id}`} className="text-sky-400 hover:text-sky-300 font-medium transition-colors">
