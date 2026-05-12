@@ -133,6 +133,7 @@ export default function AtcAcceptTransfertSidebar({
   // Tracker quand chaque élément a été vu pour la première fois
   const firstSeenRef = useRef<Map<string, number>>(new Map());
   const lastReminderRef = useRef<Map<string, number>>(new Map());
+  const lastRappelDataRefreshRef = useRef(0);
   
   // Références pour détecter les nouveaux éléments
   const prevTransfertIds = useRef<Set<string>>(new Set());
@@ -221,12 +222,17 @@ export default function AtcAcceptTransfertSidebar({
         const sinceLastReminder = (currentTime - lastReminder) / 1000;
         
         if (sinceLastReminder >= interval) {
+          const nowMs = Date.now();
+          if (nowMs - lastRappelDataRefreshRef.current >= 10_000) {
+            lastRappelDataRefreshRef.current = nowMs;
+            startTransition(() => router.refresh());
+          }
           playNotificationSound('rappel', urgency);
           lastReminderRef.current.set(item.id, currentTime);
         }
       }
     });
-  }, [currentTime, plansAccepter, plansCloture]);
+  }, [currentTime, plansAccepter, plansCloture, router]);
 
   // Nettoyer les références pour les éléments supprimés
   useEffect(() => {

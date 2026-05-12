@@ -171,6 +171,22 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     () => overview?.instances ?? [],
     [overview]
   );
+  const aeroportCode = useMemo(() => String(aeroport || '').trim().toUpperCase(), [aeroport]);
+  /** Bot en diffusion réelle pour l'aéroport de la session (même si la base est fausse). */
+  const liveBotsOnThisAirport = useMemo(() => {
+    if (!aeroportCode) return [];
+    return instances.filter((i) => {
+      if (!i.bot_broadcasting) return false;
+      const code = String(i.airport ?? i.aeroport ?? '')
+        .trim()
+        .toUpperCase();
+      return code === aeroportCode;
+    });
+  }, [instances, aeroportCode]);
+  const botDesyncDbFalse = useMemo(
+    () => instances.filter((i) => i.desync && i.bot_broadcasting && !i.db_broadcasting),
+    [instances]
+  );
   const atisCodeAutoRotate = overview?.user_prefs.atis_code_auto_rotate ?? false;
   const botReachable = overview?.bot.reachable ?? null;
   const botError = overview?.bot.error ?? null;
@@ -716,8 +732,25 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         )}
 
         {/* ============ TAB : ETAT ============ */}
-        {tab === 'status' && (
+            {tab === 'status' && (
           <>
+            {botDesyncDbFalse.length > 0 && (
+              <div
+                className={`text-sm px-3 py-2.5 rounded-lg border flex gap-2 ${
+                  isDark
+                    ? 'bg-amber-500/12 border-amber-500/40 text-amber-100'
+                    : 'bg-amber-500/20 border-amber-500/50 text-amber-950'
+                }`}
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <p>
+                  <span className="font-semibold">Base non synchronisée avec Discord.</span> Utilisez le bouton{' '}
+                  <strong className="text-white">Stop</strong> sur la ligne du bot concerné (en haut de cette fenêtre), pas uniquement un
+                  redémarrage par « Démarrer ». Si l&apos;arrêt échoue, le message d&apos;erreur indiquera la cause (bot, réseau, secret).
+                </p>
+              </div>
+            )}
+
             {instances.length === 0 && botReachable !== false && (
               <p className={`text-sm ${textMuted}`}>Aucune instance détectée. Vérifiez la configuration du bot.</p>
             )}
@@ -781,7 +814,12 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
                   <button
                     onClick={handleStart}
-                    disabled={actionLoading}
+                    disabled={actionLoading || liveBotsOnThisAirport.length > 0}
+                    title={
+                      liveBotsOnThisAirport.length > 0
+                        ? `Coupez d'abord l'ATIS sur le${liveBotsOnThisAirport.length > 1 ? 's' : ''} bot ${liveBotsOnThisAirport.map((b) => b.instance_id).join(', ')} (Stop sur la carte).`
+                        : undefined
+                    }
                     className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-semibold text-base disabled:opacity-50"
                   >
                     <Play className="h-5 w-5" />
@@ -1361,8 +1399,8 @@ function InstanceCard({
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
           <span>
             {inst.bot_broadcasting && !inst.db_broadcasting
-              ? 'Bot en diffusion mais base non synchro. Cliquez Stop pour resynchroniser.'
-              : 'Base marquée active mais bot inactif. Cliquez Stop pour nettoyer.'}
+              ? 'Bot en diffusion mais la base ne l’indique pas. Utilisez le bouton Stop sur cette ligne pour couper le flux Discord, puis vérifiez le message s’il échoue.'
+              : 'Base marquée active mais le bot ne diffuse pas. Cliquez Stop pour nettoyer l’enregistrement.'}
           </span>
         </div>
       )}

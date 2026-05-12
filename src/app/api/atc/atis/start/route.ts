@@ -86,6 +86,27 @@ export async function POST(request: Request) {
       );
     }
 
+    // Vérification 3 : état réel des bots (si la DB est désynchronisée, un flux peut
+    // encore être actif alors que broadcasting=false côté Supabase).
+    const { instances: liveStatuses, error: liveErr } = await getAllBotStatuses();
+    if (!liveErr && liveStatuses.length > 0) {
+      const stillLive = liveStatuses.find(
+        (i) =>
+          i.broadcasting &&
+          String(i.airport ?? '')
+            .trim()
+            .toUpperCase() === aeroportCode
+      );
+      if (stillLive) {
+        return NextResponse.json(
+          {
+            error: `Le bot ${stillLive.instance_id} diffuse encore l’ATIS de ${stillLive.airport ?? aeroportCode} (état réel Discord). Dans le panneau ATIS, onglet État — cliquez « Stop » à droite de cette instance (pas seulement « Démarrer ») pour couper le flux, puis relancez.`,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     // Resolution de l'instance cible : explicit (body.instance_id) ou auto.
     let availableInstance: number | null = null;
 

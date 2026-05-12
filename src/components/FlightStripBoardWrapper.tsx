@@ -17,6 +17,20 @@ interface FlightStripBoardWrapperProps {
 export default function FlightStripBoardWrapper({ allStrips, plansATraiter, atcPosition, atcAeroport, onlineSessions }: FlightStripBoardWrapperProps) {
   const [activatedPlanIds, setActivatedPlanIds] = useState<Set<string>>(new Set());
 
+  // Nettoyer les activations locales si le strip n'existe plus côté serveur (évite état fantôme).
+  useEffect(() => {
+    const valid = new Set(allStrips.map((s) => s.id));
+    setActivatedPlanIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (valid.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : prev;
+    });
+  }, [allStrips]);
+
   // Filtrer les strips : exclure ceux qui sont "à traiter" ET pas encore activés
   const visibleStrips = allStrips.filter((strip) => {
     const isATraiter = plansATraiter.includes(strip.id);

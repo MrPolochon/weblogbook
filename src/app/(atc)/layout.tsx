@@ -11,6 +11,7 @@ import AtcAtisButton from '@/components/AtcAtisButton';
 import AtcAtisTicker from '@/components/AtcAtisTicker';
 import InactivityLogout from '@/components/InactivityLogout';
 import AtcSessionRealtimeGuard from '@/components/AtcSessionRealtimeGuard';
+import AtcPlansRealtimeRefresh from '@/components/AtcPlansRealtimeRefresh';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,8 +82,14 @@ export default async function AtcLayout({
     <AtcThemeProvider>
       <div className="min-h-dvh flex flex-col safe-x" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <AtcSessionRealtimeGuard userId={user.id} enService={enService} />
+        <AtcPlansRealtimeRefresh
+          userId={user.id}
+          enService={enService}
+          aeroport={session?.aeroport ?? null}
+          position={session?.position ?? null}
+        />
         <InactivityLogout />
-        <AutoRefresh intervalSeconds={15} />
+        <AutoRefresh intervalSeconds={8} />
         <AtcModeBg isAdmin={isAdmin} />
         <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
         <AtcAtisTicker />

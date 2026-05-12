@@ -71,28 +71,46 @@ export async function POST(request: Request) {
     }
 
     const stopped: number[] = [];
+    const botErrors: string[] = [];
     for (const instanceId of targetInstances) {
       const res = await fetchAtisBot('/webhook/stop', {
         method: 'POST',
         instanceId,
       });
+      // Succès ou bot injoignable (503) : on aligne la DB pour ne pas bloquer l'utilisateur.
       if (!res.error || res.status === 503) {
-        // 503 = bot indisponible : on met quand même la DB à jour pour ne pas rester coincé
         stopped.push(instanceId);
+        await admin
+          .from('atis_broadcast_state')
+          .update({
+            controlling_user_id: null,
+            aeroport: null,
+            position: null,
+            broadcasting: false,
+            source: null,
+            started_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', String(instanceId));
+      } else {
+        botErrors.push(`Bot ${instanceId}: ${res.error}`);
       }
+    }
 
-      await admin
-        .from('atis_broadcast_state')
-        .update({
-          controlling_user_id: null,
-          aeroport: null,
-          position: null,
-          broadcasting: false,
-          source: null,
-          started_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', String(instanceId));
+    if (botErrors.length > 0) {
+      return NextResponse.json(
+        {
+          ok: stopped.length > 0,
+          stopped,
+          error:
+            (stopped.length > 0 ? 'Arrêt partiel. ' : '') +
+            botErrors.join(' — ') +
+            (stopped.length === 0
+              ? " La base n'a pas été modifiée sur les instances en erreur ; le flux Discord peut encore être actif."
+              : ''),
+        },
+        { status: 502 }
+      );
     }
 
     return NextResponse.json({ ok: true, broadcasting: false, stopped });
