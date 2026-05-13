@@ -81,6 +81,11 @@ function premierTypeAvionDepuisEmbed<T extends object>(
   return ta;
 }
 
+/** Aligné sur POST /api/plans-vol : départ et arrivée doivent différer après normalisation OACI. */
+function aeroportsRouteDistincts(depart: string, arrivee: string): boolean {
+  return depart.trim().toUpperCase() !== arrivee.trim().toUpperCase();
+}
+
 export default function DepotPlanVolForm({ compagniesDisponibles, inventairePersonnel, avionsParCompagnie = {} }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -479,7 +484,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     let done = 0;
     total += 2; // route
     if (aeroport_depart) done++;
-    if (aeroport_arrivee && aeroport_arrivee !== aeroport_depart) done++;
+    if (aeroport_arrivee && aeroportsRouteDistincts(aeroport_depart, aeroport_arrivee)) done++;
     total += 2; // details
     if (numero_vol.trim()) done++;
     if (temps_prev_min && parseInt(temps_prev_min, 10) > 0) done++;
@@ -493,7 +498,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const checklistItems = useMemo(() => {
     const items: { label: string; ok: boolean }[] = [
       { label: 'Aéroport de départ', ok: !!aeroport_depart },
-      { label: 'Aéroport d\'arrivée', ok: !!aeroport_arrivee && aeroport_arrivee !== aeroport_depart },
+      { label: 'Aéroport d\'arrivée', ok: !!aeroport_arrivee && aeroportsRouteDistincts(aeroport_depart, aeroport_arrivee) },
       { label: 'Numéro de vol', ok: !!numero_vol.trim() },
       { label: 'Durée de vol', ok: !!(temps_prev_min && parseInt(temps_prev_min, 10) > 0) },
     ];
@@ -554,6 +559,10 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     }
     if (type_vol === 'VFR' && !intentions_vol.trim()) { setError('Intentions de vol requises pour VFR.'); return; }
     if (type_vol === 'IFR' && (!sid_depart.trim() || !star_arrivee.trim())) { setError('SID de départ et STAR d\'arrivée requises pour IFR.'); return; }
+    if (!aeroportsRouteDistincts(aeroport_depart, aeroport_arrivee)) {
+      setError('L’aéroport de départ et l’aéroport d’arrivée doivent être différents.');
+      return;
+    }
     
     // Validation vol commercial
     if (vol_commercial && !selectedCompagnieId) {
@@ -643,6 +652,13 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
     setError(null);
     setShowNoAtcConfirm(false);
     setLoading(true);
+    
+    if (!aeroportsRouteDistincts(aeroport_depart, aeroport_arrivee)) {
+      setError('L’aéroport de départ et l’aéroport d’arrivée doivent être différents.');
+      submitBusyRef.current = false;
+      setLoading(false);
+      return;
+    }
     
     try {
       const res = await fetch('/api/plans-vol', {
@@ -1611,6 +1627,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
         disabled={
           loading ||
           showNoAtcConfirm ||
+          (!!aeroport_depart && !!aeroport_arrivee && !aeroportsRouteDistincts(aeroport_depart, aeroport_arrivee)) ||
           (vol_commercial && (
             (nature_transport === 'passagers' && !remplissageValidePax) ||
             (nature_transport === 'cargo' && !remplissageValideCargo)
@@ -1726,8 +1743,8 @@ function ModeCard({
 function RouteVisual({ depart, arrivee }: { depart: string; arrivee: string }) {
   const dep = depart ? getAeroportInfo(depart) : null;
   const arr = arrivee ? getAeroportInfo(arrivee) : null;
-  const sameAirport = depart && arrivee && depart === arrivee;
-  const ready = depart && arrivee && !sameAirport;
+  const sameAirport = !!(depart && arrivee && !aeroportsRouteDistincts(depart, arrivee));
+  const ready = !!(depart && arrivee && !sameAirport);
 
   return (
     <div className="mt-4 relative overflow-hidden rounded-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/80 via-slate-900/40 to-slate-900/80 p-3 sm:p-4">
