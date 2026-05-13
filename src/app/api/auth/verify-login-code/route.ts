@@ -80,13 +80,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (ip != null) {
-      await admin.from('user_login_tracking').upsert({
+    const loginIp = ip ?? previousIp ?? null;
+    await admin.from('user_login_tracking').upsert(
+      {
         user_id: user.id,
-        last_login_ip: ip,
+        last_login_ip: loginIp,
         last_login_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' });
-    }
+      },
+      { onConflict: 'user_id' }
+    );
     await admin.from('login_verification_codes').delete().eq('user_id', user.id);
 
     // Reset l'avertissement d'inactivite : l'utilisateur s'est reconnecte a temps.
@@ -105,11 +107,11 @@ export async function POST(req: NextRequest) {
       // Migration add_inactivity_warnings.sql peut ne pas etre encore appliquee
     }
 
-    if (ip) {
+    if (loginIp) {
       try {
         await admin.from('login_ip_history').insert({
           user_id: user.id,
-          ip,
+          ip: loginIp,
           previous_ip: previousIp,
           user_agent: userAgent,
         });

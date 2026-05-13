@@ -3,13 +3,15 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { formatDuree } from '@/lib/utils';
-import { formatDateUTC, formatDateMediumUTC } from '@/lib/date-utils';
+import { formatDateUTC, formatDateMediumUTC, formatDateTimeUTC } from '@/lib/date-utils';
 import { ArrowLeft } from 'lucide-react';
 import CreatePiloteForm from './CreatePiloteForm';
 import PilotesActions from './PilotesActions';
 import GenerateAllCardsButton from './GenerateAllCardsButton';
 import RefreshAllCardsButton from './RefreshAllCardsButton';
 import InactivityWarningBadge, { WarnAllInactiveButton, InactivityLegend } from './InactivityWarningBadge';
+
+export const dynamic = 'force-dynamic';
 
 const UN_MOIS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -136,6 +138,9 @@ export default async function AdminPilotesPage() {
           )}
         </td>
         <td className="py-3 pr-4 text-slate-300">{formatDuree(p.heures_initiales_minutes ?? 0)}</td>
+        <td className="py-3 pr-4 text-slate-400 text-xs whitespace-nowrap" title="Enregistré à la connexion (IP / code email)">
+          {p.last_login_at ? formatDateTimeUTC(p.last_login_at) : '—'}
+        </td>
         <td className="py-3 pr-4">
           {blocked ? (
             <span className="text-amber-400">
@@ -192,6 +197,7 @@ export default async function AdminPilotesPage() {
                   <th className="pb-2 pr-4">IFSA</th>
                   <th className="pb-2 pr-4">Espace pilote</th>
                   <th className="pb-2 pr-4">Heures initiales</th>
+                  <th className="pb-2 pr-4">Dernière connexion</th>
                   <th className="pb-2 pr-4">Blocage</th>
                   <th className="pb-2 pr-4">Créé le</th>
                   <th className="pb-2">Actions</th>
@@ -219,6 +225,7 @@ export default async function AdminPilotesPage() {
                   <th className="pb-2 pr-4">IFSA</th>
                   <th className="pb-2 pr-4">Espace pilote</th>
                   <th className="pb-2 pr-4">Heures initiales</th>
+                  <th className="pb-2 pr-4">Dernière connexion</th>
                   <th className="pb-2 pr-4">Blocage</th>
                   <th className="pb-2 pr-4">Créé le</th>
                   <th className="pb-2">Actions</th>

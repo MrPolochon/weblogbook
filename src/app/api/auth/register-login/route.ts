@@ -40,14 +40,34 @@ export async function POST(req: NextRequest) {
     const previousIp = tracking?.last_login_ip ?? null;
     const requireCode = !previousIp || (ip != null && ip !== previousIp);
 
-    if (!requireCode && ip != null) {
-      await admin
-        .from('user_login_tracking')
-        .upsert({
+    // Même IP (ou IP actuelle indisponible mais déjà une IP en base) : on enregistre
+    // toujours last_login_at pour l'inactivité admin. Sinon l'IP null en dev / proxy
+    // empêchait toute mise à jour alors que le compte est bien connecté.
+    if (!requireCode) {
+      const loginIp = ip ?? previousIp ?? null;
+      await admin.from('user_login_tracking').upsert(
+        {
           user_id: user.id,
-          last_login_ip: ip,
+          last_login_ip: loginIp,
           last_login_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
+        },
+        { onConflict: 'user_id' }
+      );
+
+      try {
+        await admin
+          .from('profiles')
+          .update({
+            inactivity_warning_status: null,
+            inactivity_warning_error: null,
+            inactivity_warned_at: null,
+            inactivity_delete_after: null,
+          })
+          .eq('id', user.id)
+          .not('inactivity_warning_status', 'is', null);
+      } catch {
+        // Migration add_inactivity_warnings.sql peut ne pas etre encore appliquee
+      }
     }
 
     return NextResponse.json({ ok: true, requireCode });
