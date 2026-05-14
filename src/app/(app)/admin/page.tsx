@@ -191,13 +191,13 @@ export default async function AdminPage() {
 
                 return (
                   <Link key={link.href} href={link.href}
-                    className={`group relative flex items-center gap-3 p-4 rounded-xl border transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg ${
+                    className={`group relative flex items-center gap-3 p-4 rounded-xl border transition-all duration-200 md:hover:-translate-y-0.5 md:hover:shadow-lg ${
                       hasBadge
-                        ? 'border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 hover:border-amber-500/60'
-                        : `${colors.border} bg-slate-800/20 hover:bg-slate-800/40 hover:border-slate-600/50`
+                        ? 'border-amber-500/40 bg-amber-500/5 md:hover:bg-amber-500/10 md:hover:border-amber-500/60'
+                        : `${colors.border} bg-slate-800/20 md:hover:bg-slate-800/40 md:hover:border-slate-600/50`
                     }`}>
                     <div className="relative shrink-0">
-                      <div className={`p-2 rounded-lg transition-colors ${hasBadge ? 'bg-amber-500/15' : colors.iconBg} group-hover:scale-105`}>
+                      <div className={`p-2 rounded-lg transition-colors ${hasBadge ? 'bg-amber-500/15' : colors.iconBg} md:group-hover:scale-105`}>
                         <Icon className={`h-5 w-5 ${hasBadge ? 'text-amber-400' : colors.text}`} />
                       </div>
                       {hasBadge && (

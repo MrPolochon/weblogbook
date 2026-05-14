@@ -69,6 +69,22 @@ body.admin-mode {
     linear-gradient(180deg, #0b1220 0%, #131f37 100%);
 }
 
+/*
+ * Mobile / GPU modestes : grilles + multiples calques fixed (::before/::after) + dégradés
+ * peuvent provoquer des bandes corrompues (artefacts) sur certains navigateurs Android.
+ * Fond uni en admin sur petit écran et pas de motifs superposés.
+ */
+@media (max-width: 768px) {
+  body.admin-mode {
+    background: #0f172a;
+  }
+
+  body.admin-mode::before,
+  body.admin-mode::after {
+    content: none;
+  }
+}
+
 /* ========== MODE CLAIR ATC (par défaut) ========== */
 body.atc-admin-bg,
 body.atc-normal-bg,
