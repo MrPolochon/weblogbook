@@ -334,7 +334,8 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   }
   const [autorisationsExploit, setAutorisationsExploit] = useState<AutorisationExploitation[]>([]);
   const [loadingAutorisations, setLoadingAutorisations] = useState(false);
-  const [autorisationMotifReponse, setAutorisationMotifReponse] = useState('');
+  /** Motif approuver/refuser/révoquer par id de demande (évite un seul champ partagé entre toutes les cartes). */
+  const [autorisationMotifsById, setAutorisationMotifsById] = useState<Record<string, string>>({});
   const [autorisationFilter, setAutorisationFilter] = useState<'en_attente' | 'approuvee' | 'toutes'>('en_attente');
   const [autorisationsEnAttenteCount, setAutorisationsEnAttenteCount] = useState(0);
 
@@ -370,10 +371,11 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   async function handleTraiterAutorisation(id: string, action: 'approuver' | 'refuser' | 'revoquer') {
     setLoading(true);
     try {
+      const motifRaw = autorisationMotifsById[id]?.trim() ?? '';
       const res = await fetch('/api/autorisations-exploitation', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, action, motif_reponse: autorisationMotifReponse || null }),
+        body: JSON.stringify({ id, action, motif_reponse: motifRaw || null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
@@ -383,7 +385,11 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
         revoquer: 'Autorisation révoquée',
       };
       toast.success(data.message || labels[action]);
-      setAutorisationMotifReponse('');
+      setAutorisationMotifsById((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       loadAutorisationsExploit();
       fetch('/api/autorisations-exploitation?toutes=true&statut=en_attente')
         .then(res => res.ok ? res.json() : [])
@@ -2034,8 +2040,13 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                             <input
                               type="text"
                               placeholder="Motif (optionnel)"
-                              value={autorisationMotifReponse}
-                              onChange={e => setAutorisationMotifReponse(e.target.value)}
+                              value={autorisationMotifsById[auth.id] ?? ''}
+                              onChange={(e) =>
+                                setAutorisationMotifsById((prev) => ({
+                                  ...prev,
+                                  [auth.id]: e.target.value,
+                                }))
+                              }
                               className="input text-xs px-2 py-1 w-48"
                             />
                             <div className="flex gap-1.5">
@@ -2063,8 +2074,13 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                             <input
                               type="text"
                               placeholder="Motif révocation"
-                              value={autorisationMotifReponse}
-                              onChange={e => setAutorisationMotifReponse(e.target.value)}
+                              value={autorisationMotifsById[auth.id] ?? ''}
+                              onChange={(e) =>
+                                setAutorisationMotifsById((prev) => ({
+                                  ...prev,
+                                  [auth.id]: e.target.value,
+                                }))
+                              }
                               className="input text-xs px-2 py-1 w-48"
                             />
                             <button
