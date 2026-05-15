@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMinutes, subMinutes } from 'date-fns';
-import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_VOL_CIVIL } from '@/lib/aeroports-ptfs';
 
 type T = { id: string; nom: string; constructeur?: string };
 type C = { id: string; nom: string };
@@ -233,7 +233,7 @@ export default function AddVolAdminForm({
               <label className="label">Aéroport départ *</label>
               <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)}>
                 <option value="">— Choisir —</option>
-                {AEROPORTS_PTFS.map((a) => (
+                {AEROPORTS_VOL_CIVIL.map((a) => (
                   <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
                 ))}
               </select>
@@ -242,7 +242,7 @@ export default function AddVolAdminForm({
               <label className="label">Aéroport arrivée *</label>
               <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)}>
                 <option value="">— Choisir —</option>
-                {AEROPORTS_PTFS.map((a) => (
+                {AEROPORTS_VOL_CIVIL.map((a) => (
                   <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
                 ))}
               </select>

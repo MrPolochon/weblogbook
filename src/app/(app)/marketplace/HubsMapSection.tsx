@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { MapPin, Building2, Star, ChevronDown, ChevronUp } from 'lucide-react';
-import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_VOL_CIVIL } from '@/lib/aeroports-ptfs';
 
 type HubData = {
   id: string;
@@ -66,7 +66,7 @@ export default function HubsMapSection() {
 
     // Fusionner avec les infos aéroport
     const result: AeroportHubs[] = [];
-    for (const apt of AEROPORTS_PTFS) {
+    for (const apt of AEROPORTS_VOL_CIVIL) {
       const compagnies = map.get(apt.code) || [];
       result.push({
         code: apt.code,

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_VOL_CIVIL } from '@/lib/aeroports-ptfs';
 import { calculerPrixHangar } from '@/lib/compagnie-utils';
 import {
   Wrench, Building2, Users, Warehouse, Tags, ClipboardList,
@@ -598,7 +598,7 @@ function DemandesTab({ detail, api, flash, busy, onRefresh, router }: {
   );
 }
 
-const AEROPORTS_TRIES = [...AEROPORTS_PTFS].sort((a, b) => a.code.localeCompare(b.code));
+const AEROPORTS_TRIES = [...AEROPORTS_VOL_CIVIL].sort((a, b) => a.code.localeCompare(b.code));
 
 function HangarsTab({ detail, isPdg, api, flash, busy, onRefresh }: {
   detail: Detail; isPdg: boolean; api: (u: string, m: string, b?: unknown) => Promise<unknown>;

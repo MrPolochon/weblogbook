@@ -14,6 +14,13 @@ export interface AeroportPTFS {
   industriel: boolean; // Aéroport avec zone industrielle (plus de cargo)
   vor?: string;
   freq?: string;
+  /**
+   * Si true : masqué des listes « vol civil » (plans de vol, logbook, etc.).
+   * À utiliser uniquement pour des points non exploitables en ligne régulière — ex. porte-avions.
+   * Les bases militaires classiques (McConnell IIAB, Garry, Scampton…) ne doivent PAS avoir ce flag :
+   * elles restent `taille: 'military'` mais sélectionnables par les civils.
+   */
+  militaireSeulement?: boolean;
 }
 
 export const AEROPORTS_PTFS: readonly AeroportPTFS[] = [
@@ -48,6 +55,9 @@ export const AEROPORTS_PTFS: readonly AeroportPTFS[] = [
   { code: 'IIAB', nom: 'McConnell AFB', taille: 'military', tourisme: false, passagersMax: 3000, cargoMax: 50000, industriel: false },
   { code: 'IGAR', nom: 'Air Base Garry', taille: 'military', tourisme: false, passagersMax: 2000, cargoMax: 40000, industriel: false, vor: 'GRY', freq: '111.90' },
   { code: 'ISCM', nom: 'RAF Scampton', taille: 'military', tourisme: false, passagersMax: 2000, cargoMax: 35000, industriel: false },
+  // Porte-avions (PTFS) — pas sur ptfs.app/charts ; codes style I… alignés jeu / usage communautaire
+  { code: 'IGFD', nom: 'USS Gerald R. Ford (porte-avions)', taille: 'military', tourisme: false, passagersMax: 800, cargoMax: 15000, industriel: false, militaireSeulement: true },
+  { code: 'IQEL', nom: 'HMS Queen Elizabeth (porte-avions)', taille: 'military', tourisme: false, passagersMax: 800, cargoMax: 15000, industriel: false, militaireSeulement: true },
 ] as const;
 
 // Waypoints/VOR/DME du réseau PTFS
@@ -205,6 +215,9 @@ export const ESPACES_AERIENS: readonly EspaceAerien[] = [
 ] as const;
 
 export const CODES_OACI_VALIDES: Set<string> = new Set(AEROPORTS_PTFS.map((a) => a.code));
+
+/** Vol civil / compagnie : tous les aéroports PTFS sauf ceux en `militaireSeulement` (porte-avions IGFD, IQEL). Les bases IIAB, IGAR, ISCM, etc. sont incluses. */
+export const AEROPORTS_VOL_CIVIL: AeroportPTFS[] = AEROPORTS_PTFS.filter((a) => !a.militaireSeulement);
 
 export function getAeroportLabel(code: string | null | undefined): string {
   if (!code) return '—';

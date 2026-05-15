@@ -3,7 +3,7 @@
 import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMinutes, subMinutes } from 'date-fns';
-import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_VOL_CIVIL } from '@/lib/aeroports-ptfs';
 import { COMPAGNIE_MEDEVAC_SIAVI } from '@/lib/vol-compagnie-libelle';
 
 import type { PlanPreFill } from './NouveauVolClient';
@@ -242,7 +242,7 @@ export default function VolForm({
           <label className="label">Aéroport de départ *</label>
           <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
             <option value="">— Choisir —</option>
-            {AEROPORTS_PTFS.map((a) => (
+            {AEROPORTS_VOL_CIVIL.map((a) => (
               <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
             ))}
           </select>
@@ -251,7 +251,7 @@ export default function VolForm({
           <label className="label">Aéroport d&apos;arrivée *</label>
           <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required>
             <option value="">— Choisir —</option>
-            {AEROPORTS_PTFS.map((a) => (
+            {AEROPORTS_VOL_CIVIL.map((a) => (
               <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
             ))}
           </select>

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AEROPORTS_PTFS, getAeroportInfo, estimerPassagers, estimerCargo, genererTypeCargaison, getCargaisonInfo, getBonusIsolement, TypeCargaison, type CoefficientContext } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_VOL_CIVIL, getAeroportInfo, estimerPassagers, estimerCargo, genererTypeCargaison, getCargaisonInfo, getBonusIsolement, TypeCargaison, type CoefficientContext } from '@/lib/aeroports-ptfs';
 import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
 import { Building2, Plane, Users, Weight, Shield, Radio, Phone, MapPin, Send, Navigation, Sparkles, Gauge, FileText, Route, Briefcase, CheckCircle2, Circle, ClipboardCheck } from 'lucide-react';
@@ -1222,7 +1222,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
             </label>
             <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
               <option value="">— Choisir —</option>
-              {AEROPORTS_PTFS.map((a) => (
+              {AEROPORTS_VOL_CIVIL.map((a) => (
                 <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
               ))}
             </select>
@@ -1234,7 +1234,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
             </label>
             <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required>
               <option value="">— Choisir —</option>
-              {AEROPORTS_PTFS.map((a) => (
+              {AEROPORTS_VOL_CIVIL.map((a) => (
                 <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
               ))}
             </select>

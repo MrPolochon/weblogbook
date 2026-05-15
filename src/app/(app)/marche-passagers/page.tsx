@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import MarcheClient from './MarcheClient';
-import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_VOL_CIVIL } from '@/lib/aeroports-ptfs';
 
 export default async function MarchePage() {
   const supabase = await createClient();
@@ -22,7 +22,7 @@ export default async function MarchePage() {
     admin.from('aeroport_cargo').select('code_oaci, cargo_disponible, cargo_max, derniere_regeneration'),
   ]);
 
-  const passagersAeroports = AEROPORTS_PTFS.map(a => {
+  const passagersAeroports = AEROPORTS_VOL_CIVIL.map(a => {
     const p = passagersData?.find(x => x.code_oaci === a.code);
     return {
       code: a.code, nom: a.nom, taille: a.taille, tourisme: a.tourisme,
@@ -33,7 +33,7 @@ export default async function MarchePage() {
     };
   });
 
-  const cargoAeroports = AEROPORTS_PTFS.map(a => {
+  const cargoAeroports = AEROPORTS_VOL_CIVIL.map(a => {
     const c = cargoData?.find(x => x.code_oaci === a.code);
     return {
       code: a.code, nom: a.nom, taille: a.taille, industriel: a.industriel,

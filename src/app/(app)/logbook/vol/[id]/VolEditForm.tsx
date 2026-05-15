@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMinutes, subMinutes } from 'date-fns';
-import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_VOL_CIVIL } from '@/lib/aeroports-ptfs';
 import { COMPAGNIE_MEDEVAC_SIAVI, isCompagnieMedevacSiavi } from '@/lib/vol-compagnie-libelle';
 
 type T = { id: string; nom: string; constructeur?: string };
@@ -324,7 +324,7 @@ export default function VolEditForm({
           <label className="label">Aéroport de départ *</label>
           <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required disabled={readOnly}>
             <option value="">— Choisir —</option>
-            {AEROPORTS_PTFS.map((a) => (
+            {AEROPORTS_VOL_CIVIL.map((a) => (
               <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
             ))}
           </select>
@@ -333,7 +333,7 @@ export default function VolEditForm({
           <label className="label">Aéroport d&apos;arrivée *</label>
           <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required disabled={readOnly}>
             <option value="">— Choisir —</option>
-            {AEROPORTS_PTFS.map((a) => (
+            {AEROPORTS_VOL_CIVIL.map((a) => (
               <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
             ))}
           </select>

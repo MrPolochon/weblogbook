@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AEROPORTS_PTFS, getAeroportInfo, getPrixOptimal, PRIX_MAXIMUM_ABSOLU } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_VOL_CIVIL, getAeroportInfo, getPrixOptimal, PRIX_MAXIMUM_ABSOLU } from '@/lib/aeroports-ptfs';
 import { Plus, Trash2, RefreshCw, Route, ArrowLeftRight, Info } from 'lucide-react';
 
 interface TarifLiaison {
@@ -181,7 +181,7 @@ export default function TarifsLiaisonsClient({ compagnieId, prixBilletDefaut }: 
               onChange={(e) => setNewDepart(e.target.value)}
             >
               <option value="">— Choisir —</option>
-              {AEROPORTS_PTFS.map((a) => (
+              {AEROPORTS_VOL_CIVIL.map((a) => (
                 <option key={a.code} value={a.code}>
                   {a.code} – {a.nom}
                 </option>
@@ -196,7 +196,7 @@ export default function TarifsLiaisonsClient({ compagnieId, prixBilletDefaut }: 
               onChange={(e) => setNewArrivee(e.target.value)}
             >
               <option value="">— Choisir —</option>
-              {AEROPORTS_PTFS.map((a) => (
+              {AEROPORTS_VOL_CIVIL.map((a) => (
                 <option key={a.code} value={a.code}>
                   {a.code} – {a.nom}
                   {a.tourisme && ' 🏖️'}
