@@ -3,14 +3,16 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plane, Radio, Compass, Navigation2 } from 'lucide-react';
-import DepotPlanVolForm from './DepotPlanVolForm';
+import DepotPlanVolForm, { type AvionArmeeItem } from './DepotPlanVolForm';
 
-export default async function DepotPlanVolPage() {
+export default async function DepotPlanVolPage({ searchParams }: { searchParams?: { mission?: string } }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+  const { data: profile } = await supabase.from('profiles').select('role, armee').eq('id', user.id).single();
   if (profile?.role === 'atc') redirect('/logbook');
+
+  const missionId = searchParams?.mission || '';
 
   // Vérifier si le pilote a déjà un plan actif (accepté, en cours, etc.)
   // Inclure 'en_pause' et 'planifie_suivant' pour bloquer la création d'un autre plan
@@ -29,6 +31,15 @@ export default async function DepotPlanVolPage() {
   }
 
   const admin = createAdminClient();
+
+  let armeeAvions: AvionArmeeItem[] = [];
+  if (profile?.armee) {
+    const { data: armeeRows } = await admin
+      .from('armee_avions')
+      .select('id, nom_personnalise, types_avion(id, nom, code_oaci, est_militaire)')
+      .order('created_at', { ascending: false });
+    armeeAvions = (armeeRows || []) as AvionArmeeItem[];
+  }
 
   // Récupérer TOUTES les compagnies où le pilote est employé
   const { data: emplois } = await admin.from('compagnie_employes')
@@ -240,6 +251,8 @@ export default async function DepotPlanVolPage() {
         compagniesDisponibles={compagniesDisponibles}
         inventairePersonnel={inventairePersonnel}
         avionsParCompagnie={avionsParCompagnie}
+        armeeAvions={armeeAvions}
+        initialMissionId={missionId}
       />
     </div>
   );

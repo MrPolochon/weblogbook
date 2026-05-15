@@ -26,20 +26,32 @@ export default function ArmeeMissionsClient() {
                 Cooldown {m.cooldownMinutes} min
               </span>
             </div>
-            <Link
-              href={`/militaire/nouveau?mission=${m.id}`}
-              className="mt-4 w-full inline-flex items-center justify-center px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium"
-            >
-              Déposer le plan de vol
-            </Link>
+            <div className="mt-4 flex flex-col gap-2">
+              <Link
+                href={`/militaire/nouveau?mission=${m.id}`}
+                className="w-full inline-flex items-center justify-center px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium"
+              >
+                Carnet militaire (validation admin)
+              </Link>
+              <Link
+                href={`/logbook/depot-plan-vol?mission=${m.id}`}
+                className="w-full inline-flex items-center justify-center px-3 py-2 border border-sky-500/50 text-sky-200 hover:bg-sky-500/10 rounded-lg text-sm font-medium"
+              >
+                Plan de vol (ATC, comme tout pilote)
+              </Link>
+            </div>
           </div>
         ))}
         {ARME_MISSIONS.length === 0 && (
           <p className="text-sm text-slate-500">Aucune mission disponible.</p>
         )}
       </div>
-      <p className="text-xs text-slate-500 mt-4">
-        La récompense finale est ajustée selon le retard par rapport à l&apos;heure d&apos;arrivée prévue.
+      <p className="text-xs text-slate-500 mt-4 space-y-2">
+        <span className="block">La récompense finale est ajustée selon le retard par rapport à l&apos;heure d&apos;arrivée prévue.</span>
+        <span className="block">
+          Utilisez <strong className="text-slate-400">Carnet militaire</strong> pour la validation admin et les récompenses, et le lien{' '}
+          <strong className="text-slate-400">Plan de vol</strong> pour le même dépôt que tout pilote (logbook → flotte armée en non commercial).
+        </span>
       </p>
     </div>
   );

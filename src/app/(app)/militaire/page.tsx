@@ -54,10 +54,18 @@ export default async function MilitairePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold text-slate-100">Espace militaire</h1>
-        <Link href="/militaire/nouveau" className="btn-primary inline-flex gap-2">
-          <Plus className="h-4 w-4" />
-          Nouveau vol militaire
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/militaire/nouveau" className="btn-primary inline-flex gap-2">
+            <Plus className="h-4 w-4" />
+            Nouveau vol (carnet)
+          </Link>
+          <Link
+            href="/logbook/depot-plan-vol"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-sky-500/50 text-sky-200 hover:bg-sky-500/10 text-sm font-medium"
+          >
+            Déposer un plan (ATC)
+          </Link>
+        </div>
       </div>
 
       <div className="card">

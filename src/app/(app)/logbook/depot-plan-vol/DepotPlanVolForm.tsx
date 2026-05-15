@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_VOL_CIVIL, getAeroportInfo, estimerPassagers, estimerCargo, genererTypeCargaison, getCargaisonInfo, getBonusIsolement, TypeCargaison, type CoefficientContext } from '@/lib/aeroports-ptfs';
+import { ARME_MISSIONS } from '@/lib/armee-missions';
 import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
 import { Building2, Plane, Users, Weight, Shield, Radio, Phone, MapPin, Send, Navigation, Sparkles, Gauge, FileText, Route, Briefcase, CheckCircle2, Circle, ClipboardCheck } from 'lucide-react';
@@ -66,10 +67,20 @@ interface AvionIndividuel {
   types_avion: { id: string; nom: string; constructeur: string; capacite_pax: number; capacite_cargo_kg: number; code_oaci: string | null } | { id: string; nom: string; constructeur: string; capacite_pax: number; capacite_cargo_kg: number; code_oaci: string | null }[] | null;
 }
 
+/** Appareils de la flotte armée (même formulaire de dépôt qu’un vol « normal »). */
+export interface AvionArmeeItem {
+  id: string;
+  nom_personnalise: string | null;
+  types_avion: { id: string; nom: string; code_oaci: string | null; est_militaire?: boolean } | { id: string; nom: string; code_oaci: string | null; est_militaire?: boolean }[] | null;
+}
+
 interface Props {
   compagniesDisponibles: Compagnie[];
   inventairePersonnel: InventaireItem[];
   avionsParCompagnie?: Record<string, AvionIndividuel[]>;
+  armeeAvions?: AvionArmeeItem[];
+  /** Préremplit route / durée / callsign depuis une carte mission (query ?mission=). */
+  initialMissionId?: string;
 }
 
 /** Embeds PostgREST : objet, tableau ou null — évite capacité 0 si tableau vide. */
@@ -86,7 +97,13 @@ function aeroportsRouteDistincts(depart: string, arrivee: string): boolean {
   return depart.trim().toUpperCase() !== arrivee.trim().toUpperCase();
 }
 
-export default function DepotPlanVolForm({ compagniesDisponibles, inventairePersonnel, avionsParCompagnie = {} }: Props) {
+export default function DepotPlanVolForm({
+  compagniesDisponibles,
+  inventairePersonnel,
+  avionsParCompagnie = {},
+  armeeAvions = [],
+  initialMissionId = '',
+}: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [aeroport_depart, setAeroportDepart] = useState('');
@@ -112,6 +129,7 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   const [selectedCompagnieId, setSelectedCompagnieId] = useState('');
   const [nature_transport, setNatureTransport] = useState<'passagers' | 'cargo'>('passagers');
   const [inventaire_avion_id, setInventaireAvionId] = useState('');
+  const [armee_avion_id, setArmeeAvionId] = useState('');
   const [compagnie_avion_id, setCompagnieAvionId] = useState('');
   
   // Calculated values - stockés séparément pour éviter la triche
@@ -181,6 +199,20 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
   useEffect(() => {
     setCompagnieAvionId('');
   }, [selectedCompagnieId]);
+
+  useEffect(() => {
+    if (vol_commercial || vol_ferry) setArmeeAvionId('');
+  }, [vol_commercial, vol_ferry]);
+
+  useEffect(() => {
+    if (!initialMissionId) return;
+    const m = ARME_MISSIONS.find((x) => x.id === initialMissionId);
+    if (!m) return;
+    setAeroportDepart(m.aeroport_depart);
+    setAeroportArrivee(m.aeroport_arrivee);
+    setTempsPrevMin(String(m.duree_minutes));
+    setNumeroVol((prev) => (prev.trim() ? prev : `${m.callsign_prefix}${Math.floor(100 + Math.random() * 900)}`));
+  }, [initialMissionId]);
 
   // Reset individual aircraft selection when departure airport changes
   // SAUF si l'avion sélectionné est déjà à cet aéroport
@@ -534,7 +566,8 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
       vol_commercial: vol_commercial && !vol_ferry,
       compagnie_id: (vol_commercial || vol_ferry) && selectedCompagnieId ? selectedCompagnieId : undefined,
       nature_transport: vol_commercial && !vol_ferry ? nature_transport : undefined,
-      inventaire_avion_id: !vol_commercial && !vol_ferry && inventaire_avion_id ? inventaire_avion_id : undefined,
+      inventaire_avion_id: !vol_commercial && !vol_ferry && inventaire_avion_id && !armee_avion_id ? inventaire_avion_id : undefined,
+      armee_avion_id: !vol_commercial && !vol_ferry && armee_avion_id ? armee_avion_id : undefined,
       compagnie_avion_id: (vol_commercial || vol_ferry) && compagnie_avion_id ? compagnie_avion_id : undefined,
       vol_ferry,
       nb_pax_genere: vol_commercial ? nbPax : undefined,
@@ -1140,10 +1173,10 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           <SectionHeader
             step={2}
             icon={<Plane className="h-4 w-4" />}
-            label="Mon appareil personnel"
-            subtitle="Avion de votre inventaire (vol non rémunéré)"
+            label={armeeAvions.length > 0 ? 'Appareil (personnel ou armée)' : 'Mon appareil personnel'}
+            subtitle={armeeAvions.length > 0 ? 'Vol non commercial — inventaire perso ou flotte armée (même dossier ATC que tout pilote)' : 'Avion de votre inventaire (vol non rémunéré)'}
             accent="slate"
-            badge={selectedInventaire ? (
+            badge={inventaire_avion_id || armee_avion_id ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-emerald-300">
                 <CheckCircle2 className="h-3 w-3" />
                 Sélectionné
@@ -1152,41 +1185,73 @@ export default function DepotPlanVolForm({ compagniesDisponibles, inventairePers
           />
           <div className="mt-4">
           {avionsPersonnelsDispo.length > 0 ? (
-            <>
-              <select 
-                className="input w-full" 
-                value={inventaire_avion_id} 
-                onChange={(e) => setInventaireAvionId(e.target.value)}
+            <select 
+              className="input w-full" 
+              value={inventaire_avion_id} 
+              onChange={(e) => {
+                setInventaireAvionId(e.target.value);
+                if (e.target.value) setArmeeAvionId('');
+              }}
+            >
+              <option value="">— Sélectionner un appareil —</option>
+              {avionsPersonnelsDispo.map((inv) => {
+                const estMilitaire = inv.types_avion?.est_militaire || false;
+                return (
+                  <option key={inv.id} value={inv.id}>
+                    {estMilitaire ? '🛡️ ' : ''}
+                    {inv.immatriculation ? `${inv.immatriculation} — ` : ''}
+                    {inv.nom_personnalise || inv.types_avion?.nom || 'Avion'}
+                    {inv.types_avion?.code_oaci && ` (${inv.types_avion.code_oaci})`}
+                    {estMilitaire && ' [MILITAIRE]'}
+                  </option>
+                );
+              })}
+            </select>
+          ) : (
+            <div className="text-sm text-slate-400 mt-2">
+              <p>Vous n&apos;avez aucun appareil dans votre inventaire personnel.</p>
+              {armeeAvions.length === 0 ? (
+                <p className="text-amber-400 mt-1">
+                  Achetez un avion sur le <Link href="/marketplace" className="underline hover:text-amber-300">Marketplace</Link> pour effectuer des vols personnels.
+                </p>
+              ) : (
+                <p className="text-sky-300/90 mt-1">Vous pouvez sélectionner un appareil de la flotte armée ci‑dessous.</p>
+              )}
+            </div>
+          )}
+          {selectedInventaire?.types_avion?.est_militaire && (
+            <div className="mt-2 p-2 rounded bg-red-500/10 border border-red-500/30">
+              <p className="text-xs text-red-300 flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                Cet avion militaire est utilisable car il est dans votre inventaire personnel.
+              </p>
+            </div>
+          )}
+          {armeeAvions.length > 0 && (
+            <div className="mt-4">
+              <label className="label">Flotte armée</label>
+              <p className="text-xs text-slate-500 mb-1">
+                Même écran que pour tout pilote : le plan part vers <span className="text-slate-400">Plans de vol</span> / ATC. Choix exclusif avec l&apos;inventaire perso.
+              </p>
+              <select
+                className="input w-full"
+                value={armee_avion_id}
+                onChange={(e) => {
+                  setArmeeAvionId(e.target.value);
+                  if (e.target.value) setInventaireAvionId('');
+                }}
               >
-                <option value="">— Sélectionner un appareil —</option>
-                {avionsPersonnelsDispo.map((inv) => {
-                  const estMilitaire = inv.types_avion?.est_militaire || false;
+                <option value="">— Aucun —</option>
+                {armeeAvions.map((inv) => {
+                  const ty = premierTypeAvionDepuisEmbed(inv.types_avion);
                   return (
                     <option key={inv.id} value={inv.id}>
-                      {estMilitaire ? '🛡️ ' : ''}
-                      {inv.immatriculation ? `${inv.immatriculation} — ` : ''}
-                      {inv.nom_personnalise || inv.types_avion?.nom || 'Avion'}
-                      {inv.types_avion?.code_oaci && ` (${inv.types_avion.code_oaci})`}
-                      {estMilitaire && ' [MILITAIRE]'}
+                      🛡️ {inv.nom_personnalise || ty?.nom || 'Appareil armée'}
+                      {ty?.code_oaci ? ` (${ty.code_oaci})` : ''}
                     </option>
                   );
                 })}
               </select>
-              {selectedInventaire?.types_avion?.est_militaire && (
-                <div className="mt-2 p-2 rounded bg-red-500/10 border border-red-500/30">
-                  <p className="text-xs text-red-300 flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
-                    Cet avion militaire est utilisable car il est dans votre inventaire personnel.
-                  </p>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="text-sm text-slate-400 mt-2">
-              <p>Vous n&apos;avez aucun appareil dans votre inventaire.</p>
-              <p className="text-amber-400 mt-1">
-                Achetez un avion sur le <Link href="/marketplace" className="underline hover:text-amber-300">Marketplace</Link> pour effectuer des vols personnels.
-              </p>
             </div>
           )}
           {inventairePersonnel.length > 0 && avionsPersonnelsDispo.length === 0 && (

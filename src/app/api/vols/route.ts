@@ -59,7 +59,8 @@ export async function POST(request: Request) {
       if (!ad || !CODES_OACI_VALIDES.has(String(ad).toUpperCase()) || !aa || !CODES_OACI_VALIDES.has(String(aa).toUpperCase())) {
         return NextResponse.json({ error: 'Aéroports de départ et d\'arrivée requis (code OACI valide).' }, { status: 400 });
       }
-      if (typeof dm !== 'number' || dm < 1 || !du || !cb) {
+      const dmNum = typeof dm === 'number' ? dm : parseInt(String(dm), 10);
+      if (isNaN(dmNum) || dmNum < 1 || !du || !cb) {
         return NextResponse.json({ error: 'Champs requis manquants ou invalides.' }, { status: 400 });
       }
 
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
         if (
           String(ad).toUpperCase() !== mission.aeroport_depart ||
           String(aa).toUpperCase() !== mission.aeroport_arrivee ||
-          dm !== mission.duree_minutes ||
+          dmNum !== mission.duree_minutes ||
           String(eoe) !== mission.escadrille_ou_escadron ||
           String(nvm) !== mission.nature_vol_militaire
         ) {
@@ -162,7 +163,7 @@ export async function POST(request: Request) {
 
       const depStr = /Z$/.test(String(du)) ? String(du) : String(du) + 'Z';
       const dep = parseISO(depStr);
-      const arrivee = addMinutes(dep, dm);
+      const arrivee = addMinutes(dep, dmNum);
       const row = {
         pilote_id: targetPiloteId,
         copilote_id: targetCopiloteId,
@@ -183,7 +184,7 @@ export async function POST(request: Request) {
         nature_vol_militaire_autre: mission ? null : (eoe === 'autre' && nvm === 'autre' && nvma ? String(nvma).trim() : null),
         aeroport_depart: String(ad).toUpperCase(),
         aeroport_arrivee: String(aa).toUpperCase(),
-        duree_minutes: dm,
+        duree_minutes: dmNum,
         depart_utc: dep.toISOString(),
         arrivee_utc: arrivee.toISOString(),
         type_vol: 'Vol militaire',
@@ -196,14 +197,15 @@ export async function POST(request: Request) {
         created_by_admin: false,
         created_by_user_id: null,
       };
-      const { data, error } = await supabase.from('vols').insert(row).select('id').single();
+      // Insert via service_role : RLS vols_insert exige pilote_id = auth.uid(), ce qui bloque
+      // un dépôt en tant que co-pilote (pilote réel = autre compte). Aligné sur le vol civil co-pilote.
+      const { data, error } = await admin.from('vols').insert(row).select('id').single();
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
       if (isEscadrilleOuEscadron) {
         const equipageIds: string[] = Array.isArray(equipageIdsBody) ? equipageIdsBody.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
         const tous = Array.from(new Set([user.id, ...equipageIds]));
         if (tous.length > 0) {
-          const admin = createAdminClient();
           await admin.from('vols_equipage_militaire').insert(tous.map((pid) => ({ vol_id: data.id, profile_id: pid })));
         }
       }

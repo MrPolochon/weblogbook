@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire, calculerCoefficientRemplissage, calculerCoefficientChargementCargo } from '@/lib/aeroports-ptfs';
 import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
 import { heureDepartToIso } from '@/lib/heure-depart';
+import { ARME_MISSIONS } from '@/lib/armee-missions';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol (uniquement à l’aéroport de départ)
 // Delivery → Clairance → Ground → Tower → DEP → APP → Center
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    const { data: profile } = await supabase.from('profiles').select('role, sanction_blocage_vol, sanction_blocage_motif, sanction_blocage_jusqu_au').eq('id', user.id).single();
+    const { data: profile } = await supabase.from('profiles').select('role, armee, sanction_blocage_vol, sanction_blocage_motif, sanction_blocage_jusqu_au').eq('id', user.id).single();
     if (profile?.role === 'atc') return NextResponse.json({ error: 'Compte ATC uniquement : dépôt de plan depuis l\'espace pilote impossible.' }, { status: 403 });
     
     // Vérifier si le pilote est bloqué par une sanction IFSA
@@ -66,11 +67,73 @@ export async function POST(request: Request) {
       if (!star_arrivee || !String(star_arrivee).trim()) return NextResponse.json({ error: 'STAR d\'arrivée requise pour IFR.' }, { status: 400 });
     }
 
+    const armeeAvionRaw = body.armee_avion_id;
+    const missionIdPlan = body.mission_id != null && String(body.mission_id).trim() !== '' ? String(body.mission_id).trim() : null;
+    const isMilitaryPlan = armeeAvionRaw != null && String(armeeAvionRaw).trim() !== '';
+
     const admin = createAdminClient();
+
+    let armeeAvionId: string | null = null;
+    let armeeMissionId: string | null = null;
+
+    if (isMilitaryPlan) {
+      if (!profile?.armee && profile?.role !== 'admin') {
+        return NextResponse.json({ error: 'Dépôt d’un plan militaire réservé aux comptes Armée (ou admin).' }, { status: 403 });
+      }
+      if (vol_commercial || compagnie_id || compagnie_avion_id || vol_ferry || inventaire_avion_id) {
+        return NextResponse.json({ error: 'Un plan militaire ne peut pas combiner compagnie, ferry, inventaire perso ou vol commercial.' }, { status: 400 });
+      }
+      const uuidArmee = String(armeeAvionRaw).trim();
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuidArmee)) {
+        return NextResponse.json({ error: 'Identifiant d’avion militaire invalide.' }, { status: 400 });
+      }
+      const { data: avionArmee } = await admin.from('armee_avions')
+        .select('id, detruit, types_avion(id, est_militaire)')
+        .eq('id', uuidArmee)
+        .single();
+      if (!avionArmee) {
+        return NextResponse.json({ error: 'Avion militaire introuvable.' }, { status: 404 });
+      }
+      if ((avionArmee as { detruit?: boolean }).detruit) {
+        return NextResponse.json({ error: 'Cet appareil est déclaré détruit.' }, { status: 400 });
+      }
+      const ta = Array.isArray((avionArmee as { types_avion?: unknown }).types_avion)
+        ? (avionArmee as { types_avion: { est_militaire?: boolean }[] }).types_avion[0]
+        : (avionArmee as { types_avion?: { est_militaire?: boolean } | null }).types_avion;
+      if (!ta?.est_militaire) {
+        return NextResponse.json({ error: 'Cet appareil n’est pas un type militaire.' }, { status: 400 });
+      }
+      armeeAvionId = uuidArmee;
+
+      if (missionIdPlan) {
+        const mission = ARME_MISSIONS.find((m) => m.id === missionIdPlan);
+        if (!mission) {
+          return NextResponse.json({ error: 'Mission militaire introuvable.' }, { status: 404 });
+        }
+        if (
+          ad !== mission.aeroport_depart ||
+          aa !== mission.aeroport_arrivee ||
+          t !== mission.duree_minutes
+        ) {
+          return NextResponse.json({ error: 'Le plan ne correspond pas à la mission (liaison ou durée).' }, { status: 400 });
+        }
+        armeeMissionId = mission.id;
+      }
+
+      const { count: plansArmee } = await admin
+        .from('plans_vol')
+        .select('*', { count: 'exact', head: true })
+        .eq('armee_avion_id', armeeAvionId)
+        .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
+
+      if (plansArmee && plansArmee > 0) {
+        return NextResponse.json({ error: 'Cet appareil militaire a déjà un plan de vol en cours.' }, { status: 400 });
+      }
+    }
 
     // ── Normaliser le numéro de vol avec le code OACI de la compagnie ──
     let numeroVolFinal = String(numero_vol).trim().toUpperCase();
-    if (compagnie_id) {
+    if (!isMilitaryPlan && compagnie_id) {
       const { data: compagnieData } = await admin.from('compagnies')
         .select('code_oaci')
         .eq('id', compagnie_id)
@@ -224,6 +287,9 @@ export async function POST(request: Request) {
     }
 
     // Validation vol ferry
+    if (vol_ferry && isMilitaryPlan) {
+      return NextResponse.json({ error: 'Vol ferry indisponible pour un plan militaire.' }, { status: 400 });
+    }
     if (vol_ferry) {
       if (!compagnie_avion_id) {
         return NextResponse.json({ error: 'Un vol ferry nécessite de sélectionner un avion spécifique.' }, { status: 400 });
@@ -289,7 +355,7 @@ export async function POST(request: Request) {
     }
 
     // Validation avion individuel (si utilisé)
-    if (compagnie_avion_id) {
+    if (!isMilitaryPlan && compagnie_avion_id) {
       const { data: avionIndiv } = await admin
         .from('compagnie_avions')
         .select('id, compagnie_id, aeroport_actuel, statut, usure_percent, immatriculation, detruit, bloque_incident')
@@ -533,6 +599,8 @@ export async function POST(request: Request) {
         location_pourcentage_revenu_loueur: locationFields.data?.pourcentage_revenu_loueur || null,
         location_prix_journalier: locationFields.data?.prix_journalier || null,
         bria_conversation: bria_conversation || null,
+        armee_avion_id: armeeAvionId,
+        armee_mission_id: armeeMissionId,
       }).select('id').single();
 
       if (error) return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });
@@ -652,6 +720,8 @@ export async function POST(request: Request) {
       location_pourcentage_revenu_loueur: locationFields.data?.pourcentage_revenu_loueur || null,
       location_prix_journalier: locationFields.data?.prix_journalier || null,
       bria_conversation: bria_conversation || null,
+      armee_avion_id: armeeAvionId,
+      armee_mission_id: armeeMissionId,
     }).select('id').single();
 
     if (error) return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });

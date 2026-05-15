@@ -38,6 +38,17 @@ export default async function NouveauVolMilitairePage({ searchParams }: { search
         </Link>
         <h1 className="text-2xl font-semibold text-slate-100">Nouveau vol militaire</h1>
       </div>
+      <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3 text-sm text-sky-100/95">
+        <p className="font-medium text-sky-200">Carnet militaire ≠ plan de vol ATC</p>
+        <p className="mt-1 text-sky-100/80 text-xs leading-relaxed">
+          Ce formulaire crée une demande dans <strong className="text-sky-100">Vols militaires</strong> (tableau sur /militaire), à valider par un admin.
+          Pour un <strong className="text-sky-100">plan de vol</strong> classique (ATC), utilisez{' '}
+          <Link href={missionId ? `/logbook/depot-plan-vol?mission=${missionId}` : '/logbook/depot-plan-vol'} className="underline underline-offset-2 hover:text-white">
+            Déposer un plan de vol
+          </Link>{' '}
+          dans le logbook — vous pouvez y choisir la flotte armée en vol non commercial.
+        </p>
+      </div>
       <VolFormMilitaire pilotesArmee={list} inventaireMilitaire={inventaireMilitaire || []} missionId={missionId} />
     </div>
   );
