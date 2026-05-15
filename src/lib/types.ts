@@ -77,6 +77,9 @@ export interface PlanVol {
   medevac_total_segments?: number | null;
   medevac_next_plan_id?: string | null;
 
+  /** Lien carte mission armée (si plan déposé pour une mission + flotte armée). */
+  armee_mission_id?: string | null;
+
   // Relations enrichies (optionnelles)
   pilote?: { identifiant: string } | null;
   copilote?: { identifiant: string } | null;

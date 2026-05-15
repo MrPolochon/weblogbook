@@ -7,7 +7,7 @@ import { AEROPORTS_VOL_CIVIL, getAeroportInfo, estimerPassagers, estimerCargo, g
 import { ARME_MISSIONS } from '@/lib/armee-missions';
 import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
-import { Building2, Plane, Users, Weight, Shield, Radio, Phone, MapPin, Send, Navigation, Sparkles, Gauge, FileText, Route, Briefcase, CheckCircle2, Circle, ClipboardCheck } from 'lucide-react';
+import { Building2, Plane, Users, Weight, Shield, Radio, Phone, MapPin, Send, Navigation, Sparkles, Gauge, FileText, Route, Briefcase, CheckCircle2, Circle, ClipboardCheck, Target } from 'lucide-react';
 import BriaDialog, { getBriaCooldownRemaining } from '@/components/BriaDialog';
 import NotamsAirportWarning from '@/components/NotamsAirportWarning';
 import { unlockAudioForIOS } from '@/lib/phone-sounds';
@@ -130,6 +130,8 @@ export default function DepotPlanVolForm({
   const [nature_transport, setNatureTransport] = useState<'passagers' | 'cargo'>('passagers');
   const [inventaire_avion_id, setInventaireAvionId] = useState('');
   const [armee_avion_id, setArmeeAvionId] = useState('');
+  /** Mission armée liée au plan (enregistrée en `plans_vol.armee_mission_id` avec la flotte armée). */
+  const [armee_mission_id, setArmeeMissionId] = useState('');
   const [compagnie_avion_id, setCompagnieAvionId] = useState('');
   
   // Calculated values - stockés séparément pour éviter la triche
@@ -187,6 +189,13 @@ export default function DepotPlanVolForm({
   // Get selected aircraft info
   const selectedInventaire = inventairePersonnel.find(i => i.id === inventaire_avion_id);
   const selectedAvionIndiv = avionsCompagnie.find(a => a.id === compagnie_avion_id);
+
+  const routeMissionId = useMemo(() => {
+    if (armeeAvions.length > 0) return armee_mission_id;
+    return initialMissionId || '';
+  }, [armeeAvions.length, armee_mission_id, initialMissionId]);
+
+  const missionLocked = armeeAvions.length > 0 && Boolean(armee_mission_id && ARME_MISSIONS.some((m) => m.id === armee_mission_id));
   
   // Auto-select company if only one available
   useEffect(() => {
@@ -205,14 +214,24 @@ export default function DepotPlanVolForm({
   }, [vol_commercial, vol_ferry]);
 
   useEffect(() => {
-    if (!initialMissionId) return;
-    const m = ARME_MISSIONS.find((x) => x.id === initialMissionId);
+    if (vol_commercial || vol_ferry) setArmeeMissionId('');
+  }, [vol_commercial, vol_ferry]);
+
+  useEffect(() => {
+    if (armeeAvions.length > 0 && initialMissionId) {
+      setArmeeMissionId(initialMissionId);
+    }
+  }, [armeeAvions.length, initialMissionId]);
+
+  useEffect(() => {
+    if (!routeMissionId) return;
+    const m = ARME_MISSIONS.find((x) => x.id === routeMissionId);
     if (!m) return;
     setAeroportDepart(m.aeroport_depart);
     setAeroportArrivee(m.aeroport_arrivee);
     setTempsPrevMin(String(m.duree_minutes));
     setNumeroVol((prev) => (prev.trim() ? prev : `${m.callsign_prefix}${Math.floor(100 + Math.random() * 900)}`));
-  }, [initialMissionId]);
+  }, [routeMissionId]);
 
   // Reset individual aircraft selection when departure airport changes
   // SAUF si l'avion sélectionné est déjà à cet aéroport
@@ -540,8 +559,35 @@ export default function DepotPlanVolForm({
       items.push({ label: 'STAR d\'arrivée', ok: !!star_arrivee.trim() });
     }
     if (vol_commercial || vol_ferry) items.push({ label: 'Appareil sélectionné', ok: !!compagnie_avion_id });
+    if (!vol_commercial && !vol_ferry && armee_mission_id && armeeAvions.length > 0) {
+      items.push({ label: 'Flotte armée (mission)', ok: !!armee_avion_id });
+    }
     return items;
-  }, [aeroport_depart, aeroport_arrivee, numero_vol, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee, vol_commercial, vol_ferry, compagnie_avion_id]);
+  }, [aeroport_depart, aeroport_arrivee, numero_vol, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee, vol_commercial, vol_ferry, compagnie_avion_id, armee_mission_id, armee_avion_id, armeeAvions.length]);
+
+  function missionArmeeValidationError(): string | null {
+    if (vol_commercial || vol_ferry) return null;
+    const t = parseInt(temps_prev_min, 10);
+    if (armee_mission_id && inventaire_avion_id) {
+      return 'Une mission armée ne peut pas être liée avec l’inventaire personnel. Utilisez la flotte armée ou retirez la mission.';
+    }
+    if (armee_mission_id && armeeAvions.length > 0) {
+      const m = ARME_MISSIONS.find((x) => x.id === armee_mission_id);
+      if (!m) return 'Mission invalide.';
+      if (!armee_avion_id) {
+        return 'Pour cette mission, sélectionnez un appareil de la flotte armée : le plan de vol sera enregistré avec le lien mission (ATC + suivi).';
+      }
+      if (
+        aeroport_depart !== m.aeroport_depart ||
+        aeroport_arrivee !== m.aeroport_arrivee ||
+        isNaN(t) ||
+        t !== m.duree_minutes
+      ) {
+        return 'La route et la durée doivent correspondre à la mission sélectionnée.';
+      }
+    }
+    return null;
+  }
 
   // Préparer les données du formulaire
   function getFormData(volSansAtc: boolean = false) {
@@ -568,6 +614,7 @@ export default function DepotPlanVolForm({
       nature_transport: vol_commercial && !vol_ferry ? nature_transport : undefined,
       inventaire_avion_id: !vol_commercial && !vol_ferry && inventaire_avion_id && !armee_avion_id ? inventaire_avion_id : undefined,
       armee_avion_id: !vol_commercial && !vol_ferry && armee_avion_id ? armee_avion_id : undefined,
+      mission_id: !vol_commercial && !vol_ferry && armee_avion_id && armee_mission_id ? armee_mission_id : undefined,
       compagnie_avion_id: (vol_commercial || vol_ferry) && compagnie_avion_id ? compagnie_avion_id : undefined,
       vol_ferry,
       nb_pax_genere: vol_commercial ? nbPax : undefined,
@@ -594,6 +641,12 @@ export default function DepotPlanVolForm({
     if (type_vol === 'IFR' && (!sid_depart.trim() || !star_arrivee.trim())) { setError('SID de départ et STAR d\'arrivée requises pour IFR.'); return; }
     if (!aeroportsRouteDistincts(aeroport_depart, aeroport_arrivee)) {
       setError('L’aéroport de départ et l’aéroport d’arrivée doivent être différents.');
+      return;
+    }
+
+    const missionErr = missionArmeeValidationError();
+    if (missionErr) {
+      setError(missionErr);
       return;
     }
     
@@ -688,6 +741,14 @@ export default function DepotPlanVolForm({
     
     if (!aeroportsRouteDistincts(aeroport_depart, aeroport_arrivee)) {
       setError('L’aéroport de départ et l’aéroport d’arrivée doivent être différents.');
+      submitBusyRef.current = false;
+      setLoading(false);
+      return;
+    }
+
+    const missionErr = missionArmeeValidationError();
+    if (missionErr) {
+      setError(missionErr);
       submitBusyRef.current = false;
       setLoading(false);
       return;
@@ -1184,13 +1245,39 @@ export default function DepotPlanVolForm({
             ) : null}
           />
           <div className="mt-4">
+          {armeeAvions.length > 0 && (
+            <div className="mb-4 rounded-lg border border-red-500/25 bg-red-500/5 p-3">
+              <label className="label flex items-center gap-2">
+                <Target className="h-4 w-4 shrink-0 text-red-400" />
+                Mission armée
+              </label>
+              <p className="text-xs text-slate-500 mb-2 leading-relaxed">
+                Avec une mission, ce plan est enregistré pour la carte mission correspondante : liaison et durée imposées, et <strong className="text-slate-300">appareil de la flotte armée</strong> obligatoire.
+              </p>
+              <select
+                className="input w-full"
+                value={armee_mission_id}
+                onChange={(e) => setArmeeMissionId(e.target.value)}
+              >
+                <option value="">— Sans mission —</option>
+                {ARME_MISSIONS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.titre} ({m.aeroport_depart} → {m.aeroport_arrivee}, {m.duree_minutes} min)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {avionsPersonnelsDispo.length > 0 ? (
             <select 
               className="input w-full" 
               value={inventaire_avion_id} 
               onChange={(e) => {
                 setInventaireAvionId(e.target.value);
-                if (e.target.value) setArmeeAvionId('');
+                if (e.target.value) {
+                  setArmeeAvionId('');
+                  if (armee_mission_id) setArmeeMissionId('');
+                }
               }}
             >
               <option value="">— Sélectionner un appareil —</option>
@@ -1269,9 +1356,15 @@ export default function DepotPlanVolForm({
           step={3}
           icon={<Route className="h-4 w-4" />}
           label="Route"
-          subtitle="Aéroports de départ et de destination"
+          subtitle={missionLocked ? 'Mission armée : liaison et durée verrouillées sur la mission' : 'Aéroports de départ et de destination'}
           accent="sky"
         />
+
+        {missionLocked && (
+          <p className="mt-2 text-xs text-amber-200/90 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+            Modifiez ou retirez la mission (étape appareil) pour changer la route.
+          </p>
+        )}
 
         {/* Visuel route : DEP — ✈ ··· — ARR */}
         <RouteVisual
@@ -1285,7 +1378,7 @@ export default function DepotPlanVolForm({
               <MapPin className="h-3.5 w-3.5 text-sky-400" />
               Départ <span className="text-rose-400">*</span>
             </label>
-            <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
+            <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required disabled={missionLocked}>
               <option value="">— Choisir —</option>
               {AEROPORTS_VOL_CIVIL.map((a) => (
                 <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
@@ -1297,7 +1390,7 @@ export default function DepotPlanVolForm({
               <MapPin className="h-3.5 w-3.5 text-emerald-400" />
               Arrivée <span className="text-rose-400">*</span>
             </label>
-            <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required>
+            <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required disabled={missionLocked}>
               <option value="">— Choisir —</option>
               {AEROPORTS_VOL_CIVIL.map((a) => (
                 <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
@@ -1364,6 +1457,7 @@ export default function DepotPlanVolForm({
                 min={1}
                 required
                 placeholder="45"
+                disabled={missionLocked}
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono uppercase tracking-widest text-slate-500">min</span>
             </div>

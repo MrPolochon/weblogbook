@@ -9,6 +9,7 @@ import PlanVolAnnulerButton from './PlanVolAnnulerButton';
 import TranspondeurInterface from './TranspondeurInterface';
 import MedevacPauseBanner from './MedevacPauseBanner';
 import type { PlanVol } from '@/lib/types';
+import { ARME_MISSIONS } from '@/lib/armee-missions';
 
 const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
   depose: { label: 'Déposé', color: 'text-slate-300', bgColor: 'bg-slate-500/20' },
@@ -35,7 +36,7 @@ export default async function MesPlansVolPage() {
     supabase.from('profiles').select('role, identifiant').eq('id', user.id).single(),
     supabase
       .from('plans_vol')
-      .select('id, pilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id')
+      .select('id, pilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id')
       .eq('pilote_id', user.id)
       .order('created_at', { ascending: false }),
   ]);
@@ -259,11 +260,16 @@ export default async function MesPlansVolPage() {
                         </div>
                       </div>
                       <div>
-                        <div className="flex items-center gap-3 mb-1">
+                        <div className="flex items-center gap-3 mb-1 flex-wrap">
                           <span className="font-bold text-slate-100 font-mono">{p.numero_vol}</span>
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${config.bgColor} ${config.color}`}>
                             {config.label}
                           </span>
+                          {p.armee_mission_id ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border border-red-500/40 bg-red-500/10 text-red-300">
+                              Mission&nbsp;: {ARME_MISSIONS.find((m) => m.id === p.armee_mission_id)?.titre || p.armee_mission_id}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="flex items-center gap-2 text-sm">
                           <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400">{p.aeroport_depart}</span>
