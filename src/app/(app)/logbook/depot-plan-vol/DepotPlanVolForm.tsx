@@ -92,9 +92,11 @@ function premierTypeAvionDepuisEmbed<T extends object>(
   return ta;
 }
 
-/** Aligné sur POST /api/plans-vol : départ et arrivée doivent différer après normalisation OACI. */
-function aeroportsRouteDistincts(depart: string, arrivee: string): boolean {
-  return depart.trim().toUpperCase() !== arrivee.trim().toUpperCase();
+/** Même code OACI au départ et à l’arrivée (tour de piste, vol d’entraînement local, etc.). */
+function isVolLocalRoute(depart: string, arrivee: string): boolean {
+  const d = depart.trim().toUpperCase();
+  const a = arrivee.trim().toUpperCase();
+  return Boolean(d && a && d === a);
 }
 
 export default function DepotPlanVolForm({
@@ -527,15 +529,17 @@ export default function DepotPlanVolForm({
   const tauxRemplissageCargo = capaciteCargoMax > 0 ? (cargoKg / capaciteCargoMax) : 0;
   
   const remplissageMinRequis = 0.25; // 25% minimum
-  const remplissageValidePax = tauxRemplissagePax >= remplissageMinRequis;
-  const remplissageValideCargo = tauxRemplissageCargo >= remplissageMinRequis;
+  const volLocalRoute = isVolLocalRoute(aeroport_depart, aeroport_arrivee);
+  // Vol local : pas d’exploitation ligne régulière, le plan ne doit pas être bloqué par le seuil 25 %.
+  const remplissageValidePax = volLocalRoute || tauxRemplissagePax >= remplissageMinRequis;
+  const remplissageValideCargo = volLocalRoute || tauxRemplissageCargo >= remplissageMinRequis;
 
   const progressPct = useMemo(() => {
     let total = 0;
     let done = 0;
-    total += 2; // route
-    if (aeroport_depart) done++;
-    if (aeroport_arrivee && aeroportsRouteDistincts(aeroport_depart, aeroport_arrivee)) done++;
+    total += 2; // route (départ et arrivée indépendants — vol local : même OACI possible)
+    if (aeroport_depart.trim()) done++;
+    if (aeroport_arrivee.trim()) done++;
     total += 2; // details
     if (numero_vol.trim()) done++;
     if (temps_prev_min && parseInt(temps_prev_min, 10) > 0) done++;
@@ -548,8 +552,8 @@ export default function DepotPlanVolForm({
 
   const checklistItems = useMemo(() => {
     const items: { label: string; ok: boolean }[] = [
-      { label: 'Aéroport de départ', ok: !!aeroport_depart },
-      { label: 'Aéroport d\'arrivée', ok: !!aeroport_arrivee && aeroportsRouteDistincts(aeroport_depart, aeroport_arrivee) },
+      { label: 'Aéroport de départ', ok: Boolean(aeroport_depart?.trim()) },
+      { label: 'Aéroport d\'arrivée', ok: Boolean(aeroport_arrivee?.trim()) },
       { label: 'Numéro de vol', ok: !!numero_vol.trim() },
       { label: 'Durée de vol', ok: !!(temps_prev_min && parseInt(temps_prev_min, 10) > 0) },
     ];
@@ -639,11 +643,6 @@ export default function DepotPlanVolForm({
     }
     if (type_vol === 'VFR' && !intentions_vol.trim()) { setError('Intentions de vol requises pour VFR.'); return; }
     if (type_vol === 'IFR' && (!sid_depart.trim() || !star_arrivee.trim())) { setError('SID de départ et STAR d\'arrivée requises pour IFR.'); return; }
-    if (!aeroportsRouteDistincts(aeroport_depart, aeroport_arrivee)) {
-      setError('L’aéroport de départ et l’aéroport d’arrivée doivent être différents.');
-      return;
-    }
-
     const missionErr = missionArmeeValidationError();
     if (missionErr) {
       setError(missionErr);
@@ -739,13 +738,6 @@ export default function DepotPlanVolForm({
     setShowNoAtcConfirm(false);
     setLoading(true);
     
-    if (!aeroportsRouteDistincts(aeroport_depart, aeroport_arrivee)) {
-      setError('L’aéroport de départ et l’aéroport d’arrivée doivent être différents.');
-      submitBusyRef.current = false;
-      setLoading(false);
-      return;
-    }
-
     const missionErr = missionArmeeValidationError();
     if (missionErr) {
       setError(missionErr);
@@ -1356,7 +1348,11 @@ export default function DepotPlanVolForm({
           step={3}
           icon={<Route className="h-4 w-4" />}
           label="Route"
-          subtitle={missionLocked ? 'Mission armée : liaison et durée verrouillées sur la mission' : 'Aéroports de départ et de destination'}
+          subtitle={
+            missionLocked
+              ? 'Mission armée : liaison et durée verrouillées sur la mission'
+              : 'Départ et arrivée — le même OACI est autorisé (vol local VFR ou IFR, ex. IRFD → IRFD)'
+          }
           accent="sky"
         />
 
@@ -1381,7 +1377,7 @@ export default function DepotPlanVolForm({
             <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required disabled={missionLocked}>
               <option value="">— Choisir —</option>
               {AEROPORTS_VOL_CIVIL.map((a) => (
-                <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
+                <option key={`route-dep-${a.code}`} value={a.code}>{a.code} – {a.nom}</option>
               ))}
             </select>
           </div>
@@ -1393,11 +1389,18 @@ export default function DepotPlanVolForm({
             <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required disabled={missionLocked}>
               <option value="">— Choisir —</option>
               {AEROPORTS_VOL_CIVIL.map((a) => (
-                <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
+                <option key={`route-arr-${a.code}`} value={a.code}>{a.code} – {a.nom}</option>
               ))}
             </select>
           </div>
         </div>
+
+        {!missionLocked && isVolLocalRoute(aeroport_depart, aeroport_arrivee) && (
+          <p className="mt-3 text-xs text-sky-200/90 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 leading-relaxed">
+            <span className="font-semibold text-sky-300">Vol local.</span>{' '}
+            Même aéroport au départ et à l&apos;arrivée : valide en VFR (tour de piste, travail de zones) et en IFR (entraînement aux procédures et approches sur le même terrain). Saisissez SID et STAR adaptés si vous déposez en IFR.
+          </p>
+        )}
 
         <NotamsAirportWarning aeroportDepart={aeroport_depart} aeroportArrivee={aeroport_arrivee} />
       </section>
@@ -1786,7 +1789,6 @@ export default function DepotPlanVolForm({
         disabled={
           loading ||
           showNoAtcConfirm ||
-          (!!aeroport_depart && !!aeroport_arrivee && !aeroportsRouteDistincts(aeroport_depart, aeroport_arrivee)) ||
           (vol_commercial && (
             (nature_transport === 'passagers' && !remplissageValidePax) ||
             (nature_transport === 'cargo' && !remplissageValideCargo)
@@ -1902,8 +1904,10 @@ function ModeCard({
 function RouteVisual({ depart, arrivee }: { depart: string; arrivee: string }) {
   const dep = depart ? getAeroportInfo(depart) : null;
   const arr = arrivee ? getAeroportInfo(arrivee) : null;
-  const sameAirport = !!(depart && arrivee && !aeroportsRouteDistincts(depart, arrivee));
-  const ready = !!(depart && arrivee && !sameAirport);
+  const d = depart.trim().toUpperCase();
+  const a = arrivee.trim().toUpperCase();
+  const sameAirport = !!(d && a && d === a);
+  const ready = !!(d && a);
 
   return (
     <div className="mt-4 relative overflow-hidden rounded-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/80 via-slate-900/40 to-slate-900/80 p-3 sm:p-4">
@@ -1961,8 +1965,8 @@ function RouteVisual({ depart, arrivee }: { depart: string; arrivee: string }) {
             <Plane className="absolute h-5 w-5 text-slate-600 -rotate-12 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
           )}
           {sameAirport && (
-            <div className="mt-1 text-[10px] font-mono uppercase tracking-widest text-amber-400">
-              ⚠ identique
+            <div className="mt-1 text-[10px] font-mono uppercase tracking-widest text-sky-400/90">
+              Vol local
             </div>
           )}
         </div>
