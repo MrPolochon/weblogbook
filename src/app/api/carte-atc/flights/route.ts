@@ -47,6 +47,24 @@ function synthStartedAtFromRepairEta(isoEta: string | null | undefined): string 
   return new Date(start).toISOString();
 }
 
+function repairTimingFromEta(
+  isoEta: string | null | undefined,
+  startHintIso: string | null | undefined
+): { startedAt: string; durationMin: number } {
+  const eta = isoEta ? new Date(isoEta).getTime() : NaN;
+  const hintedStart = startHintIso ? new Date(startHintIso).getTime() : NaN;
+  if (Number.isFinite(eta) && Number.isFinite(hintedStart) && hintedStart < eta) {
+    return {
+      startedAt: new Date(hintedStart).toISOString(),
+      durationMin: Math.max(1, Math.round((eta - hintedStart) / 60_000)),
+    };
+  }
+  return {
+    startedAt: synthStartedAtFromRepairEta(isoEta),
+    durationMin: Math.round(TRANSIT_REP_MAX_MS / 60_000),
+  };
+}
+
 function ferryRepairStartedAt(vol: {
   automatique?: boolean | null;
   fin_prevue_at?: string | null;
@@ -109,7 +127,7 @@ export async function GET() {
     admin
       .from('reparation_demandes')
       .select(
-        'id, avion_id, statut, aeroport_depart_client, compagnie_id, entreprise_transit_eta_at, retour_transit_eta_at, reparation_hangars(aeroport_code)',
+        'id, avion_id, statut, aeroport_depart_client, compagnie_id, acceptee_at, payee_at, entreprise_transit_eta_at, retour_transit_eta_at, reparation_hangars(aeroport_code)',
       )
       .in('statut', ['acceptee', 'en_transit', 'retour_transit']),
     admin
@@ -196,6 +214,8 @@ export async function GET() {
     statut: string;
     aeroport_depart_client: string | null;
     compagnie_id: string;
+    acceptee_at?: string | null;
+    payee_at?: string | null;
     entreprise_transit_eta_at: string | null;
     retour_transit_eta_at: string | null;
     reparation_hangars: unknown;
@@ -298,6 +318,7 @@ export async function GET() {
       if (!hang || !avRow?.aeroport_actuel) continue;
       const dep = String(avRow.aeroport_actuel).trim().toUpperCase();
       if (dep === hang) continue;
+      const timing = repairTimingFromEta(rd.entreprise_transit_eta_at, rd.acceptee_at);
       flights.push({
         id: `rep-tow-${rd.id}`,
         kind: 'civil',
@@ -305,8 +326,8 @@ export async function GET() {
         aeroport_depart: dep,
         aeroport_arrivee: hang,
         type_vol: 'IFR',
-        temps_prev_min: Math.round(TRANSIT_REP_MAX_MS / 60_000),
-        started_at: synthStartedAtFromRepairEta(rd.entreprise_transit_eta_at),
+        temps_prev_min: timing.durationMin,
+        started_at: timing.startedAt,
         status: 'reparation_entreprise_transit',
         pilote_id: null,
         pilote_identifiant: 'Réparation externe',
@@ -331,6 +352,7 @@ export async function GET() {
       });
       if (!hang || !baseCible || hang === baseCible.toUpperCase()) continue;
       const arr = baseCible.toUpperCase();
+      const timing = repairTimingFromEta(rd.retour_transit_eta_at, rd.payee_at);
       flights.push({
         id: `rep-ret-${rd.id}`,
         kind: 'civil',
@@ -338,8 +360,8 @@ export async function GET() {
         aeroport_depart: hang,
         aeroport_arrivee: arr,
         type_vol: 'IFR',
-        temps_prev_min: Math.round(TRANSIT_REP_MAX_MS / 60_000),
-        started_at: synthStartedAtFromRepairEta(rd.retour_transit_eta_at),
+        temps_prev_min: timing.durationMin,
+        started_at: timing.startedAt,
         status: 'reparation_retour_transit',
         pilote_id: null,
         pilote_identifiant: 'Réparation externe',

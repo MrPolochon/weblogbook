@@ -1087,9 +1087,9 @@ interface HydLeak { id: number; position: number; severity: number; sealedUntil:
 function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
   const DURATION = 40;
   const TARGET_PRESSURE = 75;
-  const GREEN_RANGE = 16;
-  const BASE_LEAK_RATE = 8;
-  const PUMP_RATE = 24;
+  const GREEN_RANGE = 20;
+  const BASE_LEAK_RATE = 3.2;
+  const PUMP_RATE = 42;
   const MAX_PRESSURE = 110;
 
   const [pressure, setPressure] = useState(TARGET_PRESSURE);
@@ -1133,9 +1133,9 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
     lastTickAt.current = now;
     const t = now / 1000;
 
-    const difficultyMult = 1 + elapsed / DURATION;
+    const difficultyMult = 1 + (elapsed / DURATION) * 0.45;
     const activeLeaks = leaksRef.current.filter(l => l.sealedUntil < now);
-    const leakExtra = activeLeaks.reduce((sum, l) => sum + l.severity * 2.4, 0);
+    const leakExtra = activeLeaks.reduce((sum, l) => sum + l.severity * 0.9, 0);
     const totalLeak = (BASE_LEAK_RATE * difficultyMult + leakExtra) * dt;
 
     const jitter = Math.sin(t * 2.5) * 1.2 * dt;
@@ -1151,11 +1151,11 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
       setLiveScore(Math.round((inGreenFrames.current / totalFrames.current) * 100));
     }
 
-    if (Math.random() < 0.0018 * difficultyMult && leaksRef.current.filter(l => l.sealedUntil < now).length < 2) {
+    if (elapsed > 6 && Math.random() < 0.00055 * difficultyMult && leaksRef.current.filter(l => l.sealedUntil < now).length < 1) {
       const newLeak: HydLeak = {
         id: nextLeakId.current++,
         position: 10 + Math.random() * 80,
-        severity: 1 + Math.floor(Math.random() * 3),
+        severity: 1,
         sealedUntil: 0,
       };
       setLeaks(prev => [...prev, newLeak]);
@@ -1179,7 +1179,7 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
           setFinished(true);
           setRunning(false);
           const score = totalFrames.current > 0
-            ? Math.round((inGreenFrames.current / totalFrames.current) * 100) : 50;
+            ? Math.max(35, Math.round((inGreenFrames.current / totalFrames.current) * 100)) : 50;
           const duration = Math.round((Date.now() - startTime.current) / 1000);
           onComplete({ type_jeu: 'hydraulique', score, duree_secondes: Math.max(duration, 12) });
           return 0;
@@ -1233,9 +1233,9 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
       <div className="rounded-lg border border-blue-800/40 bg-blue-950/20 px-3 py-2.5 text-xs text-slate-400 space-y-1.5">
         <p className="font-medium text-blue-200/90">Comment jouer</p>
         <ul className="list-disc list-inside space-y-1 leading-relaxed">
-          <li>Cliquez <strong className="text-slate-200">Démarrer le circuit</strong>, puis utilisez des <strong className="text-slate-200">appuis courts</strong> ou maintenez légèrement le grand bouton bleu pour pomper.</li>
-          <li>Gardez l&apos;aiguille / la pression dans la <strong className="text-slate-200">bande verte élargie</strong> au centre (cible {TARGET_PRESSURE} PSI). Relâchez dès que la pression monte trop.</li>
-          <li>Des <strong className="text-slate-200">fuites</strong> (pastilles rouges animées sur la conduite) apparaissent : <strong className="text-slate-200">cliquez-les</strong> pour les colmater quelques secondes. Le score reflète le temps passé en zone verte.</li>
+          <li>Cliquez <strong className="text-slate-200">Démarrer le circuit</strong>, puis maintenez le bouton bleu jusqu&apos;à atteindre la zone verte.</li>
+          <li>La pression descend doucement : quelques <strong className="text-slate-200">petits appuis</strong> suffisent pour la maintenir dans la bande verte.</li>
+          <li>Une seule <strong className="text-slate-200">fuite</strong> peut apparaître à la fois. Cliquez la pastille rouge pour la colmater pendant plusieurs secondes.</li>
         </ul>
       </div>
 
@@ -1296,7 +1296,7 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <span>Fuites colmatées : {leaksSealed}</span>
             <span>•</span>
-            <span>Fuites actives : <span className={activeLeakCount > 0 ? 'text-red-400 font-medium' : 'text-emerald-400'}>{activeLeakCount}</span></span>
+            <span>Fuite active : <span className={activeLeakCount > 0 ? 'text-red-400 font-medium' : 'text-emerald-400'}>{activeLeakCount}</span></span>
           </div>
 
           {/* Pump button */}
@@ -1313,7 +1313,7 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
                   ? 'bg-blue-500 text-white scale-[0.97] shadow-inner border-blue-400'
                   : 'bg-blue-700/80 text-blue-100 hover:bg-blue-600 shadow-lg border-blue-600/50'
               }`}>
-              {pumping ? '💧 POMPAGE EN COURS...' : '⬇ MAINTENIR POUR POMPER'}
+              {pumping ? '💧 PRESSION EN MONTÉE...' : '⬇ MAINTENIR POUR POMPER'}
             </button>
           )}
         </div>
