@@ -834,173 +834,180 @@ export default function AtcMapClient() {
             )}
           </div>
 
-          {selectedFlight && (
-            <div className="absolute top-3 left-3 w-[300px] rounded-xl overflow-hidden bg-slate-950/96 border border-slate-700/60 shadow-2xl shadow-black/50 backdrop-blur-md text-xs">
-              {/* Photo avion */}
-              {selectedFlight.avion_image_url ? (
-                <div className="relative h-36 w-full overflow-hidden bg-slate-900">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={selectedFlight.avion_image_url}
-                    alt={selectedFlight.avion_immatriculation || selectedFlight.numero_vol}
-                    className="w-full h-full object-cover"
-                  />
-                  {/* Gradient bas pour lisibilité */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
-                  {/* Callsign & type en overlay bas */}
-                  <div className="absolute bottom-2 left-3 right-8">
-                    <p className="font-black text-lg text-white leading-tight tracking-wide drop-shadow">
+          {selectedFlight && (() => {
+            /* ── helpers ── */
+            const depName = AIRPORT_NAMES[selectedFlight.aeroport_depart] || selectedFlight.aeroport_depart;
+            const arrName = AIRPORT_NAMES[selectedFlight.aeroport_arrivee] || selectedFlight.aeroport_arrivee;
+
+            /* parse strip_atd (ATC ATD) en heure affichable */
+            const parseAtd = (atd: string, ref: Date): string | null => {
+              const raw = atd.trim().toUpperCase();
+              const m4 = raw.match(/^(\d{4})$/);
+              const mH = raw.match(/^(\d{1,2})[H:](\d{2})$/i);
+              let h: number | null = null, min: number | null = null;
+              if (m4) { h = parseInt(m4[1].slice(0, 2), 10); min = parseInt(m4[1].slice(2), 10); }
+              else if (mH) { h = parseInt(mH[1], 10); min = parseInt(mH[2], 10); }
+              if (h === null || min === null) return atd;
+              const d = new Date(ref);
+              d.setUTCHours(h, min, 0, 0);
+              if (d.getTime() < ref.getTime() - 3_600_000) d.setUTCDate(d.getUTCDate() + 1);
+              return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+            };
+
+            const schedRef = selectedFlight.heure_depart_estimee ? new Date(selectedFlight.heure_depart_estimee) : new Date();
+            const scheduledDep = selectedFlight.heure_depart_estimee
+              ? new Date(selectedFlight.heure_depart_estimee).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+              : null;
+            const actualDep = selectedFlight.strip_atd ? parseAtd(selectedFlight.strip_atd, schedRef) : null;
+
+            /* ETA estimée = ATD (ou heure dépôt) + durée prévue */
+            const departMs = actualDep
+              ? (() => { const d = new Date(schedRef); const [hh, mm] = actualDep.split(':').map(Number); d.setUTCHours(hh, mm, 0, 0); if (d.getTime() < schedRef.getTime() - 3_600_000) d.setUTCDate(d.getUTCDate() + 1); return d.getTime(); })()
+              : selectedFlight.heure_depart_estimee
+                ? new Date(selectedFlight.heure_depart_estimee).getTime()
+                : new Date(selectedFlight.started_at).getTime();
+            const estimatedArr = new Date(departMs + selectedFlight.temps_prev_min * 60_000)
+              .toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+
+            const typeColor = selectedFlight.operationnel_reparation ? OPS_REPARATION_COLOR
+              : selectedFlight.type_vol === 'VFR' ? '#4ade80'
+              : selectedFlight.type_vol === 'MIL' ? '#c084fc'
+              : selectedFlight.vol_ferry ? '#38bdf8'
+              : '#f87171';
+            const typeBg = selectedFlight.operationnel_reparation ? 'rgba(249,115,22,0.22)'
+              : selectedFlight.type_vol === 'VFR' ? 'rgba(34,197,94,0.18)'
+              : selectedFlight.type_vol === 'MIL' ? 'rgba(168,85,247,0.18)'
+              : selectedFlight.vol_ferry ? 'rgba(56,189,248,0.18)'
+              : 'rgba(239,68,68,0.20)';
+            const phaseColor = selectedFlight.flight_phase === 'cruising' ? '#4ade80'
+              : selectedFlight.flight_phase === 'approaching' ? '#fbbf24'
+              : '#60a5fa';
+            const phaseBg = selectedFlight.flight_phase === 'cruising' ? 'rgba(74,222,128,0.15)'
+              : selectedFlight.flight_phase === 'approaching' ? 'rgba(251,191,36,0.15)'
+              : 'rgba(96,165,250,0.15)';
+
+            const pct = Math.round(selectedFlight.progress * 100);
+
+            return (
+              <div className="absolute top-3 left-3 w-[310px] rounded-xl overflow-hidden shadow-2xl shadow-black/60 backdrop-blur-md text-xs" style={{ background: '#1a1f2e', border: '1px solid rgba(148,163,184,0.15)' }}>
+
+                {/* ── 1. PHOTO + CALLSIGN overlay ── */}
+                <div className="relative w-full" style={{ aspectRatio: '16/9', background: '#0f1623' }}>
+                  {selectedFlight.avion_image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={selectedFlight.avion_image_url} alt={selectedFlight.numero_vol} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Plane className="h-10 w-10 text-slate-700" />
+                    </div>
+                  )}
+                  {/* gradient bas */}
+                  <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(26,31,46,0.95) 0%, rgba(26,31,46,0.3) 45%, transparent 100%)' }} />
+                  {/* callsign + compagnie */}
+                  <div className="absolute bottom-2.5 left-3">
+                    <p className="font-black text-xl text-white leading-tight tracking-wide" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>
                       {selectedFlight.numero_vol}
                     </p>
-                    {selectedFlight.avion_immatriculation && (
-                      <p className="text-slate-300 text-[11px] font-mono">{selectedFlight.avion_immatriculation} · {selectedFlight.type_avion_nom || '—'}</p>
-                    )}
+                    <p className="text-slate-300 text-[11px] mt-0.5">
+                      {[selectedFlight.avion_immatriculation, selectedFlight.type_avion_nom].filter(Boolean).join(' · ') || ''}
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFlightId(null)}
-                    className="absolute top-2 right-2 h-6 w-6 flex items-center justify-center rounded-full bg-slate-950/70 text-slate-300 hover:text-white transition"
-                  >
-                    <X className="h-3.5 w-3.5" />
+                  {/* bouton fermer */}
+                  <button type="button" onClick={() => setSelectedFlightId(null)}
+                    className="absolute top-2 right-2 h-7 w-7 flex items-center justify-center rounded-full text-slate-200 hover:text-white transition"
+                    style={{ background: 'rgba(15,22,35,0.75)' }}>
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
-              ) : (
-                <div className="flex items-start justify-between gap-2 px-3 pt-3 pb-2 border-b border-slate-800">
-                  <div>
-                    <p className="font-black text-base text-white tracking-wide">{selectedFlight.numero_vol}</p>
-                    {selectedFlight.avion_immatriculation && (
-                      <p className="text-slate-400 text-[11px] font-mono">{selectedFlight.avion_immatriculation}{selectedFlight.type_avion_nom ? ` · ${selectedFlight.type_avion_nom}` : ''}</p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFlightId(null)}
-                    className="h-6 w-6 flex items-center justify-center rounded-full bg-slate-800 text-slate-400 hover:text-white transition"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
 
-              {/* Route DEP → ARR */}
-              <div className="px-3 py-3 bg-slate-900/60 border-b border-slate-800/80">
-                <div className="flex items-center gap-2">
-                  <div className="text-center min-w-0">
-                    <p className="text-white font-black text-lg leading-none tabular-nums">{selectedFlight.aeroport_depart}</p>
-                  </div>
-                  <div className="flex-1 flex items-center justify-center gap-1">
-                    {/* Barre de progression route */}
-                    <div className="flex-1 h-0.5 rounded-full bg-slate-700 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-amber-400 transition-all duration-500"
-                        style={{ width: `${Math.round(selectedFlight.progress * 100)}%` }}
-                      />
+                {/* ── 2. DEP · avion · ARR ── */}
+                <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(148,163,184,0.1)' }}>
+                  <div className="flex items-stretch gap-2">
+                    {/* Départ */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-black text-[22px] leading-none tabular-nums">{selectedFlight.aeroport_depart}</p>
+                      <p className="text-slate-400 text-[10px] mt-0.5 truncate">{depName}</p>
                     </div>
-                    <Plane className="h-4 w-4 text-amber-400 shrink-0" />
-                  </div>
-                  <div className="text-center min-w-0">
-                    <p className="text-white font-black text-lg leading-none tabular-nums">{selectedFlight.aeroport_arrivee}</p>
+                    {/* Barre progression + icone */}
+                    <div className="flex flex-col items-center justify-center gap-1 px-1" style={{ minWidth: 56 }}>
+                      <Plane className="h-5 w-5 text-amber-400" />
+                      <div className="w-full h-[3px] rounded-full overflow-hidden" style={{ background: 'rgba(148,163,184,0.15)' }}>
+                        <div className="h-full rounded-full bg-amber-400 transition-all duration-500" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                    {/* Arrivée */}
+                    <div className="flex-1 min-w-0 text-right">
+                      <p className="text-white font-black text-[22px] leading-none tabular-nums">{selectedFlight.aeroport_arrivee}</p>
+                      <p className="text-slate-400 text-[10px] mt-0.5 truncate">{arrName}</p>
+                    </div>
                   </div>
                 </div>
-                {/* Badges */}
-                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                  <span
-                    className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"
-                    style={{
-                      backgroundColor: selectedFlight.operationnel_reparation
-                        ? 'rgba(249,115,22,0.25)'
-                        : selectedFlight.type_vol === 'VFR' ? 'rgba(34,197,94,0.18)' :
-                        selectedFlight.type_vol === 'MIL' ? 'rgba(168,85,247,0.18)' :
-                        selectedFlight.vol_ferry ? 'rgba(56,189,248,0.18)' :
-                        'rgba(239,68,68,0.18)',
-                      color: selectedFlight.operationnel_reparation
-                        ? OPS_REPARATION_COLOR
-                        : selectedFlight.type_vol === 'VFR' ? '#4ade80' :
-                        selectedFlight.type_vol === 'MIL' ? '#c084fc' :
-                        selectedFlight.vol_ferry ? '#38bdf8' :
-                        '#f87171',
-                    }}
-                  >
-                    {mapFlightLabel(selectedFlight)}
-                  </span>
-                  <span
-                    className="px-2 py-0.5 rounded text-[10px] font-bold"
-                    style={{
-                      backgroundColor: selectedFlight.flight_phase === 'cruising' ? 'rgba(74,222,128,0.15)' :
-                        selectedFlight.flight_phase === 'approaching' ? 'rgba(251,191,36,0.15)' :
-                        'rgba(96,165,250,0.15)',
-                      color: selectedFlight.flight_phase === 'cruising' ? '#4ade80' :
-                        selectedFlight.flight_phase === 'approaching' ? '#fbbf24' :
-                        '#60a5fa',
-                    }}
-                  >
-                    {PHASE_LABELS_FR[selectedFlight.flight_phase]}
-                  </span>
-                </div>
-              </div>
 
-              {/* SCHEDULED / ACTUAL style FR24 */}
-              {(selectedFlight.heure_depart_estimee || selectedFlight.strip_atd) && (
-                <div className="grid grid-cols-2 divide-x divide-slate-800 border-b border-slate-800">
-                  <div className="px-3 py-2">
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Scheduled</p>
-                    <p className="text-sm font-mono font-bold text-slate-200">
-                      {selectedFlight.heure_depart_estimee
-                        ? new Date(selectedFlight.heure_depart_estimee).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
-                        : '—'}
-                    </p>
+                {/* ── 3. SCHEDULED / ACTUAL table ── */}
+                <div className="grid grid-cols-2" style={{ borderBottom: '1px solid rgba(148,163,184,0.1)' }}>
+                  {/* Départ */}
+                  <div className="px-4 py-2.5" style={{ borderRight: '1px solid rgba(148,163,184,0.1)' }}>
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.14em] mb-2" style={{ color: '#64748b' }}>Départ</p>
+                    <div className="flex justify-between items-baseline mb-1">
+                      <span className="text-[9px] uppercase tracking-widest" style={{ color: '#64748b' }}>Scheduled</span>
+                      <span className="text-sm font-bold font-mono text-white tabular-nums">{scheduledDep || '—'}</span>
+                    </div>
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-[9px] uppercase tracking-widest" style={{ color: '#64748b' }}>Actual</span>
+                      <span className={`text-sm font-bold font-mono tabular-nums ${actualDep ? 'text-emerald-400' : 'text-slate-600'}`}>{actualDep || '—'}</span>
+                    </div>
                   </div>
-                  <div className="px-3 py-2">
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Actual</p>
-                    <p className={`text-sm font-mono font-bold ${selectedFlight.strip_atd ? 'text-emerald-400' : 'text-slate-500'}`}>
-                      {selectedFlight.strip_atd
-                        ? (() => {
-                            const ref = selectedFlight.heure_depart_estimee
-                              ? new Date(selectedFlight.heure_depart_estimee)
-                              : new Date();
-                            const raw = selectedFlight.strip_atd.trim().toUpperCase();
-                            const m4 = raw.match(/^(\d{4})$/);
-                            const mH = raw.match(/^(\d{1,2})[H:](\d{2})$/i);
-                            let h: number | null = null, min: number | null = null;
-                            if (m4) { h = parseInt(m4[1].slice(0, 2), 10); min = parseInt(m4[1].slice(2), 10); }
-                            else if (mH) { h = parseInt(mH[1], 10); min = parseInt(mH[2], 10); }
-                            if (h !== null && min !== null) {
-                              const atd = new Date(ref);
-                              atd.setUTCHours(h, min, 0, 0);
-                              if (atd.getTime() < ref.getTime() - 3600_000) atd.setUTCDate(atd.getUTCDate() + 1);
-                              return atd.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
-                            }
-                            return selectedFlight.strip_atd;
-                          })()
-                        : '—'}
-                    </p>
+                  {/* Arrivée */}
+                  <div className="px-4 py-2.5">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.14em] mb-2" style={{ color: '#64748b' }}>Arrivée</p>
+                    <div className="flex justify-between items-baseline mb-1">
+                      <span className="text-[9px] uppercase tracking-widest" style={{ color: '#64748b' }}>Scheduled</span>
+                      <span className="text-sm font-bold font-mono text-white tabular-nums">—</span>
+                    </div>
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-[9px] uppercase tracking-widest" style={{ color: '#64748b' }}>Estimated</span>
+                      <span className="text-sm font-bold font-mono tabular-nums" style={{ color: '#22d3ee' }}>{estimatedArr}</span>
+                    </div>
                   </div>
                 </div>
-              )}
 
-              {/* Infos détaillées */}
-              <div className="px-3 py-2.5 space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Durée prévue</span>
-                  <span className="text-slate-200 font-medium">{selectedFlight.temps_prev_min} min</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Progression</span>
-                  <span className="text-slate-200 font-medium">{Math.round(selectedFlight.progress * 100)} %</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Pilote</span>
-                  <span className="text-slate-200 font-medium">{selectedFlight.pilote_identifiant || 'N/A'}</span>
-                </div>
-                {selectedFlight.discord_username && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Discord</span>
-                    <span className="text-slate-200 font-medium">{selectedFlight.discord_username}</span>
+                {/* ── 4. Progression bar + badges + pilote ── */}
+                <div className="px-4 py-2.5 space-y-2">
+                  {/* Barre de progression avec labels */}
+                  <div className="flex items-center gap-2 text-[10px]">
+                    <span className="text-slate-500 tabular-nums">{pct}%</span>
+                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(148,163,184,0.12)' }}>
+                      <div className="h-full rounded-full bg-amber-400 transition-all duration-500" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-slate-500">{selectedFlight.temps_prev_min} min</span>
                   </div>
-                )}
+                  {/* Badges type + phase */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide" style={{ backgroundColor: typeBg, color: typeColor }}>
+                      {mapFlightLabel(selectedFlight)}
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor: phaseBg, color: phaseColor }}>
+                      {PHASE_LABELS_FR[selectedFlight.flight_phase]}
+                    </span>
+                  </div>
+                  {/* Pilote + Discord */}
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex justify-between">
+                      <span style={{ color: '#64748b' }}>Pilote</span>
+                      <span className="text-slate-200 font-medium">{selectedFlight.pilote_identifiant || 'N/A'}</span>
+                    </div>
+                    {selectedFlight.discord_username && (
+                      <div className="flex justify-between">
+                        <span style={{ color: '#64748b' }}>Discord</span>
+                        <span className="text-slate-200 font-medium">{selectedFlight.discord_username}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Panneau latéral */}
