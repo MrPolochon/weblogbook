@@ -72,7 +72,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editImmat, setEditImmat] = useState('');
   const [editNom, setEditNom] = useState('');
-  const [editImageUrl, setEditImageUrl] = useState('');
+  const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -251,7 +251,40 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
     setEditingId(avion.id);
     setEditImmat(avion.immatriculation);
     setEditNom(avion.nom_bapteme || '');
-    setEditImageUrl(avion.avion_image_url || '');
+  }
+
+  async function handleUploadImage(avionId: string, file: File) {
+    if (!file) return;
+    setUploadingImageId(avionId);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/compagnies/avions/${avionId}/image`, { method: 'POST', body: fd });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      toast.success('Photo mise à jour');
+      loadAvions();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur upload');
+    } finally {
+      setUploadingImageId(null);
+    }
+  }
+
+  async function handleDeleteImage(avionId: string) {
+    if (!confirm('Supprimer la photo de cet avion ?')) return;
+    setUploadingImageId(avionId);
+    try {
+      const res = await fetch(`/api/compagnies/avions/${avionId}/image`, { method: 'DELETE' });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      toast.success('Photo supprimée');
+      loadAvions();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setUploadingImageId(null);
+    }
   }
 
   async function handleSaveEdit() {
@@ -264,7 +297,6 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
         body: JSON.stringify({
           immatriculation: editImmat.trim().toUpperCase(),
           nom_bapteme: editNom.trim() || null,
-          avion_image_url: editImageUrl.trim() || null,
         }),
       });
       const d = await res.json().catch(() => ({}));
@@ -561,7 +593,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                     </td>
                     <td className="py-2.5 pr-4">
                       {isEditing ? (
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1.5">
                           <input
                             type="text"
                             value={editNom}
@@ -570,13 +602,33 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                             placeholder="Nom de baptême"
                             maxLength={50}
                           />
-                          <input
-                            type="url"
-                            value={editImageUrl}
-                            onChange={(e) => setEditImageUrl(e.target.value)}
-                            className="input py-1 px-2 w-32 text-xs text-slate-400"
-                            placeholder="URL photo avion (ODW)"
-                          />
+                          {/* Upload photo avion */}
+                          <label className="flex items-center gap-1.5 cursor-pointer group">
+                            <span className="text-[10px] text-slate-500 group-hover:text-slate-300 transition-colors whitespace-nowrap">
+                              {uploadingImageId === a.id ? 'Upload…' : a.avion_image_url ? '📷 Changer photo' : '📷 Ajouter photo'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={uploadingImageId === a.id}
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleUploadImage(a.id, f);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                          {a.avion_image_url && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteImage(a.id)}
+                              disabled={uploadingImageId === a.id}
+                              className="text-[10px] text-red-400/70 hover:text-red-400 text-left disabled:opacity-50 transition-colors"
+                            >
+                              🗑 Supprimer photo
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
