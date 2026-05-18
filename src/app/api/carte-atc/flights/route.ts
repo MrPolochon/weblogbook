@@ -27,6 +27,8 @@ interface MapFlight {
   star: string | null;
   /** Déplacement vers / depuis une réparation externe — affichage orange sur l’ODW. */
   operationnel_reparation?: boolean;
+  /** Ferry compagnie classique, affiché même hors opération réparation. */
+  vol_ferry?: boolean;
 }
 
 type HangarJoin = { aeroport_code?: string | null };
@@ -86,11 +88,11 @@ export async function GET() {
       .select(`
         id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, temps_prev_min,
         statut, accepted_at, created_at, pilote_id, vol_sans_atc, current_holder_user_id,
+        armee_avion_id, armee_mission_id,
         route_ifr, strip_route, strip_sid_atc, sid_depart, star_arrivee, strip_star,
         profiles!plans_vol_pilote_id_fkey(id, identifiant)
       `)
       .in('statut', ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'])
-      .neq('aeroport_depart', 'aeroport_arrivee')
       .not('aeroport_depart', 'is', null)
       .not('aeroport_arrivee', 'is', null),
     admin
@@ -101,7 +103,6 @@ export async function GET() {
       `)
       .eq('type_vol', 'Vol militaire')
       .lte('depart_utc', nowIso)
-      .neq('aeroport_depart', 'aeroport_arrivee')
       .not('aeroport_depart', 'is', null)
       .not('aeroport_arrivee', 'is', null),
     admin.from('discord_links').select('user_id, discord_username').eq('status', 'active'),
@@ -117,7 +118,6 @@ export async function GET() {
         'id, avion_id, aeroport_depart, aeroport_arrivee, statut, automatique, fin_prevue_at, duree_prevue_min, duree_minutes, created_at, pilote_id',
       )
       .in('statut', ['planned', 'in_progress'])
-      .neq('aeroport_depart', 'aeroport_arrivee')
       .not('aeroport_depart', 'is', null)
       .not('aeroport_arrivee', 'is', null),
   ]);
@@ -144,11 +144,11 @@ export async function GET() {
     const startAt = p.accepted_at || p.created_at || nowIso;
     flights.push({
       id: `pv-${p.id}`,
-      kind: 'civil',
+      kind: (p.armee_avion_id || p.armee_mission_id) ? 'military' : 'civil',
       numero_vol: p.numero_vol || 'N/A',
       aeroport_depart: p.aeroport_depart,
       aeroport_arrivee: p.aeroport_arrivee,
-      type_vol: p.type_vol === 'VFR' ? 'VFR' : 'IFR',
+      type_vol: (p.armee_avion_id || p.armee_mission_id) ? 'MIL' : p.type_vol === 'VFR' ? 'VFR' : 'IFR',
       temps_prev_min: Math.max(1, Number(p.temps_prev_min || 1)),
       started_at: startAt,
       status: p.statut,
@@ -225,14 +225,17 @@ export async function GET() {
   }
 
   const ferryByAvion = new Set<string>(ferriesRows.map((v) => v.avion_id).filter(Boolean));
-  const avionIdsRepair = Array.from(new Set(repairRowsAll.map((r) => r.avion_id)));
+  const avionIdsOdW = Array.from(new Set([
+    ...repairRowsAll.map((r) => r.avion_id),
+    ...ferriesRows.map((v) => v.avion_id),
+  ].filter(Boolean)));
 
   let avionMeta: { id: string; immatriculation: string | null; aeroport_actuel: string }[] = [];
-  if (avionIdsRepair.length) {
+  if (avionIdsOdW.length) {
     const { data: cav } = await admin
       .from('compagnie_avions')
       .select('id, immatriculation, aeroport_actuel')
-      .in('id', avionIdsRepair);
+      .in('id', avionIdsOdW);
     avionMeta = (cav || []) as typeof avionMeta;
   }
 
@@ -253,11 +256,11 @@ export async function GET() {
     repairRowsAll.some((r) => r.avion_id === avid && (r.statut === 'acceptee' || r.statut === 'retour_transit'));
 
   for (const vf of ferriesRows) {
-    if (!hasRepairFerryHue(vf.avion_id)) continue;
     if (vf.automatique && vf.fin_prevue_at) {
       const finTs = new Date(vf.fin_prevue_at).getTime();
       if (Number.isFinite(finTs) && finTs <= odwNowMs) continue;
     }
+    const isRepairFerry = hasRepairFerryHue(vf.avion_id);
     const imm = avMap.get(vf.avion_id)?.immatriculation || vf.avion_id.slice(0, 6).toUpperCase();
     const pilId = vf.pilote_id ?? null;
     const dureeMin = Math.max(
@@ -266,9 +269,9 @@ export async function GET() {
         : typeof vf.duree_minutes === 'number' && vf.duree_minutes > 0 ? vf.duree_minutes : 180,
     );
     flights.push({
-      id: `rep-ff-${vf.id}`,
+      id: `${isRepairFerry ? 'rep-ff' : 'ferry'}-${vf.id}`,
       kind: 'civil',
-      numero_vol: `REP-OPS ${imm}`,
+      numero_vol: `${isRepairFerry ? 'REP-OPS' : 'FERRY'} ${imm}`,
       aeroport_depart: vf.aeroport_depart,
       aeroport_arrivee: vf.aeroport_arrivee,
       type_vol: 'IFR',
@@ -281,7 +284,8 @@ export async function GET() {
       route: null,
       sid: null,
       star: null,
-      operationnel_reparation: true,
+      operationnel_reparation: isRepairFerry,
+      vol_ferry: !isRepairFerry,
     });
   }
 

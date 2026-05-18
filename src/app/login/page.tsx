@@ -150,9 +150,6 @@ function SummerUpdateDecor() {
           <Waves key={i} className="h-10 w-24 animate-float" style={{ animationDelay: `${i * 0.18}s` }} />
         ))}
       </div>
-      <div className="absolute left-6 top-8 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-amber-100/80 backdrop-blur-md">
-        Summer Update
-      </div>
     </div>
   );
 }
@@ -450,10 +447,6 @@ function LoginPageContent() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-300/35 via-sky-400/25 to-cyan-300/25 mb-4 shadow-xl shadow-amber-300/20 backdrop-blur-sm border border-amber-200/25 animate-zoom-bounce hover:animate-float">
             <Shield className="h-10 w-10 text-amber-100 drop-shadow-[0_0_18px_rgba(251,191,36,0.45)]" />
-          </div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-amber-200/25 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-100 backdrop-blur-md animate-init animate-slide-up delay-200">
-            <Sun className="h-3.5 w-3.5" />
-            Summer Update
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight animate-init animate-slide-up delay-200">PTFS Logbook</h1>
           <p className="text-cyan-100/80 text-sm mt-2 animate-init animate-slide-up delay-300">Système de gestion des vols · Saison estivale</p>

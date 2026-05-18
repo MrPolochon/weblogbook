@@ -49,6 +49,8 @@ interface MapFlight {
   star: string | null;
   /** Déplacement lié réparation externe → symbole / trace orange sur l’ODW. */
   operationnel_reparation?: boolean;
+  /** Ferry compagnie classique. */
+  vol_ferry?: boolean;
 }
 
 interface RenderFlight extends MapFlight {
@@ -69,11 +71,20 @@ const POSITION_PRIORITY = ['Center', 'APP', 'DEP', 'Tower', 'Ground', 'Delivery'
 
 const OPS_REPARATION_COLOR = '#f97316'; // orange — acheminement réparation externe (ODW)
 
-function mapFlightAccentColor(f: Pick<MapFlight, 'operationnel_reparation' | 'type_vol'>): string {
+function mapFlightAccentColor(f: Pick<MapFlight, 'operationnel_reparation' | 'vol_ferry' | 'type_vol'>): string {
   if (f.operationnel_reparation) return OPS_REPARATION_COLOR;
+  if (f.vol_ferry) return '#38bdf8';
   if (f.type_vol === 'VFR') return '#22c55e';
   if (f.type_vol === 'MIL') return '#a855f7';
   return '#ef4444';
+}
+
+function mapFlightLabel(f: Pick<MapFlight, 'operationnel_reparation' | 'vol_ferry' | 'type_vol' | 'aeroport_depart' | 'aeroport_arrivee'>): string {
+  if (f.operationnel_reparation) return 'OPS RÉPARATION';
+  if (f.vol_ferry) return 'FERRY';
+  if (f.type_vol === 'MIL') return 'MILITAIRE';
+  if (f.aeroport_depart === f.aeroport_arrivee) return `${f.type_vol} LOCAL`;
+  return f.type_vol;
 }
 
 function formatDuration(startedAt: string): string {
@@ -806,6 +817,7 @@ export default function AtcMapClient() {
                   <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-green-500 shrink-0" /> <span className="text-slate-300">Vol VFR</span></div>
                   <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-red-500 shrink-0" /> <span className="text-slate-300">Vol IFR</span></div>
                   <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-purple-500 shrink-0" /> <span className="text-slate-300">Vol militaire</span></div>
+                  <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed border-sky-400 shrink-0" /> <span className="text-slate-300">Ferry</span></div>
                   <div className="flex items-center gap-2"><span className="w-4 h-0 border-t-2 border-dashed shrink-0" style={{ borderColor: OPS_REPARATION_COLOR }} /> <span className="text-slate-300">Réparation ext.</span></div>
                 </div>
               </div>
@@ -822,6 +834,11 @@ export default function AtcMapClient() {
                     style={{ backgroundColor: 'rgba(249,115,22,0.2)', color: OPS_REPARATION_COLOR }}
                   >
                     Réparation
+                  </span>
+                )}
+                {selectedFlight.vol_ferry && (
+                  <span className="ml-2 align-middle px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-sky-500/20 text-sky-300">
+                    Ferry
                   </span>
                 )}
               </p>
@@ -844,8 +861,7 @@ export default function AtcMapClient() {
                       '#f87171',
                   }}
                 >
-                  {selectedFlight.operationnel_reparation ? 'OPS RÉPARATION' :
-                    selectedFlight.type_vol === 'MIL' ? 'MILITAIRE' : selectedFlight.type_vol}
+                  {mapFlightLabel(selectedFlight)}
                 </span>
                 <span className="text-slate-400">
                   Durée prévue: {selectedFlight.temps_prev_min} min
@@ -954,7 +970,10 @@ export default function AtcMapClient() {
                       {f.aeroport_depart} → {f.aeroport_arrivee}
                     </span>
                     <br />
-                    <span className="text-slate-500">{f.operationnel_reparation ? 'Réparation externe · ' : ''}Statut : {PHASE_LABELS_FR[f.flight_phase]}</span>
+                    <span className="text-slate-500">
+                      {f.operationnel_reparation ? 'Réparation externe · ' : f.vol_ferry ? 'Ferry · ' : f.aeroport_depart === f.aeroport_arrivee ? 'Vol local · ' : ''}
+                      Statut : {PHASE_LABELS_FR[f.flight_phase]}
+                    </span>
 
                     </span>
                   </button>
