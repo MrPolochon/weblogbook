@@ -2,13 +2,46 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { isCoPdg } from '@/lib/co-pdg-utils';
+import sharp from 'sharp';
 
 const BUCKET = 'cartes-identite';
 const FOLDER = 'avions';
 
+/** Cible : 16:9, 1280×720, rognage centré + optimisé JPEG/WebP. */
+const TARGET_W = 1280;
+const TARGET_H = 720;
+
 function pathFromUrl(url: string): string | null {
   const parts = url.split(`/${BUCKET}/`);
   return parts.length >= 2 ? parts[1] : null;
+}
+
+async function processImage(buffer: ArrayBuffer): Promise<Buffer> {
+  const src = Buffer.from(buffer);
+  const meta = await sharp(src).metadata();
+  const w = meta.width ?? 1;
+  const h = meta.height ?? 1;
+
+  // Déterminer la zone de rognage centrée au ratio 16:9
+  let cropW: number;
+  let cropH: number;
+  if (w / h > TARGET_W / TARGET_H) {
+    // Image plus large que 16:9 → rogner les côtés
+    cropH = h;
+    cropW = Math.round(h * (TARGET_W / TARGET_H));
+  } else {
+    // Image plus haute que 16:9 → rogner le haut/bas
+    cropW = w;
+    cropH = Math.round(w * (TARGET_H / TARGET_W));
+  }
+  const left = Math.round((w - cropW) / 2);
+  const top = Math.round((h - cropH) / 2);
+
+  return sharp(src)
+    .extract({ left, top, width: cropW, height: cropH })
+    .resize(TARGET_W, TARGET_H, { fit: 'fill' })
+    .jpeg({ quality: 88, progressive: true })
+    .toBuffer();
 }
 
 export async function POST(
@@ -54,13 +87,15 @@ export async function POST(
       if (oldPath) await admin.storage.from(BUCKET).remove([oldPath]);
     }
 
-    // Upload de la nouvelle image
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-    const fileName = `${FOLDER}/${id}/photo-${Date.now()}.${ext}`;
-    const buffer = await file.arrayBuffer();
+    // Rogner et redimensionner au format 16:9 (1280×720) centré
+    const rawBuffer = await file.arrayBuffer();
+    const processedBuffer = await processImage(rawBuffer);
+
+    // Upload en JPEG standardisé (extension toujours .jpg)
+    const fileName = `${FOLDER}/${id}/photo-${Date.now()}.jpg`;
     const { error: uploadError } = await admin.storage
       .from(BUCKET)
-      .upload(fileName, buffer, { contentType: file.type, upsert: true });
+      .upload(fileName, processedBuffer, { contentType: 'image/jpeg', upsert: true });
     if (uploadError)
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
 
