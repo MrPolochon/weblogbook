@@ -35,6 +35,10 @@ interface MapFlight {
   avion_immatriculation?: string | null;
   /** Type de l'avion (ex. Boeing 737). */
   type_avion_nom?: string | null;
+  /** Heure de départ prévue saisie au dépôt du plan (SCHEDULED). */
+  heure_depart_estimee?: string | null;
+  /** Heure de départ réelle saisie par l'ATC dans le strip (ATD — ACTUAL). */
+  strip_atd?: string | null;
 }
 
 type HangarJoin = { aeroport_code?: string | null };
@@ -113,6 +117,7 @@ export async function GET() {
         id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, temps_prev_min,
         statut, accepted_at, created_at, pilote_id, vol_sans_atc, current_holder_user_id,
         armee_avion_id, armee_mission_id, compagnie_avion_id,
+        heure_depart_estimee, strip_atd,
         route_ifr, strip_route, strip_sid_atc, sid_depart, star_arrivee, strip_star,
         profiles!plans_vol_pilote_id_fkey(id, identifiant),
         compagnie_avions!plans_vol_compagnie_avion_id_fkey(immatriculation, avion_image_url, types_avion:type_avion_id(nom))
@@ -193,6 +198,8 @@ export async function GET() {
       avion_image_url: avionImg,
       avion_immatriculation: avionImmat,
       type_avion_nom: typeAvionNom,
+      heure_depart_estimee: p.heure_depart_estimee || null,
+      strip_atd: p.strip_atd || null,
     });
   }
 

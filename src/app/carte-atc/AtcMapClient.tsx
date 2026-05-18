@@ -57,6 +57,10 @@ interface MapFlight {
   avion_immatriculation?: string | null;
   /** Type de l'avion. */
   type_avion_nom?: string | null;
+  /** Heure de départ prévue saisie au dépôt du plan (SCHEDULED). */
+  heure_depart_estimee?: string | null;
+  /** Heure de départ réelle saisie par l'ATC dans le strip (ACTUAL ATD). */
+  strip_atd?: string | null;
 }
 
 interface RenderFlight extends MapFlight {
@@ -934,6 +938,45 @@ export default function AtcMapClient() {
                   </span>
                 </div>
               </div>
+
+              {/* SCHEDULED / ACTUAL style FR24 */}
+              {(selectedFlight.heure_depart_estimee || selectedFlight.strip_atd) && (
+                <div className="grid grid-cols-2 divide-x divide-slate-800 border-b border-slate-800">
+                  <div className="px-3 py-2">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Scheduled</p>
+                    <p className="text-sm font-mono font-bold text-slate-200">
+                      {selectedFlight.heure_depart_estimee
+                        ? new Date(selectedFlight.heure_depart_estimee).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+                        : '—'}
+                    </p>
+                  </div>
+                  <div className="px-3 py-2">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Actual</p>
+                    <p className={`text-sm font-mono font-bold ${selectedFlight.strip_atd ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      {selectedFlight.strip_atd
+                        ? (() => {
+                            const ref = selectedFlight.heure_depart_estimee
+                              ? new Date(selectedFlight.heure_depart_estimee)
+                              : new Date();
+                            const raw = selectedFlight.strip_atd.trim().toUpperCase();
+                            const m4 = raw.match(/^(\d{4})$/);
+                            const mH = raw.match(/^(\d{1,2})[H:](\d{2})$/i);
+                            let h: number | null = null, min: number | null = null;
+                            if (m4) { h = parseInt(m4[1].slice(0, 2), 10); min = parseInt(m4[1].slice(2), 10); }
+                            else if (mH) { h = parseInt(mH[1], 10); min = parseInt(mH[2], 10); }
+                            if (h !== null && min !== null) {
+                              const atd = new Date(ref);
+                              atd.setUTCHours(h, min, 0, 0);
+                              if (atd.getTime() < ref.getTime() - 3600_000) atd.setUTCDate(atd.getUTCDate() + 1);
+                              return atd.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+                            }
+                            return selectedFlight.strip_atd;
+                          })()
+                        : '—'}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Infos détaillées */}
               <div className="px-3 py-2.5 space-y-1.5">
