@@ -451,7 +451,7 @@ export default function MaCompagnieClient({
                         <Users className="h-4 w-4" />
                         Alliance
                       </Link>
-                      {isPdg && (
+                      {isLeader && (
                         <button
                           onClick={handleQuitterAlliance}
                           disabled={quittingAlliance}
