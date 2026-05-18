@@ -14,6 +14,27 @@ export function isoReparationTransitEtaFromNow(): string {
   return new Date(Date.now() + randomReparationTransitDelayMs()).toISOString();
 }
 
+export function formatReparationTransitDuration(ms: number): string {
+  const minutesTotal = Math.max(1, Math.round(ms / 60_000));
+  const h = Math.floor(minutesTotal / 60);
+  const m = minutesTotal % 60;
+  if (h <= 0) return `${m} min`;
+  return `${h}h${m > 0 ? String(m).padStart(2, '0') : ''}`;
+}
+
+export async function calculerCoutTransfertReparation(
+  admin: SupabaseClient,
+  aeroportArrivee: string
+): Promise<{ coutBase: number; taxes: number; total: number; tauxTaxe: number }> {
+  const { data: taxesData } = await admin.from('taxes_aeroport')
+    .select('taxe_pourcent')
+    .eq('code_oaci', aeroportArrivee)
+    .single();
+  const tauxTaxe = taxesData?.taxe_pourcent || 2;
+  const taxes = Math.round(COUT_VOL_FERRY * tauxTaxe / 100);
+  return { coutBase: COUT_VOL_FERRY, taxes, total: COUT_VOL_FERRY + taxes, tauxTaxe };
+}
+
 type HangarLite = { aeroport_code?: string | null };
 
 function hangarCodeFromJoined(row: { reparation_hangars?: HangarLite | HangarLite[] | null }): string | null {
@@ -45,68 +66,6 @@ export async function applyEntrepriseTransfertArriveeHangar(
     .single();
   if (!avionCurrent) return { ok: false, error: 'Avion introuvable' };
 
-  const taxesDataRes = await admin.from('taxes_aeroport')
-    .select('taxe_pourcent')
-    .eq('code_oaci', hangarAeroport)
-    .single();
-  const tauxTaxe = taxesDataRes.data?.taxe_pourcent || 2;
-  const taxesTransfert = Math.round(COUT_VOL_FERRY * tauxTaxe / 100);
-  const coutTransfert = COUT_VOL_FERRY + taxesTransfert;
-
-  const { data: compteComp } = await admin.from('felitz_comptes')
-    .select('id, solde')
-    .eq('compagnie_id', demande.compagnie_id)
-    .eq('type', 'entreprise')
-    .single();
-  if (!compteComp) return { ok: false, error: 'Compte entreprise introuvable' };
-  if (compteComp.solde < coutTransfert) {
-    return {
-      ok: false,
-      error: `Solde insuffisant pour le transfert vers le hangar (${coutTransfert.toLocaleString('fr-FR')} F$).`,
-    };
-  }
-
-  const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
-    p_compte_id: compteComp.id,
-    p_montant: coutTransfert,
-  });
-  if (!debitOk) return { ok: false, error: 'Solde insuffisant (transaction concurrente)' };
-
-  const compteRepId = (
-    await admin.from('felitz_comptes')
-      .select('id')
-      .eq('entreprise_reparation_id', demande.entreprise_id)
-      .eq('type', 'reparation')
-      .maybeSingle()
-  ).data?.id;
-  let repairCredited = false;
-
-  await admin.from('felitz_transactions').insert({
-    compte_id: compteComp.id,
-    type: 'debit',
-    montant: COUT_VOL_FERRY,
-    libelle: `Transfert réparation ${avionCurrent.immatriculation} vers ${hangarAeroport}`,
-  });
-  if (taxesTransfert > 0) {
-    await admin.from('felitz_transactions').insert({
-      compte_id: compteComp.id,
-      type: 'debit',
-      montant: taxesTransfert,
-      libelle: `Taxes aéroportuaires ${hangarAeroport} (transfert réparation)`,
-    });
-  }
-
-  if (compteRepId) {
-    await admin.rpc('crediter_compte_safe', { p_compte_id: compteRepId, p_montant: coutTransfert });
-    repairCredited = true;
-    await admin.from('felitz_transactions').insert({
-      compte_id: compteRepId,
-      type: 'credit',
-      montant: coutTransfert,
-      libelle: `Transfert pris en charge pour ${avionCurrent.immatriculation}`,
-    });
-  }
-
   const nowIso = new Date().toISOString();
 
   const { data: demandeLiee } = await admin
@@ -121,24 +80,9 @@ export async function applyEntrepriseTransfertArriveeHangar(
     .select('id');
 
   if (!demandeLiee?.length) {
-    // Rollback avec traces de compensation (au lieu de mouvements silencieux
-    // qui laissaient les lignes débit/crédit initiales sans contrepartie).
-    const { crediterFelitzAvecTrace, debiterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
-    await crediterFelitzAvecTrace(admin, {
-      compteId: compteComp.id,
-      montant: coutTransfert,
-      libelle: `Annulation transit réparation (statut incompatible)`,
-    });
-    if (repairCredited && compteRepId) {
-      await debiterFelitzAvecTrace(admin, {
-        compteId: compteRepId,
-        montant: coutTransfert,
-        libelle: `Annulation crédit transit (statut incompatible)`,
-      });
-    }
     return {
       ok: false,
-      error: 'Transit déjà traité ou statut incompatible (réessayez plus tard ou contactez un admin si le solde a bougé).',
+      error: 'Transit déjà traité ou statut incompatible.',
     };
   }
 

@@ -87,6 +87,15 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
+    if (action === 'marquer_reparation_transfert_repondu') {
+      const currentMetadata = message.metadata || {};
+      await admin.from('messages').update({
+        metadata: { ...currentMetadata, reparation_transfert_repondu: true },
+        lu: true
+      }).eq('id', id);
+      return NextResponse.json({ ok: true });
+    }
+
     if (action === 'encaisser') {
       const result = await encaisserChequeMessage(admin, user.id, message);
       if (!result.ok) {

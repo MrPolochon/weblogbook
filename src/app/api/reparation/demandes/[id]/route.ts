@@ -4,7 +4,13 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { isCoPdg } from '@/lib/co-pdg-utils';
 import { getGamesForDemande } from '@/lib/reparation-games';
 import { resolveAeroportBaseRetour } from '@/lib/reparation-after-ferry';
-import { applyEntrepriseTransfertArriveeHangar, isoReparationTransitEtaFromNow } from '@/lib/reparation-transit';
+import {
+  applyEntrepriseTransfertArriveeHangar,
+  calculerCoutTransfertReparation,
+  formatReparationTransitDuration,
+  isoReparationTransitEtaFromNow,
+  randomReparationTransitDelayMs,
+} from '@/lib/reparation-transit';
 
 export const dynamic = 'force-dynamic';
 
@@ -98,6 +104,113 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return isCoPdg(user!.id, comp.id, admin);
   }
 
+  async function lancerTransfertAutoHangar(transitDureeMs?: number): Promise<NextResponse> {
+    if (!await isCompagniePdg()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+    if (demande.statut !== 'acceptee') return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
+
+    const { data: hangar } = await admin
+      .from('reparation_hangars')
+      .select('aeroport_code')
+      .eq('id', demande.hangar_id)
+      .single();
+    const hangarCode = hangar?.aeroport_code ? String(hangar.aeroport_code).trim().toUpperCase() : '';
+    if (!hangarCode) return NextResponse.json({ error: 'Hangar introuvable.' }, { status: 400 });
+
+    const { data: avion } = await admin
+      .from('compagnie_avions')
+      .select('id, immatriculation, aeroport_actuel')
+      .eq('id', demande.avion_id)
+      .single();
+    if (!avion) return NextResponse.json({ error: 'Avion introuvable.' }, { status: 404 });
+
+    if (String(avion.aeroport_actuel || '').trim().toUpperCase() === hangarCode) {
+      return NextResponse.json({
+        error: `L'avion est déjà au hangar (${hangarCode}). L'entreprise peut confirmer l'arrivée et lancer la réparation.`,
+      }, { status: 400 });
+    }
+
+    const cout = await calculerCoutTransfertReparation(admin, hangarCode);
+    const { data: compteComp } = await admin
+      .from('felitz_comptes')
+      .select('id, solde')
+      .eq('compagnie_id', demande.compagnie_id)
+      .eq('type', 'entreprise')
+      .single();
+    if (!compteComp) return NextResponse.json({ error: 'Compte entreprise introuvable.' }, { status: 400 });
+    if (Number(compteComp.solde ?? 0) < cout.total) {
+      return NextResponse.json({
+        error: `Solde insuffisant pour le ferry automatique vers le hangar (${cout.total.toLocaleString('fr-FR')} F$).`,
+      }, { status: 400 });
+    }
+
+    const { data: debitOk } = await admin.rpc('debiter_compte_safe', {
+      p_compte_id: compteComp.id,
+      p_montant: cout.total,
+    });
+    if (!debitOk) return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente).' }, { status: 400 });
+
+    const imm = avion.immatriculation || demande.avion_id.slice(0, 6).toUpperCase();
+    await admin.from('felitz_transactions').insert({
+      compte_id: compteComp.id,
+      type: 'debit',
+      montant: cout.coutBase,
+      libelle: `Réparation ${imm} — ferry automatique vers ${hangarCode}`,
+    });
+    if (cout.taxes > 0) {
+      await admin.from('felitz_transactions').insert({
+        compte_id: compteComp.id,
+        type: 'debit',
+        montant: cout.taxes,
+        libelle: `Taxes aéroportuaires ${hangarCode} (ferry réparation ${imm})`,
+      });
+    }
+
+    const dureeMs = transitDureeMs && transitDureeMs >= 20 * 60_000 && transitDureeMs <= 4 * 60 * 60_000
+      ? transitDureeMs
+      : randomReparationTransitDelayMs();
+    const etaIso = new Date(Date.now() + dureeMs).toISOString();
+
+    const { data: locked } = await admin
+      .from('reparation_demandes')
+      .update({
+        statut: 'en_transit',
+        entreprise_transit_eta_at: etaIso,
+      })
+      .eq('id', id)
+      .eq('statut', 'acceptee')
+      .select('id')
+      .maybeSingle();
+    if (!locked) {
+      const { crediterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
+      await crediterFelitzAvecTrace(admin, {
+        compteId: compteComp.id,
+        montant: cout.total,
+        libelle: `Annulation ferry réparation ${imm} (statut incompatible)`,
+      });
+      return NextResponse.json({ error: 'Transit déjà traité ou statut incompatible.' }, { status: 409 });
+    }
+
+    await admin.from('compagnie_avions').update({ statut: 'en_transit' }).eq('id', demande.avion_id);
+
+    const { data: comp } = await admin.from('compagnies').select('pdg_id').eq('id', demande.compagnie_id).single();
+    if (comp?.pdg_id) {
+      await admin.from('messages').insert({
+        destinataire_id: comp.pdg_id,
+        titre: `✈️ Ferry réparation lancé — ${imm}`,
+        contenu: `Le ferry automatique vers le hangar ${hangarCode} est lancé.\n\nCoût débité: ${cout.total.toLocaleString('fr-FR')} F$ (${cout.coutBase.toLocaleString('fr-FR')} F$ + ${cout.taxes.toLocaleString('fr-FR')} F$ taxes)\nDurée estimée: ${formatReparationTransitDuration(dureeMs)}\nArrivée estimée: ${new Date(etaIso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}\n\nL'avion sera déplacé automatiquement et la réparation pourra démarrer à l'arrivée.`,
+        type_message: 'normal',
+      });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      cout_total: cout.total,
+      duree_ms: dureeMs,
+      duree_text: formatReparationTransitDuration(dureeMs),
+      eta_at: etaIso,
+    });
+  }
+
   if (action === 'accepter') {
     if (!await isEntrepriseStaff()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     if (demande.statut !== 'demandee') return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
@@ -112,12 +225,54 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const { data: comp } = await admin.from('compagnies').select('pdg_id, nom').eq('id', demande.compagnie_id).single();
     if (comp) {
+      const { data: hangar } = await admin
+        .from('reparation_hangars')
+        .select('aeroport_code')
+        .eq('id', demande.hangar_id)
+        .maybeSingle();
+      const { data: avion } = await admin
+        .from('compagnie_avions')
+        .select('id, immatriculation, aeroport_actuel')
+        .eq('id', demande.avion_id)
+        .maybeSingle();
+      const hangarCode = hangar?.aeroport_code ? String(hangar.aeroport_code).trim().toUpperCase() : '';
+      const avionAirport = avion?.aeroport_actuel ? String(avion.aeroport_actuel).trim().toUpperCase() : '';
+      const imm = avion?.immatriculation || demande.avion_id.slice(0, 6).toUpperCase();
+
       await admin.from('messages').insert({
         destinataire_id: comp.pdg_id,
         titre: `✅ Réparation acceptée`,
-        contenu: `Votre demande de réparation a été acceptée. Acheminez l'avion vers le hangar (vol ferry depuis un hub, ou demandez le transfert à l'entreprise). Les vols ligne ne sont pas autorisés pendant cette phase.${body.commentaire ? `\nMessage : ${body.commentaire}` : ''}`,
+        contenu: `Votre demande de réparation a été acceptée. Acheminez l'avion vers le hangar (vol ferry depuis un hub, ou transfert automatique). Les vols ligne ne sont pas autorisés pendant cette phase.${body.commentaire ? `\nMessage : ${body.commentaire}` : ''}`,
         type_message: 'normal',
       });
+
+      if (hangarCode && avionAirport && avionAirport !== hangarCode) {
+        const cout = await calculerCoutTransfertReparation(admin, hangarCode);
+        const dureeMs = randomReparationTransitDelayMs();
+        await admin.from('messages').insert({
+          destinataire_id: comp.pdg_id,
+          titre: `✈️ Ferry requis vers hangar — ${imm}`,
+          contenu:
+            `L'avion ${imm} est actuellement à ${avionAirport}, mais le hangar de réparation est à ${hangarCode}.\n\n` +
+            `Pour lancer la réparation, vous devez envoyer l'avion au hangar.\n\n` +
+            `Option automatique :\n` +
+            `- Coût: ${cout.total.toLocaleString('fr-FR')} F$ (${cout.coutBase.toLocaleString('fr-FR')} F$ + ${cout.taxes.toLocaleString('fr-FR')} F$ taxes)\n` +
+            `- Durée estimée: ${formatReparationTransitDuration(dureeMs)}\n\n` +
+            `Si vous refusez, la demande sera annulée : l'avion doit être au hangar pour être réparé.`,
+          type_message: 'reparation_transfert_hangar',
+          metadata: {
+            demande_id: id,
+            avion_immatriculation: imm,
+            aeroport_depart: avionAirport,
+            aeroport_arrivee: hangarCode,
+            cout_total: cout.total,
+            cout_base: cout.coutBase,
+            taxes: cout.taxes,
+            transit_duree_ms: dureeMs,
+            reparation_transfert_repondu: false,
+          },
+        });
+      }
     }
     return NextResponse.json({ ok: true });
   }
@@ -197,13 +352,51 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   if (action === 'demander_transfert_hangar') {
+    return lancerTransfertAutoHangar();
+  }
+
+  if (action === 'accepter_transfert_hangar') {
+    const dureeMs = typeof body.transit_duree_ms === 'number'
+      ? body.transit_duree_ms
+      : parseInt(String(body.transit_duree_ms || ''), 10);
+    return lancerTransfertAutoHangar(Number.isFinite(dureeMs) ? dureeMs : undefined);
+  }
+
+  if (action === 'refuser_transfert_hangar') {
     if (!await isCompagniePdg()) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     if (demande.statut !== 'acceptee') return NextResponse.json({ error: ERR_REPARATION_STATUT }, { status: 400 });
 
-    await admin.from('reparation_demandes').update({
-      statut: 'en_transit',
-      entreprise_transit_eta_at: isoReparationTransitEtaFromNow(),
-    }).eq('id', id);
+    const { data: avion } = await admin
+      .from('compagnie_avions')
+      .select('immatriculation')
+      .eq('id', demande.avion_id)
+      .maybeSingle();
+    const imm = avion?.immatriculation || demande.avion_id.slice(0, 6).toUpperCase();
+
+    await admin.from('reparation_demandes').update({ statut: 'annulee' }).eq('id', id);
+
+    const [{ data: comp }, { data: ent }] = await Promise.all([
+      admin.from('compagnies').select('pdg_id').eq('id', demande.compagnie_id).single(),
+      admin.from('entreprises_reparation').select('pdg_id').eq('id', demande.entreprise_id).single(),
+    ]);
+
+    if (comp?.pdg_id) {
+      await admin.from('messages').insert({
+        destinataire_id: comp.pdg_id,
+        titre: `❌ Réparation annulée — ${imm}`,
+        contenu: `Vous avez refusé le ferry automatique vers le hangar. La demande est annulée : l'avion doit être envoyé au hangar pour pouvoir être réparé.`,
+        type_message: 'normal',
+      });
+    }
+    if (ent?.pdg_id) {
+      await admin.from('messages').insert({
+        destinataire_id: ent.pdg_id,
+        titre: `❌ Réparation annulée — ${imm}`,
+        contenu: `La compagnie a refusé le ferry automatique vers le hangar. La demande est annulée.`,
+        type_message: 'normal',
+      });
+    }
+
     return NextResponse.json({ ok: true });
   }
 
@@ -506,6 +699,45 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ ok: true, retour_aeroport: baseCible });
     }
 
+    const { data: avionRetour } = await admin
+      .from('compagnie_avions')
+      .select('immatriculation')
+      .eq('id', demande.avion_id)
+      .maybeSingle();
+    const immRetour = avionRetour?.immatriculation || demande.avion_id.slice(0, 6).toUpperCase();
+    const coutRetour = await calculerCoutTransfertReparation(admin, baseCible.toUpperCase());
+    const { data: compteCompRetour } = await admin
+      .from('felitz_comptes')
+      .select('id, solde')
+      .eq('compagnie_id', demande.compagnie_id)
+      .eq('type', 'entreprise')
+      .single();
+    if (!compteCompRetour) return NextResponse.json({ error: 'Compte entreprise introuvable.' }, { status: 400 });
+    if (Number(compteCompRetour.solde ?? 0) < coutRetour.total) {
+      return NextResponse.json({
+        error: `Solde insuffisant pour le transit retour (${coutRetour.total.toLocaleString('fr-FR')} F$).`,
+      }, { status: 400 });
+    }
+    const { data: debitRetourOk } = await admin.rpc('debiter_compte_safe', {
+      p_compte_id: compteCompRetour.id,
+      p_montant: coutRetour.total,
+    });
+    if (!debitRetourOk) return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente).' }, { status: 400 });
+    await admin.from('felitz_transactions').insert({
+      compte_id: compteCompRetour.id,
+      type: 'debit',
+      montant: coutRetour.coutBase,
+      libelle: `Réparation ${immRetour} — transit retour vers ${baseCible.toUpperCase()}`,
+    });
+    if (coutRetour.taxes > 0) {
+      await admin.from('felitz_transactions').insert({
+        compte_id: compteCompRetour.id,
+        type: 'debit',
+        montant: coutRetour.taxes,
+        libelle: `Taxes aéroportuaires ${baseCible.toUpperCase()} (retour réparation ${immRetour})`,
+      });
+    }
+
     const etaIso = isoReparationTransitEtaFromNow();
     const etaFmt = new Date(etaIso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -521,7 +753,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         destinataire_id: comp.pdg_id,
         titre: `🔧 Réparation — retour automatique`,
         contenu:
-          `L'avion part en transit roulier vers votre aéroport d'origine ${baseCible}. Arrivée estimée avant le ${etaFmt} (entre 20 min et 4 h). ` +
+          `L'avion part en transit roulier vers votre aéroport d'origine ${baseCible}. Coût débité: ${coutRetour.total.toLocaleString('fr-FR')} F$. Arrivée estimée avant le ${etaFmt} (entre 20 min et 4 h). ` +
           `Vous pouvez aussi faire un vol ferry vers ${baseCible} pour boucler plus vite : la réparation sera clôturée dès arrivée.`,
         type_message: 'normal',
       });
@@ -535,7 +767,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   if (action === 'annuler') {
-    if (!await isCompagniePdg() && !await isEntrepriseStaff()) {
+    const cancelledByCompany = await isCompagniePdg();
+    const cancelledByEntreprise = !cancelledByCompany && await isEntrepriseStaff();
+    if (!cancelledByCompany && !cancelledByEntreprise) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
     if (['completee', 'payee', 'facturee', 'annulee'].includes(demande.statut)) {
@@ -547,6 +781,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { data: avionActuel } = await admin.from('compagnie_avions').select('statut').eq('id', demande.avion_id).single();
     if (avionActuel?.statut === 'en_reparation') {
       await admin.from('compagnie_avions').update({ statut: 'ground' }).eq('id', demande.avion_id);
+    }
+
+    const [{ data: avion }, { data: comp }, { data: ent }] = await Promise.all([
+      admin.from('compagnie_avions').select('immatriculation').eq('id', demande.avion_id).maybeSingle(),
+      admin.from('compagnies').select('pdg_id, nom').eq('id', demande.compagnie_id).maybeSingle(),
+      admin.from('entreprises_reparation').select('pdg_id, nom').eq('id', demande.entreprise_id).maybeSingle(),
+    ]);
+    const imm = avion?.immatriculation || demande.avion_id.slice(0, 6).toUpperCase();
+    if (cancelledByCompany && ent?.pdg_id) {
+      await admin.from('messages').insert({
+        destinataire_id: ent.pdg_id,
+        titre: `❌ Demande annulée — ${imm}`,
+        contenu: `La compagnie ${comp?.nom || 'cliente'} a annulé la demande de réparation pour l'avion ${imm}.`,
+        type_message: 'normal',
+      });
+    }
+    if (cancelledByEntreprise && comp?.pdg_id) {
+      await admin.from('messages').insert({
+        destinataire_id: comp.pdg_id,
+        titre: `❌ Demande annulée — ${imm}`,
+        contenu: `L'entreprise de réparation ${ent?.nom || ''} a annulé la demande de réparation pour l'avion ${imm}.`,
+        type_message: 'normal',
+      });
     }
     return NextResponse.json({ ok: true });
   }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Wrench, CreditCard, Loader2 } from 'lucide-react';
+import { Wrench, CreditCard, Loader2, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Demande {
@@ -36,6 +36,7 @@ export default function CompagnieReparationsClient({ compagnieId, isPdg }: { com
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState<string | null>(null);
   const [askingTransfer, setAskingTransfer] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -72,7 +73,7 @@ export default function CompagnieReparationsClient({ compagnieId, isPdg }: { com
   }
 
   async function handleDemanderTransfert(demandeId: string) {
-    if (!confirm('Confirmer la demande de transfert vers le hangar de réparation ? Les frais de transfert seront facturés par l\'entreprise de réparation.')) return;
+    if (!confirm('Confirmer le ferry automatique vers le hangar de réparation ? Les frais seront débités du compte de la compagnie.')) return;
     setAskingTransfer(demandeId);
     try {
       const res = await fetch(`/api/reparation/demandes/${demandeId}`, {
@@ -89,6 +90,27 @@ export default function CompagnieReparationsClient({ compagnieId, isPdg }: { com
       toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setAskingTransfer(null);
+    }
+  }
+
+  async function handleAnnuler(demandeId: string) {
+    if (!confirm('Annuler cette demande de réparation ?')) return;
+    setCancelling(demandeId);
+    try {
+      const res = await fetch(`/api/reparation/demandes/${demandeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'annuler' }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      toast.success('Demande de réparation annulée');
+      setDemandes(prev => prev.filter(dm => dm.id !== demandeId));
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setCancelling(null);
     }
   }
 
@@ -132,6 +154,16 @@ export default function CompagnieReparationsClient({ compagnieId, isPdg }: { com
                 >
                   {paying === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CreditCard className="h-3.5 w-3.5" />}
                   Payer {d.prix_total?.toLocaleString('fr-FR')} F$
+                </button>
+              )}
+              {['demandee', 'acceptee'].includes(d.statut) && isPdg && (
+                <button
+                  onClick={() => handleAnnuler(d.id)}
+                  disabled={cancelling === d.id || askingTransfer === d.id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-slate-700 text-slate-300 rounded-lg hover:bg-red-600/30 hover:text-red-200 disabled:opacity-50 transition-colors shrink-0"
+                >
+                  {cancelling === d.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5" />}
+                  Annuler
                 </button>
               )}
               {d.statut === 'acceptee' && isPdg && (

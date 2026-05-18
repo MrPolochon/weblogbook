@@ -18,6 +18,7 @@ type PlanPaiement = {
   revenue_brut: number | null;
   salaire_pilote: number | null;
   temps_prev_min: number;
+  heure_depart_estimee?: string | null;
   accepted_at: string | null;
   demande_cloture_at?: string | null;
   numero_vol?: string;
@@ -52,6 +53,8 @@ type PaiementVolResult = {
     taxes: number;
     coefficient: number;
     tempsReel: number;
+    ecartPonctualite?: number;
+    arriveePrevueAt?: string;
     bonusCargaison?: number;
     remboursementPret?: number;
     taxeAlliance?: number;
@@ -169,6 +172,29 @@ function calculerTempsReelPlan(plan: PlanPaiement, dateFinVol: Date): number {
   return tempsReelMin;
 }
 
+function calculerTimingPonctualitePlan(
+  plan: PlanPaiement,
+  dateFinVol: Date
+): { tempsReelMin: number; ecartPonctualiteMin: number; arriveePrevueAt: Date | null } {
+  const tempsReelMin = calculerTempsReelPlan(plan, dateFinVol);
+  const departPrevuAt = plan.heure_depart_estimee ? new Date(plan.heure_depart_estimee) : null;
+  if (departPrevuAt && Number.isFinite(departPrevuAt.getTime())) {
+    const arriveePrevueAt = new Date(departPrevuAt.getTime() + plan.temps_prev_min * 60_000);
+    const ecartPonctualiteMin = Math.abs(Math.round((dateFinVol.getTime() - arriveePrevueAt.getTime()) / 60_000));
+    return { tempsReelMin, ecartPonctualiteMin, arriveePrevueAt };
+  }
+
+  return {
+    tempsReelMin,
+    ecartPonctualiteMin: Math.abs(tempsReelMin - plan.temps_prev_min),
+    arriveePrevueAt: null,
+  };
+}
+
+function formatUtcHHMM(d: Date): string {
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}z`;
+}
+
 async function payerMissionArmee(
   admin: AdminClient,
   plan: PlanPaiement,
@@ -238,6 +264,14 @@ function calculerCoefficientPonctualite(
   typeCargaison?: TypeCargaison | null
 ): number {
   const ecart = Math.abs(tempsReelMin - tempsPrevuMin);
+  return calculerCoefficientPonctualiteDepuisEcart(ecart, typeCargaison);
+}
+
+function calculerCoefficientPonctualiteDepuisEcart(
+  ecartMinutes: number,
+  typeCargaison?: TypeCargaison | null
+): number {
+  const ecart = Math.abs(ecartMinutes);
   if (ecart <= 1) return 1.0;
 
   // Multiplicateur de sensibilité pour le cargo
@@ -420,17 +454,18 @@ export async function envoyerChequesVol(
     return { success: false, message: 'Le plan de vol doit être accepté avant le paiement.' };
   }
 
-  // Calculer le temps réel depuis le départ (ATD) jusqu'à la demande de clôture par le pilote
-  // Priorité : heure ATD saisie par l'ATC > heure d'acceptation (accepted_at)
-  // Garde-fous si ATD invalide : durée négative, trop courte (heure d'arrivée saisie par erreur), trop longue (mauvaise date)
-  const tempsReelMin = calculerTempsReelPlan(plan, dateFinVol);
+  // Ponctualité hors armée : si le pilote a saisi une heure de départ prévue,
+  // on compare l'arrivée réelle à l'arrivée planifiée (départ prévu + durée).
+  // Sinon, fallback historique : durée réelle vs durée prévue.
+  const timingPonctualite = calculerTimingPonctualitePlan(plan, dateFinVol);
+  const { tempsReelMin, ecartPonctualiteMin, arriveePrevueAt } = timingPonctualite;
 
   // Type de cargaison : vols cargo ou passagers avec cargo complémentaire (ponctualité + bonus)
   const typeCargaison = plan.type_cargaison
     ? (plan.type_cargaison as TypeCargaison)
     : null;
 
-  const coefficient = calculerCoefficientPonctualite(plan.temps_prev_min, tempsReelMin, typeCargaison);
+  const coefficient = calculerCoefficientPonctualiteDepuisEcart(ecartPonctualiteMin, typeCargaison);
 
   // Calculer le bonus de cargaison (dangereux/surdimensionné = +1% ; marchandise rare = déjà inclus dans revenue_brut)
   let bonusCargaison = 0;
@@ -571,7 +606,13 @@ export async function envoyerChequesVol(
 
   // Chèque salaire pilote
   if (salaireEffectif > 0) {
-    let contenuSalaire = `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min\nCoefficient de ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`;
+    let contenuSalaire = `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min`;
+    if (arriveePrevueAt) {
+      contenuSalaire += `\nArrivée prévue: ${formatUtcHHMM(arriveePrevueAt)}\nArrivée réelle: ${formatUtcHHMM(dateFinVol)}\nÉcart horaire: ${ecartPonctualiteMin} min`;
+    } else {
+      contenuSalaire += `\nÉcart durée: ${ecartPonctualiteMin} min`;
+    }
+    contenuSalaire += `\nCoefficient de ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`;
     if (plan.type_cargaison === 'marchandise_rare' && plan.type_cargaison_libelle) {
       contenuSalaire += `\n\n💎 Marchandise rare transportée : ${plan.type_cargaison_libelle}`;
     }
@@ -752,7 +793,13 @@ export async function envoyerChequesVol(
 
   // Chèque revenu compagnie
   if (revenuLocataire > 0 && compagnie.pdg_id) {
-    let contenuMessage = `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$\nCoefficient ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$\nSalaire pilote: ${salaireEffectif.toLocaleString('fr-FR')} F$`;
+    let contenuMessage = `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$`;
+    if (arriveePrevueAt) {
+      contenuMessage += `\nArrivée prévue: ${formatUtcHHMM(arriveePrevueAt)}\nArrivée réelle: ${formatUtcHHMM(dateFinVol)}\nÉcart horaire: ${ecartPonctualiteMin} min`;
+    } else {
+      contenuMessage += `\nÉcart durée: ${ecartPonctualiteMin} min`;
+    }
+    contenuMessage += `\nCoefficient ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$\nSalaire pilote: ${salaireEffectif.toLocaleString('fr-FR')} F$`;
 
     if (remboursementPret > 0) {
       const resteApres = (pretInfo?.montant_total_du || 0) - (pretInfo?.montant_rembourse || 0) - remboursementPret;
@@ -839,6 +886,8 @@ export async function envoyerChequesVol(
       taxes: taxesReellementPrelevees,
       coefficient,
       tempsReel: tempsReelMin,
+      ecartPonctualite: ecartPonctualiteMin,
+      arriveePrevueAt: arriveePrevueAt?.toISOString(),
       bonusCargaison: montantBonus > 0 ? montantBonus : undefined,
       remboursementPret: remboursementPret > 0 ? remboursementPret : undefined,
       taxeAlliance: taxeAlliance > 0 ? taxeAlliance : undefined,
@@ -917,13 +966,8 @@ export async function finaliserCloturePlan(
       .single();
 
     if (siaviAvion) {
-      let tempsReelMin = plan.temps_prev_min;
-      if (plan.accepted_at && plan.demande_cloture_at) {
-        const acceptedAt = new Date(plan.accepted_at);
-        const demandeCloture = new Date(plan.demande_cloture_at);
-        const diffMs = demandeCloture.getTime() - acceptedAt.getTime();
-        tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
-      }
+      const timingPonctualite = calculerTimingPonctualitePlan(plan, dateCalculTemps);
+      const { tempsReelMin, ecartPonctualiteMin, arriveePrevueAt } = timingPonctualite;
 
       usureAppliquee = calculerUsureVol(tempsReelMin);
       const nouvelleUsure = Math.max(0, Number(siaviAvion.usure_percent) - usureAppliquee);
@@ -942,14 +986,14 @@ export async function finaliserCloturePlan(
         })
         .eq('id', siaviAvion.id);
 
-      // Calcul revenu MEDEVAC via décote exponentielle
+      // Calcul revenu MEDEVAC via décote exponentielle.
+      // Hors armée, l'écart se base sur l'arrivée prévue si l'heure de départ a été saisie.
       const { data: config } = await admin.from('siavi_config').select('*').eq('id', 1).single();
       if (config) {
-        const retard = Math.max(0, tempsReelMin - plan.temps_prev_min);
         const base = Number(config.revenu_base_medevac) || 35000;
         const k = Number(config.decote_exponentielle_k) || 0.02;
         const plancher = Number(config.revenu_plancher) || 5000;
-        const revenu = Math.max(plancher, Math.round(base * Math.exp(-k * retard)));
+        const revenu = Math.max(plancher, Math.round(base * Math.exp(-k * ecartPonctualiteMin)));
         const pctPilote = Number(config.pourcentage_salaire_pilote) || 40;
         const salairePilote = Math.round(revenu * pctPilote / 100);
         const revenuSiavi = revenu - salairePilote;
@@ -976,7 +1020,7 @@ export async function finaliserCloturePlan(
               destinataire_id: plan.pilote_id,
               expediteur_id: null,
               titre: `Salaire MEDEVAC - Vol ${plan.numero_vol || 'N/A'}`,
-              contenu: `Vol MEDEVAC effectué avec succès !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min\nRetard: ${retard} min\n\nRevenu total: ${revenu.toLocaleString('fr-FR')} F$\nVotre part (${pctPilote}%): ${salairePilote.toLocaleString('fr-FR')} F$`,
+              contenu: `Vol MEDEVAC effectué avec succès !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min${arriveePrevueAt ? `\nArrivée prévue: ${formatUtcHHMM(arriveePrevueAt)}\nArrivée réelle: ${formatUtcHHMM(dateCalculTemps)}\nÉcart horaire: ${ecartPonctualiteMin} min` : `\nÉcart durée: ${ecartPonctualiteMin} min`}\n\nRevenu total: ${revenu.toLocaleString('fr-FR')} F$\nVotre part (${pctPilote}%): ${salairePilote.toLocaleString('fr-FR')} F$`,
               type_message: 'cheque_salaire',
               cheque_montant: salairePilote,
               cheque_encaisse: false,

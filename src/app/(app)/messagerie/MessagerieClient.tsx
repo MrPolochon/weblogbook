@@ -6,7 +6,7 @@ import {
   Inbox, Send, CreditCard, Mail, Trash2, Loader2, X,
   UserPlus, Check, XCircle, AlertTriangle, Banknote, CheckCheck,
   Reply, Forward, CheckSquare, Search, ArrowLeft, PenLine,
-  Megaphone, User,
+  Megaphone, User, Wrench,
 } from 'lucide-react';
 import ChequeVisuel from '@/components/ChequeVisuel';
 import MessageContent from '@/components/MessageContent';
@@ -40,6 +40,11 @@ interface Message {
     amende_payee?: boolean;
     broadcast_id?: string;
     broadcast_audience?: string;
+    demande_id?: string;
+    avion_immatriculation?: string;
+    cout_total?: number;
+    transit_duree_ms?: number;
+    reparation_transfert_repondu?: boolean;
   } | null;
   expediteur?: { identifiant: string } | { identifiant: string }[] | null;
   destinataire?: { identifiant: string } | { identifiant: string }[] | null;
@@ -120,6 +125,8 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   const [invitationError, setInvitationError] = useState<string | null>(null);
   const [processingAmende, setProcessingAmende] = useState<string | null>(null);
   const [amendeError, setAmendeError] = useState<string | null>(null);
+  const [processingReparationTransfer, setProcessingReparationTransfer] = useState<string | null>(null);
+  const [reparationTransferError, setReparationTransferError] = useState<string | null>(null);
   const [encaisserToutLoading, setEncaisserToutLoading] = useState(false);
   const [encaisserToutRecap, setEncaisserToutRecap] = useState<{ nb_cheques: number; total: number; par_compte: { label: string; nb: number; total: number }[] } | null>(null);
   const [markAllLoading, setMarkAllLoading] = useState(false);
@@ -173,6 +180,41 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       if (selectedMessage?.id === messageId) setSelectedMessage({ ...selectedMessage, metadata: { ...selectedMessage.metadata, invitation_repondue: true } });
       startTransition(() => router.refresh());
     } catch (e) { setInvitationError(e instanceof Error ? e.message : 'Erreur'); } finally { setProcessingInvitation(null); }
+  }
+
+  async function handleRepondreTransfertReparation(messageId: string, demandeId: string, action: 'accepter' | 'refuser') {
+    if (action === 'refuser' && !confirm('Refuser le ferry automatique ? La demande de réparation sera annulée.')) return;
+    setProcessingReparationTransfer(messageId);
+    setReparationTransferError(null);
+    try {
+      const payload = action === 'accepter'
+        ? { action: 'accepter_transfert_hangar', transit_duree_ms: selectedMessage?.metadata?.transit_duree_ms }
+        : { action: 'refuser_transfert_hangar' };
+      const res = await fetch(`/api/reparation/demandes/${demandeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      await fetch(`/api/messages/${messageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'marquer_reparation_transfert_repondu' }),
+      });
+      if (selectedMessage?.id === messageId) {
+        setSelectedMessage({
+          ...selectedMessage,
+          metadata: { ...selectedMessage.metadata, reparation_transfert_repondu: true },
+        });
+      }
+      toast.success(action === 'accepter' ? 'Ferry automatique lancé.' : 'Demande de réparation annulée.');
+      startTransition(() => router.refresh());
+    } catch (e) {
+      setReparationTransferError(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setProcessingReparationTransfer(null);
+    }
   }
 
   async function handleMarkAsRead(id: string) {
@@ -261,6 +303,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   function typeBorderColor(msg: Message): string {
     if (CHEQUE_TYPES.includes(msg.type_message)) return 'border-l-emerald-500';
     if (msg.type_message === 'recrutement') return 'border-l-teal-500';
+    if (msg.type_message === 'reparation_transfert_hangar') return 'border-l-sky-500';
     if (['amende_ifsa', 'relance_amende'].includes(msg.type_message)) return 'border-l-red-500';
     if (msg.type_message === 'broadcast') return 'border-l-amber-500';
     return 'border-l-violet-500';
@@ -271,6 +314,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       return <span className={`text-[10px] px-1.5 py-0.5 rounded ${msg.cheque_encaisse ? 'bg-slate-700/50 text-slate-500' : 'bg-emerald-500/15 text-emerald-400'}`}>{msg.cheque_encaisse ? 'Encaissé' : `${msg.cheque_montant?.toLocaleString('fr-FR')} F$`}</span>;
     }
     if (msg.type_message === 'recrutement') return <span className={`text-[10px] px-1.5 py-0.5 rounded ${msg.metadata?.invitation_repondue ? 'bg-slate-700/50 text-slate-500' : 'bg-teal-500/15 text-teal-400'}`}>{msg.metadata?.invitation_repondue ? 'Répondu' : 'Offre'}</span>;
+    if (msg.type_message === 'reparation_transfert_hangar') return <span className={`text-[10px] px-1.5 py-0.5 rounded ${msg.metadata?.reparation_transfert_repondu ? 'bg-slate-700/50 text-slate-500' : 'bg-sky-500/15 text-sky-400'}`}>{msg.metadata?.reparation_transfert_repondu ? 'Répondu' : 'Ferry réparation'}</span>;
     if (['amende_ifsa', 'relance_amende'].includes(msg.type_message)) return <span className={`text-[10px] px-1.5 py-0.5 rounded ${msg.metadata?.amende_payee ? 'bg-slate-700/50 text-slate-500' : 'bg-red-500/15 text-red-400'}`}>{msg.metadata?.amende_payee ? 'Payée' : `${msg.metadata?.montant_amende?.toLocaleString('fr-FR')} F$`}</span>;
     if (msg.type_message === 'broadcast') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 inline-flex items-center gap-1"><Megaphone className="h-2.5 w-2.5" />Diffusion</span>;
     return null;
@@ -375,6 +419,42 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                     <button onClick={() => handleRepondreInvitation(m.id, m.metadata!.invitation_id!, 'refuser')} disabled={processingInvitation === m.id} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"><XCircle className="h-3.5 w-3.5" />Refuser</button>
                   </div>
                 ) : <p className="text-xs text-slate-500">Invitation expirée.</p>}
+              </div>
+            </div>
+          ) : m.type_message === 'reparation_transfert_hangar' ? (
+            <div className="space-y-5">
+              <MessageContent className="text-slate-300 leading-relaxed" content={m.contenu} />
+              <div className="p-5 rounded-lg bg-sky-500/5 border border-sky-500/20">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 rounded-lg bg-sky-500/15"><Wrench className="h-5 w-5 text-sky-400" /></div>
+                  <div>
+                    <p className="font-semibold text-slate-100 text-sm">Ferry automatique vers hangar</p>
+                    <p className="text-xs text-sky-400">{m.metadata?.avion_immatriculation || 'Avion'} · {m.metadata?.cout_total?.toLocaleString('fr-FR') || '?'} F$</p>
+                  </div>
+                </div>
+                {reparationTransferError && <p className="text-red-400 text-xs mb-3">{reparationTransferError}</p>}
+                {m.metadata?.reparation_transfert_repondu ? (
+                  <p className="text-sm text-slate-500 flex items-center gap-1.5"><Check className="h-4 w-4" />Répondu</p>
+                ) : m.metadata?.demande_id ? (
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={() => handleRepondreTransfertReparation(m.id, m.metadata!.demande_id!, 'accepter')}
+                      disabled={processingReparationTransfer === m.id}
+                      className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {processingReparationTransfer === m.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                      Accepter le ferry
+                    </button>
+                    <button
+                      onClick={() => handleRepondreTransfertReparation(m.id, m.metadata!.demande_id!, 'refuser')}
+                      disabled={processingReparationTransfer === m.id}
+                      className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      Refuser et annuler
+                    </button>
+                  </div>
+                ) : <p className="text-xs text-slate-500">Demande de réparation introuvable.</p>}
               </div>
             </div>
           ) : ['amende_ifsa', 'relance_amende'].includes(m.type_message) ? (
