@@ -25,10 +25,40 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Seul le PDG ou le co-PDG peut faire quitter la compagnie' }, { status: 403 });
   }
 
-  const { data: mem } = await admin.from('alliance_membres').select('alliance_id').eq('compagnie_id', compagnie_id).eq('alliance_id', allianceId).single();
+  const { data: mem } = await admin
+    .from('alliance_membres')
+    .select('id, alliance_id, role')
+    .eq('compagnie_id', compagnie_id)
+    .eq('alliance_id', allianceId)
+    .single();
   if (!mem) return NextResponse.json({ error: 'Cette compagnie n\'est pas dans cette alliance' }, { status: 400 });
 
-  const { error } = await admin.rpc('alliance_quitter', { p_compagnie_id: compagnie_id });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  // Retrait du membre et mise à null de l'alliance sur la compagnie
+  await admin.from('alliance_membres').delete().eq('id', mem.id);
+  await admin.from('compagnies').update({ alliance_id: null }).eq('id', compagnie_id);
+
+  // Compter les membres restants
+  const { count: restants } = await admin
+    .from('alliance_membres')
+    .select('*', { count: 'exact', head: true })
+    .eq('alliance_id', allianceId);
+
+  if ((restants ?? 0) === 0) {
+    // Plus personne : supprimer l'alliance
+    await admin.from('alliances').delete().eq('id', allianceId);
+  } else if (mem.role === 'president') {
+    // Le président part : promouvoir le membre le plus ancien
+    const { data: plusAncien } = await admin
+      .from('alliance_membres')
+      .select('id')
+      .eq('alliance_id', allianceId)
+      .order('joined_at', { ascending: true })
+      .limit(1)
+      .single();
+    if (plusAncien) {
+      await admin.from('alliance_membres').update({ role: 'president' }).eq('id', plusAncien.id);
+    }
+  }
+
   return NextResponse.json({ ok: true });
 }
