@@ -116,6 +116,20 @@ export async function POST(request: Request) {
         ) {
           return NextResponse.json({ error: 'Le plan ne correspond pas à la mission (liaison ou durée).' }, { status: 400 });
         }
+        const cooldownMs = mission.cooldownMinutes * 60_000;
+        const { data: lastGlobal } = await admin
+          .from('armee_missions_log')
+          .select('created_at')
+          .eq('mission_id', mission.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (lastGlobal?.created_at) {
+          const last = new Date(lastGlobal.created_at).getTime();
+          if (Date.now() - last < cooldownMs) {
+            return NextResponse.json({ error: `Mission indisponible (cooldown global ${mission.cooldownMinutes} min).` }, { status: 400 });
+          }
+        }
         armeeMissionId = mission.id;
       }
 

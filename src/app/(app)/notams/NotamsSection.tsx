@@ -12,6 +12,7 @@ type Notam = {
   code_aeroport: string;
   du_at: string;
   au_at: string;
+  permanent?: boolean | null;
   champ_a: string | null;
   champ_e: string;
   champ_d: string | null;

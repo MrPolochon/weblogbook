@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
 import { calculerUsureVol, TAUX_PRELEVEMENT_PRET } from '@/lib/compagnie-utils';
+import { ARME_MISSIONS } from '@/lib/armee-missions';
 import {
   ensureCompteEntreprise,
   ensureComptePersonnel,
@@ -38,6 +39,31 @@ type PlanPaiement = {
   medevac_segment_index?: number | null;
   medevac_total_segments?: number | null;
   medevac_next_plan_id?: string | null;
+  armee_mission_id?: string | null;
+};
+
+type PaiementVolResult = {
+  success: boolean;
+  message?: string;
+  revenus?: {
+    brut: number;
+    net: number;
+    salaire: number;
+    taxes: number;
+    coefficient: number;
+    tempsReel: number;
+    bonusCargaison?: number;
+    remboursementPret?: number;
+    taxeAlliance?: number;
+    codeshare?: number;
+  };
+  missionArmee?: {
+    missionId: string;
+    reward: number;
+    base: number;
+    retard: number;
+    coefficient: number;
+  };
 };
 
 /**
@@ -119,6 +145,83 @@ export function parseStripATD(
   }
 
   return atd;
+}
+
+function calculerTempsReelPlan(plan: PlanPaiement, dateFinVol: Date): number {
+  let tempsReelMin = plan.temps_prev_min;
+  if (plan.accepted_at) {
+    const acceptedAt = new Date(plan.accepted_at);
+    const departureTime = parseStripATD(plan.strip_atd, acceptedAt) || acceptedAt;
+    const diffMs = dateFinVol.getTime() - departureTime.getTime();
+    tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
+    const usedAtd = departureTime.getTime() !== acceptedAt.getTime();
+    const seuilMin = Math.max(2, Math.floor(plan.temps_prev_min * 0.2));
+    const seuilMax = Math.min(1440, plan.temps_prev_min * 4);
+    const dureeInvalide =
+      diffMs < 0 ||
+      (usedAtd && tempsReelMin < seuilMin) ||
+      (usedAtd && tempsReelMin > seuilMax);
+    if (dureeInvalide) {
+      const diffMsBase = dateFinVol.getTime() - acceptedAt.getTime();
+      tempsReelMin = Math.max(1, Math.round(diffMsBase / 60000));
+    }
+  }
+  return tempsReelMin;
+}
+
+async function payerMissionArmee(
+  admin: AdminClient,
+  plan: PlanPaiement,
+  dateFinVol: Date
+): Promise<PaiementVolResult['missionArmee'] | { error: string } | null> {
+  if (!plan.armee_mission_id) return null;
+
+  const mission = ARME_MISSIONS.find((m) => m.id === plan.armee_mission_id);
+  if (!mission) {
+    return { error: 'Mission militaire introuvable pour ce plan.' };
+  }
+
+  const tempsReelMin = calculerTempsReelPlan(plan, dateFinVol);
+  const retard = Math.max(0, tempsReelMin - plan.temps_prev_min);
+  const coefficient = Math.max(0.2, 1 - retard * 0.01);
+  const base = Math.floor(Math.random() * (mission.rewardMax - mission.rewardMin + 1)) + mission.rewardMin;
+  const reward = Math.max(0, Math.round(base * coefficient));
+
+  const { data: compteMilitaire } = await admin
+    .from('felitz_comptes')
+    .select('id')
+    .eq('type', 'militaire')
+    .limit(1)
+    .maybeSingle();
+  if (!compteMilitaire) {
+    return { error: 'Compte militaire introuvable (mission non payée).' };
+  }
+
+  await admin.rpc('crediter_compte_safe', { p_compte_id: compteMilitaire.id, p_montant: reward });
+
+  await admin.from('felitz_transactions').insert({
+    compte_id: compteMilitaire.id,
+    type: 'credit',
+    montant: reward,
+    libelle: `Mission militaire: ${mission.titre}`,
+    reference_id: plan.id,
+  });
+
+  await admin.from('armee_missions_log').insert({
+    mission_id: mission.id,
+    user_id: plan.pilote_id,
+    reward,
+  });
+
+  await admin.from('messages').insert({
+    destinataire_id: plan.pilote_id,
+    expediteur_id: null,
+    titre: `Mission militaire validée - ${mission.titre}`,
+    contenu: `Mission clôturée via plan de vol ${plan.numero_vol || 'N/A'}.\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min\nRetard: ${retard} min\nCoefficient: ${Math.round(coefficient * 100)}%\n\nRécompense versée au compte militaire: ${reward.toLocaleString('fr-FR')} F$`,
+    type_message: 'notification',
+  });
+
+  return { missionId: mission.id, reward, base, retard, coefficient };
 }
 
 /**
@@ -302,9 +405,14 @@ export async function envoyerChequesVol(
   admin: AdminClient,
   plan: PlanPaiement,
   dateFinVol: Date // Date de fin du vol pour le calcul (demande_cloture_at, pas confirmation ATC)
-): Promise<{ success: boolean; message?: string; revenus?: { brut: number; net: number; salaire: number; taxes: number; coefficient: number; tempsReel: number; bonusCargaison?: number; remboursementPret?: number; taxeAlliance?: number; codeshare?: number } }> {
+): Promise<PaiementVolResult> {
+  const missionArmee = await payerMissionArmee(admin, plan, dateFinVol);
+  if (missionArmee && 'error' in missionArmee) {
+    return { success: false, message: missionArmee.error };
+  }
+
   if (!plan.vol_commercial || !plan.compagnie_id || !plan.revenue_brut || plan.revenue_brut <= 0) {
-    return { success: true, message: 'Vol non commercial ou sans revenus' };
+    return { success: true, message: 'Vol non commercial ou sans revenus', missionArmee: missionArmee || undefined };
   }
 
   // Sécurité : vérifier que le plan a été accepté avant de payer
@@ -315,24 +423,7 @@ export async function envoyerChequesVol(
   // Calculer le temps réel depuis le départ (ATD) jusqu'à la demande de clôture par le pilote
   // Priorité : heure ATD saisie par l'ATC > heure d'acceptation (accepted_at)
   // Garde-fous si ATD invalide : durée négative, trop courte (heure d'arrivée saisie par erreur), trop longue (mauvaise date)
-  let tempsReelMin = plan.temps_prev_min;
-  if (plan.accepted_at) {
-    const acceptedAt = new Date(plan.accepted_at);
-    const departureTime = parseStripATD(plan.strip_atd, acceptedAt) || acceptedAt;
-    const diffMs = dateFinVol.getTime() - departureTime.getTime();
-    tempsReelMin = Math.max(1, Math.round(diffMs / 60000));
-    const usedAtd = departureTime.getTime() !== acceptedAt.getTime();
-    const seuilMin = Math.max(2, Math.floor(plan.temps_prev_min * 0.2));
-    const seuilMax = Math.min(1440, plan.temps_prev_min * 4); // max 24h ou 4× temps prévu
-    const dureeInvalide =
-      diffMs < 0 || // ATD après clôture (erreur de saisie)
-      (usedAtd && tempsReelMin < seuilMin) || // trop courte = probablement heure d'arrivée dans ATD
-      (usedAtd && tempsReelMin > seuilMax); // trop longue = mauvaise date ou erreur
-    if (dureeInvalide) {
-      const diffMsBase = dateFinVol.getTime() - acceptedAt.getTime();
-      tempsReelMin = Math.max(1, Math.round(diffMsBase / 60000));
-    }
-  }
+  const tempsReelMin = calculerTempsReelPlan(plan, dateFinVol);
 
   // Type de cargaison : vols cargo ou passagers avec cargo complémentaire (ponctualité + bonus)
   const typeCargaison = plan.type_cargaison
@@ -752,7 +843,8 @@ export async function envoyerChequesVol(
       remboursementPret: remboursementPret > 0 ? remboursementPret : undefined,
       taxeAlliance: taxeAlliance > 0 ? taxeAlliance : undefined,
       codeshare: codeshareTotal > 0 ? codeshareTotal : undefined
-    }
+    },
+    missionArmee: missionArmee || undefined,
   };
 }
 

@@ -889,6 +889,10 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
   }, []);
 
   useEffect(() => {
+    setLineLayoutTick(t => t + 1);
+  }, [connections, shuffledTerminals]);
+
+  useEffect(() => {
     if (submitted) return;
     const timer = setInterval(() => {
       setTimeLeft(prev => {
@@ -952,7 +956,7 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
   const allConnected = connections.size === WIRE_DEFS.length;
 
   return (
-    <div className="space-y-3 max-w-5xl">
+    <div className="space-y-3 max-w-6xl">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2"><Zap className="h-5 w-5 text-yellow-400" />Câblage Électrique</h2>
         <div className="flex items-center gap-3">
@@ -975,10 +979,10 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
         </ul>
       </div>
 
-      <div ref={containerRef} className="relative grid grid-cols-[minmax(0,1fr)_minmax(48px,72px)_minmax(0,1fr)] gap-2 items-start min-h-[220px]">
+      <div ref={containerRef} className="relative grid grid-cols-[minmax(180px,0.95fr)_minmax(56px,80px)_minmax(260px,1.25fr)] gap-3 sm:gap-4 items-start min-h-[300px] overflow-x-auto pb-2">
         {/* Left: wires */}
-        <div className="space-y-1">
-          <p className="text-[10px] text-slate-600 font-medium mb-1">FILS</p>
+        <div className="space-y-1.5 min-w-[180px]">
+          <p className="text-[10px] text-slate-500 font-semibold mb-1 uppercase tracking-wider">FILS</p>
           {WIRE_DEFS.map(w => {
             const isSelected = selectedWire === w.id;
             const isConnected = connections.has(w.id);
@@ -988,7 +992,7 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
             return (
               <button key={w.id} ref={el => { wireRefs.current.set(w.id, el); }}
                 onClick={() => handleWireClick(w.id)} disabled={submitted}
-                className={`w-full min-h-8 p-1.5 rounded-lg border text-left text-[11px] transition flex items-center gap-1.5 ${
+                className={`w-full min-h-10 px-2 py-1.5 rounded-lg border text-left text-[11px] transition flex items-center gap-2 ${
                   isCorrect ? 'border-emerald-500 bg-emerald-900/20' :
                   isWrong ? 'border-red-500 bg-red-900/20' :
                   isSelected ? 'border-amber-400 bg-amber-900/20 ring-1 ring-amber-400 scale-[1.02]' :
@@ -996,8 +1000,8 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
                   'border-slate-600/50 bg-slate-800/80 hover:bg-slate-700'
                 }`}>
                 <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-white/20" style={{ backgroundColor: w.color }} />
-                <span className="text-slate-200 truncate" title={w.label}>{w.label}</span>
-                <span className="text-[9px] text-slate-600 ml-auto">{w.section}</span>
+                <span className="text-slate-200 leading-tight" title={w.label}>{w.label}</span>
+                <span className="text-[9px] text-slate-500 ml-auto rounded bg-slate-900/60 px-1 py-0.5 whitespace-nowrap">{w.section}</span>
               </button>
             );
           })}
@@ -1023,8 +1027,8 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
         </svg>
 
         {/* Right: terminals */}
-        <div className="space-y-1">
-          <p className="text-[10px] text-slate-600 font-medium mb-1">TERMINAUX</p>
+        <div className="space-y-1.5 min-w-[260px]">
+          <p className="text-[10px] text-slate-500 font-semibold mb-1 uppercase tracking-wider">TERMINAUX</p>
           {shuffledTerminals.map((wireId, idx) => {
             const terminal = WIRE_DEFS[wireId];
             const connectedWireId = Array.from(connections.entries()).find(([, v]) => v === idx)?.[0];
@@ -1035,7 +1039,7 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
             return (
               <button key={idx} ref={el => { termRefs.current.set(idx, el); }}
                 onClick={() => handleTerminalClick(idx)} disabled={submitted}
-                className={`w-full min-h-8 p-1.5 rounded-lg border text-left text-[11px] transition ${
+                className={`w-full min-h-12 px-3 py-2 rounded-lg border text-left text-[11px] transition ${
                   isCorrect ? 'border-emerald-500 bg-emerald-900/20' :
                   isWrong ? 'border-red-500 bg-red-900/20' :
                   missed ? 'border-orange-500/40 bg-orange-900/10' :
@@ -1043,9 +1047,14 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
                   selectedWire !== null ? 'border-amber-600/50 bg-slate-800 hover:bg-amber-900/10 cursor-pointer ring-1 ring-amber-600/20' :
                   'border-slate-600/50 bg-slate-800/80'
                 }`}>
-                <span className="text-slate-300 truncate block" title={terminal.terminal}>{terminal.terminal}</span>
+                <span className="text-slate-200 block whitespace-normal break-words leading-tight" title={terminal.terminal}>
+                  {terminal.terminal}
+                </span>
+                <span className="mt-1 inline-flex rounded bg-slate-950/50 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-slate-500">
+                  {terminal.section}
+                </span>
                 {hasConnection && (
-                  <span className="text-[9px] mt-0.5 block truncate" style={{ color: WIRE_DEFS[connectedWireId].color }}>
+                  <span className="text-[9px] mt-1 block whitespace-normal break-words leading-tight" style={{ color: WIRE_DEFS[connectedWireId].color }}>
                     ← {WIRE_DEFS[connectedWireId].label}
                   </span>
                 )}
@@ -1076,11 +1085,11 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
 interface HydLeak { id: number; position: number; severity: number; sealedUntil: number }
 
 function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
-  const DURATION = 35;
+  const DURATION = 40;
   const TARGET_PRESSURE = 75;
-  const GREEN_RANGE = 12;
-  const BASE_LEAK = 0.3;
-  const PUMP_AMOUNT = 2.5;
+  const GREEN_RANGE = 16;
+  const BASE_LEAK_RATE = 8;
+  const PUMP_RATE = 24;
   const MAX_PRESSURE = 110;
 
   const [pressure, setPressure] = useState(TARGET_PRESSURE);
@@ -1099,30 +1108,39 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
   const animRef = useRef(0);
   const leaksRef = useRef<HydLeak[]>([]);
   const nextLeakId = useRef(0);
+  const lastTickAt = useRef(0);
 
   useEffect(() => { pressureRef.current = pressure; }, [pressure]);
   useEffect(() => { pumpingRef.current = pumping; }, [pumping]);
   useEffect(() => { leaksRef.current = leaks; }, [leaks]);
 
   function sealLeak(leakId: number) {
-    setLeaks(prev => prev.map(l => l.id === leakId ? { ...l, sealedUntil: Date.now() + 5000 } : l));
-    setLeaksSealed(prev => prev + 1);
+    const now = Date.now();
+    let didSeal = false;
+    setLeaks(prev => prev.map(l => {
+      if (l.id !== leakId || l.sealedUntil >= now) return l;
+      didSeal = true;
+      return { ...l, sealedUntil: now + 8000 };
+    }));
+    if (didSeal) setLeaksSealed(prev => prev + 1);
   }
 
   const tick = useCallback(() => {
     if (!running || finished) return;
     const now = Date.now();
     const elapsed = (now - startTime.current) / 1000;
+    const dt = Math.min(0.05, Math.max(0.001, (now - (lastTickAt.current || now)) / 1000));
+    lastTickAt.current = now;
     const t = now / 1000;
 
     const difficultyMult = 1 + elapsed / DURATION;
     const activeLeaks = leaksRef.current.filter(l => l.sealedUntil < now);
-    const leakExtra = activeLeaks.reduce((sum, l) => sum + l.severity * 0.15, 0);
-    const totalLeak = (BASE_LEAK * difficultyMult + leakExtra);
+    const leakExtra = activeLeaks.reduce((sum, l) => sum + l.severity * 2.4, 0);
+    const totalLeak = (BASE_LEAK_RATE * difficultyMult + leakExtra) * dt;
 
-    const jitter = Math.sin(t * 2.5) * 0.2;
+    const jitter = Math.sin(t * 2.5) * 1.2 * dt;
     let newP = pressureRef.current - totalLeak + jitter;
-    if (pumpingRef.current) newP += PUMP_AMOUNT;
+    if (pumpingRef.current) newP += PUMP_RATE * dt;
     newP = Math.max(0, Math.min(MAX_PRESSURE, newP));
     pressureRef.current = newP;
     setPressure(newP);
@@ -1133,7 +1151,7 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
       setLiveScore(Math.round((inGreenFrames.current / totalFrames.current) * 100));
     }
 
-    if (Math.random() < 0.003 * difficultyMult && leaksRef.current.filter(l => l.sealedUntil < now).length < 3) {
+    if (Math.random() < 0.0018 * difficultyMult && leaksRef.current.filter(l => l.sealedUntil < now).length < 2) {
       const newLeak: HydLeak = {
         id: nextLeakId.current++,
         position: 10 + Math.random() * 80,
@@ -1174,8 +1192,16 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
   }, [running, finished]);
 
   function start() {
+    pressureRef.current = TARGET_PRESSURE;
+    setPressure(TARGET_PRESSURE);
+    setTimeLeft(DURATION);
+    setLiveScore(100);
+    setLeaks([]);
+    setLeaksSealed(0);
+    setFinished(false);
     setRunning(true);
     startTime.current = Date.now();
+    lastTickAt.current = Date.now();
     inGreenFrames.current = 0;
     totalFrames.current = 0;
   }
@@ -1207,8 +1233,8 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
       <div className="rounded-lg border border-blue-800/40 bg-blue-950/20 px-3 py-2.5 text-xs text-slate-400 space-y-1.5">
         <p className="font-medium text-blue-200/90">Comment jouer</p>
         <ul className="list-disc list-inside space-y-1 leading-relaxed">
-          <li>Cliquez <strong className="text-slate-200">Démarrer le circuit</strong>, puis <strong className="text-slate-200">maintenez enfoncé</strong> le grand bouton bleu pour pomper (souris ou doigt).</li>
-          <li>Gardez l&apos;aiguille / la pression dans la <strong className="text-slate-200">bande verte</strong> au centre (cible {TARGET_PRESSURE} PSI).</li>
+          <li>Cliquez <strong className="text-slate-200">Démarrer le circuit</strong>, puis utilisez des <strong className="text-slate-200">appuis courts</strong> ou maintenez légèrement le grand bouton bleu pour pomper.</li>
+          <li>Gardez l&apos;aiguille / la pression dans la <strong className="text-slate-200">bande verte élargie</strong> au centre (cible {TARGET_PRESSURE} PSI). Relâchez dès que la pression monte trop.</li>
           <li>Des <strong className="text-slate-200">fuites</strong> (pastilles rouges animées sur la conduite) apparaissent : <strong className="text-slate-200">cliquez-les</strong> pour les colmater quelques secondes. Le score reflète le temps passé en zone verte.</li>
         </ul>
       </div>
@@ -1279,8 +1305,9 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
               onMouseDown={() => setPumping(true)}
               onMouseUp={() => setPumping(false)}
               onMouseLeave={() => setPumping(false)}
-              onTouchStart={() => setPumping(true)}
+              onTouchStart={(e) => { e.preventDefault(); setPumping(true); }}
               onTouchEnd={() => setPumping(false)}
+              onTouchCancel={() => setPumping(false)}
               className={`w-full py-5 rounded-xl text-lg font-bold transition-all select-none border ${
                 pumping
                   ? 'bg-blue-500 text-white scale-[0.97] shadow-inner border-blue-400'

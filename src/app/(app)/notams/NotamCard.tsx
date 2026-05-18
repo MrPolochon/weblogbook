@@ -4,6 +4,7 @@ type Notam = {
   code_aeroport: string;
   du_at: string;
   au_at: string;
+  permanent?: boolean | null;
   champ_a: string | null;
   champ_e: string;
   champ_d: string | null;
@@ -27,8 +28,8 @@ export default function NotamCard({ n, variant = 'default', adminDeleteButton }:
   const now = Date.now();
   const du = new Date(n.du_at).getTime();
   const au = new Date(n.au_at).getTime();
-  const actif = !n.annule && now >= du && now <= au;
-  const expire = !n.annule && now > au;
+  const actif = !n.annule && now >= du && (n.permanent || now <= au);
+  const expire = !n.annule && !n.permanent && now > au;
   const aVenir = !n.annule && now < du;
 
   const text = variant === 'atc' ? 'text-slate-800' : 'text-slate-300';
@@ -54,8 +55,11 @@ export default function NotamCard({ n, variant = 'default', adminDeleteButton }:
           <p className="font-mono font-semibold">{n.identifiant}</p>
           <p>
             <span className={textLabel}>DU: </span>{formatDUAU(n.du_at)}
-            <span className={`ml-2 ${textLabel}`}>AU: </span>{formatDUAU(n.au_at)}
+            <span className={`ml-2 ${textLabel}`}>AU: </span>{n.permanent ? 'PERMANENT' : formatDUAU(n.au_at)}
           </p>
+          {n.permanent && !n.annule && !aVenir && (
+            <p className="text-sky-400 text-xs font-medium">— Permanent jusqu&apos;à suppression —</p>
+          )}
           {n.champ_a && (
             <p><span className={textLabel}>A) </span>{n.champ_a}</p>
           )}

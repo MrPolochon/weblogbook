@@ -10,6 +10,7 @@ export type NotamLite = {
   code_aeroport: string;
   du_at: string;
   au_at: string;
+  permanent?: boolean | null;
   annule: boolean;
   status: NotamStatus;
 };

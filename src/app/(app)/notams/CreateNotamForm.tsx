@@ -12,6 +12,7 @@ export default function CreateNotamForm({ variant = 'default', embedded, onSucce
   const [du_time, setDuTime] = useState('');
   const [au_at, setAuAt] = useState('');
   const [au_time, setAuTime] = useState('');
+  const [permanent, setPermanent] = useState(false);
   const [champ_a, setChampA] = useState('');
   const [champ_e, setChampE] = useState('');
   const [champ_d, setChampD] = useState('');
@@ -37,8 +38,8 @@ export default function CreateNotamForm({ variant = 'default', embedded, onSucce
     if (!code) { setError('Code aéroport requis.'); return; }
     if (!du_at) { setError('Date de début (DU) requise.'); return; }
     if (!du_time) { setError('Heure de début (DU) requise.'); return; }
-    if (!au_at) { setError('Date de fin (AU) requise.'); return; }
-    if (!au_time) { setError('Heure de fin (AU) requise.'); return; }
+    if (!permanent && !au_at) { setError('Date de fin (AU) requise.'); return; }
+    if (!permanent && !au_time) { setError('Heure de fin (AU) requise.'); return; }
     if (!champ_e.trim()) { setError('Description (champ E) requise.'); return; }
     setLoading(true);
     try {
@@ -48,7 +49,8 @@ export default function CreateNotamForm({ variant = 'default', embedded, onSucce
         body: JSON.stringify({
           code_aeroport: code,
           du_at: toUtcIso(du_at, du_time),
-          au_at: toUtcIso(au_at, au_time),
+          au_at: permanent ? null : toUtcIso(au_at, au_time),
+          permanent,
           champ_a: champ_a.trim() || null,
           champ_e: champ_e.trim(),
           champ_d: champ_d.trim() || null,
@@ -64,6 +66,7 @@ export default function CreateNotamForm({ variant = 'default', embedded, onSucce
       setDuTime('');
       setAuAt('');
       setAuTime('');
+      setPermanent(false);
       setChampA('');
       setChampE('');
       setChampD('');
@@ -113,14 +116,28 @@ export default function CreateNotamForm({ variant = 'default', embedded, onSucce
             <input type="time" className={input} value={du_time} onChange={(e) => setDuTime(e.target.value)} required />
           </div>
         </div>
+        <label className={`flex items-start gap-3 rounded-xl border p-3 ${isAtc ? 'border-slate-300 bg-slate-50' : 'border-slate-700/60 bg-slate-900/40'}`}>
+          <input
+            type="checkbox"
+            checked={permanent}
+            onChange={(e) => setPermanent(e.target.checked)}
+            className="mt-1"
+          />
+          <span>
+            <span className={`block text-sm font-medium ${isAtc ? 'text-slate-800' : 'text-slate-200'}`}>NOTAM permanent</span>
+            <span className={`block text-xs ${isAtc ? 'text-slate-600' : 'text-slate-500'}`}>
+              Aucun AU à renseigner. Le NOTAM reste actif après DU jusqu’à suppression manuelle.
+            </span>
+          </span>
+        </label>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className={`label ${label}`}>AU — Date de fin (UTC) *</label>
-            <input type="date" className={input} value={au_at} onChange={(e) => setAuAt(e.target.value)} required />
+            <label className={`label ${label}`}>AU — Date de fin (UTC){permanent ? '' : ' *'}</label>
+            <input type="date" className={input} value={au_at} onChange={(e) => setAuAt(e.target.value)} required={!permanent} disabled={permanent} />
           </div>
           <div>
-            <label className={`label ${label}`}>AU — Heure de fin (UTC, HH:mm) *</label>
-            <input type="time" className={input} value={au_time} onChange={(e) => setAuTime(e.target.value)} required />
+            <label className={`label ${label}`}>AU — Heure de fin (UTC, HH:mm){permanent ? '' : ' *'}</label>
+            <input type="time" className={input} value={au_time} onChange={(e) => setAuTime(e.target.value)} required={!permanent} disabled={permanent} />
           </div>
         </div>
         <div>

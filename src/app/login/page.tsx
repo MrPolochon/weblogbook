@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves } from 'lucide-react';
 
 const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
 
@@ -137,14 +137,35 @@ function TwinklingStars() {
   );
 }
 
+function SummerUpdateDecor() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div className="absolute -top-20 -right-16 h-72 w-72 rounded-full bg-gradient-to-br from-amber-200/35 via-orange-300/20 to-transparent blur-2xl" />
+      <div className="absolute right-8 top-10 hidden sm:flex h-24 w-24 items-center justify-center rounded-full border border-amber-200/30 bg-amber-300/10 shadow-[0_0_80px_rgba(251,191,36,0.35)] backdrop-blur-sm">
+        <Sun className="h-12 w-12 text-amber-200/80 animate-pulse-soft" />
+      </div>
+      <div className="absolute -bottom-20 left-0 right-0 h-48 bg-gradient-to-t from-cyan-500/25 via-sky-400/10 to-transparent" />
+      <div className="absolute bottom-6 left-1/2 flex w-[120vw] -translate-x-1/2 items-center justify-center gap-8 text-cyan-100/20">
+        {Array.from({ length: 9 }, (_, i) => (
+          <Waves key={i} className="h-10 w-24 animate-float" style={{ animationDelay: `${i * 0.18}s` }} />
+        ))}
+      </div>
+      <div className="absolute left-6 top-8 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-amber-100/80 backdrop-blur-md">
+        Summer Update
+      </div>
+    </div>
+  );
+}
+
 type LoginMode = 'pilote' | 'atc' | 'siavi';
 
 function LoginPageFallback() {
   return (
     <div className="min-h-screen relative flex items-center justify-center">
       <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url(/mixou-bg.png)' }} />
-      <div className="absolute inset-0 bg-slate-900/80" />
-      <p className="relative z-10 text-slate-400">Chargement…</p>
+      <div className="absolute inset-0 bg-gradient-to-br from-sky-950/70 via-cyan-900/45 to-amber-900/35" />
+      <SummerUpdateDecor />
+      <p className="relative z-10 text-amber-100">Chargement…</p>
     </div>
   );
 }
@@ -399,7 +420,9 @@ function LoginPageContent() {
       style={{ backgroundImage: 'url(/mixou-bg.png)' }}
     />
   );
-  const overlay = <div className="absolute inset-0 bg-slate-900/80" />;
+  const overlay = (
+    <div className="absolute inset-0 bg-gradient-to-br from-sky-950/80 via-cyan-950/55 to-orange-950/45" />
+  );
 
   if (loading) {
     return (
@@ -417,6 +440,7 @@ function LoginPageContent() {
       {overlay}
       
       {/* Animations d'arrière-plan */}
+      <SummerUpdateDecor />
       <TwinklingStars />
       <AnimatedClouds />
       <FlyingPlane />
@@ -424,23 +448,27 @@ function LoginPageContent() {
       <div className="relative z-10 w-full max-w-md">
         {/* Logo / Titre */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-sky-500/30 to-indigo-500/30 mb-4 shadow-xl shadow-sky-500/20 backdrop-blur-sm border border-sky-500/20 animate-zoom-bounce hover:animate-float">
-            <Shield className="h-10 w-10 text-sky-400 drop-shadow-lg" />
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-300/35 via-sky-400/25 to-cyan-300/25 mb-4 shadow-xl shadow-amber-300/20 backdrop-blur-sm border border-amber-200/25 animate-zoom-bounce hover:animate-float">
+            <Shield className="h-10 w-10 text-amber-100 drop-shadow-[0_0_18px_rgba(251,191,36,0.45)]" />
+          </div>
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-amber-200/25 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-100 backdrop-blur-md animate-init animate-slide-up delay-200">
+            <Sun className="h-3.5 w-3.5" />
+            Summer Update
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight animate-init animate-slide-up delay-200">PTFS Logbook</h1>
-          <p className="text-slate-400 text-sm mt-2 animate-init animate-slide-up delay-300">Système de gestion des vols</p>
+          <p className="text-cyan-100/80 text-sm mt-2 animate-init animate-slide-up delay-300">Système de gestion des vols · Saison estivale</p>
         </div>
 
         {/* Sélecteur de mode (masqué lors de l'étape email/code) */}
         {step === 'form' && (
-        <div className="flex gap-2 mb-6 p-1 bg-slate-800/50 rounded-2xl backdrop-blur-sm animate-init animate-reveal-blur delay-400">
+        <div className="flex gap-2 mb-6 p-1 bg-slate-900/45 rounded-2xl backdrop-blur-md border border-white/10 shadow-xl shadow-cyan-950/30 animate-init animate-reveal-blur delay-400">
           <button
             type="button"
             onClick={() => setMode('pilote')}
             className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl font-semibold transition-all duration-300 ${
               mode === 'pilote'
-                ? 'bg-gradient-to-r from-sky-500 to-sky-400 text-white shadow-lg shadow-sky-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
+                : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
             }`}
           >
             <Plane className="h-5 w-5" />
@@ -452,7 +480,7 @@ function LoginPageContent() {
             className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl font-semibold transition-all duration-300 ${
               mode === 'atc'
                 ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 text-white shadow-lg shadow-emerald-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
             }`}
           >
             <Radio className="h-5 w-5" />
@@ -464,7 +492,7 @@ function LoginPageContent() {
             className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl font-semibold transition-all duration-300 ${
               mode === 'siavi'
                 ? 'bg-gradient-to-r from-red-500 to-red-400 text-white shadow-lg shadow-red-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'
+                : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
             }`}
           >
             <Flame className="h-5 w-5" />
@@ -516,7 +544,11 @@ function LoginPageContent() {
 
         {/* Formulaire : identifiant / mot de passe */}
         {step === 'form' && (
-          <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur delay-500">
+          <div className="card backdrop-blur-xl bg-slate-900/60 border-cyan-200/15 shadow-2xl shadow-cyan-950/40 animate-init animate-reveal-blur delay-500">
+            <div className="mb-5 rounded-xl border border-amber-200/15 bg-gradient-to-r from-amber-300/10 via-cyan-300/10 to-sky-400/10 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-100/80">Briefing été</p>
+              <p className="mt-1 text-sm text-cyan-50/80">Bienvenue à bord. Choisissez votre espace et connectez-vous pour rejoindre le réseau.</p>
+            </div>
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="label text-slate-200">Identifiant</label>
@@ -551,7 +583,7 @@ function LoginPageContent() {
                 type="submit"
                 className={`w-full py-3.5 rounded-xl font-bold transition-all duration-300 transform active:scale-[0.98] ${
                   mode === 'pilote'
-                    ? 'bg-gradient-to-r from-sky-500 to-sky-400 hover:from-sky-400 hover:to-sky-300 text-white shadow-lg shadow-sky-500/30 hover:shadow-sky-500/50'
+                    ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 hover:from-cyan-300 hover:via-sky-300 hover:to-amber-200 text-slate-950 shadow-lg shadow-cyan-400/30 hover:shadow-cyan-300/50'
                     : mode === 'atc'
                       ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50'
                       : 'bg-gradient-to-r from-red-500 to-red-400 hover:from-red-400 hover:to-red-300 text-white shadow-lg shadow-red-500/30 hover:shadow-red-500/50'

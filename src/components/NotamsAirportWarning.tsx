@@ -7,7 +7,7 @@ import { AlertTriangle, ExternalLink } from 'lucide-react';
 /**
  * Bandeau d'avertissement affiche sur le formulaire de depot de plan de vol
  * lorsqu'un (ou les deux) aeroports selectionnes ont au moins un NOTAM
- * **actuellement actif** (entre `du_at` et `au_at`, non annule).
+ * **actuellement actif** (entre `du_at` et `au_at`, ou permanent après `du_at`, non annule).
  *
  * Volontairement compact :
  *  - une seule requete vers /api/notams au montage (renvoie tous les NOTAMs
@@ -23,6 +23,7 @@ type NotamRow = {
   code_aeroport: string;
   du_at: string;
   au_at: string;
+  permanent?: boolean | null;
   champ_e: string;
   annule: boolean;
 };
@@ -67,7 +68,7 @@ export default function NotamsAirportWarning({
       const du = new Date(n.du_at).getTime();
       const au = new Date(n.au_at).getTime();
       if (Number.isNaN(du) || Number.isNaN(au)) continue;
-      if (now < du || now > au) continue;
+      if (now < du || (!n.permanent && now > au)) continue;
       let arr = result.get(code);
       if (!arr) { arr = []; result.set(code, arr); }
       arr.push(n);
