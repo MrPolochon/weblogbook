@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Plane, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2, Handshake, Gift } from 'lucide-react';
+import { Plane, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2, Handshake, Gift, Check } from 'lucide-react';
 import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX, FRACTION_REPARATION_HUB, isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -571,16 +571,103 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
 
                 return (
                   <tr key={a.id} className={`border-b border-slate-700/50 last:border-0 ${rowClass}`}>
+                    {/* ─── MODE ÉDITION : ligne étendue sur toutes les colonnes ─── */}
+                    {isEditing ? (
+                      <td colSpan={7} className="py-3 px-1">
+                        <div className="flex items-start gap-4 flex-wrap rounded-xl border border-sky-500/30 bg-sky-500/5 px-4 py-3">
+                          {/* Vignette photo actuelle + upload */}
+                          <div className="shrink-0 flex flex-col items-center gap-1.5">
+                            <label className="relative cursor-pointer group block w-28 h-16 overflow-hidden rounded-lg border-2 border-dashed border-slate-600 hover:border-sky-400 bg-slate-800/60 transition-all">
+                              {a.avion_image_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={a.avion_image_url}
+                                  alt={a.immatriculation}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <span className="flex flex-col items-center justify-center h-full text-slate-500 group-hover:text-sky-400 transition-colors text-xs gap-1">
+                                  <span className="text-2xl leading-none">📷</span>
+                                  Photo ODW
+                                </span>
+                              )}
+                              {/* Overlay hover */}
+                              <span className="absolute inset-0 bg-sky-900/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[11px] text-sky-200 font-semibold">
+                                {uploadingImageId === a.id ? 'Upload…' : a.avion_image_url ? 'Changer' : 'Ajouter'}
+                              </span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                disabled={uploadingImageId === a.id}
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0];
+                                  if (f) handleUploadImage(a.id, f);
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                            {a.avion_image_url && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteImage(a.id)}
+                                disabled={uploadingImageId === a.id}
+                                className="text-[10px] text-red-400/60 hover:text-red-400 disabled:opacity-40 transition-colors"
+                              >
+                                Supprimer
+                              </button>
+                            )}
+                            <p className="text-[9px] text-slate-600 text-center leading-tight">16:9 · auto-rogné</p>
+                          </div>
+
+                          {/* Champs immat + nom */}
+                          <div className="flex items-center gap-3 flex-wrap flex-1 min-w-0">
+                            <div className="flex flex-col gap-1 min-w-0">
+                              <label className="text-[10px] text-slate-500 uppercase tracking-wider">Immatriculation</label>
+                              <input
+                                type="text"
+                                value={editImmat}
+                                onChange={(e) => setEditImmat(e.target.value.toUpperCase())}
+                                className="input py-1.5 px-3 w-28 text-sm font-mono"
+                                maxLength={10}
+                              />
+                            </div>
+                            <div className="flex flex-col gap-1 flex-1 min-w-0">
+                              <label className="text-[10px] text-slate-500 uppercase tracking-wider">Nom de baptême</label>
+                              <input
+                                type="text"
+                                value={editNom}
+                                onChange={(e) => setEditNom(e.target.value)}
+                                className="input py-1.5 px-3 text-sm w-full min-w-[8rem]"
+                                placeholder="Optionnel"
+                                maxLength={50}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Boutons sauver / annuler */}
+                          <div className="flex items-center gap-2 shrink-0 self-center">
+                            <button
+                              type="button"
+                              onClick={handleSaveEdit}
+                              disabled={actionId === a.id}
+                              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold disabled:opacity-50 transition-colors"
+                            >
+                              <Check className="h-3.5 w-3.5" /> Sauver
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingId(null)}
+                              className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition-colors"
+                            >
+                              Annuler
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    ) : (
+                    <>
                     <td className="py-2.5 pr-4">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          value={editImmat}
-                          onChange={(e) => setEditImmat(e.target.value.toUpperCase())}
-                          className="input py-1 px-2 w-24 text-sm font-mono"
-                          maxLength={10}
-                        />
-                      ) : (
                         <div className="flex items-center gap-1">
                           {a.detruit && <Skull className="h-3 w-3 text-red-500" />}
                           <span className={`font-mono font-medium ${a.detruit ? 'text-red-400 line-through' : 'text-slate-200'}`}>
@@ -589,48 +676,8 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                           {isLeasedOut && <span className="text-xs text-slate-400 ml-2">Loué</span>}
                           {isLeasedIn && <span className="text-xs text-pink-400 ml-2">Loué</span>}
                         </div>
-                      )}
                     </td>
                     <td className="py-2.5 pr-4">
-                      {isEditing ? (
-                        <div className="flex flex-col gap-1.5">
-                          <input
-                            type="text"
-                            value={editNom}
-                            onChange={(e) => setEditNom(e.target.value)}
-                            className="input py-1 px-2 w-32 text-sm"
-                            placeholder="Nom de baptême"
-                            maxLength={50}
-                          />
-                          {/* Upload photo avion */}
-                          <label className="flex items-center gap-1.5 cursor-pointer group">
-                            <span className="text-[10px] text-slate-500 group-hover:text-slate-300 transition-colors whitespace-nowrap">
-                              {uploadingImageId === a.id ? 'Upload…' : a.avion_image_url ? '📷 Changer photo' : '📷 Ajouter photo'}
-                            </span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              disabled={uploadingImageId === a.id}
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (f) handleUploadImage(a.id, f);
-                                e.target.value = '';
-                              }}
-                            />
-                          </label>
-                          {a.avion_image_url && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteImage(a.id)}
-                              disabled={uploadingImageId === a.id}
-                              className="text-[10px] text-red-400/70 hover:text-red-400 text-left disabled:opacity-50 transition-colors"
-                            >
-                              🗑 Supprimer photo
-                            </button>
-                          )}
-                        </div>
-                      ) : (
                         <div className="flex items-center gap-2">
                           {a.avion_image_url && (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -642,7 +689,6 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                           )}
                           <span className="text-slate-400 italic">{a.nom_bapteme || '—'}</span>
                         </div>
-                      )}
                     </td>
                     <td className="py-2.5 pr-4 text-slate-300">{typeNom || '—'}</td>
                     <td className="py-2.5 pr-4">
@@ -670,24 +716,8 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                     {(isPdg || isLeasedIn) && (
                       <td className="py-2.5">
                         <div className="flex items-center gap-2">
-                          {isEditing ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={handleSaveEdit}
-                                disabled={actionId === a.id}
-                                className="text-xs text-emerald-400 hover:underline disabled:opacity-50"
-                              >
-                                Sauver
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingId(null)}
-                                className="text-xs text-slate-400 hover:underline"
-                              >
-                                Annuler
-                              </button>
-                            </>
+                          {false ? (
+                            <></> /* Boutons Sauver/Annuler maintenant dans le panneau édition en haut */
                           ) : (
                             <>
                               {/* Avion détruit - options limitées */}
@@ -894,6 +924,8 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                           )}
                         </div>
                       </td>
+                    )}
+                    </>
                     )}
                   </tr>
                 );
