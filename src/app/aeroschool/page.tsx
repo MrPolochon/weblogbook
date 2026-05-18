@@ -48,7 +48,7 @@ export default function AeroSchoolPage() {
               <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-2xl border border-amber-200/30 bg-amber-300/15 shadow-[0_0_40px_rgba(251,191,36,0.18)]">
                 <GraduationCap className="h-10 w-10 text-amber-200" />
               </div>
-              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.26em] text-sky-200/80">Centre d'évaluation public</p>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.26em] text-sky-200/80">Centre d&apos;évaluation public</p>
               <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-white">AeroSchool</h1>
               <p className="mx-auto mt-3 max-w-2xl text-sm sm:text-base text-slate-300">
                 Questionnaires et évaluations aéronautiques accessibles sans compte. Préparez votre test, respectez les consignes et envoyez vos réponses.
