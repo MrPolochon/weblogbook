@@ -29,6 +29,12 @@ interface MapFlight {
   operationnel_reparation?: boolean;
   /** Ferry compagnie classique, affiché même hors opération réparation. */
   vol_ferry?: boolean;
+  /** URL image de l'avion (livery / photo), fournie par la compagnie. */
+  avion_image_url?: string | null;
+  /** Immatriculation de l'avion (pour l'affichage ODW). */
+  avion_immatriculation?: string | null;
+  /** Type de l'avion (ex. Boeing 737). */
+  type_avion_nom?: string | null;
 }
 
 type HangarJoin = { aeroport_code?: string | null };
@@ -106,9 +112,10 @@ export async function GET() {
       .select(`
         id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, temps_prev_min,
         statut, accepted_at, created_at, pilote_id, vol_sans_atc, current_holder_user_id,
-        armee_avion_id, armee_mission_id,
+        armee_avion_id, armee_mission_id, compagnie_avion_id,
         route_ifr, strip_route, strip_sid_atc, sid_depart, star_arrivee, strip_star,
-        profiles!plans_vol_pilote_id_fkey(id, identifiant)
+        profiles!plans_vol_pilote_id_fkey(id, identifiant),
+        compagnie_avions!plans_vol_compagnie_avion_id_fkey(immatriculation, avion_image_url, types_avion:type_avion_id(nom))
       `)
       .in('statut', ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'])
       .not('aeroport_depart', 'is', null)
@@ -160,6 +167,13 @@ export async function GET() {
     const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
     const piloteId = p.pilote_id || null;
     const startAt = p.accepted_at || p.created_at || nowIso;
+    const rawAvion = p.compagnie_avions as unknown;
+    const avionRow = Array.isArray(rawAvion) ? rawAvion[0] : rawAvion;
+    const avionImmat: string | null = (avionRow as { immatriculation?: string | null } | null)?.immatriculation || null;
+    const avionImg: string | null = (avionRow as { avion_image_url?: string | null } | null)?.avion_image_url || null;
+    const rawTypeAvion = (avionRow as { types_avion?: unknown } | null)?.types_avion;
+    const typeAvionRow = Array.isArray(rawTypeAvion) ? rawTypeAvion[0] : rawTypeAvion;
+    const typeAvionNom: string | null = (typeAvionRow as { nom?: string | null } | null)?.nom || null;
     flights.push({
       id: `pv-${p.id}`,
       kind: (p.armee_avion_id || p.armee_mission_id) ? 'military' : 'civil',
@@ -176,6 +190,9 @@ export async function GET() {
       route: p.strip_route || p.route_ifr || null,
       sid: p.strip_sid_atc || p.sid_depart || null,
       star: p.strip_star || p.star_arrivee || null,
+      avion_image_url: avionImg,
+      avion_immatriculation: avionImmat,
+      type_avion_nom: typeAvionNom,
     });
   }
 

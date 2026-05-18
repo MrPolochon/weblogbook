@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { RefreshCw, Radio, Layers, ArrowLeft, Info, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { RefreshCw, Radio, Layers, ArrowLeft, Info, X, ZoomIn, ZoomOut, RotateCcw, Plane } from 'lucide-react';
 import {
   AIRPORT_TO_FIR,
   DEFAULT_FIR_ZONES,
@@ -51,6 +51,12 @@ interface MapFlight {
   operationnel_reparation?: boolean;
   /** Ferry compagnie classique. */
   vol_ferry?: boolean;
+  /** URL image de l'avion (livery / photo). */
+  avion_image_url?: string | null;
+  /** Immatriculation de l'avion. */
+  avion_immatriculation?: string | null;
+  /** Type de l'avion. */
+  type_avion_nom?: string | null;
 }
 
 interface RenderFlight extends MapFlight {
@@ -825,72 +831,131 @@ export default function AtcMapClient() {
           </div>
 
           {selectedFlight && (
-            <div className="absolute top-3 left-3 max-w-[340px] rounded-lg bg-slate-900/95 border border-slate-600/40 p-3 text-xs space-y-1.5 backdrop-blur-sm">
-              <p className="text-slate-100 font-semibold text-sm">
-                Plan de vol {selectedFlight.numero_vol}
-                {selectedFlight.operationnel_reparation && (
-                  <span
-                    className="ml-2 align-middle px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"
-                    style={{ backgroundColor: 'rgba(249,115,22,0.2)', color: OPS_REPARATION_COLOR }}
+            <div className="absolute top-3 left-3 w-[300px] rounded-xl overflow-hidden bg-slate-950/96 border border-slate-700/60 shadow-2xl shadow-black/50 backdrop-blur-md text-xs">
+              {/* Photo avion */}
+              {selectedFlight.avion_image_url ? (
+                <div className="relative h-36 w-full overflow-hidden bg-slate-900">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={selectedFlight.avion_image_url}
+                    alt={selectedFlight.avion_immatriculation || selectedFlight.numero_vol}
+                    className="w-full h-full object-cover"
+                  />
+                  {/* Gradient bas pour lisibilité */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent" />
+                  {/* Callsign & type en overlay bas */}
+                  <div className="absolute bottom-2 left-3 right-8">
+                    <p className="font-black text-lg text-white leading-tight tracking-wide drop-shadow">
+                      {selectedFlight.numero_vol}
+                    </p>
+                    {selectedFlight.avion_immatriculation && (
+                      <p className="text-slate-300 text-[11px] font-mono">{selectedFlight.avion_immatriculation} · {selectedFlight.type_avion_nom || '—'}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFlightId(null)}
+                    className="absolute top-2 right-2 h-6 w-6 flex items-center justify-center rounded-full bg-slate-950/70 text-slate-300 hover:text-white transition"
                   >
-                    Réparation
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-2 px-3 pt-3 pb-2 border-b border-slate-800">
+                  <div>
+                    <p className="font-black text-base text-white tracking-wide">{selectedFlight.numero_vol}</p>
+                    {selectedFlight.avion_immatriculation && (
+                      <p className="text-slate-400 text-[11px] font-mono">{selectedFlight.avion_immatriculation}{selectedFlight.type_avion_nom ? ` · ${selectedFlight.type_avion_nom}` : ''}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedFlightId(null)}
+                    className="h-6 w-6 flex items-center justify-center rounded-full bg-slate-800 text-slate-400 hover:text-white transition"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Route DEP → ARR */}
+              <div className="px-3 py-3 bg-slate-900/60 border-b border-slate-800/80">
+                <div className="flex items-center gap-2">
+                  <div className="text-center min-w-0">
+                    <p className="text-white font-black text-lg leading-none tabular-nums">{selectedFlight.aeroport_depart}</p>
+                  </div>
+                  <div className="flex-1 flex items-center justify-center gap-1">
+                    {/* Barre de progression route */}
+                    <div className="flex-1 h-0.5 rounded-full bg-slate-700 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-amber-400 transition-all duration-500"
+                        style={{ width: `${Math.round(selectedFlight.progress * 100)}%` }}
+                      />
+                    </div>
+                    <Plane className="h-4 w-4 text-amber-400 shrink-0" />
+                  </div>
+                  <div className="text-center min-w-0">
+                    <p className="text-white font-black text-lg leading-none tabular-nums">{selectedFlight.aeroport_arrivee}</p>
+                  </div>
+                </div>
+                {/* Badges */}
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  <span
+                    className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide"
+                    style={{
+                      backgroundColor: selectedFlight.operationnel_reparation
+                        ? 'rgba(249,115,22,0.25)'
+                        : selectedFlight.type_vol === 'VFR' ? 'rgba(34,197,94,0.18)' :
+                        selectedFlight.type_vol === 'MIL' ? 'rgba(168,85,247,0.18)' :
+                        selectedFlight.vol_ferry ? 'rgba(56,189,248,0.18)' :
+                        'rgba(239,68,68,0.18)',
+                      color: selectedFlight.operationnel_reparation
+                        ? OPS_REPARATION_COLOR
+                        : selectedFlight.type_vol === 'VFR' ? '#4ade80' :
+                        selectedFlight.type_vol === 'MIL' ? '#c084fc' :
+                        selectedFlight.vol_ferry ? '#38bdf8' :
+                        '#f87171',
+                    }}
+                  >
+                    {mapFlightLabel(selectedFlight)}
                   </span>
-                )}
-                {selectedFlight.vol_ferry && (
-                  <span className="ml-2 align-middle px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-sky-500/20 text-sky-300">
-                    Ferry
+                  <span
+                    className="px-2 py-0.5 rounded text-[10px] font-bold"
+                    style={{
+                      backgroundColor: selectedFlight.flight_phase === 'cruising' ? 'rgba(74,222,128,0.15)' :
+                        selectedFlight.flight_phase === 'approaching' ? 'rgba(251,191,36,0.15)' :
+                        'rgba(96,165,250,0.15)',
+                      color: selectedFlight.flight_phase === 'cruising' ? '#4ade80' :
+                        selectedFlight.flight_phase === 'approaching' ? '#fbbf24' :
+                        '#60a5fa',
+                    }}
+                  >
+                    {PHASE_LABELS_FR[selectedFlight.flight_phase]}
                   </span>
-                )}
-              </p>
-              <p className="text-slate-300">
-                {selectedFlight.aeroport_depart} → {selectedFlight.aeroport_arrivee}
-              </p>
-              <div className="flex items-center gap-2">
-                <span
-                  className="px-2 py-0.5 rounded-full text-[11px] font-semibold"
-                  style={{
-                    backgroundColor: selectedFlight.operationnel_reparation
-                      ? 'rgba(249,115,22,0.2)'
-                      : selectedFlight.type_vol === 'VFR' ? 'rgba(34,197,94,0.18)' :
-                      selectedFlight.type_vol === 'MIL' ? 'rgba(168,85,247,0.18)' :
-                      'rgba(239,68,68,0.18)',
-                    color: selectedFlight.operationnel_reparation
-                      ? OPS_REPARATION_COLOR
-                      : selectedFlight.type_vol === 'VFR' ? '#4ade80' :
-                      selectedFlight.type_vol === 'MIL' ? '#c084fc' :
-                      '#f87171',
-                  }}
-                >
-                  {mapFlightLabel(selectedFlight)}
-                </span>
-                <span className="text-slate-400">
-                  Durée prévue: {selectedFlight.temps_prev_min} min
-                </span>
+                </div>
               </div>
-              <p className="text-slate-200">
-                <span className="text-slate-400">Statut : </span>
-                <strong
-                  className="font-semibold"
-                  style={{
-                    color:
-                      selectedFlight.flight_phase === 'departing' ? '#60a5fa' :
-                      selectedFlight.flight_phase === 'cruising' ? '#4ade80' :
-                      selectedFlight.flight_phase === 'approaching' ? '#fbbf24' :
-                      '#a78bfa',
-                  }}
-                >
-                  {PHASE_LABELS_FR[selectedFlight.flight_phase]}
-                </strong>
-              </p>
-              <p className="text-slate-400">
-                Progression : {Math.round(selectedFlight.progress * 100)}%
-              </p>
-              <p className="text-slate-300">
-                Pilote (ID site): {selectedFlight.pilote_identifiant || 'N/A'}
-              </p>
-              <p className="text-slate-300">
-                Discord: {selectedFlight.discord_username || 'Non lié'}
-              </p>
+
+              {/* Infos détaillées */}
+              <div className="px-3 py-2.5 space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Durée prévue</span>
+                  <span className="text-slate-200 font-medium">{selectedFlight.temps_prev_min} min</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Progression</span>
+                  <span className="text-slate-200 font-medium">{Math.round(selectedFlight.progress * 100)} %</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Pilote</span>
+                  <span className="text-slate-200 font-medium">{selectedFlight.pilote_identifiant || 'N/A'}</span>
+                </div>
+                {selectedFlight.discord_username && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Discord</span>
+                    <span className="text-slate-200 font-medium">{selectedFlight.discord_username}</span>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

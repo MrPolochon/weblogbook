@@ -14,6 +14,7 @@ type Avion = {
   id: string;
   immatriculation: string;
   nom_bapteme: string | null;
+  avion_image_url?: string | null;
   usure_percent: number;
   aeroport_actuel: string;
   statut: string;
@@ -71,6 +72,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editImmat, setEditImmat] = useState('');
   const [editNom, setEditNom] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState('');
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -249,6 +251,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
     setEditingId(avion.id);
     setEditImmat(avion.immatriculation);
     setEditNom(avion.nom_bapteme || '');
+    setEditImageUrl(avion.avion_image_url || '');
   }
 
   async function handleSaveEdit() {
@@ -261,6 +264,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
         body: JSON.stringify({
           immatriculation: editImmat.trim().toUpperCase(),
           nom_bapteme: editNom.trim() || null,
+          avion_image_url: editImageUrl.trim() || null,
         }),
       });
       const d = await res.json().catch(() => ({}));
@@ -397,6 +401,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
         return { text: 'Au sol', className: 'text-emerald-400' };
       case 'in_flight': return { text: 'En vol', className: 'text-sky-400' };
       case 'maintenance': return { text: 'Maintenance', className: 'text-amber-400' };
+      case 'en_transit': return { text: 'En transit réparation', className: 'text-sky-300' };
       case 'en_reparation': return { text: 'En réparation', className: 'text-orange-400' };
       case 'bloque': return { text: 'Bloqué', className: 'text-red-500' };
       default: return { text: statut, className: 'text-slate-400' };
@@ -556,16 +561,35 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                     </td>
                     <td className="py-2.5 pr-4">
                       {isEditing ? (
-                        <input
-                          type="text"
-                          value={editNom}
-                          onChange={(e) => setEditNom(e.target.value)}
-                          className="input py-1 px-2 w-32 text-sm"
-                          placeholder="Nom de baptême"
-                          maxLength={50}
-                        />
+                        <div className="flex flex-col gap-1">
+                          <input
+                            type="text"
+                            value={editNom}
+                            onChange={(e) => setEditNom(e.target.value)}
+                            className="input py-1 px-2 w-32 text-sm"
+                            placeholder="Nom de baptême"
+                            maxLength={50}
+                          />
+                          <input
+                            type="url"
+                            value={editImageUrl}
+                            onChange={(e) => setEditImageUrl(e.target.value)}
+                            className="input py-1 px-2 w-32 text-xs text-slate-400"
+                            placeholder="URL photo avion (ODW)"
+                          />
+                        </div>
                       ) : (
-                        <span className="text-slate-400 italic">{a.nom_bapteme || '—'}</span>
+                        <div className="flex items-center gap-2">
+                          {a.avion_image_url && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={a.avion_image_url}
+                              alt={a.immatriculation}
+                              className="h-6 w-10 object-cover rounded shrink-0 border border-slate-700"
+                            />
+                          )}
+                          <span className="text-slate-400 italic">{a.nom_bapteme || '—'}</span>
+                        </div>
                       )}
                     </td>
                     <td className="py-2.5 pr-4 text-slate-300">{typeNom || '—'}</td>

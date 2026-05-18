@@ -45,6 +45,13 @@ export async function PATCH(
     if (body.nom_bapteme !== undefined) {
       updates.nom_bapteme = body.nom_bapteme?.trim() || null;
     }
+    if (body.avion_image_url !== undefined) {
+      const raw = body.avion_image_url?.trim() || null;
+      if (raw && !/^https?:\/\//i.test(raw)) {
+        return NextResponse.json({ error: 'URL image invalide (doit commencer par http/https).' }, { status: 400 });
+      }
+      updates.avion_image_url = raw;
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'Aucune modification' }, { status: 400 });
