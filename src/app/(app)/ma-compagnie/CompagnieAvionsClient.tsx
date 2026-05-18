@@ -74,6 +74,9 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
   const [editNom, setEditNom] = useState('');
   const [uploadingImageId, setUploadingImageId] = useState<string | null>(null);
 
+  // Prévisualisation photo plein écran
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
@@ -579,12 +582,23 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                           <div className="shrink-0 flex flex-col items-center gap-1.5">
                             <label className="relative cursor-pointer group block w-28 h-16 overflow-hidden rounded-lg border-2 border-dashed border-slate-600 hover:border-sky-400 bg-slate-800/60 transition-all">
                               {a.avion_image_url ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={a.avion_image_url}
-                                  alt={a.immatriculation}
-                                  className="w-full h-full object-cover"
-                                />
+                                <>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={a.avion_image_url}
+                                    alt={a.immatriculation}
+                                    className="w-full h-full object-cover"
+                                  />
+                                  {/* Bouton zoom indépendant */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); setPreviewUrl(a.avion_image_url!); }}
+                                    className="absolute top-1 right-1 h-5 w-5 flex items-center justify-center rounded bg-slate-950/70 text-slate-300 hover:text-white hover:bg-slate-950 transition z-10 text-[10px]"
+                                    title="Voir en grand"
+                                  >
+                                    ⛶
+                                  </button>
+                                </>
                               ) : (
                                 <span className="flex flex-col items-center justify-center h-full text-slate-500 group-hover:text-sky-400 transition-colors text-xs gap-1">
                                   <span className="text-2xl leading-none">📷</span>
@@ -679,14 +693,24 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                     </td>
                     <td className="py-2.5 pr-4">
                         <div className="flex items-center gap-2">
-                          {a.avion_image_url && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={a.avion_image_url}
-                              alt={a.immatriculation}
-                              className="h-6 w-10 object-cover rounded shrink-0 border border-slate-700"
-                            />
-                          )}
+                          {a.avion_image_url ? (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewUrl(a.avion_image_url!)}
+                              className="relative group shrink-0 h-8 w-[52px] overflow-hidden rounded border border-slate-600 hover:border-sky-400 transition-colors"
+                              title="Voir la photo"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={a.avion_image_url}
+                                alt={a.immatriculation}
+                                className="w-full h-full object-cover"
+                              />
+                              <span className="absolute inset-0 bg-sky-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-sky-200 text-[9px] font-bold">
+                                Voir
+                              </span>
+                            </button>
+                          ) : null}
                           <span className="text-slate-400 italic">{a.nom_bapteme || '—'}</span>
                         </div>
                     </td>
@@ -1050,6 +1074,36 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
               <button className="btn-secondary" onClick={() => setShowLocationModal(false)}>Annuler</button>
             </div>
           </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ─── Prévisualisation photo avion plein écran ─── */}
+      {previewUrl && mounted && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4"
+          onClick={() => setPreviewUrl(null)}
+        >
+          <div
+            className="relative max-w-4xl w-full rounded-2xl overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewUrl}
+              alt="Photo avion"
+              className="w-full h-auto block"
+            />
+            <button
+              type="button"
+              onClick={() => setPreviewUrl(null)}
+              className="absolute top-3 right-3 h-8 w-8 flex items-center justify-center rounded-full bg-slate-950/80 text-slate-200 hover:text-white hover:bg-slate-950 transition text-lg font-bold"
+              aria-label="Fermer"
+            >
+              ×
+            </button>
+          </div>
+          <p className="absolute bottom-4 text-slate-500 text-xs">Cliquez en dehors pour fermer</p>
         </div>,
         document.body
       )}
