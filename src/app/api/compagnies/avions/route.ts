@@ -29,6 +29,21 @@ export async function GET(request: Request) {
       console.error('[avions] auto-heal transit reparation:', e);
     }
 
+    // Filet d'affichage / cohérence : une demande de réparation en transit
+    // doit toujours verrouiller l'avion en "en_transit" côté flotte.
+    const { data: demandesTransit } = await admin
+      .from('reparation_demandes')
+      .select('avion_id')
+      .eq('compagnie_id', compagnie_id)
+      .in('statut', ['en_transit', 'retour_transit']);
+    const transitAvionIds = Array.from(new Set((demandesTransit || []).map((d) => d.avion_id).filter(Boolean)));
+    if (transitAvionIds.length > 0) {
+      await admin
+        .from('compagnie_avions')
+        .update({ statut: 'en_transit' })
+        .in('id', transitAvionIds);
+    }
+
     const nowIso = new Date().toISOString();
 
     // Charger les locations actives (loueur ou locataire)
