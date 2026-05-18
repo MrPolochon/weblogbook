@@ -860,7 +860,16 @@ export default function AtcMapClient() {
               : null;
             const actualDep = selectedFlight.strip_atd ? parseAtd(selectedFlight.strip_atd, schedRef) : null;
 
-            /* ETA estimée = ATD (ou heure dépôt) + durée prévue */
+            /* Arrivée schedulée = heure départ estimée (déposée par le pilote) + durée prévue
+               → c'est l'heure à laquelle l'avion devait passer de "approche" à "arrivé" selon le planning */
+            const scheduledArrMs = selectedFlight.heure_depart_estimee
+              ? new Date(selectedFlight.heure_depart_estimee).getTime() + selectedFlight.temps_prev_min * 60_000
+              : null;
+            const scheduledArr = scheduledArrMs
+              ? new Date(scheduledArrMs).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+              : null;
+
+            /* ETA estimée = ATD réel (ATC) + durée prévue (ou scheduled si pas d'ATD) */
             const departMs = actualDep
               ? (() => { const d = new Date(schedRef); const [hh, mm] = actualDep.split(':').map(Number); d.setUTCHours(hh, mm, 0, 0); if (d.getTime() < schedRef.getTime() - 3_600_000) d.setUTCDate(d.getUTCDate() + 1); return d.getTime(); })()
               : selectedFlight.heure_depart_estimee
@@ -962,7 +971,9 @@ export default function AtcMapClient() {
                     <p className="text-[9px] font-semibold uppercase tracking-[0.14em] mb-2" style={{ color: '#64748b' }}>Arrivée</p>
                     <div className="flex justify-between items-baseline mb-1">
                       <span className="text-[9px] uppercase tracking-widest" style={{ color: '#64748b' }}>Scheduled</span>
-                      <span className="text-sm font-bold font-mono text-white tabular-nums">—</span>
+                      <span className={`text-sm font-bold font-mono tabular-nums ${scheduledArr ? 'text-white' : 'text-slate-600'}`}>
+                        {scheduledArr || '—'}
+                      </span>
                     </div>
                     <div className="flex justify-between items-baseline">
                       <span className="text-[9px] uppercase tracking-widest" style={{ color: '#64748b' }}>Estimated</span>
