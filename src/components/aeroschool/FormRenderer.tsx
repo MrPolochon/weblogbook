@@ -52,6 +52,17 @@ interface Props {
   form: FormData;
 }
 
+function AeroSchoolBackdrop() {
+  return (
+    <>
+      <div className="absolute inset-0 bg-gradient-to-br from-sky-950 via-slate-950 to-amber-950/45" />
+      <div className="absolute inset-0 bg-cockpit-grid opacity-45" />
+      <div className="pointer-events-none absolute -top-28 right-[-8%] h-96 w-96 rounded-full bg-amber-300/15 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-[-12%] left-[-10%] h-96 w-96 rounded-full bg-sky-400/15 blur-3xl" />
+    </>
+  );
+}
+
 export default function FormRenderer({ form }: Props) {
   const router = useRouter();
   const [testStarted, setTestStarted] = useState(false);
@@ -310,12 +321,19 @@ export default function FormRenderer({ form }: Props) {
   // Page d'avertissement avant de commencer le test
   if (!testStarted) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6">
-        <div className="max-w-lg w-full text-center space-y-8">
-          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-6 space-y-4">
-            <AlertTriangle className="h-14 w-14 text-amber-400 mx-auto" />
-            <h2 className="text-xl font-bold text-amber-100">Avant de commencer</h2>
-            <p className="text-slate-300 text-left leading-relaxed">
+      <div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center p-6">
+        <AeroSchoolBackdrop />
+        <div className="relative z-10 max-w-2xl w-full text-center space-y-6 animate-page-reveal">
+          <div className="rounded-3xl border border-amber-200/25 bg-slate-900/75 p-6 sm:p-8 space-y-5 shadow-2xl shadow-slate-950/40 backdrop-blur-xl">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl border border-amber-200/30 bg-amber-300/15">
+              <AlertTriangle className="h-10 w-10 text-amber-200" />
+            </div>
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-sky-200/80">Briefing candidat</p>
+              <h2 className="mt-2 text-2xl font-black text-white">Avant de commencer</h2>
+              <p className="mt-1 text-sm text-slate-400">{form.title}</p>
+            </div>
+            <p className="text-slate-300 text-left leading-relaxed rounded-2xl border border-slate-700/60 bg-slate-950/40 p-4">
               {antitricheEnabled ? (
                 <>
                   Fermez toutes les applications en arrière-plan et tous les autres onglets du navigateur.
@@ -326,11 +344,16 @@ export default function FormRenderer({ form }: Props) {
                 <>Vous pouvez remplir le formulaire à votre rythme.</>
               )}
             </p>
+            {timeLimitMinutes != null && (
+              <div className="rounded-2xl border border-sky-300/20 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
+                Temps limite : <strong>{timeLimitMinutes} min</strong>
+              </div>
+            )}
           </div>
           <button
             type="button"
             onClick={() => setTestStarted(true)}
-            className="px-10 py-4 bg-sky-500 hover:bg-sky-400 text-white font-bold text-lg rounded-xl shadow-lg transition-colors"
+            className="px-10 py-4 bg-gradient-to-r from-sky-400 via-cyan-400 to-amber-300 hover:brightness-110 text-slate-950 font-black text-lg rounded-2xl shadow-lg shadow-sky-500/25 transition"
           >
             Commencer
           </button>
@@ -365,15 +388,16 @@ export default function FormRenderer({ form }: Props) {
   // Écran de confirmation
   if (submitted) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="max-w-lg w-full text-center space-y-6">
-          <CheckCircle2 className="h-20 w-20 text-emerald-400 mx-auto" />
-          <h2 className="text-3xl font-bold text-white">Réponses envoyées !</h2>
+      <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4">
+        <AeroSchoolBackdrop />
+        <div className="relative z-10 max-w-lg w-full text-center space-y-6 rounded-3xl border border-emerald-300/25 bg-slate-900/75 p-8 shadow-2xl shadow-slate-950/40 backdrop-blur-xl">
+          <CheckCircle2 className="h-20 w-20 text-emerald-300 mx-auto" />
+          <h2 className="text-3xl font-black text-white">Réponses envoyées</h2>
           <p className="text-slate-400">
             Merci d&apos;avoir répondu au formulaire <strong className="text-slate-200">&quot;{form.title}&quot;</strong>.
           </p>
           {submitResult?.maxScore !== undefined && submitResult.maxScore > 0 && (
-            <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6">
+            <div className="bg-slate-950/50 border border-slate-700/50 rounded-2xl p-6">
               <p className="text-slate-400 text-sm mb-2">Votre score</p>
               <p className="text-4xl font-bold text-white">
                 {submitResult.score} <span className="text-slate-500 text-2xl">/ {submitResult.maxScore}</span>
@@ -398,10 +422,11 @@ export default function FormRenderer({ form }: Props) {
   };
 
   return (
-    <div ref={antiCheatShellRef} className="min-h-screen bg-slate-900 py-8 px-4">
+    <div ref={antiCheatShellRef} className="min-h-screen relative overflow-hidden py-8 px-4">
+      <AeroSchoolBackdrop />
       {/* Chrono fixe en haut au centre */}
       {testStarted && timeLimitMinutes != null && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-slate-800 border border-slate-600 shadow-xl">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-slate-950/90 border border-amber-200/25 shadow-xl backdrop-blur-xl">
           <Clock className="h-6 w-6 text-amber-400" />
           <span className={`text-2xl font-mono font-bold tabular-nums ${remainingSeconds <= 60 ? 'text-amber-400' : 'text-slate-200'}`}>
             {formatTime(Math.max(0, remainingSeconds))}
@@ -409,24 +434,25 @@ export default function FormRenderer({ form }: Props) {
         </div>
       )}
 
-      <form className="max-w-3xl mx-auto space-y-6" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
+      <form className="relative z-10 max-w-4xl mx-auto space-y-6 animate-page-reveal" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
         {/* Barre de progression */}
-        <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+        <div className="w-full bg-slate-950/70 rounded-full h-2 overflow-hidden border border-slate-700/60">
           <div
-            className="h-full bg-gradient-to-r from-sky-500 to-emerald-500 transition-all duration-500"
+            className="h-full bg-gradient-to-r from-sky-400 via-cyan-400 to-amber-300 transition-all duration-500"
             style={{ width: `${progress}%` }}
           />
         </div>
 
         {/* En-tête du formulaire */}
         {currentSection === 0 && (
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 border-t-4 border-t-sky-500">
-            <h1 className="text-2xl font-bold text-white">{form.title}</h1>
+          <div className="bg-slate-900/75 border border-sky-300/20 rounded-3xl p-6 sm:p-7 shadow-2xl shadow-slate-950/30 backdrop-blur-xl border-t-4 border-t-sky-400">
+            <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-sky-200/80">AeroSchool</p>
+            <h1 className="mt-2 text-2xl sm:text-3xl font-black text-white">{form.title}</h1>
             {form.description && (
               <p className="text-slate-400 mt-2">{form.description}</p>
             )}
             {antitricheEnabled && (
-            <div className="mt-4 flex items-center gap-2 text-amber-400 text-sm bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+            <div className="mt-4 flex items-center gap-2 text-amber-200 text-sm bg-amber-500/10 border border-amber-500/20 rounded-2xl p-3">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>Ne changez pas d&apos;onglet et ne quittez pas cette page pendant le questionnaire.</span>
             </div>
@@ -437,7 +463,7 @@ export default function FormRenderer({ form }: Props) {
         {/* Section courante */}
         <div className="space-y-4">
           {form.sections.length > 1 && (
-            <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 border-l-4 border-l-emerald-500">
+            <div className="bg-slate-900/70 border border-slate-700/60 rounded-2xl p-5 backdrop-blur-md border-l-4 border-l-emerald-400">
               <p className="text-slate-400 text-sm">Section {currentSection + 1} / {form.sections.length}</p>
               <h2 className="text-xl font-semibold text-white mt-1">{section.title}</h2>
               {section.description && <p className="text-slate-400 text-sm mt-1">{section.description}</p>}
@@ -450,7 +476,7 @@ export default function FormRenderer({ form }: Props) {
               const mqs = moduleQuestions[q.id];
               if (moduleLoading && !mqs) {
                 return (
-                  <div key={q.id} className="bg-orange-500/10 border-2 border-orange-500/30 rounded-xl p-6 flex items-center justify-center gap-2">
+                  <div key={q.id} className="bg-orange-500/10 border-2 border-orange-500/30 rounded-2xl p-6 flex items-center justify-center gap-2">
                     <Loader2 className="h-6 w-6 text-orange-400 animate-spin" />
                     <span className="text-orange-400">Chargement des questions…</span>
                   </div>
@@ -459,7 +485,7 @@ export default function FormRenderer({ form }: Props) {
               const questionsToShow = mqs || [];
               if (questionsToShow.length === 0 && q.module_id) {
                 return (
-                  <div key={q.id} className="bg-orange-500/10 border-2 border-orange-500/30 rounded-xl p-6 text-orange-400 text-center">
+                  <div key={q.id} className="bg-orange-500/10 border-2 border-orange-500/30 rounded-2xl p-6 text-orange-400 text-center">
                     Module introuvable ou vide.
                   </div>
                 );
@@ -467,18 +493,18 @@ export default function FormRenderer({ form }: Props) {
               return (
                 <div key={q.id} className="space-y-4">
                   {q.title && (
-                    <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-4 py-2">
+                    <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl px-4 py-2">
                       <h3 className="text-orange-300 font-semibold">{q.title}</h3>
                     </div>
                   )}
                   {questionsToShow.map((mq) => {
                     const answerKey = formatModuleAnswerKey(q.id, q.module_id, mq.id);
                     return (
-                      <div key={mq.id} className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-3">
+                      <div key={mq.id} className="bg-slate-900/70 border border-slate-700/60 rounded-2xl p-5 space-y-3 shadow-xl shadow-slate-950/20 backdrop-blur-md">
                         <h3 className="text-slate-100 font-medium">{mq.title}</h3>
                         <div className="space-y-2">
                           {(mq.options || []).map((opt) => (
-                            <label key={opt} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-700/30 cursor-pointer transition-colors">
+                            <label key={opt} className="flex items-center gap-3 p-3 rounded-xl border border-transparent hover:border-sky-400/20 hover:bg-sky-400/5 cursor-pointer transition-colors">
                               <input
                                 type="radio"
                                 name={answerKey}
@@ -504,7 +530,7 @@ export default function FormRenderer({ form }: Props) {
             }
 
             return (
-            <div key={q.id} className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-3">
+            <div key={q.id} className="bg-slate-900/70 border border-slate-700/60 rounded-2xl p-5 space-y-3 shadow-xl shadow-slate-950/20 backdrop-blur-md transition-colors hover:border-sky-300/20">
               <div className="flex items-start gap-1">
                 <h3 className="text-slate-100 font-medium">{q.title}</h3>
                 {q.required && <span className="text-red-400 text-sm">*</span>}
@@ -523,7 +549,7 @@ export default function FormRenderer({ form }: Props) {
                   autoCapitalize="off"
                   spellCheck={false}
                   name={q.id}
-                  className="w-full bg-transparent border-b border-slate-600 focus:border-sky-500 text-slate-200 py-2 outline-none transition-colors"
+                  className="w-full bg-slate-950/35 border border-slate-700/70 focus:border-sky-400 text-slate-100 rounded-xl px-4 py-3 outline-none transition-colors"
                 />
               )}
 
@@ -539,7 +565,7 @@ export default function FormRenderer({ form }: Props) {
                   autoCapitalize="off"
                   spellCheck={false}
                   name={q.id}
-                  className="w-full bg-slate-700/30 border border-slate-600 focus:border-sky-500 rounded-lg text-slate-200 p-3 outline-none transition-colors resize-y"
+                  className="w-full bg-slate-950/35 border border-slate-700/70 focus:border-sky-400 rounded-xl text-slate-100 p-4 outline-none transition-colors resize-y"
                 />
               )}
 
@@ -547,7 +573,7 @@ export default function FormRenderer({ form }: Props) {
               {q.type === 'radio' && q.options && (
                 <div className="space-y-2">
                   {q.options.map((opt) => (
-                    <label key={opt} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-700/30 cursor-pointer transition-colors">
+                    <label key={opt} className="flex items-center gap-3 p-3 rounded-xl border border-transparent hover:border-sky-400/20 hover:bg-sky-400/5 cursor-pointer transition-colors">
                       <input
                         type="radio"
                         name={q.id}
@@ -565,7 +591,7 @@ export default function FormRenderer({ form }: Props) {
               {q.type === 'checkbox' && q.options && (
                 <div className="space-y-2">
                   {q.options.map((opt) => (
-                    <label key={opt} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-700/30 cursor-pointer transition-colors">
+                    <label key={opt} className="flex items-center gap-3 p-3 rounded-xl border border-transparent hover:border-sky-400/20 hover:bg-sky-400/5 cursor-pointer transition-colors">
                       <input
                         type="checkbox"
                         checked={Array.isArray(answers[q.id]) && (answers[q.id] as string[]).includes(opt)}
@@ -583,7 +609,7 @@ export default function FormRenderer({ form }: Props) {
                 <select
                   value={(answers[q.id] as string) || ''}
                   onChange={(e) => updateAnswer(q.id, e.target.value)}
-                  className="w-full bg-slate-700 border border-slate-600 rounded-lg text-slate-200 px-3 py-2.5 outline-none focus:border-sky-500 transition-colors"
+                  className="w-full bg-slate-950/50 border border-slate-700 rounded-xl text-slate-200 px-3 py-3 outline-none focus:border-sky-400 transition-colors"
                 >
                   <option value="">Sélectionner…</option>
                   {q.options.map((opt) => (
@@ -608,9 +634,9 @@ export default function FormRenderer({ form }: Props) {
                         key={n}
                         type="button"
                         onClick={() => updateAnswer(q.id, String(n))}
-                        className={`w-10 h-10 rounded-full border text-sm font-medium transition-all ${
+                        className={`w-11 h-11 rounded-full border text-sm font-bold transition-all ${
                           (answers[q.id] as string) === String(n)
-                            ? 'bg-sky-500 border-sky-400 text-white shadow-lg shadow-sky-500/30'
+                            ? 'bg-gradient-to-br from-sky-400 to-amber-300 border-sky-300 text-slate-950 shadow-lg shadow-sky-500/20'
                             : 'border-slate-600 text-slate-400 hover:border-slate-500 hover:text-slate-200'
                         }`}
                       >
@@ -641,12 +667,12 @@ export default function FormRenderer({ form }: Props) {
         )}
 
         {/* Navigation */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between rounded-2xl border border-slate-700/60 bg-slate-900/65 p-3 backdrop-blur-md">
           <button
             type="button"
             onClick={handlePrev}
             disabled={isFirst}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
           >
             <ChevronLeft className="h-4 w-4" />
             Précédent
@@ -657,7 +683,7 @@ export default function FormRenderer({ form }: Props) {
               type="button"
               onClick={handleSubmit}
               disabled={submitting}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-400 text-white font-bold text-sm shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 to-sky-400 text-slate-950 font-black text-sm shadow-lg shadow-emerald-500/20 hover:brightness-110 transition-all disabled:opacity-50"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               {submitting ? 'Envoi…' : 'Envoyer'}
@@ -666,7 +692,7 @@ export default function FormRenderer({ form }: Props) {
             <button
               type="button"
               onClick={handleNext}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-sky-500 text-white font-bold text-sm shadow-lg shadow-sky-500/30 hover:shadow-sky-500/50 transition-all"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-400 to-amber-300 text-slate-950 font-black text-sm shadow-lg shadow-sky-500/20 hover:brightness-110 transition-all"
             >
               Suivant
               <ChevronRight className="h-4 w-4" />

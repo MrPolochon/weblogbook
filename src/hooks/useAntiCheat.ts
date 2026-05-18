@@ -11,6 +11,8 @@ import { useEffect, useRef, useState, useCallback, type RefObject } from 'react'
  *  - Avertit AVANT de pénaliser pour les actions ambiguës (F12, clic outside) :
  *    1ʳᵉ tentative ⇒ toast d'alerte + action bloquée
  *    2ᵉ tentative   ⇒ triche
+ *  - Bloque les sorties de contenu évidentes (copier/coller, impression,
+ *    enregistrement de page) avec la même logique warning puis triche.
  *  - Ne pénalise INSTANTANÉMENT que les signaux non ambigus :
  *    iframe d'extension, iframe cross-origin, focus perdu trop longtemps,
  *    onglet caché trop longtemps, présence non confirmée.
@@ -29,7 +31,10 @@ export type CheatReason =
   | 'click_outside_test_area'
   | 'focus_lost_too_long'
   | 'tab_hidden_too_long'
-  | 'presence_check_timeout';
+  | 'presence_check_timeout'
+  | 'clipboard_action'
+  | 'context_menu'
+  | 'print_or_save_shortcut';
 
 interface AntiCheatOptions {
   enabled?: boolean;
@@ -215,7 +220,7 @@ export function useAntiCheat({
     focusLostTicks: 0,
     tabHiddenTicks: 0,
     /** Compteurs d'infractions ambiguës (1ʳᵉ = warning, 2ᵉ = triche). */
-    strikes: { devtools: 0, viewSource: 0, clickOutside: 0 },
+    strikes: { devtools: 0, viewSource: 0, clickOutside: 0, clipboard: 0, contextMenu: 0, printSave: 0 },
     /** Timestamp de la dernière interaction utilisateur (ms). */
     lastActivityAt: 0,
   });
@@ -253,6 +258,20 @@ export function useAntiCheat({
     onWarningRef.current?.(message);
   }, []);
 
+  const strikeOrCheat = useCallback((
+    strikeKey: keyof typeof stateRef.current.strikes,
+    reason: CheatReason,
+    warning: string
+  ) => {
+    const s = stateRef.current;
+    s.strikes[strikeKey] += 1;
+    if (s.strikes[strikeKey] >= 2) {
+      triggerCheat(reason);
+    } else {
+      warn(warning);
+    }
+  }, [triggerCheat, warn]);
+
   const confirmPresence = useCallback(() => {
     setPresencePromptVisible(false);
     if (presenceResponseTimeoutRef.current) {
@@ -273,7 +292,7 @@ export function useAntiCheat({
     state.hadFocus = false;
     state.focusLostTicks = 0;
     state.tabHiddenTicks = 0;
-    state.strikes = { devtools: 0, viewSource: 0, clickOutside: 0 };
+    state.strikes = { devtools: 0, viewSource: 0, clickOutside: 0, clipboard: 0, contextMenu: 0, printSave: 0 };
     state.lastActivityAt = Date.now();
     setCheatingDetected(false);
     setPresencePromptVisible(false);
@@ -341,22 +360,17 @@ export function useAntiCheat({
 
       if (isDevtools) {
         e.preventDefault();
-        state.strikes.devtools += 1;
-        if (state.strikes.devtools >= 2) {
-          triggerCheat('devtools_shortcut');
-        } else {
-          warn('Outils de développement bloqués. La prochaine tentative sera comptée comme triche.');
-        }
+        strikeOrCheat('devtools', 'devtools_shortcut', 'Outils de développement bloqués. La prochaine tentative sera comptée comme triche.');
         return;
       }
       if (isViewSource) {
         e.preventDefault();
-        state.strikes.viewSource += 1;
-        if (state.strikes.viewSource >= 2) {
-          triggerCheat('view_source_shortcut');
-        } else {
-          warn('Affichage du code source bloqué. La prochaine tentative sera comptée comme triche.');
-        }
+        strikeOrCheat('viewSource', 'view_source_shortcut', 'Affichage du code source bloqué. La prochaine tentative sera comptée comme triche.');
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && ['p', 'P', 's', 'S'].includes(e.key)) {
+        e.preventDefault();
+        strikeOrCheat('printSave', 'print_or_save_shortcut', 'Impression / enregistrement de page bloqué. La prochaine tentative sera comptée comme triche.');
       }
     };
 
@@ -385,12 +399,22 @@ export function useAntiCheat({
       if (pointerEventIsInsideAllowedRoot(e, root)) return;
       if (pointerIsNearRoot(e, root)) return;
 
-      state.strikes.clickOutside += 1;
-      if (state.strikes.clickOutside >= 2) {
-        triggerCheat('click_outside_test_area');
-      } else {
-        warn('Clic en dehors du formulaire détecté. Restez bien dans la zone du test.');
-      }
+      strikeOrCheat('clickOutside', 'click_outside_test_area', 'Clic en dehors du formulaire détecté. Restez bien dans la zone du test.');
+    };
+
+    /* ── 6b. Copie / collage / menu contextuel : blocage progressif ───── */
+    const handleClipboard = (e: ClipboardEvent) => {
+      if (state.cheating || !state.active) return;
+      e.preventDefault();
+      state.lastActivityAt = Date.now();
+      strikeOrCheat('clipboard', 'clipboard_action', 'Copier/coller est bloqué pendant le test. La prochaine tentative sera comptée comme triche.');
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      if (state.cheating || !state.active) return;
+      e.preventDefault();
+      state.lastActivityAt = Date.now();
+      strikeOrCheat('contextMenu', 'context_menu', 'Menu contextuel bloqué pendant le test. La prochaine tentative sera comptée comme triche.');
     };
 
     /* ── 7. Focus / visibilité avec marge confortable ─────────────────── */
@@ -437,6 +461,10 @@ export function useAntiCheat({
     /* ── Enregistrement listeners ─────────────────────────────────────── */
     document.addEventListener('keydown', handleKeyDown, true);
     document.addEventListener('pointerdown', handlePointerDownCapture, true);
+    document.addEventListener('copy', handleClipboard, true);
+    document.addEventListener('cut', handleClipboard, true);
+    document.addEventListener('paste', handleClipboard, true);
+    document.addEventListener('contextmenu', handleContextMenu, true);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleWindowFocus);
 
@@ -454,6 +482,10 @@ export function useAntiCheat({
       clearInterval(focusInterval);
       document.removeEventListener('keydown', handleKeyDown, true);
       document.removeEventListener('pointerdown', handlePointerDownCapture, true);
+      document.removeEventListener('copy', handleClipboard, true);
+      document.removeEventListener('cut', handleClipboard, true);
+      document.removeEventListener('paste', handleClipboard, true);
+      document.removeEventListener('contextmenu', handleContextMenu, true);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleWindowFocus);
       window.removeEventListener('mousemove', trackActivity);
@@ -462,7 +494,7 @@ export function useAntiCheat({
       document.removeEventListener('touchstart', trackActivity);
       scheduleNextPresenceRef.current = null;
     };
-  }, [enabled, graceMs, triggerCheat, warn]);
+  }, [enabled, graceMs, strikeOrCheat, triggerCheat, warn]);
 
   return {
     cheatingDetected,
