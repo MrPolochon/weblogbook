@@ -44,11 +44,18 @@ export default function TranspondeurInterface({
   hasModeSAvion = false,
 }: TranspondeurInterfaceProps) {
   const [code, setCode] = useState(initialCode || '');
-  const [mode, setMode] = useState(initialMode || 'C');
+  // Si l'avion n'a pas Mode S mais que le mode sauvegardé est 'S', forcer 'C'.
+  const safeInitialMode = (!hasModeSAvion && (initialMode || 'C') === 'S') ? 'C' : (initialMode || 'C');
+  const [mode, setMode] = useState(safeInitialMode);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Si hasModeSAvion change (ex. refresh), s'assurer qu'on n'est pas en Mode S sans droit
+  useEffect(() => {
+    if (!hasModeSAvion && mode === 'S') setMode('C');
+  }, [hasModeSAvion, mode]);
 
   // Mise à jour de l'heure chaque seconde
   useEffect(() => {
@@ -253,39 +260,57 @@ export default function TranspondeurInterface({
               Mode Transpondeur
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: 'A', label: 'Mode A', desc: 'Identification' },
-                { id: 'C', label: 'Mode C', desc: 'Altitude' },
-                { id: 'S', label: 'Mode S', desc: 'Sélectif', requiresModeSAvion: true },
-              ].map((m) => {
-                const unavailable = m.requiresModeSAvion && !hasModeSAvion;
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => !unavailable && setMode(m.id)}
-                    disabled={unavailable}
-                    title={unavailable ? 'Cet avion n\'est pas équipé d\'un transpondeur Mode S' : undefined}
-                    className={`p-3 rounded-xl border-2 transition-all relative ${
-                      unavailable
-                        ? 'border-slate-700 bg-slate-800/20 text-slate-600 cursor-not-allowed opacity-40'
-                        : mode === m.id
-                          ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400'
-                          : 'border-slate-600 bg-slate-800/50 text-slate-400 hover:border-slate-500'
-                    }`}
-                  >
-                    <span className="font-mono text-xl font-bold">{m.id}</span>
-                    <p className="text-xs mt-1 opacity-80">{m.desc}</p>
-                    {unavailable && (
-                      <span className="absolute -top-1.5 -right-1.5 text-[8px] font-black bg-slate-600 text-slate-300 rounded px-1 leading-none py-0.5">N/A</span>
-                    )}
-                  </button>
-                );
-              })}
+              {/* Mode A */}
+              <button
+                onClick={() => setMode('A')}
+                className={`p-3 rounded-xl border-2 transition-all ${
+                  mode === 'A'
+                    ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400'
+                    : 'border-slate-600 bg-slate-800/50 text-slate-400 hover:border-slate-500'
+                }`}
+              >
+                <span className="font-mono text-xl font-bold">A</span>
+                <p className="text-xs mt-1 opacity-80">Identification</p>
+              </button>
+              {/* Mode C */}
+              <button
+                onClick={() => setMode('C')}
+                className={`p-3 rounded-xl border-2 transition-all ${
+                  mode === 'C'
+                    ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400'
+                    : 'border-slate-600 bg-slate-800/50 text-slate-400 hover:border-slate-500'
+                }`}
+              >
+                <span className="font-mono text-xl font-bold">C</span>
+                <p className="text-xs mt-1 opacity-80">Altitude</p>
+              </button>
+              {/* Mode S — disponible uniquement si l'avion en est équipé */}
+              {hasModeSAvion ? (
+                <button
+                  onClick={() => setMode('S')}
+                  className={`p-3 rounded-xl border-2 transition-all ${
+                    mode === 'S'
+                      ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400'
+                      : 'border-slate-600 bg-slate-800/50 text-slate-400 hover:border-slate-500'
+                  }`}
+                >
+                  <span className="font-mono text-xl font-bold">S</span>
+                  <p className="text-xs mt-1 opacity-80">Sélectif</p>
+                </button>
+              ) : (
+                <div
+                  title="Cet avion n'est pas équipé d'un transpondeur Mode S"
+                  className="p-3 rounded-xl border-2 border-slate-800 bg-slate-900/40 flex flex-col items-center justify-center cursor-not-allowed select-none"
+                >
+                  <span className="font-mono text-xl font-bold text-slate-700 line-through">S</span>
+                  <p className="text-[10px] mt-1 text-slate-600 font-semibold">Non équipé</p>
+                </div>
+              )}
             </div>
             {!hasModeSAvion && (
-              <p className="text-xs text-slate-500 flex items-center gap-1">
-                <Radio className="h-3 w-3 shrink-0" />
-                Cet avion n&apos;est pas équipé d&apos;un transpondeur Mode S — seuls les modes A et C sont disponibles.
+              <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                <Radio className="h-3 w-3 shrink-0 text-slate-600" />
+                Cet avion n&apos;est pas équipé d&apos;un transpondeur Mode S.
               </p>
             )}
           </div>
