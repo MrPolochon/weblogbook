@@ -4,6 +4,7 @@ import {
   Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap, Lock,
   Package, KeyRound, Wrench, Handshake, LayoutDashboard, Activity,
   Settings, Route, Flame, ImageIcon, HardDrive, ScrollText, Radio,
+  TrendingUp, CheckCircle2,
 } from 'lucide-react';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -97,8 +98,16 @@ const sections: Section[] = [
   },
 ];
 
-async function getAdminCounts(): Promise<Record<string, number>> {
+interface AdminStats {
+  counts: Record<string, number>;
+  totalPilotes: number;
+  totalCompagnies: number;
+  totalVolsValides: number;
+}
+
+async function getAdminData(): Promise<AdminStats> {
   const counts: Record<string, number> = {};
+  let totalPilotes = 0, totalCompagnies = 0, totalVolsValides = 0;
   try {
     const admin = createAdminClient();
     const results = await Promise.allSettled([
@@ -108,17 +117,20 @@ async function getAdminCounts(): Promise<Record<string, number>> {
       admin.from('aeroschool_responses').select('*', { count: 'exact', head: true }).neq('status', 'reviewed'),
       admin.from('hangar_market_reventes').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
       admin.from('incidents_vol').select('*', { count: 'exact', head: true }).in('statut', ['en_attente', 'en_examen']),
+      admin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'pilote'),
+      admin.from('compagnies').select('*', { count: 'exact', head: true }),
+      admin.from('vols').select('*', { count: 'exact', head: true }).eq('statut', 'validé'),
     ]);
     const keys = ['passwordResetRequests', 'volsEnAttente', 'plansNonClotures', 'aeroschoolResponses', 'demandesRevente', 'incidentsEnAttente'];
-    results.forEach((r, i) => {
-      if (r.status === 'fulfilled' && r.value && !(r.value as { error?: unknown }).error) {
-        counts[keys[i]] = (r.value as { count?: number | null }).count ?? 0;
-      } else {
-        counts[keys[i]] = 0;
-      }
+    results.slice(0, 6).forEach((r, i) => {
+      counts[keys[i]] = (r.status === 'fulfilled' && !(r.value as { error?: unknown })?.error)
+        ? ((r.value as { count?: number | null }).count ?? 0) : 0;
     });
+    totalPilotes = (results[6].status === 'fulfilled' ? (results[6].value as { count?: number | null }).count : null) ?? 0;
+    totalCompagnies = (results[7].status === 'fulfilled' ? (results[7].value as { count?: number | null }).count : null) ?? 0;
+    totalVolsValides = (results[8].status === 'fulfilled' ? (results[8].value as { count?: number | null }).count : null) ?? 0;
   } catch {}
-  return counts;
+  return { counts, totalPilotes, totalCompagnies, totalVolsValides };
 }
 
 const COLOR_MAP: Record<string, { bg: string; text: string; border: string; iconBg: string }> = {
@@ -130,35 +142,76 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; icon
 };
 
 export default async function AdminPage() {
-  const counts = await getAdminCounts();
+  const { counts, totalPilotes, totalCompagnies, totalVolsValides } = await getAdminData();
   const totalPending = Object.values(counts).reduce((a, b) => a + b, 0);
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-            <LayoutDashboard className="h-7 w-7 text-sky-400" />
-            Administration
-          </h1>
-          <p className="text-slate-400 mt-1">Panneau de gestion centralisé</p>
+      {/* ── Hero header ── */}
+      <div className="relative overflow-hidden rounded-2xl shadow-xl">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950">
+          <div className="absolute inset-0 bg-cockpit-grid opacity-20" />
+          <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-sky-500/5 blur-3xl" />
+          <div className="absolute -bottom-10 -left-10 w-60 h-60 rounded-full bg-purple-500/5 blur-3xl" />
         </div>
-        {totalPending > 0 && (
-          <div className="flex flex-col gap-1.5 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
-            <div className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-amber-400 shrink-0" />
-              <span className="text-amber-300 font-medium">{totalPending} action{totalPending > 1 ? 's' : ''} en attente</span>
+        <div className="relative z-10 p-6">
+          <div className="flex items-start justify-between flex-wrap gap-4">
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <div className="p-2.5 rounded-xl bg-white/8 border border-white/10">
+                  <LayoutDashboard className="h-6 w-6 text-sky-400" />
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Administration</h1>
+              </div>
+              <p className="text-slate-400 text-sm">Panneau de gestion centralisé</p>
             </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-amber-400/90">
-              {(counts.plansNonClotures ?? 0) > 0 && <span>Plans de vol : {counts.plansNonClotures}</span>}
-              {(counts.volsEnAttente ?? 0) > 0 && <span>Vols : {counts.volsEnAttente}</span>}
-              {(counts.aeroschoolResponses ?? 0) > 0 && <span>AeroSchool : {counts.aeroschoolResponses}</span>}
-              {(counts.passwordResetRequests ?? 0) > 0 && <span>Mots de passe : {counts.passwordResetRequests}</span>}
-              {(counts.demandesRevente ?? 0) > 0 && <span>Hangar Market : {counts.demandesRevente}</span>}
-              {(counts.incidentsEnAttente ?? 0) > 0 && <span>Incidents : {counts.incidentsEnAttente}</span>}
+            {totalPending > 0 && (
+              <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30">
+                <Activity className="h-5 w-5 text-amber-400 shrink-0 animate-pulse-soft" />
+                <div>
+                  <p className="text-amber-200 font-semibold text-sm">{totalPending} action{totalPending > 1 ? 's' : ''} en attente</p>
+                  <p className="text-amber-400/70 text-xs mt-0.5 flex flex-wrap gap-x-2">
+                    {(counts.plansNonClotures ?? 0) > 0 && <span>Plans: {counts.plansNonClotures}</span>}
+                    {(counts.volsEnAttente ?? 0) > 0 && <span>Vols: {counts.volsEnAttente}</span>}
+                    {(counts.aeroschoolResponses ?? 0) > 0 && <span>AeroSchool: {counts.aeroschoolResponses}</span>}
+                    {(counts.incidentsEnAttente ?? 0) > 0 && <span>Incidents: {counts.incidentsEnAttente}</span>}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Stats rapides */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-5">
+            <div className="flex items-center gap-3 rounded-xl bg-white/5 border border-white/8 px-4 py-3">
+              <div className="p-1.5 rounded-lg bg-sky-500/15">
+                <Users className="h-4 w-4 text-sky-400" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-sky-300 tabular-nums">{totalPilotes.toLocaleString('fr-FR')}</p>
+                <p className="text-xs text-slate-500">Pilotes</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 rounded-xl bg-white/5 border border-white/8 px-4 py-3">
+              <div className="p-1.5 rounded-lg bg-violet-500/15">
+                <Building2 className="h-4 w-4 text-violet-400" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-violet-300 tabular-nums">{totalCompagnies.toLocaleString('fr-FR')}</p>
+                <p className="text-xs text-slate-500">Compagnies</p>
+              </div>
+            </div>
+            <div className="col-span-2 sm:col-span-1 flex items-center gap-3 rounded-xl bg-white/5 border border-white/8 px-4 py-3">
+              <div className="p-1.5 rounded-lg bg-emerald-500/15">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-emerald-300 tabular-nums">{totalVolsValides.toLocaleString('fr-FR')}</p>
+                <p className="text-xs text-slate-500">Vols validés</p>
+              </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {sections.map(section => {

@@ -426,6 +426,15 @@ export default function AtcMapClient() {
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
+        {/* Disclaimer positions simulées */}
+        <div className="border-t border-slate-700/40 bg-slate-900/50">
+          <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-1.5 flex items-center gap-2">
+            <Info className="h-3 w-3 text-slate-500 shrink-0" />
+            <p className="text-[11px] text-slate-500 leading-none">
+              Les positions affichées sont <span className="text-slate-400">simulées</span> à partir des plans de vol — PTFS ne nous autorise pas à exploiter les données en temps réel du jeu.
+            </p>
+          </div>
+        </div>
       </header>
 
       <div className="max-w-[1600px] mx-auto p-2 sm:p-4 flex flex-col md:flex-row gap-3 md:gap-4" style={{ height: 'calc(100dvh - 60px)' }}>
