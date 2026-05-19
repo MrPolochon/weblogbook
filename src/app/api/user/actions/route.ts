@@ -60,16 +60,31 @@ export async function GET() {
       count: n1,
     });
 
-    const n2 = plansClotures?.length ?? 0;
-    if (n2 > 0) actions.push({
-      id: 'plan_cloture',
-      kind: 'plan_cloture',
-      title: `${n2} plan${n2 > 1 ? 's' : ''} clôturé${n2 > 1 ? 's' : ''} à enregistrer`,
-      body: 'Cliquez pour enregistrer le vol automatiquement.',
-      link: n2 === 1 ? `/logbook/nouveau?plan=${plansClotures![0].id}` : '/logbook/plans-vol',
-      count: n2,
-      planId: n2 === 1 ? plansClotures![0].id : undefined,
-    });
+    // Un item par plan clôturé (max 5 affichés individuellement)
+    const MAX_INDIVIDUAL = 5;
+    for (const plan of (plansClotures ?? []).slice(0, MAX_INDIVIDUAL)) {
+      actions.push({
+        id: `plan_cloture_${plan.id}`,
+        kind: 'plan_cloture',
+        title: `Plan ${plan.numero_vol || plan.id.slice(0, 8)} à enregistrer`,
+        body: 'Cliquez pour enregistrer le vol automatiquement.',
+        link: `/logbook/nouveau?plan=${plan.id}`,
+        count: 1,
+        planId: plan.id,
+      });
+    }
+    // Si plus de 5, une ligne groupée pour le reste
+    const extra = (plansClotures?.length ?? 0) - MAX_INDIVIDUAL;
+    if (extra > 0) {
+      actions.push({
+        id: 'plan_cloture_more',
+        kind: 'plan_cloture',
+        title: `+ ${extra} autre${extra > 1 ? 's' : ''} plan${extra > 1 ? 's' : ''} à enregistrer`,
+        body: 'Voir tous les plans clôturés.',
+        link: '/logbook/plans-vol',
+        count: extra,
+      });
+    }
 
     const n3 = attenteConfPilote?.length ?? 0;
     if (n3 > 0) actions.push({
