@@ -37,7 +37,7 @@ export default async function MesPlansVolPage() {
     supabase.from('profiles').select('role, identifiant').eq('id', user.id).single(),
     supabase
       .from('plans_vol')
-      .select('id, pilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id')
+      .select('id, pilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, compagnie_avion_id, inventaire_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id')
       .eq('pilote_id', user.id)
       .order('created_at', { ascending: false }),
     // Plans civils clôturés à enregistrer (pas encore transformés en vol)
@@ -88,40 +88,31 @@ export default async function MesPlansVolPage() {
   }
 
   // Déterminer si l'avion du plan actif a un transpondeur Mode S.
-  // Priorité : avion SIAVI (siavi_avion_id) → avion compagnie (pilote en vol).
+  // Priorité : compagnie_avion_id → inventaire_avion_id → siavi_avion_id (IDs directs du plan).
   let hasModeSAvion = false;
   if (planActif) {
-    if ((planActif as any).siavi_avion_id) {
-      const { data: siavi } = await admin
-        .from('siavi_avions')
-        .select('type_avion_id')
-        .eq('id', (planActif as any).siavi_avion_id)
-        .single();
-      if (siavi?.type_avion_id) {
-        const { data: ta } = await admin
-          .from('types_avion')
-          .select('has_mode_s')
-          .eq('id', siavi.type_avion_id)
-          .single();
-        hasModeSAvion = ta?.has_mode_s ?? false;
-      }
+    const p = planActif as any;
+    let typeAvionId: string | null = null;
+
+    // 1. Avion de compagnie (lien direct via compagnie_avion_id sur le plan)
+    if (!typeAvionId && p.compagnie_avion_id) {
+      const { data: ca } = await admin.from('compagnie_avions').select('type_avion_id').eq('id', p.compagnie_avion_id).single();
+      typeAvionId = ca?.type_avion_id ?? null;
     }
-    if (!hasModeSAvion) {
-      // Chercher l'avion compagnie piloté par ce pilote
-      const { data: compAvion } = await admin
-        .from('compagnie_avions')
-        .select('type_avion_id')
-        .eq('pilote_id', user.id)
-        .eq('statut', 'en_vol')
-        .single();
-      if (compAvion?.type_avion_id) {
-        const { data: ta } = await admin
-          .from('types_avion')
-          .select('has_mode_s')
-          .eq('id', compAvion.type_avion_id)
-          .single();
-        hasModeSAvion = ta?.has_mode_s ?? false;
-      }
+    // 2. Avion inventaire personnel
+    if (!typeAvionId && p.inventaire_avion_id) {
+      const { data: ia } = await admin.from('inventaire_avions').select('type_avion_id').eq('id', p.inventaire_avion_id).single();
+      typeAvionId = ia?.type_avion_id ?? null;
+    }
+    // 3. Avion SIAVI (MEDEVAC, etc.)
+    if (!typeAvionId && p.siavi_avion_id) {
+      const { data: sa } = await admin.from('siavi_avions').select('type_avion_id').eq('id', p.siavi_avion_id).single();
+      typeAvionId = sa?.type_avion_id ?? null;
+    }
+
+    if (typeAvionId) {
+      const { data: ta } = await admin.from('types_avion').select('has_mode_s').eq('id', typeAvionId).single();
+      hasModeSAvion = ta?.has_mode_s ?? false;
     }
   }
 
