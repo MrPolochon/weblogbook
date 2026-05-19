@@ -246,11 +246,14 @@ export default function NavBar({
                 <span className="hidden lg:inline">Espace Pilote</span>
                 <span className="lg:hidden">Pilote</span>
                 <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200 shrink-0', menuOpen && 'rotate-180')} />
-                {volsAConfirmerCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white ring-2 ring-[#0b0e1a]">
-                    {volsAConfirmerCount > 99 ? '99+' : volsAConfirmerCount}
-                  </span>
-                )}
+                {(() => {
+                  const total = volsAConfirmerCount + messagesNonLusCount + invitationsCount;
+                  return total > 0 ? (
+                    <span className="absolute -top-1 -right-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white ring-2 ring-[#0b0e1a]">
+                      {total > 99 ? '99+' : total}
+                    </span>
+                  ) : null;
+                })()}
               </button>
             </div>
 
