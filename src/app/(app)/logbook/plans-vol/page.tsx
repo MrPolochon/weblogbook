@@ -6,6 +6,7 @@ import { formatDateHourUTC } from '@/lib/date-utils';
 import { ArrowLeft, FileText, AlertCircle, Bell, Plane, CheckCircle2, XCircle, Timer, ArrowRight, Plus, Radio } from 'lucide-react';
 import PlanVolCloturerButton from './PlanVolCloturerButton';
 import PlanVolAnnulerButton from './PlanVolAnnulerButton';
+import NePasEnregistrerPlanButton from './NePasEnregistrerPlanButton';
 import TranspondeurInterface from './TranspondeurInterface';
 import MedevacPauseBanner from './MedevacPauseBanner';
 import type { PlanVol } from '@/lib/types';
@@ -32,13 +33,22 @@ export default async function MesPlansVolPage() {
   const admin = createAdminClient();
 
   // Profile and plans in parallel
-  const [{ data: profile }, { data: raw }] = await Promise.all([
+  const [{ data: profile }, { data: raw }, { data: plansClotures }] = await Promise.all([
     supabase.from('profiles').select('role, identifiant').eq('id', user.id).single(),
     supabase
       .from('plans_vol')
       .select('id, pilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id')
       .eq('pilote_id', user.id)
       .order('created_at', { ascending: false }),
+    // Plans civils clôturés à enregistrer (pas encore transformés en vol)
+    admin.from('plans_vol')
+      .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, temps_prev_min, cloture_at')
+      .eq('pilote_id', user.id)
+      .eq('statut', 'cloture')
+      .is('siavi_avion_id', null)
+      .not('accepted_at', 'is', null)
+      .not('cloture_at', 'is', null)
+      .order('cloture_at', { ascending: false }),
   ]);
 
   if (profile?.role === 'atc') redirect('/logbook');
@@ -356,6 +366,60 @@ export default async function MesPlansVolPage() {
       <p className="text-slate-500 text-sm text-center">
         Si aucun ATC n&apos;a accepté le plan ou s&apos;il est en autosurveillance, la clôture est immédiate. Sinon, l&apos;ATC qui détient le plan doit confirmer la clôture.
       </p>
+
+      {/* ── Plans clôturés à enregistrer ── */}
+      {plansClotures && plansClotures.length > 0 && (
+        <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 overflow-hidden">
+          <div className="px-6 py-4 border-b border-emerald-500/20 bg-emerald-500/10 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+              <h2 className="text-base font-semibold text-emerald-200">
+                Plans clôturés à enregistrer
+              </h2>
+              <span className="text-xs font-medium text-emerald-400/70 bg-emerald-500/15 px-2 py-0.5 rounded-full">
+                {plansClotures.length}
+              </span>
+            </div>
+            <p className="text-xs text-emerald-400/60 hidden sm:block">
+              Ces vols restent ici jusqu&apos;à ce que vous les enregistriez ou les supprimiez.
+            </p>
+          </div>
+          <div className="divide-y divide-emerald-500/10">
+            {plansClotures.map((p) => (
+              <div key={p.id} className="px-6 py-4 flex flex-wrap items-center justify-between gap-4 hover:bg-emerald-500/5 transition-colors">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/15 shrink-0">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span className="font-bold text-slate-100 font-mono">{p.numero_vol}</span>
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-300">Clôturé</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400">{p.aeroport_depart}</span>
+                      <ArrowRight className="h-3 w-3 text-slate-600 shrink-0" />
+                      <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">{p.aeroport_arrivee}</span>
+                      <span className="text-slate-500">• {p.type_vol}</span>
+                      <span className="text-slate-500">• {p.temps_prev_min} min</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Link
+                    href={`/logbook/nouveau?plan=${p.id}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Enregistrer le vol
+                  </Link>
+                  <NePasEnregistrerPlanButton planId={p.id} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
