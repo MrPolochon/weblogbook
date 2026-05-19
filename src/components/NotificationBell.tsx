@@ -52,6 +52,7 @@ export default function NotificationBell({ className }: { className?: string }) 
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [dismissingPlanId, setDismissingPlanId] = useState<string | null>(null);
   const [pos, setPos] = useState({ top: 0, right: 0 });
   const [mounted, setMounted] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -163,6 +164,24 @@ export default function NotificationBell({ className }: { className?: string }) 
     router.push(action.link);
   }
 
+  async function dismissPlan(planId: string) {
+    if (!confirm('Ne pas enregistrer ce vol et supprimer définitivement le plan de vol ?')) return;
+    setDismissingPlanId(planId);
+    try {
+      const res = await fetch(`/api/plans-vol/${planId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Erreur');
+      }
+      // Retirer l'action de la liste localement
+      setActions(prev => prev.filter(a => a.planId !== planId));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setDismissingPlanId(null);
+    }
+  }
+
   const totalBadge = unread + actions.length;
   const hasActions = actions.length > 0;
   const hasNotifs = items.length > 0;
@@ -245,19 +264,32 @@ export default function NotificationBell({ className }: { className?: string }) 
                     <ul className="divide-y divide-slate-800/50">
                       {actions.map((a) => (
                         <li key={a.id}>
-                          <button type="button" onClick={() => handleActionClick(a)}
-                            className="w-full text-left px-4 py-3 hover:bg-slate-800/60 transition-colors flex items-center gap-3">
-                            <span className={cn('shrink-0 p-1.5 rounded-lg', ACTION_COLORS[a.kind])}>
-                              {ACTION_ICONS[a.kind]}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <div className={cn('text-sm font-semibold leading-tight', ACTION_TEXT[a.kind])}>
-                                {a.title}
+                          <div className="px-4 py-3">
+                            <button type="button" onClick={() => handleActionClick(a)}
+                              className="w-full text-left hover:bg-slate-800/60 transition-colors flex items-center gap-3 rounded-lg -mx-1 px-1 py-1">
+                              <span className={cn('shrink-0 p-1.5 rounded-lg', ACTION_COLORS[a.kind])}>
+                                {ACTION_ICONS[a.kind]}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <div className={cn('text-sm font-semibold leading-tight', ACTION_TEXT[a.kind])}>
+                                  {a.title}
+                                </div>
+                                <div className="text-xs text-slate-500 mt-0.5 leading-tight line-clamp-1">{a.body}</div>
                               </div>
-                              <div className="text-xs text-slate-500 mt-0.5 leading-tight line-clamp-1">{a.body}</div>
-                            </div>
-                            <ChevronRight className="h-3.5 w-3.5 text-slate-600 shrink-0" />
-                          </button>
+                              <ChevronRight className="h-3.5 w-3.5 text-slate-600 shrink-0" />
+                            </button>
+                            {/* Bouton "Ne pas enregistrer" pour plan clôturé à enregistrer */}
+                            {a.kind === 'plan_cloture' && a.planId && (
+                              <button
+                                type="button"
+                                onClick={() => dismissPlan(a.planId!)}
+                                disabled={dismissingPlanId === a.planId}
+                                className="mt-2 w-full text-xs font-medium text-slate-500 hover:text-red-400 hover:bg-red-500/10 border border-slate-700/50 hover:border-red-500/30 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50"
+                              >
+                                {dismissingPlanId === a.planId ? '…' : '✕ Ne pas enregistrer ce vol'}
+                              </button>
+                            )}
+                          </div>
                         </li>
                       ))}
                     </ul>

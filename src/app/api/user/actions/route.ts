@@ -11,6 +11,8 @@ export interface ActionItem {
   body: string;
   link: string;
   count: number;
+  /** ID du plan concerné (disponible pour les actions à plan unique, ex. plan_cloture) */
+  planId?: string;
 }
 
 /**
@@ -66,6 +68,7 @@ export async function GET() {
       body: 'Cliquez pour enregistrer le vol automatiquement.',
       link: n2 === 1 ? `/logbook/nouveau?plan=${plansClotures![0].id}` : '/logbook/plans-vol',
       count: n2,
+      planId: n2 === 1 ? plansClotures![0].id : undefined,
     });
 
     const n3 = attenteConfPilote?.length ?? 0;
