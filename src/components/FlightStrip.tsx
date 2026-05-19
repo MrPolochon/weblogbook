@@ -248,7 +248,7 @@ function FlUnitToggle({ planId, unit, onSaved }: { planId: string; unit: string 
 /* ============================================================ */
 /*  ACTION BAR                                                     */
 /* ============================================================ */
-function StripActionBar({ strip, onRefresh, onTransferRequest }: { strip: StripData; onRefresh?: () => void; onTransferRequest?: (stripId: string, event?: React.MouseEvent) => void }) {
+function StripActionBar({ strip, onRefresh, onTransferRequest, onOptimisticStatut }: { strip: StripData; onRefresh?: () => void; onTransferRequest?: (stripId: string, event?: React.MouseEvent) => void; onOptimisticStatut?: (s: string) => void }) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
   const [loading, setLoading] = useState<string | null>(null);
@@ -263,15 +263,27 @@ function StripActionBar({ strip, onRefresh, onTransferRequest }: { strip: StripD
   const [showBriaLog, setShowBriaLog] = useState(false);
   const busyRef = useRef(false);
 
+  // Table de correspondance action → statut optimiste (mise à jour instantanée avant fetch)
+  const OPTIMISTIC_STATUT: Record<string, string> = {
+    accepter: 'accepte',
+    cloture: 'cloture',
+    automonitoring: 'automonitoring',
+    en_cours: 'en_cours',
+  };
+
   const callAction = async (action: string, body: Record<string, unknown> = {}) => {
     if (busyRef.current) return;
     busyRef.current = true;
     setLoading(action);
+    // Mise à jour optimiste instantanée du statut (affichage immédiat sans attendre le fetch)
+    const optimistic = OPTIMISTIC_STATUT[action];
+    if (optimistic) onOptimisticStatut?.(optimistic);
     try {
       const res = await fetch(`/api/plans-vol/${strip.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...body }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // Si le plan a été modifié entre le chargement et l'action, on refresh pour resynchroniser
+        // Annuler l'optimisme si l'action a échoué
+        if (optimistic) onOptimisticStatut?.(strip.statut);
         if (res.status === 400 || res.status === 409) onRefresh?.();
         throw new Error(d.error || 'Erreur');
       }
@@ -650,7 +662,13 @@ function FlightStripImpl({
 }) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
-  const isClotureRequested = strip.statut === 'en_attente_cloture';
+
+  // Statut local pour mise à jour optimiste instantanée (avant le retour du fetch)
+  const [optimisticStatut, setOptimisticStatut] = useState<string | null>(null);
+  useEffect(() => { setOptimisticStatut(null); }, [strip.statut]);
+  const statut = optimisticStatut ?? strip.statut;
+
+  const isClotureRequested = statut === 'en_attente_cloture';
   
   // Son de notification pour demande de clôture
   useEffect(() => {
@@ -942,19 +960,19 @@ function FlightStripImpl({
               <Cell className="flex-1">
                 <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>STATUT</div>
                 <span className={`text-sm font-bold uppercase ${
-                  strip.statut === 'en_cours' ? (isDark ? 'text-sky-300' : 'text-sky-700') :
-                  strip.statut === 'en_attente_cloture' ? (isDark ? 'text-orange-300' : 'text-orange-700') :
-                  strip.statut === 'accepte' ? (isDark ? 'text-emerald-300' : 'text-emerald-700') :
-                  (strip.statut === 'depose' || strip.statut === 'en_attente') ? (isDark ? 'text-amber-300' : 'text-amber-700') : 
-                  strip.statut === 'automonitoring' ? (isDark ? 'text-purple-300' : 'text-purple-700') : txt
+                  statut === 'en_cours' ? (isDark ? 'text-sky-300' : 'text-sky-700') :
+                  statut === 'en_attente_cloture' ? (isDark ? 'text-orange-300' : 'text-orange-700') :
+                  statut === 'accepte' ? (isDark ? 'text-emerald-300' : 'text-emerald-700') :
+                  (statut === 'depose' || statut === 'en_attente') ? (isDark ? 'text-amber-300' : 'text-amber-700') : 
+                  statut === 'automonitoring' ? (isDark ? 'text-purple-300' : 'text-purple-700') : txt
                 }`}>
-                  {strip.statut === 'en_cours' ? 'EN VOL' :
-                   strip.statut === 'en_attente_cloture' ? 'CLÔTURE' :
-                   strip.statut === 'accepte' ? 'ACCEPTÉ' :
-                   strip.statut === 'depose' ? 'DÉPOSÉ' :
-                   strip.statut === 'en_attente' ? 'EN ATTENTE' :
-                   strip.statut === 'automonitoring' ? 'AUTOSURV.' :
-                   strip.statut}
+                  {statut === 'en_cours' ? 'EN VOL' :
+                   statut === 'en_attente_cloture' ? 'CLÔTURE' :
+                   statut === 'accepte' ? 'ACCEPTÉ' :
+                   statut === 'depose' ? 'DÉPOSÉ' :
+                   statut === 'en_attente' ? 'EN ATTENTE' :
+                   statut === 'automonitoring' ? 'AUTOSURV.' :
+                   statut}
                 </span>
               </Cell>
             </div>
@@ -963,7 +981,7 @@ function FlightStripImpl({
       </div>
 
       {/* ACTION BAR */}
-      <StripActionBar strip={strip} onRefresh={onRefresh} onTransferRequest={onTransferRequest} />
+      <StripActionBar strip={{ ...strip, statut }} onRefresh={onRefresh} onTransferRequest={onTransferRequest} onOptimisticStatut={setOptimisticStatut} />
       
       {/* Animations CSS */}
       {(isClotureRequested || isDupe) && (

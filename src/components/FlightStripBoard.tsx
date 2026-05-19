@@ -72,24 +72,37 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
   const [transferDialog, setTransferDialog] = useState<string | null>(null);
 
   // État local pour mises à jour optimistes (déplacement immédiat au drop).
-  // On ne resync l'état local depuis les props QUE si l'identité des strips ou leur
-  // ordre/zone change réellement (sinon un nouveau tableau identique en contenu mais
-  // de référence différente déclenchait un reset et faisait revenir le strip à sa
-  // position serveur en plein drag).
+  // La signature inclut statut, code_transpondeur et mode pour que tout changement
+  // serveur (accepter, cloture, squawk…) déclenche bien un resync de localStrips.
+  // Elle exclut les champs inline-edit pour ne pas interrompre une saisie en cours.
   const [localStrips, setLocalStrips] = useState<StripData[]>(strips);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
   const stripsSignature = useMemo(
-    () => strips.map(s => `${s.id}:${s.strip_zone ?? 'null'}:${s.strip_order}`).join('|'),
+    () => strips.map(s =>
+      `${s.id}:${s.strip_zone ?? 'null'}:${s.strip_order}:${s.statut}:${s.code_transpondeur ?? ''}:${s.mode_transpondeur ?? ''}`
+    ).join('|'),
     [strips]
   );
   useEffect(() => {
-    setLocalStrips(strips);
+    // Pendant un drag actif, on ne remplace QUE les strips existants sans changer leur
+    // zone/order local (évite le saut visuel du strip en train d'être déplacé).
+    if (draggedId) {
+      setLocalStrips(prev => strips.map(s => {
+        if (s.id === draggedId) {
+          const local = prev.find(l => l.id === s.id);
+          if (local) return { ...s, strip_zone: local.strip_zone, strip_order: local.strip_order };
+        }
+        return s;
+      }));
+    } else {
+      setLocalStrips(strips);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stripsSignature]);
 
   // ═══════════════════════════════════════════════
   //  DRAG & DROP
   // ═══════════════════════════════════════════════
-  const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ zone: ZoneOrNull; stripId?: string; position?: 'before' | 'after' } | null>(null);
   const dragCounters = useRef<Map<string, number>>(new Map());
 
