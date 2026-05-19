@@ -134,8 +134,19 @@ export default function ClassementClient({ pilotes, currentUserId }: Props) {
         )}
       </div>
 
-      {/* Category selector */}
-      <div className="flex flex-wrap gap-1.5">
+      {/* Category selector — dropdown sur mobile, chips sur desktop */}
+      <div className="sm:hidden">
+        <select
+          value={activeCategory}
+          onChange={(e) => setActiveCategory(e.target.value as CategoryId)}
+          className="w-full rounded-lg border border-slate-700 bg-slate-800/60 text-slate-200 text-sm font-medium px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+        >
+          {CATEGORIES.map(cat => (
+            <option key={cat.id} value={cat.id}>{cat.label}</option>
+          ))}
+        </select>
+      </div>
+      <div className="hidden sm:flex flex-wrap gap-1.5">
         {CATEGORIES.map(cat => {
           const Icon = cat.icon;
           const isActive = activeCategory === cat.id;
@@ -150,7 +161,7 @@ export default function ClassementClient({ pilotes, currentUserId }: Props) {
               }`}
             >
               <Icon className={`h-3.5 w-3.5 ${isActive ? cat.color : ''}`} />
-              <span className="hidden sm:inline">{cat.label}</span>
+              <span>{cat.label}</span>
             </button>
           );
         })}

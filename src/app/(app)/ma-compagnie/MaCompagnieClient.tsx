@@ -512,7 +512,7 @@ export default function MaCompagnieClient({
       </header>
 
       {/* === BARRE DE NAVIGATION ANCRES === */}
-      <nav className="sticky top-0 z-20 -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 py-2 bg-slate-950/80 backdrop-blur-md border-y border-slate-800/60">
+      <nav className="sticky top-14 z-20 -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 py-2 bg-slate-950/80 backdrop-blur-md border-y border-slate-800/60">
         <div className="flex gap-2 overflow-x-auto scrollbar-thin">
           {navSections.filter(s => s.show).map((s) => {
             const Icon = s.icon;
@@ -692,7 +692,7 @@ export default function MaCompagnieClient({
       )}
 
       {/* === SECTION : EQUIPE === */}
-      <section id="equipe" className="space-y-6 scroll-mt-20">
+      <section id="equipe" className="space-y-6 scroll-mt-28">
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Infos compagnie */}
         <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-sky-500/5">
@@ -1034,7 +1034,7 @@ export default function MaCompagnieClient({
 
       {/* === SECTION : FINANCES === */}
       {isLeader && (
-        <section id="finances" className="space-y-6 scroll-mt-20">
+        <section id="finances" className="space-y-6 scroll-mt-28">
           <CompagniePretClient compagnieId={compagnie.id} />
 
           <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-amber-500/5">
@@ -1065,7 +1065,7 @@ export default function MaCompagnieClient({
       )}
 
       {/* === SECTION : FLOTTE === */}
-      <section id="flotte" className="space-y-6 scroll-mt-20">
+      <section id="flotte" className="space-y-6 scroll-mt-28">
         {isLeader && <CompagnieLocationsClient compagnieId={compagnie.id} />}
         {isLeader && <CompagnieHubsClient compagnieId={compagnie.id} />}
         <CompagnieAutorisationsClient compagnieId={compagnie.id} isPdg={isLeader} />
@@ -1073,7 +1073,7 @@ export default function MaCompagnieClient({
       </section>
 
       {/* === SECTION : OPERATIONS === */}
-      <section id="operations" className="space-y-6 scroll-mt-20">
+      <section id="operations" className="space-y-6 scroll-mt-28">
         <CompagnieReparationsClient compagnieId={compagnie.id} isPdg={isLeader} />
         {isLeader && <CompagnieVolsFerryClient compagnieId={compagnie.id} />}
       </section>

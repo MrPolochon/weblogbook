@@ -1,10 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { INSTRUCTION_TITRE_TYPES } from '@/lib/licence-titres-instruction';
 import {
   BookUser, Search, Shield, GraduationCap, Award, Radio, TowerControl,
-  Plane,
+  Plane, Mail, Copy, Check,
 } from 'lucide-react';
 import UserAvatar from '@/components/UserAvatar';
 
@@ -46,6 +47,13 @@ export default function AnnuaireClient({ entries }: { entries: AnnuaireEntry[] }
     admin: true, FI: true, FE: true, 'ATC FI': true, 'ATC FE': true,
   });
   const [search, setSearch] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  function copyDiscord(id: string, discord: string) {
+    navigator.clipboard.writeText(discord).catch(() => {});
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  }
 
   const filtered = useMemo(() => {
     const keys = (Object.keys(active) as FilterKey[]).filter((k) => active[k]);
@@ -188,6 +196,35 @@ export default function AnnuaireClient({ entries }: { entries: AnnuaireEntry[] }
                         {t}
                       </span>
                     ) : null,
+                  )}
+                </div>
+
+                {/* Boutons d'action */}
+                <div className="flex gap-2 pt-1 border-t border-slate-700/30">
+                  <Link
+                    href={`/messagerie?to=${encodeURIComponent(e.identifiant)}`}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 hover:border-sky-500/40 text-sky-400 hover:text-sky-300 px-2 py-1.5 text-xs font-medium transition-colors"
+                  >
+                    <Mail className="h-3.5 w-3.5 shrink-0" />
+                    Message
+                  </Link>
+                  {e.discord ? (
+                    <button
+                      type="button"
+                      onClick={() => copyDiscord(e.id, e.discord!)}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-700/40 hover:bg-slate-700/70 border border-slate-600/30 hover:border-slate-500/50 text-slate-400 hover:text-slate-200 px-2 py-1.5 text-xs font-medium transition-colors"
+                      title={`Copier : ${e.discord}`}
+                    >
+                      {copiedId === e.id
+                        ? <><Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" /><span className="text-emerald-400">Copié !</span></>
+                        : <><Copy className="h-3.5 w-3.5 shrink-0" />Discord</>
+                      }
+                    </button>
+                  ) : (
+                    <div className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-700/20 text-slate-600 px-2 py-1.5 text-xs font-medium cursor-not-allowed select-none">
+                      <Copy className="h-3.5 w-3.5 shrink-0" />
+                      Discord
+                    </div>
                   )}
                 </div>
               </div>
