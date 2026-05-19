@@ -288,7 +288,26 @@ function StripActionBar({ strip, onRefresh, onTransferRequest, onOptimisticStatu
         throw new Error(d.error || 'Erreur');
       }
       onRefresh?.();
-    } catch (e) { alert(e instanceof Error ? e.message : 'Erreur'); }
+    } catch (e) {
+      try {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContext) {
+          const ctx = new AudioContext();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(880, ctx.currentTime);
+          osc.frequency.setValueAtTime(440, ctx.currentTime + 0.1);
+          gain.gain.setValueAtTime(0.25, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 0.35);
+          osc.onended = () => ctx.close();
+        }
+      } catch { /* son non dispo */ }
+      alert(e instanceof Error ? e.message : 'Erreur');
+    }
     finally { setLoading(null); busyRef.current = false; }
   };
 
