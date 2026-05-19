@@ -89,7 +89,7 @@ export default async function AtcLayout({
           position={session?.position ?? null}
         />
         <InactivityLogout />
-        <AutoRefresh intervalSeconds={8} />
+        <AutoRefresh intervalSeconds={60} />
         <AtcModeBg isAdmin={isAdmin} />
         <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
         <AtcAtisTicker />

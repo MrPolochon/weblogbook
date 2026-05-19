@@ -1,17 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 /**
- * Rafraîchit le shell ATC (layout + page) quand des plans concernant la session
- * changent en base — complète AutoRefresh (intervalle) et évite le décalage
- * « son / sidebar ok mais tableau pas à jour ».
+ * Écoute les changements Supabase Realtime sur plans_vol et déclenche
+ * un refresh rapide des strips (event `atc-strips-refresh`) sans router.refresh().
+ * FlightStripBoardWrapper capte cet event et appelle /api/atc/strips.
  *
- * Le filtre Supabase sur UPDATE s'applique au nouvel enregistrement : un plan qui
- * quitte current_holder_user_id = nous ne déclenche pas ce filtre. On s'abonne donc
- * aussi aux lignes dont le départ ou l'arrivée touche l'aéroport de service.
+ * Un router.refresh() complet n'est plus déclenché ici (trop lent).
+ * L'AutoRefresh du layout (60s) assure la resynchronisation complète périodique.
  */
 export default function AtcPlansRealtimeRefresh({
   userId,
@@ -24,8 +22,6 @@ export default function AtcPlansRealtimeRefresh({
   aeroport: string | null;
   position: string | null;
 }) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -38,10 +34,9 @@ export default function AtcPlansRealtimeRefresh({
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         debounceRef.current = null;
-        startTransition(() => {
-          router.refresh();
-        });
-      }, 350);
+        // Déclenche un fetch rapide dans FlightStripBoardWrapper (pas de router.refresh)
+        window.dispatchEvent(new CustomEvent('atc-strips-refresh'));
+      }, 200);
     };
 
     const supabase = createClient();
@@ -102,7 +97,7 @@ export default function AtcPlansRealtimeRefresh({
       if (debounceRef.current) clearTimeout(debounceRef.current);
       supabase.removeChannel(channel);
     };
-  }, [userId, enService, aeroport, position, router, startTransition]);
+  }, [userId, enService, aeroport, position]);
 
   return null;
 }

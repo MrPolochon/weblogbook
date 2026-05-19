@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useTransition, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+
 import FlightStrip, { type StripData } from './FlightStrip';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
@@ -65,8 +65,7 @@ const ZONE_DROP_DARK: Record<ZoneId, string> = {
   transit: 'ring-4 ring-violet-500 bg-violet-900/60',
 };
 
-export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onlineSessions }: { strips: StripData[]; atcPosition?: string; atcAeroport?: string; onlineSessions?: OnlineSession[] }) {
-  const router = useRouter();
+export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onlineSessions, onRefresh }: { strips: StripData[]; atcPosition?: string; atcAeroport?: string; onlineSessions?: OnlineSession[]; onRefresh?: () => void }) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
   const isCenter = atcPosition === 'Center';
@@ -152,9 +151,9 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
       if (!res.ok) throw new Error('Erreur API');
     } catch {
       setLocalStrips(prevStrips);
-      router.refresh();
+      onRefresh?.();
     }
-  }, [localStrips, router]);
+  }, [localStrips, onRefresh]);
 
   // ─── Drop: place strip before/after another — mise à jour optimiste ───
   const dropNearStrip = useCallback(async (stripId: string, targetId: string, zone: ZoneOrNull, position: 'before' | 'after') => {
@@ -185,9 +184,9 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
       if (!res.ok) throw new Error('Erreur API');
     } catch {
       setLocalStrips(prevStrips);
-      router.refresh();
+      onRefresh?.();
     }
-  }, [localStrips, router]);
+  }, [localStrips, onRefresh]);
 
   // ─── Handle drop event ───
   const handleDrop = useCallback(async (e: React.DragEvent, zone: ZoneOrNull, targetStripId?: string, position?: 'before' | 'after') => {
@@ -247,7 +246,7 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
     });
   }, [draggedId]);
 
-  const refresh = useCallback(() => router.refresh(), [router]);
+  const refresh = useCallback(() => onRefresh?.(), [onRefresh]);
 
   const quickTransferTargets = useMemo(() => {
     if (!atcPosition || !atcAeroport || !onlineSessions) return [];
@@ -338,11 +337,11 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || 'Erreur');
       }
-      router.refresh();
+      onRefresh?.();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     }
-  }, [router]);
+  }, [onRefresh]);
 
   // ─── Render a strip item with drag support ───
   const renderStripItem = (s: StripData, zone: ZoneOrNull) => {
@@ -531,15 +530,13 @@ export default function FlightStripBoard({ strips, atcPosition, atcAeroport, onl
       )}
 
       {/* Transfer dialog (double clic droit) */}
-      {transferDialog && <TransferDialog planId={transferDialog} onClose={() => setTransferDialog(null)} />}
+      {transferDialog && <TransferDialog planId={transferDialog} onClose={() => setTransferDialog(null)} onRefresh={onRefresh} />}
     </div>
   );
 }
 
 /* ============================================================ */
-function TransferDialog({ planId, onClose }: { planId: string; onClose: () => void }) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
+function TransferDialog({ planId, onClose, onRefresh }: { planId: string; onClose: () => void; onRefresh?: () => void }) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
   const [aeroport, setAeroport] = useState('');
@@ -556,7 +553,7 @@ function TransferDialog({ planId, onClose }: { planId: string; onClose: () => vo
       const res = await fetch(`/api/plans-vol/${planId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      startTransition(() => router.refresh()); onClose();
+      onRefresh?.(); onClose();
     } catch (e) { alert(e instanceof Error ? e.message : 'Erreur'); }
     finally { setLoading(false); }
   };
