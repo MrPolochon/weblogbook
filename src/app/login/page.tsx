@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind } from 'lucide-react';
 
 const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
 
@@ -28,115 +28,211 @@ function isSafeRedirectPath(p: string | null | undefined): p is string {
   return typeof p === 'string' && p.startsWith('/') && !p.startsWith('//') && !p.includes('\\');
 }
 
-// Composant pour les nuages animés
-function AnimatedClouds() {
-  const clouds = useMemo(() => 
-    Array.from({ length: 6 }, (_, i) => ({
+/* ── Étoiles scintillantes ── */
+function TwinklingStars() {
+  const stars = useMemo(() =>
+    Array.from({ length: 30 }, (_, i) => ({
       id: i,
-      size: 40 + Math.random() * 60,
-      top: 10 + Math.random() * 70,
-      duration: 25 + Math.random() * 20,
-      delay: Math.random() * -30,
-      opacity: 0.03 + Math.random() * 0.05,
-    })), []
-  );
-
+      left: Math.random() * 100,
+      top: Math.random() * 55,
+      size: 1 + Math.random() * 1.5,
+      duration: 2 + Math.random() * 4,
+      delay: Math.random() * 6,
+    })), []);
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {clouds.map((cloud) => (
-        <div
-          key={cloud.id}
-          className="absolute animate-cloud"
-          style={{
-            top: `${cloud.top}%`,
-            width: `${cloud.size}px`,
-            height: `${cloud.size * 0.6}px`,
-            opacity: cloud.opacity,
-            animationDuration: `${cloud.duration}s`,
-            animationDelay: `${cloud.delay}s`,
-          }}
-        >
-          <svg viewBox="0 0 100 60" className="w-full h-full fill-white">
-            <ellipse cx="30" cy="40" rx="25" ry="18" />
-            <ellipse cx="55" cy="35" rx="30" ry="22" />
-            <ellipse cx="75" cy="42" rx="20" ry="15" />
-            <ellipse cx="45" cy="48" rx="28" ry="12" />
-          </svg>
+      {stars.map((s) => (
+        <div key={s.id} className="absolute rounded-full bg-white animate-twinkle"
+          style={{ left: `${s.left}%`, top: `${s.top}%`, width: `${s.size}px`, height: `${s.size}px`, animationDuration: `${s.duration}s`, animationDelay: `${s.delay}s` }} />
+      ))}
+    </div>
+  );
+}
+
+/* ── Nuages en deux couches parallax ── */
+function ParallaxClouds() {
+  const layer1 = useMemo(() => Array.from({ length: 5 }, (_, i) => ({
+    id: i, size: 80 + Math.random() * 80, top: 8 + Math.random() * 35,
+    duration: 30 + Math.random() * 25, delay: Math.random() * -40, opacity: 0.04 + Math.random() * 0.04,
+  })), []);
+  const layer2 = useMemo(() => Array.from({ length: 4 }, (_, i) => ({
+    id: i + 10, size: 50 + Math.random() * 60, top: 15 + Math.random() * 45,
+    duration: 50 + Math.random() * 30, delay: Math.random() * -55, opacity: 0.02 + Math.random() * 0.03,
+  })), []);
+  const CloudSVG = ({ w, h }: { w: number; h: number }) => (
+    <svg viewBox="0 0 160 80" width={w} height={h} className="fill-white">
+      <ellipse cx="40" cy="55" rx="35" ry="22" />
+      <ellipse cx="75" cy="45" rx="42" ry="28" />
+      <ellipse cx="115" cy="52" rx="32" ry="20" />
+      <ellipse cx="90" cy="62" rx="38" ry="16" />
+      <ellipse cx="55" cy="60" rx="28" ry="14" />
+    </svg>
+  );
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {[...layer1, ...layer2].map((c) => (
+        <div key={c.id} className="absolute animate-cloud"
+          style={{ top: `${c.top}%`, opacity: c.opacity, animationDuration: `${c.duration}s`, animationDelay: `${c.delay}s` }}>
+          <CloudSVG w={c.size} h={c.size * 0.5} />
         </div>
       ))}
     </div>
   );
 }
 
-// Composant pour l'avion animé
-function FlyingPlane() {
-  const [visible, setVisible] = useState(false);
-  
-  useEffect(() => {
-    // Premier avion après 2s
-    const initialTimeout = setTimeout(() => setVisible(true), 2000);
-    
-    // Répéter toutes les 15-25 secondes
-    const interval = setInterval(() => {
-      setVisible(true);
-      setTimeout(() => setVisible(false), 8000);
-    }, 15000 + Math.random() * 10000);
-    
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(interval);
-    };
-  }, []);
-
-  if (!visible) return null;
+/* ── Avions multiples avec traînées de condensation ── */
+function MultipleAircrafts() {
+  const planes = useMemo(() => [
+    { id: 1, top: '9%',  size: 18, duration: 22, delay: 0,   dir: 1, angle: -8,  color: 'white/50', contrailW: 180 },
+    { id: 2, top: '18%', size: 12, duration: 38, delay: -12, dir: 1, angle: -5,  color: 'cyan-100/40', contrailW: 140 },
+    { id: 3, top: '28%', size: 9,  duration: 55, delay: -28, dir: -1, angle: 6, color: 'white/30', contrailW: 100 },
+    { id: 4, top: '14%', size: 14, duration: 30, delay: -18, dir: 1, angle: -10, color: 'amber-100/40', contrailW: 160 },
+  ], []);
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      <div className="animate-fly-across absolute" style={{ top: '15%' }}>
-        <div className="relative">
-          {/* Trainée de l'avion */}
-          <div className="absolute right-full top-1/2 -translate-y-1/2 w-32 h-0.5 bg-gradient-to-l from-white/30 to-transparent" />
-          {/* Icône avion */}
-          <Plane className="h-6 w-6 text-white/60 transform -rotate-12" />
+      {planes.map((p) => (
+        <div key={p.id} className="absolute w-full"
+          style={{ top: p.top, animation: `${p.dir > 0 ? 'plane-drift' : 'plane-drift-rev'} ${p.duration}s linear ${p.delay}s infinite` }}>
+          <div className="flex items-center" style={{ transform: `rotate(${p.dir > 0 ? p.angle : -p.angle}deg)` }}>
+            {p.dir < 0 && (
+              <div className="h-px bg-gradient-to-l from-white/50 to-transparent animate-contrail-fade"
+                style={{ width: p.contrailW, animationDuration: `${p.duration}s`, animationDelay: `${p.delay}s` }} />
+            )}
+            <Plane className={`shrink-0 text-${p.color}`} style={{ width: p.size, height: p.size, transform: p.dir < 0 ? 'scaleX(-1)' : undefined }} />
+            {p.dir > 0 && (
+              <div className="h-px bg-gradient-to-r from-white/50 to-transparent animate-contrail-fade"
+                style={{ width: p.contrailW, animationDuration: `${p.duration}s`, animationDelay: `${p.delay}s` }} />
+            )}
+          </div>
         </div>
+      ))}
+    </div>
+  );
+}
+
+/* ── Radar en coin bas-gauche ── */
+function RadarCorner() {
+  const blips = useMemo(() => [
+    { cx: 48, cy: 32, delay: '0.5s' },
+    { cx: 62, cy: 55, delay: '1.8s' },
+    { cx: 30, cy: 50, delay: '3.2s' },
+    { cx: 55, cy: 42, delay: '2.4s' },
+  ], []);
+  return (
+    <div className="absolute bottom-20 left-6 pointer-events-none hidden sm:block" style={{ opacity: 0.22 }}>
+      <svg width="90" height="90" viewBox="0 0 90 90">
+        {/* Cercles concentriques */}
+        {[40, 30, 20, 10].map((r) => (
+          <circle key={r} cx="45" cy="45" r={r} fill="none" stroke="#22d3ee" strokeWidth="0.6" opacity="0.6" />
+        ))}
+        {/* Crosshairs */}
+        <line x1="45" y1="5" x2="45" y2="85" stroke="#22d3ee" strokeWidth="0.5" opacity="0.4" />
+        <line x1="5" y1="45" x2="85" y2="45" stroke="#22d3ee" strokeWidth="0.5" opacity="0.4" />
+        {/* Sweep */}
+        <g style={{ transformOrigin: '45px 45px', animation: 'radar-rotate 4s linear infinite' }}>
+          <line x1="45" y1="45" x2="45" y2="5" stroke="#22d3ee" strokeWidth="1.5" opacity="0.9" />
+          <path d="M45 45 L55 10 A40 40 0 0 0 45 5 Z" fill="url(#sweep)" opacity="0.35" />
+          <defs>
+            <radialGradient id="sweep" cx="50%" cy="100%" r="100%">
+              <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.8" />
+              <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+            </radialGradient>
+          </defs>
+        </g>
+        {/* Blips */}
+        {blips.map((b, i) => (
+          <circle key={i} cx={b.cx} cy={b.cy} r="2.5" fill="#4ade80"
+            style={{ animation: `radar-blip 4s ease-out ${b.delay} infinite` }} />
+        ))}
+        {/* Cadre */}
+        <circle cx="45" cy="45" r="42" fill="none" stroke="#22d3ee" strokeWidth="1" opacity="0.5" />
+      </svg>
+      <p className="text-[8px] font-mono text-cyan-300/60 text-center mt-1 tracking-widest">RADAR</p>
+    </div>
+  );
+}
+
+/* ── HUD overlay : grille, niveaux de vol, indicateurs ── */
+function HUDOverlay() {
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      {/* Scanline très subtile */}
+      <div className="absolute left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-400/12 to-transparent animate-hud-scanline" />
+      {/* Lignes de niveaux de vol horizontales */}
+      {[22, 38, 52, 66].map((pct, i) => (
+        <div key={i} className="absolute left-0 right-0 h-px animate-altitude-pulse"
+          style={{ top: `${pct}%`, background: 'linear-gradient(90deg,transparent 0%,rgba(34,211,238,0.15) 20%,rgba(34,211,238,0.08) 80%,transparent 100%)',
+            animationDelay: `${i * 1.1}s` }} />
+      ))}
+      {/* Labels FL discrets */}
+      <div className="absolute left-3 top-[22%] text-[8px] font-mono text-cyan-400/20 tracking-widest">FL 300</div>
+      <div className="absolute left-3 top-[38%] text-[8px] font-mono text-cyan-400/20 tracking-widest">FL 200</div>
+      <div className="absolute left-3 top-[52%] text-[8px] font-mono text-cyan-400/20 tracking-widest">FL 100</div>
+      {/* Coins HUD */}
+      {[
+        'top-4 left-4 border-t border-l',
+        'top-4 right-4 border-t border-r',
+        'bottom-4 left-4 border-b border-l',
+        'bottom-4 right-4 border-b border-r',
+      ].map((cls, i) => (
+        <div key={i} className={`absolute w-8 h-8 border-cyan-400/15 ${cls}`} />
+      ))}
+      {/* Cap magnétique en haut */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 opacity-20">
+        {['270','280','290','300','N','310','320','330','340'].map((h, i) => (
+          <span key={i} className={`text-[7px] font-mono ${h === 'N' ? 'text-amber-300 text-[9px] font-bold' : 'text-cyan-300'} tracking-wider`}>{h}</span>
+        ))}
       </div>
     </div>
   );
 }
 
-// Composant pour les étoiles scintillantes
-function TwinklingStars() {
-  const stars = useMemo(() => 
-    Array.from({ length: 20 }, (_, i) => ({
-      id: i,
-      left: Math.random() * 100,
-      top: Math.random() * 60,
-      size: 1 + Math.random() * 2,
-      duration: 2 + Math.random() * 3,
-      delay: Math.random() * 5,
-    })), []
-  );
-
+/* ── Lumières de navigation (bord de piste) ── */
+function NavigationLights() {
+  const lights = useMemo(() => Array.from({ length: 22 }, (_, i) => {
+    const type = i % 4 === 0 ? 'red' : i % 4 === 2 ? 'green' : 'white';
+    return { id: i, left: (i / 21) * 100, type, delay: `${(i * 0.15) % 2}s` };
+  }), []);
+  const colorMap = { red: '#ef4444', green: '#22c55e', white: '#e2e8f0' };
+  const animMap = { red: 'animate-nav-red', green: 'animate-nav-green', white: 'animate-nav-white' };
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {stars.map((star) => (
-        <div
-          key={star.id}
-          className="absolute rounded-full bg-white animate-twinkle"
-          style={{
-            left: `${star.left}%`,
-            top: `${star.top}%`,
-            width: `${star.size}px`,
-            height: `${star.size}px`,
-            animationDuration: `${star.duration}s`,
-            animationDelay: `${star.delay}s`,
-          }}
-        />
+    <div className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none">
+      <div className="absolute bottom-4 left-0 right-0 flex justify-between px-4">
+        {lights.map((l) => (
+          <div key={l.id} className={`rounded-full ${animMap[l.type as keyof typeof animMap]}`}
+            style={{ width: 3, height: 3, background: colorMap[l.type as keyof typeof colorMap],
+              boxShadow: `0 0 6px 2px ${colorMap[l.type as keyof typeof colorMap]}`, animationDelay: l.delay }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── Balises VOR ── */
+function VORBeacons() {
+  const beacons = useMemo(() => [
+    { left: '12%', top: '72%', label: 'IRF' },
+    { left: '82%', top: '65%', label: 'ITK' },
+    { left: '48%', top: '80%', label: 'IPP' },
+  ], []);
+  return (
+    <div className="absolute inset-0 pointer-events-none hidden sm:block">
+      {beacons.map((b) => (
+        <div key={b.label} className="absolute" style={{ left: b.left, top: b.top }}>
+          <div className="relative flex items-center justify-center">
+            <div className="absolute rounded-full border border-cyan-400/30 w-8 h-8 animate-vor-pulse" style={{ animationDelay: `${Math.random()}s` }} />
+            <div className="absolute rounded-full border border-cyan-400/20 w-8 h-8 animate-vor-pulse" style={{ animationDelay: `${0.8 + Math.random()}s` }} />
+            <div className="w-1.5 h-1.5 rounded-full bg-cyan-400/50" />
+          </div>
+          <p className="text-[7px] font-mono text-cyan-300/30 text-center mt-1 tracking-widest">{b.label}</p>
+        </div>
       ))}
     </div>
   );
 }
 
+/* ── Déco été (soleil + vagues) ── */
 function SummerUpdateDecor() {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -160,8 +256,9 @@ function LoginPageFallback() {
   return (
     <div className="min-h-screen relative flex items-center justify-center">
       <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url(/mixou-bg.png)' }} />
-      <div className="absolute inset-0 bg-gradient-to-br from-sky-950/70 via-cyan-900/45 to-amber-900/35" />
+      <div className="absolute inset-0 bg-gradient-to-br from-sky-950/80 via-cyan-950/55 to-orange-950/45" />
       <SummerUpdateDecor />
+      <HUDOverlay />
       <p className="relative z-10 text-amber-100">Chargement…</p>
     </div>
   );
@@ -436,11 +533,15 @@ function LoginPageContent() {
       {fond}
       {overlay}
       
-      {/* Animations d'arrière-plan */}
+      {/* Animations d'arrière-plan — thème aviation réaliste */}
       <SummerUpdateDecor />
       <TwinklingStars />
-      <AnimatedClouds />
-      <FlyingPlane />
+      <ParallaxClouds />
+      <MultipleAircrafts />
+      <HUDOverlay />
+      <RadarCorner />
+      <VORBeacons />
+      <NavigationLights />
       
       <div className="relative z-10 w-full max-w-md">
         {/* Logo / Titre */}

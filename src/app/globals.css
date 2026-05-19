@@ -1108,6 +1108,74 @@ thead th {
 }
 
 /* ==========================================================================
+   Login page — animations réalistes aviation
+   ========================================================================== */
+
+@keyframes radar-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes radar-blip {
+  0%   { opacity: 0; r: 2; }
+  30%  { opacity: 1; r: 3; }
+  100% { opacity: 0; r: 1; }
+}
+@keyframes contrail-fade {
+  0%   { opacity: 0; transform: scaleX(0); transform-origin: right; }
+  15%  { opacity: 0.55; }
+  75%  { opacity: 0.3; }
+  100% { opacity: 0; }
+}
+@keyframes plane-drift {
+  0%   { transform: translateX(-160px); opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
+  100% { transform: translateX(calc(100vw + 160px)); opacity: 0; }
+}
+@keyframes plane-drift-rev {
+  0%   { transform: translateX(calc(100vw + 160px)); opacity: 0; }
+  5%   { opacity: 1; }
+  95%  { opacity: 1; }
+  100% { transform: translateX(-160px); opacity: 0; }
+}
+@keyframes nav-blink-red {
+  0%, 45%, 55%, 100% { opacity: 0; }
+  48%, 52%            { opacity: 0.9; }
+}
+@keyframes nav-blink-green {
+  0%, 20%, 30%, 100% { opacity: 0; }
+  23%, 27%            { opacity: 0.9; }
+}
+@keyframes nav-blink-white {
+  0%, 70%, 80%, 100% { opacity: 0; }
+  73%, 77%            { opacity: 0.7; }
+}
+@keyframes hud-scanline {
+  0%   { transform: translateY(-8px); opacity: 0.06; }
+  50%  { opacity: 0.03; }
+  100% { transform: translateY(calc(100vh + 8px)); opacity: 0; }
+}
+@keyframes altitude-pulse {
+  0%, 100% { opacity: 0.04; }
+  50%       { opacity: 0.08; }
+}
+@keyframes vor-pulse {
+  0%   { transform: scale(0.5); opacity: 0.7; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+.animate-radar-rotate    { animation: radar-rotate 4s linear infinite; }
+.animate-contrail-fade   { animation: contrail-fade 8s ease-out infinite; }
+.animate-plane-drift     { animation: plane-drift linear infinite; }
+.animate-plane-drift-rev { animation: plane-drift-rev linear infinite; }
+.animate-nav-red         { animation: nav-blink-red 2s ease infinite; }
+.animate-nav-green       { animation: nav-blink-green 2s ease infinite; }
+.animate-nav-white       { animation: nav-blink-white 2s ease infinite; }
+.animate-hud-scanline    { animation: hud-scanline 8s linear infinite; }
+.animate-altitude-pulse  { animation: altitude-pulse 4s ease-in-out infinite; }
+.animate-vor-pulse       { animation: vor-pulse 2.5s ease-out infinite; }
+
+/* ==========================================================================
    Accessibilite : respecter prefers-reduced-motion sur TOUTES les animations
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
