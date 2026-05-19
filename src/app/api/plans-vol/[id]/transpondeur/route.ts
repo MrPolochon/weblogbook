@@ -46,7 +46,7 @@ export async function PATCH(
     // Vérifier que le plan existe et appartient à l'utilisateur
     const { data: plan, error: planError } = await admin
       .from('plans_vol')
-      .select('pilote_id, statut')
+      .select('pilote_id, statut, siavi_avion_id')
       .eq('id', id)
       .single();
 
@@ -69,6 +69,32 @@ export async function PATCH(
         { error: 'Le transpondeur ne peut être modifié que pour un vol accepté ou en cours' },
         { status: 400 }
       );
+    }
+
+    // Vérifier que Mode S est disponible sur l'avion si demandé
+    if (mode_transpondeur === 'S') {
+      let hasModeSAvion = false;
+      const siavi_avion_id = (plan as any).siavi_avion_id;
+      if (siavi_avion_id) {
+        const { data: siavi } = await admin.from('siavi_avions').select('type_avion_id').eq('id', siavi_avion_id).single();
+        if (siavi?.type_avion_id) {
+          const { data: ta } = await admin.from('types_avion').select('has_mode_s').eq('id', siavi.type_avion_id).single();
+          hasModeSAvion = ta?.has_mode_s ?? false;
+        }
+      }
+      if (!hasModeSAvion) {
+        const { data: compAvion } = await admin.from('compagnie_avions').select('type_avion_id').eq('pilote_id', user.id).eq('statut', 'en_vol').single();
+        if (compAvion?.type_avion_id) {
+          const { data: ta } = await admin.from('types_avion').select('has_mode_s').eq('id', compAvion.type_avion_id).single();
+          hasModeSAvion = ta?.has_mode_s ?? false;
+        }
+      }
+      if (!hasModeSAvion) {
+        return NextResponse.json(
+          { error: 'Cet avion n\'est pas équipé d\'un transpondeur Mode S.' },
+          { status: 400 }
+        );
+      }
     }
 
     // Mettre à jour le transpondeur

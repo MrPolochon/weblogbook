@@ -77,6 +77,44 @@ export default async function MesPlansVolPage() {
     controleurIdentifiant = controleurProfile?.identifiant || null;
   }
 
+  // Déterminer si l'avion du plan actif a un transpondeur Mode S.
+  // Priorité : avion SIAVI (siavi_avion_id) → avion compagnie (pilote en vol).
+  let hasModeSAvion = false;
+  if (planActif) {
+    if ((planActif as any).siavi_avion_id) {
+      const { data: siavi } = await admin
+        .from('siavi_avions')
+        .select('type_avion_id')
+        .eq('id', (planActif as any).siavi_avion_id)
+        .single();
+      if (siavi?.type_avion_id) {
+        const { data: ta } = await admin
+          .from('types_avion')
+          .select('has_mode_s')
+          .eq('id', siavi.type_avion_id)
+          .single();
+        hasModeSAvion = ta?.has_mode_s ?? false;
+      }
+    }
+    if (!hasModeSAvion) {
+      // Chercher l'avion compagnie piloté par ce pilote
+      const { data: compAvion } = await admin
+        .from('compagnie_avions')
+        .select('type_avion_id')
+        .eq('pilote_id', user.id)
+        .eq('statut', 'en_vol')
+        .single();
+      if (compAvion?.type_avion_id) {
+        const { data: ta } = await admin
+          .from('types_avion')
+          .select('has_mode_s')
+          .eq('id', compAvion.type_avion_id)
+          .single();
+        hasModeSAvion = ta?.has_mode_s ?? false;
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -188,6 +226,7 @@ export default async function MesPlansVolPage() {
           controleurPosition={planActif.current_holder_position ?? null}
           controleurAeroport={planActif.current_holder_aeroport ?? null}
           automonitoring={planActif.automonitoring || false}
+          hasModeSAvion={hasModeSAvion}
         />
       )}
 

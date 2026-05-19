@@ -24,6 +24,8 @@ interface TranspondeurInterfaceProps {
   controleurPosition: string | null;
   controleurAeroport: string | null;
   automonitoring: boolean;
+  /** true si l'avion embarque un transpondeur Mode S (ADS-B / TCAS). false = Mode C uniquement. */
+  hasModeSAvion?: boolean;
 }
 
 export default function TranspondeurInterface({
@@ -39,6 +41,7 @@ export default function TranspondeurInterface({
   controleurPosition,
   controleurAeroport,
   automonitoring,
+  hasModeSAvion = false,
 }: TranspondeurInterfaceProps) {
   const [code, setCode] = useState(initialCode || '');
   const [mode, setMode] = useState(initialMode || 'C');
@@ -253,22 +256,38 @@ export default function TranspondeurInterface({
               {[
                 { id: 'A', label: 'Mode A', desc: 'Identification' },
                 { id: 'C', label: 'Mode C', desc: 'Altitude' },
-                { id: 'S', label: 'Mode S', desc: 'Sélectif' },
-              ].map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => setMode(m.id)}
-                  className={`p-3 rounded-xl border-2 transition-all ${
-                    mode === m.id
-                      ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400'
-                      : 'border-slate-600 bg-slate-800/50 text-slate-400 hover:border-slate-500'
-                  }`}
-                >
-                  <span className="font-mono text-xl font-bold">{m.id}</span>
-                  <p className="text-xs mt-1 opacity-80">{m.desc}</p>
-                </button>
-              ))}
+                { id: 'S', label: 'Mode S', desc: 'Sélectif', requiresModeSAvion: true },
+              ].map((m) => {
+                const unavailable = m.requiresModeSAvion && !hasModeSAvion;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => !unavailable && setMode(m.id)}
+                    disabled={unavailable}
+                    title={unavailable ? 'Cet avion n\'est pas équipé d\'un transpondeur Mode S' : undefined}
+                    className={`p-3 rounded-xl border-2 transition-all relative ${
+                      unavailable
+                        ? 'border-slate-700 bg-slate-800/20 text-slate-600 cursor-not-allowed opacity-40'
+                        : mode === m.id
+                          ? 'border-emerald-500 bg-emerald-500/20 text-emerald-400'
+                          : 'border-slate-600 bg-slate-800/50 text-slate-400 hover:border-slate-500'
+                    }`}
+                  >
+                    <span className="font-mono text-xl font-bold">{m.id}</span>
+                    <p className="text-xs mt-1 opacity-80">{m.desc}</p>
+                    {unavailable && (
+                      <span className="absolute -top-1.5 -right-1.5 text-[8px] font-black bg-slate-600 text-slate-300 rounded px-1 leading-none py-0.5">N/A</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
+            {!hasModeSAvion && (
+              <p className="text-xs text-slate-500 flex items-center gap-1">
+                <Radio className="h-3 w-3 shrink-0" />
+                Cet avion n&apos;est pas équipé d&apos;un transpondeur Mode S — seuls les modes A et C sont disponibles.
+              </p>
+            )}
           </div>
         </div>
 

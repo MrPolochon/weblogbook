@@ -140,6 +140,7 @@ export default async function AtcPage() {
       type_avion_nom: typeAvionNom,
       type_wake: getTypeWake(typeAvionCodeOaci),
       code_transpondeur: plan.code_transpondeur || null,
+      mode_transpondeur: plan.mode_transpondeur || 'C',
       squawk_attendu: null,
       sid_depart: plan.sid_depart || null,
       star_arrivee: plan.star_arrivee || null,

@@ -19,7 +19,9 @@ export type StripData = {
   type_avion_nom: string | null;
   type_wake: string;
   code_transpondeur: string | null;
+  mode_transpondeur: string | null;
   squawk_attendu: string | null;
+  isDupe?: boolean;
   sid_depart: string | null;
   star_arrivee: string | null;
   route_ifr: string | null;
@@ -681,28 +683,60 @@ function FlightStripImpl({
   const sqLabel = getSquawkLabel(strip.code_transpondeur);
   const isEmergency = !!sqColor;
   const isManual = strip.isManual ?? false;
+  const isDupe = strip.isDupe ?? false;
+  const modeTranspondeur = (strip.mode_transpondeur || 'C').toUpperCase();
   const squawkMismatch = strip.squawk_attendu && strip.code_transpondeur && strip.code_transpondeur !== strip.squawk_attendu;
   const noSquawk = strip.squawk_attendu && !strip.code_transpondeur;
-  
-  // Color scheme - Mode clair
-  const lightBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-700' : sqColor === 'radio' ? 'border-amber-600' : 'border-red-600') : isClotureRequested ? 'border-red-500' : isManual ? 'border-[#7b8fbc]' : 'border-[#8fbc8f]';
-  const lightLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-100' : sqColor === 'radio' ? 'bg-amber-100' : 'bg-red-100') : isClotureRequested ? 'bg-red-50' : isManual ? 'bg-[#d5ddef]' : 'bg-[#d5ecd5]';
-  const lightRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : isClotureRequested ? 'bg-red-100' : isManual ? 'bg-[#e8dff5]' : 'bg-[#f5f0c8]';
-  const lightTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200') : isClotureRequested ? 'bg-red-100' : isManual ? 'bg-[#c5d0e5]' : 'bg-[#c5dcc5]';
-  const lightSep = isEmergency ? 'border-red-300' : isClotureRequested ? 'border-red-300' : isManual ? 'border-[#7b8fbc]' : 'border-[#8fbc8f]';
-  const lightTxt = 'text-slate-900';
-  const lightLbl = 'text-slate-600';
 
-  // Color scheme - Mode sombre (couleurs inversées avec meilleur contraste)
-  const darkBorder = isEmergency ? (sqColor === 'hijack' ? 'border-red-500' : sqColor === 'radio' ? 'border-amber-500' : 'border-red-500') : isClotureRequested ? 'border-red-500' : isManual ? 'border-indigo-600' : 'border-emerald-600';
-  const darkLeftBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-950' : sqColor === 'radio' ? 'bg-amber-950' : 'bg-red-950') : isClotureRequested ? 'bg-red-950' : isManual ? 'bg-indigo-950' : 'bg-emerald-950';
-  const darkRightBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : isClotureRequested ? 'bg-red-900' : isManual ? 'bg-indigo-800' : 'bg-amber-900';
-  const darkTopBg = isEmergency ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900') : isClotureRequested ? 'bg-red-900' : isManual ? 'bg-indigo-900' : 'bg-emerald-900';
-  const darkSep = isEmergency ? 'border-red-700' : isClotureRequested ? 'border-red-700' : isManual ? 'border-indigo-700' : 'border-emerald-700';
-  const darkTxt = 'text-slate-100';
-  const darkLbl = 'text-slate-200';
+  // ── Couleurs : DUPE Mode C écrase tout sauf urgence ──
+  const lightBorder = isEmergency
+    ? (sqColor === 'hijack' ? 'border-red-700' : sqColor === 'radio' ? 'border-amber-600' : 'border-red-600')
+    : isDupe ? 'border-red-600'
+    : isClotureRequested ? 'border-red-500'
+    : isManual ? 'border-[#7b8fbc]' : 'border-[#8fbc8f]';
+  const lightLeftBg = isEmergency
+    ? (sqColor === 'hijack' ? 'bg-red-100' : sqColor === 'radio' ? 'bg-amber-100' : 'bg-red-100')
+    : isDupe ? 'bg-slate-200'
+    : isClotureRequested ? 'bg-red-50'
+    : isManual ? 'bg-[#d5ddef]' : 'bg-[#d5ecd5]';
+  const lightRightBg = isEmergency
+    ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200')
+    : isDupe ? 'bg-slate-300'
+    : isClotureRequested ? 'bg-red-100'
+    : isManual ? 'bg-[#e8dff5]' : 'bg-[#f5f0c8]';
+  const lightTopBg = isEmergency
+    ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200')
+    : isDupe ? 'bg-slate-300'
+    : isClotureRequested ? 'bg-red-100'
+    : isManual ? 'bg-[#c5d0e5]' : 'bg-[#c5dcc5]';
+  const lightSep = isEmergency ? 'border-red-300' : isDupe ? 'border-slate-400' : isClotureRequested ? 'border-red-300' : isManual ? 'border-[#7b8fbc]' : 'border-[#8fbc8f]';
+  const lightTxt = isDupe ? 'text-slate-400' : 'text-slate-900';
+  const lightLbl = isDupe ? 'text-slate-400' : 'text-slate-600';
 
-  // Appliquer le bon thème
+  const darkBorder = isEmergency
+    ? (sqColor === 'hijack' ? 'border-red-500' : sqColor === 'radio' ? 'border-amber-500' : 'border-red-500')
+    : isDupe ? 'border-red-500'
+    : isClotureRequested ? 'border-red-500'
+    : isManual ? 'border-indigo-600' : 'border-emerald-600';
+  const darkLeftBg = isEmergency
+    ? (sqColor === 'hijack' ? 'bg-red-950' : sqColor === 'radio' ? 'bg-amber-950' : 'bg-red-950')
+    : isDupe ? 'bg-slate-800'
+    : isClotureRequested ? 'bg-red-950'
+    : isManual ? 'bg-indigo-950' : 'bg-emerald-950';
+  const darkRightBg = isEmergency
+    ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900')
+    : isDupe ? 'bg-slate-700'
+    : isClotureRequested ? 'bg-red-900'
+    : isManual ? 'bg-indigo-800' : 'bg-amber-900';
+  const darkTopBg = isEmergency
+    ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900')
+    : isDupe ? 'bg-slate-700'
+    : isClotureRequested ? 'bg-red-900'
+    : isManual ? 'bg-indigo-900' : 'bg-emerald-900';
+  const darkSep = isEmergency ? 'border-red-700' : isDupe ? 'border-slate-500' : isClotureRequested ? 'border-red-700' : isManual ? 'border-indigo-700' : 'border-emerald-700';
+  const darkTxt = isDupe ? 'text-slate-500' : 'text-slate-100';
+  const darkLbl = isDupe ? 'text-slate-500' : 'text-slate-200';
+
   const border = isDark ? darkBorder : lightBorder;
   const leftBg = isDark ? darkLeftBg : lightLeftBg;
   const rightBg = isDark ? darkRightBg : lightRightBg;
@@ -713,28 +747,33 @@ function FlightStripImpl({
 
   return (
     <div
-          // Largeur fixe : evite le redimensionnement quand on drop la strip
-          // dans une zone plus etroite/large. Calcul interne :
-          //   drag(20) + LEFT min(390) + bar(3) + RIGHT(280) = 693px minimum.
-          // 720px laisse une petite marge pour la cellule "NOTE" (flex-1).
-          // flex-shrink-0 empeche tout ecrasement par un parent flex.
           className={`w-[720px] flex-shrink-0 border ${border} rounded shadow-sm select-none overflow-hidden`}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, strip.id); }}
-      style={isClotureRequested ? {
-        animation: 'pulse-red 1.5s ease-in-out infinite',
-        boxShadow: '0 0 20px rgba(239, 68, 68, 0.6)'
-      } : undefined}
+      style={
+        isDupe && !isEmergency
+          ? { animation: 'glitch-strip 0.4s steps(2) infinite', boxShadow: '0 0 14px rgba(239, 68, 68, 0.5)', filter: 'saturate(0) brightness(0.85)' }
+          : isClotureRequested
+            ? { animation: 'pulse-red 1.5s ease-in-out infinite', boxShadow: '0 0 20px rgba(239, 68, 68, 0.6)' }
+            : undefined
+      }
     >
       {/* Emergency banner */}
       {sqLabel && <div className={`text-center text-sm font-black tracking-[0.3em] py-1 animate-pulse ${isDark ? 'bg-red-600 text-white' : 'bg-black text-white'}`}>{sqLabel}</div>}
-      
+
+      {/* DUPE banner — transpondeur Mode C en doublon */}
+      {isDupe && !isEmergency && (
+        <div className="text-center text-sm font-black tracking-[0.4em] py-1 bg-red-700 text-white" style={{ animation: 'glitch-text 0.3s steps(1) infinite' }}>
+          ⚡ DUPE SQUAWK — MODE C ⚡
+        </div>
+      )}
+
       {/* Closure request banner */}
-      {isClotureRequested && (
+      {isClotureRequested && !isDupe && (
         <div className="text-center text-sm font-bold py-1 bg-red-600 text-white animate-pulse">
           🛬 DEMANDE DE CLÔTURE
         </div>
       )}
-      {(squawkMismatch || noSquawk) && !sqLabel && (
+      {(squawkMismatch || noSquawk) && !sqLabel && !isDupe && (
         <div className={`text-center text-xs font-bold py-1 ${isDark ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black'}`}>
           {noSquawk ? '⚠ PAS DE TRANSPONDEUR' : `⚠ SQUAWK INCORRECT (attendu: ${strip.squawk_attendu})`}
         </div>
@@ -846,8 +885,23 @@ function FlightStripImpl({
             {/* ROW 1 */}
             <div className={`flex border-b ${sep}`}>
               <Cell className={`w-[90px] border-r ${sep}`}>
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>SQUAWK</div>
-                <span className={`text-base font-mono font-black ${txt}`}>{strip.code_transpondeur || '—'}</span>
+                <div className="flex items-center justify-between mb-0.5 gap-1">
+                  <span className={`text-xs ${lbl} leading-none font-semibold`}>SQUAWK</span>
+                  <span className={`text-[9px] font-black px-1 py-0.5 rounded leading-none ${
+                    modeTranspondeur === 'S'
+                      ? (isDark ? 'bg-sky-700 text-sky-200' : 'bg-sky-200 text-sky-800')
+                      : modeTranspondeur === 'A'
+                        ? (isDark ? 'bg-slate-600 text-slate-300' : 'bg-slate-300 text-slate-700')
+                        : isDupe
+                          ? 'bg-red-700 text-white'
+                          : (isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-700')
+                  }`}>
+                    {modeTranspondeur}
+                  </span>
+                </div>
+                <span className={`text-base font-mono font-black ${isDupe ? (isDark ? 'text-slate-600' : 'text-slate-400') : txt}`}>
+                  {strip.code_transpondeur || '—'}
+                </span>
               </Cell>
               <Cell className={`w-[90px] border-r ${sep}`}>
                 <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>CLR REV</div>
@@ -907,18 +961,24 @@ function FlightStripImpl({
       {/* ACTION BAR */}
       <StripActionBar strip={strip} onRefresh={onRefresh} onTransferRequest={onTransferRequest} />
       
-      {/* Animation CSS pour clignotement rouge */}
-      {isClotureRequested && (
+      {/* Animations CSS */}
+      {(isClotureRequested || isDupe) && (
         <style jsx>{`
           @keyframes pulse-red {
-            0%, 100% {
-              border-color: rgb(185, 28, 28);
-              box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
-            }
-            50% {
-              border-color: rgb(239, 68, 68);
-              box-shadow: 0 0 30px rgba(239, 68, 68, 0.9);
-            }
+            0%, 100% { border-color: rgb(185, 28, 28); box-shadow: 0 0 20px rgba(239,68,68,0.6); }
+            50% { border-color: rgb(239, 68, 68); box-shadow: 0 0 30px rgba(239,68,68,0.9); }
+          }
+          @keyframes glitch-strip {
+            0%   { transform: translate(0,0); }
+            25%  { transform: translate(-2px, 1px); }
+            50%  { transform: translate(2px,-1px); }
+            75%  { transform: translate(-1px, 2px); }
+            100% { transform: translate(0,0); }
+          }
+          @keyframes glitch-text {
+            0%   { letter-spacing: 0.4em; opacity: 1; }
+            50%  { letter-spacing: 0.5em; opacity: 0.7; color: #ff4444; }
+            100% { letter-spacing: 0.4em; opacity: 1; }
           }
         `}</style>
       )}

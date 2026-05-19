@@ -35,14 +35,33 @@ export default function FlightStripBoardWrapper({ allStrips, plansATraiter, atcP
   const visibleStrips = allStrips.filter((strip) => {
     const isATraiter = plansATraiter.includes(strip.id);
     const isActivated = activatedPlanIds.has(strip.id);
-    
-    // Si c'est un plan à traiter ET pas encore activé, on le cache
-    if (isATraiter && !isActivated) {
-      return false;
-    }
-    
+    if (isATraiter && !isActivated) return false;
     return true;
   });
+
+  // Détection des doublons transpondeur Mode C :
+  // si deux strips ont le même code_transpondeur ET les deux sont en mode C (pas S),
+  // alors les deux sont marqués isDupe = true → le strip affiche l'alerte DUPE glitchée.
+  const squawkModeCCounts = new Map<string, string[]>(); // code → [strip.id, ...]
+  for (const s of visibleStrips) {
+    const code = s.code_transpondeur?.trim();
+    const mode = (s.mode_transpondeur || 'C').toUpperCase();
+    if (!code || code.length !== 4 || mode === 'S') continue;
+    // Ignorer les codes spéciaux (urgences)
+    if (code === '7500' || code === '7600' || code === '7700') continue;
+    const existing = squawkModeCCounts.get(code) ?? [];
+    existing.push(s.id);
+    squawkModeCCounts.set(code, existing);
+  }
+  const dupeIds = new Set<string>();
+  squawkModeCCounts.forEach((ids) => {
+    if (ids.length >= 2) ids.forEach((id) => dupeIds.add(id));
+  });
+
+  const stripsWithDupe = visibleStrips.map((s) => ({
+    ...s,
+    isDupe: dupeIds.has(s.id),
+  }));
 
   // Écouter les événements d'activation depuis la sidebar
   useEffect(() => {
@@ -58,5 +77,5 @@ export default function FlightStripBoardWrapper({ allStrips, plansATraiter, atcP
     return () => window.removeEventListener('activateStrip' as never, handleActivation as never);
   }, []);
 
-  return <FlightStripBoard strips={visibleStrips} atcPosition={atcPosition} atcAeroport={atcAeroport} onlineSessions={onlineSessions} />;
+  return <FlightStripBoard strips={stripsWithDupe} atcPosition={atcPosition} atcAeroport={atcAeroport} onlineSessions={onlineSessions} />;
 }
