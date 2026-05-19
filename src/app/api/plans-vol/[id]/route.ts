@@ -244,7 +244,7 @@ export async function PATCH(
       const isHolder = plan.current_holder_user_id === user.id;
       const canAtc = isAdmin || isHolder;
       if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui detient le plan ou un admin peut accepter.' }, { status: 403 });
-      if (plan.statut !== 'en_attente' && plan.statut !== 'depose') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
+      if (plan.statut !== 'en_attente' && plan.statut !== 'depose') return NextResponse.json({ error: `Ce plan a déjà été traité (statut : ${plan.statut}). La page va se rafraîchir.` }, { status: 400 });
 
       // Enregistrer que cet ATC a contrôlé ce vol
       if (plan.current_holder_user_id && plan.current_holder_aeroport && plan.current_holder_position) {
@@ -268,7 +268,7 @@ export async function PATCH(
       const isHolder = plan.current_holder_user_id === user.id;
       const canAtc = isAdmin || isHolder;
       if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui detient le plan ou un admin peut refuser.' }, { status: 403 });
-      if (plan.statut !== 'en_attente' && plan.statut !== 'depose') return NextResponse.json({ error: 'Ce plan n\'est pas en attente.' }, { status: 400 });
+      if (plan.statut !== 'en_attente' && plan.statut !== 'depose') return NextResponse.json({ error: `Ce plan a déjà été traité (statut : ${plan.statut}). La page va se rafraîchir.` }, { status: 400 });
       const reason = body.refusal_reason != null ? String(body.refusal_reason).trim() : '';
       if (!reason) return NextResponse.json({ error: 'La raison du refus est obligatoire.' }, { status: 400 });
 

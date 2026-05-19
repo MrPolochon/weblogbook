@@ -270,7 +270,11 @@ function StripActionBar({ strip, onRefresh, onTransferRequest }: { strip: StripD
     try {
       const res = await fetch(`/api/plans-vol/${strip.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...body }) });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(d.error || 'Erreur');
+      if (!res.ok) {
+        // Si le plan a été modifié entre le chargement et l'action, on refresh pour resynchroniser
+        if (res.status === 400 || res.status === 409) onRefresh?.();
+        throw new Error(d.error || 'Erreur');
+      }
       onRefresh?.();
     } catch (e) { alert(e instanceof Error ? e.message : 'Erreur'); }
     finally { setLoading(null); busyRef.current = false; }
