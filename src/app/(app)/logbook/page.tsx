@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
 import { formatDuree, cn } from '@/lib/utils';
 import { formatDateMediumUTC, formatTimeUTC } from '@/lib/date-utils';
-import { Plus, BookOpen, Plane, FileText, Clock, CheckCircle2, XCircle, Timer, TrendingUp, ArrowRight } from 'lucide-react';
+import { Plus, BookOpen, Plane, FileText, Clock, CheckCircle2, XCircle, Timer, TrendingUp, ArrowRight, AlertCircle, ChevronRight } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
 import NePasEnregistrerPlanButton from './NePasEnregistrerPlanButton';
 import ExportLogbookButton from './ExportLogbookButton';
@@ -207,8 +207,60 @@ export default async function LogbookPage() {
         </div>
       </div>
 
-      {/* Alertes importantes */}
-      {plansVolRefuses && plansVolRefuses.length > 0 && (
+      {/* ── Panneau Actions requises (toutes alertes regroupées) ── */}
+      {(() => {
+        type ActionItem = {
+          id: string;
+          color: 'red' | 'amber' | 'emerald' | 'sky';
+          icon: React.ReactNode;
+          title: string;
+          detail: string;
+          cta: React.ReactNode;
+        };
+        const actions: ActionItem[] = [];
+        if (plansVolRefuses && plansVolRefuses.length > 0)
+          actions.push({ id: 'plans-refuses', color: 'red', icon: <XCircle className="h-4 w-4" />, title: `${plansVolRefuses.length} plan${plansVolRefuses.length > 1 ? 's' : ''} refusé${plansVolRefuses.length > 1 ? 's' : ''} par l'ATC`, detail: 'Modifiez-les selon les indications et renvoyez-les.', cta: <Link href="/logbook/plans-vol" className="inline-flex items-center gap-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors whitespace-nowrap"><FileText className="h-3.5 w-3.5" />Voir les plans</Link> });
+        if (plansVolClotures && plansVolClotures.length > 0)
+          actions.push({ id: 'plans-clotures', color: 'emerald', icon: <CheckCircle2 className="h-4 w-4" />, title: `${plansVolClotures.length} plan${plansVolClotures.length > 1 ? 's' : ''} clôturé${plansVolClotures.length > 1 ? 's' : ''} à enregistrer`, detail: 'Cliquez sur "Enregistrer le vol" pour remplir le formulaire automatiquement.', cta: <div className="flex items-center gap-2 flex-wrap"><Link href={`/logbook/nouveau?plan=${plansVolClotures[0].id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600/80 hover:bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors whitespace-nowrap"><Plus className="h-3.5 w-3.5" />Enregistrer</Link><NePasEnregistrerPlanButton planId={plansVolClotures[0].id} /></div> });
+        if (volsEnAttentePilote && volsEnAttentePilote.length > 0)
+          actions.push({ id: 'attente-pilote', color: 'amber', icon: <Timer className="h-4 w-4" />, title: `${volsEnAttentePilote.length} vol${volsEnAttentePilote.length > 1 ? 's' : ''} en attente de confirmation pilote`, detail: 'Vous êtes co-pilote. Ces vols apparaîtront après confirmation du pilote.', cta: <Link href={`/logbook/vol/${volsEnAttentePilote[0].id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600/70 hover:bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors whitespace-nowrap"><ChevronRight className="h-3.5 w-3.5" />Voir</Link> });
+        if (volsEnAttenteCopilote && volsEnAttenteCopilote.length > 0)
+          actions.push({ id: 'attente-copilote', color: 'amber', icon: <Timer className="h-4 w-4" />, title: `${volsEnAttenteCopilote.length} vol${volsEnAttenteCopilote.length > 1 ? 's' : ''} en attente de confirmation co-pilote`, detail: 'Votre co-pilote doit confirmer pour que ces vols apparaissent.', cta: <Link href={`/logbook/vol/${volsEnAttenteCopilote[0].id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600/70 hover:bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors whitespace-nowrap"><ChevronRight className="h-3.5 w-3.5" />Voir</Link> });
+        if (volsEnAttenteInstructeur && volsEnAttenteInstructeur.length > 0)
+          actions.push({ id: 'attente-instructeur', color: 'sky', icon: <Timer className="h-4 w-4" />, title: `${volsEnAttenteInstructeur.length} vol${volsEnAttenteInstructeur.length > 1 ? 's' : ''} d'instruction en attente`, detail: "L'instructeur validera directement, sans passer par les admins.", cta: <Link href={`/logbook/vol/${volsEnAttenteInstructeur[0].id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600/70 hover:bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors whitespace-nowrap"><ChevronRight className="h-3.5 w-3.5" />Voir</Link> });
+        if (volsRefuseParCopilote && volsRefuseParCopilote.length > 0)
+          actions.push({ id: 'refuse-copilote', color: 'red', icon: <XCircle className="h-4 w-4" />, title: `${volsRefuseParCopilote.length} vol${volsRefuseParCopilote.length > 1 ? 's' : ''} refusé${volsRefuseParCopilote.length > 1 ? 's' : ''} par le co-pilote`, detail: 'Modifiez ou retirez le co-pilote pour renvoyer le vol.', cta: <div className="flex items-center gap-2"><Link href={`/logbook/vol/${volsRefuseParCopilote[0].id}`} className="inline-flex items-center gap-1.5 rounded-lg bg-red-600/70 hover:bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors whitespace-nowrap"><ChevronRight className="h-3.5 w-3.5" />Modifier</Link><VolDeleteButton volId={volsRefuseParCopilote[0].id} /></div> });
+
+        if (actions.length === 0) return null;
+        const hasError = actions.some(a => a.color === 'red');
+        const borderClass = hasError ? 'border-red-500/30' : actions.some(a => a.color === 'emerald') ? 'border-emerald-500/30' : 'border-amber-500/30';
+        const dotColors: Record<ActionItem['color'], string> = { red: 'text-red-400 bg-red-500/10', amber: 'text-amber-400 bg-amber-500/10', emerald: 'text-emerald-400 bg-emerald-500/10', sky: 'text-sky-400 bg-sky-500/10' };
+        const textColors: Record<ActionItem['color'], string> = { red: 'text-red-200', amber: 'text-amber-200', emerald: 'text-emerald-200', sky: 'text-sky-200' };
+        return (
+          <div className={`rounded-xl border ${borderClass} bg-slate-900/60 overflow-hidden animate-fade-in`}>
+            <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-slate-700/40 bg-slate-800/30">
+              <AlertCircle className="h-4 w-4 text-amber-400 shrink-0" />
+              <h2 className="text-sm font-semibold text-slate-200">Actions requises</h2>
+              <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">{actions.length}</span>
+            </div>
+            <div className="divide-y divide-slate-700/25">
+              {actions.map(a => (
+                <div key={a.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800/20 transition-colors">
+                  <span className={`shrink-0 p-1.5 rounded-lg ${dotColors[a.color]}`}>{a.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium ${textColors[a.color]} leading-tight`}>{a.title}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-tight">{a.detail}</p>
+                  </div>
+                  <div className="shrink-0">{a.cta}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Ancienne section alertes — remplacée par le panneau ci-dessus */}
+      {false && plansVolRefuses && plansVolRefuses.length > 0 && (
         <div className="relative overflow-hidden rounded-xl border-2 border-red-500/40 bg-gradient-to-r from-red-500/10 to-red-600/5 p-5">
           <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
           <div className="relative flex items-start gap-4">
@@ -373,7 +425,7 @@ export default async function LogbookPage() {
                   <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Route</th>
                   <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Appareil</th>
                   <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Cie / Callsign</th>
-                  <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Duree</th>
+                  <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Durée</th>
                   <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Type / Role</th>
                   <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Statut</th>
                   <th className="pb-3 w-10"> </th>
@@ -383,16 +435,12 @@ export default async function LogbookPage() {
                 {vols.map((v) => (
                   <tr
                     key={v.id}
-                    className="group border-l-2 border-transparent hover:border-sky-500/40 hover:bg-slate-800/35 transition-[background-color,border-color,box-shadow] duration-200"
+                    className="group border-l-2 border-transparent hover:border-sky-500/40 hover:bg-slate-800/35 transition-[background-color,border-color] duration-150 cursor-pointer"
                   >
                     <td className="py-3 pr-4">
-                      {(v.statut === 'refusé' && (v.refusal_count ?? 0) < 3) || v.statut === 'en_attente' ? (
-                        <Link href={`/logbook/vol/${v.id}`} className="text-sky-400 hover:text-sky-300 font-medium transition-colors">
-                          {formatDateMediumUTC(v.depart_utc)}
-                        </Link>
-                      ) : (
-                        <span className="text-slate-300">{formatDateMediumUTC(v.depart_utc)}</span>
-                      )}
+                      <Link href={`/logbook/vol/${v.id}`} className="text-slate-300 group-hover:text-sky-300 font-medium transition-colors block">
+                        {formatDateMediumUTC(v.depart_utc)}
+                      </Link>
                     </td>
                     <td className="py-3 pr-4">
                       <div className="flex items-center gap-1.5 text-slate-300">

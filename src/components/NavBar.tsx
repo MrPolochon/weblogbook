@@ -126,31 +126,59 @@ export default function NavBar({
     startTransition(() => router.refresh());
   }
 
-  const piloteMenuItems: Array<{
-    href: string; label: string; icon: typeof BookOpen;
-    badge: number; separator?: boolean;
-  }> = [
-    { href: '/logbook', label: 'Mon logbook', icon: BookOpen, badge: 0 },
-    { href: '/logbook/depot-plan-vol', label: 'Déposer un plan de vol', icon: Plane, badge: 0 },
-    { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText, badge: 0 },
-    { href: '/marche-passagers', label: 'Marché', icon: Map, badge: 0, separator: true },
-    { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount + invitationsCount, separator: true },
-    ...(hasCompagnie ? [
-      { href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 },
-      { href: '/alliance', label: 'Alliance', icon: Users, badge: allianceInvitationsCount },
-    ] : []),
-    ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield, badge: 0 }] : []),
-    { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0, separator: true },
-    { href: '/marketplace', label: 'Marketplace', icon: Package, badge: 0 },
-    { href: '/hangar-market', label: 'Hangar Market', icon: Store, badge: 0 },
-    ...(isReparateur || isPdg ? [{ href: '/reparation', label: 'Réparation', icon: Wrench, badge: 0 }] : []),
-    { href: '/inventaire', label: 'Mon inventaire', icon: Plane, badge: 0 },
-    { href: '/perf-ptfs', label: 'Calculateur perf PTFS', icon: Gauge, badge: 0 },
-    { href: '/documents', label: 'Documents', icon: FileText, badge: 0, separator: true },
-    { href: '/notams', label: 'NOTAMs', icon: ScrollText, badge: 0 },
-    { href: '/signalement', label: 'Signalement IFSA', icon: AlertTriangle, badge: 0, separator: true },
-    { href: '/classement', label: 'Classement', icon: Trophy, badge: 0 },
-  ];
+  type PiloteMenuItem = { href: string; label: string; icon: typeof BookOpen; badge: number };
+  type PiloteSection = { label: string; items: PiloteMenuItem[] };
+
+  const piloteSections: PiloteSection[] = [
+    {
+      label: 'Vol',
+      items: [
+        { href: '/logbook', label: 'Mon logbook', icon: BookOpen, badge: 0 },
+        { href: '/logbook/depot-plan-vol', label: 'Déposer un plan', icon: Plane, badge: 0 },
+        { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText, badge: 0 },
+        { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0 },
+      ],
+    },
+    {
+      label: 'Communauté',
+      items: [
+        { href: '/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount + invitationsCount },
+        ...(hasCompagnie ? [
+          { href: '/ma-compagnie', label: 'Ma compagnie', icon: Building2, badge: 0 },
+          { href: '/alliance', label: 'Alliance', icon: Users, badge: allianceInvitationsCount },
+        ] : []),
+        ...(isArmee || isAdmin ? [{ href: '/militaire', label: 'Espace militaire', icon: Shield, badge: 0 }] : []),
+      ],
+    },
+    {
+      label: 'Finance & Marché',
+      items: [
+        { href: '/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0 },
+        { href: '/marketplace', label: 'Marketplace', icon: Package, badge: 0 },
+        { href: '/hangar-market', label: 'Hangar Market', icon: Store, badge: 0 },
+      ],
+    },
+    {
+      label: 'Outils',
+      items: [
+        ...(isReparateur || isPdg ? [{ href: '/reparation', label: 'Réparation', icon: Wrench, badge: 0 }] : []),
+        { href: '/inventaire', label: 'Mon inventaire', icon: Plane, badge: 0 },
+        { href: '/perf-ptfs', label: 'Calculateur perf', icon: Gauge, badge: 0 },
+      ],
+    },
+    {
+      label: 'Infos',
+      items: [
+        { href: '/documents', label: 'Documents', icon: FileText, badge: 0 },
+        { href: '/notams', label: 'NOTAMs', icon: ScrollText, badge: 0 },
+        { href: '/signalement', label: 'Signalement IFSA', icon: AlertTriangle, badge: 0 },
+        { href: '/classement', label: 'Classement', icon: Trophy, badge: 0 },
+      ],
+    },
+  ].filter(s => s.items.length > 0);
+
+  // Flat list pour la nav mobile (inchangée)
+  const piloteMenuItems = piloteSections.flatMap(s => s.items);
 
   const isPiloteActive = [
     '/logbook', '/militaire', '/felitz-bank', '/ma-compagnie', '/marketplace',
@@ -376,37 +404,43 @@ export default function NavBar({
         <div
           ref={dropdownRef}
           style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
-          className="w-56 max-h-[calc(100dvh-4rem)] overflow-y-auto rounded-2xl border border-slate-600/60 bg-[#0d1120] py-2 shadow-2xl scrollbar-hide"
+          className="w-[520px] max-h-[calc(100dvh-4rem)] overflow-y-auto rounded-2xl border border-slate-600/60 bg-[#0d1120] shadow-2xl scrollbar-hide"
         >
-          {piloteMenuItems.map((item, idx) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href || (item.href !== '/logbook' && pathname.startsWith(item.href));
-            return (
-              <div key={item.href}>
-                {item.separator && idx > 0 && (
-                  <div className="mx-3 my-1.5 border-t border-slate-700/50" />
-                )}
-                <Link
-                  href={item.href}
-                  onClick={() => setMenuOpen(false)}
-                  className={cn(
-                    'flex items-center gap-2.5 mx-1.5 px-2.5 py-1.5 text-[13px] rounded-lg transition-colors',
-                    isActive
-                      ? 'bg-sky-500/20 text-sky-200 border border-sky-500/30'
-                      : 'text-slate-300 hover:bg-slate-700/60 hover:text-white border border-transparent',
-                  )}
-                >
-                  <Icon className={cn('h-3.5 w-3.5 shrink-0', isActive ? 'text-sky-400' : 'text-slate-500')} />
-                  <span className="truncate">{item.label}</span>
-                  {item.badge > 0 && (
-                    <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
-                      {item.badge > 99 ? '99+' : item.badge}
-                    </span>
-                  )}
-                </Link>
+          {/* Grille 2 colonnes de sections */}
+          <div className="grid grid-cols-2 gap-0 p-3">
+            {piloteSections.map((section) => (
+              <div key={section.label} className="p-1.5">
+                <p className="px-2 pb-1.5 pt-0.5 text-[9px] font-bold uppercase tracking-widest text-slate-500 select-none">
+                  {section.label}
+                </p>
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.href || (item.href !== '/logbook' && pathname.startsWith(item.href));
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMenuOpen(false)}
+                      className={cn(
+                        'flex items-center gap-2 px-2.5 py-1.5 text-[13px] rounded-lg transition-colors',
+                        isActive
+                          ? 'bg-sky-500/20 text-sky-200'
+                          : 'text-slate-300 hover:bg-slate-700/60 hover:text-white',
+                      )}
+                    >
+                      <Icon className={cn('h-3.5 w-3.5 shrink-0', isActive ? 'text-sky-400' : 'text-slate-500')} />
+                      <span className="truncate flex-1">{item.label}</span>
+                      {item.badge > 0 && (
+                        <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                          {item.badge > 99 ? '99+' : item.badge}
+                        </span>
+                      )}
+                    </Link>
+                  );
+                })}
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>,
         document.body,
       )}
