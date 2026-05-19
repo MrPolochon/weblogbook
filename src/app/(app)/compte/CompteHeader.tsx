@@ -1,4 +1,6 @@
+'use client';
 import { Crown, Plane, Headphones, Flame, ShieldCheck, Mail, MessageSquare, Gamepad2, Award, CheckCircle2, AlertCircle } from 'lucide-react';
+import UserAvatar from '@/components/UserAvatar';
 
 type Role = 'admin' | 'pilote' | 'atc' | 'controleur' | 'siavi' | 'instructeur' | string;
 
@@ -16,6 +18,8 @@ type Props = {
     discordLie: boolean;
     robloxRenseigne: boolean;
   };
+  /** URL de la photo officielle (cartes_identite.photo_url), si disponible. */
+  photoUrl?: string | null;
 };
 
 const ROLE_META: Record<string, { label: string; Icon: typeof Crown; classes: string }> = {
@@ -37,7 +41,7 @@ function getInitials(identifiant: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export default function CompteHeader({ identifiant, role, flags, status }: Props) {
+export default function CompteHeader({ identifiant, role, flags, status, photoUrl }: Props) {
   const displayIdentifiant = identifiant?.trim() && identifiant.trim() !== '—' ? identifiant : 'Pilote sans identifiant';
   const initials = getInitials(identifiant);
 
@@ -94,8 +98,13 @@ export default function CompteHeader({ identifiant, role, flags, status }: Props
 
       <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 sm:h-20 sm:w-20 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-violet-600 text-2xl sm:text-3xl font-bold text-white shadow-lg ring-2 ring-white/10">
-            {initials}
+          <div className="h-16 w-16 sm:h-20 sm:w-20 flex-shrink-0">
+            <UserAvatar
+              identifiant={identifiant}
+              photoUrl={photoUrl ?? null}
+              size="xl"
+              className="rounded-2xl shadow-lg ring-2 ring-white/10 w-full h-full"
+            />
           </div>
           <div className="min-w-0">
             <p className="text-xs font-medium uppercase tracking-widest text-slate-400">Identifiant pilote</p>

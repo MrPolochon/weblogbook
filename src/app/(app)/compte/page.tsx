@@ -76,6 +76,7 @@ export default async function ComptePage() {
           discordLie,
           robloxRenseigne: Boolean(profile?.roblox_username),
         }}
+        photoUrl={(carte as { photo_url?: string | null } | null)?.photo_url ?? null}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(300px,340px)] gap-6 items-start">

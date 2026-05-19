@@ -583,8 +583,30 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
     );
   }
 
+  const totalUnread = messagesRecus.filter(m => !m.lu).length;
+
   return (
-    <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 overflow-hidden" style={{ height: 'calc(100dvh - 10rem)' }}>
+    <div className="space-y-4">
+      {/* Header de page */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-violet-500/15 border border-violet-500/20">
+            <Mail className="h-5 w-5 text-violet-400" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-100">Messagerie</h1>
+            <p className="text-xs text-slate-500">Communications internes</p>
+          </div>
+        </div>
+        {totalUnread > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
+            <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
+            <span className="text-sm text-violet-300 font-medium">{totalUnread} non lu{totalUnread > 1 ? 's' : ''}</span>
+          </div>
+        )}
+      </div>
+
+    <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 overflow-hidden" style={{ height: 'calc(100dvh - 14rem)' }}>
       <div className="h-full flex">
         {/* Sidebar (desktop) / Tab bar (mobile) */}
         <div className={`${mobileShowDetail ? 'hidden lg:flex' : 'flex'} flex-col border-r border-slate-800/60 shrink-0`}>
@@ -620,15 +642,16 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
               )}
             </div>
           </div>
-          {/* Mobile tab bar */}
+          {/* Mobile tab bar — icônes + labels courts */}
           <div className="flex lg:hidden overflow-x-auto border-b border-slate-800/60">
             {tabs.map(tab => (
               <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedMessage(null); setMobileShowDetail(false); }}
                 className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2 ${
                   activeTab === tab.id ? 'border-b-violet-500 text-violet-300' : 'border-b-transparent text-slate-500 hover:text-slate-300'
                 }`}>
-                <tab.icon className="h-3.5 w-3.5" />
-                {tab.count > 0 && <span className="px-1 rounded-full bg-violet-500/20 text-violet-300 text-[10px]">{tab.count}</span>}
+                <tab.icon className="h-3.5 w-3.5 shrink-0" />
+                <span>{tab.label}</span>
+                {tab.count > 0 && <span className="px-1.5 rounded-full bg-violet-500/20 text-violet-300 text-[10px] font-bold">{tab.count}</span>}
               </button>
             ))}
           </div>
@@ -680,6 +703,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
           ) : renderDetail()}
         </div>
       </div>
+    </div>
     </div>
   );
 }
