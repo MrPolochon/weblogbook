@@ -45,13 +45,15 @@ de toucher au site, seulement à Discord, Render et Supabase.
 
 ---
 
-## Étape 3 — Configurer Render
+## Étape 3 — Configurer Railway
 
-1. Ouvre ton service `ATISVoiceMaker` sur Render.
-2. Onglet **Environment** → **Add Environment Variable** :
+> Le bot ATIS (`ATISVoiceMaker`) est hébergé sur **Railway** (anciennement Render).
+
+1. Ouvre ton service `ATISVoiceMaker` sur [Railway](https://railway.app).
+2. Va dans **Variables** → **New Variable** :
    - Key : `DISCORD_TOKEN_2`
    - Value : *colle le token de l'étape 1.4*
-   - Save.
+   - Sauvegarde (Railway redéploie automatiquement).
 3. (Optionnel mais recommandé) Si tu veux pré-configurer un canal vocal de
    secours (utilisé si la DB est vide) :
    ```
@@ -61,14 +63,14 @@ de toucher au site, seulement à Discord, Render et Supabase.
    *(Pour récupérer les IDs : active le mode développeur Discord dans
    Paramètres utilisateur → Avancés → Mode développeur, puis clic droit →
    Copier l'identifiant.)*
-4. Render va redéployer automatiquement. Va voir les logs : tu dois voir
+4. Railway va redéployer automatiquement. Va voir les logs du service : tu dois voir
    ```
    Initialized 2 ATIS bot instance(s)
    Started ATIS bot instance 1
    Started ATIS bot instance 2
    ```
    Si tu ne vois que `Initialized 1`, vérifie que `DISCORD_TOKEN_2` est bien
-   présent et que tu as cliqué Save.
+   présent et orthographié correctement dans les variables Railway.
 
 ---
 
@@ -89,7 +91,7 @@ de toucher au site, seulement à Discord, Render et Supabase.
 3. Clique **Relancer le diagnostic**.
 4. Tous les checks doivent être verts ✓ :
    - Variables d'environnement (site)
-   - Bot Render joignable
+   - Bot Railway joignable
    - Secret partagé chargé côté bot
    - Bot manager initialisé
    - Instances Discord prêtes (2)
@@ -133,7 +135,7 @@ bouton Démarrer.
 
 | Symptôme | Cause probable | Fix |
 |---|---|---|
-| `Bot Render injoignable` (40+s) | Cold start Render free tier | Attendre 1-2 min, recliquer Réessayer |
+| `Bot Railway injoignable` (40+s) | Déploiement Railway en cours ou sleep | Attendre 1-2 min, recliquer Réessayer |
 | `Secret incorrect (401)` | `ATIS_WEBHOOK_SECRET` différent entre site et bot | Vérifier que les deux utilisent **exactement** la même valeur |
 | `Initialized 1 ATIS bot instance(s)` au lieu de 2 | `DISCORD_TOKEN_2` non lu | Refaire l'étape 3, vérifier l'orthographe (pas de `DISCORD_TOKEN2` ni `DISCORD_BOT_TOKEN_2`) |
 | Bot 2 reste *starting* | Discord refuse la connexion | Vérifier les 3 intents activés, regenerer le token, réinviter le bot |
@@ -146,7 +148,7 @@ bouton Démarrer.
 
 Le code est **100% dynamique**. Il suffit de :
 1. Créer une 3e application Discord (étape 1) → copier le token.
-2. Ajouter `DISCORD_TOKEN_3` sur Render (étape 3).
+2. Ajouter `DISCORD_TOKEN_3` sur Railway (étape 3).
 3. Insérer la ligne `id='3'` dans la DB :
    ```sql
    INSERT INTO public.atis_broadcast_state (id, broadcasting) VALUES ('3', false)

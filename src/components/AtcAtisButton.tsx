@@ -1433,7 +1433,7 @@ function BotErrorCard({
       <p className="font-semibold">Bot ATIS injoignable</p>
       {error && <p className="text-xs mt-2 font-mono bg-black/20 px-3 py-2 rounded-lg">{error}</p>}
       <p className="text-xs mt-2 opacity-95">
-        Si Render (plan gratuit) : le bot peut mettre 1–2 min à démarrer après inactivité. Sinon, vérifiez{' '}
+        Si le bot Railway est en cours de redéploiement, réessayez dans 1–2 min. Sinon, vérifiez{' '}
         <code>ATIS_WEBHOOK_URL</code> + <code>ATIS_WEBHOOK_SECRET</code>.
       </p>
       <div className="flex items-center justify-between mt-3 gap-2">

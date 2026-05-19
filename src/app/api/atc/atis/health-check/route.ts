@@ -30,7 +30,7 @@ interface BotHealth {
  *
  * Verifie :
  *  1. Variables d'env (ATIS_WEBHOOK_URL, ATIS_WEBHOOK_SECRET).
- *  2. Bot Render joignable (/webhook/health).
+ *  2. Bot Railway joignable (/webhook/health).
  *  3. Toutes les instances configurees sont READY (Discord connecte).
  *  4. Lignes DB en place (atis_broadcast_state + atis_broadcast_config x N).
  *  5. Index unique partiel "1 aeroport = 1 bot" present.
@@ -78,7 +78,7 @@ export async function GET() {
     });
 
     // -----------------------------------------------------------------------
-    // 2. Bot Render joignable
+    // 2. Bot Railway joignable
     // -----------------------------------------------------------------------
     let botHealth: BotHealth | null = null;
     let botLatencyMs: number | undefined;
@@ -89,16 +89,16 @@ export async function GET() {
       if (res.error || !res.data) {
         checks.push({
           id: 'bot-reachable',
-          label: 'Bot Render joignable',
+          label: 'Bot Railway joignable',
           status: 'fail',
-          message: `Bot injoignable : ${res.error ?? 'pas de réponse'}. Cold start Render possible (réessayer dans 1–2 min).`,
+          message: `Bot injoignable : ${res.error ?? 'pas de réponse'}. Déploiement Railway en cours ? Réessayer dans 1–2 min.`,
           details: { latency_ms: botLatencyMs, status: res.status },
         });
       } else {
         botHealth = res.data;
         checks.push({
           id: 'bot-reachable',
-          label: 'Bot Render joignable',
+          label: 'Bot Railway joignable',
           status: 'ok',
           message: `Bot OK — v${botHealth.version ?? '?'} — uptime ${formatUptime(botHealth.uptime_seconds)} — ${botLatencyMs}ms.`,
           details: { latency_ms: botLatencyMs, version: botHealth.version, uptime_seconds: botHealth.uptime_seconds },
@@ -111,7 +111,7 @@ export async function GET() {
           status: botHealth.secret_loaded ? 'ok' : 'fail',
           message: botHealth.secret_loaded
             ? 'Le bot a chargé ATIS_WEBHOOK_SECRET au démarrage.'
-            : 'ATIS_WEBHOOK_SECRET non chargé côté bot — vérifie la variable Render et redémarre.',
+            : 'ATIS_WEBHOOK_SECRET non chargé côté bot — vérifie la variable Railway et redémarre le service.',
         });
 
         // 2.c. Manager pret
@@ -132,7 +132,7 @@ export async function GET() {
             id: 'bot-instances',
             label: 'Instances bot configurées',
             status: 'fail',
-            message: 'Aucune instance configurée. Définis DISCORD_TOKEN (et DISCORD_TOKEN_2) sur Render.',
+            message: 'Aucune instance configurée. Définis DISCORD_TOKEN (et DISCORD_TOKEN_2) sur Railway.',
           });
         } else {
           const allReady = ready.length === configured;

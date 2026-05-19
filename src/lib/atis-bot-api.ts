@@ -31,8 +31,8 @@ export interface FetchAtisBotOptions {
    */
   instanceId?: number;
   /**
-   * Timeout par requête. Render free tier peut nécessiter ~45s pour cold start
-   * sur la 1ère requête, mais une fois chaud les calls sont <1s.
+   * Timeout par requête. Railway peut nécessiter quelques secondes lors d'un
+   * redéploiement, mais une fois chaud les calls sont <1s.
    */
   timeoutMs?: number;
 }
@@ -83,7 +83,7 @@ export async function fetchAtisBot<T>(
     const isTimeout = e instanceof Error && e.name === 'AbortError';
     return {
       error: isTimeout
-        ? 'Délai dépassé (le bot Render démarre peut-être, réessayez dans 1 min)'
+        ? 'Délai dépassé (le bot Railway est peut-être en cours de redéploiement, réessayez dans 1 min)'
         : 'Erreur de connexion au bot',
       status: 500,
       latencyMs: Date.now() - t0,
@@ -151,7 +151,7 @@ export async function getBotOverview(): Promise<{
 
 // ---------------------------------------------------------------------------
 // Cache module-level pour guilds (et sous-cache pour channels par guild).
-// TTL court (30s) pour éviter d'épuiser le quota Render et garder l'UI réactive.
+// TTL court (30s) pour éviter de surcharger le bot Railway et garder l'UI réactive.
 // ---------------------------------------------------------------------------
 
 interface CacheEntry<T> {

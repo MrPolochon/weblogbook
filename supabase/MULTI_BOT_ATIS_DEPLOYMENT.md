@@ -30,16 +30,15 @@ Ce document décrit les étapes pour activer **deux bots ATIS simultanés** (un 
    - **Speak** (canaux vocaux)
    - **Use Slash Commands**
 
-### 2. Côté Render (service du bot)
+### 2. Côté Railway (service du bot)
 
-Dans **Environment Variables**, ajouter :
+> Le bot ATIS (`ATISVoiceMaker`) est hébergé sur **Railway** (anciennement Render).
+
+Dans **Variables** du service Railway, ajouter :
 
 ```
 DISCORD_TOKEN_2 = <le token du 2e bot>
 ```
-
-Le `render.yaml` déclare déjà `DISCORD_TOKEN_2` (avec `sync: false` = la valeur vient du
-dashboard).
 
 Optionnel : si tu veux préconfigurer le serveur/canal du 2e bot pour les commandes slash
 Discord (pas indispensable si la config est faite via le site) :
@@ -49,7 +48,7 @@ ATIS_WEBHOOK_GUILD_ID_2 = <guild_id>
 ATIS_WEBHOOK_VOICE_CHANNEL_ID_2 = <channel_id>
 ```
 
-Render va redéployer le service automatiquement après ajout des vars. Dans les logs tu
+Railway va redéployer le service automatiquement après ajout des vars. Dans les logs tu
 dois voir :
 
 ```
@@ -115,7 +114,7 @@ La logique est désormais **dynamique** : le frontend détecte automatiquement
 toutes les instances renvoyées par le bot (via `/webhook/overview`). Pour
 ajouter un Bot 3, il suffit de :
 
-- Ajouter `DISCORD_TOKEN_3` dans Render (et inviter le bot sur le serveur).
+- Ajouter `DISCORD_TOKEN_3` dans Railway (et inviter le bot sur le serveur).
 - Optionnellement, insérer les lignes correspondantes côté DB (le code
   upsert automatiquement à la première écriture) :
 
@@ -134,7 +133,7 @@ que renvoie le bot. **Aucune modification du frontend n'est nécessaire.**
 - **Endpoint consolidé `/api/atc/atis/overview`** : 1 seul appel HTTP
   retourne l'état DB + bot live + config Discord + guilds + noms ATC
   contrôleurs (au lieu de 4 appels parallèles).
-- **Cache server-side guilds/channels (TTL 30s)** : épargne le bot Render.
+- **Cache server-side guilds/channels (TTL 30s)** : épargne le bot Railway.
 - **Bot Python `/webhook/overview`** : status-all + guilds + meta en 1 call.
 - **Bot Python `/webhook/health`** : diagnostic complet (uptime, version,
   instances ready, secret loaded).

@@ -5,8 +5,8 @@ import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { fetchAtisBot, getAvailableBotInstance, getAllBotStatuses } from '@/lib/atis-bot-api';
 
 export const dynamic = 'force-dynamic';
-// Render gratuit peut mettre 30-60s a repondre apres inactivite. On etend
-// la limite Vercel a 60s pour eviter qu'un cold start coupe l'orchestration
+// Railway peut mettre quelques secondes a repondre lors d'un redeploi. On etend
+// la limite Vercel a 60s pour eviter qu'un delai coupe l'orchestration
 // avant qu'on ait pu ecrire le DB row de l'utilisateur (cause des etats zombie).
 export const maxDuration = 60;
 
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
       const target = instances.find((i) => i.instance_id === requested);
       if (!target) {
         return NextResponse.json(
-          { error: `Bot ATIS ${requested} introuvable. Vérifiez la configuration côté Render.` },
+          { error: `Bot ATIS ${requested} introuvable. Vérifiez la configuration côté Railway.` },
           { status: 400 }
         );
       }
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
     }
 
     // ETAPE CRITIQUE : on ecrit le DB row AVANT d'appeler le bot.
-    // Raison : si Render est lent (cold start) et que Vercel coupe la fonction
+    // Raison : si Railway est lent (redeploi) et que Vercel coupe la fonction
     // a 60s, le bot peut quand meme avoir demarre derriere mais on aurait
     // perdu l'info "qui controle". En ecrivant d'abord, on a au moins le
     // bon controlling_user_id si le timeout survient.

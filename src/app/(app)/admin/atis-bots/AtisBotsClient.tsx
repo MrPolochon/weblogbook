@@ -361,7 +361,7 @@ export default function AtisBotsClient() {
             <code>View Channels</code>, <code>Connect</code>, <code>Speak</code>, <code>Use Slash Commands</code>.
           </li>
           <li>
-            Sur Render, ajoute la variable d&apos;environnement <code>DISCORD_TOKEN_2</code> (ou{' '}
+            Sur Railway, ajoute la variable d&apos;environnement <code>DISCORD_TOKEN_2</code> (ou{' '}
             <code>DISCORD_TOKEN_3</code> etc.) avec le token. Le bot redémarrera automatiquement.
           </li>
           <li>
