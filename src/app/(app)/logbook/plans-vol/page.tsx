@@ -6,7 +6,7 @@ import { formatDateHourUTC } from '@/lib/date-utils';
 import { ArrowLeft, FileText, AlertCircle, Bell, Plane, CheckCircle2, XCircle, Timer, ArrowRight, Plus, Radio } from 'lucide-react';
 import PlanVolCloturerButton from './PlanVolCloturerButton';
 import PlanVolAnnulerButton from './PlanVolAnnulerButton';
-import NePasEnregistrerPlanButton from './NePasEnregistrerPlanButton';
+import NePasEnregistrerPlanButton from '../NePasEnregistrerPlanButton';
 import TranspondeurInterface from './TranspondeurInterface';
 import MedevacPauseBanner from './MedevacPauseBanner';
 import type { PlanVol } from '@/lib/types';
