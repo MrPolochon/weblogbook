@@ -1175,6 +1175,44 @@ thead th {
 .animate-altitude-pulse  { animation: altitude-pulse 4s ease-in-out infinite; }
 .animate-vor-pulse       { animation: vor-pulse 2.5s ease-out infinite; }
 
+/* ── Palmiers (Summer Update) ── */
+@keyframes palm-sway {
+  0%, 100% { transform: rotate(0deg); }
+  30%       { transform: rotate(3deg); }
+  70%       { transform: rotate(-2deg); }
+}
+.animate-palm-sway { animation: palm-sway 6s ease-in-out infinite; }
+
+/* ── Traînées de condensation standalone ── */
+@keyframes contrail-line-fade {
+  0%         { opacity: 0; transform: scaleX(0); }
+  20%        { opacity: 1; transform: scaleX(1); }
+  70%        { opacity: 0.6; }
+  100%       { opacity: 0; transform: scaleX(1.05); }
+}
+.contrail {
+  position: absolute;
+  height: 1px;
+  border-radius: 1px;
+  animation: contrail-line-fade 12s ease-in-out infinite;
+}
+.contrail.c1 {
+  top: 18%;
+  left: 0;
+  width: 35%;
+  background: linear-gradient(to right, transparent, rgba(255,255,255,0.22), transparent);
+  transform-origin: left center;
+  animation-delay: 0s;
+}
+.contrail.c2 {
+  top: 42%;
+  right: 0;
+  width: 28%;
+  background: linear-gradient(to left, transparent, rgba(255,255,255,0.22), transparent);
+  transform-origin: right center;
+  animation-delay: 5s;
+}
+
 /* ==========================================================================
    Accessibilite : respecter prefers-reduced-motion sur TOUTES les animations
    ========================================================================== */

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind, Clock, User, Lock } from 'lucide-react';
 
 const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
 
@@ -232,7 +232,7 @@ function VORBeacons() {
   );
 }
 
-/* ── Déco été (soleil + vagues) ── */
+/* ── Déco été (soleil + vagues + palmiers) ── */
 function SummerUpdateDecor() {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -246,6 +246,20 @@ function SummerUpdateDecor() {
           <Waves key={i} className="h-10 w-24 animate-float" style={{ animationDelay: `${i * 0.18}s` }} />
         ))}
       </div>
+      {/* Palmiers décoratifs */}
+      <div
+        className="animate-palm-sway"
+        aria-hidden="true"
+        style={{ position: 'absolute', bottom: 0, left: '-8px', fontSize: '64px', opacity: 0.18, transformOrigin: 'bottom center' }}
+      >🌴</div>
+      <div
+        className="animate-palm-sway"
+        aria-hidden="true"
+        style={{ position: 'absolute', bottom: 0, right: '-8px', fontSize: '64px', opacity: 0.18, transform: 'scaleX(-1)', transformOrigin: 'bottom center', animationDelay: '1.5s' }}
+      >🌴</div>
+      {/* Traînées de condensation */}
+      <div className="contrail c1" aria-hidden="true" />
+      <div className="contrail c2" aria-hidden="true" />
     </div>
   );
 }
@@ -546,8 +560,11 @@ function LoginPageContent() {
       <div className="relative z-10 w-full max-w-md">
         {/* Logo / Titre */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-300/35 via-sky-400/25 to-cyan-300/25 mb-4 shadow-xl shadow-amber-300/20 backdrop-blur-sm border border-amber-200/25 animate-zoom-bounce hover:animate-float">
-            <Shield className="h-10 w-10 text-amber-100 drop-shadow-[0_0_18px_rgba(251,191,36,0.45)]" />
+          <div
+            className="inline-flex items-center justify-center w-20 h-20 mb-4 animate-zoom-bounce hover:animate-float"
+            style={{ background: 'rgba(56,130,255,0.15)', border: '1px solid rgba(56,130,255,0.3)', borderRadius: '12px' }}
+          >
+            <Shield className="h-10 w-10" style={{ color: '#6aa0ff' }} />
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight animate-init animate-slide-up delay-200">PTFS Logbook</h1>
           <p className="text-cyan-100/80 text-sm mt-2 animate-init animate-slide-up delay-300">Système de gestion des vols · Saison estivale</p>
@@ -555,15 +572,17 @@ function LoginPageContent() {
 
         {/* Sélecteur de mode (masqué lors de l'étape email/code) */}
         {step === 'form' && (
-        <div className="flex gap-2 mb-6 p-1 bg-slate-900/45 rounded-2xl backdrop-blur-md border border-white/10 shadow-xl shadow-cyan-950/30 animate-init animate-reveal-blur delay-400">
+        <div
+          className="flex mb-6 animate-init animate-reveal-blur delay-400"
+          style={{ gap: '4px', background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: '8px', padding: '3px' }}
+        >
           <button
             type="button"
             onClick={() => setMode('pilote')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl font-semibold transition-all duration-300 ${
-              mode === 'pilote'
-                ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
-                : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
-            }`}
+            className="flex-1 flex items-center justify-center gap-2 py-3.5 px-3 font-medium transition-colors duration-200"
+            style={mode === 'pilote'
+              ? { background: 'rgba(56,130,255,0.18)', color: '#6aa0ff', border: '0.5px solid rgba(56,130,255,0.25)', borderRadius: '5px' }
+              : { color: 'rgba(200,210,230,0.4)', background: 'transparent', borderRadius: '5px' }}
           >
             <Plane className="h-5 w-5" />
             <span className="hidden sm:inline">Pilote</span>
@@ -571,11 +590,10 @@ function LoginPageContent() {
           <button
             type="button"
             onClick={() => setMode('atc')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl font-semibold transition-all duration-300 ${
-              mode === 'atc'
-                ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 text-white shadow-lg shadow-emerald-500/40'
-                : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
-            }`}
+            className="flex-1 flex items-center justify-center gap-2 py-3.5 px-3 font-medium transition-colors duration-200"
+            style={mode === 'atc'
+              ? { background: 'rgba(56,130,255,0.18)', color: '#6aa0ff', border: '0.5px solid rgba(56,130,255,0.25)', borderRadius: '5px' }
+              : { color: 'rgba(200,210,230,0.4)', background: 'transparent', borderRadius: '5px' }}
           >
             <Radio className="h-5 w-5" />
             <span className="hidden sm:inline">ATC</span>
@@ -583,11 +601,10 @@ function LoginPageContent() {
           <button
             type="button"
             onClick={() => setMode('siavi')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl font-semibold transition-all duration-300 ${
-              mode === 'siavi'
-                ? 'bg-gradient-to-r from-red-500 to-red-400 text-white shadow-lg shadow-red-500/40'
-                : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
-            }`}
+            className="flex-1 flex items-center justify-center gap-2 py-3.5 px-3 font-medium transition-colors duration-200"
+            style={mode === 'siavi'
+              ? { background: 'rgba(56,130,255,0.18)', color: '#6aa0ff', border: '0.5px solid rgba(56,130,255,0.25)', borderRadius: '5px' }
+              : { color: 'rgba(200,210,230,0.4)', background: 'transparent', borderRadius: '5px' }}
           >
             <Flame className="h-5 w-5" />
             <span className="hidden sm:inline">SIAVI</span>
@@ -613,9 +630,12 @@ function LoginPageContent() {
           </div>
         )}
         {showInactivity && step === 'form' && (
-          <div className="mb-4 p-4 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center gap-3 animate-init animate-reveal-blur">
-            <AlertTriangle className="h-6 w-6 text-amber-400 shrink-0" />
-            <p className="text-amber-200 font-medium">Vous avez été déconnecté après une heure sans activité. Reconnectez-vous pour continuer.</p>
+          <div
+            className="mb-4 flex items-center gap-2 animate-init animate-reveal-blur"
+            style={{ borderLeft: '2px solid #ffc94a', borderRadius: '0 6px 6px 0', padding: '7px 10px' }}
+          >
+            <Clock className="shrink-0" style={{ color: '#ffc94a', width: '13px', height: '13px' }} />
+            <p style={{ color: '#ffc94a', fontSize: '12px' }}>Session expirée après inactivité.</p>
           </div>
         )}
         {showSecurityLogout && step === 'form' && (
@@ -639,34 +659,52 @@ function LoginPageContent() {
         {/* Formulaire : identifiant / mot de passe */}
         {step === 'form' && (
           <div className="card backdrop-blur-xl bg-slate-900/60 border-cyan-200/15 shadow-2xl shadow-cyan-950/40 animate-init animate-reveal-blur delay-500">
-            <div className="mb-5 rounded-xl border border-amber-200/15 bg-gradient-to-r from-amber-300/10 via-cyan-300/10 to-sky-400/10 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-100/80">Briefing été</p>
-              <p className="mt-1 text-sm text-cyan-50/80">Bienvenue à bord. Choisissez votre espace et connectez-vous pour rejoindre le réseau.</p>
+            <div className="mb-5 px-1 py-2">
+              <span
+                className="inline-flex items-center gap-1"
+                style={{ background: 'rgba(56,130,255,0.1)', border: '0.5px solid rgba(56,130,255,0.2)', borderRadius: '4px', fontSize: '9px', color: '#6aa0ff', letterSpacing: '0.06em', padding: '2px 6px' }}
+              >
+                <Sun className="shrink-0" style={{ width: '9px', height: '9px' }} />
+                BRIEFING ÉTÉ
+              </span>
+              <p className="mt-2 text-sm text-cyan-50/80">Bienvenue à bord. Choisissez votre espace et connectez-vous pour rejoindre le réseau.</p>
             </div>
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
                 <label className="label text-slate-200">Identifiant</label>
-                <input
-                  type="text"
-                  className="input bg-slate-900/50"
-                  value={identifiant}
-                  onChange={(e) => setIdentifiant(e.target.value)}
-                  placeholder="Votre identifiant"
-                  required
-                  autoComplete="username"
-                />
+                <div className="relative">
+                  <User
+                    className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ left: '9px', color: 'rgba(200,210,230,0.25)', width: '13px', height: '13px' }}
+                  />
+                  <input
+                    type="text"
+                    className="input bg-slate-900/50 pl-[30px]"
+                    value={identifiant}
+                    onChange={(e) => setIdentifiant(e.target.value)}
+                    placeholder="Votre identifiant"
+                    required
+                    autoComplete="username"
+                  />
+                </div>
               </div>
               <div>
                 <label className="label text-slate-200">Mot de passe</label>
-                <input
-                  type="password"
-                  className="input bg-slate-900/50"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  autoComplete="current-password"
-                />
+                <div className="relative">
+                  <Lock
+                    className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ left: '9px', color: 'rgba(200,210,230,0.25)', width: '13px', height: '13px' }}
+                  />
+                  <input
+                    type="password"
+                    className="input bg-slate-900/50 pl-[30px]"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                    autoComplete="current-password"
+                  />
+                </div>
               </div>
               {error && (
                 <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 backdrop-blur-sm">
@@ -675,13 +713,7 @@ function LoginPageContent() {
               )}
               <button
                 type="submit"
-                className={`w-full py-3.5 rounded-xl font-bold transition-all duration-300 transform active:scale-[0.98] ${
-                  mode === 'pilote'
-                    ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 hover:from-cyan-300 hover:via-sky-300 hover:to-amber-200 text-slate-950 shadow-lg shadow-cyan-400/30 hover:shadow-cyan-300/50'
-                    : mode === 'atc'
-                      ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50'
-                      : 'bg-gradient-to-r from-red-500 to-red-400 hover:from-red-400 hover:to-red-300 text-white shadow-lg shadow-red-500/30 hover:shadow-red-500/50'
-                }`}
+                className="w-full py-3.5 rounded-xl font-medium text-white active:scale-[0.98] transform disabled:opacity-50 bg-[#3882ff] hover:bg-[#2a6ee0] transition-colors duration-150"
                 disabled={submitting}
               >
                 {submitting ? (
