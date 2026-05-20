@@ -10,7 +10,7 @@ export async function middleware(request: NextRequest) {
   const isDownload = pathname === '/download';
   const isAeroSchool = pathname.startsWith('/aeroschool');
   const isAuthCallback = pathname.startsWith('/auth/');
-  const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin' || pathname === '/api/site-config';
+  const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin' || pathname === '/api/site-config' || pathname === '/api/login-logo';
   const isApiDiscord = pathname.startsWith('/api/discord/');
   const isApiAeroSchoolPublic = pathname.startsWith('/api/aeroschool/') && request.method !== 'PUT' && request.method !== 'DELETE';
   const isDiscordRequiredPage = pathname === '/discord-obligatoire';
