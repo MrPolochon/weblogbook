@@ -1,78 +1,110 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
-// Désactive le cache statique Next.js App Router — chaque appel doit être dynamique
 export const dynamic = 'force-dynamic';
 
-/** Images publiques locales utilisées en fallback si aucune image Supabase. */
 const FALLBACK_IMAGES = ['/mixou-bg.png', '/ptfs-logo.jpg', '/ptfs-map.png'];
+const NO_CACHE = { 'Cache-Control': 'no-store, no-cache, must-revalidate' };
 
 function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function extractUrls(data: Record<string, unknown>[] | null, key: string): string[] {
-  return (data ?? [])
-    .map((r) => r[key] as string | null)
-    .filter((u): u is string => typeof u === 'string' && u.startsWith('http'));
+/**
+ * Liste récursivement les fichiers image d'un bucket Supabase Storage.
+ * Limite de profondeur (3 niveaux) et de fichiers totaux pour rester rapide.
+ */
+async function listImagePaths(
+  admin: ReturnType<typeof createAdminClient>,
+  bucketId: string,
+  prefix: string,
+  collected: string[],
+  maxFiles: number,
+  depth: number,
+): Promise<void> {
+  if (depth > 3 || collected.length >= maxFiles) return;
+
+  const { data: items } = await admin.storage
+    .from(bucketId)
+    .list(prefix || undefined, { limit: 100, offset: 0 });
+
+  if (!items) return;
+
+  const subFolders: string[] = [];
+
+  for (const item of items) {
+    if (!item.name || item.name.startsWith('.')) continue;
+    const fullPath = prefix ? `${prefix}/${item.name}` : item.name;
+    const isFolder = !item.metadata || item.metadata.mimetype === undefined;
+
+    if (isFolder) {
+      subFolders.push(fullPath);
+    } else if (
+      item.metadata?.mimetype?.startsWith('image/') &&
+      collected.length < maxFiles
+    ) {
+      collected.push(fullPath);
+    }
+  }
+
+  // Parcourir les sous-dossiers en parallèle
+  await Promise.all(
+    subFolders.map((folder) =>
+      listImagePaths(admin, bucketId, folder, collected, maxFiles, depth + 1),
+    ),
+  );
 }
 
 /**
  * GET /api/login-logo
- * Agrège TOUTES les images stockées dans Supabase :
- *   • compagnie_avions.avion_image_url  — photos d'avions
- *   • compagnies.logo_url               — logos de compagnies
- *   • alliances.logo_url                — logos d'alliances
- *   • cartes_identite.photo_url         — photos de profil
  *
- * Route publique (sans auth) — utilisée sur la page de login uniquement.
+ * Liste TOUS les fichiers image de TOUS les buckets publics Supabase Storage,
+ * génère leurs URLs publiques et en retourne une au hasard.
+ * Fallback vers les images locales si aucune image trouvée.
  */
 export async function GET() {
   try {
     const admin = createAdminClient();
 
-    const [avions, compagnies, alliances, cartes] = await Promise.all([
-      admin
-        .from('compagnie_avions')
-        .select('avion_image_url')
-        .not('avion_image_url', 'is', null)
-        .limit(200),
-      admin
-        .from('compagnies')
-        .select('logo_url')
-        .not('logo_url', 'is', null)
-        .limit(200),
-      admin
-        .from('alliances')
-        .select('logo_url')
-        .not('logo_url', 'is', null)
-        .limit(100),
-      admin
-        .from('cartes_identite')
-        .select('photo_url')
-        .not('photo_url', 'is', null)
-        .limit(200),
-    ]);
+    // 1. Récupérer tous les buckets
+    const { data: buckets, error: bucketsErr } = await admin.storage.listBuckets();
+    if (bucketsErr) throw bucketsErr;
 
-    const pool = [
-      ...extractUrls(avions.data as Record<string, unknown>[] | null, 'avion_image_url'),
-      ...extractUrls(compagnies.data as Record<string, unknown>[] | null, 'logo_url'),
-      ...extractUrls(alliances.data as Record<string, unknown>[] | null, 'logo_url'),
-      ...extractUrls(cartes.data as Record<string, unknown>[] | null, 'photo_url'),
-    ];
+    const publicBuckets = (buckets ?? []).filter((b) => b.public);
 
-    const noCache = { 'Cache-Control': 'no-store, no-cache, must-revalidate' };
+    // 2. Lister les images de chaque bucket public en parallèle
+    const allImageUrls: string[] = [];
 
-    if (pool.length === 0) {
-      return NextResponse.json({ url: pickRandom(FALLBACK_IMAGES), source: 'fallback' }, { headers: noCache });
+    await Promise.all(
+      publicBuckets.map(async (bucket) => {
+        const paths: string[] = [];
+        await listImagePaths(admin, bucket.id, '', paths, 300, 0);
+
+        for (const filePath of paths) {
+          const { data: { publicUrl } } = admin.storage
+            .from(bucket.id)
+            .getPublicUrl(filePath);
+          allImageUrls.push(publicUrl);
+        }
+      }),
+    );
+
+    if (allImageUrls.length === 0) {
+      return NextResponse.json(
+        { url: pickRandom(FALLBACK_IMAGES), source: 'fallback' },
+        { headers: NO_CACHE },
+      );
     }
 
     return NextResponse.json(
-      { url: pickRandom(pool), source: 'supabase', total: pool.length },
-      { headers: noCache },
+      { url: pickRandom(allImageUrls), source: 'storage', total: allImageUrls.length },
+      { headers: NO_CACHE },
     );
-  } catch {
-    const noCache = { 'Cache-Control': 'no-store, no-cache, must-revalidate' };
-    return NextResponse.json({ url: pickRandom(FALLBACK_IMAGES), source: 'error' }, { headers: noCache });
+  } catch (err) {
+    console.error('[login-logo]', err);
+    return NextResponse.json(
+      { url: pickRandom(FALLBACK_IMAGES), source: 'error' },
+      { headers: NO_CACHE },
+    );
   }
 }
