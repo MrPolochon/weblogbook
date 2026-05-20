@@ -268,7 +268,7 @@ function SummerUpdateDecor() {
 const LOGIN_LOGO_FALLBACKS = ['/mixou-bg.png', '/ptfs-logo.jpg', '/ptfs-map.png'];
 async function fetchLogoImage(): Promise<string> {
   try {
-    const res = await fetch('/api/login-logo', { cache: 'no-store' });
+    const res = await fetch(`/api/login-logo?_t=${Date.now()}`, { cache: 'no-store' });
     const data: { url?: string } = await res.json().catch(() => ({}));
     if (data?.url) return data.url;
   } catch { /* ignore */ }

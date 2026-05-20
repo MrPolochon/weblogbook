@@ -1,6 +1,9 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
+// Désactive le cache statique Next.js App Router — chaque appel doit être dynamique
+export const dynamic = 'force-dynamic';
+
 /** Images publiques locales utilisées en fallback si aucune image Supabase. */
 const FALLBACK_IMAGES = ['/mixou-bg.png', '/ptfs-logo.jpg', '/ptfs-map.png'];
 
@@ -58,12 +61,18 @@ export async function GET() {
       ...extractUrls(cartes.data as Record<string, unknown>[] | null, 'photo_url'),
     ];
 
+    const noCache = { 'Cache-Control': 'no-store, no-cache, must-revalidate' };
+
     if (pool.length === 0) {
-      return NextResponse.json({ url: pickRandom(FALLBACK_IMAGES), source: 'fallback' });
+      return NextResponse.json({ url: pickRandom(FALLBACK_IMAGES), source: 'fallback' }, { headers: noCache });
     }
 
-    return NextResponse.json({ url: pickRandom(pool), source: 'supabase', total: pool.length });
+    return NextResponse.json(
+      { url: pickRandom(pool), source: 'supabase', total: pool.length },
+      { headers: noCache },
+    );
   } catch {
-    return NextResponse.json({ url: pickRandom(FALLBACK_IMAGES), source: 'error' });
+    const noCache = { 'Cache-Control': 'no-store, no-cache, must-revalidate' };
+    return NextResponse.json({ url: pickRandom(FALLBACK_IMAGES), source: 'error' }, { headers: noCache });
   }
 }
