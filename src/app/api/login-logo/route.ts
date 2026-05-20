@@ -56,33 +56,35 @@ async function listImagePaths(
 }
 
 /**
+ * Sous-dossiers explicitement autorisés dans le bucket cartes-identite.
+ * Les dossiers UUID à la racine (photos de cartes d'identité des pilotes)
+ * sont volontairement exclus pour protéger la vie privée.
+ */
+const ALLOWED_PREFIXES: { bucket: string; prefix: string }[] = [
+  { bucket: 'cartes-identite', prefix: 'avions' },      // photos d'avions de compagnie
+  { bucket: 'cartes-identite', prefix: 'compagnies' },  // logos de compagnies
+];
+
+/**
  * GET /api/login-logo
  *
- * Liste TOUS les fichiers image de TOUS les buckets publics Supabase Storage,
- * génère leurs URLs publiques et en retourne une au hasard.
+ * Retourne une URL d'image aléatoire depuis les sous-dossiers autorisés
+ * de Supabase Storage. Exclut les photos personnelles (cartes d'identité).
  * Fallback vers les images locales si aucune image trouvée.
  */
 export async function GET() {
   try {
     const admin = createAdminClient();
-
-    // 1. Récupérer tous les buckets
-    const { data: buckets, error: bucketsErr } = await admin.storage.listBuckets();
-    if (bucketsErr) throw bucketsErr;
-
-    const publicBuckets = (buckets ?? []).filter((b) => b.public);
-
-    // 2. Lister les images de chaque bucket public en parallèle
     const allImageUrls: string[] = [];
 
     await Promise.all(
-      publicBuckets.map(async (bucket) => {
+      ALLOWED_PREFIXES.map(async ({ bucket, prefix }) => {
         const paths: string[] = [];
-        await listImagePaths(admin, bucket.id, '', paths, 300, 0);
+        await listImagePaths(admin, bucket, prefix, paths, 200, 0);
 
         for (const filePath of paths) {
           const { data: { publicUrl } } = admin.storage
-            .from(bucket.id)
+            .from(bucket)
             .getPublicUrl(filePath);
           allImageUrls.push(publicUrl);
         }
