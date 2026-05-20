@@ -264,6 +264,13 @@ function SummerUpdateDecor() {
   );
 }
 
+/* ── Images du logo rotatif (toutes les 30 min) ── */
+const LOGIN_LOGO_IMAGES = ['/mixou-bg.png', '/ptfs-logo.jpg', '/ptfs-map.png'];
+function pickLogoImage(current?: string): string {
+  const pool = LOGIN_LOGO_IMAGES.filter((p) => p !== current);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 type LoginMode = 'pilote' | 'atc' | 'siavi';
 
 function LoginPageFallback() {
@@ -310,6 +317,21 @@ function LoginPageContent() {
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirm, setResetConfirm] = useState('');
   const resetSuccessRef = useRef(false);
+  const [logoImg, setLogoImg] = useState<string>('');
+  const [logoFade, setLogoFade] = useState(true);
+
+  useEffect(() => {
+    setLogoImg(pickLogoImage());
+    const THIRTY_MIN = 30 * 60 * 1000;
+    const interval = setInterval(() => {
+      setLogoFade(false);
+      setTimeout(() => {
+        setLogoImg((prev) => pickLogoImage(prev));
+        setLogoFade(true);
+      }, 350);
+    }, THIRTY_MIN);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -561,10 +583,25 @@ function LoginPageContent() {
         {/* Logo / Titre */}
         <div className="text-center mb-8">
           <div
-            className="inline-flex items-center justify-center w-20 h-20 mb-4 animate-zoom-bounce hover:animate-float"
-            style={{ background: 'rgba(56,130,255,0.15)', border: '1px solid rgba(56,130,255,0.3)', borderRadius: '12px' }}
+            className="inline-flex items-center justify-center w-20 h-20 mb-4 animate-zoom-bounce hover:animate-float overflow-hidden"
+            style={{ border: '1px solid rgba(56,130,255,0.3)', borderRadius: '12px', background: 'rgba(56,130,255,0.15)' }}
           >
-            <Shield className="h-10 w-10" style={{ color: '#6aa0ff' }} />
+            {logoImg ? (
+              <img
+                key={logoImg}
+                src={logoImg}
+                alt=""
+                aria-hidden="true"
+                className="w-full h-full object-cover object-center"
+                style={{
+                  borderRadius: '11px',
+                  opacity: logoFade ? 1 : 0,
+                  transition: 'opacity 0.35s ease',
+                }}
+              />
+            ) : (
+              <Shield className="h-10 w-10" style={{ color: '#6aa0ff' }} />
+            )}
           </div>
           <h1 className="text-3xl font-bold text-white tracking-tight animate-init animate-slide-up delay-200">PTFS Logbook</h1>
           <p className="text-cyan-100/80 text-sm mt-2 animate-init animate-slide-up delay-300">Système de gestion des vols · Saison estivale</p>
@@ -572,17 +609,15 @@ function LoginPageContent() {
 
         {/* Sélecteur de mode (masqué lors de l'étape email/code) */}
         {step === 'form' && (
-        <div
-          className="flex mb-6 animate-init animate-reveal-blur delay-400"
-          style={{ gap: '4px', background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.07)', borderRadius: '8px', padding: '3px' }}
-        >
+        <div className="flex gap-2 mb-6 p-1 bg-slate-900/45 rounded-2xl backdrop-blur-md border border-white/10 shadow-xl shadow-cyan-950/30 animate-init animate-reveal-blur delay-400">
           <button
             type="button"
             onClick={() => setMode('pilote')}
-            className="flex-1 flex items-center justify-center gap-2 py-3.5 px-3 font-medium transition-colors duration-200"
-            style={mode === 'pilote'
-              ? { background: 'rgba(56,130,255,0.18)', color: '#6aa0ff', border: '0.5px solid rgba(56,130,255,0.25)', borderRadius: '5px' }
-              : { color: 'rgba(200,210,230,0.4)', background: 'transparent', borderRadius: '5px' }}
+            className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl font-semibold transition-all duration-300 ${
+              mode === 'pilote'
+                ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
+                : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
+            }`}
           >
             <Plane className="h-5 w-5" />
             <span className="hidden sm:inline">Pilote</span>
@@ -590,10 +625,11 @@ function LoginPageContent() {
           <button
             type="button"
             onClick={() => setMode('atc')}
-            className="flex-1 flex items-center justify-center gap-2 py-3.5 px-3 font-medium transition-colors duration-200"
-            style={mode === 'atc'
-              ? { background: 'rgba(56,130,255,0.18)', color: '#6aa0ff', border: '0.5px solid rgba(56,130,255,0.25)', borderRadius: '5px' }
-              : { color: 'rgba(200,210,230,0.4)', background: 'transparent', borderRadius: '5px' }}
+            className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl font-semibold transition-all duration-300 ${
+              mode === 'atc'
+                ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
+                : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
+            }`}
           >
             <Radio className="h-5 w-5" />
             <span className="hidden sm:inline">ATC</span>
@@ -601,10 +637,11 @@ function LoginPageContent() {
           <button
             type="button"
             onClick={() => setMode('siavi')}
-            className="flex-1 flex items-center justify-center gap-2 py-3.5 px-3 font-medium transition-colors duration-200"
-            style={mode === 'siavi'
-              ? { background: 'rgba(56,130,255,0.18)', color: '#6aa0ff', border: '0.5px solid rgba(56,130,255,0.25)', borderRadius: '5px' }
-              : { color: 'rgba(200,210,230,0.4)', background: 'transparent', borderRadius: '5px' }}
+            className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl font-semibold transition-all duration-300 ${
+              mode === 'siavi'
+                ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
+                : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
+            }`}
           >
             <Flame className="h-5 w-5" />
             <span className="hidden sm:inline">SIAVI</span>
