@@ -264,11 +264,15 @@ function SummerUpdateDecor() {
   );
 }
 
-/* ── Images du logo rotatif (toutes les 30 min) ── */
-const LOGIN_LOGO_IMAGES = ['/mixou-bg.png', '/ptfs-logo.jpg', '/ptfs-map.png'];
-function pickLogoImage(current?: string): string {
-  const pool = LOGIN_LOGO_IMAGES.filter((p) => p !== current);
-  return pool[Math.floor(Math.random() * pool.length)];
+/** Fallback local si l'API /login-logo est indisponible */
+const LOGIN_LOGO_FALLBACKS = ['/mixou-bg.png', '/ptfs-logo.jpg', '/ptfs-map.png'];
+async function fetchLogoImage(): Promise<string> {
+  try {
+    const res = await fetch('/api/login-logo', { cache: 'no-store' });
+    const data: { url?: string } = await res.json().catch(() => ({}));
+    if (data?.url) return data.url;
+  } catch { /* ignore */ }
+  return LOGIN_LOGO_FALLBACKS[Math.floor(Math.random() * LOGIN_LOGO_FALLBACKS.length)];
 }
 
 type LoginMode = 'pilote' | 'atc' | 'siavi';
@@ -321,16 +325,20 @@ function LoginPageContent() {
   const [logoFade, setLogoFade] = useState(true);
 
   useEffect(() => {
-    setLogoImg(pickLogoImage());
-    const THIRTY_MIN = 30 * 60 * 1000;
-    const interval = setInterval(() => {
+    let cancelled = false;
+    const rotate = async () => {
+      const url = await fetchLogoImage();
+      if (cancelled) return;
       setLogoFade(false);
       setTimeout(() => {
-        setLogoImg((prev) => pickLogoImage(prev));
+        if (cancelled) return;
+        setLogoImg(url);
         setLogoFade(true);
       }, 350);
-    }, THIRTY_MIN);
-    return () => clearInterval(interval);
+    };
+    rotate();
+    const interval = setInterval(rotate, 30 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
   useEffect(() => {
