@@ -456,35 +456,33 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-          <Plane className="h-5 w-5 text-sky-400" />
+          <Plane className="h-5 w-5 text-sky-400 shrink-0" />
           Flotte ({avions.length} avion{avions.length > 1 ? 's' : ''})
         </h2>
-        <div className="flex items-center gap-4">
-          {isPdg && (
-            <>
-              <div className="text-right text-sm">
-                <span className="text-emerald-400">{avionsDisponibles}</span>
-                <span className="text-slate-500"> dispo</span>
-                {avionsEnVol > 0 && (
-                  <>
-                    <span className="text-slate-600 mx-1">•</span>
-                    <span className="text-sky-400">{avionsEnVol}</span>
-                    <span className="text-slate-500"> en vol</span>
-                  </>
-                )}
-              </div>
-              <Link
-                href="/marketplace"
-                className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                <ShoppingCart className="h-4 w-4" />
-                Acheter
-              </Link>
-            </>
-          )}
-        </div>
+        {isPdg && (
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-sm">
+              <span className="text-emerald-400">{avionsDisponibles}</span>
+              <span className="text-slate-500"> dispo</span>
+              {avionsEnVol > 0 && (
+                <>
+                  <span className="text-slate-600 mx-1">•</span>
+                  <span className="text-sky-400">{avionsEnVol}</span>
+                  <span className="text-slate-500"> en vol</span>
+                </>
+              )}
+            </div>
+            <Link
+              href="/marketplace"
+              className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Acheter
+            </Link>
+          </div>
+        )}
       </div>
 
       {error && <p className="text-red-400 text-sm mb-3">{error}</p>}

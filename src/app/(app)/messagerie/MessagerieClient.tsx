@@ -329,25 +329,21 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
     const name = isSent ? getIdentifiant(msg.destinataire) : getIdentifiant(msg.expediteur);
     return (
       <button key={msg.id} onClick={() => selectMessage(msg)}
-        className={`w-full text-left flex items-center gap-3 px-4 py-2.5 transition-colors border-l-2 ${
+        className={`w-full text-left flex items-center gap-2.5 px-3 sm:px-4 py-2.5 transition-colors border-l-2 ${
           sel ? `bg-violet-500/8 ${typeBorderColor(msg)}` : unread ? 'border-l-transparent bg-slate-800/30 hover:bg-slate-800/50' : 'border-l-transparent hover:bg-slate-800/30'
         }`}>
         {avatar(name, photoByIdentifiant)}
-        <div className="flex-1 min-w-0 flex items-center gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
               {unread && <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0" />}
               <span className={`text-sm truncate ${unread ? 'font-semibold text-slate-100' : 'text-slate-400'}`}>{name}</span>
             </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`text-sm truncate ${unread ? 'text-slate-200' : 'text-slate-400'}`}>{msg.titre}</span>
-              <span className="text-slate-600 shrink-0">—</span>
-              <span className="text-xs text-slate-600 truncate">{truncate(msg.contenu, 50)}</span>
-            </div>
+            <span className={`text-[11px] shrink-0 ${unread ? 'text-violet-400 font-medium' : 'text-slate-600'}`}>{formatRelativeDate(msg.created_at)}</span>
           </div>
-          <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
-            <span className={`text-[11px] ${unread ? 'text-violet-400 font-medium' : 'text-slate-600'}`}>{formatRelativeDate(msg.created_at)}</span>
-            {badge(msg)}
+          <div className="flex items-center justify-between gap-1 mt-0.5 min-w-0">
+            <span className={`text-xs truncate flex-1 min-w-0 ${unread ? 'text-slate-200' : 'text-slate-400'}`}>{msg.titre}</span>
+            <div className="shrink-0">{badge(msg)}</div>
           </div>
         </div>
       </button>
@@ -380,8 +376,8 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
         </div>
 
         {/* Header */}
-        <div className={`px-6 py-4 border-b border-slate-800/40 border-l-4 ${typeBorderColor(m)} shrink-0`}>
-          <h2 className="text-lg font-semibold text-slate-100 break-words">{m.titre}</h2>
+        <div className={`px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800/40 border-l-4 ${typeBorderColor(m)} shrink-0`}>
+          <h2 className="text-base sm:text-lg font-semibold text-slate-100 break-words">{m.titre}</h2>
           <div className="flex items-center gap-2 mt-2">
             {avatar(activeTab === 'sent' ? getIdentifiant(m.destinataire) : getIdentifiant(m.expediteur), photoByIdentifiant)}
             <div>
@@ -392,7 +388,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           {CHEQUE_TYPES.includes(m.type_message) && m.cheque_montant ? (
             <div className="space-y-5">
               <MessageContent className="text-slate-300 leading-relaxed" content={m.contenu} />
@@ -606,7 +602,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
         )}
       </div>
 
-    <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 overflow-hidden" style={{ height: 'calc(100dvh - 14rem)' }}>
+    <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 overflow-hidden" style={{ height: 'calc(100dvh - 12rem)' }}>
       <div className="h-full flex">
         {/* Sidebar (desktop) / Tab bar (mobile) */}
         <div className={`${mobileShowDetail ? 'hidden lg:flex' : 'flex'} flex-col border-r border-slate-800/60 shrink-0`}>
@@ -643,15 +639,15 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
             </div>
           </div>
           {/* Mobile tab bar — icônes + labels courts */}
-          <div className="flex lg:hidden overflow-x-auto border-b border-slate-800/60">
+          <div className="flex lg:hidden overflow-x-auto border-b border-slate-800/60 scrollbar-none snap-x">
             {tabs.map(tab => (
               <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedMessage(null); setMobileShowDetail(false); }}
-                className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2 ${
+                className={`flex items-center gap-1 px-2.5 py-2.5 text-[11px] font-medium whitespace-nowrap transition-colors border-b-2 snap-start ${
                   activeTab === tab.id ? 'border-b-violet-500 text-violet-300' : 'border-b-transparent text-slate-500 hover:text-slate-300'
                 }`}>
                 <tab.icon className="h-3.5 w-3.5 shrink-0" />
-                <span>{tab.label}</span>
-                {tab.count > 0 && <span className="px-1.5 rounded-full bg-violet-500/20 text-violet-300 text-[10px] font-bold">{tab.count}</span>}
+                <span className="hidden min-[360px]:inline">{tab.label}</span>
+                {tab.count > 0 && <span className="px-1 rounded-full bg-violet-500/20 text-violet-300 text-[10px] font-bold">{tab.count}</span>}
               </button>
             ))}
           </div>

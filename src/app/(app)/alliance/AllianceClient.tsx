@@ -250,7 +250,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
           if (allianceId) await loadDetail(allianceId);
         }} />
         {alliances.map(a => (
-          <button key={a.id} onClick={() => loadDetail(a.id)} className="group w-full text-left rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-all duration-200 hover:bg-slate-800/50 hover:border-violet-500/40 hover:shadow-lg hover:shadow-violet-500/5 hover:-translate-y-0.5 flex items-center justify-between">
+          <button key={a.id} onClick={() => loadDetail(a.id)} className="group w-full text-left rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-all duration-200 hover:bg-slate-800/50 hover:border-violet-500/40 hover:shadow-lg hover:shadow-violet-500/5 hover:-translate-y-0.5 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <span className="font-semibold text-slate-100">{a.nom}</span>
               <span className="ml-2 text-xs text-slate-500">{a.nb_membres} membre{(a.nb_membres || 0) > 1 ? 's' : ''}</span>
@@ -258,7 +258,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
                 <span className="block text-xs text-slate-500 mt-0.5">via {a.my_compagnie_noms?.join(', ') ?? a.my_compagnie_nom}</span>
               )}
             </div>
-            <span className={`text-sm ${ROLE_COLORS[a.my_role || ''] || 'text-slate-400'}`}>{ROLE_LABELS[a.my_role || ''] || a.my_role}</span>
+            <span className={`text-sm self-start sm:self-auto ${ROLE_COLORS[a.my_role || ''] || 'text-slate-400'}`}>{ROLE_LABELS[a.my_role || ''] || a.my_role}</span>
           </button>
         ))}
       </div>
@@ -343,7 +343,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
         </div>
 
         {/* Strip KPI */}
-        <div className="grid grid-cols-2 md:grid-cols-4 border-t border-slate-700/40 divide-x divide-slate-700/40">
+        <div className="grid grid-cols-2 md:grid-cols-4 border-t border-slate-700/40 divide-y divide-slate-700/40 min-[480px]:divide-y-0 min-[480px]:divide-x">
           <button type="button" onClick={() => setTab('membres')} className="p-4 text-left transition-colors hover:bg-violet-500/5">
             <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
               <Building2 className="h-3.5 w-3.5" /> Membres
@@ -635,29 +635,29 @@ function MembresTab({ detail, isPresident, isLeader, onRefresh, flash, api, busy
             : m.role === 'vice_president' ? <ShieldCheck className="h-3.5 w-3.5 text-sky-400" />
             : null;
           return (
-            <div key={`${m.id}-${m.compagnie_id}`} className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-slate-700/20">
-              <div className="flex items-center gap-2">
-                {roleIcon || <Building2 className="h-4 w-4 text-slate-500" />}
+            <div key={`${m.id}-${m.compagnie_id}`} className="flex flex-col gap-2 py-2.5 px-3 rounded-lg bg-slate-700/20 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2 flex-wrap">
+                {roleIcon || <Building2 className="h-4 w-4 text-slate-500 shrink-0" />}
                 <span className="text-slate-200 font-medium">{m.compagnie?.nom || m.compagnie_id}</span>
                 <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[m.role] || ''} bg-slate-700/50`}>{ROLE_LABELS[m.role] || m.role}</span>
               </div>
               {isPresident && m.role !== 'president' && (
-                <div className="flex gap-1.5 items-center">
+                <div className="flex gap-2 items-center flex-wrap">
                   <select onChange={async (e) => {
                     if (!e.target.value) return;
                     const roleName = ROLE_LABELS[e.target.value] || e.target.value;
                     if (!confirm(`Nommer ${m.compagnie?.nom} comme ${roleName} ?`)) { e.target.value = ''; return; }
                     try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'changer_role', membre_id: m.id, nouveau_role: e.target.value }); flash(`${m.compagnie?.nom} est maintenant ${roleName}`); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
                     e.target.value = '';
-                  }} className="text-xs rounded border border-slate-600 bg-slate-800 text-slate-300 px-1.5 py-1" defaultValue="">
+                  }} className="flex-1 sm:flex-none text-xs rounded border border-slate-600 bg-slate-800 text-slate-300 px-2 py-2 min-h-[36px]" defaultValue="">
                     <option value="">Changer le rôle...</option>
                     {['vice_president', 'secretaire', 'membre'].filter(r => r !== m.role).map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
                   <button disabled={busy} onClick={async () => {
                     if (!confirm(`Expulser ${m.compagnie?.nom} de l'alliance ?`)) return;
                     try { await api(`/api/alliances/${detail.id}/membres`, 'PATCH', { action: 'expulser', membre_id: m.id }); flash('Membre expulsé'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-                  }} className="text-xs px-2 py-1 rounded bg-red-600/30 text-red-300 hover:bg-red-600/50 disabled:opacity-50" title="Expulser">
-                    <UserMinus className="h-3 w-3" />
+                  }} className="p-2.5 min-h-[36px] min-w-[36px] rounded bg-red-600/30 text-red-300 hover:bg-red-600/50 disabled:opacity-50 flex items-center justify-center" title="Expulser">
+                    <UserMinus className="h-3.5 w-3.5" />
                   </button>
                 </div>
               )}

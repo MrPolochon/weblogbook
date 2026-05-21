@@ -782,52 +782,50 @@ export default function MaCompagnieClient({
               {employes.map((emp) => (
                 <div 
                   key={emp.id} 
-                  className="flex items-center justify-between bg-slate-800/30 rounded-lg p-3 border border-slate-700/30 transition-all duration-200 hover:bg-slate-800/50 hover:border-slate-600/40 hover:translate-x-0.5"
+                  className="flex flex-col gap-2 bg-slate-800/30 rounded-lg p-3 border border-slate-700/30 transition-all duration-200 hover:bg-slate-800/50 hover:border-slate-600/40 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-slate-200 font-medium">{emp.identifiant}</span>
                     {emp.role === 'co_pdg' && (
                       <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
                         Co-PDG
                       </span>
                     )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-slate-400 flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5" />
+                    <span className="text-xs text-slate-400 flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
                       {formatHeures(emp.heures)}
                     </span>
-                    {isPdg && (
-                      <>
-                        {emp.role === 'co_pdg' ? (
-                          <button
-                            onClick={() => handleChangeRole(emp.id, 'employe')}
-                            disabled={roleLoading === emp.id}
-                            className="text-[11px] text-red-400 hover:text-red-300 disabled:opacity-50"
-                            title="Rétrograder en employé"
-                          >
-                            {roleLoading === emp.id ? '…' : 'Rétrograder'}
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleChangeRole(emp.id, 'co_pdg')}
-                            disabled={roleLoading === emp.id}
-                            className="text-[11px] text-amber-400 hover:text-amber-300 disabled:opacity-50"
-                            title="Promouvoir co-PDG"
-                          >
-                            {roleLoading === emp.id ? '…' : 'Co-PDG'}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setFireConfirm({ empId: emp.id, identifiant: emp.identifiant, step: 1 })}
-                          className="text-[11px] text-red-500 hover:text-red-400"
-                          title="Licencier"
-                        >
-                          Licencier
-                        </button>
-                      </>
-                    )}
                   </div>
+                  {isPdg && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {emp.role === 'co_pdg' ? (
+                        <button
+                          onClick={() => handleChangeRole(emp.id, 'employe')}
+                          disabled={roleLoading === emp.id}
+                          className="text-xs px-2.5 py-1.5 rounded bg-red-500/10 text-red-400 hover:text-red-300 hover:bg-red-500/20 disabled:opacity-50 min-h-[32px]"
+                          title="Rétrograder en employé"
+                        >
+                          {roleLoading === emp.id ? '…' : 'Rétrograder'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleChangeRole(emp.id, 'co_pdg')}
+                          disabled={roleLoading === emp.id}
+                          className="text-xs px-2.5 py-1.5 rounded bg-amber-500/10 text-amber-400 hover:text-amber-300 hover:bg-amber-500/20 disabled:opacity-50 min-h-[32px]"
+                          title="Promouvoir co-PDG"
+                        >
+                          {roleLoading === emp.id ? '…' : 'Co-PDG'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setFireConfirm({ empId: emp.id, identifiant: emp.identifiant, step: 1 })}
+                        className="text-xs px-2.5 py-1.5 rounded bg-red-600/20 text-red-500 hover:text-red-400 hover:bg-red-600/30 min-h-[32px]"
+                        title="Licencier"
+                      >
+                        Licencier
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

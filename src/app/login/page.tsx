@@ -573,7 +573,7 @@ function LoginPageContent() {
   }
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden animate-page-reveal">
+    <div className="min-h-dvh relative flex items-start sm:items-center justify-center px-4 pt-8 pb-6 sm:p-4 overflow-x-hidden animate-page-reveal">
       {fond}
       {overlay}
       
@@ -589,9 +589,9 @@ function LoginPageContent() {
       
       <div className="relative z-10 w-full max-w-md">
         {/* Logo / Titre */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-4 sm:mb-8">
           <div
-            className="inline-flex items-center justify-center w-20 h-20 mb-4 animate-zoom-bounce hover:animate-float overflow-hidden"
+            className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 mb-3 sm:mb-4 animate-zoom-bounce hover:animate-float overflow-hidden"
             style={{ border: '1px solid rgba(56,130,255,0.3)', borderRadius: '12px', background: 'rgba(56,130,255,0.15)' }}
           >
             {logoImg ? (
@@ -611,48 +611,48 @@ function LoginPageContent() {
               <Shield className="h-10 w-10" style={{ color: '#6aa0ff' }} />
             )}
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight animate-init animate-slide-up delay-200">PTFS Logbook</h1>
-          <p className="text-cyan-100/80 text-sm mt-2 animate-init animate-slide-up delay-300">Système de gestion des vols · Saison estivale</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight animate-init animate-slide-up delay-200">PTFS Logbook</h1>
+          <p className="text-cyan-100/80 text-xs sm:text-sm mt-1.5 sm:mt-2 animate-init animate-slide-up delay-300">Système de gestion des vols · Saison estivale</p>
         </div>
 
         {/* Sélecteur de mode (masqué lors de l'étape email/code) */}
         {step === 'form' && (
-        <div className="flex gap-2 mb-6 p-1 bg-slate-900/45 rounded-2xl backdrop-blur-md border border-white/10 shadow-xl shadow-cyan-950/30 animate-init animate-reveal-blur delay-400">
+        <div className="flex gap-2 mb-4 sm:mb-6 p-1 bg-slate-900/45 rounded-2xl backdrop-blur-md border border-white/10 shadow-xl shadow-cyan-950/30 animate-init animate-reveal-blur delay-400">
           <button
             type="button"
             onClick={() => setMode('pilote')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl font-semibold transition-all duration-300 ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
               mode === 'pilote'
                 ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
                 : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
             }`}
           >
-            <Plane className="h-5 w-5" />
-            <span className="hidden sm:inline">Pilote</span>
+            <Plane className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+            <span className="text-xs sm:text-sm">Pilote</span>
           </button>
           <button
             type="button"
             onClick={() => setMode('atc')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl font-semibold transition-all duration-300 ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
               mode === 'atc'
                 ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
                 : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
             }`}
           >
-            <Radio className="h-5 w-5" />
-            <span className="hidden sm:inline">ATC</span>
+            <Radio className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+            <span className="text-xs sm:text-sm">ATC</span>
           </button>
           <button
             type="button"
             onClick={() => setMode('siavi')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3.5 px-3 rounded-xl font-semibold transition-all duration-300 ${
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
               mode === 'siavi'
                 ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
                 : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
             }`}
           >
-            <Flame className="h-5 w-5" />
-            <span className="hidden sm:inline">SIAVI</span>
+            <Flame className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+            <span className="text-xs sm:text-sm">SIAVI</span>
           </button>
         </div>
         )}
@@ -714,7 +714,7 @@ function LoginPageContent() {
               </span>
               <p className="mt-2 text-sm text-cyan-50/80">Bienvenue à bord. Choisissez votre espace et connectez-vous pour rejoindre le réseau.</p>
             </div>
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="label text-slate-200">Identifiant</label>
                 <div className="relative">
@@ -1016,7 +1016,7 @@ function LoginPageContent() {
                   inputMode="numeric"
                   pattern="[0-9]*"
                   maxLength={6}
-                  className="input bg-slate-900/50 text-center text-2xl tracking-[0.5em] font-mono"
+                  className="input bg-slate-900/50 text-center text-xl sm:text-2xl tracking-[0.4em] sm:tracking-[0.5em] font-mono"
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="000000"
@@ -1050,27 +1050,27 @@ function LoginPageContent() {
 
 
         {/* Boutons secondaires */}
-        <div className="mt-6 flex flex-row items-center justify-center gap-3 animate-init animate-slide-up delay-800">
+        <div className="mt-4 sm:mt-6 flex flex-wrap items-center justify-center gap-2 sm:gap-3 animate-init animate-slide-up delay-800">
           <Link
             href="/aeroschool"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:text-amber-200 hover:bg-amber-500/20 hover:border-amber-500/50 transition-all backdrop-blur-sm group cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:text-amber-200 hover:bg-amber-500/20 hover:border-amber-500/50 transition-all backdrop-blur-sm group cursor-pointer"
           >
-            <GraduationCap className="h-5 w-5 text-amber-400 group-hover:scale-110 transition-transform" />
-            <span className="font-semibold">AeroSchool</span>
+            <GraduationCap className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
+            <span className="font-semibold text-sm">AeroSchool</span>
           </Link>
           <Link
             href="/carte-atc"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all backdrop-blur-sm group cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/20 hover:border-emerald-500/50 transition-all backdrop-blur-sm group cursor-pointer"
           >
-            <Radio className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition-transform" />
-            <span className="font-semibold">ODW</span>
+            <Radio className="h-4 w-4 text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
+            <span className="font-semibold text-sm">ODW</span>
           </Link>
           <Link
             href="/download"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-300 hover:text-sky-200 hover:bg-sky-500/20 hover:border-sky-500/50 transition-all backdrop-blur-sm group cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-300 hover:text-sky-200 hover:bg-sky-500/20 hover:border-sky-500/50 transition-all backdrop-blur-sm group cursor-pointer"
           >
-            <Download className="h-4 w-4 text-sky-400 group-hover:scale-110 transition-transform" />
-            <span className="font-semibold">Téléchargements</span>
+            <Download className="h-4 w-4 text-sky-400 group-hover:scale-110 transition-transform shrink-0" />
+            <span className="font-semibold text-sm">Téléchargements</span>
           </Link>
         </div>
       </div>
