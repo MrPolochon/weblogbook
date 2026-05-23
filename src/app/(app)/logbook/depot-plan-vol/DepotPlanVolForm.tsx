@@ -641,6 +641,10 @@ export default function DepotPlanVolForm({
       setError('Remplissez tous les champs requis.');
       return;
     }
+    if (!heure_depart.trim()) {
+      setError('L\'heure de départ (UTC) est obligatoire.');
+      return;
+    }
     if (type_vol === 'VFR' && !intentions_vol.trim()) { setError('Intentions de vol requises pour VFR.'); return; }
     if (type_vol === 'IFR' && (!sid_depart.trim() || !star_arrivee.trim())) { setError('SID de départ et STAR d\'arrivée requises pour IFR.'); return; }
     const missionErr = missionArmeeValidationError();
@@ -1466,7 +1470,7 @@ export default function DepotPlanVolForm({
             </div>
           </div>
           <div className="flex-1 max-w-[160px]">
-            <label className="label">Heure de départ (UTC)</label>
+            <label className="label">Heure de départ (UTC) <span className="text-red-400">*</span></label>
             <div className="relative">
               <input
                 type="time"
@@ -1474,6 +1478,7 @@ export default function DepotPlanVolForm({
                 value={heure_depart}
                 onChange={(e) => setHeureDepart(e.target.value)}
                 placeholder="14:30"
+                required
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono uppercase tracking-widest text-slate-500">UTC</span>
             </div>

@@ -171,7 +171,7 @@ export async function GET() {
     const rawProfile = p.profiles as unknown;
     const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
     const piloteId = p.pilote_id || null;
-    const startAt = p.accepted_at || p.created_at || nowIso;
+    const startAt = p.heure_depart_estimee || p.accepted_at || p.created_at || nowIso;
     const rawAvion = p.compagnie_avions as unknown;
     const avionRow = Array.isArray(rawAvion) ? rawAvion[0] : rawAvion;
     const avionImmat: string | null = (avionRow as { immatriculation?: string | null } | null)?.immatriculation || null;

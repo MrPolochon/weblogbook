@@ -602,12 +602,28 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
         )}
       </div>
 
-    <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 overflow-hidden" style={{ height: 'calc(100dvh - 12rem)' }}>
-      <div className="h-full flex">
-        {/* Sidebar (desktop) / Tab bar (mobile) */}
-        <div className={`${mobileShowDetail ? 'hidden lg:flex' : 'flex'} flex-col border-r border-slate-800/60 shrink-0`}>
-          {/* Desktop sidebar */}
-          <div className="hidden lg:flex flex-col w-48 h-full">
+    <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 overflow-hidden flex flex-col" style={{ height: 'calc(100dvh - 12rem)' }}>
+
+      {/* Barre d'onglets mobile — pleine largeur en haut */}
+      {!mobileShowDetail && (
+        <div className="flex lg:hidden overflow-x-auto border-b border-slate-800/60 shrink-0 scrollbar-none snap-x">
+          {tabs.map(tab => (
+            <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedMessage(null); setMobileShowDetail(false); }}
+              className={`flex items-center gap-1 px-3 py-2.5 text-[11px] font-medium whitespace-nowrap transition-colors border-b-2 snap-start ${
+                activeTab === tab.id ? 'border-b-violet-500 text-violet-300' : 'border-b-transparent text-slate-500 hover:text-slate-300'
+              }`}>
+              <tab.icon className="h-3.5 w-3.5 shrink-0" />
+              <span>{tab.label}</span>
+              {tab.count > 0 && <span className="ml-1 px-1.5 rounded-full bg-violet-500/20 text-violet-300 text-[10px] font-bold">{tab.count}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-1 min-h-0">
+        {/* Sidebar desktop uniquement */}
+        <div className="hidden lg:flex flex-col border-r border-slate-800/60 shrink-0">
+          <div className="flex flex-col w-48 h-full">
             <div className="py-2 space-y-0.5">
               {tabs.map(tab => (
                 <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedMessage(null); setMobileShowDetail(false); }}
@@ -620,7 +636,6 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
                 </button>
               ))}
             </div>
-            {/* Actions */}
             <div className="mt-auto px-3 py-3 space-y-2 border-t border-slate-800/40">
               {currentUnreadCount > 0 && (
                 <button onClick={handleMarkAllAsRead} disabled={markAllLoading}
@@ -638,23 +653,10 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
               )}
             </div>
           </div>
-          {/* Mobile tab bar — icônes + labels courts */}
-          <div className="flex lg:hidden overflow-x-auto border-b border-slate-800/60 scrollbar-none snap-x">
-            {tabs.map(tab => (
-              <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedMessage(null); setMobileShowDetail(false); }}
-                className={`flex items-center gap-1 px-2.5 py-2.5 text-[11px] font-medium whitespace-nowrap transition-colors border-b-2 snap-start ${
-                  activeTab === tab.id ? 'border-b-violet-500 text-violet-300' : 'border-b-transparent text-slate-500 hover:text-slate-300'
-                }`}>
-                <tab.icon className="h-3.5 w-3.5 shrink-0" />
-                <span className="hidden min-[360px]:inline">{tab.label}</span>
-                {tab.count > 0 && <span className="px-1 rounded-full bg-violet-500/20 text-violet-300 text-[10px] font-bold">{tab.count}</span>}
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Message list */}
-        <div className={`${mobileShowDetail ? 'hidden lg:flex' : 'flex'} flex-col flex-1 min-w-0 border-r border-slate-800/60 lg:max-w-md`}>
+        <div className={`${mobileShowDetail ? 'hidden' : 'flex'} lg:flex flex-col flex-1 min-w-0 border-r border-slate-800/60 lg:max-w-md`}>
           {/* Mobile actions bar */}
           <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/40 lg:hidden">
             {currentUnreadCount > 0 && (
@@ -690,7 +692,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
         </div>
 
         {/* Detail panel */}
-        <div className={`${mobileShowDetail ? 'flex' : 'hidden lg:flex'} flex-col flex-1 min-w-0`}>
+        <div className={`${mobileShowDetail ? 'flex' : 'hidden'} lg:flex flex-col flex-1 min-w-0`}>
           {activeTab === 'compose' && !mobileShowDetail ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-600">
               <PenLine className="h-10 w-10 mb-2 opacity-20" />

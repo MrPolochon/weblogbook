@@ -51,6 +51,9 @@ export async function POST(request: Request) {
       vol_sans_atc, vol_ferry, bria_conversation
     } = body;
     const heureDepartIso = heureDepartToIso(typeof heure_depart === 'string' ? heure_depart : null);
+    if (!heureDepartIso) {
+      return NextResponse.json({ error: 'L\'heure de départ (UTC) est obligatoire.' }, { status: 400 });
+    }
     const prixBilletUtilise = typeof prix_billet_utilise === 'number' ? prix_billet_utilise : parseInt(String(prix_billet_utilise || 0), 10) || 0;
     
     const ad = String(aeroport_depart || '').toUpperCase();
