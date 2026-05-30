@@ -2,7 +2,12 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
-// POST - Créer un avion pour une compagnie (admin only)
+async function genererImmatriculation(admin: ReturnType<typeof createAdminClient>): Promise<string> {
+  const { data: immatData } = await admin.rpc('generer_immatriculation', { prefixe: 'F-' });
+  return immatData || `F-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+}
+
+// POST - Créer un avion (compagnie ou inventaire personnel, admin only)
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -15,25 +20,76 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { compagnie_id, type_avion_id, immatriculation, nom_bapteme, aeroport_actuel } = body;
+    const { compagnie_id, proprietaire_id, type_avion_id, immatriculation, nom_bapteme, aeroport_actuel } = body;
 
-    if (!compagnie_id || !type_avion_id) {
-      return NextResponse.json({ error: 'compagnie_id et type_avion_id requis' }, { status: 400 });
+    if (!type_avion_id) {
+      return NextResponse.json({ error: 'type_avion_id requis' }, { status: 400 });
+    }
+    if (!compagnie_id && !proprietaire_id) {
+      return NextResponse.json({ error: 'compagnie_id ou proprietaire_id requis' }, { status: 400 });
+    }
+    if (compagnie_id && proprietaire_id) {
+      return NextResponse.json({ error: 'Indiquez soit une compagnie, soit un utilisateur, pas les deux' }, { status: 400 });
     }
 
     const admin = createAdminClient();
-    
+
+    const { data: typeAvion } = await admin.from('types_avion').select('id, nom').eq('id', type_avion_id).single();
+    if (!typeAvion) {
+      return NextResponse.json({ error: 'Type d\'avion introuvable' }, { status: 404 });
+    }
+
+    let immat = immatriculation?.trim().toUpperCase();
+    if (!immat) {
+      immat = await genererImmatriculation(admin);
+    }
+
+    if (proprietaire_id) {
+      const { data: proprietaire } = await admin
+        .from('profiles')
+        .select('id, identifiant')
+        .eq('id', proprietaire_id)
+        .single();
+      if (!proprietaire) {
+        return NextResponse.json({ error: 'Utilisateur introuvable' }, { status: 404 });
+      }
+
+      const aeroport = aeroport_actuel?.trim().toUpperCase() || 'IRFD';
+
+      const { data: avion, error } = await admin
+        .from('inventaire_avions')
+        .insert({
+          proprietaire_id,
+          type_avion_id,
+          immatriculation: immat,
+          nom_personnalise: nom_bapteme?.trim() || null,
+          aeroport_actuel: aeroport,
+          usure_percent: 100,
+          statut: 'ground',
+          prix_achat: 0,
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        if (error.code === '23505') {
+          return NextResponse.json({ error: 'Cette immatriculation existe déjà.' }, { status: 400 });
+        }
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+
+      const label = proprietaire.identifiant || proprietaire.id.slice(0, 8);
+      return NextResponse.json({
+        ok: true,
+        id: avion.id,
+        message: `${typeAvion.nom} (${immat}) ajouté à l'inventaire de ${label}`,
+      });
+    }
+
     // Vérifier que la compagnie existe
     const { data: compagnie } = await admin.from('compagnies').select('id, nom').eq('id', compagnie_id).single();
     if (!compagnie) {
       return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
-    }
-
-    // Générer une immatriculation si non fournie
-    let immat = immatriculation?.trim().toUpperCase();
-    if (!immat) {
-      const { data: immatData } = await admin.rpc('generer_immatriculation', { prefixe: 'F-' });
-      immat = immatData || `F-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     }
 
     // Déterminer l'aéroport initial

@@ -25,7 +25,7 @@ export default async function AdminInventairePage() {
         Inventaires (tous les pilotes)
       </h1>
       <p className="text-slate-400 text-sm">
-        Sélectionnez un pilote pour afficher son inventaire personnel d&apos;avions.
+        Sélectionnez un pilote pour consulter ou ajouter des avions à son inventaire personnel.
       </p>
       <AdminInventaireClient profiles={profiles ?? []} />
     </div>

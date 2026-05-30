@@ -91,7 +91,15 @@ export default function AtcPlansRealtimeRefresh({
         },
         scheduleRefresh
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Si la subscription Realtime échoue ou se ferme, on log un warning et on
+        // déclenche un refresh manuel pour éviter qu'une demande de clôture reste
+        // invisible jusqu'au polling de secours.
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.warn('[ATC Realtime] subscription state:', status);
+          window.dispatchEvent(new CustomEvent('atc-strips-refresh'));
+        }
+      });
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);

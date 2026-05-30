@@ -23,6 +23,7 @@ type Avion = {
 };
 
 type Compagnie = { id: string; nom: string };
+type Profile = { id: string; identifiant: string | null };
 type TypeAvion = {
   id: string;
   nom: string;
@@ -48,7 +49,7 @@ function typeSansCapaciteCommercial(t: TypeAvion): boolean {
 
 const STATUTS = ['ground', 'in_flight', 'maintenance', 'bloque'] as const;
 
-export default function AdminAvionsClient() {
+export default function AdminAvionsClient({ profiles }: { profiles: Profile[] }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [avions, setAvions] = useState<Avion[]>([]);
@@ -73,6 +74,7 @@ export default function AdminAvionsClient() {
   const [typesAvion, setTypesAvion] = useState<TypeAvion[]>([]);
   const [newAvion, setNewAvion] = useState({
     compagnie_id: '',
+    proprietaire_id: '',
     type_avion_id: '',
     immatriculation: '',
     nom_bapteme: '',
@@ -125,7 +127,13 @@ export default function AdminAvionsClient() {
 
   async function handleAddAvion(e: React.FormEvent) {
     e.preventDefault();
-    if (!newAvion.compagnie_id || !newAvion.type_avion_id) {
+    const isPersonnel = viewMode === 'personnel';
+    if (isPersonnel) {
+      if (!newAvion.proprietaire_id || !newAvion.type_avion_id) {
+        setError('Sélectionnez un utilisateur et un type d\'avion');
+        return;
+      }
+    } else if (!newAvion.compagnie_id || !newAvion.type_avion_id) {
       setError('Sélectionnez une compagnie et un type d\'avion');
       return;
     }
@@ -134,15 +142,31 @@ export default function AdminAvionsClient() {
     setError(null);
 
     try {
+      const payload = isPersonnel
+        ? {
+            proprietaire_id: newAvion.proprietaire_id,
+            type_avion_id: newAvion.type_avion_id,
+            immatriculation: newAvion.immatriculation,
+            nom_bapteme: newAvion.nom_bapteme,
+            aeroport_actuel: newAvion.aeroport_actuel,
+          }
+        : {
+            compagnie_id: newAvion.compagnie_id,
+            type_avion_id: newAvion.type_avion_id,
+            immatriculation: newAvion.immatriculation,
+            nom_bapteme: newAvion.nom_bapteme,
+            aeroport_actuel: newAvion.aeroport_actuel,
+          };
+
       const res = await fetch('/api/admin/avions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newAvion)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
       
-      setNewAvion({ compagnie_id: '', type_avion_id: '', immatriculation: '', nom_bapteme: '', aeroport_actuel: '' });
+      setNewAvion({ compagnie_id: '', proprietaire_id: '', type_avion_id: '', immatriculation: '', nom_bapteme: '', aeroport_actuel: '' });
       setShowAddForm(false);
       loadAvions();
       startTransition(() => router.refresh());
@@ -349,7 +373,7 @@ export default function AdminAvionsClient() {
           onChange={(e) => setFilter(e.target.value)}
           className="input flex-1"
         />
-        {viewMode === 'compagnie' && (
+        {viewMode === 'compagnie' ? (
           <button
             onClick={() => setShowAddForm(!showAddForm)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
@@ -358,6 +382,16 @@ export default function AdminAvionsClient() {
           >
             <Plus className="h-4 w-4" />
             Ajouter un avion
+          </button>
+        ) : (
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+              showAddForm ? 'bg-purple-600 text-white' : 'bg-purple-600 hover:bg-purple-700 text-white'
+            }`}
+          >
+            <Plus className="h-4 w-4" />
+            Ajouter à un inventaire
           </button>
         )}
         <button
@@ -371,26 +405,43 @@ export default function AdminAvionsClient() {
 
       {/* Formulaire d'ajout d'avion */}
       {showAddForm && (
-        <div className="card border-emerald-500/30 bg-emerald-500/5">
+        <div className={`card ${viewMode === 'personnel' ? 'border-purple-500/30 bg-purple-500/5' : 'border-emerald-500/30 bg-emerald-500/5'}`}>
           <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-            <Plus className="h-5 w-5 text-emerald-400" />
-            Ajouter un avion à une compagnie
+            <Plus className={`h-5 w-5 ${viewMode === 'personnel' ? 'text-purple-400' : 'text-emerald-400'}`} />
+            {viewMode === 'personnel' ? 'Ajouter un avion à un inventaire personnel' : 'Ajouter un avion à une compagnie'}
           </h3>
           <form onSubmit={handleAddAvion} className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Compagnie *</label>
-              <select
-                value={newAvion.compagnie_id}
-                onChange={(e) => setNewAvion({ ...newAvion, compagnie_id: e.target.value })}
-                className="input w-full"
-                required
-              >
-                <option value="">— Sélectionner —</option>
-                {compagnies.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nom}</option>
-                ))}
-              </select>
-            </div>
+            {viewMode === 'personnel' ? (
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Utilisateur *</label>
+                <select
+                  value={newAvion.proprietaire_id}
+                  onChange={(e) => setNewAvion({ ...newAvion, proprietaire_id: e.target.value })}
+                  className="input w-full"
+                  required
+                >
+                  <option value="">— Sélectionner —</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.identifiant ?? p.id.slice(0, 8)}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-1">Compagnie *</label>
+                <select
+                  value={newAvion.compagnie_id}
+                  onChange={(e) => setNewAvion({ ...newAvion, compagnie_id: e.target.value })}
+                  className="input w-full"
+                  required
+                >
+                  <option value="">— Sélectionner —</option>
+                  {compagnies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nom}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="md:col-span-2 lg:col-span-1 lg:min-w-[min(100%,28rem)]">
               <label className="block text-sm font-medium text-slate-400 mb-1">Type d&apos;avion *</label>
               <select
@@ -435,13 +486,15 @@ export default function AdminAvionsClient() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Aéroport initial (hub si vide)</label>
+              <label className="block text-sm font-medium text-slate-400 mb-1">
+                Aéroport initial {viewMode === 'compagnie' ? '(hub si vide)' : '(IRFD si vide)'}
+              </label>
               <select
                 value={newAvion.aeroport_actuel}
                 onChange={(e) => setNewAvion({ ...newAvion, aeroport_actuel: e.target.value })}
                 className="input w-full"
               >
-                <option value="">Hub principal</option>
+                <option value="">{viewMode === 'compagnie' ? 'Hub principal' : 'IRFD (défaut)'}</option>
                 {AEROPORTS_PTFS.map((a) => (
                   <option key={a.code} value={a.code}>{a.code} - {a.nom}</option>
                 ))}
@@ -451,7 +504,9 @@ export default function AdminAvionsClient() {
               <button
                 type="submit"
                 disabled={adding}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                className={`px-4 py-2 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                  viewMode === 'personnel' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
               >
                 {adding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Ajouter

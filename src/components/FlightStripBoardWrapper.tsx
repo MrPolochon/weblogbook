@@ -68,6 +68,30 @@ export default function FlightStripBoardWrapper({ allStrips, plansATraiter, atcP
     return () => window.removeEventListener('atc-strips-refresh', handler);
   }, [refreshStrips]);
 
+  // Polling de secours : garantit qu'aucune demande de clôture (ou autre update plans_vol)
+  // ne reste invisible si Supabase Realtime rate un event (websocket dropped, onglet en veille longue,
+  // réplication mal configurée). Pas exécuté si l'onglet est en arrière-plan pour économiser CPU/réseau.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') refreshStrips();
+    }, 20_000);
+    return () => clearInterval(interval);
+  }, [refreshStrips]);
+
+  // Refresh immédiat au retour de focus (onglet rebascule au premier plan, sortie de veille,
+  // changement de fenêtre). Comble la fenêtre pendant laquelle Realtime ne reçoit pas d'event.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshStrips();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [refreshStrips]);
+
   // Écouter les événements d'activation depuis la sidebar
   useEffect(() => {
     const handleActivation = (event: CustomEvent<{ planId: string }>) => {
