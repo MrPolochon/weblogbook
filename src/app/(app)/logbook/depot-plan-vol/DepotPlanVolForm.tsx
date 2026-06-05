@@ -20,6 +20,8 @@ interface TypeAvion {
   capacite_pax: number;
   capacite_cargo_kg: number;
   est_militaire?: boolean;
+  /** ICAO Item 10b : true = Mode S (code /S), false = Mode C (code /C) */
+  has_mode_s?: boolean;
 }
 
 interface InventaireItem {
@@ -985,6 +987,9 @@ export default function DepotPlanVolForm({
                 const wear = selectedAvionIndiv.usure_percent;
                 const wearColor = wear === 0 ? 'text-rose-300' : wear < 30 ? 'text-amber-300' : wear < 70 ? 'text-sky-300' : 'text-emerald-300';
                 const wearBarColor = wear === 0 ? 'bg-rose-500' : wear < 30 ? 'bg-amber-500' : wear < 70 ? 'bg-sky-500' : 'bg-emerald-500';
+                const hasS = (t as TypeAvion | null)?.has_mode_s ?? false;
+                const equipCode = hasS ? 'S' : 'C';
+                const equipLabel = hasS ? 'Mode S — altitude + identification' : 'Mode C — altitude uniquement';
                 return (
                   <div className="mt-3 rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-950/40 to-slate-900/40 p-3 animate-fade-in">
                     <div className="flex items-center justify-between gap-3">
@@ -1015,6 +1020,18 @@ export default function DepotPlanVolForm({
                           </div>
                         </div>
                       </div>
+                    </div>
+                    {/* Équipement ICAO Item 10b */}
+                    <div className="mt-2.5 flex items-center gap-2 pt-2 border-t border-slate-700/30">
+                      <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-black font-mono uppercase tracking-widest border ${
+                        hasS
+                          ? 'bg-sky-500/15 border-sky-500/30 text-sky-300'
+                          : 'bg-slate-700/40 border-slate-600/40 text-slate-400'
+                      }`}>
+                        <Radio className="h-2.5 w-2.5" />
+                        ÉQUIP /{equipCode}
+                      </span>
+                      <span className="text-[10px] text-slate-500">{equipLabel}</span>
                     </div>
                     {wear === 0 && (
                       <p className="mt-2 text-xs text-rose-300 flex items-center gap-1">

@@ -36,7 +36,7 @@ export default async function DepotPlanVolPage({ searchParams }: { searchParams?
   if (profile?.armee) {
     const { data: armeeRows } = await admin
       .from('armee_avions')
-      .select('id, nom_personnalise, types_avion(id, nom, code_oaci, est_militaire)')
+      .select('id, nom_personnalise, types_avion(id, nom, code_oaci, est_militaire, has_mode_s)')
       .order('created_at', { ascending: false });
     armeeAvions = (armeeRows || []) as AvionArmeeItem[];
   }
@@ -73,7 +73,7 @@ export default async function DepotPlanVolPage({ searchParams }: { searchParams?
 
   // Récupérer l'inventaire personnel
   const { data: inventaireData } = await admin.from('inventaire_avions')
-    .select('*, types_avion:type_avion_id(id, nom, code_oaci, capacite_pax, capacite_cargo_kg, est_militaire)')
+    .select('*, types_avion:type_avion_id(id, nom, code_oaci, capacite_pax, capacite_cargo_kg, est_militaire, has_mode_s)')
     .eq('proprietaire_id', user.id);
 
   // Vérifier disponibilité
@@ -105,7 +105,7 @@ export default async function DepotPlanVolPage({ searchParams }: { searchParams?
   if (compagniesDisponibles.length > 0) {
     const compagnieIds = compagniesDisponibles.map(c => c.id);
     const { data: avionsData } = await admin.from('compagnie_avions')
-      .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion:type_avion_id(id, nom, constructeur, capacite_pax, capacite_cargo_kg, code_oaci)')
+      .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion:type_avion_id(id, nom, constructeur, capacite_pax, capacite_cargo_kg, code_oaci, has_mode_s)')
       .in('compagnie_id', compagnieIds)
       .order('immatriculation');
 
@@ -135,7 +135,7 @@ export default async function DepotPlanVolPage({ searchParams }: { searchParams?
     if (locationsActives && locationsActives.length > 0) {
       const leasedIds = Array.from(new Set(locationsActives.map(l => l.avion_id)));
       const { data: leasedAvions } = await admin.from('compagnie_avions')
-        .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion:type_avion_id(id, nom, constructeur, capacite_pax, capacite_cargo_kg, code_oaci)')
+        .select('id, compagnie_id, immatriculation, nom_bapteme, aeroport_actuel, statut, usure_percent, types_avion:type_avion_id(id, nom, constructeur, capacite_pax, capacite_cargo_kg, code_oaci, has_mode_s)')
         .in('id', leasedIds);
 
       (leasedAvions || []).forEach(item => {

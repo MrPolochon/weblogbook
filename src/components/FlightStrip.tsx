@@ -846,6 +846,16 @@ function FlightStripImpl({
                 ) : (
                   <span className={`text-base font-mono font-bold ${txt}`}>{strip.type_wake}</span>
                 )}
+                {/* Code équipement ICAO Item 10b (surveillance) */}
+                {!isManual && (
+                  <span className={`text-[9px] font-black font-mono tracking-widest leading-none mt-0.5 block ${
+                    modeTranspondeur === 'S'
+                      ? (isDark ? 'text-sky-400/80' : 'text-sky-600/80')
+                      : (isDark ? 'text-slate-500' : 'text-slate-500')
+                  }`}>
+                    {modeTranspondeur === 'S' ? '/S' : modeTranspondeur === 'A' ? '/A' : '/C'}
+                  </span>
+                )}
               </Cell>
               <Cell className={`w-[50px] border-r ${sep} text-center`}>
                 {isManual ? (
