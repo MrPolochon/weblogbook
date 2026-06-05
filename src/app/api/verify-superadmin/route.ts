@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { timingSafeEqual, createHash } from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,7 +15,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password !== expected) {
+    if (typeof password !== 'string' || !password) {
+      return NextResponse.json({ error: 'Mot de passe incorrect.' }, { status: 401 });
+    }
+
+    // Comparaison en temps constant pour éviter les timing attacks.
+    // On hache les deux valeurs pour que les buffers aient la même longueur,
+    // indépendamment de la longueur du mot de passe fourni.
+    const hashInput    = createHash('sha256').update(password).digest();
+    const hashExpected = createHash('sha256').update(expected).digest();
+
+    if (!timingSafeEqual(hashInput, hashExpected)) {
       return NextResponse.json(
         { error: 'Mot de passe incorrect.' },
         { status: 401 }

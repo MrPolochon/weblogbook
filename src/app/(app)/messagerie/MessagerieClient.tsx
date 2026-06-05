@@ -101,6 +101,10 @@ type TabId = 'inbox' | 'recrutement' | 'cheques' | 'sanctions' | 'sent' | 'compo
 export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utilisateurs, currentUserIdentifiant, isAdmin = false, photoByIdentifiant = {} }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+  // État local des listes : mis à jour optimistement après chaque action
+  // (évite un router.refresh() complet pour des mutations simples).
+  const [localRecus, setLocalRecus] = useState<Message[]>(messagesRecus);
+  const [localEnvoyes, setLocalEnvoyes] = useState<Message[]>(messagesEnvoyes);
   const [activeTab, setActiveTab] = useState<TabId>('inbox');
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [loading, setLoading] = useState(false);
@@ -116,11 +120,11 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   const [composeMode, setComposeMode] = useState<'individuel' | 'diffusion'>('individuel');
   const [broadcastAudience, setBroadcastAudience] = useState<BroadcastAudience | null>(null);
   const CHEQUE_TYPES = useMemo(() => ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'cheque_siavi_intervention', 'cheque_siavi_taxes'], []);
-  const cheques = useMemo(() => messagesRecus.filter(m => CHEQUE_TYPES.includes(m.type_message)), [messagesRecus, CHEQUE_TYPES]);
-  const invitations = useMemo(() => messagesRecus.filter(m => m.type_message === 'recrutement'), [messagesRecus]);
-  const sanctions = useMemo(() => messagesRecus.filter(m => ['amende_ifsa', 'relance_amende'].includes(m.type_message)), [messagesRecus]);
+  const cheques = useMemo(() => localRecus.filter(m => CHEQUE_TYPES.includes(m.type_message)), [localRecus, CHEQUE_TYPES]);
+  const invitations = useMemo(() => localRecus.filter(m => m.type_message === 'recrutement'), [localRecus]);
+  const sanctions = useMemo(() => localRecus.filter(m => ['amende_ifsa', 'relance_amende'].includes(m.type_message)), [localRecus]);
   // Les messages 'broadcast' sont affichés dans l'inbox normal (avec un badge dédié)
-  const messagesNormaux = useMemo(() => messagesRecus.filter(m => ![...CHEQUE_TYPES, 'recrutement', 'amende_ifsa', 'relance_amende'].includes(m.type_message)), [messagesRecus, CHEQUE_TYPES]);
+  const messagesNormaux = useMemo(() => localRecus.filter(m => ![...CHEQUE_TYPES, 'recrutement', 'amende_ifsa', 'relance_amende'].includes(m.type_message)), [localRecus, CHEQUE_TYPES]);
   const [processingInvitation, setProcessingInvitation] = useState<string | null>(null);
   const [invitationError, setInvitationError] = useState<string | null>(null);
   const [processingAmende, setProcessingAmende] = useState<string | null>(null);
@@ -145,7 +149,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       case 'recrutement': return invitations;
       case 'cheques': return cheques;
       case 'sanctions': return sanctions;
-      case 'sent': return messagesEnvoyes;
+      case 'sent': return localEnvoyes;
       default: return [];
     }
   }
@@ -158,6 +162,18 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
 
   // ── Handlers ──
 
+  // ── Helpers d'état local (évitent router.refresh()) ──
+  const patchLocal = useCallback((id: string, patch: Partial<Message>) => {
+    setLocalRecus(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m));
+    setLocalEnvoyes(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m));
+    setSelectedMessage(prev => prev?.id === id ? { ...prev, ...patch } : prev);
+  }, []);
+  const removeLocal = useCallback((id: string) => {
+    setLocalRecus(prev => prev.filter(m => m.id !== id));
+    setLocalEnvoyes(prev => prev.filter(m => m.id !== id));
+    setSelectedMessage(prev => prev?.id === id ? null : prev);
+  }, []);
+
   async function handlePayerAmende(messageId: string, sanctionId: string) {
     if (!confirm('Confirmer le paiement de cette amende ?')) return;
     setProcessingAmende(messageId); setAmendeError(null);
@@ -165,8 +181,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       const res = await fetch('/api/ifsa/amendes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sanction_id: sanctionId }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Erreur');
       await fetch(`/api/messages/${messageId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'marquer_amende_payee' }) });
-      if (selectedMessage?.id === messageId) setSelectedMessage({ ...selectedMessage, metadata: { ...selectedMessage.metadata, amende_payee: true } });
-      startTransition(() => router.refresh());
+      patchLocal(messageId, { metadata: { ...selectedMessage?.metadata, amende_payee: true } });
     } catch (e) { setAmendeError(e instanceof Error ? e.message : 'Erreur'); } finally { setProcessingAmende(null); }
   }
 
@@ -177,7 +192,8 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       const res = await fetch('/api/recrutement', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invitation_id: invitationId, action }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Erreur');
       await fetch(`/api/messages/${messageId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'marquer_invitation_repondue' }) });
-      if (selectedMessage?.id === messageId) setSelectedMessage({ ...selectedMessage, metadata: { ...selectedMessage.metadata, invitation_repondue: true } });
+      patchLocal(messageId, { metadata: { ...selectedMessage?.metadata, invitation_repondue: true } });
+      // Refresh pour mettre à jour la compagnie/emploi dans le layout
       startTransition(() => router.refresh());
     } catch (e) { setInvitationError(e instanceof Error ? e.message : 'Erreur'); } finally { setProcessingInvitation(null); }
   }
@@ -191,25 +207,16 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
         ? { action: 'accepter_transfert_hangar', transit_duree_ms: selectedMessage?.metadata?.transit_duree_ms }
         : { action: 'refuser_transfert_hangar' };
       const res = await fetch(`/api/reparation/demandes/${demandeId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
       await fetch(`/api/messages/${messageId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'marquer_reparation_transfert_repondu' }),
       });
-      if (selectedMessage?.id === messageId) {
-        setSelectedMessage({
-          ...selectedMessage,
-          metadata: { ...selectedMessage.metadata, reparation_transfert_repondu: true },
-        });
-      }
+      patchLocal(messageId, { metadata: { ...selectedMessage?.metadata, reparation_transfert_repondu: true } });
       toast.success(action === 'accepter' ? 'Ferry automatique lancé.' : 'Demande de réparation annulée.');
-      startTransition(() => router.refresh());
     } catch (e) {
       setReparationTransferError(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -218,28 +225,31 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   }
 
   async function handleMarkAsRead(id: string) {
+    patchLocal(id, { lu: true });
     await fetch(`/api/messages/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'marquer_lu' }) });
-    startTransition(() => router.refresh());
   }
 
   const handleMarkAllAsRead = useCallback(async () => {
     const unread = currentTabMessages().filter(m => !m.lu);
     if (unread.length === 0) return;
     setMarkAllLoading(true);
+    // Mise à jour locale immédiate
+    unread.forEach(m => patchLocal(m.id, { lu: true }));
     try {
       await Promise.all(unread.map(m => fetch(`/api/messages/${m.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'marquer_lu' }) })));
       toast.success(`${unread.length} message${unread.length > 1 ? 's' : ''} marqué${unread.length > 1 ? 's' : ''} comme lu${unread.length > 1 ? 's' : ''}`);
-      startTransition(() => router.refresh());
     } catch { toast.error('Erreur'); } finally { setMarkAllLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, messagesNormaux, invitations, cheques, sanctions, router, startTransition]);
+  }, [activeTab, messagesNormaux, invitations, cheques, sanctions, patchLocal]);
 
   async function handleDelete(id: string) {
     if (!confirm('Supprimer ce message ?')) return;
     setLoading(true);
     try {
       const res = await fetch(`/api/messages/${id}`, { method: 'DELETE' }); const data = await res.json(); if (!res.ok) throw new Error(data.error);
-      setSelectedMessage(null); setMobileShowDetail(false); toast.success('Supprimé'); startTransition(() => router.refresh());
+      removeLocal(id);
+      setMobileShowDetail(false);
+      toast.success('Supprimé');
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Erreur'); } finally { setLoading(false); }
   }
 
@@ -247,8 +257,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
     try {
       const res = await fetch(`/api/messages/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'encaisser' }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error);
-      if (selectedMessage?.id === id) setSelectedMessage({ ...selectedMessage, cheque_encaisse: true });
-      startTransition(() => router.refresh());
+      patchLocal(id, { cheque_encaisse: true });
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Erreur'); }
   }
 
@@ -257,8 +266,9 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
     try {
       const res = await fetch('/api/messages/encaisser-tout', { method: 'POST' }); const data = await res.json(); if (!res.ok) throw new Error(data.error);
       setEncaisserToutRecap(data);
+      // Marquer tous les chèques comme encaissés localement
+      cheques.filter(c => !c.cheque_encaisse).forEach(c => patchLocal(c.id, { cheque_encaisse: true }));
       if (Array.isArray(data.erreurs_partielles) && data.erreurs_partielles.length > 0) toast.warning(`${data.erreurs_partielles.length} chèque(s) non encaissé(s).`);
-      startTransition(() => router.refresh());
     } catch (e) { toast.error(e instanceof Error ? e.message : 'Erreur'); } finally { setEncaisserToutLoading(false); }
   }
 
@@ -276,6 +286,8 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       const res = await fetch('/api/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error);
       const destName = isBroadcast ? audienceLabel(broadcastAudience!) : selectedDestName;
+      // Ajouter le message envoyé localement
+      if (data.message) setLocalEnvoyes(prev => [data.message, ...prev]);
       setComposeDestinataire(''); setComposeTitre(''); setComposeContenu(''); setDestSearch('');
       setBroadcastAudience(null); setComposeMode('individuel');
       if (isBroadcast && data.recipients_count != null) {
@@ -283,7 +295,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       } else {
         toast.success(`Envoyé à ${destName}`);
       }
-      setActiveTab('sent'); startTransition(() => router.refresh());
+      setActiveTab('sent');
     } catch (e) { setComposeError(e instanceof Error ? e.message : 'Erreur'); } finally { setComposeSending(false); }
   }
 

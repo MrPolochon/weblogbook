@@ -90,24 +90,25 @@ export default async function SiaviPage() {
       .order('medevac_segment_index', { ascending: true }),
   ]);
 
-  // Enrichir les sessions AFIS et ATC avec les identifiants
-  const profileCache = new Map<string, { identifiant: string } | null>();
-  async function getProfile(userId: string | null): Promise<{ identifiant: string } | null> {
-    if (!userId) return null;
-    if (profileCache.has(userId)) return profileCache.get(userId) || null;
-    const { data } = await admin.from('profiles').select('identifiant').eq('id', userId).single();
-    profileCache.set(userId, data);
-    return data;
+  // Enrichir les sessions AFIS et ATC : une seule requête IN au lieu de N requêtes séquentielles.
+  const afisIds = (afisSessionsRaw || []).map(s => s.user_id).filter(Boolean);
+  const atcIds  = (atcSessionsRaw  || []).map(s => s.user_id).filter(Boolean);
+  const allSessionIds = [...new Set([...afisIds, ...atcIds])];
+
+  let profileMap = new Map<string, { identifiant: string }>();
+  if (allSessionIds.length > 0) {
+    const { data: profilesRaw } = await admin.from('profiles').select('id, identifiant').in('id', allSessionIds);
+    for (const p of profilesRaw || []) profileMap.set(p.id, { identifiant: p.identifiant });
   }
 
-  const afisEnService = await Promise.all((afisSessionsRaw || []).map(async (sess) => ({
+  const afisEnService = (afisSessionsRaw || []).map(sess => ({
     ...sess,
-    profiles: await getProfile(sess.user_id),
-  })));
-  const atcEnService = await Promise.all((atcSessionsRaw || []).map(async (sess) => ({
+    profiles: profileMap.get(sess.user_id) ?? null,
+  }));
+  const atcEnService = (atcSessionsRaw || []).map(sess => ({
     ...sess,
-    profiles: await getProfile(sess.user_id),
-  })));
+    profiles: profileMap.get(sess.user_id) ?? null,
+  }));
 
   // Compter la flotte SIAVI
   const flotteCount: AvionCount = (flotteRaw || []).reduce((acc: AvionCount, a: { statut: string }) => {
@@ -131,14 +132,14 @@ export default async function SiaviPage() {
   let plansSurveilles: SupervisedPlan[] = [];
   if (session?.est_afis) {
     const { data } = await admin.from('plans_vol')
-      .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, temps_prev_min, medevac_mission_id, medevac_segment_index, medevac_total_segments, pilote_id')
+      .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, temps_prev_min, medevac_mission_id, medevac_segment_index, medevac_total_segments, pilote:profiles!plans_vol_pilote_id_fkey(identifiant)')
       .eq('current_afis_user_id', user.id)
       .in('statut', ['accepte', 'en_cours', 'en_attente_cloture', 'automonitoring'])
       .order('created_at', { ascending: false });
-    plansSurveilles = await Promise.all((data || []).map(async (plan) => ({
+    plansSurveilles = (data || []).map(plan => ({
       ...plan,
-      pilote: await getProfile(plan.pilote_id),
-    })));
+      pilote: Array.isArray(plan.pilote) ? (plan.pilote[0] ?? null) : (plan.pilote ?? null),
+    })) as SupervisedPlan[];
   }
 
   const totalAfisEnService = afisEnService.filter(s => s.est_afis).length;
