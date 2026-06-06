@@ -57,8 +57,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (incident.statut === 'en_attente') return NextResponse.json({ error: 'Prenez d\'abord l\'incident en charge avant de rendre une decision.' }, { status: 400 });
 
       const { decision, notes } = body;
-      if (!decision || !['remis_en_etat', 'detruit'].includes(decision)) {
-        return NextResponse.json({ error: 'Decision invalide (remis_en_etat ou detruit).' }, { status: 400 });
+      if (!decision || !['remis_en_etat', 'detruit', 'aucune_action'].includes(decision)) {
+        return NextResponse.json({ error: 'Decision invalide (remis_en_etat, detruit ou aucune_action).' }, { status: 400 });
       }
 
       await admin.from('incidents_vol').update({
@@ -70,6 +70,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         updated_at: new Date().toISOString(),
       }).eq('id', id);
 
+      // Supprimer les photos uploadées maintenant que l'incident est clôturé
+      const imagesUrls: string[] = (incident as any).images_urls || [];
+      if (imagesUrls.length > 0) {
+        try {
+          const paths = imagesUrls.map((url: string) => {
+            const match = url.match(/\/storage\/v1\/object\/public\/cartes-identite\/(.+)$/);
+            return match ? match[1] : null;
+          }).filter((p: string | null): p is string => Boolean(p));
+          if (paths.length > 0) await admin.storage.from('cartes-identite').remove(paths);
+          await admin.from('incidents_vol').update({ images_urls: [] }).eq('id', id);
+        } catch (deleteErr) { console.warn('Delete incident photos:', deleteErr); }
+      }
+
       if (incident.compagnie_avion_id) {
         if (decision === 'detruit') {
           await admin.from('compagnie_avions').update({
@@ -80,9 +93,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             bloque_incident: false,
             incident_id: null,
           }).eq('id', incident.compagnie_avion_id);
-        } else {
+        } else if (decision === 'remis_en_etat') {
           await admin.from('compagnie_avions').update({
             usure_percent: 100,
+            statut: 'ground',
+            bloque_incident: false,
+            incident_id: null,
+          }).eq('id', incident.compagnie_avion_id);
+        } else {
+          // aucune_action : débloquer l'avion sans toucher à l'usure
+          await admin.from('compagnie_avions').update({
             statut: 'ground',
             bloque_incident: false,
             incident_id: null,
@@ -90,23 +110,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
       }
 
+      const decisionLabels = {
+        detruit: 'Votre avion a été officiellement déclaré DÉTRUIT suite à l\'examen.',
+        remis_en_etat: 'Votre avion a été remis en état (usure remise à 100%) suite à l\'examen.',
+        aucune_action: 'Aucune action n\'a été effectuée sur votre avion. Il est de nouveau disponible avec son usure actuelle.',
+      };
+
       if (incident.signalement_ifsa_id) {
         await admin.from('ifsa_signalements').update({
           statut: 'classe',
-          reponse_ifsa: `Decision staff: ${decision === 'detruit' ? 'Avion detruit' : 'Avion remis en etat (usure 100%)'}.${typeof notes === 'string' && notes.trim() ? ' Notes: ' + notes.trim() : ''}`,
+          reponse_ifsa: `Décision staff: ${decision === 'detruit' ? 'Avion détruit' : decision === 'remis_en_etat' ? 'Avion remis en état (usure 100%)' : 'Aucune action — avion débloqué'}.${typeof notes === 'string' && notes.trim() ? ' Notes: ' + notes.trim() : ''}`,
           traite_par_id: user.id,
           traite_at: new Date().toISOString(),
         }).eq('id', incident.signalement_ifsa_id);
       }
 
       if (incident.pilote_id) {
-        const decisionLabel = decision === 'detruit'
-          ? 'Votre avion a ete officiellement declare DETRUIT suite a l\'examen.'
-          : 'Votre avion a ete remis en etat (usure remise a 100%) suite a l\'examen.';
         await admin.from('messages').insert({
           destinataire_id: incident.pilote_id,
-          titre: `Incident ${incident.numero_incident} — Decision`,
-          contenu: `L'incident ${incident.numero_incident} (${incident.type_incident === 'crash' ? 'CRASH' : 'Atterrissage d\'urgence'}) concernant votre vol ${incident.numero_vol} a ete examine.\n\n${decisionLabel}${typeof notes === 'string' && notes.trim() ? '\n\nNotes du staff: ' + notes.trim() : ''}`,
+          titre: `Incident ${incident.numero_incident} — Décision`,
+          contenu: `L'incident ${incident.numero_incident} (${incident.type_incident === 'crash' ? 'CRASH' : 'Atterrissage d\'urgence'}) concernant votre vol ${incident.numero_vol} a été examiné.\n\n${decisionLabels[decision as keyof typeof decisionLabels]}${typeof notes === 'string' && notes.trim() ? '\n\nNotes du staff: ' + notes.trim() : ''}`,
           type_message: 'systeme',
           expediteur_id: user.id,
         });

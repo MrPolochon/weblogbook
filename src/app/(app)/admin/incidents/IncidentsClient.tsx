@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Flame, PlaneLanding, Clock, CheckCircle2, Eye, AlertTriangle, ExternalLink, Image as ImageIcon, Wrench, Trash2, Shield } from 'lucide-react';
+import { Flame, PlaneLanding, Clock, CheckCircle2, Eye, AlertTriangle, ImageIcon, Wrench, Trash2, Shield, MinusCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Incident = {
@@ -25,8 +25,10 @@ type Incident = {
   signale_par_identifiant: string | null;
   position_atc: string | null;
   screenshot_url: string | null;
+  description: string | null;
+  images_urls: string[];
   statut: 'en_attente' | 'en_examen' | 'clos';
-  decision: 'remis_en_etat' | 'detruit' | null;
+  decision: 'remis_en_etat' | 'detruit' | 'aucune_action' | null;
   decision_notes: string | null;
   examine_par_id: string | null;
   examine_at: string | null;
@@ -45,6 +47,12 @@ const TYPE_CONFIG = {
   atterrissage_urgence: { label: 'Urgence', bg: 'bg-amber-600', icon: PlaneLanding },
 } as const;
 
+const DECISION_CONFIG = {
+  detruit: { label: '🔴 Avion détruit', color: 'text-red-300' },
+  remis_en_etat: { label: '🟢 Avion remis en état (usure 100%)', color: 'text-emerald-300' },
+  aucune_action: { label: '⚪ Aucune action — avion débloqué (usure inchangée)', color: 'text-slate-300' },
+} as const;
+
 export default function IncidentsClient() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +61,7 @@ export default function IncidentsClient() {
   const [prenant, setPrenant] = useState<string | null>(null);
   const [notesMap, setNotesMap] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<'tous' | 'en_attente' | 'en_examen' | 'clos'>('tous');
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const fetchIncidents = useCallback(async () => {
     try {
@@ -76,21 +85,15 @@ export default function IncidentsClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'prendre_en_charge' }),
       });
-      if (!res.ok) {
-        const d = await res.json();
-        toast.error(d.error || 'Erreur');
-        return;
-      }
+      if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Erreur'); return; }
       toast.success('Incident pris en charge');
       fetchIncidents();
-    } catch {
-      toast.error('Erreur serveur');
-    } finally {
-      setPrenant(null);
-    }
+    } catch { toast.error('Erreur serveur'); } finally { setPrenant(null); }
   };
 
-  const handleDecision = async (id: string, decision: 'remis_en_etat' | 'detruit') => {
+  const handleDecision = async (id: string, decision: 'remis_en_etat' | 'detruit' | 'aucune_action') => {
+    const labels = { remis_en_etat: 'Remettre en état', detruit: 'Détruire l\'avion', aucune_action: 'Ne rien faire' };
+    if (!confirm(`Confirmer : ${labels[decision]} ?`)) return;
     try {
       setDeciding(id);
       const res = await fetch(`/api/incidents/${id}`, {
@@ -98,20 +101,13 @@ export default function IncidentsClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'decider', decision, notes: (notesMap[id] || '').trim() || undefined }),
       });
-      if (!res.ok) {
-        const d = await res.json();
-        toast.error(d.error || 'Erreur');
-        return;
-      }
-      toast.success(decision === 'detruit' ? 'Avion detruit' : 'Avion remis en etat');
+      if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Erreur'); return; }
+      const toasts = { remis_en_etat: 'Avion remis en état', detruit: 'Avion détruit', aucune_action: 'Avion débloqué sans modification' };
+      toast.success(toasts[decision]);
       setNotesMap(prev => { const copy = { ...prev }; delete copy[id]; return copy; });
       setExpanded(null);
       fetchIncidents();
-    } catch {
-      toast.error('Erreur serveur');
-    } finally {
-      setDeciding(null);
-    }
+    } catch { toast.error('Erreur serveur'); } finally { setDeciding(null); }
   };
 
   const filtered = filter === 'tous' ? incidents : incidents.filter(i => i.statut === filter);
@@ -125,6 +121,17 @@ export default function IncidentsClient() {
 
   return (
     <div className="space-y-4">
+      {/* Lightbox photo */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center p-4 cursor-zoom-out"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <img src={lightboxUrl} alt="Photo incident" className="max-w-full max-h-[90vh] rounded-lg shadow-2xl object-contain" />
+        </div>
+      )}
+
+      {/* Filtres */}
       <div className="flex items-center gap-2 flex-wrap">
         {(['tous', 'en_attente', 'en_examen', 'clos'] as const).map(f => (
           <button
@@ -154,6 +161,7 @@ export default function IncidentsClient() {
             const StatusIcon = sc.icon;
             const TypeIcon = tc.icon;
             const isOpen = expanded === inc.id;
+            const hasPhotos = (inc.images_urls || []).length > 0;
 
             return (
               <div key={inc.id} className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden">
@@ -161,25 +169,35 @@ export default function IncidentsClient() {
                   onClick={() => setExpanded(isOpen ? null : inc.id)}
                   className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-slate-700/30 transition-colors"
                 >
-                  <div className={`p-1.5 rounded ${tc.bg}`}>
+                  <div className={`p-1.5 rounded ${tc.bg} shrink-0`}>
                     <TypeIcon className="h-4 w-4 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm font-bold text-slate-100">{inc.numero_incident}</span>
                       <span className={`text-xs px-2 py-0.5 rounded border font-medium ${sc.bg}`}>
                         <StatusIcon className="h-3 w-3 inline mr-1" />{sc.label}
                       </span>
-                      {inc.screenshot_url && <ImageIcon className="h-3.5 w-3.5 text-slate-500" />}
+                      {hasPhotos && (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-sky-400 bg-sky-500/10 border border-sky-500/20 px-1.5 py-0.5 rounded">
+                          <ImageIcon className="h-3 w-3" />{inc.images_urls.length} photo{inc.images_urls.length > 1 ? 's' : ''}
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5 truncate">
                       {tc.label} — Vol {inc.numero_vol || '?'} ({inc.aeroport_depart} → {inc.aeroport_arrivee})
                       {inc.pilote_identifiant && ` — Pilote: ${inc.pilote_identifiant}`}
                     </p>
+                    {inc.description && (
+                      <p className="text-xs text-slate-500 mt-0.5 italic truncate">{inc.description}</p>
+                    )}
                   </div>
-                  <span className="text-xs text-slate-500 shrink-0">
-                    {new Date(inc.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-slate-500 hidden sm:block">
+                      {new Date(inc.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </span>
+                    {isOpen ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+                  </div>
                 </button>
 
                 {isOpen && (
@@ -188,10 +206,10 @@ export default function IncidentsClient() {
                       <div className="space-y-2">
                         <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" /> Infos vol</h3>
                         <dl className="text-xs space-y-1">
-                          <Row label="Numero vol" value={inc.numero_vol} />
+                          <Row label="Numéro vol" value={inc.numero_vol} />
                           <Row label="Type vol" value={inc.type_vol} />
-                          <Row label="Depart" value={inc.aeroport_depart} />
-                          <Row label="Arrivee" value={inc.aeroport_arrivee} />
+                          <Row label="Départ" value={inc.aeroport_depart} />
+                          <Row label="Arrivée" value={inc.aeroport_arrivee} />
                           <Row label="Lieu incident" value={inc.aeroport_incident} />
                           <Row label="Pilote" value={inc.pilote_identifiant} />
                         </dl>
@@ -202,36 +220,76 @@ export default function IncidentsClient() {
                           <Row label="Immatriculation" value={inc.immatriculation} />
                           <Row label="Type avion" value={inc.type_avion} />
                           <Row label="Usure avant" value={inc.usure_avant_incident != null ? `${inc.usure_avant_incident}%` : null} />
-                          <Row label="Signale par" value={inc.signale_par_identifiant} />
+                          <Row label="Signalé par" value={inc.signale_par_identifiant} />
                           <Row label="Position ATC" value={inc.position_atc} />
                         </dl>
                       </div>
                     </div>
 
-                    {inc.screenshot_url && (
+                    {/* Description */}
+                    {inc.description && (
                       <div className="space-y-1">
-                        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Screenshot</h3>
+                        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Description ATC</h3>
+                        <p className="text-sm text-slate-200 bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2 leading-relaxed">
+                          {inc.description}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Photos */}
+                    {hasPhotos && (
+                      <div className="space-y-2">
+                        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <ImageIcon className="h-3.5 w-3.5" /> Photos ({inc.images_urls.length})
+                        </h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {inc.images_urls.map((url, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setLightboxUrl(url)}
+                              className="relative aspect-video overflow-hidden rounded-lg border border-slate-600 hover:border-sky-500 transition-colors cursor-zoom-in group"
+                            >
+                              <img
+                                src={url}
+                                alt={`Photo ${i + 1}`}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-slate-500">Les photos seront supprimées automatiquement à la clôture de l&apos;incident.</p>
+                      </div>
+                    )}
+
+                    {/* Ancienne URL screenshot */}
+                    {inc.screenshot_url && !hasPhotos && (
+                      <div className="space-y-1">
+                        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5"><ImageIcon className="h-3.5 w-3.5" /> Screenshot (lien externe)</h3>
                         <a href={inc.screenshot_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-sky-400 hover:text-sky-300">
-                          <ExternalLink className="h-3 w-3" />Voir le screenshot
+                          Voir le screenshot →
                         </a>
                       </div>
                     )}
 
-                    {inc.statut === 'clos' && (
+                    {/* Décision rendue */}
+                    {inc.statut === 'clos' && inc.decision && (
                       <div className="p-3 bg-slate-900/50 border border-slate-600 rounded-lg space-y-1">
-                        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Decision</h3>
-                        <p className="text-sm font-bold text-slate-100">
-                          {inc.decision === 'detruit' ? '🔴 Avion detruit' : '🟢 Avion remis en etat (usure 100%)'}
+                        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Décision</h3>
+                        <p className={`text-sm font-bold ${DECISION_CONFIG[inc.decision]?.color || 'text-slate-100'}`}>
+                          {DECISION_CONFIG[inc.decision]?.label || inc.decision}
                         </p>
                         {inc.decision_notes && <p className="text-xs text-slate-400">{inc.decision_notes}</p>}
                         {inc.examine_at && (
                           <p className="text-xs text-slate-500">
-                            Examine le {new Date(inc.examine_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            Examiné le {new Date(inc.examine_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </p>
                         )}
                       </div>
                     )}
 
+                    {/* Action : prendre en charge */}
                     {inc.statut === 'en_attente' && (
                       <button
                         onClick={() => handlePrendre(inc.id)}
@@ -242,9 +300,10 @@ export default function IncidentsClient() {
                       </button>
                     )}
 
+                    {/* Actions : décision */}
                     {inc.statut === 'en_examen' && (
                       <div className="space-y-3 p-3 bg-slate-900/50 border border-slate-600 rounded-lg">
-                        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Rendre une decision</h3>
+                        <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Rendre une décision</h3>
                         <textarea
                           value={notesMap[inc.id] || ''}
                           onChange={(e) => setNotesMap(prev => ({ ...prev, [inc.id]: e.target.value }))}
@@ -253,24 +312,35 @@ export default function IncidentsClient() {
                           aria-label="Notes de décision"
                           className="w-full text-sm bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-100 placeholder:text-slate-500 resize-none"
                         />
-                        <div className="flex gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <button
                             onClick={() => handleDecision(inc.id, 'remis_en_etat')}
                             disabled={deciding === inc.id}
-                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                            className="flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
                           >
                             <Wrench className="h-4 w-4" />
-                            Remettre en etat
+                            Remettre en état
+                          </button>
+                          <button
+                            onClick={() => handleDecision(inc.id, 'aucune_action')}
+                            disabled={deciding === inc.id}
+                            className="flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-slate-600 text-white rounded-lg hover:bg-slate-500 disabled:opacity-50 transition-colors"
+                          >
+                            <MinusCircle className="h-4 w-4" />
+                            Ne rien faire
                           </button>
                           <button
                             onClick={() => handleDecision(inc.id, 'detruit')}
                             disabled={deciding === inc.id}
-                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+                            className="flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
                           >
                             <Trash2 className="h-4 w-4" />
-                            Detruire l&apos;avion
+                            Détruire l&apos;avion
                           </button>
                         </div>
+                        <p className="text-[10px] text-slate-500">
+                          <strong className="text-slate-400">Ne rien faire</strong> : l&apos;avion est débloqué avec son usure actuelle, aucune modification n&apos;est effectuée.
+                        </p>
                       </div>
                     )}
                   </div>

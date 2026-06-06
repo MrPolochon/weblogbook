@@ -731,6 +731,7 @@ export async function PATCH(
       const isCrash = action === 'crash';
       const aeroportAtc = plan.current_holder_aeroport || (isCrash ? plan.aeroport_depart : plan.aeroport_arrivee) || plan.aeroport_depart || '';
       const screenshotUrl = typeof body.screenshot_url === 'string' ? body.screenshot_url.trim() : null;
+      const descriptionIncident = typeof body.description === 'string' ? body.description.trim() : null;
 
       let immatriculation: string | null = null;
       let typeAvion: string | null = null;
@@ -784,6 +785,7 @@ export async function PATCH(
         signale_par_identifiant: profile?.identifiant || null,
         position_atc: plan.current_holder_position,
         screenshot_url: screenshotUrl,
+        description: descriptionIncident,
         statut: 'en_attente',
       }).select('id').single();
 

@@ -256,7 +256,9 @@ function StripActionBar({ strip, onRefresh, onTransferRequest, onOptimisticStatu
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showCrashConfirm, setShowCrashConfirm] = useState(false);
   const [showUrgenceConfirm, setShowUrgenceConfirm] = useState(false);
-  const [incidentScreenshot, setIncidentScreenshot] = useState('');
+  const [incidentDescription, setIncidentDescription] = useState('');
+  const [incidentPhoto, setIncidentPhoto] = useState<File | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [refuseReason, setRefuseReason] = useState('');
   const [intentionsPos, setIntentionsPos] = useState<{ x: number; y: number } | null>(null);
   const [noteAtcPos, setNoteAtcPos] = useState<{ x: number; y: number } | null>(null);
@@ -352,6 +354,51 @@ function StripActionBar({ strip, onRefresh, onTransferRequest, onOptimisticStatu
     );
   }
 
+  const resetIncident = () => { setIncidentDescription(''); setIncidentPhoto(null); };
+
+  const submitIncident = async (actionType: 'crash' | 'atterrissage_urgence') => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setLoading(actionType);
+    const optimistic = OPTIMISTIC_STATUT[actionType];
+    if (optimistic) onOptimisticStatut?.(optimistic);
+    try {
+      const res = await fetch(`/api/plans-vol/${strip.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: actionType, description: incidentDescription.trim() || undefined }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (optimistic) onOptimisticStatut?.(strip.statut);
+        if (res.status === 400 || res.status === 409) onRefresh?.();
+        try {
+          const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioContext) {
+            const ctx = new AudioContext(); const osc = ctx.createOscillator(); const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination); osc.type = 'square';
+            osc.frequency.setValueAtTime(880, ctx.currentTime); osc.frequency.setValueAtTime(440, ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.25, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+            osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.35); osc.onended = () => ctx.close();
+          }
+        } catch { /* son non dispo */ }
+        alert(d.error || 'Erreur');
+        return;
+      }
+      // Upload photo si présente
+      if (incidentPhoto && d.incident_id) {
+        setUploadingPhoto(true);
+        try {
+          const fd = new FormData();
+          fd.append('photo', incidentPhoto);
+          await fetch(`/api/incidents/${d.incident_id}/photos`, { method: 'POST', body: fd });
+        } catch { /* photo non critique */ } finally { setUploadingPhoto(false); }
+      }
+      onRefresh?.();
+    } catch (e) { alert(e instanceof Error ? e.message : 'Erreur'); }
+    finally { setLoading(null); busyRef.current = false; }
+  };
+
   if (showCrashConfirm) {
     return (
       <div className={`px-2 py-2 border-t space-y-2 ${isDark ? 'bg-red-950 border-red-800' : 'bg-red-50 border-red-300'}`} onClick={(e) => e.stopPropagation()}>
@@ -366,18 +413,24 @@ function StripActionBar({ strip, onRefresh, onTransferRequest, onOptimisticStatu
             </p>
           </div>
         </div>
-        <input
-          type="url"
-          value={incidentScreenshot}
-          onChange={(e) => setIncidentScreenshot(e.target.value)}
-          placeholder="URL du screenshot (optionnel)"
-          className={`w-full text-xs border rounded px-2 py-1 font-mono ${isDark ? 'bg-slate-900 text-slate-100 border-red-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-red-300 placeholder:text-slate-400'}`}
+        <textarea
+          value={incidentDescription}
+          onChange={(e) => setIncidentDescription(e.target.value)}
+          placeholder="Description de l'incident (optionnel)..."
+          rows={2}
+          className={`w-full text-xs border rounded px-2 py-1 resize-none ${isDark ? 'bg-slate-900 text-slate-100 border-red-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-red-300 placeholder:text-slate-400'}`}
         />
+        <label className={`flex items-center gap-2 text-xs cursor-pointer ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+          <span className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-semibold cursor-pointer ${isDark ? 'border-red-700 bg-slate-800 hover:bg-slate-700' : 'border-red-300 bg-white hover:bg-slate-50'}`}>
+            📷 {incidentPhoto ? incidentPhoto.name.slice(0, 20) : 'Ajouter une photo'}
+          </span>
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => setIncidentPhoto(e.target.files?.[0] ?? null)} />
+        </label>
         <div className="flex gap-1.5">
-          <button type="button" onClick={async () => { await callAction('crash', { screenshot_url: incidentScreenshot || undefined }); setShowCrashConfirm(false); setIncidentScreenshot(''); }} disabled={loading === 'crash'} className="flex-1 px-2 py-1.5 text-xs font-bold bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-50 shadow-sm">
-            {loading === 'crash' ? '…' : 'Confirmer CRASH'}
+          <button type="button" onClick={async () => { await submitIncident('crash'); setShowCrashConfirm(false); resetIncident(); }} disabled={loading === 'crash' || uploadingPhoto} className="flex-1 px-2 py-1.5 text-xs font-bold bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-50 shadow-sm">
+            {uploadingPhoto ? 'Upload photo…' : loading === 'crash' ? '…' : 'Confirmer CRASH'}
           </button>
-          <button type="button" onClick={() => { setShowCrashConfirm(false); setIncidentScreenshot(''); }} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
+          <button type="button" onClick={() => { setShowCrashConfirm(false); resetIncident(); }} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
             Retour
           </button>
         </div>
@@ -399,18 +452,24 @@ function StripActionBar({ strip, onRefresh, onTransferRequest, onOptimisticStatu
             </p>
           </div>
         </div>
-        <input
-          type="url"
-          value={incidentScreenshot}
-          onChange={(e) => setIncidentScreenshot(e.target.value)}
-          placeholder="URL du screenshot (optionnel)"
-          className={`w-full text-xs border rounded px-2 py-1 font-mono ${isDark ? 'bg-slate-900 text-slate-100 border-amber-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-amber-300 placeholder:text-slate-400'}`}
+        <textarea
+          value={incidentDescription}
+          onChange={(e) => setIncidentDescription(e.target.value)}
+          placeholder="Description de l'incident (optionnel)..."
+          rows={2}
+          className={`w-full text-xs border rounded px-2 py-1 resize-none ${isDark ? 'bg-slate-900 text-slate-100 border-amber-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-amber-300 placeholder:text-slate-400'}`}
         />
+        <label className={`flex items-center gap-2 text-xs cursor-pointer ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+          <span className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-semibold cursor-pointer ${isDark ? 'border-amber-700 bg-slate-800 hover:bg-slate-700' : 'border-amber-300 bg-white hover:bg-slate-50'}`}>
+            📷 {incidentPhoto ? incidentPhoto.name.slice(0, 20) : 'Ajouter une photo'}
+          </span>
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => setIncidentPhoto(e.target.files?.[0] ?? null)} />
+        </label>
         <div className="flex gap-1.5">
-          <button type="button" onClick={async () => { await callAction('atterrissage_urgence', { screenshot_url: incidentScreenshot || undefined }); setShowUrgenceConfirm(false); setIncidentScreenshot(''); }} disabled={loading === 'atterrissage_urgence'} className="flex-1 px-2 py-1.5 text-xs font-bold bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 shadow-sm">
-            {loading === 'atterrissage_urgence' ? '…' : 'Confirmer atterrissage'}
+          <button type="button" onClick={async () => { await submitIncident('atterrissage_urgence'); setShowUrgenceConfirm(false); resetIncident(); }} disabled={loading === 'atterrissage_urgence' || uploadingPhoto} className="flex-1 px-2 py-1.5 text-xs font-bold bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 shadow-sm">
+            {uploadingPhoto ? 'Upload photo…' : loading === 'atterrissage_urgence' ? '…' : 'Confirmer atterrissage'}
           </button>
-          <button type="button" onClick={() => { setShowUrgenceConfirm(false); setIncidentScreenshot(''); }} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
+          <button type="button" onClick={() => { setShowUrgenceConfirm(false); resetIncident(); }} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
             Retour
           </button>
         </div>
