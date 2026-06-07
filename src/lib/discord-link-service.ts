@@ -174,9 +174,18 @@ export async function refreshDiscordLinkState(userId: string) {
   });
   const result = await fetchDiscordBot<BotMemberStatus>(`/webhook/discord-member-status?${query.toString()}`);
   if (!result.data) {
+    // Bot injoignable (timeout, Railway down, erreur réseau) → fail-open :
+    // on accorde l'accès temporairement plutôt que de bloquer définitivement.
+    // Le bot re-synchronisera quand il sera de nouveau en ligne.
+    // Exception : si le bot répond explicitement "missing_guild" ou "missing_role"
+    // via un code 2xx avec data, on respecte sa décision.
     const botUnconfigured =
       result.status === 503 && result.error === 'Bot Discord non configuré';
-    if (botUnconfigured) {
+    const botUnreachable = !result.status || result.status >= 500 ||
+      (result.error ?? '').toLowerCase().includes('timeout') ||
+      (result.error ?? '').toLowerCase().includes('connexion') ||
+      (result.error ?? '').toLowerCase().includes('connect');
+    if (botUnconfigured || botUnreachable) {
       return oauthOnlyActive();
     }
     return link;
