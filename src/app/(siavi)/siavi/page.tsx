@@ -93,7 +93,7 @@ export default async function SiaviPage() {
   // Enrichir les sessions AFIS et ATC : une seule requête IN au lieu de N requêtes séquentielles.
   const afisIds = (afisSessionsRaw || []).map(s => s.user_id).filter(Boolean);
   const atcIds  = (atcSessionsRaw  || []).map(s => s.user_id).filter(Boolean);
-  const allSessionIds = [...new Set([...afisIds, ...atcIds])];
+  const allSessionIds = Array.from(new Set([...afisIds, ...atcIds]));
 
   let profileMap = new Map<string, { identifiant: string }>();
   if (allSessionIds.length > 0) {
