@@ -60,18 +60,20 @@ export default async function AdminPilotesPage() {
       .order('identifiant'),
     Promise.resolve(admin.from('user_login_tracking').select('user_id, last_login_at')).then(r => r.data).catch(() => null),
     // Dernier plan de vol par pilote (dans le seuil)
-    admin.from('plans_vol')
-      .select('pilote_id, created_at')
-      .gte('created_at', seuilIso)
-      .order('created_at', { ascending: false })
-      .then(r => r.data).catch(() => null),
+    Promise.resolve(
+      admin.from('plans_vol')
+        .select('pilote_id, created_at')
+        .gte('created_at', seuilIso)
+        .order('created_at', { ascending: false })
+    ).then(r => r.data).catch(() => null),
     // Dernier vol validé par pilote (dans le seuil)
-    admin.from('vols')
-      .select('pilote_id, created_at')
-      .gte('created_at', seuilIso)
-      .in('statut', ['validé', 'en_attente'])
-      .order('created_at', { ascending: false })
-      .then(r => r.data).catch(() => null),
+    Promise.resolve(
+      admin.from('vols')
+        .select('pilote_id, created_at')
+        .gte('created_at', seuilIso)
+        .in('statut', ['validé', 'en_attente'])
+        .order('created_at', { ascending: false })
+    ).then(r => r.data).catch(() => null),
   ]);
 
   let profiles: unknown[] | null = profilesRes.data;
