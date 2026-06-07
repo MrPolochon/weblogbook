@@ -68,12 +68,16 @@ export async function POST(req: Request) {
 
   if (parsed.data.all_inactive) {
     const seuilIso = new Date(Date.now() - INACTIVITY_THRESHOLD_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const [profilesRes, trackingRes] = await Promise.all([
+    const [profilesRes, trackingRes, recentPlansRes, recentVolsRes] = await Promise.all([
       admin.from('profiles')
         .select('id, created_at, role, inactivity_warning_status')
         .neq('role', 'admin')
         .is('inactivity_warning_status', null),
       admin.from('user_login_tracking').select('user_id, last_login_at'),
+      // Pilotes ayant déposé un plan récent → actifs malgré absence du dashboard
+      admin.from('plans_vol').select('pilote_id').gte('created_at', seuilIso).not('pilote_id', 'is', null),
+      // Pilotes ayant un vol validé récent
+      admin.from('vols').select('pilote_id').gte('created_at', seuilIso).in('statut', ['validé', 'en_attente']).not('pilote_id', 'is', null),
     ]);
 
     if (profilesRes.error) {
@@ -92,8 +96,15 @@ export async function POST(req: Request) {
     const lastByUser = new Map<string, string | null>();
     for (const t of tracking) lastByUser.set(t.user_id as string, t.last_login_at as string | null);
 
+    // Pilotes actifs par activité de vol (plans + vols)
+    const activeByFlight = new Set<string>();
+    for (const p of recentPlansRes.data ?? []) activeByFlight.add(p.pilote_id as string);
+    for (const v of recentVolsRes.data ?? []) activeByFlight.add(v.pilote_id as string);
+
     targetIds = profiles
       .filter((p) => {
+        // Exclure les pilotes actifs par vol (même s'ils ne se sont pas connectés)
+        if (activeByFlight.has(p.id as string)) return false;
         const last = lastByUser.get(p.id as string) ?? null;
         const ref = last ?? (p.created_at as string);
         return ref < seuilIso;

@@ -13,13 +13,29 @@ import InactivityWarningBadge, { WarnAllInactiveButton, InactivityLegend } from 
 
 export const dynamic = 'force-dynamic';
 
-const UN_MOIS_MS = 30 * 24 * 60 * 60 * 1000;
+import { INACTIVITY_THRESHOLD_DAYS } from '@/lib/admin/inactivity-warning';
 
-function isInactif1Mois(createdAt: string, lastLoginAt: string | null): boolean {
+const SEUIL_MS = INACTIVITY_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Un pilote est considéré inactif seulement si AUCUNE de ces activités
+ * n'a eu lieu dans les INACTIVITY_THRESHOLD_DAYS jours :
+ *  - connexion au site (last_login_at)
+ *  - dépôt d'un plan de vol (last_plan_at)
+ *  - enregistrement d'un vol (last_vol_at)
+ */
+function isInactifSeuil(
+  createdAt: string,
+  lastLoginAt: string | null,
+  lastPlanAt: string | null,
+  lastVolAt: string | null,
+): boolean {
   const now = Date.now();
-  const seuil = now - UN_MOIS_MS;
-  if (lastLoginAt) return new Date(lastLoginAt).getTime() < seuil;
-  return new Date(createdAt).getTime() < seuil;
+  const seuil = now - SEUIL_MS;
+  const dates = [lastLoginAt, lastPlanAt, lastVolAt].filter(Boolean) as string[];
+  if (dates.length === 0) return new Date(createdAt).getTime() < seuil;
+  const lastActivity = Math.max(...dates.map(d => new Date(d).getTime()));
+  return lastActivity < seuil;
 }
 
 type InactivityStatus = 'warned' | 'dm_failed' | null;
@@ -33,15 +49,29 @@ export default async function AdminPilotesPage() {
 
   const admin = createAdminClient();
 
-  // Profiles + login tracking in parallel
+  // Profiles + login tracking + activité de vol en parallèle
   // Defensive : on tente d'inclure les colonnes inactivity_*, fallback sans
   // si la migration add_inactivity_warnings.sql n'est pas encore appliquee.
-  const [profilesRes, trackingResult] = await Promise.all([
+  const seuilIso = new Date(Date.now() - SEUIL_MS).toISOString();
+  const [profilesRes, trackingResult, recentPlansResult, recentVolsResult] = await Promise.all([
     admin
       .from('profiles')
       .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc, ifsa, inactivity_warning_status, inactivity_warned_at, inactivity_delete_after, inactivity_warning_error')
       .order('identifiant'),
     Promise.resolve(admin.from('user_login_tracking').select('user_id, last_login_at')).then(r => r.data).catch(() => null),
+    // Dernier plan de vol par pilote (dans le seuil)
+    admin.from('plans_vol')
+      .select('pilote_id, created_at')
+      .gte('created_at', seuilIso)
+      .order('created_at', { ascending: false })
+      .then(r => r.data).catch(() => null),
+    // Dernier vol validé par pilote (dans le seuil)
+    admin.from('vols')
+      .select('pilote_id, created_at')
+      .gte('created_at', seuilIso)
+      .in('statut', ['validé', 'en_attente'])
+      .order('created_at', { ascending: false })
+      .then(r => r.data).catch(() => null),
   ]);
 
   let profiles: unknown[] | null = profilesRes.data;
@@ -57,6 +87,22 @@ export default async function AdminPilotesPage() {
   const lastLoginByUser: Record<string, string | null> = {};
   if (trackingResult) {
     for (const t of trackingResult) lastLoginByUser[t.user_id] = t.last_login_at;
+  }
+
+  // Dernière activité de vol par pilote (plans + vols validés)
+  const lastPlanByPilote: Record<string, string | null> = {};
+  for (const p of recentPlansResult ?? []) {
+    const pid = p.pilote_id as string;
+    if (!lastPlanByPilote[pid] || (p.created_at as string) > lastPlanByPilote[pid]!) {
+      lastPlanByPilote[pid] = p.created_at as string;
+    }
+  }
+  const lastVolByPilote: Record<string, string | null> = {};
+  for (const v of recentVolsResult ?? []) {
+    const pid = v.pilote_id as string;
+    if (!lastVolByPilote[pid] || (v.created_at as string) > lastVolByPilote[pid]!) {
+      lastVolByPilote[pid] = v.created_at as string;
+    }
   }
 
   type ProfileRow = {
@@ -78,7 +124,14 @@ export default async function AdminPilotesPage() {
   const withInactif = ((profiles || []) as ProfileRow[]).map((p) => ({
     ...p,
     last_login_at: lastLoginByUser[p.id] ?? null,
-    inactif1Mois: isInactif1Mois(p.created_at, lastLoginByUser[p.id] ?? null),
+    last_plan_at: lastPlanByPilote[p.id] ?? null,
+    last_vol_at: lastVolByPilote[p.id] ?? null,
+    inactif1Mois: isInactifSeuil(
+      p.created_at,
+      lastLoginByUser[p.id] ?? null,
+      lastPlanByPilote[p.id] ?? null,
+      lastVolByPilote[p.id] ?? null,
+    ),
     warningStatus: (p.inactivity_warning_status ?? null) as InactivityStatus,
     warnedAt: p.inactivity_warned_at ?? null,
     deleteAfter: p.inactivity_delete_after ?? null,

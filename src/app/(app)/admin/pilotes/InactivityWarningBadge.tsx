@@ -106,7 +106,7 @@ export function WarnAllInactiveButton({ count }: { count: number }) {
   const [busy, setBusy] = useState(false);
 
   async function warnAll() {
-    if (!confirm(`Envoyer un DM Discord d'avertissement aux ${count} utilisateurs inactifs (>30j) non encore avertis ?\n\nIls auront 14 jours pour se reconnecter avant suppression automatique.`)) return;
+    if (!confirm(`Envoyer un DM Discord d'avertissement aux ${count} utilisateurs inactifs (>60j sans connexion ni vol) non encore avertis ?\n\nIls auront 14 jours pour se reconnecter avant suppression automatique.`)) return;
     setBusy(true);
     try {
       const res = await fetch('/api/admin/inactivity/warn', {
@@ -157,9 +157,10 @@ export function InactivityLegend() {
         Legende suppression d&apos;inactivite (preserve le stockage)
       </div>
       <ul className="ml-6 space-y-0.5 text-slate-400">
-        <li>· <span className="text-amber-300 font-semibold">AVERTIR</span> : non averti, clique pour envoyer un DM Discord</li>
+        <li>· <span className="text-amber-300 font-semibold">AVERTIR</span> : inactif depuis 60j (sans connexion ni vol), DM Discord a envoyer</li>
         <li>· <span className="text-emerald-300 font-semibold">AVERTI</span> : DM envoye, suppression auto si pas de reconnexion sous 14j</li>
         <li>· <span className="text-red-300 font-semibold">DM ECHOUE</span> : Discord non lie ou bot HS, supprime le compte manuellement</li>
+        <li>· <span className="text-slate-400">Activite = connexion au site OU depot de plan OU vol enregistre</span></li>
       </ul>
     </div>
   );

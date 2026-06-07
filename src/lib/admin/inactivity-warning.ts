@@ -8,10 +8,13 @@ import { fetchAtisBot } from '@/lib/atis-bot-api';
 export const INACTIVITY_DELETE_DELAY_DAYS = 14;
 
 /**
- * Seuil d'inactivite avant qu'un compte soit considere comme "rouge".
- * Doit etre coherent avec `isInactif1Mois` cote UI.
+ * Seuil d'inactivite (jours) avant qu'un compte soit considere comme "rouge".
+ * L'ACTIVITE inclut : connexion site, dépôt de plan de vol, vol enregistré.
+ * Doit etre coherent avec `isInactifSeuil` cote UI.
+ * 60 jours pour éviter de flaguer des pilotes qui volent sans forcément
+ * consulter leur dashboard tous les 30 jours.
  */
-export const INACTIVITY_THRESHOLD_DAYS = 30;
+export const INACTIVITY_THRESHOLD_DAYS = 60;
 
 export type WarnResult = {
   user_id: string;
