@@ -127,14 +127,14 @@ SELECT
   },
   {
     "id": "adm-015",
-    "title": "Quel SQL débloque massivement tous les utilisateurs bloqués par le bot Discord down ?",
+    "title": "Quand le bot Discord est down et que des utilisateurs sont bloqués, quel est le bon réflexe admin ?",
     "options": [
-      "UPDATE discord_links SET status='active' WHERE guild_member=false",
-      "UPDATE discord_links SET status='active', guild_member=true, has_required_role=true WHERE status IN ('missing_role','missing_guild') AND is_permanent=false",
-      "DELETE FROM discord_links WHERE status='missing_guild'",
-      "UPDATE profiles SET blocked_until=NULL WHERE block_reason LIKE 'DISCORD:%'"
+      "Supprimer et recréer les comptes bloqués",
+      "Contacter l'hébergeur du bot pour intervention d'urgence",
+      "Redémarrer le bot Railway puis utiliser le bouton 'Forcer re-sync Discord' pour chaque utilisateur bloqué",
+      "Attendre que le bot redémarre automatiquement sans intervention"
     ],
-    "correct_answers": ["UPDATE discord_links SET status='active', guild_member=true, has_required_role=true WHERE status IN ('missing_role','missing_guild') AND is_permanent=false"]
+    "correct_answers": ["Redémarrer le bot Railway puis utiliser le bouton 'Forcer re-sync Discord' pour chaque utilisateur bloqué"]
   },
   {
     "id": "adm-016",
@@ -188,14 +188,14 @@ SELECT
   },
   {
     "id": "adm-021",
-    "title": "Quel est le rôle de la table 'security_logout' dans le middleware ?",
+    "title": "Quelle page admin permet de gérer les IPs suspectes et les tentatives de connexion anormales ?",
     "options": [
-      "Stocker les mots de passe hashés",
-      "Déclencher une déconnexion forcée d'un utilisateur au prochain chargement de page",
-      "Logger les connexions suspectes",
-      "Bloquer les tentatives de bruteforce"
+      "/admin/logs",
+      "/admin/securite",
+      "/admin/ips",
+      "/admin/pilotes"
     ],
-    "correct_answers": ["Déclencher une déconnexion forcée d'un utilisateur au prochain chargement de page"]
+    "correct_answers": ["/admin/securite"]
   },
   {
     "id": "adm-022",
@@ -1674,14 +1674,14 @@ SELECT
   },
   {
     "id": "adm-162",
-    "title": "Comment le site protège-t-il le mot de passe superadmin contre les timing attacks ?",
+    "title": "Quelle bonne pratique de sécurité s'applique à toute comparaison de secret ou mot de passe côté serveur ?",
     "options": [
-      "En hashant le mot de passe côté client",
-      "En utilisant crypto.timingSafeEqual() pour la comparaison",
-      "En limitant les tentatives à 3 par heure",
-      "En ajoutant un délai artificiel de 500ms"
+      "Comparer en clair côté client pour plus de rapidité",
+      "Utiliser une comparaison à temps constant pour éviter les attaques par analyse de timing",
+      "Stocker le secret en clair dans les logs pour vérification",
+      "Hacher le secret uniquement à l'affichage"
     ],
-    "correct_answers": ["En utilisant crypto.timingSafeEqual() pour la comparaison"]
+    "correct_answers": ["Utiliser une comparaison à temps constant pour éviter les attaques par analyse de timing"]
   },
   {
     "id": "adm-163",
@@ -1957,14 +1957,14 @@ SELECT
   },
   {
     "id": "adm-190",
-    "title": "Comment un admin peut-il forcer la déconnexion immédiate d'un utilisateur actif ?",
+    "title": "Qu'est-ce que InactivityLogout sur le site ?",
     "options": [
-      "En insérant une ligne dans la table 'security_logout' avec l'user_id",
-      "En supprimant son token de session Supabase",
-      "Via /admin/securite → forcer déconnexion",
-      "En envoyant un webhook Discord"
+      "Un système qui déconnecte automatiquement les pilotes inactifs depuis trop longtemps",
+      "Un bot qui surveille les connexions Discord inactives",
+      "Un outil de déconnexion planifiée à heure fixe",
+      "Un système de déconnexion uniquement pour les ATC"
     ],
-    "correct_answers": ["En insérant une ligne dans la table 'security_logout' avec l'user_id"]
+    "correct_answers": ["Un système qui déconnecte automatiquement les pilotes inactifs depuis trop longtemps"]
   },
   {
     "id": "adm-191",
