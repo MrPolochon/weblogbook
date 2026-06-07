@@ -64,11 +64,17 @@ export async function POST(
 
     const admin = createAdminClient();
 
-    const { data: avion } = await admin
+    const { data: avion, error: avionErr } = await admin
       .from('compagnie_avions')
       .select('id, compagnie_id, avion_image_url')
       .eq('id', id)
       .single();
+    if (avionErr) {
+      if (avionErr.code === '42703' || (avionErr.message ?? '').includes('avion_image_url')) {
+        return NextResponse.json({ error: 'Migration SQL requise : exécutez add_compagnie_avions_image.sql dans Supabase.' }, { status: 503 });
+      }
+      return NextResponse.json({ error: avionErr.message || 'Avion introuvable' }, { status: 404 });
+    }
     if (!avion) return NextResponse.json({ error: 'Avion introuvable' }, { status: 404 });
 
     const { data: compagnie } = await admin
