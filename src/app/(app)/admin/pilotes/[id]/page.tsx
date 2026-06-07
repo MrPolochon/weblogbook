@@ -6,6 +6,7 @@ import { ArrowLeft } from 'lucide-react';
 import EditPiloteForm from './EditPiloteForm';
 import PiloteCarteSection from './PiloteCarteSection';
 import AdminProfileEmail from './AdminProfileEmail';
+import DiscordResyncButton from './DiscordResyncButton';
 
 const DISCORD_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   active:          { label: 'Actif',              color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' },
@@ -85,7 +86,13 @@ export default async function AdminPiloteEditPage({
               {discordLink.sanction_reason && (
                 <p className="text-xs text-red-400 mt-1">Sanction : {discordLink.sanction_reason}</p>
               )}
+              {discordLink.last_sync_at && (
+                <p className="text-xs text-slate-500">
+                  Dernier sync : {new Date(discordLink.last_sync_at).toLocaleString('fr-FR')}
+                </p>
+              )}
             </div>
+            <DiscordResyncButton userId={id} currentStatus={discordLink.status} />
           </div>
         ) : (
           <p className="text-sm text-slate-500">Ce compte n&apos;a pas lié de compte Discord.</p>
