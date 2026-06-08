@@ -30,13 +30,11 @@ export default async function ClassementPage() {
 
   const admin = createAdminClient();
 
-  const [profilesRes, volsRes, plansRes, equipageRes, licencesRes, comptesRes, inventaireRes] = await Promise.all([
+  const [profilesRes, volsRes, equipageRes, licencesRes, comptesRes, inventaireRes] = await Promise.all([
     admin.from('profiles').select('id, identifiant, heures_initiales_minutes, created_at').not('identifiant', 'is', null),
+    // Uniquement les vols VALIDÉS — même source que le logbook pour cohérence.
+    // On n'ajoute pas plans_vol en doublon (un vol clôturé ET enregistré serait compté 2x).
     admin.from('vols').select('id, pilote_id, copilote_id, instructeur_id, chef_escadron_id, duree_minutes, type_vol, aeroport_depart, aeroport_arrivee, type_avion_id').eq('statut', 'validé').limit(10000),
-    admin.from('plans_vol')
-      .select('id, pilote_id, temps_prev_min, type_vol, aeroport_depart, aeroport_arrivee, accepted_at, cloture_at, compagnie_avions:compagnie_avion_id(type_avion_id), inventaire_avions:inventaire_avion_id(type_avion_id)')
-      .in('statut', ['cloture', 'en_pause'])
-      .limit(10000),
     admin.from('vols_equipage_militaire').select('vol_id, profile_id'),
     admin.from('licences_qualifications').select('user_id'),
     admin.from('felitz_comptes').select('proprietaire_id, solde').eq('type', 'personnel'),
@@ -45,7 +43,7 @@ export default async function ClassementPage() {
 
   const profiles = profilesRes.data || [];
   const volsAnciens = volsRes.data || [];
-  const plansClotures = plansRes.data || [];
+  const plansClotures: never[] = []; // supprimé — utiliser uniquement vols validés
   const equipageData = equipageRes.data || [];
   const licences = licencesRes.data || [];
   const comptes = comptesRes.data || [];
