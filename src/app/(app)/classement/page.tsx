@@ -32,10 +32,11 @@ export default async function ClassementPage() {
 
   const [profilesRes, volsRes, plansRes, equipageRes, licencesRes, comptesRes, inventaireRes] = await Promise.all([
     admin.from('profiles').select('id, identifiant, heures_initiales_minutes, created_at').not('identifiant', 'is', null),
-    admin.from('vols').select('id, pilote_id, copilote_id, instructeur_id, chef_escadron_id, duree_minutes, type_vol, aeroport_depart, aeroport_arrivee, type_avion_id').eq('statut', 'validé'),
+    admin.from('vols').select('id, pilote_id, copilote_id, instructeur_id, chef_escadron_id, duree_minutes, type_vol, aeroport_depart, aeroport_arrivee, type_avion_id').eq('statut', 'validé').limit(10000),
     admin.from('plans_vol')
       .select('id, pilote_id, temps_prev_min, type_vol, aeroport_depart, aeroport_arrivee, accepted_at, cloture_at, compagnie_avions:compagnie_avion_id(type_avion_id), inventaire_avions:inventaire_avion_id(type_avion_id)')
-      .in('statut', ['cloture', 'en_pause']),
+      .in('statut', ['cloture', 'en_pause'])
+      .limit(10000),
     admin.from('vols_equipage_militaire').select('vol_id, profile_id'),
     admin.from('licences_qualifications').select('user_id'),
     admin.from('felitz_comptes').select('proprietaire_id, solde').eq('type', 'personnel'),
