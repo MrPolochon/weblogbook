@@ -43,7 +43,6 @@ export default async function ClassementPage() {
 
   const profiles = profilesRes.data || [];
   const volsAnciens = volsRes.data || [];
-  const plansClotures: never[] = []; // supprimé — utiliser uniquement vols validés
   const equipageData = equipageRes.data || [];
   const licences = licencesRes.data || [];
   const comptes = comptesRes.data || [];
@@ -90,29 +89,6 @@ export default async function ClassementPage() {
     if (v.chef_escadron_id) addVolToUser(v.chef_escadron_id, vol);
     const crew = equipageByVol.get(v.id);
     if (crew) for (const pid of crew) addVolToUser(pid, vol);
-  }
-
-  // Attribute plans_vol to pilote only (plans don't have multi-role)
-  for (const p of plansClotures) {
-    let duree = p.temps_prev_min || 0;
-    if (p.accepted_at && p.cloture_at) {
-      const real = Math.round((new Date(p.cloture_at).getTime() - new Date(p.accepted_at).getTime()) / 60000);
-      if (real > 0) duree = real;
-    }
-    const ca = p.compagnie_avions as { type_avion_id: string } | { type_avion_id: string }[] | null;
-    const ia = p.inventaire_avions as { type_avion_id: string } | { type_avion_id: string }[] | null;
-    const typeAvionId =
-      (Array.isArray(ca) ? ca[0]?.type_avion_id : ca?.type_avion_id) ||
-      (Array.isArray(ia) ? ia[0]?.type_avion_id : ia?.type_avion_id) ||
-      null;
-    addVolToUser(p.pilote_id, {
-      id: `plan_${p.id}`,
-      duree_minutes: duree,
-      type_vol: p.type_vol,
-      aeroport_depart: p.aeroport_depart,
-      aeroport_arrivee: p.aeroport_arrivee,
-      type_avion_id: typeAvionId,
-    });
   }
 
   const licencesByUser = new Map<string, number>();
