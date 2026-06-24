@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Flame, PlaneLanding, Clock, CheckCircle2, Eye, AlertTriangle, ImageIcon, Wrench, Trash2, Shield, MinusCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Flame, PlaneLanding, Clock, CheckCircle2, Eye, AlertTriangle, ImageIcon, Wrench, Trash2, Shield, MinusCircle, ChevronDown, ChevronUp, Gauge } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Incident = {
@@ -28,8 +28,9 @@ type Incident = {
   description: string | null;
   images_urls: string[];
   statut: 'en_attente' | 'en_examen' | 'clos';
-  decision: 'remis_en_etat' | 'detruit' | 'aucune_action' | null;
+  decision: 'remis_en_etat' | 'detruit' | 'aucune_action' | 'usure_modifiee' | null;
   decision_notes: string | null;
+  usure_apres_decision: number | null;
   examine_par_id: string | null;
   examine_at: string | null;
   signalement_ifsa_id: string | null;
@@ -51,6 +52,7 @@ const DECISION_CONFIG = {
   detruit: { label: '🔴 Avion détruit', color: 'text-red-300' },
   remis_en_etat: { label: '🟢 Avion remis en état (usure 100%)', color: 'text-emerald-300' },
   aucune_action: { label: '⚪ Aucune action — avion débloqué (usure inchangée)', color: 'text-slate-300' },
+  usure_modifiee: { label: '🔧 Usure modifiée', color: 'text-amber-300' },
 } as const;
 
 export default function IncidentsClient() {
@@ -60,6 +62,7 @@ export default function IncidentsClient() {
   const [deciding, setDeciding] = useState<string | null>(null);
   const [prenant, setPrenant] = useState<string | null>(null);
   const [notesMap, setNotesMap] = useState<Record<string, string>>({});
+  const [usureMap, setUsureMap] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<'tous' | 'en_attente' | 'en_examen' | 'clos'>('tous');
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
@@ -91,23 +94,61 @@ export default function IncidentsClient() {
     } catch { toast.error('Erreur serveur'); } finally { setPrenant(null); }
   };
 
-  const handleDecision = async (id: string, decision: 'remis_en_etat' | 'detruit' | 'aucune_action') => {
-    const labels = { remis_en_etat: 'Remettre en état', detruit: 'Détruire l\'avion', aucune_action: 'Ne rien faire' };
+  const handleDecision = async (
+    id: string,
+    decision: 'remis_en_etat' | 'detruit' | 'aucune_action' | 'usure_modifiee',
+    usurePercent?: number,
+  ) => {
+    const labels = {
+      remis_en_etat: 'Remettre en état',
+      detruit: 'Détruire l\'avion',
+      aucune_action: 'Ne rien faire',
+      usure_modifiee: `Définir l'usure à ${usurePercent ?? '?'}%`,
+    };
     if (!confirm(`Confirmer : ${labels[decision]} ?`)) return;
     try {
       setDeciding(id);
+      const payload: Record<string, unknown> = {
+        action: 'decider',
+        decision,
+        notes: (notesMap[id] || '').trim() || undefined,
+      };
+      if (decision === 'usure_modifiee' && usurePercent != null) {
+        payload.usure_percent = usurePercent;
+      }
       const res = await fetch(`/api/incidents/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'decider', decision, notes: (notesMap[id] || '').trim() || undefined }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) { const d = await res.json(); toast.error(d.error || 'Erreur'); return; }
-      const toasts = { remis_en_etat: 'Avion remis en état', detruit: 'Avion détruit', aucune_action: 'Avion débloqué sans modification' };
+      const toasts = {
+        remis_en_etat: 'Avion remis en état',
+        detruit: 'Avion détruit',
+        aucune_action: 'Avion débloqué sans modification',
+        usure_modifiee: `Usure définie à ${usurePercent ?? '?'}%`,
+      };
       toast.success(toasts[decision]);
       setNotesMap(prev => { const copy = { ...prev }; delete copy[id]; return copy; });
+      setUsureMap(prev => { const copy = { ...prev }; delete copy[id]; return copy; });
       setExpanded(null);
       fetchIncidents();
     } catch { toast.error('Erreur serveur'); } finally { setDeciding(null); }
+  };
+
+  const handleAppliquerUsure = (inc: Incident) => {
+    const max = inc.usure_avant_incident ?? 100;
+    const raw = usureMap[inc.id]?.trim();
+    if (!raw) {
+      toast.error('Indiquez un pourcentage d\'usure.');
+      return;
+    }
+    const valeur = Math.round(Number(raw));
+    if (!Number.isFinite(valeur) || valeur < 0 || valeur > max) {
+      toast.error(`Usure invalide — entre 0 et ${max}% (réduction uniquement).`);
+      return;
+    }
+    handleDecision(inc.id, 'usure_modifiee', valeur);
   };
 
   const filtered = filter === 'tous' ? incidents : incidents.filter(i => i.statut === filter);
@@ -278,7 +319,9 @@ export default function IncidentsClient() {
                       <div className="p-3 bg-slate-900/50 border border-slate-600 rounded-lg space-y-1">
                         <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Décision</h3>
                         <p className={`text-sm font-bold ${DECISION_CONFIG[inc.decision]?.color || 'text-slate-100'}`}>
-                          {DECISION_CONFIG[inc.decision]?.label || inc.decision}
+                          {inc.decision === 'usure_modifiee' && inc.usure_apres_decision != null
+                            ? `🔧 Usure définie à ${inc.usure_apres_decision}%${inc.usure_apres_decision === 0 ? ' — avion bloqué' : ''}`
+                            : DECISION_CONFIG[inc.decision]?.label || inc.decision}
                         </p>
                         {inc.decision_notes && <p className="text-xs text-slate-400">{inc.decision_notes}</p>}
                         {inc.examine_at && (
@@ -338,6 +381,53 @@ export default function IncidentsClient() {
                             Détruire l&apos;avion
                           </button>
                         </div>
+
+                        {/* Modifier l'usure à la baisse */}
+                        {inc.compagnie_avion_id && (
+                          <div className="pt-3 border-t border-slate-700 space-y-2">
+                            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                              <Gauge className="h-3.5 w-3.5" />
+                              Modifier l&apos;usure
+                            </h4>
+                            <p className="text-[10px] text-slate-500">
+                              Usure actuelle : <strong className="text-slate-300">{inc.usure_avant_incident ?? '?'}%</strong>
+                              — réduction uniquement (0 à {inc.usure_avant_incident ?? 100}%).
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={inc.usure_avant_incident ?? 100}
+                                  value={usureMap[inc.id] ?? ''}
+                                  onChange={(e) => setUsureMap(prev => ({ ...prev, [inc.id]: e.target.value }))}
+                                  placeholder={`0 – ${inc.usure_avant_incident ?? 100}`}
+                                  aria-label="Pourcentage d'usure cible"
+                                  className="w-24 text-sm bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-slate-100 placeholder:text-slate-500"
+                                />
+                                <span className="text-sm text-slate-400">%</span>
+                              </div>
+                              <button
+                                onClick={() => handleAppliquerUsure(inc)}
+                                disabled={deciding === inc.id}
+                                className="px-4 py-2 text-sm font-bold bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                              >
+                                Appliquer usure
+                              </button>
+                              <button
+                                onClick={() => handleDecision(inc.id, 'usure_modifiee', 0)}
+                                disabled={deciding === inc.id}
+                                className="px-4 py-2 text-sm font-bold bg-rose-700 text-white rounded-lg hover:bg-rose-800 disabled:opacity-50 transition-colors"
+                              >
+                                Usure à 0%
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-slate-500">
+                              <strong className="text-slate-400">Usure à 0%</strong> : l&apos;avion est bloqué et nécessite une réparation.
+                            </p>
+                          </div>
+                        )}
+
                         <p className="text-[10px] text-slate-500">
                           <strong className="text-slate-400">Ne rien faire</strong> : l&apos;avion est débloqué avec son usure actuelle, aucune modification n&apos;est effectuée.
                         </p>

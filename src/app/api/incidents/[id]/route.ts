@@ -56,15 +56,39 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (incident.statut === 'clos') return NextResponse.json({ error: 'Incident deja clos.' }, { status: 400 });
       if (incident.statut === 'en_attente') return NextResponse.json({ error: 'Prenez d\'abord l\'incident en charge avant de rendre une decision.' }, { status: 400 });
 
-      const { decision, notes } = body;
-      if (!decision || !['remis_en_etat', 'detruit', 'aucune_action'].includes(decision)) {
-        return NextResponse.json({ error: 'Decision invalide (remis_en_etat, detruit ou aucune_action).' }, { status: 400 });
+      const { decision, notes, usure_percent: usurePercentRaw } = body;
+      if (!decision || !['remis_en_etat', 'detruit', 'aucune_action', 'usure_modifiee'].includes(decision)) {
+        return NextResponse.json({ error: 'Decision invalide.' }, { status: 400 });
+      }
+
+      let usureApresDecision: number | null = null;
+      if (decision === 'usure_modifiee') {
+        if (!incident.compagnie_avion_id) {
+          return NextResponse.json({ error: 'Aucun avion compagnie lié à cet incident.' }, { status: 400 });
+        }
+        const usureCible = Math.round(Number(usurePercentRaw));
+        if (!Number.isFinite(usureCible) || usureCible < 0 || usureCible > 100) {
+          return NextResponse.json({ error: 'Usure invalide (0 à 100).' }, { status: 400 });
+        }
+        const { data: avionRef } = await admin
+          .from('compagnie_avions')
+          .select('usure_percent')
+          .eq('id', incident.compagnie_avion_id)
+          .single();
+        const usureMax = avionRef?.usure_percent ?? incident.usure_avant_incident ?? 100;
+        if (usureCible > usureMax) {
+          return NextResponse.json({
+            error: `L'usure ne peut être réduite que vers la baisse (max actuel : ${usureMax}%).`,
+          }, { status: 400 });
+        }
+        usureApresDecision = usureCible;
       }
 
       await admin.from('incidents_vol').update({
         statut: 'clos',
         decision,
         decision_notes: typeof notes === 'string' ? notes.trim() : null,
+        usure_apres_decision: usureApresDecision,
         examine_par_id: user.id,
         examine_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -100,6 +124,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             bloque_incident: false,
             incident_id: null,
           }).eq('id', incident.compagnie_avion_id);
+        } else if (decision === 'usure_modifiee' && usureApresDecision != null) {
+          await admin.from('compagnie_avions').update({
+            usure_percent: usureApresDecision,
+            statut: usureApresDecision === 0 ? 'bloque' : 'ground',
+            bloque_incident: false,
+            incident_id: null,
+          }).eq('id', incident.compagnie_avion_id);
         } else {
           // aucune_action : débloquer l'avion sans toucher à l'usure
           await admin.from('compagnie_avions').update({
@@ -114,12 +145,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         detruit: 'Votre avion a été officiellement déclaré DÉTRUIT suite à l\'examen.',
         remis_en_etat: 'Votre avion a été remis en état (usure remise à 100%) suite à l\'examen.',
         aucune_action: 'Aucune action n\'a été effectuée sur votre avion. Il est de nouveau disponible avec son usure actuelle.',
+        usure_modifiee: usureApresDecision != null
+          ? `L'usure de votre avion a été définie à ${usureApresDecision}% suite à l'examen.${usureApresDecision === 0 ? ' L\'avion est bloqué et nécessite une réparation.' : ''}`
+          : 'L\'usure de votre avion a été modifiée suite à l\'examen.',
       };
+
+      const staffDecisionLabel =
+        decision === 'detruit' ? 'Avion détruit'
+        : decision === 'remis_en_etat' ? 'Avion remis en état (usure 100%)'
+        : decision === 'usure_modifiee' ? `Usure définie à ${usureApresDecision ?? '?'}%`
+        : 'Aucune action — avion débloqué';
 
       if (incident.signalement_ifsa_id) {
         await admin.from('ifsa_signalements').update({
           statut: 'classe',
-          reponse_ifsa: `Décision staff: ${decision === 'detruit' ? 'Avion détruit' : decision === 'remis_en_etat' ? 'Avion remis en état (usure 100%)' : 'Aucune action — avion débloqué'}.${typeof notes === 'string' && notes.trim() ? ' Notes: ' + notes.trim() : ''}`,
+          reponse_ifsa: `Décision staff: ${staffDecisionLabel}.${typeof notes === 'string' && notes.trim() ? ' Notes: ' + notes.trim() : ''}`,
           traite_par_id: user.id,
           traite_at: new Date().toISOString(),
         }).eq('id', incident.signalement_ifsa_id);
