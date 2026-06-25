@@ -50,6 +50,14 @@ export function calculateDistance(a: Point, b: Point): number {
 export const PLANE_BLIP_D =
   'M0,-5.2 L1.35,-0.85 L2.8,-0.3 L2.8,0.55 L1.15,0.55 L1.15,3.6 L-1.15,3.6 L-1.15,0.55 L-2.8,0.55 L-2.8,-0.3 L-1.35,-0.85 Z';
 
+/** Silhouette hélicoptère centrée sur (0,0), nez vers le nord (−Y). */
+export const HELICOPTER_BLIP_D =
+  'M-4.2,-5.4 L4.2,-5.4 L4.2,-4.7 L1.4,-4.7 L1.4,-0.9 L2,-0.9 L2,3.4 L-2,3.4 L-2,-0.9 L-1.4,-0.9 L-1.4,-4.7 L-4.2,-4.7 Z M3.4,1.4 L5.6,3 L5.6,3.6 L3.4,2.4 Z';
+
+export function isHelicopterCategorie(categorie: string | null | undefined): boolean {
+  return categorie === 'helicoptere';
+}
+
 // ─── Route-based interpolation ───────────────────────────────────────────────
 
 const waypointIndex = new Map<string, Point>();

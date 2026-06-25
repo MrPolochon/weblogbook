@@ -251,8 +251,17 @@ export async function PATCH(
         await enregistrerControleATC(admin, id, plan.current_holder_user_id, plan.current_holder_aeroport, plan.current_holder_position);
       }
 
+      const acceptUpdates: Record<string, unknown> = {
+        statut: 'accepte',
+        accepted_at: new Date().toISOString(),
+      };
+      // Admin accepte hors flux ATC (ex. ATC déconnecté de force) → autosurveillance pour ODW / suivi pilote.
+      if (isAdmin && !plan.current_holder_user_id) {
+        acceptUpdates.automonitoring = true;
+      }
+
       const { data: acceptLocked, error: acceptLockErr } = await admin.from('plans_vol')
-        .update({ statut: 'accepte', accepted_at: new Date().toISOString() })
+        .update(acceptUpdates)
         .eq('id', id)
         .eq('statut', plan.statut)
         .select('id');

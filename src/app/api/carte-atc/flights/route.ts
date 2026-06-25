@@ -35,6 +35,8 @@ interface MapFlight {
   avion_immatriculation?: string | null;
   /** Type de l'avion (ex. Boeing 737). */
   type_avion_nom?: string | null;
+  /** Catégorie types_avion (ex. helicoptere). */
+  type_avion_categorie?: string | null;
   /** Heure de départ prévue saisie au dépôt du plan (SCHEDULED). */
   heure_depart_estimee?: string | null;
   /** Heure de départ réelle saisie par l'ATC dans le strip (ATD — ACTUAL). */
@@ -99,13 +101,50 @@ function ferryRepairStartedAt(vol: {
   return vol.created_at || new Date().toISOString();
 }
 
+function pickJoinRow<T>(raw: unknown): T | null {
+  if (!raw) return null;
+  return (Array.isArray(raw) ? raw[0] : raw) as T;
+}
+
+type TypeAvionJoin = { nom?: string | null; categorie?: string | null };
+type AvionJoin = {
+  immatriculation?: string | null;
+  avion_image_url?: string | null;
+  nom_personnalise?: string | null;
+  types_avion?: TypeAvionJoin | TypeAvionJoin[] | null;
+};
+
+function resolvePlanAvionMeta(p: Record<string, unknown>): {
+  immat: string | null;
+  img: string | null;
+  typeNom: string | null;
+  categorie: string | null;
+} {
+  const sources = [
+    pickJoinRow<AvionJoin>(p.compagnie_avions),
+    pickJoinRow<AvionJoin>(p.inventaire_avions),
+    pickJoinRow<AvionJoin>(p.siavi_avions),
+  ];
+  for (const row of sources) {
+    if (!row) continue;
+    const ta = pickJoinRow<TypeAvionJoin>(row.types_avion);
+    return {
+      immat: row.immatriculation || row.nom_personnalise || null,
+      img: row.avion_image_url ?? null,
+      typeNom: ta?.nom ?? null,
+      categorie: ta?.categorie ?? null,
+    };
+  }
+  return { immat: null, img: null, typeNom: null, categorie: null };
+}
+
 export async function GET() {
   const admin = createAdminClient();
 
   const nowIso = new Date().toISOString();
 
   const [
-    { data: plans },
+    plansRes,
     { data: militaryVols },
     { data: links },
     { data: repairDemandes },
@@ -116,11 +155,13 @@ export async function GET() {
       .select(`
         id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, temps_prev_min,
         statut, accepted_at, created_at, pilote_id, vol_sans_atc, current_holder_user_id,
-        armee_avion_id, armee_mission_id, compagnie_avion_id,
+        armee_avion_id, armee_mission_id, compagnie_avion_id, inventaire_avion_id, siavi_avion_id,
         heure_depart_estimee, strip_atd,
         route_ifr, strip_route, strip_sid_atc, sid_depart, star_arrivee, strip_star,
         profiles!plans_vol_pilote_id_fkey(id, identifiant),
-        compagnie_avions!plans_vol_compagnie_avion_id_fkey(immatriculation, avion_image_url, types_avion:type_avion_id(nom))
+        compagnie_avions!plans_vol_compagnie_avion_id_fkey(immatriculation, avion_image_url, types_avion:type_avion_id(nom, categorie)),
+        inventaire_avions!plans_vol_inventaire_avion_id_fkey(immatriculation, nom_personnalise, types_avion:type_avion_id(nom, categorie)),
+        siavi_avions!plans_vol_siavi_avion_id_fkey(immatriculation, types_avion:type_avion_id(nom, categorie))
       `)
       .in('statut', ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'])
       .not('aeroport_depart', 'is', null)
@@ -152,6 +193,26 @@ export async function GET() {
       .not('aeroport_arrivee', 'is', null),
   ]);
 
+  let plans: Record<string, unknown>[] | null = plansRes.data as Record<string, unknown>[] | null;
+  if (plansRes.error) {
+    console.warn('ODW plans_vol join failed, fallback:', plansRes.error.message);
+    const { data: fallbackPlans } = await admin
+      .from('plans_vol')
+      .select(`
+        id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, temps_prev_min,
+        statut, accepted_at, created_at, pilote_id, vol_sans_atc, current_holder_user_id,
+        armee_avion_id, armee_mission_id, compagnie_avion_id, inventaire_avion_id, siavi_avion_id,
+        heure_depart_estimee, strip_atd,
+        route_ifr, strip_route, strip_sid_atc, sid_depart, star_arrivee, strip_star,
+        profiles!plans_vol_pilote_id_fkey(id, identifiant),
+        compagnie_avions!plans_vol_compagnie_avion_id_fkey(immatriculation, avion_image_url, types_avion:type_avion_id(nom, categorie))
+      `)
+      .in('statut', ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'])
+      .not('aeroport_depart', 'is', null)
+      .not('aeroport_arrivee', 'is', null);
+    plans = (fallbackPlans || []) as Record<string, unknown>[];
+  }
+
   const discordByUser = new Map<string, string>();
   for (const link of links || []) {
     if (link.user_id && link.discord_username) {
@@ -162,44 +223,34 @@ export async function GET() {
   const flights: MapFlight[] = [];
 
   for (const p of plans || []) {
-    const isAuto = p.statut === 'automonitoring' || p.vol_sans_atc === true;
-    const isAtcManaged = Boolean(p.current_holder_user_id);
-    const isInFlight = p.statut === 'en_cours' || p.statut === 'en_attente_cloture';
-    const shouldDisplay = isAuto || isAtcManaged || isInFlight;
-    if (!shouldDisplay) continue;
-
-    const rawProfile = p.profiles as unknown;
+    const row = p as Record<string, unknown>;
+    const rawProfile = row.profiles as unknown;
     const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile;
-    const piloteId = p.pilote_id || null;
-    const startAt = p.heure_depart_estimee || p.accepted_at || p.created_at || nowIso;
-    const rawAvion = p.compagnie_avions as unknown;
-    const avionRow = Array.isArray(rawAvion) ? rawAvion[0] : rawAvion;
-    const avionImmat: string | null = (avionRow as { immatriculation?: string | null } | null)?.immatriculation || null;
-    const avionImg: string | null = (avionRow as { avion_image_url?: string | null } | null)?.avion_image_url || null;
-    const rawTypeAvion = (avionRow as { types_avion?: unknown } | null)?.types_avion;
-    const typeAvionRow = Array.isArray(rawTypeAvion) ? rawTypeAvion[0] : rawTypeAvion;
-    const typeAvionNom: string | null = (typeAvionRow as { nom?: string | null } | null)?.nom || null;
+    const piloteId = (row.pilote_id as string | null) || null;
+    const startAt = (row.heure_depart_estimee as string) || (row.accepted_at as string) || (row.created_at as string) || nowIso;
+    const avionMeta = resolvePlanAvionMeta(row);
     flights.push({
-      id: `pv-${p.id}`,
-      kind: (p.armee_avion_id || p.armee_mission_id) ? 'military' : 'civil',
-      numero_vol: p.numero_vol || 'N/A',
-      aeroport_depart: p.aeroport_depart,
-      aeroport_arrivee: p.aeroport_arrivee,
-      type_vol: (p.armee_avion_id || p.armee_mission_id) ? 'MIL' : p.type_vol === 'VFR' ? 'VFR' : 'IFR',
-      temps_prev_min: Math.max(1, Number(p.temps_prev_min || 1)),
+      id: `pv-${row.id}`,
+      kind: (row.armee_avion_id || row.armee_mission_id) ? 'military' : 'civil',
+      numero_vol: (row.numero_vol as string) || 'N/A',
+      aeroport_depart: row.aeroport_depart as string,
+      aeroport_arrivee: row.aeroport_arrivee as string,
+      type_vol: (row.armee_avion_id || row.armee_mission_id) ? 'MIL' : row.type_vol === 'VFR' ? 'VFR' : 'IFR',
+      temps_prev_min: Math.max(1, Number(row.temps_prev_min || 1)),
       started_at: startAt,
-      status: p.statut,
+      status: row.statut as string,
       pilote_id: piloteId,
       pilote_identifiant: (profile as { identifiant?: string } | null)?.identifiant || null,
       discord_username: piloteId ? (discordByUser.get(piloteId) || null) : null,
-      route: p.strip_route || p.route_ifr || null,
-      sid: p.strip_sid_atc || p.sid_depart || null,
-      star: p.strip_star || p.star_arrivee || null,
-      avion_image_url: avionImg,
-      avion_immatriculation: avionImmat,
-      type_avion_nom: typeAvionNom,
-      heure_depart_estimee: p.heure_depart_estimee || null,
-      strip_atd: p.strip_atd || null,
+      route: (row.strip_route as string) || (row.route_ifr as string) || null,
+      sid: (row.strip_sid_atc as string) || (row.sid_depart as string) || null,
+      star: (row.strip_star as string) || (row.star_arrivee as string) || null,
+      avion_image_url: avionMeta.img,
+      avion_immatriculation: avionMeta.immat,
+      type_avion_nom: avionMeta.typeNom,
+      type_avion_categorie: avionMeta.categorie,
+      heure_depart_estimee: (row.heure_depart_estimee as string) || null,
+      strip_atd: (row.strip_atd as string) || null,
     });
   }
 

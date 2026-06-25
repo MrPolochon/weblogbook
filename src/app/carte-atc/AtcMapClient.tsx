@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { RefreshCw, Radio, Layers, ArrowLeft, Info, X, ZoomIn, ZoomOut, RotateCcw, Plane } from 'lucide-react';
+import { RefreshCw, Radio, Layers, ArrowLeft, Info, X, ZoomIn, ZoomOut, RotateCcw, Plane, RotateCw } from 'lucide-react';
 import {
   AIRPORT_TO_FIR,
   DEFAULT_FIR_ZONES,
@@ -21,6 +21,8 @@ import {
   getFlightPhase,
   PHASE_LABELS_FR,
   PLANE_BLIP_D,
+  HELICOPTER_BLIP_D,
+  isHelicopterCategorie,
   type FlightPhase,
 } from '@/lib/radar-utils';
 
@@ -57,6 +59,8 @@ interface MapFlight {
   avion_immatriculation?: string | null;
   /** Type de l'avion. */
   type_avion_nom?: string | null;
+  /** Catégorie types_avion (helicoptere, etc.). */
+  type_avion_categorie?: string | null;
   /** Heure de départ prévue saisie au dépôt du plan (SCHEDULED). */
   heure_depart_estimee?: string | null;
   /** Heure de départ réelle saisie par l'ATC dans le strip (ACTUAL ATD). */
@@ -89,12 +93,17 @@ function mapFlightAccentColor(f: Pick<MapFlight, 'operationnel_reparation' | 'vo
   return '#ef4444';
 }
 
-function mapFlightLabel(f: Pick<MapFlight, 'operationnel_reparation' | 'vol_ferry' | 'type_vol' | 'aeroport_depart' | 'aeroport_arrivee'>): string {
+function mapFlightLabel(f: Pick<MapFlight, 'operationnel_reparation' | 'vol_ferry' | 'type_vol' | 'aeroport_depart' | 'aeroport_arrivee' | 'type_avion_categorie'>): string {
   if (f.operationnel_reparation) return 'OPS RÉPARATION';
   if (f.vol_ferry) return 'FERRY';
+  if (isHelicopterCategorie(f.type_avion_categorie)) return 'HÉLICO';
   if (f.type_vol === 'MIL') return 'MILITAIRE';
   if (f.aeroport_depart === f.aeroport_arrivee) return `${f.type_vol} LOCAL`;
   return f.type_vol;
+}
+
+function flightBlipPath(f: Pick<MapFlight, 'type_avion_categorie'>): string {
+  return isHelicopterCategorie(f.type_avion_categorie) ? HELICOPTER_BLIP_D : PLANE_BLIP_D;
 }
 
 function formatDuration(startedAt: string): string {
@@ -663,7 +672,7 @@ export default function AtcMapClient() {
                       <circle cx={f.x} cy={f.y} r="14" fill="transparent" />
                       <g transform={`translate(${f.x},${f.y}) rotate(${f.heading})`}>
                         <path
-                          d={PLANE_BLIP_D}
+                          d={flightBlipPath(f)}
                           fill={color}
                           stroke="rgba(15,23,42,0.85)"
                           strokeWidth={0.22}
@@ -916,7 +925,9 @@ export default function AtcMapClient() {
                     <img src={selectedFlight.avion_image_url} alt={selectedFlight.numero_vol} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <Plane className="h-10 w-10 text-slate-700" />
+                      {isHelicopterCategorie(selectedFlight.type_avion_categorie)
+                        ? <RotateCw className="h-10 w-10 text-slate-700" />
+                        : <Plane className="h-10 w-10 text-slate-700" />}
                     </div>
                   )}
                   {/* gradient bas */}
@@ -948,7 +959,9 @@ export default function AtcMapClient() {
                     </div>
                     {/* Barre progression + icone */}
                     <div className="flex flex-col items-center justify-center gap-1 px-1" style={{ minWidth: 56 }}>
-                      <Plane className="h-5 w-5 text-amber-400" />
+                      {isHelicopterCategorie(selectedFlight.type_avion_categorie)
+                        ? <RotateCw className="h-5 w-5 text-amber-400" />
+                        : <Plane className="h-5 w-5 text-amber-400" />}
                       <div className="w-full h-[3px] rounded-full overflow-hidden" style={{ background: 'rgba(148,163,184,0.15)' }}>
                         <div className="h-full rounded-full bg-amber-400 transition-all duration-500" style={{ width: `${pct}%` }} />
                       </div>
@@ -1106,7 +1119,7 @@ export default function AtcMapClient() {
                     </span>
                     <br />
                     <span className="text-slate-500">
-                      {f.operationnel_reparation ? 'Réparation externe · ' : f.vol_ferry ? 'Ferry · ' : f.aeroport_depart === f.aeroport_arrivee ? 'Vol local · ' : ''}
+                      {f.operationnel_reparation ? 'Réparation externe · ' : f.vol_ferry ? 'Ferry · ' : isHelicopterCategorie(f.type_avion_categorie) ? 'Hélico · ' : f.aeroport_depart === f.aeroport_arrivee ? 'Vol local · ' : ''}
                       Statut : {PHASE_LABELS_FR[f.flight_phase]}
                     </span>
 
