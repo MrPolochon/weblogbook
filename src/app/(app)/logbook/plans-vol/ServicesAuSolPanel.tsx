@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
@@ -25,6 +25,8 @@ const SERVICE_CONFIG: Partial<Record<ServiceType, { label: string; icon: React.R
   catering: { label: 'Catering',  icon: <Utensils className="h-4 w-4" />,      color: 'emerald' },
   fuel:     { label: 'Carburant', icon: <Fuel className="h-4 w-4" />,          color: 'sky' },
   boarding: { label: 'Boarding',  icon: <Users className="h-4 w-4" />,         color: 'purple' },
+  repoussage:  { label: 'Repoussage',  icon: <ArrowLeftRight className="h-4 w-4" />, color: 'orange' },
+  marshalling: { label: 'Marshalling', icon: <Navigation className="h-4 w-4" />,     color: 'red' },
 };
 
 export default function ServicesAuSolPanel({
@@ -190,16 +192,16 @@ export default function ServicesAuSolPanel({
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Portes</h3>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="rounded-xl border border-emerald-800/40 bg-emerald-900/10 p-3">
-                    <p className="text-[10px] text-emerald-400/80 uppercase font-medium">Départ</p>
+                    <p className="text-[10px] text-emerald-400/80 uppercase font-medium">DÃ©part</p>
                     <p className="text-lg font-bold text-emerald-300 mt-0.5">
-                      {porteDepart ?? <span className="text-slate-500 text-sm">Non assignée</span>}
+                      {porteDepart ?? <span className="text-slate-500 text-sm">Non assignÃ©e</span>}
                     </p>
                     <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-1">
                       <MapPin className="h-2.5 w-2.5" />{aeroportDepart}
                     </div>
                   </div>
                   <div className="rounded-xl border border-sky-800/40 bg-sky-900/10 p-3">
-                    <p className="text-[10px] text-sky-400/80 uppercase font-medium">Arrivée</p>
+                    <p className="text-[10px] text-sky-400/80 uppercase font-medium">ArrivÃ©e</p>
                     <p className="text-lg font-bold text-sky-300 mt-0.5">
                       {porteArrivee ?? <span className="text-slate-500 text-sm">En attente</span>}
                     </p>
@@ -210,14 +212,14 @@ export default function ServicesAuSolPanel({
                 </div>
               </section>
 
-              {/* Équipe */}
+              {/* Ã‰quipe */}
               {assignedTeamInfo && (
                 <div className="flex items-center gap-2 rounded-xl border border-emerald-800/40 bg-emerald-900/10 px-3 py-2.5 text-sm text-emerald-300">
                   <Users2 className="h-4 w-4 shrink-0" />Pris en charge par le ground crew
                 </div>
               )}
 
-              {/* Disponibilité */}
+              {/* DisponibilitÃ© */}
               {groundCheckDone && groundUnavailableReason === 'gc_unavailable' && (
                 <div className="flex items-center gap-2 rounded-xl border border-amber-700/40 bg-amber-900/10 px-3 py-2.5 text-sm text-amber-300">
                   <AlertTriangle className="h-4 w-4 shrink-0" />Aucun ground crew disponible
@@ -265,7 +267,7 @@ export default function ServicesAuSolPanel({
 
               {/* Marshalling */}
               <section>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Opérations avion</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">OpÃ©rations avion</h3>
                 <div className="space-y-2">
                   {/* Marshalling */}
                   {marshallingActive ? (
@@ -285,12 +287,12 @@ export default function ServicesAuSolPanel({
                           className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition-colors disabled:opacity-50"
                         >
                           {confirmLoading === marshallingActive.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                          Confirmer terminé
+                          Confirmer terminÃ©
                         </button>
                       )}
                       {marshallingActive.pilote_confirme && (
                         <p className="text-xs text-emerald-400 flex items-center gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" />Confirmation envoyée au GC
+                          <CheckCircle2 className="h-3.5 w-3.5" />Confirmation envoyÃ©e au GC
                         </p>
                       )}
                     </div>
@@ -314,7 +316,7 @@ export default function ServicesAuSolPanel({
                       <div className="flex items-center gap-2">
                         <ArrowLeftRight className="h-4 w-4 text-orange-400" />
                         <span className="text-xs font-semibold text-slate-200">
-                          Repoussage {repoussageActive.direction === 'gauche' ? '← Gauche' : '→ Droite'}
+                          Repoussage {repoussageActive.direction === 'gauche' ? 'â† Gauche' : 'â†’ Droite'}
                         </span>
                         <StatusBadge statut={repoussageActive.statut} />
                       </div>
@@ -326,12 +328,12 @@ export default function ServicesAuSolPanel({
                           className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition-colors disabled:opacity-50"
                         >
                           {confirmLoading === repoussageActive.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                          Confirmer terminé
+                          Confirmer terminÃ©
                         </button>
                       )}
                       {repoussageActive.pilote_confirme && (
                         <p className="text-xs text-emerald-400 flex items-center gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" />Confirmation envoyée au GC
+                          <CheckCircle2 className="h-3.5 w-3.5" />Confirmation envoyÃ©e au GC
                         </p>
                       )}
                     </div>
@@ -345,7 +347,7 @@ export default function ServicesAuSolPanel({
                       >
                         <ArrowLeftRight className="h-4 w-4" />
                         Demander Repoussage
-                        <span className="ml-auto text-slate-500 text-xs">▾</span>
+                        <span className="ml-auto text-slate-500 text-xs">â–¾</span>
                       </button>
                       {repoussageMenuOpen && (
                         <div className="absolute left-0 right-0 top-full mt-1 z-10 rounded-xl border border-orange-800/40 bg-slate-900 shadow-xl overflow-hidden">
@@ -354,7 +356,7 @@ export default function ServicesAuSolPanel({
                             onClick={() => requestService('repoussage', 'gauche')}
                             className="w-full flex items-center gap-2 px-4 py-3 text-sm text-orange-300 hover:bg-orange-900/20 transition-colors"
                           >
-                            {loading.repoussage_gauche ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>←</span>}
+                            {loading.repoussage_gauche ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>â†</span>}
                             Pushback Left (Gauche)
                           </button>
                           <button
@@ -362,7 +364,7 @@ export default function ServicesAuSolPanel({
                             onClick={() => requestService('repoussage', 'droite')}
                             className="w-full flex items-center gap-2 px-4 py-3 text-sm text-orange-300 hover:bg-orange-900/20 transition-colors border-t border-orange-800/30"
                           >
-                            {loading.repoussage_droite ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>→</span>}
+                            {loading.repoussage_droite ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>â†’</span>}
                             Pushback Right (Droite)
                           </button>
                         </div>
@@ -379,9 +381,9 @@ export default function ServicesAuSolPanel({
                   {boarding ? (
                     <div className="rounded-xl border border-purple-800/40 bg-purple-900/10 p-3 space-y-2">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-300 font-medium">{boarding.pax_embarques}/{boarding.total_pax} embarqués</span>
+                        <span className="text-slate-300 font-medium">{boarding.pax_embarques}/{boarding.total_pax} embarquÃ©s</span>
                         <span className={`text-xs font-semibold ${boarding.statut === 'completed' ? 'text-emerald-400' : boarding.statut === 'in_progress' ? 'text-purple-400' : 'text-slate-400'}`}>
-                          {boarding.statut === 'completed' ? '✓ Terminé' : boarding.statut === 'in_progress' ? 'En cours' : 'Non démarré'}
+                          {boarding.statut === 'completed' ? 'âœ“ TerminÃ©' : boarding.statut === 'in_progress' ? 'En cours' : 'Non dÃ©marrÃ©'}
                         </span>
                       </div>
                       <div className="h-2 rounded-full bg-slate-700 overflow-hidden">
@@ -389,7 +391,7 @@ export default function ServicesAuSolPanel({
                       </div>
                       {boardingIncomplet && malusBoarding > 0 && (
                         <div className="flex items-center gap-1.5 text-xs text-amber-400">
-                          <AlertTriangle className="h-3.5 w-3.5" />Départ anticipé : malus -{malusBoarding}%
+                          <AlertTriangle className="h-3.5 w-3.5" />DÃ©part anticipÃ© : malus -{malusBoarding}%
                         </div>
                       )}
                     </div>
@@ -399,7 +401,7 @@ export default function ServicesAuSolPanel({
                       onClick={startBoarding}
                       className="w-full rounded-xl border border-purple-800/40 bg-purple-900/10 hover:bg-purple-900/20 p-3 text-sm font-semibold text-purple-300 transition-colors flex items-center justify-center gap-2"
                     >
-                      <Users className="h-4 w-4" />Démarrer le boarding
+                      <Users className="h-4 w-4" />DÃ©marrer le boarding
                     </button>
                   )}
                 </section>
@@ -451,8 +453,8 @@ function StatusBadge({ statut }: { statut: string }) {
     pending:     { label: 'En attente',    color: 'text-amber-400',  icon: <Clock className="h-3 w-3" /> },
     accepted:    { label: 'Pris en charge',color: 'text-sky-400',    icon: <CheckCircle2 className="h-3 w-3" /> },
     in_progress: { label: 'En cours',      color: 'text-purple-400', icon: <Loader2 className="h-3 w-3" /> },
-    completed:   { label: 'Terminé',       color: 'text-emerald-400',icon: <CheckCircle2 className="h-3 w-3" /> },
-    rejected:    { label: 'Rejeté',        color: 'text-red-400',    icon: <X className="h-3 w-3" /> },
+    completed:   { label: 'TerminÃ©',       color: 'text-emerald-400',icon: <CheckCircle2 className="h-3 w-3" /> },
+    rejected:    { label: 'RejetÃ©',        color: 'text-red-400',    icon: <X className="h-3 w-3" /> },
   };
   const c = config[statut] ?? config.pending;
   return (
