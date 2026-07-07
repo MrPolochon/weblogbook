@@ -218,8 +218,7 @@ export async function middleware(request: NextRequest) {
         .from('app_maintenance')
         .update({ active: false })
         .eq('id', 1)
-        .then(() => { _maintenanceCache = null; })
-        .catch(() => {});
+        .then(() => { _maintenanceCache = null; }, () => {});
       // On laisse passer la requête
     } else {
       // Maintenance toujours active → vérifier si l'utilisateur est admin
