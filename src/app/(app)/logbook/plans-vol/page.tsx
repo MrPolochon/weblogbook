@@ -9,6 +9,7 @@ import PlanVolAnnulerButton from './PlanVolAnnulerButton';
 import NePasEnregistrerPlanButton from '../NePasEnregistrerPlanButton';
 import TranspondeurInterface from './TranspondeurInterface';
 import MedevacPauseBanner from './MedevacPauseBanner';
+import ServicesAuSolPanel from './ServicesAuSolPanel';
 import type { PlanVol } from '@/lib/types';
 import { ARME_MISSIONS } from '@/lib/armee-missions';
 
@@ -209,6 +210,18 @@ export default async function MesPlansVolPage() {
             medevac_total_segments: medevacPause.segmentSuivant.medevac_total_segments ?? null,
             statut: medevacPause.segmentSuivant.statut,
           }}
+        />
+      )}
+
+      {/* Panel Services au Sol - Vol actif */}
+      {planActif && (
+        <ServicesAuSolPanel
+          planVolId={planActif.id}
+          aeroportDepart={planActif.aeroport_depart}
+          aeroportArrivee={planActif.aeroport_arrivee}
+          statut={planActif.statut}
+          porteDepart={(planActif as unknown as { porte_depart?: string | null }).porte_depart ?? null}
+          paxCount={(planActif as unknown as { nb_pax_genere?: number | null }).nb_pax_genere ?? null}
         />
       )}
 

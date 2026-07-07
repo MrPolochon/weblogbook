@@ -3,7 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { stopAtisIfController } from '@/lib/atis-bot-api';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
+import { ATC_TAUX_PAR_MINUTE } from '@/lib/atc-salaire';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
+import { ensureComptePersonnel, getComptePersonnelCanonique } from '@/lib/felitz/ensure-comptes';
 
 /**
  * POST - Se mettre en service sur une position.
@@ -64,57 +66,58 @@ export async function DELETE() {
     const { data: session } = await supabase.from('atc_sessions').select('id, started_at, aeroport, position').eq('user_id', user.id).single();
     if (!session) return NextResponse.json({ error: 'Aucune session active.' }, { status: 400 });
 
-    // Mettre à jour le temps total de service
+    let durationMinutes = 0;
     if (session.started_at) {
-      const durationMinutes = Math.max(0, Math.floor((Date.now() - new Date(session.started_at).getTime()) / 60_000));
+      durationMinutes = Math.max(0, Math.floor((Date.now() - new Date(session.started_at).getTime()) / 60_000));
       const { data: prof } = await supabase.from('profiles').select('atc_temps_total_minutes').eq('id', user.id).single();
       const prev = (prof?.atc_temps_total_minutes ?? 0) | 0;
       await supabase.from('profiles').update({ atc_temps_total_minutes: prev + durationMinutes }).eq('id', user.id);
     }
 
-    // Récupérer et traiter les taxes accumulées pendant cette session
+    const tauxMinute = ATC_TAUX_PAR_MINUTE[session.position] ?? 0;
+    const salaireMinute = durationMinutes * tauxMinute;
+
     const { data: taxesPending } = await admin.from('atc_taxes_pending')
       .select('id, montant, aeroport, description, plan_vol_id')
       .eq('session_id', session.id);
 
-    let chequeMontant = 0;
+    const totalTaxes = taxesPending?.reduce((sum, t) => sum + (t.montant || 0), 0) ?? 0;
+    const chequeMontant = salaireMinute + totalTaxes;
     let chequeEnvoye = false;
 
-    if (taxesPending && taxesPending.length > 0) {
-      // Calculer le total des taxes
-      chequeMontant = taxesPending.reduce((sum, t) => sum + (t.montant || 0), 0);
+    if (chequeMontant > 0) {
+      let compteAtc = await getComptePersonnelCanonique(admin, user.id);
+      if (!compteAtc) compteAtc = await ensureComptePersonnel(admin, user.id);
 
-      if (chequeMontant > 0) {
-        // Récupérer le compte personnel de l'ATC
-        const { data: compteAtc } = await admin.from('felitz_comptes')
-          .select('id')
-          .eq('proprietaire_id', user.id)
-          .eq('type', 'personnel')
-          .single();
+      if (compteAtc) {
+        const nbVols = taxesPending?.length ?? 0;
+        const aeroportsConcernes = Array.from(new Set((taxesPending || []).map(t => t.aeroport))).join(', ');
 
-        if (compteAtc) {
-          // Construire le détail des vols
-          const nbVols = taxesPending.length;
-          const aeroportsConcernes = Array.from(new Set(taxesPending.map(t => t.aeroport))).join(', ');
-          
-          // Envoyer un seul chèque avec le total
-          await admin.from('messages').insert({
-            destinataire_id: user.id,
-            expediteur_id: null,
-            titre: `Salaire ATC - ${session.aeroport} ${session.position}`,
-            contenu: `Fin de votre service sur ${session.aeroport} - ${session.position}.\n\nVous avez contrôlé ${nbVols} vol(s) sur les aéroports: ${aeroportsConcernes}.\n\nTotal des taxes perçues: ${chequeMontant.toLocaleString('fr-FR')} F$\n\nMerci pour votre service !`,
-            type_message: 'cheque_taxes_atc',
-            cheque_montant: chequeMontant,
-            cheque_encaisse: false,
-            cheque_destinataire_compte_id: compteAtc.id,
-            cheque_libelle: `Salaire ATC - ${session.aeroport} ${session.position} (${nbVols} vols)`,
-            cheque_pour_compagnie: false
-          });
-          chequeEnvoye = true;
+        let contenu = `Fin de votre service sur ${session.aeroport} - ${session.position}.\n\n`;
+        contenu += `Durée de service : ${durationMinutes} min\n`;
+        contenu += `Salaire à la minute (${durationMinutes} min × ${tauxMinute.toLocaleString('fr-FR')} F$/min) : ${salaireMinute.toLocaleString('fr-FR')} F$\n`;
+        if (nbVols > 0) {
+          contenu += `Taxes aéroportuaires perçues (${nbVols} vol(s) sur ${aeroportsConcernes}) : ${totalTaxes.toLocaleString('fr-FR')} F$\n`;
         }
-      }
+        contenu += `\nTotal : ${chequeMontant.toLocaleString('fr-FR')} F$\n\nMerci pour votre service !`;
 
-      // Supprimer les taxes pending traitées
+        await admin.from('messages').insert({
+          destinataire_id: user.id,
+          expediteur_id: null,
+          titre: `Salaire ATC - ${session.aeroport} ${session.position}`,
+          contenu,
+          type_message: 'cheque_taxes_atc',
+          cheque_montant: chequeMontant,
+          cheque_encaisse: false,
+          cheque_destinataire_compte_id: compteAtc.id,
+          cheque_libelle: `Salaire ATC - ${session.aeroport} ${session.position} (${durationMinutes} min)`,
+          cheque_pour_compagnie: false
+        });
+        chequeEnvoye = true;
+      }
+    }
+
+    if (taxesPending && taxesPending.length > 0) {
       await admin.from('atc_taxes_pending').delete().eq('session_id', session.id);
     }
 

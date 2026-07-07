@@ -4,25 +4,10 @@ import { NextResponse, NextRequest } from 'next/server';
 import { sendLoginCodeEmail } from '@/lib/email';
 import { rateLimit } from '@/lib/rate-limit';
 import { randomInt } from 'crypto';
+import { getClientIp, normalizeIp } from '@/lib/ip-utils';
 
 const CODE_EXPIRY_MINUTES = 10;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function getClientIp(request: NextRequest): string | null {
-  // NB: x-forwarded-for / x-real-ip ne doivent être considérés fiables
-  // que si l'application est derrière un reverse proxy de confiance
-  // (Vercel, Cloudflare, Nginx avec set_real_ip_from). Sinon un client
-  // peut spoofer ces headers. Vercel/Cloudflare protègent ces headers,
-  // donc en prod sur Vercel c'est sûr.
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim();
-    if (first) return first;
-  }
-  const realIp = request.headers.get('x-real-ip');
-  if (realIp) return realIp.trim();
-  return null;
-}
 
 function generateSixDigitCode(): string {
   // Utilise un PRNG cryptographique (uniforme, non prévisible).
@@ -57,7 +42,8 @@ export async function POST(req: NextRequest) {
       .select('last_login_ip')
       .eq('user_id', user.id)
       .maybeSingle();
-    const previousIp = tracking?.last_login_ip ?? null;
+    // Normaliser l'IP lue en base (peut contenir l'ancien format ::ffff:x.x.x.x)
+    const previousIp = tracking?.last_login_ip ? normalizeIp(tracking.last_login_ip) : null;
 
     // Même IP que la précédente connexion : pas d'envoi de code par email
     if (previousIp != null && currentIp != null && previousIp === currentIp) {

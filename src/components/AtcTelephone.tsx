@@ -354,7 +354,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
 
   // Cleanup LiveKit
   const cleanupLiveKit = useCallback(async () => {
-    console.log('[LiveKit] Cleanup');
     if (audioLevelIntervalRef.current) {
       clearInterval(audioLevelIntervalRef.current);
       audioLevelIntervalRef.current = null;
@@ -377,7 +376,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   useEffect(() => {
     if (callState === 'ringing' || callState === 'connecting' || callState === 'incoming') {
       const timeout = setTimeout(async () => {
-        console.log('[Telephone] Timeout 30s - reset automatique');
         playMessage('Délai dépassé');
         await cleanupLiveKit();
         const callId = currentCall?.callId || incomingCall?.callId;
@@ -400,12 +398,9 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
 
   // Rejoindre un appel LiveKit
   const joinLiveKitCall = useCallback(async (callId: string): Promise<boolean> => {
-    console.log('[LiveKit] Joining call:', callId);
     setConnectionStatus('Connexion...');
     
     try {
-      // Obtenir le token
-      console.log('[LiveKit] Fetching token...');
       const response = await fetch('/api/livekit/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -429,8 +424,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
         throw new Error('URL LiveKit non configurée');
       }
       
-      console.log('[LiveKit] Token obtained, connecting to:', url);
-      
       // Créer la room
       const room = new Room({
         adaptiveStream: true,
@@ -445,13 +438,11 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       
       // Événements
       room.on(RoomEvent.Connected, () => {
-        console.log('[LiveKit] Connected to room, waiting for other participant...');
         setConnectionStatus('En attente...');
         // Ne pas dire "Communications établie" ici, attendre l'autre participant
       });
       
-      room.on(RoomEvent.Disconnected, (reason) => {
-        console.log('[LiveKit] Disconnected, reason:', reason);
+      room.on(RoomEvent.Disconnected, (_reason) => {
         cleanupLiveKit();
         setCallState('idle');
         setNumber('');
@@ -463,7 +454,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       });
       
       room.on(RoomEvent.ParticipantConnected, (participant) => {
-        console.log('[LiveKit] Participant connected:', participant.identity);
         setCallState('connected');
         setConnectionStatus('Connecté');
         playSound('connected');
@@ -477,9 +467,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       });
 
       // Quand l'autre participant raccroche
-      room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-        console.log('[LiveKit] Participant disconnected:', participant.identity);
-        // L'autre a raccroché, on termine l'appel
+      room.on(RoomEvent.ParticipantDisconnected, (_participant) => {
         cleanupLiveKit();
         setCallState('idle');
         setNumber('');
@@ -490,8 +478,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
         playMessage('Correspondant a raccroché');
       });
       
-      room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
-        console.log('[LiveKit] Track subscribed:', track.kind, 'from', participant.identity);
+      room.on(RoomEvent.TrackSubscribed, (track, _publication, _participant) => {
         if (track.kind === Track.Kind.Audio) {
           attachRemoteAudioTrack(track, room);
         }
@@ -512,7 +499,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       });
       
       room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
-        console.log('[LiveKit] Connection state:', state);
         if (state === ConnectionState.Connected) {
           setConnectionStatus('Connecté');
         } else if (state === ConnectionState.Reconnecting) {
@@ -529,8 +515,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
         playMessage('Erreur microphone');
       });
       
-      // Connecter avec timeout (autoSubscribe: true pour recevoir les tracks des participants)
-      console.log('[LiveKit] Connecting to room...');
       const connectPromise = room.connect(url, token, { autoSubscribe: true });
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Timeout connexion')), 15000)
@@ -538,7 +522,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       
       await Promise.race([connectPromise, timeoutPromise]);
       
-      console.log('[LiveKit] Connected, enabling microphone...');
       if (selectedInputId) {
         const roomWithSwitch = room as unknown as {
           switchActiveDevice?: (kind: string, deviceId: string) => Promise<void>;
@@ -564,7 +547,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       // Vérifier si l'autre participant est DÉJÀ dans la room (rejoint avant nous)
       const existingParticipants = Array.from(room.remoteParticipants.values());
       if (existingParticipants.length > 0) {
-        console.log('[LiveKit] Other participant already in room:', existingParticipants[0].identity);
         setCallState('connected');
         setConnectionStatus('Connecté');
         playSound('connected');
@@ -576,8 +558,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
             }
           });
         });
-      } else {
-        console.log('[LiveKit] Audio publishing started, waiting for other participant...');
       }
       return true;
     } catch (err) {

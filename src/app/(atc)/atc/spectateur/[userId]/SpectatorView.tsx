@@ -89,7 +89,6 @@ export default function SpectatorView({
           filter: `current_holder_user_id=eq.${targetUserId}`
         },
         async (payload) => {
-          console.log('Plan change detected:', payload.eventType);
           setLastUpdate(new Date());
           
           if (payload.eventType === 'INSERT') {

@@ -71,6 +71,7 @@ export default function InstructionClient({
   typesAvion,
   avionsTemp,
   elevesProgression,
+  initialIndisponible,
 }: {
   loadError?: string;
   viewerRole: string;
@@ -99,11 +100,16 @@ export default function InstructionClient({
   typesAvion: TypeAvion[];
   avionsTemp: AvionTemp[];
   elevesProgression: Array<{ eleve_id: string; licence_code: string; module_code: string; completed: boolean; note?: string | null }>;
+  /** Statut d'indisponibilité initial de l'instructeur (depuis le profil). */
+  initialIndisponible?: boolean;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const isManager = isManagerProp;
   const formationProgramsForCreate = createFormationPrograms.length > 0 ? createFormationPrograms : programs;
+  const isInstructeurOuExaminateur = isManager || canViewExaminerInbox;
+  const [indisponible, setIndisponible] = useState(initialIndisponible ?? false);
+  const [togglingDispo, setTogglingDispo] = useState(false);
   const [atcTrainingMessage, setAtcTrainingMessage] = useState('');
   const [pilotTrainingMessage, setPilotTrainingMessage] = useState('');
 
@@ -112,13 +118,13 @@ export default function InstructionClient({
   const [rattachUserId, setRattachUserId] = useState('');
   const [rattachCandidates, setRattachCandidates] = useState<Array<{ id: string; identifiant: string }>>([]);
   const [rattachCandidatesLoading, setRattachCandidatesLoading] = useState(false);
-  const [formationLicence, setFormationLicence] = useState('PPL');
-  const [formationLicenceRattach, setFormationLicenceRattach] = useState('PPL');
+  const [formationLicence, setFormationLicence] = useState('ATC-INIT');
+  const [formationLicenceRattach, setFormationLicenceRattach] = useState('ATC-INIT');
   const [selectedEleveId, setSelectedEleveId] = useState('');
   const [typeAvionId, setTypeAvionId] = useState('');
   const [nomPerso, setNomPerso] = useState('');
   const [immat, setImmat] = useState('');
-  const [examLicence, setExamLicence] = useState(myFormationLicence || examLicenceOptions[0] || 'PPL');
+  const [examLicence, setExamLicence] = useState(myFormationLicence || examLicenceOptions[0] || 'CAL-ATC');
   const [examMessage, setExamMessage] = useState('');
   const [examFinishDialog, setExamFinishDialog] = useState<{
     requestId: string;
@@ -349,6 +355,32 @@ export default function InstructionClient({
       toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function toggleDisponibilite() {
+    setTogglingDispo(true);
+    try {
+      const res = await fetch('/api/instruction/disponibilite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ indisponible: !indisponible }),
+      });
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string; transferts?: number; elevesNonTransferes?: string[] };
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      setIndisponible(!indisponible);
+      if (!indisponible && (data.transferts ?? 0) > 0) {
+        toast.success(`Mode indisponible activé. ${data.transferts} élève(s) transféré(s).`);
+      } else if (!indisponible && (data.elevesNonTransferes ?? []).length > 0) {
+        toast.warning(`Mode indisponible activé. Aucun instructeur disponible pour : ${data.elevesNonTransferes!.join(', ')}.`);
+      } else {
+        toast.success(!indisponible ? 'Vous êtes maintenant indisponible.' : 'Vous êtes de nouveau disponible.');
+      }
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setTogglingDispo(false);
     }
   }
 
@@ -928,7 +960,36 @@ export default function InstructionClient({
                 <span className="text-violet-300 font-medium">{assignedExamsCount} examen{assignedExamsCount > 1 ? 's' : ''} à traiter</span>
               </div>
             )}
+            {isInstructeurOuExaminateur && indisponible && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                <span className="h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
+                <span className="text-orange-300 font-medium text-xs">Indisponible</span>
+              </div>
+            )}
           </div>
+
+          {isInstructeurOuExaminateur && (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={toggleDisponibilite}
+                disabled={togglingDispo}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
+                  indisponible
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                    : 'bg-orange-500/10 border-orange-500/30 text-orange-300 hover:bg-orange-500/20'
+                } disabled:opacity-50`}
+              >
+                <span className={`h-2 w-2 rounded-full ${indisponible ? 'bg-orange-400 animate-pulse' : 'bg-emerald-400'}`} />
+                {togglingDispo ? 'Mise à jour...' : indisponible ? 'Me rendre disponible' : 'Me mettre indisponible'}
+              </button>
+              {!indisponible && (
+                <p className="text-xs text-slate-500 max-w-xs">
+                  En mode indisponible, vous ne recevrez plus de nouvelles demandes. Vos élèves actifs seront transférés automatiquement.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1126,42 +1187,49 @@ export default function InstructionClient({
           )}
         </div>
         {examRequestsMine.length === 0 ? (
-          <p className="text-slate-500">Aucune demande.</p>
+          <div className="text-center py-8">
+            <ClipboardList className="h-8 w-8 text-slate-700 mx-auto mb-2" />
+            <p className="text-slate-500 text-sm">Aucune demande d&apos;examen.</p>
+          </div>
         ) : (
           <div className="space-y-2">
             {examRequestsMine.map((r) => {
               const instructeur = Array.isArray(r.instructeur) ? r.instructeur[0] : r.instructeur;
               const statutLabel: Record<string, string> = {
                 assigne: 'En attente de confirmation',
-                accepte: 'Accepté — En attente de session',
+                accepte: 'Accepté — En attente',
                 en_cours: 'Session en cours',
-                termine: r.resultat === 'reussi' ? 'Réussi' : r.resultat === 'echoue' ? 'Échoué' : 'Terminé',
+                termine: r.resultat === 'reussi' ? 'Réussi ✓' : r.resultat === 'echoue' ? 'Échoué' : 'Terminé',
                 refuse: 'Refusé',
               };
-              const statutColor: Record<string, string> = {
-                assigne: 'text-amber-400',
-                accepte: 'text-sky-400',
-                en_cours: 'text-violet-400',
-                termine: r.resultat === 'reussi' ? 'text-emerald-400' : 'text-red-400',
-                refuse: 'text-red-400',
+              const statutBadge: Record<string, string> = {
+                assigne: 'bg-amber-500/15 text-amber-300 border border-amber-500/25',
+                accepte: 'bg-sky-500/15 text-sky-300 border border-sky-500/25',
+                en_cours: 'bg-violet-500/15 text-violet-300 border border-violet-500/25',
+                termine: r.resultat === 'reussi'
+                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/25'
+                  : 'bg-red-500/15 text-red-300 border border-red-500/25',
+                refuse: 'bg-red-500/15 text-red-300 border border-red-500/25',
               };
               return (
-                <div key={r.id} className="rounded border border-slate-700/60 p-3 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-slate-200 font-medium">{r.licence_code}</p>
-                    <span className={`text-xs font-semibold px-2 py-1 rounded ${statutColor[r.statut] || 'text-slate-400'}`}>
+                <div key={r.id} className="rounded-xl border border-slate-700/50 bg-slate-800/20 hover:border-slate-700/70 transition-colors p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-slate-100 font-semibold">{r.licence_code}</p>
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statutBadge[r.statut] || 'bg-slate-700/60 text-slate-400'}`}>
                       {statutLabel[r.statut] || r.statut}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500">Examinateur: {instructeur?.identifiant || 'Assignation en cours'}</p>
+                  <p className="text-xs text-slate-500">Examinateur : <span className="text-slate-400">{instructeur?.identifiant || 'Assignation en cours…'}</span></p>
                   {r.statut === 'en_cours' && (
-                    <p className="text-sm text-violet-300 mt-1">Votre session d&apos;examen est en cours. Effectuez votre vol normalement.</p>
+                    <p className="text-sm text-violet-300 bg-violet-500/5 border border-violet-500/15 rounded-lg px-3 py-2">
+                      Votre session d&apos;examen est en cours. Effectuez votre vol normalement.
+                    </p>
                   )}
-                  {r.message && <p className="text-sm text-slate-400 mt-1">Demande: {r.message}</p>}
-                  {r.response_note && <p className="text-sm text-sky-300 mt-1">Réponse: {r.response_note}</p>}
+                  {r.message && <p className="text-xs text-slate-400 border-l-2 border-slate-700 pl-2">Demande : {r.message}</p>}
+                  {r.response_note && <p className="text-xs text-sky-300 border-l-2 border-sky-500/40 pl-2">Réponse : {r.response_note}</p>}
                   {(r.statut === 'assigne' || r.statut === 'accepte') && (
                     <button type="button" onClick={() => cancelMyExamRequest(r.id)} disabled={loading}
-                      className="mt-2 px-3 py-1.5 rounded text-xs font-medium text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                      className="mt-1 px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-colors disabled:opacity-50">
                       Annuler la demande
                     </button>
                   )}
@@ -1197,17 +1265,17 @@ export default function InstructionClient({
         </form>
           {pilotTrainingsMine.length > 0 && (
             <div>
-              <p className="text-sm text-slate-300 mb-2">Mes demandes en cours (vol)</p>
-              <ul className="space-y-2 text-sm text-slate-400">
+              <p className="text-sm font-medium text-slate-400 mb-2">Mes demandes en cours (vol)</p>
+              <ul className="space-y-2">
                 {pilotTrainingsMine.map((t) => (
-                  <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 border border-slate-700/50 rounded p-2">
-                    <span>
-                      Assigné à <span className="text-slate-200">{t.assignee_identifiant || '—'}</span>
-                      {t.message ? <span className="block text-xs mt-1">{t.message}</span> : null}
+                  <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-700/50 bg-slate-800/20 px-4 py-3 text-sm">
+                    <span className="text-slate-300">
+                      Assigné à <span className="text-slate-100 font-medium">{t.assignee_identifiant || '—'}</span>
+                      {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
                     </span>
                     <button
                       type="button"
-                      className="text-xs text-red-400 border border-red-500/30 rounded px-2 py-1"
+                      className="text-xs text-red-400 border border-red-500/30 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors"
                       onClick={() => annulePilotTraining(String(t.id))}
                       disabled={loading}
                     >
@@ -1220,12 +1288,12 @@ export default function InstructionClient({
           )}
           {isPilotTrainingInstructor && pilotTrainingsAssigned.length > 0 && (
             <div>
-              <p className="text-sm text-emerald-200/90 mb-2">Training vol à assurer (côté instructeur)</p>
-              <ul className="space-y-2 text-sm text-slate-300">
+              <p className="text-sm font-medium text-emerald-300/80 mb-2">Training vol à assurer (côté instructeur)</p>
+              <ul className="space-y-2">
                 {pilotTrainingsAssigned.map((t) => (
-                  <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 border border-emerald-500/30 rounded p-2">
-                    <span>
-                      Avec <span className="text-slate-100">{t.requester_identifiant || '—'}</span>
+                  <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-4 py-3 text-sm">
+                    <span className="text-slate-300">
+                      Avec <span className="text-slate-100 font-medium">{t.requester_identifiant || '—'}</span>
                       {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
                     </span>
                     <button
@@ -1267,17 +1335,17 @@ export default function InstructionClient({
         </form>
         {atcTrainingsMine.length > 0 && (
           <div>
-            <p className="text-sm text-slate-300 mb-2">Mes demandes en cours</p>
-            <ul className="space-y-2 text-sm text-slate-400">
+            <p className="text-sm font-medium text-slate-400 mb-2">Mes demandes en cours</p>
+            <ul className="space-y-2">
               {atcTrainingsMine.map((t) => (
-                <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 border border-slate-700/50 rounded p-2">
-                  <span>
-                    Assigné à <span className="text-slate-200">{t.assignee_identifiant || '—'}</span>
-                    {t.message ? <span className="block text-xs mt-1">{t.message}</span> : null}
+                <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-700/50 bg-slate-800/20 px-4 py-3 text-sm">
+                  <span className="text-slate-300">
+                    Assigné à <span className="text-slate-100 font-medium">{t.assignee_identifiant || '—'}</span>
+                    {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
                   </span>
                   <button
                     type="button"
-                    className="text-xs text-red-400 border border-red-500/30 rounded px-2 py-1"
+                    className="text-xs text-red-400 border border-red-500/30 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors"
                     onClick={() => annuleAtcTraining(String(t.id))}
                     disabled={loading}
                   >
@@ -1290,12 +1358,12 @@ export default function InstructionClient({
         )}
         {isAtcTrainingInstructor && atcTrainingsAssigned.length > 0 && (
           <div>
-            <p className="text-sm text-amber-200/90 mb-2">Training à assurer (côté instructeur)</p>
-            <ul className="space-y-2 text-sm text-slate-300">
+            <p className="text-sm font-medium text-amber-300/80 mb-2">Training à assurer (côté instructeur)</p>
+            <ul className="space-y-2">
               {atcTrainingsAssigned.map((t) => (
-                <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 border border-amber-500/30 rounded p-2">
-                  <span>
-                    Avec <span className="text-slate-100">{t.requester_identifiant || '—'}</span>
+                <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
+                  <span className="text-slate-300">
+                    Avec <span className="text-slate-100 font-medium">{t.requester_identifiant || '—'}</span>
                     {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
                   </span>
                   <button

@@ -8,6 +8,7 @@ import { ARME_MISSIONS } from '@/lib/armee-missions';
 import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
 import { Building2, Plane, Users, Weight, Shield, Radio, Phone, MapPin, Send, Navigation, Sparkles, Gauge, FileText, Route, Briefcase, CheckCircle2, Circle, ClipboardCheck, Target } from 'lucide-react';
+import PorteDepartSelect from '@/components/PorteDepartSelect';
 import BriaDialog, { getBriaCooldownRemaining } from '@/components/BriaDialog';
 import NotamsAirportWarning from '@/components/NotamsAirportWarning';
 import { unlockAudioForIOS } from '@/lib/phone-sounds';
@@ -1464,8 +1465,26 @@ export default function DepotPlanVolForm({
             )}
           </div>
           <div>
-            <label className="label">Porte</label>
-            <input type="text" className="input font-mono" value={porte} onChange={(e) => setPorte(e.target.value)} placeholder="Optionnel" />
+            <label className="label">
+              Porte de départ
+              {aeroport_depart && <span className="ml-1 text-emerald-400/70 text-xs">(sélectionner depuis le catalogue)</span>}
+            </label>
+            {aeroport_depart ? (
+              <PorteDepartSelect
+                aeroport={aeroport_depart}
+                value={porte}
+                onChange={setPorte}
+              />
+            ) : (
+              <input
+                type="text"
+                className="input font-mono"
+                value={porte}
+                onChange={(e) => setPorte(e.target.value)}
+                placeholder="Choisir un aéroport de départ d'abord"
+                disabled
+              />
+            )}
           </div>
         </div>
 

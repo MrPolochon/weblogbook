@@ -68,6 +68,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Une demande est déjà en cours pour cette licence.' }, { status: 400 });
     }
 
+    // Vérifier qu'au moins 1 session de training a été effectuée avant de demander un examen.
+    // Formation ATC → vérifier instruction_atc_training_requests ; sinon → pilot_training_requests.
+    const isAtcLicence = ['CAL-ATC', 'PCAL-ATC', 'CAL-AFIS', 'PCAL-AFIS', 'LPAFIS', 'LATC'].includes(licenceCode);
+    const trainingTable = isAtcLicence
+      ? 'instruction_atc_training_requests'
+      : 'instruction_pilot_training_requests';
+    const { count: trainingCount } = await admin
+      .from(trainingTable)
+      .select('*', { count: 'exact', head: true })
+      .eq('requester_id', user.id);
+    if ((trainingCount ?? 0) === 0) {
+      return NextResponse.json(
+        { error: 'Vous devez avoir effectué au moins une session de training avant de demander un examen.' },
+        { status: 400 },
+      );
+    }
+
     const instructorIds = await getExaminerPoolUserIds(admin, licenceCode);
     if (instructorIds.length === 0) {
       return NextResponse.json(

@@ -1,4 +1,143 @@
-export type Role = 'admin' | 'pilote' | 'atc' | 'ifsa' | 'siavi';
+export type Role = 'admin' | 'pilote' | 'atc' | 'ifsa' | 'siavi' | 'ground_crew';
+
+// ── Ground Crew types ─────────────────────────────────────────────────────────
+export type GateType = 'light' | 'medium' | 'heavy' | 'super_heavy' | 'helicopter' | 'cargo' | 'general_aviation' | 'unrestricted' | 'special';
+export type AircraftSize = 'light' | 'medium' | 'heavy' | 'super_heavy';
+export type ServiceType = 'bagages' | 'catering' | 'fuel' | 'boarding';
+export type ServiceStatut = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'rejected' | 'ground_crew_unavailable';
+export type GateStatus = 'reserved' | 'occupied' | 'released';
+export type AssignmentType = 'depart' | 'arrivee';
+export type BoardingStatut = 'not_started' | 'in_progress' | 'completed';
+
+export interface GroundSession {
+  id: string;
+  user_id: string;
+  aeroport: string;
+  started_at: string;
+  profiles?: { identifiant: string } | null;
+}
+
+export interface AirportGate {
+  id: string;
+  aeroport: string;
+  gate_code: string;
+  gate_type: GateType;
+  max_aircraft_size: AircraftSize | null;
+  terminal: string | null;
+  reserved_for: string | null;
+  requires_separation: boolean;
+  notes: string | null;
+  display_order: number | null;
+  created_at: string;
+}
+
+export interface GateAssignment {
+  id: string;
+  plan_vol_id: string;
+  aeroport: string;
+  gate_id: string;
+  assignment_type: AssignmentType;
+  assigned_at: string;
+  expires_at: string | null;
+  status: GateStatus;
+  gate?: AirportGate | null;
+}
+
+export interface CompanyGatePriority {
+  id: string;
+  compagnie_id: string;
+  aeroport: string;
+  gate_id: string;
+  priority_level: number;
+  prix_paye: number | null;
+  expires_at: string;
+  created_at: string;
+  gate?: AirportGate | null;
+  compagnie?: { nom: string } | null;
+}
+
+export interface CompagnieGatePreference {
+  id: string;
+  compagnie_id: string;
+  aeroport: string;
+  gate_id: string;
+  created_at: string;
+  gate?: AirportGate | null;
+}
+
+export interface GroundServiceRequest {
+  id: string;
+  plan_vol_id: string;
+  pilote_id: string;
+  aeroport: string;
+  service_type: ServiceType;
+  statut: ServiceStatut;
+  accepted_by: string | null;
+  requested_at: string;
+  accepted_at: string | null;
+  completed_at: string | null;
+  pax_count: number | null;
+  score_minijeu: number | null;
+  montant_paye: number | null;
+  notes: string | null;
+  team_id?: string | null;
+  pilote?: { identifiant: string } | null;
+  accepteur?: { identifiant: string } | null;
+  plan_vol?: { numero_vol: string; aeroport_depart: string; aeroport_arrivee: string } | null;
+}
+
+// ── Ground Crew Teams ─────────────────────────────────────────────────────────
+export interface GroundTeam {
+  id: string;
+  aeroport: string;
+  created_by: string;
+  created_at: string;
+  disbanded_at: string | null;
+}
+
+export interface GroundTeamMember {
+  id: string;
+  team_id: string;
+  user_id: string;
+  joined_at: string;
+  left_at: string | null;
+  profile?: { identifiant: string } | null;
+  online?: boolean;
+  score_moyen?: number;
+}
+
+export interface GroundTeamInvitation {
+  id: string;
+  team_id: string;
+  from_user_id: string;
+  to_user_id: string;
+  aeroport: string;
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
+  created_at: string;
+  expires_at: string;
+  from_profile?: { identifiant: string } | null;
+  to_profile?: { identifiant: string } | null;
+}
+
+export interface GroundServiceContribution {
+  id: string;
+  service_request_id: string;
+  user_id: string;
+  score_minijeu: number;
+  montant_percu: number;
+  completed_at: string;
+}
+
+export interface BoardingStatus {
+  id: string;
+  plan_vol_id: string;
+  total_pax: number;
+  pax_embarques: number;
+  statut: BoardingStatut;
+  started_at: string | null;
+  completed_at: string | null;
+  ground_crew_id: string | null;
+}
 export type VolStatut = 'en_attente' | 'validé' | 'refusé';
 export type TypeVol = 'IFR' | 'VFR';
 export type RolePilote = 'Pilote' | 'Co-pilote';

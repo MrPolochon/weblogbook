@@ -2,17 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { rateLimit } from '@/lib/rate-limit';
-
-function getClientIp(request: NextRequest): string | null {
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim();
-    if (first) return first;
-  }
-  const realIp = request.headers.get('x-real-ip');
-  if (realIp) return realIp.trim();
-  return null;
-}
+import { getClientIp } from '@/lib/ip-utils';
 
 /**
  * Vérifie le code à 6 chiffres saisi par l'utilisateur.

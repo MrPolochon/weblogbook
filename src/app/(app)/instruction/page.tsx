@@ -30,7 +30,7 @@ export default async function InstructionPage() {
       .maybeSingle(),
     admin
       .from('profiles')
-      .select('formation_instruction_active, formation_instruction_licence, instructeur_referent_id')
+      .select('formation_instruction_active, formation_instruction_licence, instructeur_referent_id, instruction_indisponible')
       .eq('id', user.id)
       .maybeSingle(),
   ]);
@@ -48,6 +48,7 @@ export default async function InstructionPage() {
     formation_instruction_active: Boolean(meInstruction?.formation_instruction_active),
     formation_instruction_licence: (meInstruction?.formation_instruction_licence as string | null) || null,
     instructeur_referent_id: (meInstruction?.instructeur_referent_id as string | null) || null,
+    instruction_indisponible: Boolean(meInstruction?.instruction_indisponible),
   };
 
   const cap = await getInstructionCapabilities(admin, user.id, viewer.role);
@@ -224,6 +225,7 @@ export default async function InstructionPage() {
       typesAvion={(typesAvion || []) as Array<{ id: string; nom: string; constructeur: string | null; code_oaci: string | null }>}
       avionsTemp={(avionsTemp || []) as Array<{ id: string; proprietaire_id: string; type_avion_id: string; nom_personnalise: string | null; immatriculation: string | null; aeroport_actuel: string | null; statut: string | null; usure_percent: number | null; instruction_actif: boolean }>}
       elevesProgression={(elevesProgression || []) as Array<{ eleve_id: string; licence_code: string; module_code: string; completed: boolean; note?: string | null }>}
+      initialIndisponible={viewer.instruction_indisponible}
     />
   );
 }

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind, Clock, User, Lock } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind, Clock, User, Lock, Wrench } from 'lucide-react';
 
 const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
 
@@ -275,7 +275,7 @@ async function fetchLogoImage(): Promise<string> {
   return LOGIN_LOGO_FALLBACKS[Math.floor(Math.random() * LOGIN_LOGO_FALLBACKS.length)];
 }
 
-type LoginMode = 'pilote' | 'atc' | 'siavi';
+type LoginMode = 'pilote' | 'atc' | 'siavi' | 'ground_crew';
 
 function LoginPageFallback() {
   return (
@@ -439,9 +439,15 @@ function LoginPageContent() {
         if (!canAtc) throw new Error('Ce compte n\'a pas accès à l\'espace ATC.');
         targetPath = '/atc';
         setRedirectTo('/atc');
+      } else if (mode === 'ground_crew') {
+        const canGround = profile?.role === 'admin' || profile?.role === 'ground_crew';
+        if (!canGround) throw new Error('Ce compte n\'a pas accès à l\'espace Ground Crew.');
+        targetPath = '/ground';
+        setRedirectTo('/ground');
       } else {
         if (profile?.role === 'atc') throw new Error('Ce compte est uniquement ATC. Sélectionnez "Contrôleur ATC" pour vous connecter.');
         if (profile?.role === 'siavi') throw new Error('Ce compte est uniquement SIAVI. Sélectionnez "SIAVI" pour vous connecter.');
+        if (profile?.role === 'ground_crew') throw new Error('Ce compte est uniquement Ground Crew. Sélectionnez "Ground Crew" pour vous connecter.');
         setRedirectTo('/logbook');
       }
       // Mémorise le mode/destination choisi pour qu'un /login?step=verify (déclenché par le middleware)
@@ -617,42 +623,63 @@ function LoginPageContent() {
 
         {/* Sélecteur de mode (masqué lors de l'étape email/code) */}
         {step === 'form' && (
-        <div className="flex gap-2 mb-4 sm:mb-6 p-1 bg-slate-900/45 rounded-2xl backdrop-blur-md border border-white/10 shadow-xl shadow-cyan-950/30 animate-init animate-reveal-blur delay-400">
+        <div className="space-y-2 mb-4 sm:mb-6 animate-init animate-reveal-blur delay-400">
+          {/* Ligne principale : Pilote | ATC | SIAVI */}
+          <div className="flex gap-2 p-1 bg-slate-900/45 rounded-2xl backdrop-blur-md border border-white/10 shadow-xl shadow-cyan-950/30">
+            <button
+              type="button"
+              onClick={() => setMode('pilote')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
+                mode === 'pilote'
+                  ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
+                  : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
+              }`}
+            >
+              <Plane className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+              <span className="text-xs sm:text-sm">Pilote</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('atc')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
+                mode === 'atc'
+                  ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
+                  : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
+              }`}
+            >
+              <Radio className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+              <span className="text-xs sm:text-sm">ATC</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('siavi')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
+                mode === 'siavi'
+                  ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
+                  : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
+              }`}
+            >
+              <Flame className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
+              <span className="text-xs sm:text-sm">SIAVI</span>
+            </button>
+          </div>
+          {/* Ligne secondaire : Ground Crew */}
           <button
             type="button"
-            onClick={() => setMode('pilote')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
-              mode === 'pilote'
-                ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
-                : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
+            onClick={() => setMode('ground_crew')}
+            className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold text-sm transition-all duration-300 border ${
+              mode === 'ground_crew'
+                ? 'bg-orange-500/25 border-orange-500/60 text-orange-200 shadow-lg shadow-orange-500/20'
+                : 'bg-orange-500/5 border-orange-500/20 text-orange-300/70 hover:bg-orange-500/15 hover:border-orange-500/40 hover:text-orange-200'
             }`}
           >
-            <Plane className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
-            <span className="text-xs sm:text-sm">Pilote</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('atc')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
-              mode === 'atc'
-                ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
-                : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
-            }`}
-          >
-            <Radio className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
-            <span className="text-xs sm:text-sm">ATC</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('siavi')}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
-              mode === 'siavi'
-                ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
-                : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
-            }`}
-          >
-            <Flame className="h-4 w-4 sm:h-5 sm:w-5 shrink-0" />
-            <span className="text-xs sm:text-sm">SIAVI</span>
+            <Wrench className="h-4 w-4 shrink-0" />
+            <span>Espace Ground Crew</span>
+            {mode === 'ground_crew' && (
+              <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-500/30 text-orange-200">
+                SÉLECTIONNÉ
+              </span>
+            )}
           </button>
         </div>
         )}
@@ -758,7 +785,11 @@ function LoginPageContent() {
               )}
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-xl font-medium text-white active:scale-[0.98] transform disabled:opacity-50 bg-[#3882ff] hover:bg-[#2a6ee0] transition-colors duration-150"
+                className={`w-full py-3.5 rounded-xl font-medium text-white active:scale-[0.98] transform disabled:opacity-50 transition-colors duration-150 ${
+                  mode === 'ground_crew'
+                    ? 'bg-orange-500 hover:bg-orange-400 shadow-lg shadow-orange-500/25'
+                    : 'bg-[#3882ff] hover:bg-[#2a6ee0]'
+                }`}
                 disabled={submitting}
               >
                 {submitting ? (
@@ -771,7 +802,10 @@ function LoginPageContent() {
                   </span>
                 ) : (
                   <>
-                    {mode === 'pilote' ? 'Accéder à l\'espace pilote' : mode === 'atc' ? 'Accéder à l\'espace ATC' : 'Accéder à l\'espace SIAVI'}
+                    {mode === 'pilote' ? 'Accéder à l\'espace pilote'
+                      : mode === 'atc' ? 'Accéder à l\'espace ATC'
+                      : mode === 'siavi' ? 'Accéder à l\'espace SIAVI'
+                      : 'Accéder à l\'espace Ground Crew'}
                     <span className="ml-2">→</span>
                   </>
                 )}

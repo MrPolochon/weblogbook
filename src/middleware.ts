@@ -3,6 +3,47 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isDiscordLinkRequired, isTemporaryDiscordSanctionActive, type DiscordLinkStatus } from '@/lib/discord-link';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Cache module-level du statut de maintenance (TTL : 30 s)
+// En Edge Runtime les variables module-level persistent dans le même V8 isolate.
+// ─────────────────────────────────────────────────────────────────────────────
+type MaintenanceStatus = {
+  active: boolean;
+  message: string;
+  maintenance_until: string | null;
+};
+
+let _maintenanceCache: { data: MaintenanceStatus; fetchedAt: number } | null = null;
+const MAINTENANCE_CACHE_TTL_MS = 30_000;
+
+async function getMaintenanceStatus(
+  admin: ReturnType<typeof createAdminClient>,
+): Promise<MaintenanceStatus | null> {
+  const now = Date.now();
+  if (_maintenanceCache && now - _maintenanceCache.fetchedAt < MAINTENANCE_CACHE_TTL_MS) {
+    return _maintenanceCache.data;
+  }
+  try {
+    const { data, error } = await admin
+      .from('app_maintenance')
+      .select('active, message, maintenance_until')
+      .eq('id', 1)
+      .single();
+    if (error || !data) return null;
+    const status: MaintenanceStatus = {
+      active: Boolean(data.active),
+      message: (data.message as string | null) ?? 'Maintenance en cours.',
+      maintenance_until: (data.maintenance_until as string | null) ?? null,
+    };
+    _maintenanceCache = { data: status, fetchedAt: now };
+    return status;
+  } catch {
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isSetup = pathname === '/setup';
@@ -10,11 +51,17 @@ export async function middleware(request: NextRequest) {
   const isDownload = pathname === '/download';
   const isAeroSchool = pathname.startsWith('/aeroschool');
   const isAuthCallback = pathname.startsWith('/auth/');
-  const isApiPublic = pathname === '/api/setup' || pathname === '/api/has-admin' || pathname === '/api/site-config' || pathname === '/api/login-logo';
+  const isApiPublic =
+    pathname === '/api/setup' ||
+    pathname === '/api/has-admin' ||
+    pathname === '/api/site-config' ||
+    pathname === '/api/login-logo' ||
+    pathname === '/api/maintenance-status';
   const isApiDiscord = pathname.startsWith('/api/discord/');
   const isApiAeroSchoolPublic = pathname.startsWith('/api/aeroschool/') && request.method !== 'PUT' && request.method !== 'DELETE';
   const isDiscordRequiredPage = pathname === '/discord-obligatoire';
   const isApiAuth = pathname.startsWith('/api/auth/');
+  const isMaintenance = pathname === '/maintenance';
 
   if (request.method === 'OPTIONS') {
     return NextResponse.next({ request });
@@ -43,7 +90,11 @@ export async function middleware(request: NextRequest) {
   const isCarteAtc = pathname === '/carte-atc';
   const isApiAtcOnline = pathname === '/api/atc/online';
 
-  if (isAuthCallback || isApiPublic || isApiDiscord || isApiAeroSchoolPublic || isApiAuth || isSetup || isLogin || isDownload || isAeroSchool || isCarteAtc || isApiAtcOnline) {
+  if (
+    isAuthCallback || isApiPublic || isApiDiscord || isApiAeroSchoolPublic || isApiAuth ||
+    isSetup || isLogin || isDownload || isAeroSchool || isCarteAtc || isApiAtcOnline ||
+    isMaintenance
+  ) {
     return NextResponse.next({ request });
   }
 
@@ -83,7 +134,7 @@ export async function middleware(request: NextRequest) {
   const admin = createAdminClient();
   const discordRequired = isDiscordLinkRequired();
 
-  const [securityResult, siteConfigResult, discordResult] = await Promise.all([
+  const [securityResult, siteConfigResult, discordResult, maintenanceStatus] = await Promise.all([
     // 1) Security logout check (fail-closed : en cas d'erreur DB on déconnecte par sécurité)
     Promise.resolve(admin.from('security_logout').select('user_id').eq('user_id', user.id).maybeSingle())
       .catch(() => ({ error: true, data: null })),
@@ -101,6 +152,9 @@ export async function middleware(request: NextRequest) {
             .maybeSingle(),
         ]).catch(() => [{ data: null }, { data: null }] as const)
       : Promise.resolve(null),
+
+    // 4) Statut de maintenance (utilise le cache 30 s — quasi-gratuit si en cache)
+    getMaintenanceStatus(admin),
   ]);
 
   // Handle security logout (fail-closed : si erreur de lecture, on déconnecte par sécurité)
@@ -132,6 +186,78 @@ export async function middleware(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = '/login';
       url.searchParams.set('message', 'admin_only');
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // ── Défense en profondeur : vérification de rôle pour les pages protégées ──
+  // Les routes /ground, /atc, /siavi, /admin ne sont PAS dans la liste des routes publiques
+  // et sont donc couvertes par le check d'auth ci-dessus (redirect /login si non connecté).
+  // La vérification du rôle spécifique est assurée par les layouts Server Component de chaque
+  // groupe de routes (plus flexibles car ils accèdent aux flags booléens atc/siavi/etc.).
+  // Ici, on ajoute uniquement un guard admin simple pour /admin/* si le profil est déjà dispo.
+  if (discordResult && !pathname.startsWith('/api/')) {
+    const roleFromDiscord = ((discordResult as [{ data: { role?: string } | null }, unknown])[0]?.data as { role?: string } | null)?.role ?? null;
+    const isAdminPageRoute = pathname.startsWith('/admin');
+    if (isAdminPageRoute && roleFromDiscord !== null && roleFromDiscord !== 'admin') {
+      const url = request.nextUrl.clone();
+      url.pathname = '/';
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // ── Mode maintenance ─────────────────────────────────────────────────────
+  // Bloque tous les utilisateurs non-admin si la maintenance est active.
+  // Les admins passent toujours, même en maintenance.
+  if (maintenanceStatus?.active && !pathname.startsWith('/api/')) {
+    const until = maintenanceStatus.maintenance_until;
+
+    if (until && new Date(until).getTime() < Date.now()) {
+      // La maintenance_until est dépassé → désactivation automatique en arrière-plan
+      admin
+        .from('app_maintenance')
+        .update({ active: false })
+        .eq('id', 1)
+        .then(() => { _maintenanceCache = null; })
+        .catch(() => {});
+      // On laisse passer la requête
+    } else {
+      // Maintenance toujours active → vérifier si l'utilisateur est admin
+      let userRole: string | null = null;
+      if (discordResult) {
+        userRole =
+          ((discordResult as [{ data: { role?: string } | null }, unknown])[0]?.data as { role?: string } | null)?.role ?? null;
+      } else {
+        try {
+          const { data: p } = await admin.from('profiles').select('role').eq('id', user.id).single();
+          userRole = p?.role ?? null;
+        } catch { /* ignore */ }
+      }
+
+      if (userRole !== 'admin') {
+        const url = request.nextUrl.clone();
+        url.pathname = '/maintenance';
+        return NextResponse.redirect(url);
+      }
+    }
+  }
+
+  // ── Redirection ground_crew vers /ground ────────────────────────────────────
+  // Si l'utilisateur est ground_crew et accède à / ou /logbook, on le redirige.
+  if (!pathname.startsWith('/api/') && !pathname.startsWith('/ground') && (pathname === '/' || pathname.startsWith('/logbook'))) {
+    let groundRole: string | null = null;
+    if (discordResult) {
+      groundRole = ((discordResult as [{ data: { role?: string } | null }, unknown])[0]?.data as { role?: string } | null)?.role ?? null;
+    }
+    if (!groundRole) {
+      try {
+        const { data: gcProfile } = await admin.from('profiles').select('role').eq('id', user.id).single();
+        groundRole = gcProfile?.role ?? null;
+      } catch { /* ignore */ }
+    }
+    if (groundRole === 'ground_crew') {
+      const url = request.nextUrl.clone();
+      url.pathname = '/ground';
       return NextResponse.redirect(url);
     }
   }

@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Users, Building2, Crown, Settings, Landmark, Loader2,
   Megaphone, Plane, Wallet, ShieldCheck, UserMinus, ArrowRightLeft,
-  Send, HandCoins, Star, Check, X, ChevronDown, ChevronUp, MessageSquare
+  Send, HandCoins, Star, Check, X, ChevronDown, ChevronUp, MessageSquare,
+  ChevronRight, TrendingUp, Globe,
 } from 'lucide-react';
 
 interface Parametres {
@@ -222,7 +223,15 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
         <Header />
         {error && <Alert type="error">{error}</Alert>}
         {success && <Alert type="success">{success}</Alert>}
-        <p className="text-slate-500">Vous n&apos;êtes dans aucune alliance. Un administrateur peut en créer une, ou un président peut vous inviter.</p>
+        <div className="rounded-2xl border border-slate-700/40 bg-slate-800/20 p-10 text-center flex flex-col items-center gap-4">
+          <div className="h-16 w-16 rounded-2xl bg-violet-500/10 ring-2 ring-violet-500/20 flex items-center justify-center">
+            <Globe className="h-8 w-8 text-violet-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-200 mb-1">Aucune alliance active</h2>
+            <p className="text-slate-500 text-sm max-w-sm mx-auto">Vous n&apos;êtes rattaché à aucune alliance. Un administrateur peut en créer une, ou un président d&apos;alliance peut vous inviter via votre compagnie.</p>
+          </div>
+        </div>
         <PendingInvitations pdgCompagnieIds={pdgCompagnieIds} onAccepted={async (allianceId) => {
           const res = await fetch('/api/alliances');
           const data = await res.json();
@@ -250,15 +259,52 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
           if (allianceId) await loadDetail(allianceId);
         }} />
         {alliances.map(a => (
-          <button key={a.id} onClick={() => loadDetail(a.id)} className="group w-full text-left rounded-xl border border-slate-700/50 bg-slate-800/30 p-4 transition-all duration-200 hover:bg-slate-800/50 hover:border-violet-500/40 hover:shadow-lg hover:shadow-violet-500/5 hover:-translate-y-0.5 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <span className="font-semibold text-slate-100">{a.nom}</span>
-              <span className="ml-2 text-xs text-slate-500">{a.nb_membres} membre{(a.nb_membres || 0) > 1 ? 's' : ''}</span>
-              {(a.my_compagnie_noms?.length ?? 0) > 0 && (
-                <span className="block text-xs text-slate-500 mt-0.5">via {a.my_compagnie_noms?.join(', ') ?? a.my_compagnie_nom}</span>
+          <button
+            key={a.id}
+            onClick={() => loadDetail(a.id)}
+            className="group w-full text-left rounded-xl border border-slate-700/40 bg-slate-800/20 p-4 transition-all duration-200 hover:bg-slate-800/50 hover:border-violet-500/40 hover:shadow-lg hover:shadow-violet-500/5 hover:-translate-y-0.5"
+          >
+            <div className="flex items-center gap-4">
+              {/* Logo ou avatar initiales */}
+              {a.logo_url ? (
+                <img
+                  src={a.logo_url}
+                  alt={`Logo ${a.nom}`}
+                  width={48}
+                  height={48}
+                  loading="lazy"
+                  className="h-12 w-12 rounded-xl object-contain bg-white/5 border border-slate-700/50 p-0.5 shrink-0"
+                />
+              ) : (
+                <div className="h-12 w-12 rounded-xl bg-violet-500/15 ring-1 ring-violet-500/25 flex items-center justify-center shrink-0">
+                  <span className="text-violet-300 font-bold text-xl leading-none">
+                    {a.nom.charAt(0).toUpperCase()}
+                  </span>
+                </div>
               )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                  <span className="font-semibold text-slate-100 text-base truncate">{a.nom}</span>
+                  {a.my_role && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[a.my_role] || 'text-slate-400'} bg-slate-700/60 ring-1 ring-slate-600/50`}>
+                      {ROLE_LABELS[a.my_role] || a.my_role}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="flex items-center gap-1 text-xs text-slate-500">
+                    <Building2 className="h-3 w-3" />
+                    {a.nb_membres ?? 0} compagnie{(a.nb_membres || 0) > 1 ? 's' : ''}
+                  </span>
+                  {(a.my_compagnie_noms?.length ?? 0) > 0 && (
+                    <span className="text-xs text-slate-600">
+                      via {a.my_compagnie_noms?.join(', ') ?? a.my_compagnie_nom}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 text-slate-600 group-hover:text-violet-400 group-hover:translate-x-0.5 transition-all shrink-0" />
             </div>
-            <span className={`text-sm self-start sm:self-auto ${ROLE_COLORS[a.my_role || ''] || 'text-slate-400'}`}>{ROLE_LABELS[a.my_role || ''] || a.my_role}</span>
           </button>
         ))}
       </div>
@@ -474,7 +520,11 @@ function Header() {
 }
 
 function Alert({ type, children }: { type: 'error' | 'success'; children: React.ReactNode }) {
-  return <p className={`text-sm ${type === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>{children}</p>;
+  return (
+    <div className={`flex items-start gap-2 rounded-xl px-4 py-3 text-sm border ${type === 'error' ? 'bg-red-900/20 border-red-700/30 text-red-300' : 'bg-emerald-900/20 border-emerald-700/30 text-emerald-300'}`}>
+      {children}
+    </div>
+  );
 }
 
 function PendingInvitations({ pdgCompagnieIds, onAccepted }: { pdgCompagnieIds: string[]; onAccepted: (allianceId: string) => void }) {
@@ -547,47 +597,132 @@ function PendingInvitations({ pdgCompagnieIds, onAccepted }: { pdgCompagnieIds: 
   );
 }
 
+function MemberAvatar({ nom, role }: { nom: string; role: string }) {
+  const initials = nom
+    .split(/[\s-]+/)
+    .slice(0, 2)
+    .map((w) => w[0] ?? '')
+    .join('')
+    .toUpperCase() || '?';
+  const bg =
+    role === 'president'
+      ? 'bg-amber-500/20 text-amber-300 ring-amber-500/30'
+      : role === 'vice_president'
+      ? 'bg-sky-500/20 text-sky-300 ring-sky-500/30'
+      : role === 'secretaire'
+      ? 'bg-emerald-500/20 text-emerald-300 ring-emerald-500/30'
+      : 'bg-slate-700/50 text-slate-400 ring-slate-600/30';
+  return (
+    <div
+      className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ring-1 ${bg}`}
+      title={nom}
+    >
+      {initials}
+    </div>
+  );
+}
+
 function DashboardTab({ detail }: { detail: AllianceDetail }) {
   const president = detail.membres.find(m => m.role === 'president');
+  const importantAnnonces = detail.annonces.filter(a => a.important).slice(0, 3);
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard label="Membres" value={detail.membres.length} />
-        <StatCard label="Annonces" value={detail.annonces.length} />
-        <StatCard label="Transferts" value={detail.transferts.length} />
-        {detail.compte_alliance && <StatCard label="Solde" value={`${detail.compte_alliance.solde.toLocaleString('fr-FR')} F$`} />}
+      {/* KPI Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="rounded-xl bg-violet-500/10 border border-violet-500/20 p-4 text-center">
+          <p className="text-2xl font-bold text-violet-300 tabular-nums">{detail.membres.length}</p>
+          <p className="text-xs text-slate-400 mt-1 flex items-center justify-center gap-1">
+            <Building2 className="h-3 w-3" /> Compagnies
+          </p>
+        </div>
+        <div className="rounded-xl bg-sky-500/10 border border-sky-500/20 p-4 text-center">
+          <p className="text-2xl font-bold text-sky-300 tabular-nums">{detail.annonces.length}</p>
+          <p className="text-xs text-slate-400 mt-1 flex items-center justify-center gap-1">
+            <Megaphone className="h-3 w-3" /> Annonces
+          </p>
+        </div>
+        <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-4 text-center">
+          <p className="text-2xl font-bold text-amber-300 tabular-nums">{detail.transferts.length}</p>
+          <p className="text-xs text-slate-400 mt-1 flex items-center justify-center gap-1">
+            <ArrowRightLeft className="h-3 w-3" /> Transferts
+          </p>
+        </div>
+        {detail.compte_alliance ? (
+          <div className={`rounded-xl border p-4 text-center ${detail.compte_alliance.solde >= 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+            <p className={`text-xl font-bold tabular-nums ${detail.compte_alliance.solde >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+              {detail.compte_alliance.solde.toLocaleString('fr-FR')}
+              <span className="text-sm font-medium ml-1">F$</span>
+            </p>
+            <p className="text-xs text-slate-400 mt-1 flex items-center justify-center gap-1">
+              <Wallet className="h-3 w-3" /> Solde
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-xl bg-slate-700/20 border border-slate-700/30 p-4 text-center">
+            <p className="text-2xl font-bold text-slate-500">—</p>
+            <p className="text-xs text-slate-500 mt-1 flex items-center justify-center gap-1">
+              <Wallet className="h-3 w-3" /> Compte
+            </p>
+          </div>
+        )}
       </div>
 
+      {/* Président highlight */}
       {president && (
-        <div className="flex items-center gap-2 text-slate-300">
-          <Crown className="h-5 w-5 text-amber-400" />
-          <span>Président : <strong>{president.compagnie?.nom || 'Inconnu'}</strong></span>
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-900/15 border border-amber-700/25">
+          <Crown className="h-5 w-5 text-amber-400 shrink-0" />
+          <div>
+            <p className="text-xs text-amber-400/80 uppercase tracking-wide font-medium">Président de l&apos;alliance</p>
+            <p className="text-slate-200 font-semibold">{president.compagnie?.nom || 'Inconnu'}</p>
+          </div>
         </div>
       )}
 
-      {detail.annonces.filter(a => a.important).length > 0 && (
+      {/* Annonces importantes */}
+      {importantAnnonces.length > 0 && (
         <div>
-          <h3 className="font-medium text-slate-200 mb-2 flex items-center gap-2"><Megaphone className="h-4 w-4 text-amber-400" />Annonces importantes</h3>
-          {detail.annonces.filter(a => a.important).slice(0, 3).map(a => (
-            <div key={a.id} className="p-3 rounded-lg bg-amber-900/20 border border-amber-700/30 mb-2">
-              <p className="font-medium text-amber-200">{a.titre}</p>
-              <p className="text-slate-300 text-sm whitespace-pre-wrap">{a.contenu}</p>
-              <p className="text-slate-500 text-xs mt-1">{new Date(a.created_at).toLocaleDateString('fr-FR')}</p>
-            </div>
-          ))}
+          <h3 className="font-medium text-slate-200 mb-3 flex items-center gap-2">
+            <Megaphone className="h-4 w-4 text-amber-400" />
+            Annonces importantes
+          </h3>
+          <div className="space-y-2">
+            {importantAnnonces.map(a => (
+              <div key={a.id} className="p-4 rounded-xl bg-amber-900/15 border border-amber-700/25">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                  <p className="font-semibold text-amber-200 text-sm">{a.titre}</p>
+                  <p className="text-slate-500 text-xs ml-auto">{new Date(a.created_at).toLocaleDateString('fr-FR')}</p>
+                </div>
+                <p className="text-slate-300 text-sm whitespace-pre-wrap">{a.contenu}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
+      {/* Membres avec avatars */}
       <div>
-        <h3 className="font-medium text-slate-200 mb-2">Membres</h3>
+        <h3 className="font-medium text-slate-200 mb-3 flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-violet-400" />
+          Compagnies membres ({detail.membres.length})
+        </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {detail.membres.map(m => (
-            <div key={`${m.id}-${m.compagnie_id}`} className="flex items-center gap-2 py-1">
-              <Building2 className="h-4 w-4 text-slate-500" />
-              <span className="text-slate-200">{m.compagnie?.nom || m.compagnie_id}</span>
-              <span className={`text-xs ${ROLE_COLORS[m.role] || 'text-slate-500'}`}>{ROLE_LABELS[m.role] || m.role}</span>
-            </div>
-          ))}
+          {detail.membres.map(m => {
+            const nom = m.compagnie?.nom || m.compagnie_id;
+            return (
+              <div
+                key={`${m.id}-${m.compagnie_id}`}
+                className="flex items-center gap-3 py-2 px-3 rounded-xl bg-slate-800/30 border border-slate-700/30 hover:bg-slate-800/50 transition-colors"
+              >
+                <MemberAvatar nom={nom} role={m.role} />
+                <span className="text-slate-200 text-sm font-medium truncate flex-1">{nom}</span>
+                <span className={`text-xs font-medium shrink-0 ${ROLE_COLORS[m.role] || 'text-slate-500'}`}>
+                  {ROLE_LABELS[m.role] || m.role}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -596,9 +731,9 @@ function DashboardTab({ detail }: { detail: AllianceDetail }) {
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg bg-slate-700/30 p-3 text-center">
-      <p className="text-2xl font-bold text-slate-100">{value}</p>
-      <p className="text-xs text-slate-400">{label}</p>
+    <div className="rounded-xl bg-slate-700/20 border border-slate-700/30 p-3 text-center">
+      <p className="text-2xl font-bold text-slate-100 tabular-nums">{value}</p>
+      <p className="text-xs text-slate-400 mt-0.5">{label}</p>
     </div>
   );
 }
@@ -631,15 +766,13 @@ function MembresTab({ detail, isPresident, isLeader, onRefresh, flash, api, busy
       <h3 className="font-medium text-slate-200">Membres ({detail.membres.length})</h3>
       <div className="space-y-2">
         {detail.membres.map(m => {
-          const roleIcon = m.role === 'president' ? <Crown className="h-3.5 w-3.5 text-amber-400" />
-            : m.role === 'vice_president' ? <ShieldCheck className="h-3.5 w-3.5 text-sky-400" />
-            : null;
+          const nom = m.compagnie?.nom || m.compagnie_id;
           return (
-            <div key={`${m.id}-${m.compagnie_id}`} className="flex flex-col gap-2 py-2.5 px-3 rounded-lg bg-slate-700/20 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2 flex-wrap">
-                {roleIcon || <Building2 className="h-4 w-4 text-slate-500 shrink-0" />}
-                <span className="text-slate-200 font-medium">{m.compagnie?.nom || m.compagnie_id}</span>
-                <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${ROLE_COLORS[m.role] || ''} bg-slate-700/50`}>{ROLE_LABELS[m.role] || m.role}</span>
+            <div key={`${m.id}-${m.compagnie_id}`} className="flex flex-col gap-2 py-2.5 px-3 rounded-xl bg-slate-700/20 border border-slate-700/20 sm:flex-row sm:items-center sm:justify-between hover:bg-slate-700/30 transition-colors">
+              <div className="flex items-center gap-3 flex-wrap">
+                <MemberAvatar nom={nom} role={m.role} />
+                <span className="text-slate-200 font-medium">{nom}</span>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ROLE_COLORS[m.role] || ''} bg-slate-700/50 ring-1 ring-slate-600/30`}>{ROLE_LABELS[m.role] || m.role}</span>
               </div>
               {isPresident && m.role !== 'president' && (
                 <div className="flex gap-2 items-center flex-wrap">

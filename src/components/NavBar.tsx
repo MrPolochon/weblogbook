@@ -9,6 +9,7 @@ import {
   ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map,
   Store, AlertTriangle, Flame, Gauge, Wrench, Eye, Trophy, Menu, X, Clock,
 } from 'lucide-react';
+import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import NotificationBell from '@/components/NotificationBell';
@@ -325,16 +326,7 @@ export default function NavBar({
 
             {isAdmin && (
               <>
-                <NavLink href="/atc" active={pathname.startsWith('/atc')} accent="emerald" title="Espace ATC">
-                  <Radio className="h-3.5 w-3.5 shrink-0" />
-                  <span className="hidden lg:inline">Espace ATC</span>
-                  <span className="lg:hidden">ATC</span>
-                </NavLink>
-                <NavLink href="/siavi" active={pathname.startsWith('/siavi')} accent="red" title="Espace SIAVI">
-                  <Flame className="h-3.5 w-3.5 shrink-0" />
-                  <span className="hidden lg:inline">Espace SIAVI</span>
-                  <span className="lg:hidden">SIAVI</span>
-                </NavLink>
+                <AdminSpaceSelector />
               </>
             )}
 
@@ -565,26 +557,13 @@ export default function NavBar({
                 onClick={() => setMobileOpen(false)}
               />
 
-              {/* Espaces ATC & SIAVI (admin seulement) */}
+              {/* Changer d'espace (admin seulement) */}
               {isAdmin && (
                 <>
                   <MobileSectionLabel>Autres espaces</MobileSectionLabel>
-                  <MobileItem
-                    href="/atc"
-                    icon={Radio}
-                    label="Espace ATC"
-                    active={pathname.startsWith('/atc')}
-                    accent="emerald"
-                    onClick={() => setMobileOpen(false)}
-                  />
-                  <MobileItem
-                    href="/siavi"
-                    icon={Flame}
-                    label="Espace SIAVI"
-                    active={pathname.startsWith('/siavi')}
-                    accent="red"
-                    onClick={() => setMobileOpen(false)}
-                  />
+                  <div className="mx-2 mb-1">
+                    <AdminSpaceSelector triggerClassName="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium border border-purple-700/30 bg-purple-900/10 text-purple-300 hover:bg-purple-900/20 transition-colors" />
+                  </div>
                 </>
               )}
 

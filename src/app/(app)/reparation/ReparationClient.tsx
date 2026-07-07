@@ -8,7 +8,9 @@ import { calculerPrixHangar } from '@/lib/compagnie-utils';
 import {
   Wrench, Building2, Users, Warehouse, Tags, ClipboardList,
   Loader2, Plus, Trash2, Check, X, Play, FileText, CreditCard,
-  Truck, ParkingSquare, Search, Settings
+  Truck, ParkingSquare, Search, Settings, Maximize2, ArrowRight,
+  Star, AlertTriangle, TrendingDown, ChevronDown, BadgePercent,
+  Filter, Clock, Edit3, Info
 } from 'lucide-react';
 
 interface Entreprise {
@@ -33,6 +35,7 @@ interface Hangar {
   aeroport_code: string;
   nom: string | null;
   capacite: number;
+  prix_achat?: number;
 }
 
 interface Tarif {
@@ -466,42 +469,146 @@ export default function ReparationClient({ userId }: { userId: string }) {
 
 function DashboardTab({ detail }: { detail: Detail }) {
   const active = detail.demandes.filter(d => !['completee', 'refusee', 'annulee'].includes(d.statut));
+  const aValider = active.filter(d => d.statut === 'demandee');
+  const tarif = detail.tarifs[0];
+
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Stat label="Employés" value={detail.employes.length} />
-        <Stat label="Hangars" value={detail.hangars.length} />
-        <Stat label="Demandes actives" value={active.length} />
-        <Stat label="Solde" value={detail.compte ? `${detail.compte.solde.toLocaleString('fr-FR')} F$` : '—'} />
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Stat label="Employés" value={detail.employes.length} icon={<Users className="h-4 w-4 text-violet-400" />} color="violet" />
+        <Stat label="Hangars" value={detail.hangars.length} icon={<Warehouse className="h-4 w-4 text-sky-400" />} color="sky" />
+        <Stat label="Demandes actives" value={active.length} icon={<ClipboardList className="h-4 w-4 text-orange-400" />} color="orange" badge={aValider.length > 0 ? `+${aValider.length} à valider` : undefined} />
+        <Stat label="Solde" value={detail.compte ? `${detail.compte.solde.toLocaleString('fr-FR')} F$` : '—'} icon={<CreditCard className="h-4 w-4 text-emerald-400" />} color="emerald" />
       </div>
+
+      {aValider.length > 0 && (
+        <div className="rounded-xl bg-amber-900/20 border border-amber-700/40 p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-amber-300 text-sm">{aValider.length} demande{aValider.length > 1 ? 's' : ''} en attente de validation</p>
+            <p className="text-xs text-amber-400/70 mt-0.5">Acceptez ou refusez les demandes rapidement pour libérer le planning.</p>
+          </div>
+        </div>
+      )}
+
+      {tarif ? (
+        <div className="rounded-xl bg-slate-800/40 border border-slate-700/40 p-4 flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg bg-orange-500/15 flex items-center justify-center shrink-0">
+            <Tags className="h-4 w-4 text-orange-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-slate-500 uppercase tracking-wide">Tarif actif</p>
+            <p className="text-slate-200 font-semibold">{tarif.prix_par_point.toLocaleString('fr-FR')} F$/point · {tarif.duree_estimee_par_point} min/point</p>
+          </div>
+          {detail.alliance_reparation_actif && (
+            <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30">
+              <BadgePercent className="h-3 w-3" /> {detail.prix_alliance_pourcent}% alliance
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl bg-slate-800/40 border border-dashed border-slate-600/50 p-4 flex items-center gap-3 text-slate-500">
+          <Tags className="h-4 w-4 shrink-0" />
+          <p className="text-sm">Aucun tarif défini — tarif par défaut appliqué (1 000 F$/point).</p>
+        </div>
+      )}
+
       {active.length > 0 && (
         <div>
-          <h3 className="font-medium text-slate-200 mb-2">Demandes en cours</h3>
-          {active.slice(0, 5).map(d => (
-            <div key={d.id} className="text-sm text-slate-300 py-1 flex items-center gap-2">
-              <span className="font-mono">{d.avion?.immatriculation || '?'}</span>
-              <span className="text-slate-500">—</span>
-              <span>{d.compagnie?.nom || '?'}</span>
-              <span className={`text-xs font-medium ${STATUT_LABELS[d.statut]?.color || 'text-slate-400'}`}>{STATUT_LABELS[d.statut]?.label || d.statut}</span>
-            </div>
-          ))}
+          <h3 className="font-semibold text-slate-200 mb-3 flex items-center gap-2">
+            <Clock className="h-4 w-4 text-slate-400" /> Demandes en cours
+          </h3>
+          <div className="space-y-2">
+            {active.slice(0, 5).map(d => {
+              const statut = STATUT_LABELS[d.statut];
+              return (
+                <div key={d.id} className="rounded-lg border border-slate-700/40 bg-slate-800/20 p-3 flex items-center gap-3">
+                  <span className="font-mono text-slate-200 text-sm shrink-0">{d.avion?.immatriculation || '?'}</span>
+                  <ArrowRight className="h-3 w-3 text-slate-600 shrink-0" />
+                  <span className="text-slate-400 text-sm flex-1 truncate">{d.compagnie?.nom || '?'}</span>
+                  {d.usure_avant != null && (
+                    <div className="hidden sm:flex items-center gap-1 text-xs text-slate-500">
+                      <TrendingDown className="h-3 w-3" /> {d.usure_avant}%
+                    </div>
+                  )}
+                  <StatutBadge statut={d.statut} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {active.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700/50 bg-slate-800/20 p-10 text-center">
+          <Wrench className="h-8 w-8 text-slate-600 mx-auto mb-3" />
+          <p className="text-slate-400 font-medium">Aucune demande en cours</p>
+          <p className="text-slate-500 text-sm mt-1">Les nouvelles demandes apparaîtront ici.</p>
         </div>
       )}
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return <div className="rounded-lg bg-slate-700/30 p-3 text-center"><p className="text-2xl font-bold text-slate-100">{value}</p><p className="text-xs text-slate-400">{label}</p></div>;
+function Stat({ label, value, icon, color, badge }: {
+  label: string; value: string | number;
+  icon?: React.ReactNode; color?: string; badge?: string;
+}) {
+  const colorMap: Record<string, string> = {
+    violet: 'bg-violet-500/10 border-violet-700/30',
+    sky: 'bg-sky-500/10 border-sky-700/30',
+    orange: 'bg-orange-500/10 border-orange-700/30',
+    emerald: 'bg-emerald-500/10 border-emerald-700/30',
+  };
+  return (
+    <div className={`rounded-xl border p-3 text-center ${color ? colorMap[color] || 'bg-slate-700/30 border-slate-700/30' : 'bg-slate-700/30 border-slate-700/30'}`}>
+      {icon && <div className="flex justify-center mb-1.5">{icon}</div>}
+      <p className="text-xl font-bold text-slate-100">{value}</p>
+      <p className="text-xs text-slate-400">{label}</p>
+      {badge && <p className="text-[10px] text-amber-400 mt-0.5 animate-pulse">{badge}</p>}
+    </div>
+  );
 }
+
+function StatutBadge({ statut }: { statut: string }) {
+  const bgMap: Record<string, string> = {
+    demandee:      'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    acceptee:      'bg-sky-500/20 text-sky-300 border-sky-500/30',
+    en_transit:    'bg-sky-400/20 text-sky-200 border-sky-400/30',
+    en_reparation: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
+    mini_jeux:     'bg-violet-400/20 text-violet-200 border-violet-400/30',
+    terminee:      'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    facturee:      'bg-amber-400/20 text-amber-200 border-amber-400/30',
+    payee:         'bg-emerald-400/20 text-emerald-200 border-emerald-400/30',
+    retour_transit:'bg-sky-300/20 text-sky-200 border-sky-300/30',
+    completee:     'bg-emerald-600/20 text-emerald-200 border-emerald-600/30',
+    refusee:       'bg-red-500/20 text-red-300 border-red-500/30',
+    annulee:       'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  };
+  return (
+    <span className={`inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-full border ${bgMap[statut] || 'bg-slate-700/30 text-slate-400 border-slate-600/30'}`}>
+      {STATUT_LABELS[statut]?.label || statut}
+    </span>
+  );
+}
+
+type DemandeFiltre = 'tous' | 'a_valider' | 'en_cours' | 'archives';
 
 function DemandesTab({ detail, api, flash, busy, onRefresh, router }: {
   detail: Detail; api: (u: string, m: string, b?: unknown) => Promise<unknown>;
   flash: (m: string, e?: boolean) => void; busy: boolean; onRefresh: () => void;
   router: ReturnType<typeof useRouter>;
 }) {
-  const active = detail.demandes.filter(d => !['completee', 'refusee', 'annulee'].includes(d.statut));
-  const past = detail.demandes.filter(d => ['completee', 'refusee', 'annulee'].includes(d.statut));
+  const [filtre, setFiltre] = useState<DemandeFiltre>('a_valider');
+  const tarif = detail.tarifs[0];
+
+  const demandesParFiltre: Record<DemandeFiltre, Demande[]> = {
+    tous:      detail.demandes,
+    a_valider: detail.demandes.filter(d => d.statut === 'demandee'),
+    en_cours:  detail.demandes.filter(d => !['completee', 'refusee', 'annulee', 'demandee'].includes(d.statut)),
+    archives:  detail.demandes.filter(d => ['completee', 'refusee', 'annulee'].includes(d.statut)),
+  };
+  const demandes = demandesParFiltre[filtre];
 
   async function doAction(demandeId: string, action: string, extra?: Record<string, unknown>) {
     try {
@@ -511,89 +618,205 @@ function DemandesTab({ detail, api, flash, busy, onRefresh, router }: {
     } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
   }
 
+  const filtres: { key: DemandeFiltre; label: string; count: number }[] = [
+    { key: 'a_valider', label: 'À valider', count: demandesParFiltre.a_valider.length },
+    { key: 'en_cours',  label: 'En cours',  count: demandesParFiltre.en_cours.length },
+    { key: 'tous',      label: 'Tout',       count: detail.demandes.length },
+    { key: 'archives',  label: 'Archives',   count: demandesParFiltre.archives.length },
+  ];
+
   return (
-    <div className="space-y-6">
-      {active.length === 0 && past.length === 0 && <p className="text-slate-500 text-sm">Aucune demande.</p>}
+    <div className="space-y-4">
+      {/* Filtres */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <Filter className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+        {filtres.map(f => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setFiltre(f.key)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 transition-all ${
+              filtre === f.key
+                ? 'bg-orange-500/20 text-orange-300 ring-orange-400/40'
+                : 'bg-slate-800/40 text-slate-400 ring-slate-700 hover:text-slate-200'
+            }`}
+          >
+            {f.label}
+            {f.count > 0 && (
+              <span className={`min-w-[16px] h-4 text-center px-1 rounded-full text-[10px] font-bold ${
+                filtre === f.key ? 'bg-slate-950/50 text-orange-200' : 'bg-slate-700 text-slate-300'
+              }`}>{f.count}</span>
+            )}
+          </button>
+        ))}
+      </div>
 
-      {active.map(d => (
-        <div key={d.id} className="p-4 rounded-lg bg-slate-700/20 border border-slate-700/30 space-y-2">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-slate-200">{d.avion?.immatriculation || '?'}</span>
-              <span className="text-slate-400">— {d.compagnie?.nom || '?'}</span>
-            </div>
-            <span className={`text-sm font-medium ${STATUT_LABELS[d.statut]?.color || ''}`}>
-              {STATUT_LABELS[d.statut]?.label || d.statut}
-            </span>
-          </div>
-          <div className="text-xs text-slate-400 space-x-4">
-            <span>Usure: {d.usure_avant ?? '?'}%{d.usure_apres != null ? ` → ${d.usure_apres}%` : ''}</span>
-            {d.prix_total != null && <span>Prix: {d.prix_total.toLocaleString('fr-FR')} F$</span>}
-            {d.score_qualite != null && <span>Score: {d.score_qualite}/100</span>}
-          </div>
-          {d.commentaire_compagnie && <p className="text-xs text-slate-400">Client: {d.commentaire_compagnie}</p>}
-
-          <div className="flex gap-2 flex-wrap pt-1">
-            {d.statut === 'demandee' && (
-              <>
-                <button disabled={busy} onClick={() => doAction(d.id, 'accepter')} className="px-3 py-1 rounded bg-emerald-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Check className="h-3 w-3" />Accepter</button>
-                <button disabled={busy} onClick={() => doAction(d.id, 'refuser')} className="px-3 py-1 rounded bg-red-600/50 text-red-200 text-xs disabled:opacity-50 flex items-center gap-1"><X className="h-3 w-3" />Refuser</button>
-              </>
-            )}
-            {d.statut === 'acceptee' && (
-              <button disabled={busy} onClick={() => doAction(d.id, 'ferry_arrive')} className="px-3 py-1 rounded bg-sky-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Truck className="h-3 w-3" />Confirmer arrivée au hangar</button>
-            )}
-            {d.statut === 'en_transit' && (
-              <button disabled={busy} onClick={() => doAction(d.id, 'ferry_arrive')} className="px-3 py-1 rounded bg-sky-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Truck className="h-3 w-3" />Transfert entreprise: avion arrivé</button>
-            )}
-            {d.statut === 'en_reparation' && (
-              <button disabled={busy} onClick={() => router.push(`/reparation/jeu/${d.id}`)} className="px-3 py-1 rounded bg-violet-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Play className="h-3 w-3" />Jouer les mini-jeux</button>
-            )}
-            {d.statut === 'mini_jeux' && (
-              <>
-                <button disabled={busy} onClick={() => router.push(`/reparation/jeu/${d.id}`)} className="px-3 py-1 rounded bg-violet-600/50 text-violet-200 text-xs disabled:opacity-50 flex items-center gap-1"><Play className="h-3 w-3" />Continuer les jeux</button>
-                {d.mini_jeux_complets ? (
-                  <button disabled={busy} onClick={() => doAction(d.id, 'terminer')} className="px-3 py-1 rounded bg-emerald-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Check className="h-3 w-3" />Terminer réparation</button>
-                ) : (
-                  <p className="text-xs text-slate-500 w-full">Complétez les 4 mini-jeux assignés avant de terminer.</p>
-                )}
-              </>
-            )}
-            {d.statut === 'terminee' && (
-              <button disabled={busy} onClick={() => doAction(d.id, 'facturer')} className="px-3 py-1 rounded bg-amber-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><FileText className="h-3 w-3" />Facturer</button>
-            )}
-            {d.statut === 'payee' && (
-              <div className="flex gap-2">
-                <button disabled={busy} onClick={() => doAction(d.id, 'completer', { livraison: 'parking' })} className="px-3 py-1 rounded bg-slate-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><ParkingSquare className="h-3 w-3" />Laisser au parking</button>
-                <button disabled={busy} onClick={() => doAction(d.id, 'completer', { livraison: 'ferry' })} className="px-3 py-1 rounded bg-sky-600 text-white text-xs disabled:opacity-50 flex items-center gap-1"><Truck className="h-3 w-3" />Transit vers la base</button>
-              </div>
-            )}
-            {d.statut === 'retour_transit' && (
-              <p className="text-xs text-sky-400 max-w-md">
-                Transit automatique (20 min à 4 h) vers l&apos;aéroport d&apos;origine du client. Un vol ferry vers la même base clôture aussi la demande s&apos;il part avant la fin du délai.
-              </p>
-            )}
-            {!['completee', 'refusee', 'annulee', 'facturee', 'payee', 'retour_transit'].includes(d.statut) && (
-              <button disabled={busy} onClick={() => doAction(d.id, 'annuler')} className="px-3 py-1 rounded bg-slate-700 text-slate-300 text-xs disabled:opacity-50">Annuler</button>
-            )}
-          </div>
-        </div>
-      ))}
-
-      {past.length > 0 && (
-        <div>
-          <h3 className="font-medium text-slate-200 mb-2">Historique</h3>
-          <div className="max-h-64 overflow-y-auto space-y-1">
-            {past.map(d => (
-              <div key={d.id} className="text-sm text-slate-400 py-1">
-                {d.avion?.immatriculation || '?'} — {d.compagnie?.nom || '?'} — <span className={STATUT_LABELS[d.statut]?.color || ''}>{STATUT_LABELS[d.statut]?.label || d.statut}</span>
-                {d.score_qualite != null && ` — Score: ${d.score_qualite}/100`}
-                {d.prix_total != null && ` — ${d.prix_total.toLocaleString('fr-FR')} F$`}
-              </div>
-            ))}
-          </div>
+      {demandes.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700/50 bg-slate-800/20 p-10 text-center">
+          <ClipboardList className="h-8 w-8 text-slate-600 mx-auto mb-3" />
+          <p className="text-slate-400 font-medium">
+            {filtre === 'a_valider' ? 'Aucune demande en attente' :
+             filtre === 'en_cours' ? 'Aucune réparation en cours' :
+             filtre === 'archives' ? 'Aucun historique' : 'Aucune demande'}
+          </p>
+          {filtre === 'a_valider' && <p className="text-slate-500 text-sm mt-1">Toutes les demandes ont été traitées.</p>}
         </div>
       )}
+
+      {demandes.map(d => {
+        const prixEstime = tarif && d.usure_avant != null
+          ? d.usure_avant * tarif.prix_par_point
+          : null;
+
+        return (
+          <div key={d.id} className="rounded-xl border border-slate-700/40 bg-slate-800/20 overflow-hidden transition-shadow hover:shadow-lg hover:shadow-orange-500/5">
+            {/* Header carte */}
+            <div className="p-4 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-10 w-10 rounded-xl bg-slate-700/50 flex items-center justify-center shrink-0">
+                  <Wrench className="h-5 w-5 text-orange-400" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono font-bold text-slate-100">{d.avion?.immatriculation || '?'}</span>
+                    <span className="text-slate-400 text-sm truncate">{d.compagnie?.nom || '?'}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {new Date(d.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+                  </p>
+                </div>
+              </div>
+              <StatutBadge statut={d.statut} />
+            </div>
+
+            {/* Usure progress */}
+            {d.usure_avant != null && (
+              <div className="px-4 pb-2 space-y-1">
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span className="flex items-center gap-1"><TrendingDown className="h-3 w-3" /> Usure</span>
+                  <span>
+                    {d.usure_avant}%{d.usure_apres != null ? ` → ${d.usure_apres}%` : ''}
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-slate-700 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-red-500 to-amber-500 transition-all"
+                    style={{ width: `${d.usure_avant}%` }}
+                  />
+                </div>
+                {d.usure_apres != null && (
+                  <div className="h-1.5 rounded-full bg-slate-700 overflow-hidden -mt-1.5">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all"
+                      style={{ width: `${d.usure_apres}%`, opacity: 0.6 }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Prix */}
+            <div className="px-4 pb-3 flex items-center gap-4 flex-wrap text-xs text-slate-400">
+              {d.prix_total != null ? (
+                <span className="text-emerald-400 font-semibold">{d.prix_total.toLocaleString('fr-FR')} F$</span>
+              ) : prixEstime != null ? (
+                <span className="text-slate-500">~{prixEstime.toLocaleString('fr-FR')} F$ estimé</span>
+              ) : null}
+              {d.score_qualite != null && (
+                <span className={`font-semibold ${d.score_qualite >= 80 ? 'text-emerald-400' : d.score_qualite >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                  Score : {d.score_qualite}/100
+                </span>
+              )}
+            </div>
+
+            {d.commentaire_compagnie && (
+              <div className="mx-4 mb-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-700/30 text-xs text-slate-400">
+                <Info className="h-3.5 w-3.5 shrink-0 mt-0.5 text-slate-500" />
+                {d.commentaire_compagnie}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="border-t border-slate-700/30 px-4 py-3 flex gap-2 flex-wrap">
+              {d.statut === 'demandee' && (
+                <>
+                  <button disabled={busy} onClick={() => doAction(d.id, 'accepter')}
+                    className="flex-1 sm:flex-none px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold disabled:opacity-50 flex items-center justify-center gap-1 transition-colors">
+                    {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}Accepter
+                  </button>
+                  <button disabled={busy} onClick={() => doAction(d.id, 'refuser')}
+                    className="px-3 py-1.5 rounded-lg bg-red-600/30 hover:bg-red-600/50 text-red-300 text-xs font-semibold disabled:opacity-50 flex items-center gap-1 transition-colors">
+                    <X className="h-3 w-3" />Refuser
+                  </button>
+                </>
+              )}
+              {d.statut === 'acceptee' && (
+                <button disabled={busy} onClick={() => doAction(d.id, 'ferry_arrive')}
+                  className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold disabled:opacity-50 flex items-center gap-1 transition-colors">
+                  {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Truck className="h-3 w-3" />}Confirmer arrivée au hangar
+                </button>
+              )}
+              {d.statut === 'en_transit' && (
+                <button disabled={busy} onClick={() => doAction(d.id, 'ferry_arrive')}
+                  className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold disabled:opacity-50 flex items-center gap-1 transition-colors">
+                  {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Truck className="h-3 w-3" />}Avion arrivé au hangar
+                </button>
+              )}
+              {d.statut === 'en_reparation' && (
+                <button disabled={busy} onClick={() => router.push(`/reparation/jeu/${d.id}`)}
+                  className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold disabled:opacity-50 flex items-center gap-1 transition-colors">
+                  <Play className="h-3 w-3" />Jouer les mini-jeux
+                </button>
+              )}
+              {d.statut === 'mini_jeux' && (
+                <>
+                  <button disabled={busy} onClick={() => router.push(`/reparation/jeu/${d.id}`)}
+                    className="px-3 py-1.5 rounded-lg bg-violet-600/60 hover:bg-violet-600 text-violet-200 text-xs font-semibold disabled:opacity-50 flex items-center gap-1 transition-colors">
+                    <Play className="h-3 w-3" />Continuer les jeux
+                  </button>
+                  {d.mini_jeux_complets ? (
+                    <button disabled={busy} onClick={() => doAction(d.id, 'terminer')}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold disabled:opacity-50 flex items-center gap-1 transition-colors">
+                      {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}Terminer réparation
+                    </button>
+                  ) : (
+                    <p className="text-xs text-slate-500 w-full">Complétez les 4 mini-jeux assignés avant de terminer.</p>
+                  )}
+                </>
+              )}
+              {d.statut === 'terminee' && (
+                <button disabled={busy} onClick={() => doAction(d.id, 'facturer')}
+                  className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold disabled:opacity-50 flex items-center gap-1 transition-colors">
+                  {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}Facturer
+                </button>
+              )}
+              {d.statut === 'payee' && (
+                <div className="flex gap-2">
+                  <button disabled={busy} onClick={() => doAction(d.id, 'completer', { livraison: 'parking' })}
+                    className="px-3 py-1.5 rounded-lg bg-slate-600 hover:bg-slate-500 text-white text-xs font-semibold disabled:opacity-50 flex items-center gap-1 transition-colors">
+                    <ParkingSquare className="h-3 w-3" />Parking
+                  </button>
+                  <button disabled={busy} onClick={() => doAction(d.id, 'completer', { livraison: 'ferry' })}
+                    className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold disabled:opacity-50 flex items-center gap-1 transition-colors">
+                    <Truck className="h-3 w-3" />Transit vers la base
+                  </button>
+                </div>
+              )}
+              {d.statut === 'retour_transit' && (
+                <p className="text-xs text-sky-400">
+                  Transit automatique en cours vers l&apos;aéroport d&apos;origine du client.
+                </p>
+              )}
+              {!['completee', 'refusee', 'annulee', 'facturee', 'payee', 'retour_transit'].includes(d.statut) && (
+                <button disabled={busy} onClick={() => doAction(d.id, 'annuler')}
+                  className="ml-auto px-3 py-1.5 rounded-lg bg-slate-700/60 hover:bg-slate-700 text-slate-400 text-xs transition-colors">
+                  Annuler
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -607,6 +830,8 @@ function HangarsTab({ detail, isPdg, api, flash, busy, onRefresh }: {
   const [code, setCode] = useState('');
   const [nom, setNom] = useState('');
   const [capacite, setCapacite] = useState('2');
+  const [agrandirId, setAgrandirId] = useState<string | null>(null);
+  const [nbPlaces, setNbPlaces] = useState('1');
 
   const aeroportsDisponibles = useMemo(() => {
     const codesExistants = new Set(detail.hangars.map(h => h.aeroport_code));
@@ -617,30 +842,130 @@ function HangarsTab({ detail, isPdg, api, flash, busy, onRefresh }: {
   const mult = detail.prix_hangar_multiplicateur ?? 2;
   const cap = Math.max(1, Math.min(20, Number(capacite) || 2));
   const prixProchain = calculerPrixHangar(detail.hangars.length + 1, cap, base, mult);
+  const prixParPlace = Math.max(10000, Math.floor(base / 5));
+
+  const hangarAgrandir = agrandirId ? detail.hangars.find(h => h.id === agrandirId) : null;
+  const nbPlacesNum = Math.max(1, Math.min(hangarAgrandir ? 20 - hangarAgrandir.capacite : 19, Number(nbPlaces) || 1));
+  const prixAgrandir = prixParPlace * nbPlacesNum;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      {detail.hangars.length === 0 && (
+        <div className="rounded-xl border border-dashed border-slate-700/50 bg-slate-800/20 p-8 text-center">
+          <Warehouse className="h-8 w-8 text-slate-600 mx-auto mb-3" />
+          <p className="text-slate-400 font-medium">Aucun hangar</p>
+          <p className="text-slate-500 text-sm mt-1">Le premier hangar est gratuit.</p>
+        </div>
+      )}
+
       {detail.hangars.map(h => (
-        <div key={h.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-700/20">
-          <div>
-            <span className="font-mono text-slate-200">{h.aeroport_code}</span>
-            {h.nom && <span className="text-slate-400 ml-2">— {h.nom}</span>}
-            <span className="text-xs text-slate-500 ml-2">Cap: {h.capacite}</span>
+        <div key={h.id} className="rounded-xl border border-slate-700/40 bg-slate-800/20 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-lg bg-sky-500/15 flex items-center justify-center shrink-0">
+                <Warehouse className="h-4 w-4 text-sky-400" />
+              </div>
+              <div>
+                <span className="font-mono font-bold text-slate-200">{h.aeroport_code}</span>
+                {h.nom && <span className="text-slate-400 text-sm ml-2">— {h.nom}</span>}
+                <div className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
+                  <span>{h.capacite} place{h.capacite > 1 ? 's' : ''}</span>
+                  {h.capacite < 20 && <span className="text-slate-600">· max 20</span>}
+                  {h.capacite >= 20 && <span className="text-emerald-600 font-semibold">Plein</span>}
+                </div>
+              </div>
+            </div>
+            {/* Barre capacité */}
+            <div className="hidden sm:flex flex-col gap-1 w-24">
+              <div className="h-1.5 rounded-full bg-slate-700 overflow-hidden">
+                <div className="h-full rounded-full bg-sky-500 transition-all" style={{ width: `${(h.capacite / 20) * 100}%` }} />
+              </div>
+              <span className="text-[10px] text-slate-600 text-right">{h.capacite}/20</span>
+            </div>
+            {isPdg && (
+              <div className="flex items-center gap-1 shrink-0">
+                {h.capacite < 20 && (
+                  <button
+                    disabled={busy}
+                    onClick={() => { setAgrandirId(agrandirId === h.id ? null : h.id); setNbPlaces('1'); }}
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors ${
+                      agrandirId === h.id
+                        ? 'bg-sky-600 text-white'
+                        : 'bg-sky-500/15 text-sky-300 hover:bg-sky-500/30 border border-sky-500/30'
+                    }`}
+                  >
+                    <Maximize2 className="h-3.5 w-3.5" />
+                    Agrandir
+                  </button>
+                )}
+                <button disabled={busy} onClick={async () => {
+                  try { await api(`/api/reparation/hangars?id=${h.id}`, 'DELETE'); flash('Hangar supprimé'); onRefresh(); }
+                  catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+                }} className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50 transition-colors">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            )}
           </div>
-          {isPdg && (
-            <button disabled={busy} onClick={async () => {
-              try { await api(`/api/reparation/hangars?id=${h.id}`, 'DELETE'); flash('Hangar supprimé'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-            }} className="text-red-400 hover:text-red-300 disabled:opacity-50"><Trash2 className="h-4 w-4" /></button>
+
+          {/* Panel Agrandir */}
+          {agrandirId === h.id && (
+            <div className="border-t border-sky-700/30 bg-sky-900/10 px-4 py-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Maximize2 className="h-4 w-4 text-sky-400" />
+                <span className="text-sm font-semibold text-sky-300">Agrandir le hangar</span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Prix : <span className="text-sky-300 font-semibold">{prixParPlace.toLocaleString('fr-FR')} F$ / place</span>
+                {' '}· Places disponibles : {20 - h.capacite}
+              </p>
+              <div className="flex items-end gap-3 flex-wrap">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1">Places à ajouter</label>
+                  <input
+                    type="number" min="1" max={20 - h.capacite}
+                    value={nbPlaces}
+                    onChange={e => setNbPlaces(e.target.value)}
+                    className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-24 text-sm"
+                  />
+                </div>
+                <div className="pb-0.5">
+                  <p className="text-xs text-slate-500 mb-1">Total à débiter</p>
+                  <p className="text-lg font-bold text-sky-300">{prixAgrandir.toLocaleString('fr-FR')} F$</p>
+                </div>
+                <div className="flex gap-2 items-end pb-0.5">
+                  <button
+                    disabled={busy || nbPlacesNum < 1 || h.capacite >= 20}
+                    onClick={async () => {
+                      try {
+                        const res = await api(`/api/reparation/hangars/${h.id}/agrandir`, 'PATCH', { nb_places_ajoutees: nbPlacesNum }) as { capacite?: number; prix_paye?: number };
+                        flash(`Hangar agrandi : ${res.capacite} places (${(res.prix_paye ?? prixAgrandir).toLocaleString('fr-FR')} F$ débités)`);
+                        setAgrandirId(null);
+                        onRefresh();
+                      } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+                    }}
+                    className="px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1.5 transition-colors"
+                  >
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Maximize2 className="h-4 w-4" />}
+                    Confirmer
+                  </button>
+                  <button onClick={() => setAgrandirId(null)} className="px-3 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm transition-colors hover:bg-slate-600">
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       ))}
-      {detail.hangars.length === 0 && <p className="text-slate-500 text-sm">Aucun hangar.</p>}
 
       {isPdg && (
-        <div className="pt-4 border-t border-slate-700 space-y-2">
-          <h4 className="text-sm font-medium text-slate-300">Ajouter un hangar</h4>
-          <p className="text-slate-400 text-sm">
-            Prix : <span className="text-emerald-400 font-medium">
+        <div className="pt-2 border-t border-slate-700/40 space-y-3">
+          <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+            <Plus className="h-4 w-4 text-orange-400" /> Ajouter un hangar
+          </h4>
+          <p className="text-xs text-slate-400">
+            Prix prochain hangar : <span className={`font-semibold ${prixProchain === 0 ? 'text-emerald-400' : 'text-amber-300'}`}>
               {prixProchain === 0 ? 'Gratuit' : `${prixProchain.toLocaleString('fr-FR')} F$`}
             </span>
           </p>
@@ -658,17 +983,21 @@ function HangarsTab({ detail, isPdg, api, flash, busy, onRefresh }: {
                 <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>
               ))}
             </select>
-            <input type="text" value={nom} onChange={e => setNom(e.target.value)} placeholder="Nom (opt.)" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 flex-1 text-sm" />
+            <input type="text" value={nom} onChange={e => setNom(e.target.value)} placeholder="Nom (opt.)" className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 flex-1 min-w-[120px] text-sm" />
             <input type="number" min="1" max="20" value={capacite} onChange={e => setCapacite(e.target.value)} placeholder="Cap." className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-20 text-sm" />
-            <button disabled={busy || !code.trim()} onClick={async () => {
-              try {
-                const res = await api('/api/reparation/hangars', 'POST', { entreprise_id: detail.id, aeroport_code: code.trim(), nom: nom.trim() || undefined, capacite: Number(capacite) || 2 }) as { ok?: boolean; prix?: number };
-                flash(prixProchain > 0 ? `Hangar ajouté (${(res?.prix ?? prixProchain).toLocaleString('fr-FR')} F$)` : 'Hangar ajouté');
-                setCode('');
-                setNom('');
-                onRefresh();
-              } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-            }} className="px-3 py-2 rounded-lg bg-orange-600 text-white text-sm disabled:opacity-50 flex items-center gap-1"><Plus className="h-4 w-4" />Ajouter</button>
+            <button
+              disabled={busy || !code.trim()}
+              onClick={async () => {
+                try {
+                  const res = await api('/api/reparation/hangars', 'POST', { entreprise_id: detail.id, aeroport_code: code.trim(), nom: nom.trim() || undefined, capacite: Number(capacite) || 2 }) as { ok?: boolean; prix?: number };
+                  flash(prixProchain > 0 ? `Hangar ajouté (${(res?.prix ?? prixProchain).toLocaleString('fr-FR')} F$)` : 'Premier hangar ajouté gratuitement');
+                  setCode(''); setNom(''); onRefresh();
+                } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+              }}
+              className="px-3 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-1 transition-colors"
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}Ajouter
+            </button>
           </div>
         </div>
       )}
@@ -680,40 +1009,131 @@ function TarifsTab({ detail, isPdg, api, flash, busy, onRefresh }: {
   detail: Detail; isPdg: boolean; api: (u: string, m: string, b?: unknown) => Promise<unknown>;
   flash: (m: string, e?: boolean) => void; busy: boolean; onRefresh: () => void;
 }) {
-  const [prix, setPrix] = useState('1000');
-  const [duree, setDuree] = useState('2');
+  const tarifExistant = detail.tarifs[0] ?? null;
+
+  const [prix, setPrix] = useState(String(tarifExistant?.prix_par_point ?? 1000));
+  const [duree, setDuree] = useState(String(tarifExistant?.duree_estimee_par_point ?? 2));
+
+  // Sync if detail refreshed
+  const tarifId = tarifExistant?.id;
+  useEffect(() => {
+    setPrix(String(tarifExistant?.prix_par_point ?? 1000));
+    setDuree(String(tarifExistant?.duree_estimee_par_point ?? 2));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tarifId]);
+
+  const prixNum = Number(prix) || 1000;
+  const dureeNum = Number(duree) || 2;
 
   return (
-    <div className="space-y-4">
-      {detail.tarifs.map(t => (
-        <div key={t.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-700/20">
-          <div>
-            <span className="text-slate-200">{t.type_avion?.nom || 'Tarif par défaut'}</span>
-            <span className="text-slate-400 ml-2">— {t.prix_par_point.toLocaleString('fr-FR')} F$/point</span>
-            <span className="text-xs text-slate-500 ml-2">~{t.duree_estimee_par_point} min/point</span>
+    <div className="space-y-5">
+      {/* Tarif actif */}
+      {tarifExistant ? (
+        <div className="rounded-xl bg-orange-500/8 border border-orange-500/20 p-4 flex items-start gap-3">
+          <div className="h-10 w-10 rounded-xl bg-orange-500/15 flex items-center justify-center shrink-0">
+            <Tags className="h-5 w-5 text-orange-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-xs text-slate-500 uppercase tracking-wide">Tarif de base actif</p>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">Unique par entreprise</span>
+            </div>
+            <p className="text-xl font-bold text-slate-100 mt-1">
+              {tarifExistant.prix_par_point.toLocaleString('fr-FR')} <span className="text-sm font-normal text-slate-400">F$ / point d&apos;usure</span>
+            </p>
+            <p className="text-sm text-slate-400 mt-0.5">{tarifExistant.duree_estimee_par_point} min / point · durée estimée</p>
           </div>
         </div>
-      ))}
-      {detail.tarifs.length === 0 && <p className="text-slate-500 text-sm">Aucun tarif défini. Le tarif par défaut sera appliqué.</p>}
+      ) : (
+        <div className="rounded-xl bg-slate-800/40 border border-dashed border-slate-600/50 p-4 flex items-center gap-3 text-slate-500">
+          <Tags className="h-5 w-5 shrink-0" />
+          <div>
+            <p className="text-sm text-slate-400 font-medium">Aucun tarif défini</p>
+            <p className="text-xs mt-0.5">Le tarif par défaut (1 000 F$/point) sera appliqué jusqu&apos;à ce que vous en définissiez un.</p>
+          </div>
+        </div>
+      )}
 
+      {/* Réduction alliance */}
+      {detail.alliance_reparation_actif && (
+        <div className="rounded-xl bg-sky-900/20 border border-sky-700/30 p-3 flex items-center gap-3">
+          <BadgePercent className="h-4 w-4 text-sky-400 shrink-0" />
+          <div className="text-sm">
+            <span className="text-sky-300 font-semibold">{detail.prix_alliance_pourcent}%</span>
+            <span className="text-slate-400 ml-1">du tarif normal pour les membres alliance — s&apos;applique EN PLUS du tarif de base ci-dessus.</span>
+          </div>
+        </div>
+      )}
+
+      {/* Exemple de calcul */}
+      {tarifExistant && (
+        <div className="rounded-xl bg-slate-800/30 border border-slate-700/30 p-4 space-y-2">
+          <p className="text-xs text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+            <Info className="h-3.5 w-3.5" /> Exemple de calcul
+          </p>
+          <div className="flex flex-wrap gap-4 text-sm text-slate-300">
+            <div>
+              <span className="text-slate-500">Avion 50% d&apos;usure → 0% : </span>
+              <span className="font-semibold text-amber-300">{(50 * tarifExistant.prix_par_point).toLocaleString('fr-FR')} F$</span>
+            </div>
+            {detail.alliance_reparation_actif && (
+              <div>
+                <span className="text-slate-500">Avec alliance {detail.prix_alliance_pourcent}% : </span>
+                <span className="font-semibold text-sky-300">{Math.round(50 * tarifExistant.prix_par_point * ((detail.prix_alliance_pourcent ?? 80) / 100)).toLocaleString('fr-FR')} F$</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Formulaire PDG */}
       {isPdg && (
-        <div className="pt-4 border-t border-slate-700 space-y-2">
-          <h4 className="text-sm font-medium text-slate-300">Définir le tarif par défaut</h4>
-          <div className="flex gap-2 flex-wrap">
+        <div className="pt-3 border-t border-slate-700/40 space-y-3">
+          <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+            {tarifExistant ? <><Edit3 className="h-4 w-4 text-orange-400" /> Modifier le tarif</> : <><Plus className="h-4 w-4 text-orange-400" /> Définir le tarif</>}
+          </h4>
+          <div className="flex gap-3 flex-wrap">
             <div>
               <label className="block text-xs text-slate-500 mb-1">F$ par point d&apos;usure</label>
-              <input type="number" min="0" value={prix} onChange={e => setPrix(e.target.value)} className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-32 text-sm" />
+              <input
+                type="number" min="0" value={prix}
+                onChange={e => setPrix(e.target.value)}
+                className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-36 text-sm"
+              />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">Min. par point</label>
-              <input type="number" min="1" value={duree} onChange={e => setDuree(e.target.value)} className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-24 text-sm" />
+              <input
+                type="number" min="1" value={duree}
+                onChange={e => setDuree(e.target.value)}
+                className="rounded-lg border border-slate-600 bg-slate-800 text-slate-200 px-3 py-2 w-28 text-sm"
+              />
             </div>
             <div className="flex items-end">
-              <button disabled={busy} onClick={async () => {
-                try { await api('/api/reparation/tarifs', 'PATCH', { entreprise_id: detail.id, prix_par_point: Number(prix) || 1000, duree_estimee_par_point: Number(duree) || 2 }); flash('Tarif enregistré'); onRefresh(); } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
-              }} className="px-3 py-2 rounded-lg bg-orange-600 text-white text-sm disabled:opacity-50">Enregistrer</button>
+              <button
+                disabled={busy}
+                onClick={async () => {
+                  try {
+                    await api('/api/reparation/tarifs', 'PATCH', {
+                      entreprise_id: detail.id,
+                      prix_par_point: prixNum,
+                      duree_estimee_par_point: dureeNum,
+                    });
+                    flash(tarifExistant ? 'Tarif modifié' : 'Tarif créé');
+                    onRefresh();
+                  } catch (err) { flash(err instanceof Error ? err.message : 'Erreur', true); }
+                }}
+                className="px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-2 transition-colors"
+              >
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : tarifExistant ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                {tarifExistant ? 'Enregistrer' : 'Créer le tarif'}
+              </button>
             </div>
           </div>
+          <p className="text-xs text-slate-500">
+            Aperçu : 50 points d&apos;usure = <span className="text-amber-300">{(50 * prixNum).toLocaleString('fr-FR')} F$</span>
+            {' '}· durée estimée {50 * dureeNum} min
+          </p>
         </div>
       )}
     </div>

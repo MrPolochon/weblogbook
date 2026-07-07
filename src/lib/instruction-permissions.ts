@@ -110,12 +110,17 @@ export function canAccessInstructionManagerTools(cap: InstructionCapabilities): 
  */
 export async function getExaminerPoolUserIds(admin: SupabaseClient, licenceCode: string): Promise<string[]> {
   const isAtc = isAtcSideExamRequest(licenceCode);
-  if (isAtc) {
-    const { data: atcFe } = await admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_ATC_FE);
-    return Array.from(new Set((atcFe || []).map((r) => r.user_id as string)));
-  }
-  const { data: fe } = await admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_FE);
-  return Array.from(new Set((fe || []).map((r) => r.user_id as string)));
+  const licType = isAtc ? LICENCE_ATC_FE : LICENCE_FE;
+  const { data: feRows } = await admin.from('licences_qualifications').select('user_id').eq('type', licType);
+  const rawIds = Array.from(new Set((feRows || []).map((r) => r.user_id as string)));
+  if (rawIds.length === 0) return [];
+  // Exclure les examinateurs marqués indisponibles
+  const { data: dispRows } = await admin
+    .from('profiles')
+    .select('id')
+    .in('id', rawIds)
+    .eq('instruction_indisponible', false);
+  return (dispRows || []).map((r) => r.id as string);
 }
 
 export async function userCanConcludeThisExam(
@@ -211,26 +216,33 @@ export function selectTrainingAssigneeFiFirst(
   return bestFi;
 }
 
-/** Training ATC : **ATC FI** uniquement (admin sans titre exclu). */
+/** Training ATC : **ATC FI** uniquement (admin sans titre exclu, indisponibles exclus). */
 export async function getAtcTrainingTier1UserIds(admin: SupabaseClient): Promise<string[]> {
   const { data: fiRows } = await admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_ATC_FI);
-  const ids = new Set<string>();
-  for (const r of fiRows || []) ids.add(r.user_id as string);
-  return Array.from(ids);
+  const rawIds = Array.from(new Set((fiRows || []).map((r) => r.user_id as string)));
+  if (rawIds.length === 0) return [];
+  const { data: dispRows } = await admin
+    .from('profiles')
+    .select('id')
+    .in('id', rawIds)
+    .eq('instruction_indisponible', false);
+  return (dispRows || []).map((r) => r.id as string);
 }
 
-/** **ATC FE** hors pool FI (évite double compte ATC FI + ATC FE). */
+/** **ATC FE** hors pool FI (évite double compte ATC FI + ATC FE, indisponibles exclus). */
 export async function getAtcTrainingTier2UserIds(
   admin: SupabaseClient,
   tier1: Set<string>,
 ): Promise<string[]> {
   const { data: feRows } = await admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_ATC_FE);
-  const out = new Set<string>();
-  for (const r of feRows || []) {
-    const id = r.user_id as string;
-    if (!tier1.has(id)) out.add(id);
-  }
-  return Array.from(out);
+  const rawIds = Array.from(new Set((feRows || []).map((r) => r.user_id as string).filter((id) => !tier1.has(id))));
+  if (rawIds.length === 0) return [];
+  const { data: dispRows } = await admin
+    .from('profiles')
+    .select('id')
+    .in('id', rawIds)
+    .eq('instruction_indisponible', false);
+  return (dispRows || []).map((r) => r.id as string);
 }
 
 /** Union des deux pools (ex. listes déroulantes) — l’assignation utilise les tiers + selectTrainingAssigneeFiFirst. */
@@ -242,28 +254,35 @@ export async function getAtcTrainingInstructorPoolUserIds(admin: SupabaseClient)
 }
 
 /**
- * Training vol : **FI** uniquement (admin / instructeur sans licence FI exclu).
+ * Training vol : **FI** uniquement (admin / instructeur sans licence FI exclu, indisponibles exclus).
  * Charge : `instruction_pilot_training_requests`.
  */
 export async function getPilotTrainingTier1UserIds(admin: SupabaseClient): Promise<string[]> {
   const { data: fiRows } = await admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_FI);
-  const ids = new Set<string>();
-  for (const r of fiRows || []) ids.add(r.user_id as string);
-  return Array.from(ids);
+  const rawIds = Array.from(new Set((fiRows || []).map((r) => r.user_id as string)));
+  if (rawIds.length === 0) return [];
+  const { data: dispRows } = await admin
+    .from('profiles')
+    .select('id')
+    .in('id', rawIds)
+    .eq('instruction_indisponible', false);
+  return (dispRows || []).map((r) => r.id as string);
 }
 
-/** Détenteurs **FE** qui ne sont pas déjà en tier 1 (évite double compte FI+FE). */
+/** Détenteurs **FE** hors tier 1, indisponibles exclus. */
 export async function getPilotTrainingTier2UserIds(
   admin: SupabaseClient,
   tier1: Set<string>,
 ): Promise<string[]> {
   const { data: feRows } = await admin.from('licences_qualifications').select('user_id').eq('type', LICENCE_FE);
-  const out = new Set<string>();
-  for (const r of feRows || []) {
-    const id = r.user_id as string;
-    if (!tier1.has(id)) out.add(id);
-  }
-  return Array.from(out);
+  const rawIds = Array.from(new Set((feRows || []).map((r) => r.user_id as string).filter((id) => !tier1.has(id))));
+  if (rawIds.length === 0) return [];
+  const { data: dispRows } = await admin
+    .from('profiles')
+    .select('id')
+    .in('id', rawIds)
+    .eq('instruction_indisponible', false);
+  return (dispRows || []).map((r) => r.id as string);
 }
 
 /** Instructeurs pouvant être désignés comme nouveau référent pour ce parcours (FI/FÉ ou ATC FI/FÉ selon la licence). */

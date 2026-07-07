@@ -437,11 +437,21 @@ export async function PATCH(
         if (!star_arrivee || !String(star_arrivee).trim()) return NextResponse.json({ error: 'STAR d\'arrivee requise pour IFR.' }, { status: 400 });
       }
 
+      // Récupérer toutes les sessions ATC de l'aéroport en une seule requête,
+      // puis choisir la position la plus prioritaire selon ORDRE_ACCEPTATION_PLANS.
+      const { data: sessionsAD } = await admin
+        .from('atc_sessions')
+        .select('user_id, position')
+        .eq('aeroport', ad)
+        .in('position', [...ORDRE_ACCEPTATION_PLANS]);
+      const sessionsByPosition = new Map<string, string>(
+        (sessionsAD ?? []).map(s => [s.position, s.user_id])
+      );
       let holder: { user_id: string; position: string; aeroport: string } | null = null;
       for (const pos of ORDRE_ACCEPTATION_PLANS) {
-        const { data: s } = await admin.from('atc_sessions').select('user_id').eq('aeroport', ad).eq('position', pos).single();
-        if (s?.user_id) {
-          holder = { user_id: s.user_id, position: pos, aeroport: ad };
+        const uid = sessionsByPosition.get(pos);
+        if (uid) {
+          holder = { user_id: uid, position: pos, aeroport: ad };
           break;
         }
       }
@@ -937,13 +947,16 @@ export async function PATCH(
       const { strips } = body; // Array of { id, strip_zone, strip_order }
       if (!Array.isArray(strips)) return NextResponse.json({ error: 'Format invalide.' }, { status: 400 });
 
-      for (const s of strips) {
-        if (!s.id) continue;
-        await admin.from('plans_vol').update({
-          strip_zone: s.strip_zone || null,
-          strip_order: s.strip_order ?? 0,
-        }).eq('id', s.id);
-      }
+      await Promise.all(
+        strips
+          .filter((s) => Boolean(s.id))
+          .map((s) =>
+            admin.from('plans_vol').update({
+              strip_zone: s.strip_zone || null,
+              strip_order: s.strip_order ?? 0,
+            }).eq('id', s.id)
+          )
+      );
       return NextResponse.json({ ok: true });
     }
 

@@ -1,0 +1,198 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { LayoutGrid, X, RefreshCw, Plane, ArrowUp, ArrowDown } from 'lucide-react';
+
+interface GateData {
+  id: string;
+  aeroport: string;
+  gate_code: string;
+  gate_type: string;
+  terminal: string | null;
+  available: boolean;
+  assignment: {
+    id: string;
+    assignment_type: string;
+    status: string;
+    plan_vol: {
+      id: string;
+      numero_vol: string;
+      callsign: string | null;
+      aeroport_depart: string;
+      aeroport_arrivee: string;
+      statut: string;
+      pilote: { identifiant: string } | null;
+    } | null;
+  } | null;
+}
+
+interface Props {
+  aeroport: string | null;
+}
+
+export default function AtcGestionParkingsPanel({ aeroport }: Props) {
+  const [open, setOpen] = useState(false);
+  const [gates, setGates] = useState<GateData[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const loadGates = useCallback(async () => {
+    if (!aeroport) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/ground/gates?aeroport=${aeroport}`);
+      const data = await res.json() as { gates?: GateData[] };
+      setGates(data.gates ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, [aeroport]);
+
+  useEffect(() => {
+    if (open) loadGates();
+  }, [open, loadGates]);
+
+  if (!aeroport) return null;
+
+  const occupied = gates.filter((g) => !g.available).length;
+  const total = gates.length;
+
+  // Grouper par terminal
+  const byTerminal = gates.reduce<Record<string, GateData[]>>((acc, g) => {
+    const t = g.terminal ?? 'Hors terminal';
+    if (!acc[t]) acc[t] = [];
+    acc[t].push(g);
+    return acc;
+  }, {});
+
+  return (
+    <>
+      {/* Bouton d'ouverture */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="Gestion Parkings"
+        className="fixed right-0 top-1/3 -translate-y-1/2 z-30 flex flex-col items-center justify-center gap-1 rounded-l-xl border border-r-0 border-slate-700/50 bg-slate-800/60 px-2 py-4 hover:bg-slate-700/80 transition-colors shadow-xl"
+      >
+        <LayoutGrid className="h-4 w-4 text-slate-400" />
+        <span className="text-[9px] font-bold text-slate-400" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+          Parkings
+        </span>
+        {occupied > 0 && (
+          <span className="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-sky-500 text-[9px] font-bold text-white">
+            {occupied}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm" onClick={() => setOpen(false)} />
+          <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-[#0a0f1c] border-l border-slate-700/50 shadow-2xl flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50 bg-slate-800/30">
+              <div className="flex items-center gap-2">
+                <LayoutGrid className="h-4 w-4 text-slate-400" />
+                <span className="font-bold text-slate-100 text-sm">Gestion Parkings — {aeroport}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={loadGates}
+                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 px-2 py-1 rounded"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center justify-center h-8 w-8 rounded-lg border border-slate-700/50 text-slate-400"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="flex gap-2 p-3 border-b border-slate-700/30">
+              <div className="flex-1 rounded-lg border border-emerald-800/40 bg-emerald-900/10 p-2 text-center">
+                <p className="text-lg font-black text-emerald-400">{total - occupied}</p>
+                <p className="text-[10px] text-emerald-400/70">Libres</p>
+              </div>
+              <div className="flex-1 rounded-lg border border-sky-800/40 bg-sky-900/10 p-2 text-center">
+                <p className="text-lg font-black text-sky-400">{occupied}</p>
+                <p className="text-[10px] text-sky-400/70">Occupés</p>
+              </div>
+              <div className="flex-1 rounded-lg border border-slate-700/40 bg-slate-800/20 p-2 text-center">
+                <p className="text-lg font-black text-slate-300">{total}</p>
+                <p className="text-[10px] text-slate-400/70">Total</p>
+              </div>
+            </div>
+
+            {/* Contenu */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              {total === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-sm">
+                  Aucune porte configurée pour {aeroport}
+                </div>
+              ) : (
+                Object.entries(byTerminal).map(([terminal, terminalGates]) => (
+                  <div key={terminal}>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">{terminal}</p>
+                    <div className="space-y-1">
+                      {terminalGates.map((gate) => (
+                        <GateRow key={gate.id} gate={gate} />
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function GateRow({ gate }: { gate: GateData }) {
+  const plan = gate.assignment?.plan_vol;
+  const isDepart = gate.assignment?.assignment_type === 'depart';
+
+  return (
+    <div className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs ${
+      gate.available
+        ? 'border-emerald-800/30 bg-emerald-900/10'
+        : isDepart
+        ? 'border-emerald-700/40 bg-emerald-900/20'
+        : 'border-sky-700/40 bg-sky-900/20'
+    }`}>
+      <span className={`font-bold text-sm min-w-[70px] ${
+        gate.available ? 'text-emerald-300' : isDepart ? 'text-emerald-200' : 'text-sky-200'
+      }`}>
+        {gate.gate_code}
+      </span>
+
+      {gate.available ? (
+        <span className="text-emerald-500/70">Libre</span>
+      ) : plan ? (
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className={`rounded-full p-0.5 ${isDepart ? 'bg-emerald-800/40' : 'bg-sky-800/40'}`}>
+            {isDepart
+              ? <ArrowUp className="h-2.5 w-2.5 text-emerald-400" />
+              : <ArrowDown className="h-2.5 w-2.5 text-sky-400" />
+            }
+          </div>
+          <div className="min-w-0">
+            <p className="font-mono font-semibold text-slate-200 truncate">{plan.numero_vol}</p>
+            <p className="text-slate-400 text-[10px] truncate">
+              {plan.pilote?.identifiant} • {plan.aeroport_depart}→{plan.aeroport_arrivee}
+            </p>
+          </div>
+          <Plane className={`h-3 w-3 shrink-0 ${isDepart ? 'text-emerald-400' : 'text-sky-400'}`} />
+        </div>
+      ) : (
+        <span className="text-slate-500">Occupé</span>
+      )}
+    </div>
+  );
+}

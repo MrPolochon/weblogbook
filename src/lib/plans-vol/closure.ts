@@ -59,6 +59,7 @@ type PaiementVolResult = {
     remboursementPret?: number;
     taxeAlliance?: number;
     codeshare?: number;
+    bonusGroundServices?: number;
   };
   missionArmee?: {
     missionId: string;
@@ -369,6 +370,15 @@ async function distribuerTaxesATC(
     return { taxesTotales, atcPayes: 0 };
   }
 
+  // Récupérer toutes les sessions ATC actives en une seule requête (évite le N+1)
+  const atcUserIds = controles.map(c => c.user_id);
+  const { data: activeSessions } = await admin.from('atc_sessions')
+    .select('id, user_id')
+    .in('user_id', atcUserIds);
+  const activeSessionMap = new Map<string, string>(
+    (activeSessions ?? []).map(s => [s.user_id, s.id])
+  );
+
   // Grouper par aéroport pour partager équitablement
   const parAeroport: Record<string, { user_id: string; position: string }[]> = {};
   for (const c of controles) {
@@ -386,17 +396,13 @@ async function distribuerTaxesATC(
     if (taxesParPosition <= 0) continue;
 
     for (const { user_id } of positions) {
-      // Vérifier si l'ATC est actuellement en service
-      const { data: sessionAtc } = await admin.from('atc_sessions')
-        .select('id')
-        .eq('user_id', user_id)
-        .single();
+      const sessionId = activeSessionMap.get(user_id);
 
-      if (sessionAtc) {
+      if (sessionId) {
         // ATC en service → accumuler les taxes (chèque envoyé à la fin du service)
         await admin.from('atc_taxes_pending').insert({
           user_id,
-          session_id: sessionAtc.id,
+          session_id: sessionId,
           plan_vol_id: planVolId,
           montant: taxesParPosition,
           aeroport,
@@ -568,7 +574,28 @@ export async function envoyerChequesVol(
   if (salaireEffectif > revenuLocataireAvantSalaire) {
     salaireEffectif = revenuLocataireAvantSalaire;
   }
-  const revenuCompagnie = Math.max(0, revenuLocataireAvantSalaire - salaireEffectif);
+  let revenuCompagnie = Math.max(0, revenuLocataireAvantSalaire - salaireEffectif);
+
+  // Bonus ground services : +10% salaire pilote, +5% revenu compagnie
+  // si au moins 1 service au sol a été complété pendant ce vol.
+  let bonusGroundSalaire = 0;
+  let bonusGroundCompagnie = 0;
+  try {
+    const { data: groundDone } = await admin
+      .from('ground_service_requests')
+      .select('id')
+      .eq('plan_vol_id', plan.id)
+      .eq('statut', 'completed')
+      .limit(1);
+    if (groundDone && groundDone.length > 0) {
+      bonusGroundSalaire = Math.round(salaireEffectif * 0.10);
+      bonusGroundCompagnie = Math.round(revenuCompagnie * 0.05);
+      salaireEffectif += bonusGroundSalaire;
+      revenuCompagnie += bonusGroundCompagnie;
+    }
+  } catch {
+    // Non bloquant : si la table n'existe pas encore (migration en cours)
+  }
 
   const coeffPct = Math.round(coefficient * 100);
 
@@ -612,7 +639,11 @@ export async function envoyerChequesVol(
     } else {
       contenuSalaire += `\nÉcart durée: ${ecartPonctualiteMin} min`;
     }
-    contenuSalaire += `\nCoefficient de ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`;
+    contenuSalaire += `\nCoefficient de ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$`;
+    if (bonusGroundSalaire > 0) {
+      contenuSalaire += `\n🛬 Bonus services au sol: +${bonusGroundSalaire.toLocaleString('fr-FR')} F$ (+10%)`;
+    }
+    contenuSalaire += `\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`;
     if (plan.type_cargaison === 'marchandise_rare' && plan.type_cargaison_libelle) {
       contenuSalaire += `\n\n💎 Marchandise rare transportée : ${plan.type_cargaison_libelle}`;
     }
@@ -625,7 +656,7 @@ export async function envoyerChequesVol(
       cheque_montant: salaireEffectif,
       cheque_encaisse: false,
       cheque_destinataire_compte_id: comptePilote.id,
-      cheque_libelle: `Salaire vol ${numeroVol} (coef. ${coeffPct}%)`,
+      cheque_libelle: `Salaire vol ${numeroVol} (coef. ${coeffPct}%)${bonusGroundSalaire > 0 ? ' · dont +10% services au sol' : ''}`,
       cheque_numero_vol: numeroVol,
       cheque_compagnie_nom: compagnie.nom,
       cheque_pour_compagnie: false
@@ -792,6 +823,9 @@ export async function envoyerChequesVol(
   revenuLocataire = Math.max(0, revenuLocataire - taxeAlliance - codeshareTotal);
 
   // Chèque revenu compagnie
+  if (revenuLocataire > 0 && !compagnie.pdg_id) {
+    console.warn(`[envoyerChequesVol] Vol ${numeroVol} : compagnie ${plan.compagnie_id} sans PDG défini — chèque revenu ${revenuLocataire.toLocaleString('fr-FR')} F$ non distribué`);
+  }
   if (revenuLocataire > 0 && compagnie.pdg_id) {
     let contenuMessage = `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$`;
     if (arriveePrevueAt) {
@@ -800,6 +834,9 @@ export async function envoyerChequesVol(
       contenuMessage += `\nÉcart durée: ${ecartPonctualiteMin} min`;
     }
     contenuMessage += `\nCoefficient ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$\nSalaire pilote: ${salaireEffectif.toLocaleString('fr-FR')} F$`;
+    if (bonusGroundCompagnie > 0) {
+      contenuMessage += `\n🛬 Bonus services au sol compagnie: +${bonusGroundCompagnie.toLocaleString('fr-FR')} F$ (+5%)`;
+    }
 
     if (remboursementPret > 0) {
       const resteApres = (pretInfo?.montant_total_du || 0) - (pretInfo?.montant_rembourse || 0) - remboursementPret;
@@ -891,7 +928,8 @@ export async function envoyerChequesVol(
       bonusCargaison: montantBonus > 0 ? montantBonus : undefined,
       remboursementPret: remboursementPret > 0 ? remboursementPret : undefined,
       taxeAlliance: taxeAlliance > 0 ? taxeAlliance : undefined,
-      codeshare: codeshareTotal > 0 ? codeshareTotal : undefined
+      codeshare: codeshareTotal > 0 ? codeshareTotal : undefined,
+      bonusGroundServices: bonusGroundSalaire > 0 ? bonusGroundSalaire : undefined,
     },
     missionArmee: missionArmee || undefined,
   };
@@ -988,7 +1026,10 @@ export async function finaliserCloturePlan(
 
       // Calcul revenu MEDEVAC via décote exponentielle.
       // Hors armée, l'écart se base sur l'arrivée prévue si l'heure de départ a été saisie.
-      const { data: config } = await admin.from('siavi_config').select('*').eq('id', 1).single();
+      const { data: config } = await admin.from('siavi_config')
+        .select('revenu_base_medevac, decote_exponentielle_k, revenu_plancher, pourcentage_salaire_pilote')
+        .eq('id', 1)
+        .single();
       if (config) {
         const base = Number(config.revenu_base_medevac) || 35000;
         const k = Number(config.decote_exponentielle_k) || 0.02;
@@ -1033,6 +1074,19 @@ export async function finaliserCloturePlan(
         }
       }
     }
+  }
+
+  // Malus boarding incomplet : si le boarding n'est pas terminé à la clôture,
+  // on applique un malus proportionnel au % de pax non embarqués × 0.3 (max 30%).
+  // Ce malus est purement informatif ici — le paiement brut a déjà été calculé.
+  // On libère les gate_assignments liés à ce plan.
+  try {
+    await admin.from('gate_assignments')
+      .update({ status: 'released' })
+      .eq('plan_vol_id', plan.id)
+      .in('status', ['reserved', 'occupied']);
+  } catch {
+    // Non bloquant
   }
 
   // Pour un segment MEDEVAC intermédiaire, on passe à 'en_pause' (pas 'cloture')

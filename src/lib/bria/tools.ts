@@ -232,8 +232,6 @@ export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
           sanitized.intentions_vol = 'Vol déposé via BRIA';
         }
 
-        console.log('[BRIA] submit_flight_plan payload:', JSON.stringify(sanitized));
-
         const res = await fetch('/api/plans-vol', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

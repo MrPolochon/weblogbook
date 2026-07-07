@@ -1,0 +1,26 @@
+-- =============================================================================
+-- Réforme salaire ATC : passage au système à la minute (2026-07-06)
+-- =============================================================================
+--
+-- Aucun changement de schéma requis : les colonnes existantes sont réutilisées.
+--
+-- Nouvelle logique appliquée dans :
+--   src/app/api/atc/session/route.ts (DELETE — déconnexion normale)
+--   src/app/api/atc/session/[user_id]/route.ts (DELETE — déconnexion forcée admin)
+--
+-- Barème salaire à la minute par position :
+--   Delivery  : 200 F$/min
+--   Clairance : 200 F$/min
+--   Ground    : 400 F$/min
+--   Tower     : 600 F$/min
+--   APP       : 800 F$/min
+--   DEP       : 800 F$/min
+--   Center    : 1 000 F$/min
+--
+-- Le chèque de fin de service (type : cheque_taxes_atc) totalise désormais :
+--   salaire_minute = duree_session_minutes × taux_position
+--   total_cheque   = salaire_minute + total_taxes_aeroportuaires_pending
+--
+-- Les taxes aéroportuaires accumulées (atc_taxes_pending) restent inchangées
+-- et continuent d'être distribuées via le même mécanisme.
+-- =============================================================================

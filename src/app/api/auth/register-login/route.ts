@@ -1,17 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
-
-function getClientIp(request: NextRequest): string | null {
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim();
-    if (first) return first;
-  }
-  const realIp = request.headers.get('x-real-ip');
-  if (realIp) return realIp.trim();
-  return null;
-}
+import { getClientIp, normalizeIp } from '@/lib/ip-utils';
 
 /**
  * Enregistre la connexion et indique si un code de confirmation par email est requis.
@@ -37,7 +27,8 @@ export async function POST(req: NextRequest) {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    const previousIp = tracking?.last_login_ip ?? null;
+    // Normaliser l'IP lue en base (peut contenir l'ancien format ::ffff:x.x.x.x)
+    const previousIp = tracking?.last_login_ip ? normalizeIp(tracking.last_login_ip) : null;
     const requireCode = !previousIp || (ip != null && ip !== previousIp);
 
     // Même IP (ou IP actuelle indisponible mais déjà une IP en base) : on enregistre

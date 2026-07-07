@@ -90,6 +90,12 @@ export default function EditPiloteForm({
       setArmee(false);
       setAtc(true);
     }
+    // Si on passe en Ground Crew, désactiver tout le reste
+    else if (newRole === 'ground_crew') {
+      setAtc(false);
+      setSiavi(false);
+      setArmee(false);
+    }
     // Si on passe en pilote, garder les valeurs actuelles
     // Si on passe en admin, garder les valeurs actuelles
   };
@@ -145,6 +151,12 @@ export default function EditPiloteForm({
         }
         body.armee = false;
         body.atc = false;
+      } else if (role === 'ground_crew') {
+        // Ground Crew uniquement — pas de cumul avec pilote pour l'instant
+        body.role = 'ground_crew';
+        body.armee = false;
+        body.atc = false;
+        body.siavi = false;
       } else if (role === 'instructeur') {
         // Instructeur avec accès pilote
         body.role = 'instructeur';
@@ -436,12 +448,14 @@ export default function EditPiloteForm({
             <option value="instructeur">Instructeur</option>
             <option value="atc">ATC uniquement</option>
             <option value="siavi">SIAVI/Pompier uniquement</option>
+            <option value="ground_crew">Ground Crew (service au sol uniquement)</option>
             <option value="admin">Administrateur</option>
           </select>
           <p className="text-xs text-slate-500 mt-1">
             {role === 'admin' && '⚠️ Les administrateurs ont accès à toutes les fonctionnalités du site.'}
             {role === 'atc' && 'Accès uniquement à l\'espace ATC, pas d\'espace pilote.'}
             {role === 'siavi' && 'Accès uniquement à l\'espace SIAVI/Pompier, pas d\'espace pilote.'}
+            {role === 'ground_crew' && 'Accès uniquement à l\'espace Ground Crew (services au sol). Pas d\'espace pilote.'}
             {role === 'instructeur' && 'Accès à l\'espace pilote avec statut instructeur. Peut être sélectionné comme instructeur pour les vols d\'instruction.'}
             {role === 'pilote' && 'Accès à l\'espace pilote. Peut aussi avoir accès à l\'ATC ou SIAVI si coché.'}
           </p>
@@ -450,75 +464,81 @@ export default function EditPiloteForm({
         {/* Accès additionnels */}
         <div className="space-y-3">
           <p className="text-sm font-medium text-slate-300">Accès additionnels :</p>
-          
-          <div className="flex flex-wrap items-center gap-4">
+
+          <div className="flex flex-wrap gap-3">
             {/* Instructeur */}
-            {role !== 'atc' && role !== 'siavi' && (
-              <label className="flex items-center gap-2 cursor-pointer">
+            {role !== 'atc' && role !== 'siavi' && role !== 'ground_crew' && (
+              <label className="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-xl border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors">
                 <input
                   type="checkbox"
                   checked={role === 'instructeur' || role === 'admin'}
                   onChange={(e) => setRole(e.target.checked ? 'instructeur' : 'pilote')}
-                  className="rounded"
+                  className="rounded accent-amber-400"
                   disabled={role === 'admin'}
                 />
-                <span className={`${role === 'admin' ? 'text-slate-400' : 'text-slate-300'}`}>
-                  🎓 Instructeur (Section instruction){role === 'admin' ? ' - automatique pour les admins' : ''}
+                <span className={`text-sm ${role === 'admin' ? 'text-slate-500' : 'text-amber-200'}`}>
+                  🎓 Instructeur{role === 'admin' ? ' (auto pour les admins)' : ''}
                 </span>
               </label>
             )}
 
             {/* Armée */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={armee} 
-                onChange={(e) => setArmee(e.target.checked)} 
+            <label className={`flex items-center gap-2 cursor-pointer px-3 py-2 rounded-xl border transition-colors ${role === 'atc' || role === 'siavi' || role === 'ground_crew' ? 'border-slate-700/30 bg-slate-800/20 opacity-40' : 'border-slate-600/25 bg-slate-700/10 hover:bg-slate-700/20'}`}>
+              <input
+                type="checkbox"
+                checked={armee}
+                onChange={(e) => setArmee(e.target.checked)}
                 className="rounded"
-                disabled={role === 'atc' || role === 'siavi'}
+                disabled={role === 'atc' || role === 'siavi' || role === 'ground_crew'}
               />
-              <span className={`${role === 'atc' || role === 'siavi' ? 'text-slate-500' : 'text-slate-300'}`}>
-                🎖️ Armée (Espace militaire)
-              </span>
+              <span className="text-sm text-slate-300">🎖️ Armée</span>
             </label>
 
             {/* ATC */}
             {role !== 'atc' && (
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={atc} 
-                  onChange={(e) => setAtc(e.target.checked)} 
-                  className="rounded"
-                  disabled={role === 'siavi'}
+              <label className={`flex items-center gap-2 cursor-pointer px-3 py-2 rounded-xl border transition-colors ${role === 'siavi' || role === 'ground_crew' ? 'border-cyan-500/10 bg-cyan-500/5 opacity-40' : 'border-cyan-500/20 bg-cyan-500/5 hover:bg-cyan-500/10'}`}>
+                <input
+                  type="checkbox"
+                  checked={atc}
+                  onChange={(e) => setAtc(e.target.checked)}
+                  className="rounded accent-cyan-400"
+                  disabled={role === 'siavi' || role === 'ground_crew'}
                 />
-                <span className={`${role === 'siavi' ? 'text-slate-500' : 'text-slate-300'}`}>📡 ATC (Espace ATC)</span>
+                <span className="text-sm text-cyan-200">📡 Accès ATC</span>
               </label>
             )}
 
             {/* IFSA */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={ifsa} 
-                onChange={(e) => setIfsa(e.target.checked)} 
-                className="rounded" 
+            <label className="flex items-center gap-2 cursor-pointer px-3 py-2 rounded-xl border border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 transition-colors">
+              <input
+                type="checkbox"
+                checked={ifsa}
+                onChange={(e) => setIfsa(e.target.checked)}
+                className="rounded accent-indigo-400"
               />
-              <span className="text-slate-300">🛡️ IFSA (Modération aviation)</span>
+              <span className="text-sm text-indigo-200">🛡️ IFSA</span>
             </label>
 
             {/* SIAVI */}
             {role !== 'siavi' && (
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={siavi} 
-                  onChange={(e) => setSiavi(e.target.checked)} 
-                  className="rounded"
-                  disabled={role === 'atc'}
+              <label className={`flex items-center gap-2 cursor-pointer px-3 py-2 rounded-xl border transition-colors ${role === 'atc' || role === 'ground_crew' ? 'border-purple-500/10 bg-purple-500/5 opacity-40' : 'border-purple-500/20 bg-purple-500/5 hover:bg-purple-500/10'}`}>
+                <input
+                  type="checkbox"
+                  checked={siavi}
+                  onChange={(e) => setSiavi(e.target.checked)}
+                  className="rounded accent-purple-400"
+                  disabled={role === 'atc' || role === 'ground_crew'}
                 />
-                <span className={`${role === 'atc' ? 'text-slate-500' : 'text-slate-300'}`}>🚒 SIAVI (Espace SIAVI/Pompier)</span>
+                <span className="text-sm text-purple-200">🚒 Accès SIAVI</span>
               </label>
+            )}
+
+            {/* Ground Crew — badge informatif quand c'est le rôle */}
+            {role === 'ground_crew' && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-orange-500/30 bg-orange-500/10">
+                <span className="w-2 h-2 rounded-full bg-orange-400" />
+                <span className="text-sm text-orange-200 font-medium">🔧 Ground Crew actif</span>
+              </div>
             )}
           </div>
 
@@ -530,11 +550,11 @@ export default function EditPiloteForm({
         {/* Accès pilote pour rôle ATC ou SIAVI */}
         {(role === 'atc' || role === 'siavi') && (
           <label className="flex items-center gap-2 cursor-pointer">
-            <input 
-              type="checkbox" 
-              checked={accesPilote} 
-              onChange={(e) => setAccesPilote(e.target.checked)} 
-              className="rounded" 
+            <input
+              type="checkbox"
+              checked={accesPilote}
+              onChange={(e) => setAccesPilote(e.target.checked)}
+              className="rounded"
             />
             <span className="text-slate-300">
               ✈️ Ajouter accès pilote (permet d&apos;accéder à l&apos;espace pilote en plus)

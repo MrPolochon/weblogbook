@@ -348,7 +348,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
 
   // Cleanup LiveKit
   const cleanupLiveKit = useCallback(async () => {
-    console.log('[LiveKit SIAVI] Cleanup');
     if (audioLevelIntervalRef.current) {
       clearInterval(audioLevelIntervalRef.current);
       audioLevelIntervalRef.current = null;
@@ -372,7 +371,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   useEffect(() => {
     if (callState === 'ringing' || callState === 'connecting' || callState === 'incoming') {
       const timeout = setTimeout(async () => {
-        console.log('[Telephone SIAVI] Timeout 30s - reset automatique');
         stopEmergencyAlarm();
         playMessage('Délai dépassé');
         await cleanupLiveKit();
@@ -396,11 +394,9 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
 
   // Rejoindre appel LiveKit
   const joinLiveKitCall = useCallback(async (callId: string): Promise<boolean> => {
-    console.log('[LiveKit SIAVI] Joining call:', callId);
     setConnectionStatus('Connexion...');
     
     try {
-      console.log('[LiveKit SIAVI] Fetching token...');
       const response = await fetch('/api/livekit/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -421,8 +417,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         throw new Error('URL LiveKit non configurée');
       }
       
-      console.log('[LiveKit SIAVI] Token obtained, connecting to:', url);
-      
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
@@ -431,13 +425,11 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       roomRef.current = room;
       
       room.on(RoomEvent.Connected, () => {
-        console.log('[LiveKit SIAVI] Connected to room, waiting for other participant...');
         setConnectionStatus('En attente...');
         // Ne pas dire "Communications établie" ici, attendre l'autre participant
       });
       
-      room.on(RoomEvent.Disconnected, (reason) => {
-        console.log('[LiveKit SIAVI] Disconnected, reason:', reason);
+      room.on(RoomEvent.Disconnected, (_reason) => {
         cleanupLiveKit();
         setCallState('idle');
         setNumber('');
@@ -449,7 +441,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       });
       
       room.on(RoomEvent.ParticipantConnected, (participant) => {
-        console.log('[LiveKit SIAVI] Participant connected:', participant.identity);
         stopEmergencyAlarm();
         setCallState('connected');
         setConnectionStatus('Connecté');
@@ -472,9 +463,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       });
 
       // Quand l'autre participant raccroche
-      room.on(RoomEvent.ParticipantDisconnected, (participant) => {
-        console.log('[LiveKit SIAVI] Participant disconnected:', participant.identity);
-        // L'autre a raccroché, on termine l'appel
+      room.on(RoomEvent.ParticipantDisconnected, (_participant) => {
         stopEmergencyAlarm();
         cleanupLiveKit();
         setCallState('idle');
@@ -486,8 +475,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         playMessage('Correspondant a raccroché');
       });
       
-      room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
-        console.log('[LiveKit SIAVI] Track subscribed:', track.kind, 'from', participant.identity);
+      room.on(RoomEvent.TrackSubscribed, (track, _publication, _participant) => {
         if (track.kind === Track.Kind.Audio) {
           const trackSid = (track as { sid?: string }).sid ?? 'audio-fallback';
           if (attachedAudioElementsRef.current.has(trackSid)) return;
@@ -523,7 +511,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       });
       
       room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
-        console.log('[LiveKit SIAVI] Connection state:', state);
         if (state === ConnectionState.Connected) {
           setConnectionStatus('Connecté');
         } else if (state === ConnectionState.Reconnecting) {
@@ -540,8 +527,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         playMessage('Erreur microphone');
       });
       
-      // Connecter avec timeout et autoSubscribe
-      console.log('[LiveKit SIAVI] Connecting to room...');
       const connectPromise = room.connect(url, token, { autoSubscribe: true });
       const timeoutPromise = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Timeout connexion')), 15000)
@@ -549,7 +534,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       
       await Promise.race([connectPromise, timeoutPromise]);
       
-      console.log('[LiveKit SIAVI] Connected, enabling microphone...');
       if (selectedInputId) {
         const roomWithSwitch = room as unknown as {
           switchActiveDevice?: (kind: string, deviceId: string) => Promise<void>;
@@ -575,7 +559,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       // Vérifier si l'autre participant est DÉJÀ dans la room (rejoint avant nous)
       const existingParticipants = Array.from(room.remoteParticipants.values());
       if (existingParticipants.length > 0) {
-        console.log('[LiveKit SIAVI] Other participant already in room:', existingParticipants[0].identity);
         stopEmergencyAlarm();
         setCallState('connected');
         setConnectionStatus('Connecté');
@@ -600,8 +583,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
             if (participants.length > 0) setAudioLevel(participants[0].audioLevel || 0);
           }, 100);
         }
-      } else {
-        console.log('[LiveKit SIAVI] Audio publishing started, waiting for other participant...');
       }
       return true;
     } catch (err) {

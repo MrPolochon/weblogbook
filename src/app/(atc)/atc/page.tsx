@@ -9,6 +9,7 @@ import PlansEnAttenteModal from '@/components/PlansEnAttenteModal';
 import AtcEnLigneModal from '@/components/AtcEnLigneModal';
 import FlightStripBoardWrapper from '@/components/FlightStripBoardWrapper';
 import AtcNonControlesPanel from '@/components/AtcNonControlesPanel';
+import AtcGestionParkingsPanel from '@/components/AtcGestionParkingsPanel';
 import { getTypeWake } from '@/lib/wake-turbulence';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -202,41 +203,46 @@ export default async function AtcPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header avec stats */}
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-emerald-100">
-            <Radio className="h-6 w-6 text-emerald-600" />
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/85 to-slate-950/95 shadow-[0_22px_42px_rgba(2,6,23,0.36),inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-60" />
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -left-16 -bottom-16 h-56 w-56 rounded-full bg-sky-500/10 blur-3xl" />
+        <div className="relative z-10 flex items-center justify-between flex-wrap gap-4 p-5 sm:p-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/20">
+              <Radio className="h-7 w-7 text-emerald-400" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-50 tracking-tight">Centre de contrôle</h1>
+              <p className="text-sm text-slate-400 mt-0.5">Interface de contrôle aérien</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">Centre de contrôle</h1>
-            <p className="text-sm text-slate-600">Interface de contrôle aérien</p>
+          <div className="flex gap-3">
+            <AtcEnLigneModal
+              totalAtc={totalAtcEnService}
+              sessionsEnService={sessionsEnServiceSafe.map(s => ({
+                aeroport: s.aeroport,
+                position: s.position,
+                user_id: s.user_id,
+                identifiant: (s.profiles as { identifiant?: string } | null)?.identifiant || '—'
+              }))}
+            />
+            <PlansEnAttenteModal totalPlans={totalPlansEnAttente} />
           </div>
-        </div>
-        <div className="flex gap-4">
-          <AtcEnLigneModal 
-            totalAtc={totalAtcEnService} 
-            sessionsEnService={sessionsEnServiceSafe.map(s => ({
-              aeroport: s.aeroport,
-              position: s.position,
-              user_id: s.user_id,
-              identifiant: (s.profiles as { identifiant?: string } | null)?.identifiant || '—'
-            }))} 
-          />
-          <PlansEnAttenteModal totalPlans={totalPlansEnAttente} />
         </div>
       </div>
 
       {/* Statut de service */}
       {!session ? (
-        <div className="card border-amber-300 bg-amber-50">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
           <div className="flex items-start gap-4">
-            <div className="p-3 rounded-lg bg-amber-100">
-              <AlertTriangle className="h-6 w-6 text-amber-600" />
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 shrink-0">
+              <AlertTriangle className="h-6 w-6 text-amber-400" />
             </div>
             <div className="flex-1">
-              <h2 className="text-lg font-semibold text-slate-900 mb-1">Hors service</h2>
-              <p className="text-slate-600 text-sm mb-4">
+              <h2 className="text-lg font-semibold text-slate-100 mb-1">Hors service</h2>
+              <p className="text-slate-400 text-sm mb-4">
                 Vous n&apos;êtes pas en service. Sélectionnez un aéroport et une position pour commencer à contrôler.
               </p>
               <SeMettreEnServiceForm />
@@ -244,22 +250,22 @@ export default async function AtcPage() {
           </div>
         </div>
       ) : (
-        <div className="card border-emerald-300 bg-emerald-50">
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-4">
               <div className="relative">
-                <div className="p-3 rounded-lg bg-emerald-100">
-                  <Radio className="h-6 w-6 text-emerald-600" />
+                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                  <Radio className="h-6 w-6 text-emerald-400" />
                 </div>
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full animate-pulse" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-900 animate-pulse" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xl font-bold text-emerald-600 font-mono">{session.aeroport}</span>
-                  <span className="text-slate-400">—</span>
-                  <span className="text-lg font-semibold text-slate-800">{session.position}</span>
+                  <span className="text-xl font-bold text-emerald-300 font-mono">{session.aeroport}</span>
+                  <span className="text-slate-600">—</span>
+                  <span className="text-lg font-semibold text-slate-200">{session.position}</span>
                 </div>
-                <p className="text-sm text-slate-600 flex items-center gap-1">
+                <p className="text-sm text-slate-400 flex items-center gap-1 mt-0.5">
                   <Clock className="h-3.5 w-3.5" />
                   En service depuis {formatDistanceToNow(new Date(session.started_at), { locale: fr })}
                 </p>
@@ -274,25 +280,31 @@ export default async function AtcPage() {
       {session && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-              <Activity className="h-5 w-5 text-sky-600" />
+            <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+              <Activity className="h-5 w-5 text-sky-400" />
               Trafic sous contrôle
+              {(plansChezMoi?.length || 0) > 0 && (
+                <span className="text-xs font-medium text-slate-500 bg-slate-800/70 px-2 py-0.5 rounded-full">
+                  {plansChezMoi.length}
+                </span>
+              )}
             </h2>
             <div className="flex items-center gap-3">
-              <span className="text-sm text-slate-600">{plansChezMoi?.length || 0} vol(s)</span>
               <CreateManualStripButton />
             </div>
           </div>
-          
+
           {!plansChezMoi || plansChezMoi.length === 0 ? (
-            <div className="card text-center py-8">
-              <Plane className="h-12 w-12 text-slate-400 mx-auto mb-3" />
-              <p className="text-slate-600">Aucun plan de vol sous votre contrôle</p>
+            <div className="card text-center py-10 border-slate-700/40">
+              <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-slate-800/60 border border-slate-700/60 mb-3 mx-auto">
+                <Plane className="h-7 w-7 text-slate-500" />
+              </div>
+              <p className="text-slate-400 font-medium">Aucun plan de vol sous votre contrôle</p>
               <p className="text-slate-500 text-sm mt-1">Les nouveaux plans apparaîtront ici automatiquement</p>
             </div>
           ) : (
-            <FlightStripBoardWrapper 
-              allStrips={plansChezMoi} 
+            <FlightStripBoardWrapper
+              allStrips={plansChezMoi}
               plansATraiter={plansChezMoi.filter(s => ['depose', 'en_attente'].includes(s.statut)).map(s => s.id)}
               atcPosition={session.position}
               atcAeroport={session.aeroport}
@@ -300,7 +312,6 @@ export default async function AtcPage() {
             />
           )}
 
-          {/* Vols en autosurveillance et plans orphelins (sous les strips non assignés) */}
           <div className="mt-3">
             <AtcNonControlesPanel
               plansAuto={plansAuto}
@@ -313,72 +324,70 @@ export default async function AtcPage() {
       )}
 
       {/* Positions en service (ATC + AFIS) */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-          <MapPin className="h-5 w-5 text-sky-600" />
+      <div className="card border-slate-700/40">
+        <h2 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
+          <MapPin className="h-4 w-4 text-sky-400" />
           Positions en service
         </h2>
-        
+
         {Object.keys(byAeroport).length === 0 && afisEnServiceSafe.length === 0 ? (
-          <div className="text-center py-6">
-            <Radio className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-            <p className="text-slate-600">Aucune position en service</p>
+          <div className="text-center py-8">
+            <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-slate-800/60 border border-slate-700/60 mb-3 mx-auto">
+              <Radio className="h-6 w-6 text-slate-600" />
+            </div>
+            <p className="text-slate-500">Aucune position en service</p>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Contrôleurs ATC (en vert) */}
+            {/* Contrôleurs ATC */}
             {Object.entries(byAeroport).map(([apt, controllers]) => (
-              <div 
-                key={`atc-${apt}`} 
-                className="p-3 rounded-lg bg-emerald-50 border border-emerald-200"
+              <div
+                key={`atc-${apt}`}
+                className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/35 transition-colors"
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <Radio className="h-4 w-4 text-emerald-500" />
-                  <span className="text-lg font-bold text-emerald-600 font-mono">{apt}</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <Radio className="h-4 w-4 text-emerald-400" />
+                  <span className="text-base font-bold text-emerald-300 font-mono">{apt}</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-auto" />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {controllers.map((c, idx) => {
                     const freq = vhfFreqMap.get(`${apt}-${c.position}`);
                     return (
-                      <div key={`${apt}-${c.position}-${idx}`} className="flex items-center justify-between text-sm gap-2">
-                        <span className="text-emerald-700 font-medium">{c.position}</span>
+                      <div key={`${apt}-${c.position}-${idx}`} className="flex items-center justify-between text-xs gap-2">
+                        <span className="text-emerald-300/80 font-medium">{c.position}</span>
                         {freq && (
-                          <span className="text-emerald-600/70 font-mono text-[11px]">{freq}</span>
+                          <span className="text-emerald-400/60 font-mono">{freq}</span>
                         )}
-                        <span className="text-slate-500 text-xs ml-auto">{c.identifiant}</span>
+                        <span className="text-slate-500 ml-auto">{c.identifiant}</span>
                       </div>
                     );
                   })}
                 </div>
               </div>
             ))}
-            
-            {/* Agents AFIS (en rouge) */}
+
+            {/* Agents AFIS */}
             {afisEnServiceSafe.map((sess, idx) => (
-              <div 
+              <div
                 key={`afis-${sess.aeroport}-${idx}`}
-                className={`p-3 rounded-lg border ${sess.est_afis ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}
+                className={`p-3 rounded-xl border transition-colors ${sess.est_afis ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/35' : 'bg-amber-500/5 border-amber-500/20 hover:border-amber-500/35'}`}
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <Flame className={`h-4 w-4 ${sess.est_afis ? 'text-red-500' : 'text-amber-500'}`} />
-                  <span className={`text-lg font-bold font-mono ${sess.est_afis ? 'text-red-600' : 'text-amber-600'}`}>{sess.aeroport}</span>
-                  {sess.est_afis ? (
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                  ) : (
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                  )}
+                  <Flame className={`h-4 w-4 ${sess.est_afis ? 'text-red-400' : 'text-amber-400'}`} />
+                  <span className={`text-base font-bold font-mono ${sess.est_afis ? 'text-red-300' : 'text-amber-300'}`}>{sess.aeroport}</span>
+                  <span className={`w-2 h-2 rounded-full ml-auto ${sess.est_afis ? 'bg-red-500 animate-pulse' : 'bg-amber-500'}`} />
                 </div>
-                <div className="flex items-center justify-between text-sm gap-2">
-                  <span className={sess.est_afis ? 'text-red-700 font-medium' : 'text-amber-700 font-medium'}>
+                <div className="flex items-center justify-between text-xs gap-2">
+                  <span className={`font-medium ${sess.est_afis ? 'text-red-300/80' : 'text-amber-300/80'}`}>
                     {sess.est_afis ? 'AFIS' : 'Pompier seul'}
                   </span>
                   {sess.est_afis && vhfFreqMap.get(`${sess.aeroport}-AFIS`) && (
-                    <span className="text-red-600/70 font-mono text-[11px]">
+                    <span className={`font-mono ${sess.est_afis ? 'text-red-400/60' : 'text-amber-400/60'}`}>
                       {vhfFreqMap.get(`${sess.aeroport}-AFIS`)}
                     </span>
                   )}
-                  <span className="text-slate-500 text-xs ml-auto">
+                  <span className="text-slate-500 ml-auto">
                     {(sess.profiles as { identifiant?: string } | null)?.identifiant || '—'}
                   </span>
                 </div>
@@ -387,6 +396,9 @@ export default async function AtcPage() {
           </div>
         )}
       </div>
+
+      {/* Panel slide-out Gestion Parkings */}
+      <AtcGestionParkingsPanel aeroport={session?.aeroport ?? null} />
     </div>
   );
 }
