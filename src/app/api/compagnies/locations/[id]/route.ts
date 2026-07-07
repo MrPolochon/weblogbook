@@ -90,6 +90,14 @@ export async function PATCH(
       if (!isLoueurPdg && !isLocatairePdg) return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 });
       if (!['pending', 'active'].includes(location.statut)) return NextResponse.json({ error: 'Location non annulable.' }, { status: 400 });
 
+      if (location.end_at) {
+        const now = new Date();
+        const dateFin = new Date(location.end_at);
+        if (dateFin < now) {
+          return NextResponse.json({ error: 'Cette location est déjà terminée et ne peut plus être annulée.' }, { status: 400 });
+        }
+      }
+
       const { error } = await admin.from('compagnie_locations').update({
         statut: 'cancelled',
         cancelled_at: new Date().toISOString(),

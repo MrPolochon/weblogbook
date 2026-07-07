@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, X, Ban } from 'lucide-react';
+import { Check, X, Ban, Clock } from 'lucide-react';
 
 type Location = {
   id: string;
@@ -18,6 +18,11 @@ type Location = {
 };
 
 type Compagnie = { id: string; nom: string };
+
+function isExpired(l: Location): boolean {
+  if (!l.end_at) return false;
+  return new Date(l.end_at) < new Date();
+}
 
 export default function CompagnieLocationsClient({ compagnieId }: { compagnieId: string }) {
   const router = useRouter();
@@ -46,10 +51,16 @@ export default function CompagnieLocationsClient({ compagnieId }: { compagnieId:
     load();
   }, [load]);
 
+  const isMember = (l: Location) =>
+    l.loueur_compagnie_id === compagnieId || l.locataire_compagnie_id === compagnieId;
+
   const compagniesById = new Map(compagnies.map((c) => [c.id, c.nom]));
   const incoming = locations.filter((l) => l.locataire_compagnie_id === compagnieId && l.statut === 'pending');
   const outgoing = locations.filter((l) => l.loueur_compagnie_id === compagnieId && l.statut === 'pending');
-  const active = locations.filter((l) => (l.loueur_compagnie_id === compagnieId || l.locataire_compagnie_id === compagnieId) && l.statut === 'active');
+  const active = locations.filter((l) => isMember(l) && l.statut === 'active' && !isExpired(l));
+  const terminated = locations.filter(
+    (l) => isMember(l) && (l.statut === 'terminee' || (l.statut === 'active' && isExpired(l)))
+  );
 
   async function handleAction(id: string, action: 'accept' | 'refuse' | 'cancel') {
     const res = await fetch(`/api/compagnies/locations/${id}`, {
@@ -114,7 +125,7 @@ export default function CompagnieLocationsClient({ compagnieId }: { compagnieId:
       )}
 
       {active.length > 0 && (
-        <div>
+        <div className="mb-4">
           <p className="text-sm text-slate-400 mb-2">Locations actives</p>
           <div className="space-y-2">
             {active.map((l) => (
@@ -134,7 +145,29 @@ export default function CompagnieLocationsClient({ compagnieId }: { compagnieId:
         </div>
       )}
 
-      {incoming.length === 0 && outgoing.length === 0 && active.length === 0 && !loading && (
+      {terminated.length > 0 && (
+        <div className="mb-4">
+          <p className="text-sm text-slate-400 mb-2">Locations terminées</p>
+          <div className="space-y-2">
+            {terminated.map((l) => (
+              <div key={l.id} className="flex items-center justify-between rounded-lg border border-slate-700/30 bg-slate-800/20 p-3 opacity-60">
+                <div className="text-sm text-slate-400">
+                  <div>Loueur: {compagniesById.get(l.loueur_compagnie_id) || '—'}</div>
+                  <div>Locataire: {compagniesById.get(l.locataire_compagnie_id) || '—'}</div>
+                  <div>Prix/jour: {l.prix_journalier.toLocaleString('fr-FR')} F$ • Part loueur: {l.pourcentage_revenu_loueur}%</div>
+                  <div>Fin: {l.end_at ? new Date(l.end_at).toLocaleDateString('fr-FR') : '—'}</div>
+                </div>
+                <div title="Location expirée" className="flex items-center gap-1.5 text-xs text-slate-500 cursor-default select-none">
+                  <Clock className="h-3.5 w-3.5" />
+                  Expirée
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {incoming.length === 0 && outgoing.length === 0 && active.length === 0 && terminated.length === 0 && !loading && (
         <p className="text-slate-500 text-sm">Aucune location en cours.</p>
       )}
     </div>
