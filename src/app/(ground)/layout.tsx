@@ -36,6 +36,19 @@ export default async function GroundLayout({
     .eq('user_id', user.id)
     .maybeSingle();
 
+  // Compter les messages non lus
+  let messagesNonLusCount = 0;
+  try {
+    const { count, error } = await admin
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('destinataire_id', user.id)
+      .eq('lu', false);
+    if (!error) messagesNonLusCount = count ?? 0;
+  } catch {
+    // Graceful fallback si la table est absente
+  }
+
   return (
     <div className="min-h-dvh flex flex-col bg-[#070b14]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <InactivityLogout />
@@ -43,6 +56,7 @@ export default async function GroundLayout({
         isAdmin={isAdmin}
         sessionInfo={groundSession ? { aeroport: groundSession.aeroport, started_at: groundSession.started_at } : null}
         userId={user.id}
+        messagesNonLusCount={messagesNonLusCount}
       />
       <main className="flex-1 mx-auto w-full max-w-7xl px-3 sm:px-5 lg:px-6 py-4 sm:py-6 lg:py-8">
         {children}

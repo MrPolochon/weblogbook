@@ -1,21 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LogOut, Wrench, MapPin, Clock, Radio } from 'lucide-react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { Wrench, LayoutDashboard, LogOut, MessageSquare, Building2, MapPin, Clock, ChevronDown } from 'lucide-react';
+import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import { cn } from '@/lib/utils';
+import { useEffect, useState, useTransition } from 'react';
 
-interface GroundNavBarProps {
-  isAdmin: boolean;
-  sessionInfo: { aeroport: string; started_at: string } | null;
-  userId: string;
-}
-
-function SessionTimer({ startedAt, aeroport }: { startedAt: string; aeroport: string }) {
+function SessionInfo({ aeroport, startedAt }: { aeroport: string; startedAt: string }) {
   const [elapsed, setElapsed] = useState('');
-  const router = useRouter();
 
   useEffect(() => {
     function tick() {
@@ -29,126 +23,154 @@ function SessionTimer({ startedAt, aeroport }: { startedAt: string; aeroport: st
     return () => clearInterval(id);
   }, [startedAt]);
 
-  async function handleHorsService() {
-    await fetch('/api/ground/session', { method: 'DELETE' });
-    router.refresh();
-  }
-
   return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className="flex items-center gap-1.5 rounded-lg border border-emerald-900/70 bg-emerald-950/80 px-2.5 py-1 text-emerald-200 font-semibold">
+    <div className="flex items-center gap-2 text-sm font-semibold whitespace-nowrap flex-shrink-0">
+      <span className="flex items-center gap-1.5 rounded-xl border border-emerald-900/70 bg-emerald-950/80 px-2.5 py-1 text-emerald-200">
         <MapPin className="h-3.5 w-3.5" />
         {aeroport}
       </span>
-      <span className="flex items-center gap-1.5 rounded-lg border border-slate-700/80 bg-slate-900/70 px-2.5 py-1 text-slate-200 font-mono text-xs">
-        <Clock className="h-3 w-3 text-slate-400" />
+      <span className="flex items-center gap-1.5 rounded-xl border border-slate-700/80 bg-slate-900/70 px-2.5 py-1 text-slate-200 font-mono text-xs">
+        <Clock className="h-3.5 w-3.5 text-slate-400" />
         {elapsed}
       </span>
-      <button
-        type="button"
-        onClick={handleHorsService}
-        className="flex items-center gap-1.5 rounded-lg border border-red-800/50 bg-red-900/20 px-2.5 py-1 text-red-300 text-xs font-medium hover:bg-red-900/40 transition-colors"
-      >
-        Hors service
-      </button>
     </div>
   );
 }
 
-export default function GroundNavBar({ isAdmin, sessionInfo, userId: _userId }: GroundNavBarProps) {
+export default function GroundNavBar({
+  isAdmin,
+  sessionInfo,
+  userId: _userId,
+  messagesNonLusCount = 0,
+}: {
+  isAdmin: boolean;
+  sessionInfo: { aeroport: string; started_at: string } | null;
+  userId: string;
+  messagesNonLusCount?: number;
+}) {
   const pathname = usePathname();
   const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/login');
+    startTransition(() => router.refresh());
   }
 
+  const linkBase =
+    'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold tracking-[0.01em] transition-all whitespace-nowrap flex-shrink-0 border';
+  const linkActive =
+    'border-emerald-800/60 bg-emerald-950/70 text-emerald-200 shadow-[0_8px_18px_rgba(2,6,23,0.24)]';
+  const linkInactive =
+    'border-slate-700/45 bg-slate-950/45 text-slate-200 hover:border-slate-500/45 hover:bg-slate-800/78 hover:text-white';
+  const headerBg =
+    'bg-slate-950/86 border-slate-700/45 shadow-[0_20px_40px_rgba(2,6,23,0.45)]';
+
   return (
-    <header
-      className="sticky top-0 z-40 border-b border-slate-700/50 bg-[#0a0f1c]"
-      style={{ boxShadow: '0 1px 0 rgba(255,255,255,0.04), 0 8px 32px rgba(0,0,0,0.7)' }}
-    >
-      <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between gap-2 px-3 sm:px-4">
-        {/* Logo + titre */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 rounded-lg bg-emerald-900/30 border border-emerald-800/40 px-3 py-1.5">
+    <header className={cn('sticky top-0 z-50 border-b backdrop-blur-xl', headerBg)}>
+      <div className="mx-auto flex max-w-screen-2xl items-center justify-between gap-3 px-4 sm:px-5 xl:px-6 sm:gap-5 flex-wrap sm:flex-nowrap py-2 sm:py-0 sm:h-[4.5rem]">
+        {/* Logo + navigation */}
+        <nav className="flex flex-nowrap items-center gap-3 overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
+          {/* Logo */}
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-800/40 bg-emerald-900/30 px-3 py-2 flex-shrink-0">
             <Wrench className="h-4 w-4 text-emerald-400" />
             <span className="text-sm font-bold text-emerald-200 hidden sm:inline">Ground Crew</span>
           </div>
-          {sessionInfo && (
-            <SessionTimer aeroport={sessionInfo.aeroport} startedAt={sessionInfo.started_at} />
-          )}
-        </div>
 
-        {/* Nav */}
-        <nav className="hidden md:flex items-center gap-1.5">
-          <NavLink href="/ground" active={pathname === '/ground'}>
-            <Radio className="h-3.5 w-3.5" />
-            Dashboard
-          </NavLink>
-          {isAdmin && (
-            <NavLink href="/logbook" active={false} accent="sky">
-              Espace Pilote
-            </NavLink>
-          )}
+          {/* Dashboard */}
+          <Link
+            href="/ground"
+            className={cn(linkBase, pathname === '/ground' ? linkActive : linkInactive)}
+          >
+            <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Dashboard</span>
+          </Link>
+
+          {/* Messagerie */}
+          <Link
+            href="/ground/messagerie"
+            className={cn(linkBase, 'relative', pathname.startsWith('/ground/messagerie') ? linkActive : linkInactive)}
+          >
+            <MessageSquare className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Messagerie</span>
+            {messagesNonLusCount > 0 && (
+              <span
+                className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white ring-2 ring-current"
+                title={`${messagesNonLusCount} message(s) non lu(s)`}
+              >
+                {messagesNonLusCount > 99 ? '99+' : messagesNonLusCount}
+              </span>
+            )}
+          </Link>
+
+          {/* Entreprise GC — bientôt disponible */}
+          <div
+            className={cn(linkBase, 'cursor-not-allowed opacity-50')}
+            title="Bientôt disponible"
+          >
+            <Building2 className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Entreprise GC</span>
+          </div>
         </nav>
 
-        {/* Actions droite */}
-        <div className="flex items-center gap-1.5">
-          {isAdmin && (
-            <Link
-              href="/logbook"
-              className="hidden md:flex items-center gap-1.5 rounded-lg border border-slate-700/50 px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
-            >
-              Changer d&apos;espace
-            </Link>
+        {/* Infos session (centre) */}
+        <div className="hidden md:flex justify-center min-w-0 flex-shrink-0">
+          {sessionInfo && (
+            <SessionInfo aeroport={sessionInfo.aeroport} startedAt={sessionInfo.started_at} />
           )}
-          <button
-            type="button"
-            onClick={handleLogout}
-            className={cn(
-              'flex items-center gap-1.5 rounded-lg border border-slate-700/50 px-3 py-2 text-sm font-semibold',
-              'text-slate-400 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 transition-colors',
+        </div>
+
+        {/* Actions droite */}
+        <div className="flex justify-end items-center gap-3 flex-shrink-0">
+          <div className="hidden sm:flex items-center gap-3">
+            {isAdmin && (
+              <AdminSpaceSelector
+                triggerClassName={cn(
+                  linkBase,
+                  'gap-1.5 border-purple-800/40 text-purple-300 hover:bg-purple-900/30',
+                )}
+              />
             )}
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            <span className="hidden lg:inline">Déconnexion</span>
-          </button>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className={cn(linkBase, 'text-slate-300 hover:bg-slate-700 hover:text-red-400')}
+            >
+              <LogOut className="h-4 w-4 flex-shrink-0" />
+              <span className="hidden lg:inline">Déconnexion</span>
+            </button>
+          </div>
         </div>
       </div>
-    </header>
-  );
-}
 
-function NavLink({
-  href, active, accent = 'emerald', children,
-}: {
-  href: string;
-  active: boolean;
-  accent?: 'emerald' | 'sky';
-  children: React.ReactNode;
-}) {
-  const colors = {
-    emerald: {
-      active: 'border-emerald-500/50 bg-emerald-500/20 text-emerald-200',
-      inactive: 'border-slate-700/50 text-slate-300 hover:border-emerald-500/40 hover:bg-emerald-500/10',
-    },
-    sky: {
-      active: 'border-sky-500/50 bg-sky-500/20 text-sky-200',
-      inactive: 'border-slate-700/50 text-slate-300 hover:border-sky-500/40 hover:bg-sky-500/10',
-    },
-  };
-  return (
-    <Link
-      href={href}
-      className={cn(
-        'flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold border transition-colors',
-        active ? colors[accent].active : colors[accent].inactive,
-      )}
-    >
-      {children}
-    </Link>
+      {/* Menu mobile */}
+      <div className="sm:hidden px-5 pb-3">
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen((prev) => !prev)}
+          className="w-full flex items-center justify-center rounded-lg px-3 py-2 border bg-slate-800/60 text-slate-300 border-slate-700/60"
+          aria-label="Ouvrir le menu"
+        >
+          <ChevronDown className={cn('h-5 w-5 transition-transform', mobileMenuOpen && 'rotate-180')} />
+        </button>
+
+        {mobileMenuOpen && (
+          <div className="mt-2 grid gap-2">
+            {isAdmin && <AdminSpaceSelector />}
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors bg-slate-800/60 text-slate-300 border border-slate-700/60 hover:bg-slate-700 hover:text-red-300"
+            >
+              <LogOut className="h-4 w-4" />
+              Déconnexion
+            </button>
+          </div>
+        )}
+      </div>
+    </header>
   );
 }
