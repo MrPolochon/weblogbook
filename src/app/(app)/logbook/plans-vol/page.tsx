@@ -38,7 +38,7 @@ export default async function MesPlansVolPage() {
     supabase.from('profiles').select('role, identifiant').eq('id', user.id).single(),
     supabase
       .from('plans_vol')
-      .select('id, pilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, compagnie_avion_id, inventaire_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id')
+      .select('id, pilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, compagnie_avion_id, inventaire_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id, porte')
       .eq('pilote_id', user.id)
       .order('created_at', { ascending: false }),
     // Plans civils clôturés à enregistrer (pas encore transformés en vol)
@@ -220,7 +220,7 @@ export default async function MesPlansVolPage() {
           aeroportDepart={planActif.aeroport_depart}
           aeroportArrivee={planActif.aeroport_arrivee}
           statut={planActif.statut}
-          porteDepart={(planActif as unknown as { porte_depart?: string | null }).porte_depart ?? null}
+          porteDepart={(planActif as unknown as { porte?: string | null }).porte ?? null}
           paxCount={(planActif as unknown as { nb_pax_genere?: number | null }).nb_pax_genere ?? null}
         />
       )}

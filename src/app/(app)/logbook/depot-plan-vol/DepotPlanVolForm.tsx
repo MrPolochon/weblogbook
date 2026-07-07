@@ -557,6 +557,7 @@ export default function DepotPlanVolForm({
     const items: { label: string; ok: boolean }[] = [
       { label: 'Aéroport de départ', ok: Boolean(aeroport_depart?.trim()) },
       { label: 'Aéroport d\'arrivée', ok: Boolean(aeroport_arrivee?.trim()) },
+      { label: 'Porte de départ', ok: Boolean(aeroport_depart && porte?.trim()) },
       { label: 'Numéro de vol', ok: !!numero_vol.trim() },
       { label: 'Durée de vol', ok: !!(temps_prev_min && parseInt(temps_prev_min, 10) > 0) },
     ];
@@ -642,6 +643,10 @@ export default function DepotPlanVolForm({
     const t = parseInt(temps_prev_min, 10);
     if (!aeroport_depart || !aeroport_arrivee || !numero_vol.trim() || isNaN(t) || t < 1 || !type_vol) {
       setError('Remplissez tous les champs requis.');
+      return;
+    }
+    if (aeroport_depart && !porte.trim()) {
+      setError('La porte de départ est obligatoire.');
       return;
     }
     if (!heure_depart.trim()) {
@@ -1466,7 +1471,7 @@ export default function DepotPlanVolForm({
           </div>
           <div>
             <label className="label">
-              Porte de départ
+              Porte de départ <span className="text-red-400">*</span>
               {aeroport_depart && <span className="ml-1 text-emerald-400/70 text-xs">(sélectionner depuis le catalogue)</span>}
             </label>
             {aeroport_depart ? (
@@ -1474,6 +1479,7 @@ export default function DepotPlanVolForm({
                 aeroport={aeroport_depart}
                 value={porte}
                 onChange={setPorte}
+                required
               />
             ) : (
               <input
