@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, UserPlus, Send, X, Check, Loader2, Search, ImagePlus, Trash2, Radio, LogOut } from 'lucide-react';
+import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, UserPlus, Send, X, Check, Loader2, Search, ImagePlus, Trash2, Radio, LogOut, LayoutGrid } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import TarifsLiaisonsClient from './TarifsLiaisonsClient';
@@ -13,6 +13,7 @@ import CompagnieVolsFerryClient from './CompagnieVolsFerryClient';
 import CompagniePretClient from './CompagniePretClient';
 import CompagnieLocationsClient from './CompagnieLocationsClient';
 import CompagnieAutorisationsClient from './CompagnieAutorisationsClient';
+import CompagniePrioritesPortesClient from './CompagniePrioritesPortesClient';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
 import { toast } from 'sonner';
 
@@ -349,10 +350,11 @@ export default function MaCompagnieClient({
   // Sections de la barre d'ancrage. On les filtre dynamiquement selon le role
   // (un employe simple n'a pas acces aux sections finances PDG, etc.).
   const navSections: { id: string; label: string; icon: typeof Users; show: boolean }[] = [
-    { id: 'equipe',     label: 'Equipe',     icon: Users,         show: true },
-    { id: 'finances',   label: 'Finances',   icon: DollarSign,    show: isLeader },
-    { id: 'flotte',     label: 'Flotte',     icon: Plane,         show: true },
-    { id: 'operations', label: 'Operations', icon: Route,         show: true },
+    { id: 'equipe',      label: 'Equipe',           icon: Users,       show: true },
+    { id: 'finances',    label: 'Finances',          icon: DollarSign,  show: isLeader },
+    { id: 'flotte',      label: 'Flotte',            icon: Plane,       show: true },
+    { id: 'operations',  label: 'Operations',        icon: Route,       show: true },
+    { id: 'portes',      label: 'Priorites Portes',  icon: LayoutGrid,  show: isLeader },
   ];
 
   const totalPilotes = employes.length;
@@ -1075,6 +1077,15 @@ export default function MaCompagnieClient({
         <CompagnieReparationsClient compagnieId={compagnie.id} isPdg={isLeader} />
         {isLeader && <CompagnieVolsFerryClient compagnieId={compagnie.id} />}
       </section>
+
+      {/* === SECTION : PRIORITES PORTES === */}
+      {isLeader && (
+        <section id="portes" className="space-y-6 scroll-mt-28">
+          <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-indigo-500/5">
+            <CompagniePrioritesPortesClient compagnieId={compagnie.id} isPdg={isLeader} />
+          </div>
+        </section>
+      )}
     </div>
   );
 }

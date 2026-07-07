@@ -17,17 +17,20 @@ export async function PATCH(
 
   const admin = createAdminClient();
 
-  const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single();
+  const { data: profile } = await admin.from('profiles').select('role, identifiant').eq('id', user.id).single();
   const isGroundCrew = profile?.role === 'ground_crew' || profile?.role === 'admin';
+  const isPilote = profile?.role === 'pilote' || profile?.role === 'admin';
 
   const body = await request.json() as {
     statut?: ServiceStatut;
     score_minijeu?: number;
     notes?: string;
+    pilote_confirme?: boolean;
   };
 
-  if (!body.statut) {
-    return NextResponse.json({ error: 'statut requis' }, { status: 400 });
+  // Permettre au pilote de confirmer sans changer le statut
+  if (!body.statut && body.pilote_confirme !== true) {
+    return NextResponse.json({ error: 'statut ou pilote_confirme requis' }, { status: 400 });
   }
 
   const { data: existingRequest } = await admin
@@ -38,6 +41,21 @@ export async function PATCH(
 
   if (!existingRequest) {
     return NextResponse.json({ error: 'Demande introuvable' }, { status: 404 });
+  }
+
+  // Cas pilote_confirme : seul le pilote propriétaire peut confirmer
+  if (body.pilote_confirme === true && !body.statut) {
+    if (!isPilote && existingRequest.pilote_id !== user.id) {
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
+    }
+    const { data: updated, error } = await admin
+      .from('ground_service_requests')
+      .update({ pilote_confirme: true })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ request: updated });
   }
 
   if (!isGroundCrew) {
@@ -68,7 +86,10 @@ export async function PATCH(
   if (body.statut === 'completed') {
     updates.completed_at = new Date().toISOString();
 
-    const score = body.score_minijeu ?? 0.75;
+    // Services sans mini-jeu (marshalling/repoussage) : score fixe à 1.0
+    const noMinigameTypes: ServiceType[] = ['marshalling', 'repoussage'];
+    const isNoMinigame = noMinigameTypes.includes(existingRequest.service_type as ServiceType);
+    const score = isNoMinigame ? 1.0 : (body.score_minijeu ?? 0.75);
     updates.score_minijeu = score;
 
     const montant = calculerPaiementService(
@@ -80,6 +101,7 @@ export async function PATCH(
   }
 
   if (body.notes) updates.notes = body.notes;
+  if (body.pilote_confirme !== undefined) updates.pilote_confirme = body.pilote_confirme;
 
   const { data: updated, error } = await admin
     .from('ground_service_requests')
@@ -97,7 +119,7 @@ export async function PATCH(
         admin,
         id,
         user.id,
-        body.score_minijeu ?? 0.75,
+        updated.score_minijeu ?? 0.75,
         updated.montant_paye ?? 0
       );
     } catch {

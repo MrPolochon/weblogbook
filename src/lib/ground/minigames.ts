@@ -1,4 +1,4 @@
-export type MinigameType = 'bagages' | 'catering' | 'fuel' | 'boarding' | 'degivrage' | 'checklist' | 'marshalling';
+export type MinigameType = 'bagages' | 'catering' | 'fuel' | 'boarding' | 'degivrage' | 'checklist' | 'marshalling' | 'repoussage';
 
 export interface MinigameConfig {
   id: MinigameType;
@@ -72,6 +72,15 @@ export const MINIGAMES: Record<MinigameType, MinigameConfig> = {
     paiement_base: 2200,
     instructions:
       'Un signal de marshalling s\'affiche (flèche ou STOP). Appuyez sur la touche correspondante dans les 3 secondes. Séquence de 7 signaux — terminez par STOP.',
+  },
+  repoussage: {
+    id: 'repoussage',
+    name: 'Repoussage',
+    description: 'Guider l\'avion hors du parking avec le tracteur',
+    duree_secondes: 30,
+    paiement_base: 2500,
+    instructions:
+      'L\'avion recule vers la voie de circulation. Suivez les directions indiquées (↙ ↓ ↘ ← →) dans les 5 secondes imparties. Séquence de 5 étapes — terminez par STOP.',
   },
 };
 

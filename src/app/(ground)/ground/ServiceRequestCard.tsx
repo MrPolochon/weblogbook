@@ -28,9 +28,10 @@ const SERVICE_COLORS: Record<ServiceType, string> = {
 interface Props {
   request: GroundServiceRequest;
   onUpdate: (updated: GroundServiceRequest) => void;
+  onAccept?: (request: GroundServiceRequest) => void;
 }
 
-export default function ServiceRequestCard({ request, onUpdate }: Props) {
+export default function ServiceRequestCard({ request, onUpdate, onAccept }: Props) {
   const [loading, setLoading] = useState(false);
   const [ageMin, setAgeMin] = useState(0);
   const isCritical = ageMin >= 3 && request.statut === 'pending';
@@ -54,7 +55,10 @@ export default function ServiceRequestCard({ request, onUpdate }: Props) {
         body: JSON.stringify({ statut }),
       });
       const data = await res.json() as { request?: GroundServiceRequest };
-      if (res.ok && data.request) onUpdate(data.request);
+      if (res.ok && data.request) {
+        onUpdate(data.request);
+        if (statut === 'accepted') onAccept?.(data.request);
+      }
     } finally {
       setLoading(false);
     }

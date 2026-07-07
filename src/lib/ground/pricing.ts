@@ -61,20 +61,22 @@ export async function calculerPrixAbonnement(
  * Calcule le montant de paiement d'un service ground crew selon le type et le score mini-jeu.
  */
 export function calculerPaiementService(
-  serviceType: 'bagages' | 'catering' | 'fuel' | 'boarding',
+  serviceType: 'bagages' | 'catering' | 'fuel' | 'boarding' | 'repoussage' | 'marshalling',
   score: number,
   paxCount?: number
 ): number {
   const scores: Record<string, number> = {
-    bagages:  2000,
-    catering: 1500,
-    fuel:     1800,
-    boarding: 100, // par passager
+    bagages:     2000,
+    catering:    1500,
+    fuel:        1800,
+    boarding:    100,  // par passager
+    repoussage:  2500,
+    marshalling: 1200,
   };
 
   const base = serviceType === 'boarding'
     ? (scores.boarding * (paxCount ?? 1))
-    : scores[serviceType];
+    : (scores[serviceType] ?? 1500);
 
   // Score entre 0.5 et 1.0 — on interpole sur 50%→100% du base
   const clampedScore = Math.max(0, Math.min(1, score));

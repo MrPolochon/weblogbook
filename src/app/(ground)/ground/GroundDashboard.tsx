@@ -3,13 +3,23 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
-  Plane, Bell, Gamepad2, LayoutGrid, CheckCircle2,
-  AlertCircle, Wrench, Users2,
+  Plane, Bell, LayoutGrid, CheckCircle2,
+  AlertCircle, Wrench, Users2, X, Trophy,
 } from 'lucide-react';
 import ServiceRequestCard from './ServiceRequestCard';
 import GatesView from './GatesView';
 import EquipeTab from './EquipeTab';
-import type { AirportGate, GroundServiceRequest } from '@/lib/types';
+import ModalAvion from './ModalAvion';
+import type { AirportGate, GroundServiceRequest, ServiceType } from '@/lib/types';
+
+function estimerMontant(serviceType: ServiceType, score: number, paxCount?: number | null): number {
+  const bases: Record<ServiceType, number> = {
+    bagages: 2000, catering: 1500, fuel: 1800, boarding: 100,
+    repoussage: 2500, marshalling: 1200,
+  };
+  const base = serviceType === 'boarding' ? bases.boarding * (paxCount ?? 1) : bases[serviceType];
+  return Math.round(base * (0.5 + Math.max(0, Math.min(1, score)) * 0.5));
+}
 
 type PlanActif = {
   id: string;
@@ -33,6 +43,7 @@ interface Props {
   aeroport: string;
   sessionId: string;
   userId: string;
+  gcIdentifiant: string;
   myTeamId: string | null;
   pendingInvitationsCount: number;
   serviceRequests: GroundServiceRequest[];
@@ -40,14 +51,13 @@ interface Props {
   plansActifs: PlanActif[];
 }
 
-const TABS = ['avions', 'demandes', 'equipe', 'minijeux', 'portes'] as const;
+const TABS = ['avions', 'demandes', 'equipe', 'portes'] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
   avions:   'Avions',
   demandes: 'Demandes',
   equipe:   'Mon Équipe',
-  minijeux: 'Mini-jeux',
   portes:   'Portes',
 };
 
@@ -55,24 +65,25 @@ const TAB_ICONS: Record<Tab, React.ReactNode> = {
   avions:   <Plane className="h-4 w-4" />,
   demandes: <Bell className="h-4 w-4" />,
   equipe:   <Users2 className="h-4 w-4" />,
-  minijeux: <Gamepad2 className="h-4 w-4" />,
   portes:   <LayoutGrid className="h-4 w-4" />,
 };
 
 export default function GroundDashboard({
-  aeroport, sessionId: _sessionId, userId,
+  aeroport, sessionId: _sessionId, userId, gcIdentifiant,
   myTeamId: initialTeamId,
   pendingInvitationsCount: initialInvitationsCount,
   serviceRequests: initialRequests,
   gates,
   plansActifs,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>('demandes');
+  const [activeTab, setActiveTab] = useState<Tab>('avions');
   const [requests, setRequests] = useState<GroundServiceRequest[]>(initialRequests);
   const [alarmPlaying, setAlarmPlaying] = useState(false);
   const [myTeamId, setMyTeamId] = useState<string | null>(initialTeamId);
   const [invitationsCount, setInvitationsCount] = useState(initialInvitationsCount);
   const alarmRef = useRef<HTMLAudioElement | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [gameToast, setGameToast] = useState<{ score: number; montant: number; serviceType: ServiceType } | null>(null);
 
   const handleNewRequest = useCallback((payload: { new: GroundServiceRequest }) => {
     setRequests((prev) => {
@@ -86,86 +97,83 @@ export default function GroundDashboard({
     const supabase = createClient();
     const channel = supabase
       .channel(`ground-requests-${aeroport}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'ground_service_requests',
-          filter: `aeroport=eq.${aeroport}`,
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            handleNewRequest(payload as unknown as { new: GroundServiceRequest });
-          }
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'ground_service_requests',
+        filter: `aeroport=eq.${aeroport}`,
+      }, (payload) => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          handleNewRequest(payload as unknown as { new: GroundServiceRequest });
         }
-      )
+      })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [aeroport, handleNewRequest]);
 
-  // Realtime invitations (badge rouge sur l'onglet équipe)
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
       .channel(`invitations-${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'ground_crew_team_invitations',
-          filter: `to_user_id=eq.${userId}`,
-        },
-        () => setInvitationsCount((c) => c + 1)
-      )
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'ground_crew_team_invitations',
+        filter: `to_user_id=eq.${userId}`,
+      }, () => setInvitationsCount((c) => c + 1))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [userId]);
 
-  // Alarme sonore si demande en attente depuis > 3 minutes
+  // Alarme si demande urgente (marshalling/repoussage ou > 3 min en pending)
   useEffect(() => {
-    const pendingOld = requests.filter((r) => {
-      if (r.statut !== 'pending') return false;
+    const urgents = requests.filter((r) => {
+      if (!['pending', 'accepted'].includes(r.statut)) return false;
+      if (['marshalling', 'repoussage'].includes(r.service_type)) return true;
       const age = (Date.now() - new Date(r.requested_at).getTime()) / 60000;
       return age >= 3;
     });
-    if (pendingOld.length > 0 && !alarmPlaying) {
+    if (urgents.length > 0 && !alarmPlaying) {
       setAlarmPlaying(true);
-    } else if (pendingOld.length === 0) {
+    } else if (urgents.length === 0) {
       setAlarmPlaying(false);
     }
   }, [requests, alarmPlaying]);
 
-  // Filtrer les demandes selon l'équipe (exclusivité)
+  const handleServiceComplete = useCallback((score: number, serviceType: ServiceType, paxCount: number | null) => {
+    const montant = estimerMontant(serviceType, score, paxCount);
+    setGameToast({ score, montant, serviceType });
+    setTimeout(() => setGameToast(null), 6000);
+  }, []);
+
+  // Filtrer les demandes selon l'équipe
   const myRequests = requests.filter((r) => {
-    if (!myTeamId) return !r.team_id; // Solo : voit les demandes sans équipe
-    return r.team_id === myTeamId;    // Équipe : voit uniquement les demandes de l'équipe
+    if (!myTeamId) return !r.team_id;
+    return r.team_id === myTeamId;
   });
 
   const pendingCount = myRequests.filter((r) => r.statut === 'pending').length;
+
+  // Plan sélectionné pour la modal
+  const selectedPlan = selectedPlanId ? plansActifs.find(p => p.id === selectedPlanId) ?? null : null;
+  const selectedPlanRequests = selectedPlanId
+    ? requests.filter(r => r.plan_vol_id === selectedPlanId)
+    : [];
 
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-emerald-900/30 border border-emerald-800/40">
-              <Wrench className="h-5 w-5 text-emerald-400" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-100">Ground Crew — {aeroport}</h1>
-              <p className="text-slate-400 text-sm">{plansActifs.length} vol(s) actif(s) sur l&apos;aéroport</p>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-emerald-900/30 border border-emerald-800/40">
+            <Wrench className="h-5 w-5 text-emerald-400" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-100">Ground Crew — {aeroport}</h1>
+            <p className="text-slate-400 text-sm">{plansActifs.length} vol(s) actif(s)</p>
           </div>
         </div>
 
         {alarmPlaying && (
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-900/30 border border-red-700/50 text-red-300 text-sm font-semibold animate-pulse">
             <AlertCircle className="h-4 w-4" />
-            Demande urgente !
+            Alerte — Action requise !
           </div>
         )}
       </div>
@@ -202,17 +210,23 @@ export default function GroundDashboard({
         ))}
       </div>
 
-      {/* Contenu des onglets */}
+      {/* Contenu */}
       {activeTab === 'avions' && (
-        <AvionsAuSolTab
+        <AvionsTab
           plans={plansActifs}
           aeroport={aeroport}
           myTeamId={myTeamId}
-          requests={requests}
+          requests={myRequests}
+          onSelectPlan={setSelectedPlanId}
         />
       )}
       {activeTab === 'demandes' && (
-        <DemandesTab requests={myRequests} onUpdate={setRequests} allRequests={requests} />
+        <DemandesTab
+          requests={myRequests}
+          onUpdate={setRequests}
+          allRequests={requests}
+          onOpenModal={setSelectedPlanId}
+        />
       )}
       {activeTab === 'equipe' && (
         <EquipeTab
@@ -222,34 +236,57 @@ export default function GroundDashboard({
           onTeamChange={setMyTeamId}
         />
       )}
-      {activeTab === 'minijeux' && (
-        <MinijevxTab aeroport={aeroport} />
-      )}
       {activeTab === 'portes' && (
         <GatesView gates={gates} aeroport={aeroport} />
+      )}
+
+      {/* Modal Avion */}
+      {selectedPlan && (
+        <ModalAvion
+          plan={selectedPlan}
+          requests={selectedPlanRequests}
+          gcIdentifiant={gcIdentifiant}
+          onClose={() => setSelectedPlanId(null)}
+          onUpdateRequest={(updated) => {
+            setRequests((prev) => prev.map(r => r.id === updated.id ? updated : r));
+          }}
+          onServiceComplete={handleServiceComplete}
+        />
+      )}
+
+      {/* Toast résultat */}
+      {gameToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl border border-emerald-700/50 bg-slate-900 px-5 py-4 shadow-2xl">
+          <Trophy className="h-6 w-6 text-emerald-400 shrink-0" />
+          <div>
+            <p className="font-bold text-slate-100 text-sm">Service complété !</p>
+            <p className="text-slate-400 text-xs mt-0.5">
+              Score : <span className="text-emerald-300 font-semibold">{Math.round(gameToast.score * 100)}%</span>
+              {' · '}Gain : <span className="text-amber-300 font-semibold">{gameToast.montant.toLocaleString()} F$</span>
+            </p>
+          </div>
+          <button type="button" onClick={() => setGameToast(null)} className="ml-2 text-slate-500 hover:text-slate-300">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       )}
     </div>
   );
 }
 
-// ── Onglet Avions au Sol ──────────────────────────────────────────────────────
-function AvionsAuSolTab({
-  plans,
-  aeroport,
-  myTeamId,
-  requests,
+// ── Onglet Avions ─────────────────────────────────────────────────────────────
+function AvionsTab({
+  plans, aeroport, myTeamId, requests, onSelectPlan,
 }: {
   plans: PlanActif[];
   aeroport: string;
   myTeamId: string | null;
   requests: GroundServiceRequest[];
+  onSelectPlan: (planId: string) => void;
 }) {
-  const departs = plans.filter((p) => p.aeroport_depart === aeroport);
-  const arrivees = plans.filter((p) => p.aeroport_arrivee === aeroport && p.aeroport_depart !== aeroport);
-
   const allPlans = [
-    ...departs.map((p) => ({ ...p, dirType: 'depart' as const })),
-    ...arrivees.map((p) => ({ ...p, dirType: 'arrivee' as const })),
+    ...plans.filter(p => p.aeroport_depart === aeroport).map(p => ({ ...p, dirType: 'depart' as const })),
+    ...plans.filter(p => p.aeroport_arrivee === aeroport && p.aeroport_depart !== aeroport).map(p => ({ ...p, dirType: 'arrivee' as const })),
   ];
 
   if (allPlans.length === 0) {
@@ -261,71 +298,63 @@ function AvionsAuSolTab({
     );
   }
 
-  function getPlanTeamId(planId: string): string | null {
-    const teamReq = requests.find(
-      (r) => r.plan_vol_id === planId && r.team_id &&
-        !['rejected', 'ground_crew_unavailable', 'completed'].includes(r.statut)
-    );
-    return teamReq?.team_id ?? null;
-  }
-
-  function TeamBadge({ planId }: { planId: string }) {
-    const planTeamId = getPlanTeamId(planId);
-    if (!planTeamId) {
-      return (
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-900/30 text-amber-300 border-amber-700/40">
-          LIBRE
-        </span>
-      );
-    }
-    if (planTeamId === myTeamId) {
-      return (
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-900/30 text-emerald-300 border-emerald-700/40">
-          MON ÉQUIPE
-        </span>
-      );
-    }
-    return (
-      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-slate-700/40 text-slate-400 border-slate-600/40">
-        AUTRE ÉQUIPE
-      </span>
-    );
-  }
-
   return (
     <div className="space-y-2">
       {allPlans.map((plan) => {
-        const gateDepart = plan.gate_assignments?.find((g) => g.assignment_type === 'depart');
-        const gateArrivee = plan.gate_assignments?.find((g) => g.assignment_type === 'arrivee');
-        const planTeamId = getPlanTeamId(plan.id);
+        const planReqs = requests.filter(r => r.plan_vol_id === plan.id);
+        const pendingReqs = planReqs.filter(r => r.statut === 'pending');
+        const hasMarshallingAlert = pendingReqs.some(r => r.service_type === 'marshalling');
+        const hasRepoussageAlert = pendingReqs.some(r => r.service_type === 'repoussage');
+        const pendingMinigameCount = pendingReqs.filter(r =>
+          !['marshalling', 'repoussage'].includes(r.service_type)
+        ).length;
+
+        const gateDepart = plan.gate_assignments?.find(g => g.assignment_type === 'depart');
+        const gateArrivee = plan.gate_assignments?.find(g => g.assignment_type === 'arrivee');
+
+        const planTeamId = planReqs.find(r => r.team_id && !['rejected','completed','ground_crew_unavailable'].includes(r.statut))?.team_id ?? null;
         const isMyTeam = planTeamId === myTeamId && !!myTeamId;
-        const borderClass = isMyTeam
+
+        const borderClass = hasMarshallingAlert
+          ? 'border-red-600/60 animate-pulse'
+          : hasRepoussageAlert
+          ? 'border-orange-600/60 animate-pulse'
+          : isMyTeam
           ? 'border-emerald-700/40'
           : plan.dirType === 'depart'
           ? 'border-emerald-800/20'
           : 'border-sky-800/20';
 
         return (
-          <div key={plan.id} className={`rounded-xl border ${borderClass} bg-slate-800/30 p-4`}>
+          <button
+            key={plan.id}
+            type="button"
+            onClick={() => onSelectPlan(plan.id)}
+            className={`w-full rounded-xl border ${borderClass} bg-slate-800/30 p-4 text-left transition-all hover:bg-slate-800/50 hover:border-slate-600/60 group`}
+          >
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-slate-700/40">
-                  <Plane className={`h-4 w-4 ${plan.dirType === 'depart' ? 'text-emerald-400' : 'text-sky-400'}`} />
+                <div className={`p-2 rounded-xl ${hasMarshallingAlert ? 'bg-red-900/40' : hasRepoussageAlert ? 'bg-orange-900/30' : 'bg-slate-700/40'}`}>
+                  <Plane className={`h-4 w-4 ${hasMarshallingAlert ? 'text-red-400' : hasRepoussageAlert ? 'text-orange-400' : plan.dirType === 'depart' ? 'text-emerald-400' : 'text-sky-400'}`} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold font-mono text-slate-100">{plan.numero_vol}</span>
-                    {plan.callsign && (
-                      <span className="text-xs text-slate-400">{plan.callsign}</span>
-                    )}
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${
-                      plan.dirType === 'depart'
-                        ? 'text-emerald-400 border-emerald-800/40'
-                        : 'text-sky-400 border-sky-800/40'
-                    }`}>
+                    {plan.callsign && <span className="text-xs text-slate-400">{plan.callsign}</span>}
+                    <span className={`text-xs px-2 py-0.5 rounded-full border ${plan.dirType === 'depart' ? 'text-emerald-400 border-emerald-800/40' : 'text-sky-400 border-sky-800/40'}`}>
                       {plan.dirType === 'depart' ? 'Départ' : 'Arrivée'}
                     </span>
-                    <TeamBadge planId={plan.id} />
+                    {hasMarshallingAlert && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-900/40 text-red-300 border border-red-700/50 animate-pulse">MARSHALLING</span>
+                    )}
+                    {hasRepoussageAlert && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-900/40 text-orange-300 border border-orange-700/50 animate-pulse">PUSHBACK</span>
+                    )}
+                    {pendingMinigameCount > 0 && (
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+                        {pendingMinigameCount}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
                     {plan.pilote?.identifiant} • {plan.aeroport_depart} → {plan.aeroport_arrivee}
@@ -335,17 +364,18 @@ function AvionsAuSolTab({
               <div className="flex items-center gap-2 text-xs">
                 {(gateDepart ?? plan.porte) && (
                   <span className="px-2 py-1 rounded-lg bg-emerald-900/30 text-emerald-300 border border-emerald-800/30">
-                    Départ : {gateDepart?.gate?.gate_code ?? plan.porte}
+                    {gateDepart?.gate?.gate_code ?? plan.porte}
                   </span>
                 )}
                 {gateArrivee && (
                   <span className="px-2 py-1 rounded-lg bg-sky-900/30 text-sky-300 border border-sky-800/30">
-                    Arrivée : {gateArrivee?.gate?.gate_code}
+                    Arr : {gateArrivee?.gate?.gate_code}
                   </span>
                 )}
+                <span className="text-slate-500 group-hover:text-slate-300 text-xs">→</span>
               </div>
             </div>
-          </div>
+          </button>
         );
       })}
     </div>
@@ -354,19 +384,18 @@ function AvionsAuSolTab({
 
 // ── Onglet Demandes ───────────────────────────────────────────────────────────
 function DemandesTab({
-  requests,
-  onUpdate,
-  allRequests,
+  requests, onUpdate, allRequests, onOpenModal,
 }: {
   requests: GroundServiceRequest[];
   onUpdate: (requests: GroundServiceRequest[]) => void;
   allRequests: GroundServiceRequest[];
+  onOpenModal: (planId: string) => void;
 }) {
   if (requests.length === 0) {
     return (
       <div className="rounded-xl border border-slate-700/40 bg-slate-800/20 p-12 text-center">
         <CheckCircle2 className="h-10 w-10 text-slate-600 mx-auto mb-3" />
-        <p className="text-slate-400">Aucune demande en attente</p>
+        <p className="text-slate-400">Aucune demande en cours</p>
         <p className="text-slate-500 text-sm mt-1">Les demandes apparaissent ici en temps réel</p>
       </div>
     );
@@ -381,83 +410,9 @@ function DemandesTab({
           onUpdate={(updated) => {
             onUpdate(allRequests.map((r) => r.id === updated.id ? updated : r));
           }}
+          onOpenModal={() => onOpenModal(req.plan_vol_id)}
         />
       ))}
     </div>
   );
-}
-
-// ── Onglet Mini-jeux ──────────────────────────────────────────────────────────
-import type { MinigameType } from '@/lib/ground/minigames';
-
-const GAME_CARDS: { id: MinigameType; name: string; desc: string; emoji: string; color: string }[] = [
-  { id: 'bagages',     name: 'Chargement Bagages',  desc: '30s • Colis + fragiles',     emoji: '🧳', color: 'amber'   },
-  { id: 'catering',    name: 'Service Catering',     desc: '45s • Mémoriser la séquence', emoji: '🍽️', color: 'emerald' },
-  { id: 'fuel',        name: 'Ravitaillement',        desc: '20s • 3 tentatives',         emoji: '⛽', color: 'sky'     },
-  { id: 'boarding',    name: 'Boarding Passagers',    desc: 'VIP → Business → Economy',   emoji: '🎫', color: 'purple'  },
-  { id: 'degivrage',   name: 'Dégivrage Aile',        desc: '45s • Gratter la glace',     emoji: '❄️', color: 'cyan'    },
-  { id: 'checklist',   name: 'Checklist Pré-vol',     desc: '5s mémo • Bon ordre',        emoji: '📋', color: 'violet'  },
-  { id: 'marshalling', name: 'Marshalling',            desc: '7 signaux • Flèches',        emoji: '🦺', color: 'orange'  },
-];
-
-function MinijevxTab({ aeroport: _aeroport }: { aeroport: string }) {
-  const [selected, setSelected] = useState<MinigameType | null>(null);
-
-  if (selected) {
-    return (
-      <div className="rounded-xl border border-slate-700/40 bg-slate-800/20 p-6">
-        <button
-          type="button"
-          onClick={() => setSelected(null)}
-          className="text-sm text-slate-400 hover:text-slate-200 mb-4 flex items-center gap-1"
-        >
-          ← Retour aux mini-jeux
-        </button>
-        <MinijeuxGame type={selected} onFinish={() => setSelected(null)} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-      {GAME_CARDS.map(game => (
-        <button
-          key={game.id}
-          type="button"
-          onClick={() => setSelected(game.id)}
-          className="rounded-xl border border-slate-700/40 bg-slate-800/20 p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-lg hover:border-slate-600/60 hover:bg-slate-800/40 group"
-        >
-          <div className="text-3xl mb-2">{game.emoji}</div>
-          <p className="font-semibold text-slate-200 text-sm group-hover:text-white">{game.name}</p>
-          <p className="text-slate-500 text-xs mt-0.5">{game.desc}</p>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-import dynamic from 'next/dynamic';
-const MinijeuBagages    = dynamic(() => import('./minijeux/MinijeuBagages'));
-const MinijeuCatering   = dynamic(() => import('./minijeux/MinijeuCatering'));
-const MinijeuFuel       = dynamic(() => import('./minijeux/MinijeuFuel'));
-const MinijeuBoarding   = dynamic(() => import('./minijeux/MinijeuBoarding'));
-const MinijeuDegivrage  = dynamic(() => import('./minijeux/MinijeuDegivrage'));
-const MinijeuChecklist  = dynamic(() => import('./minijeux/MinijeuChecklist'));
-const MinijeuMarshalling = dynamic(() => import('./minijeux/MinijeuMarshalling'));
-
-function MinijeuxGame({
-  type,
-  onFinish,
-}: {
-  type: MinigameType;
-  onFinish: (score: number) => void;
-}) {
-  if (type === 'bagages')      return <MinijeuBagages     onFinish={onFinish} />;
-  if (type === 'catering')     return <MinijeuCatering    onFinish={onFinish} />;
-  if (type === 'fuel')         return <MinijeuFuel        onFinish={onFinish} />;
-  if (type === 'boarding')     return <MinijeuBoarding    paxCount={50} onFinish={onFinish} />;
-  if (type === 'degivrage')    return <MinijeuDegivrage   onFinish={onFinish} />;
-  if (type === 'checklist')    return <MinijeuChecklist   onFinish={onFinish} />;
-  if (type === 'marshalling')  return <MinijeuMarshalling onFinish={onFinish} />;
-  return null;
 }

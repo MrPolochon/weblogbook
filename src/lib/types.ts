@@ -3,7 +3,7 @@ export type Role = 'admin' | 'pilote' | 'atc' | 'ifsa' | 'siavi' | 'ground_crew'
 // ── Ground Crew types ─────────────────────────────────────────────────────────
 export type GateType = 'light' | 'medium' | 'heavy' | 'super_heavy' | 'helicopter' | 'cargo' | 'general_aviation' | 'unrestricted' | 'special';
 export type AircraftSize = 'light' | 'medium' | 'heavy' | 'super_heavy';
-export type ServiceType = 'bagages' | 'catering' | 'fuel' | 'boarding';
+export type ServiceType = 'bagages' | 'catering' | 'fuel' | 'boarding' | 'repoussage' | 'marshalling';
 export type ServiceStatut = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'rejected' | 'ground_crew_unavailable';
 export type GateStatus = 'reserved' | 'occupied' | 'released';
 export type AssignmentType = 'depart' | 'arrivee';
@@ -80,6 +80,8 @@ export interface GroundServiceRequest {
   score_minijeu: number | null;
   montant_paye: number | null;
   notes: string | null;
+  direction?: 'gauche' | 'droite' | null;
+  pilote_confirme?: boolean | null;
   team_id?: string | null;
   pilote?: { identifiant: string } | null;
   accepteur?: { identifiant: string } | null;

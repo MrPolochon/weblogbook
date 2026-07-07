@@ -24,6 +24,13 @@ export default async function GroundPage() {
     return <GroundConnexionForm />;
   }
 
+  // Profil du GC (pour afficher son pseudo dans les modals)
+  const { data: gcProfile } = await admin
+    .from('profiles')
+    .select('identifiant')
+    .eq('id', user.id)
+    .single();
+
   // En service : charger toutes les données du dashboard
   const [
     { data: serviceRequests },
@@ -57,7 +64,7 @@ export default async function GroundPage() {
         )
       `)
       .or(`aeroport_depart.eq.${groundSession.aeroport},aeroport_arrivee.eq.${groundSession.aeroport}`)
-      .in('statut', ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'])
+      .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'])
       .order('created_at', { ascending: false })
       .limit(50),
 
@@ -83,6 +90,7 @@ export default async function GroundPage() {
       aeroport={groundSession.aeroport}
       sessionId={groundSession.id}
       userId={user.id}
+      gcIdentifiant={gcProfile?.identifiant ?? 'GC'}
       myTeamId={myTeamMembership?.team_id ?? null}
       pendingInvitationsCount={invCount}
       serviceRequests={(serviceRequests ?? []) as unknown as import('@/lib/types').GroundServiceRequest[]}
