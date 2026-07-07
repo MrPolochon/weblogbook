@@ -28,8 +28,20 @@ const GATE_TYPE_COLOR: Record<string, string> = {
   special:          'bg-red-500/20 text-red-300 border-red-500/30',
 };
 
+type PlanVolOccupant = {
+  id: string;
+  numero_vol: string;
+  callsign?: string | null;
+  aeroport_depart: string;
+  aeroport_arrivee: string;
+  statut: string;
+};
+
 type GateWithStatus = AirportGate & {
   available: boolean;
+  /** Renseigné quand la porte est occupée via plans_vol.porte (source principale). */
+  plan_vol: PlanVolOccupant | null;
+  /** Renseigné quand la porte est occupée via l'ancienne table gate_assignments. */
   assignment: {
     id: string;
     assignment_type: string;
@@ -44,7 +56,7 @@ interface Props {
 }
 
 export default function GatesView({ gates: initialGates, aeroport }: Props) {
-  const [gates, setGates] = useState<GateWithStatus[]>(initialGates.map((g) => ({ ...g, available: true, assignment: null })));
+  const [gates, setGates] = useState<GateWithStatus[]>(initialGates.map((g) => ({ ...g, available: true, plan_vol: null, assignment: null })));
   const [loading, setLoading] = useState(false);
 
   async function loadGates() {
@@ -115,6 +127,10 @@ export default function GatesView({ gates: initialGates, aeroport }: Props) {
                   )}
                   {gate.available ? (
                     <p className="text-[10px] text-emerald-400 mt-1 font-medium">✓ Libre</p>
+                  ) : gate.plan_vol ? (
+                    <p className="text-[10px] text-amber-400 mt-1 font-medium">
+                      ↑ {gate.plan_vol.numero_vol}
+                    </p>
                   ) : gate.assignment ? (
                     <p className="text-[10px] text-amber-400 mt-1 font-medium">
                       {gate.assignment.assignment_type === 'depart' ? '↑' : '↓'}{' '}

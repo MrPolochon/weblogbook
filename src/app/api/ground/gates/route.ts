@@ -33,16 +33,23 @@ export async function GET(request: Request) {
   // La table gate_assignments peut rester pour les arrivées futures.
   const { data: plansAvecPorte } = await admin
     .from('plans_vol')
-    .select('id, callsign, immatriculation, porte, statut, aeroport_depart, aeroport_arrivee, type_avion')
+    .select('id, callsign, immatriculation, numero_vol, porte, statut, aeroport_depart, aeroport_arrivee, type_avion')
     .eq('aeroport_depart', aeroport)
     .not('porte', 'is', null)
-    .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture']);
+    .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
 
   // Construire un map gate_code → plan_vol
+  // On normalise pour gérer les éventuels espaces et les anciennes valeurs
+  // numériques (ex: "15" → corresponds aussi à "Gate 15").
   const planMap = new Map<string, unknown>();
   for (const plan of plansAvecPorte ?? []) {
-    const porte = (plan as { porte: string | null }).porte;
-    if (porte) planMap.set(porte, plan);
+    const porte = (plan as { porte: string | null }).porte?.trim();
+    if (!porte) continue;
+    planMap.set(porte, plan);
+    // Compatibilité format numérique legacy : "15" → "Gate 15"
+    if (/^\d+$/.test(porte)) {
+      planMap.set(`Gate ${porte}`, plan);
+    }
   }
 
   const gatesWithStatus = gates.map((g: { gate_code: string }) => ({
