@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { LayoutGrid, RefreshCw } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 import type { AirportGate } from '@/lib/types';
 
 const GATE_TYPE_LABEL: Record<string, string> = {
@@ -59,7 +60,7 @@ export default function GatesView({ gates: initialGates, aeroport }: Props) {
   const [gates, setGates] = useState<GateWithStatus[]>(initialGates.map((g) => ({ ...g, available: true, plan_vol: null, assignment: null })));
   const [loading, setLoading] = useState(false);
 
-  async function loadGates() {
+  const loadGates = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/ground/gates?aeroport=${aeroport}`);
@@ -68,9 +69,25 @@ export default function GatesView({ gates: initialGates, aeroport }: Props) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [aeroport]);
 
-  useEffect(() => { loadGates(); }, [aeroport]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Chargement initial
+  useEffect(() => { void loadGates(); }, [loadGates]);
+
+  // Rafraîchissement automatique quand un plan de vol est soumis ou modifié
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`gates-plans-vol-${aeroport}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'plans_vol',
+        filter: `aeroport_depart=eq.${aeroport}`,
+      }, () => { void loadGates(); })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [aeroport, loadGates]);
 
   // Grouper par terminal
   const terminals = Array.from(new Set(gates.map((g) => g.terminal ?? 'Hors terminal')));

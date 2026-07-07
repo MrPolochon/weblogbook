@@ -38,25 +38,31 @@ export async function GET(request: Request) {
     .not('porte', 'is', null)
     .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
 
-  // Construire un map gate_code → plan_vol
-  // On normalise pour gérer les éventuels espaces et les anciennes valeurs
-  // numériques (ex: "15" → corresponds aussi à "Gate 15").
+  // Construire un map gate_code → plan_vol.
+  // Clés normalisées en minuscules + sans espaces parasites pour une correspondance
+  // robuste quel que soit le format stocké dans plans_vol.porte (legacy numérique,
+  // casse différente, espace insécable, etc.).
   const planMap = new Map<string, unknown>();
   for (const plan of plansAvecPorte ?? []) {
     const porte = (plan as { porte: string | null }).porte?.trim();
     if (!porte) continue;
-    planMap.set(porte, plan);
-    // Compatibilité format numérique legacy : "15" → "Gate 15"
+    // Clé principale : version normalisée minuscule
+    planMap.set(porte.toLowerCase(), plan);
+    // Compatibilité format numérique legacy : "15" → "gate 15"
     if (/^\d+$/.test(porte)) {
-      planMap.set(`Gate ${porte}`, plan);
+      planMap.set(`gate ${porte}`, plan);
     }
   }
 
-  const gatesWithStatus = gates.map((g: { gate_code: string }) => ({
-    ...g,
-    plan_vol: planMap.get(g.gate_code) ?? null,
-    available: !planMap.has(g.gate_code),
-  }));
+  const gatesWithStatus = gates.map((g: { gate_code: string }) => {
+    // Normaliser le gate_code de la même façon que les clés du planMap
+    const key = g.gate_code.trim().toLowerCase();
+    return {
+      ...g,
+      plan_vol: planMap.get(key) ?? null,
+      available: !planMap.has(key),
+    };
+  });
 
   return NextResponse.json({ gates: gatesWithStatus });
 }

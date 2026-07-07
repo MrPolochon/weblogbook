@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_VOL_CIVIL } from '@/lib/aeroports-ptfs';
+import PorteDepartSelect from '@/components/PorteDepartSelect';
 
 type Plan = {
   id: string;
@@ -152,8 +153,12 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
           <input type="text" className="input" value={numero_vol} onChange={(e) => setNumeroVol(e.target.value)} required />
         </div>
         <div>
-          <label className="label">Porte</label>
-          <input type="text" className="input" value={porte} onChange={(e) => setPorte(e.target.value)} placeholder="Optionnel" />
+          <label className="label">Porte de départ</label>
+          <PorteDepartSelect
+            aeroport={aeroport_depart || null}
+            value={porte}
+            onChange={setPorte}
+          />
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
