@@ -63,9 +63,15 @@ export default function GatesView({ gates: initialGates, aeroport }: Props) {
   const loadGates = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/ground/gates?aeroport=${aeroport}`);
+      const res = await fetch(`/api/ground/gates?aeroport=${encodeURIComponent(aeroport)}`);
+      if (!res.ok) {
+        console.error(`[GatesView] Erreur API gates (${res.status}):`, await res.text().catch(() => ''));
+        return;
+      }
       const data = await res.json() as { gates?: GateWithStatus[] };
-      if (data.gates) setGates(data.gates);
+      if (Array.isArray(data.gates)) setGates(data.gates);
+    } catch (err) {
+      console.error('[GatesView] Erreur fetch gates:', err);
     } finally {
       setLoading(false);
     }

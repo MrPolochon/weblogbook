@@ -3,6 +3,28 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
+/**
+ * Normalise un code de porte pour comparaison robuste.
+ * Gère : casse, espaces multiples, espaces insécables Unicode (U+00A0, U+202F, etc.),
+ * et caractères de contrôle invisibles.
+ */
+function normalizeGateCode(s: string): string {
+  return s
+    .replace(/[\u00A0\u202F\u2009\u2007\u2008\u200B\s]+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Extrait la partie purement numérique d'un code de porte.
+ * Ex : "Gate 9" → "9", "Parking 12" → "12", "9" → "9".
+ * Retourne null si aucun numéro isolé.
+ */
+function extractNumeric(normalized: string): string | null {
+  const m = normalized.match(/^(?:gate|porte|parking|fato|apron)\s+(\d+)$/) ?? normalized.match(/^(\d+)$/);
+  return m ? m[1] : null;
+}
+
 export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -29,38 +51,65 @@ export async function GET(request: Request) {
     return NextResponse.json({ gates: [] });
   }
 
-  // Source de vérité : plans_vol.porte (renseigné lors du dépôt du plan)
-  // La table gate_assignments peut rester pour les arrivées futures.
-  const { data: plansAvecPorte } = await admin
+  // Source de vérité : plans_vol.porte (renseigné lors du dépôt du plan).
+  // La table gate_assignments peut rester pour des extensions futures (arrivées).
+  const { data: plansAvecPorte, error: plansError } = await admin
     .from('plans_vol')
     .select('id, callsign, immatriculation, numero_vol, porte, statut, aeroport_depart, aeroport_arrivee, type_avion')
     .eq('aeroport_depart', aeroport)
     .not('porte', 'is', null)
     .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
 
-  // Construire un map gate_code → plan_vol.
-  // Clés normalisées en minuscules + sans espaces parasites pour une correspondance
-  // robuste quel que soit le format stocké dans plans_vol.porte (legacy numérique,
-  // casse différente, espace insécable, etc.).
+  if (plansError) {
+    console.error(`[ground/gates] Erreur requête plans_vol (aeroport=${aeroport}):`, plansError.message);
+  }
+
+  // Construire un map multi-clés gate_code → plan_vol pour une correspondance
+  // robuste quel que soit le format stocké dans plans_vol.porte :
+  //   - casse différente ("GATE 9" vs "Gate 9")
+  //   - espaces insécables Unicode
+  //   - format legacy purement numérique ("9" ↔ "Gate 9")
+  //   - format sans espace ("gate9" ↔ "Gate 9")
   const planMap = new Map<string, unknown>();
+
   for (const plan of plansAvecPorte ?? []) {
-    const porte = (plan as { porte: string | null }).porte?.trim();
-    if (!porte) continue;
-    // Clé principale : version normalisée minuscule
-    planMap.set(porte.toLowerCase(), plan);
-    // Compatibilité format numérique legacy : "15" → "gate 15"
-    if (/^\d+$/.test(porte)) {
-      planMap.set(`gate ${porte}`, plan);
+    const raw = (plan as { porte: string | null }).porte;
+    if (!raw) continue;
+    const norm = normalizeGateCode(raw);
+    if (!norm) continue;
+
+    // Clé normalisée principale : "gate 9"
+    planMap.set(norm, plan);
+    // Clé sans espace : "gate9"
+    planMap.set(norm.replace(/\s/g, ''), plan);
+
+    const num = extractNumeric(norm);
+    if (num) {
+      // Clé numérique seule : "9" (pour porte stockée comme "9" → retrouver "Gate 9")
+      planMap.set(num, plan);
+      // Clés avec préfixes courants : "gate 9", "parking 9", "fato 9"
+      for (const prefix of ['gate', 'parking', 'porte', 'fato']) {
+        planMap.set(`${prefix} ${num}`, plan);
+        planMap.set(`${prefix}${num}`, plan);
+      }
     }
   }
 
   const gatesWithStatus = gates.map((g: { gate_code: string }) => {
-    // Normaliser le gate_code de la même façon que les clés du planMap
-    const key = g.gate_code.trim().toLowerCase();
+    const norm = normalizeGateCode(g.gate_code);
+    const noSpace = norm.replace(/\s/g, '');
+
+    // Lookup multi-stratégie : normalisé → sans espace → numérique seul
+    const found =
+      planMap.get(norm) ??
+      planMap.get(noSpace) ??
+      (() => { const n = extractNumeric(norm); return n ? planMap.get(n) : undefined; })() ??
+      null;
+
     return {
       ...g,
-      plan_vol: planMap.get(key) ?? null,
-      available: !planMap.has(key),
+      plan_vol: found ?? null,
+      available: found == null,
     };
   });
 
