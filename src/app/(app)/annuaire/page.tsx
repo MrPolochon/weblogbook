@@ -53,7 +53,7 @@ export default async function AnnuairePage() {
   }
 
   const [profilesRes, discordRes] = await Promise.all([
-    admin.from('profiles').select('id, identifiant, role').in('id', allIds),
+    admin.from('profiles').select('id, identifiant, role, instruction_indisponible').in('id', allIds),
     admin.from('discord_links').select('user_id, discord_username').in('user_id', allIds),
   ]);
 
@@ -89,6 +89,7 @@ export default async function AnnuairePage() {
       titres: [...titresUser],
       discord: discordMap.get(id) ?? null,
       photoUrl: photosByUser.get(id) ?? null,
+      indisponible: Boolean(p.instruction_indisponible),
     });
   }
 

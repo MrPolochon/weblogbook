@@ -17,6 +17,8 @@ export type AnnuaireEntry = {
   discord: string | null;
   /** Photo officielle issue de la carte d'identite (cartes_identite.photo_url). */
   photoUrl: string | null;
+  /** Vrai si l'instructeur s'est mis indisponible. */
+  indisponible: boolean;
 };
 
 type FilterKey = 'admin' | 'FI' | 'FE' | 'ATC FI' | 'ATC FE';
@@ -167,65 +169,81 @@ export default function AnnuaireClient({ entries }: { entries: AnnuaireEntry[] }
             return (
               <div
                 key={e.id}
-                className="group rounded-xl border border-slate-700/50 bg-slate-800/20 p-4 space-y-3 transition-all duration-200 hover:border-slate-600/60 hover:bg-slate-800/30 hover:shadow-lg hover:shadow-slate-900/30"
+                className={`relative group rounded-xl border p-4 space-y-3 transition-all duration-200 ${
+                  e.indisponible
+                    ? 'bg-red-950/40 border-red-800/50 opacity-80'
+                    : 'bg-slate-800/20 border-slate-700/50 hover:border-slate-600/60 hover:bg-slate-800/30 hover:shadow-lg hover:shadow-slate-900/30'
+                }`}
               >
-                <div className="flex items-center gap-3">
-                  <UserAvatar identifiant={e.identifiant} photoUrl={e.photoUrl} size="lg" className={ringClass} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-slate-100 truncate">{e.identifiant}</p>
-                    {e.discord ? (
-                      <p className="text-xs text-slate-400 truncate">{e.discord}</p>
-                    ) : (
-                      <p className="text-xs text-slate-600 italic">Pas de Discord</p>
+                {e.indisponible && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-red-950/30 z-10 pointer-events-none">
+                    <span className="text-red-400 font-bold text-sm tracking-widest uppercase bg-red-950/80 px-3 py-1 rounded-full border border-red-700/50">
+                      Non Disponible
+                    </span>
+                  </div>
+                )}
+                <div className={e.indisponible ? 'opacity-50 pointer-events-none' : ''}>
+                  <div className="flex items-center gap-3">
+                    <UserAvatar identifiant={e.identifiant} photoUrl={e.photoUrl} size="lg" className={ringClass} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-100 truncate">{e.identifiant}</p>
+                      {e.discord ? (
+                        <p className="text-xs text-slate-400 truncate">{e.discord}</p>
+                      ) : (
+                        <p className="text-xs text-slate-600 italic">Pas de Discord</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {e.isAdmin && (
+                      <span className={`inline-flex items-center gap-1 rounded-full border ${BADGE_STYLE.admin.border} ${BADGE_STYLE.admin.bg} px-2.5 py-0.5 text-xs font-medium ${BADGE_STYLE.admin.color}`}>
+                        <Shield className="h-3 w-3" />
+                        Admin
+                      </span>
+                    )}
+                    {INSTRUCTION_TITRE_TYPES.map((t) =>
+                      e.titres.includes(t) ? (
+                        <span
+                          key={t}
+                          className={`inline-flex items-center gap-1 rounded-full border ${BADGE_STYLE[t]?.border || ''} ${BADGE_STYLE[t]?.bg || ''} px-2.5 py-0.5 text-xs font-medium ${BADGE_STYLE[t]?.color || ''}`}
+                        >
+                          {t}
+                        </span>
+                      ) : null,
                     )}
                   </div>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {e.isAdmin && (
-                    <span className={`inline-flex items-center gap-1 rounded-full border ${BADGE_STYLE.admin.border} ${BADGE_STYLE.admin.bg} px-2.5 py-0.5 text-xs font-medium ${BADGE_STYLE.admin.color}`}>
-                      <Shield className="h-3 w-3" />
-                      Admin
-                    </span>
-                  )}
-                  {INSTRUCTION_TITRE_TYPES.map((t) =>
-                    e.titres.includes(t) ? (
-                      <span
-                        key={t}
-                        className={`inline-flex items-center gap-1 rounded-full border ${BADGE_STYLE[t]?.border || ''} ${BADGE_STYLE[t]?.bg || ''} px-2.5 py-0.5 text-xs font-medium ${BADGE_STYLE[t]?.color || ''}`}
-                      >
-                        {t}
-                      </span>
-                    ) : null,
-                  )}
-                </div>
 
-                {/* Boutons d'action */}
-                <div className="flex gap-2 pt-1 border-t border-slate-700/30">
-                  <Link
-                    href={`/messagerie?to=${encodeURIComponent(e.identifiant)}`}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 hover:border-sky-500/40 text-sky-400 hover:text-sky-300 px-2 py-1.5 text-xs font-medium transition-colors"
-                  >
-                    <Mail className="h-3.5 w-3.5 shrink-0" />
-                    Message
-                  </Link>
-                  {e.discord ? (
-                    <button
-                      type="button"
-                      onClick={() => copyDiscord(e.id, e.discord!)}
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-700/40 hover:bg-slate-700/70 border border-slate-600/30 hover:border-slate-500/50 text-slate-400 hover:text-slate-200 px-2 py-1.5 text-xs font-medium transition-colors"
-                      title={`Copier : ${e.discord}`}
+                  {/* Boutons d'action */}
+                  <div className="flex gap-2 pt-1 mt-3 border-t border-slate-700/30">
+                    <Link
+                      href={`/messagerie?to=${encodeURIComponent(e.identifiant)}`}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 hover:border-sky-500/40 text-sky-400 hover:text-sky-300 px-2 py-1.5 text-xs font-medium transition-colors"
+                      aria-disabled={e.indisponible}
+                      tabIndex={e.indisponible ? -1 : undefined}
                     >
-                      {copiedId === e.id
-                        ? <><Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" /><span className="text-emerald-400">Copié !</span></>
-                        : <><Copy className="h-3.5 w-3.5 shrink-0" />Discord</>
-                      }
-                    </button>
-                  ) : (
-                    <div className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-700/20 text-slate-600 px-2 py-1.5 text-xs font-medium cursor-not-allowed select-none">
-                      <Copy className="h-3.5 w-3.5 shrink-0" />
-                      Discord
-                    </div>
-                  )}
+                      <Mail className="h-3.5 w-3.5 shrink-0" />
+                      Message
+                    </Link>
+                    {e.discord ? (
+                      <button
+                        type="button"
+                        onClick={() => copyDiscord(e.id, e.discord!)}
+                        disabled={e.indisponible}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-700/40 hover:bg-slate-700/70 border border-slate-600/30 hover:border-slate-500/50 text-slate-400 hover:text-slate-200 px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed"
+                        title={`Copier : ${e.discord}`}
+                      >
+                        {copiedId === e.id
+                          ? <><Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" /><span className="text-emerald-400">Copié !</span></>
+                          : <><Copy className="h-3.5 w-3.5 shrink-0" />Discord</>
+                        }
+                      </button>
+                    ) : (
+                      <div className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-700/20 text-slate-600 px-2 py-1.5 text-xs font-medium cursor-not-allowed select-none">
+                        <Copy className="h-3.5 w-3.5 shrink-0" />
+                        Discord
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
