@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'aeroport requis' }, { status: 400 });
   }
 
-  // Récupérer les portes avec leur statut actuel
+  // Récupérer les portes configurées pour l'aéroport
   const { data: gates, error: gatesError } = await admin
     .from('airport_gates')
     .select('*')
@@ -29,29 +29,26 @@ export async function GET(request: Request) {
     return NextResponse.json({ gates: [] });
   }
 
-  // Récupérer les assignations actives
-  const gateIds = gates.map((g: { id: string }) => g.id);
-  const { data: assignments } = await admin
-    .from('gate_assignments')
-    .select(`
-      id, gate_id, assignment_type, status, assigned_at, expires_at,
-      plan_vol:plans_vol!gate_assignments_plan_vol_id_fkey(
-        id, numero_vol, aeroport_depart, aeroport_arrivee, statut, callsign,
-        pilote:profiles!plans_vol_pilote_id_fkey(identifiant)
-      )
-    `)
-    .in('gate_id', gateIds)
-    .in('status', ['reserved', 'occupied']);
+  // Source de vérité : plans_vol.porte (renseigné lors du dépôt du plan)
+  // La table gate_assignments peut rester pour les arrivées futures.
+  const { data: plansAvecPorte } = await admin
+    .from('plans_vol')
+    .select('id, callsign, immatriculation, porte, statut, aeroport_depart, aeroport_arrivee, type_avion')
+    .eq('aeroport_depart', aeroport)
+    .not('porte', 'is', null)
+    .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture']);
 
-  const assignmentMap = new Map<string, unknown>();
-  for (const a of assignments ?? []) {
-    assignmentMap.set((a as { gate_id: string }).gate_id, a);
+  // Construire un map gate_code → plan_vol
+  const planMap = new Map<string, unknown>();
+  for (const plan of plansAvecPorte ?? []) {
+    const porte = (plan as { porte: string | null }).porte;
+    if (porte) planMap.set(porte, plan);
   }
 
-  const gatesWithStatus = gates.map((g: { id: string }) => ({
+  const gatesWithStatus = gates.map((g: { gate_code: string }) => ({
     ...g,
-    assignment: assignmentMap.get(g.id) ?? null,
-    available: !assignmentMap.has(g.id),
+    plan_vol: planMap.get(g.gate_code) ?? null,
+    available: !planMap.has(g.gate_code),
   }));
 
   return NextResponse.json({ gates: gatesWithStatus });

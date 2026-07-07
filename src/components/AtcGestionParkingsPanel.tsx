@@ -1,7 +1,18 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { LayoutGrid, X, RefreshCw, Plane, ArrowUp, ArrowDown } from 'lucide-react';
+import { LayoutGrid, X, RefreshCw, Plane, ArrowUp } from 'lucide-react';
+
+interface PlanVolData {
+  id: string;
+  callsign: string | null;
+  immatriculation: string | null;
+  porte: string | null;
+  statut: string;
+  aeroport_depart: string;
+  aeroport_arrivee: string;
+  type_avion: string | null;
+}
 
 interface GateData {
   id: string;
@@ -10,25 +21,20 @@ interface GateData {
   gate_type: string;
   terminal: string | null;
   available: boolean;
-  assignment: {
-    id: string;
-    assignment_type: string;
-    status: string;
-    plan_vol: {
-      id: string;
-      numero_vol: string;
-      callsign: string | null;
-      aeroport_depart: string;
-      aeroport_arrivee: string;
-      statut: string;
-      pilote: { identifiant: string } | null;
-    } | null;
-  } | null;
+  plan_vol: PlanVolData | null;
 }
 
 interface Props {
   aeroport: string | null;
 }
+
+const STATUT_LABELS: Record<string, string> = {
+  depose: 'Déposé',
+  en_attente: 'En attente',
+  accepte: 'Accepté',
+  en_cours: 'En vol',
+  en_attente_cloture: 'Clôture',
+};
 
 export default function AtcGestionParkingsPanel({ aeroport }: Props) {
   const [open, setOpen] = useState(false);
@@ -56,7 +62,6 @@ export default function AtcGestionParkingsPanel({ aeroport }: Props) {
   const occupied = gates.filter((g) => !g.available).length;
   const total = gates.length;
 
-  // Grouper par terminal
   const byTerminal = gates.reduce<Record<string, GateData[]>>((acc, g) => {
     const t = g.terminal ?? 'Hors terminal';
     if (!acc[t]) acc[t] = [];
@@ -155,19 +160,19 @@ export default function AtcGestionParkingsPanel({ aeroport }: Props) {
 }
 
 function GateRow({ gate }: { gate: GateData }) {
-  const plan = gate.assignment?.plan_vol;
-  const isDepart = gate.assignment?.assignment_type === 'depart';
+  const plan = gate.plan_vol;
+  const isEnCours = plan?.statut === 'en_cours';
 
   return (
     <div className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs ${
       gate.available
         ? 'border-emerald-800/30 bg-emerald-900/10'
-        : isDepart
-        ? 'border-emerald-700/40 bg-emerald-900/20'
+        : isEnCours
+        ? 'border-green-700/40 bg-green-900/20'
         : 'border-sky-700/40 bg-sky-900/20'
     }`}>
       <span className={`font-bold text-sm min-w-[70px] ${
-        gate.available ? 'text-emerald-300' : isDepart ? 'text-emerald-200' : 'text-sky-200'
+        gate.available ? 'text-emerald-300' : isEnCours ? 'text-green-200' : 'text-sky-200'
       }`}>
         {gate.gate_code}
       </span>
@@ -176,19 +181,24 @@ function GateRow({ gate }: { gate: GateData }) {
         <span className="text-emerald-500/70">Libre</span>
       ) : plan ? (
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className={`rounded-full p-0.5 ${isDepart ? 'bg-emerald-800/40' : 'bg-sky-800/40'}`}>
-            {isDepart
-              ? <ArrowUp className="h-2.5 w-2.5 text-emerald-400" />
-              : <ArrowDown className="h-2.5 w-2.5 text-sky-400" />
+          <div className={`rounded-full p-0.5 ${isEnCours ? 'bg-green-800/40' : 'bg-sky-800/40'}`}>
+            {isEnCours
+              ? <ArrowUp className="h-2.5 w-2.5 text-green-400" />
+              : <Plane className="h-2.5 w-2.5 text-sky-400" />
             }
           </div>
-          <div className="min-w-0">
-            <p className="font-mono font-semibold text-slate-200 truncate">{plan.numero_vol}</p>
+          <div className="min-w-0 flex-1">
+            <p className="font-mono font-semibold text-slate-200 truncate">
+              {plan.callsign ?? plan.immatriculation ?? '—'}
+            </p>
             <p className="text-slate-400 text-[10px] truncate">
-              {plan.pilote?.identifiant} • {plan.aeroport_depart}→{plan.aeroport_arrivee}
+              {plan.aeroport_depart}→{plan.aeroport_arrivee}
+              {plan.type_avion ? ` • ${plan.type_avion}` : ''}
             </p>
           </div>
-          <Plane className={`h-3 w-3 shrink-0 ${isDepart ? 'text-emerald-400' : 'text-sky-400'}`} />
+          <span className={`text-[9px] font-bold shrink-0 ${isEnCours ? 'text-green-400' : 'text-sky-400'}`}>
+            {STATUT_LABELS[plan.statut] ?? plan.statut}
+          </span>
         </div>
       ) : (
         <span className="text-slate-500">Occupé</span>
