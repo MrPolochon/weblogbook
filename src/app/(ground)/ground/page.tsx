@@ -30,7 +30,7 @@ export default async function GroundPage() {
     { data: gates },
     { data: plansActifs },
     { data: myTeamMembership },
-    { data: pendingInvitationsCount },
+    { count: pendingInvitationsCount },
   ] = await Promise.all([
     admin.from('ground_service_requests')
       .select(`
@@ -70,13 +70,13 @@ export default async function GroundPage() {
 
     // Nombre d'invitations en attente
     admin.from('ground_crew_team_invitations')
-      .select('id', { count: 'exact', head: true })
+      .select('*', { count: 'exact', head: true })
       .eq('to_user_id', user.id)
       .eq('status', 'pending')
       .gt('expires_at', new Date().toISOString()),
   ]);
 
-  const invCount = (pendingInvitationsCount as unknown as { count: number | null }).count ?? 0;
+  const invCount = pendingInvitationsCount ?? 0;
 
   return (
     <GroundDashboard
