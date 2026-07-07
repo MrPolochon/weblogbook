@@ -50,7 +50,7 @@ export default async function GroundPage() {
 
     admin.from('plans_vol')
       .select(`
-        id, numero_vol, callsign, aeroport_depart, aeroport_arrivee, statut, porte_depart,
+        id, numero_vol, callsign, aeroport_depart, aeroport_arrivee, statut, porte,
         pilote:profiles!plans_vol_pilote_id_fkey(identifiant),
         gate_assignments(id, gate_id, assignment_type, status,
           gate:airport_gates!gate_assignments_gate_id_fkey(gate_code, terminal)

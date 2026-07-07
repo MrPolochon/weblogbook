@@ -18,7 +18,7 @@ type PlanActif = {
   aeroport_depart: string;
   aeroport_arrivee: string;
   statut: string;
-  porte_depart: string | null;
+  porte: string | null;
   pilote: { identifiant: string } | null;
   gate_assignments: Array<{
     id: string;
@@ -333,9 +333,9 @@ function AvionsAuSolTab({
                 </div>
               </div>
               <div className="flex items-center gap-2 text-xs">
-                {(gateDepart ?? plan.porte_depart) && (
+                {(gateDepart ?? plan.porte) && (
                   <span className="px-2 py-1 rounded-lg bg-emerald-900/30 text-emerald-300 border border-emerald-800/30">
-                    Départ : {gateDepart?.gate?.gate_code ?? plan.porte_depart}
+                    Départ : {gateDepart?.gate?.gate_code ?? plan.porte}
                   </span>
                 )}
                 {gateArrivee && (
