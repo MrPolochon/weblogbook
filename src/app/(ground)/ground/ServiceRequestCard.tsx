@@ -79,8 +79,20 @@ export default function ServiceRequestCard({ request, onUpdate, onOpenModal }: P
     ? 'border-amber-700/60'
     : 'border-slate-700/40';
 
+  const planVol = request.plan_vol;
+
   return (
     <div className={`rounded-xl border ${borderClass} bg-slate-800/30 p-4 transition-all`}>
+      {planVol && (planVol.callsign || planVol.immatriculation) && (
+        <div className="mb-3 pb-2 border-b border-slate-700/40">
+          <div className="text-2xl font-bold text-white tracking-wider">
+            {planVol.callsign || planVol.immatriculation}
+          </div>
+          {planVol.immatriculation && (
+            <div className="text-sm text-slate-400">{planVol.immatriculation}</div>
+          )}
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="flex items-start gap-3">
           <div className={`p-2.5 rounded-xl border ${colorClass}`}>
@@ -121,9 +133,9 @@ export default function ServiceRequestCard({ request, onUpdate, onOpenModal }: P
                   {(request.pilote as { identifiant: string }).identifiant}
                 </span>
               )}
-              {request.plan_vol && (
+              {planVol && (
                 <span className="font-mono">
-                  {(request.plan_vol as { numero_vol: string }).numero_vol}
+                  {planVol.numero_vol}
                 </span>
               )}
               <span className="flex items-center gap-1">

@@ -85,7 +85,7 @@ export interface GroundServiceRequest {
   team_id?: string | null;
   pilote?: { identifiant: string } | null;
   accepteur?: { identifiant: string } | null;
-  plan_vol?: { numero_vol: string; aeroport_depart: string; aeroport_arrivee: string } | null;
+  plan_vol?: { numero_vol: string; callsign?: string | null; immatriculation?: string | null; aeroport_depart: string; aeroport_arrivee: string } | null;
 }
 
 // ── Ground Crew Teams ─────────────────────────────────────────────────────────

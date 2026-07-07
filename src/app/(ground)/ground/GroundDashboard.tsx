@@ -25,6 +25,8 @@ type PlanActif = {
   id: string;
   numero_vol: string;
   callsign: string | null;
+  immatriculation: string | null;
+  type_avion: string | null;
   aeroport_depart: string;
   aeroport_arrivee: string;
   statut: string;
@@ -78,12 +80,38 @@ export default function GroundDashboard({
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('avions');
   const [requests, setRequests] = useState<GroundServiceRequest[]>(initialRequests);
+  const [plans, setPlans] = useState<PlanActif[]>(plansActifs);
   const [alarmPlaying, setAlarmPlaying] = useState(false);
   const [myTeamId, setMyTeamId] = useState<string | null>(initialTeamId);
   const [invitationsCount, setInvitationsCount] = useState(initialInvitationsCount);
   const alarmRef = useRef<HTMLAudioElement | null>(null);
+  const plansRef = useRef<PlanActif[]>(plansActifs);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [gameToast, setGameToast] = useState<{ score: number; montant: number; serviceType: ServiceType } | null>(null);
+
+  useEffect(() => { plansRef.current = plans; }, [plans]);
+
+  const fetchMissingPlan = useCallback(async (planId: string) => {
+    const supabase = createClient();
+    const { data } = await supabase.from('plans_vol')
+      .select(`
+        id, numero_vol, callsign, immatriculation, type_avion, aeroport_depart, aeroport_arrivee, statut, porte,
+        pilote:profiles!plans_vol_pilote_id_fkey(identifiant),
+        gate_assignments(id, gate_id, assignment_type, status,
+          gate:airport_gates!gate_assignments_gate_id_fkey(gate_code, terminal)
+        )
+      `)
+      .eq('id', planId)
+      .single();
+    if (data) {
+      setPlans((prev) => {
+        if (prev.find((p) => p.id === planId)) return prev;
+        const next = [data as unknown as PlanActif, ...prev];
+        plansRef.current = next;
+        return next;
+      });
+    }
+  }, []);
 
   const handleNewRequest = useCallback((payload: { new: GroundServiceRequest }) => {
     setRequests((prev) => {
@@ -91,7 +119,10 @@ export default function GroundDashboard({
       if (exists) return prev.map((r) => r.id === payload.new.id ? payload.new : r);
       return [payload.new, ...prev];
     });
-  }, []);
+    if (!plansRef.current.find((p) => p.id === payload.new.plan_vol_id)) {
+      void fetchMissingPlan(payload.new.plan_vol_id);
+    }
+  }, [fetchMissingPlan]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -142,7 +173,6 @@ export default function GroundDashboard({
     setTimeout(() => setGameToast(null), 6000);
   }, []);
 
-  // Filtrer les demandes selon l'équipe
   const myRequests = requests.filter((r) => {
     if (!myTeamId) return !r.team_id;
     return r.team_id === myTeamId;
@@ -150,8 +180,11 @@ export default function GroundDashboard({
 
   const pendingCount = myRequests.filter((r) => r.statut === 'pending').length;
 
-  // Plan sélectionné pour la modal
-  const selectedPlan = selectedPlanId ? plansActifs.find(p => p.id === selectedPlanId) ?? null : null;
+  // Bug 2 : seules les demandes acceptées/en cours apparaissent dans l'onglet Demandes
+  const activeRequests = myRequests.filter((r) => ['accepted', 'in_progress'].includes(r.statut));
+
+  // Bug 3 : chercher dans plans (state) pour inclure les plans fetchés dynamiquement
+  const selectedPlan = selectedPlanId ? plans.find(p => p.id === selectedPlanId) ?? null : null;
   const selectedPlanRequests = selectedPlanId
     ? requests.filter(r => r.plan_vol_id === selectedPlanId)
     : [];
@@ -166,7 +199,7 @@ export default function GroundDashboard({
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-100">Ground Crew — {aeroport}</h1>
-            <p className="text-slate-400 text-sm">{plansActifs.length} vol(s) actif(s)</p>
+            <p className="text-slate-400 text-sm">{plans.length} vol(s) actif(s)</p>
           </div>
         </div>
 
@@ -213,7 +246,7 @@ export default function GroundDashboard({
       {/* Contenu */}
       {activeTab === 'avions' && (
         <AvionsTab
-          plans={plansActifs}
+          plans={plans}
           aeroport={aeroport}
           myTeamId={myTeamId}
           requests={myRequests}
@@ -222,7 +255,7 @@ export default function GroundDashboard({
       )}
       {activeTab === 'demandes' && (
         <DemandesTab
-          requests={myRequests}
+          requests={activeRequests}
           onUpdate={setRequests}
           allRequests={requests}
           onOpenModal={setSelectedPlanId}
@@ -338,9 +371,13 @@ function AvionsTab({
                   <Plane className={`h-4 w-4 ${hasMarshallingAlert ? 'text-red-400' : hasRepoussageAlert ? 'text-orange-400' : plan.dirType === 'depart' ? 'text-emerald-400' : 'text-sky-400'}`} />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-bold font-mono text-slate-100">{plan.numero_vol}</span>
-                    {plan.callsign && <span className="text-xs text-slate-400">{plan.callsign}</span>}
+                  <div className="text-2xl font-bold text-white tracking-wider">
+                    {plan.callsign || plan.immatriculation || plan.numero_vol}
+                  </div>
+                  {plan.immatriculation && (
+                    <div className="text-sm text-slate-400">{plan.immatriculation}</div>
+                  )}
+                  <div className="flex items-center gap-2 flex-wrap mt-1">
                     <span className={`text-xs px-2 py-0.5 rounded-full border ${plan.dirType === 'depart' ? 'text-emerald-400 border-emerald-800/40' : 'text-sky-400 border-sky-800/40'}`}>
                       {plan.dirType === 'depart' ? 'Départ' : 'Arrivée'}
                     </span>

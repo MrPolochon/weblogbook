@@ -19,6 +19,8 @@ type PlanActif = {
   id: string;
   numero_vol: string;
   callsign: string | null;
+  immatriculation?: string | null;
+  type_avion?: string | null;
   aeroport_depart: string;
   aeroport_arrivee: string;
   statut: string;

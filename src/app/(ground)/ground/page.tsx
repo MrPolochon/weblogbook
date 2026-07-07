@@ -44,7 +44,7 @@ export default async function GroundPage() {
         id, plan_vol_id, pilote_id, aeroport, service_type, statut,
         accepted_by, requested_at, accepted_at, completed_at, pax_count, notes, team_id,
         pilote:profiles!ground_service_requests_pilote_id_fkey(identifiant),
-        plan_vol:plans_vol!ground_service_requests_plan_vol_id_fkey(numero_vol, aeroport_depart, aeroport_arrivee)
+        plan_vol:plans_vol!ground_service_requests_plan_vol_id_fkey(numero_vol, callsign, immatriculation, aeroport_depart, aeroport_arrivee)
       `)
       .eq('aeroport', groundSession.aeroport)
       .in('statut', ['pending', 'accepted', 'in_progress'])
@@ -57,14 +57,14 @@ export default async function GroundPage() {
 
     admin.from('plans_vol')
       .select(`
-        id, numero_vol, callsign, aeroport_depart, aeroport_arrivee, statut, porte,
+        id, numero_vol, callsign, immatriculation, type_avion, aeroport_depart, aeroport_arrivee, statut, porte,
         pilote:profiles!plans_vol_pilote_id_fkey(identifiant),
         gate_assignments(id, gate_id, assignment_type, status,
           gate:airport_gates!gate_assignments_gate_id_fkey(gate_code, terminal)
         )
       `)
-      .or(`aeroport_depart.eq.${groundSession.aeroport},aeroport_arrivee.eq.${groundSession.aeroport}`)
-      .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'])
+      .eq('aeroport_depart', groundSession.aeroport)
+      .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture'])
       .order('created_at', { ascending: false })
       .limit(50),
 
