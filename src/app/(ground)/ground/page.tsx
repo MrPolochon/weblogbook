@@ -24,7 +24,9 @@ export default async function GroundPage() {
     return <GroundConnexion userId={user.id} />;
   }
 
-  const aeroport = session.aeroport;
+  const aeroport = session.aeroport.toUpperCase();
+
+  console.log(`[GC page] aeroport avant query=${aeroport}`);
 
   let plans: PlanVol[] = [];
   try {
