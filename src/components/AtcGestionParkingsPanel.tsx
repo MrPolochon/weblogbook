@@ -77,7 +77,7 @@ export default function AtcGestionParkingsPanel({ aeroport }: Props) {
         onClick={() => setOpen(v => !v)}
         title="Gestion Parkings"
         aria-label="Ouvrir le panel gestion parkings"
-        className="fixed right-0 top-1/3 -translate-y-1/2 z-30 flex flex-col items-center justify-center gap-1 rounded-l-xl border border-r-0 border-slate-700/50 bg-slate-800/60 px-2 py-6 hover:bg-slate-700/80 active:bg-slate-700 transition-colors shadow-xl cursor-pointer"
+        className={`fixed top-1/3 -translate-y-1/2 z-50 flex flex-col items-center justify-center gap-1 rounded-l-xl border border-r-0 border-slate-700/50 bg-slate-800/60 px-2 py-6 hover:bg-slate-700/80 active:bg-slate-700 transition-all duration-300 ease-in-out shadow-xl cursor-pointer ${open ? 'right-[420px]' : 'right-0'}`}
       >
         <LayoutGrid className="h-4 w-4 text-slate-400" />
         <span className="text-[9px] font-bold text-slate-400" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
@@ -91,10 +91,11 @@ export default function AtcGestionParkingsPanel({ aeroport }: Props) {
         <ChevronLeft className={`h-3 w-3 text-slate-400 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]" onClick={() => setOpen(false)} />
-      )}
-      <div className={`fixed right-0 top-[4.5rem] h-[calc(100vh-4.5rem)] z-50 w-[420px] max-w-[100vw] bg-[#0a0f1c] border-l border-slate-700/50 shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${open ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div
+        className={`fixed inset-0 z-40 transition-opacity duration-300 bg-black/20 backdrop-blur-[1px] ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        onClick={() => setOpen(false)}
+      />
+      <div className={`fixed right-0 top-0 h-full z-50 w-[420px] max-w-[100vw] bg-[#0a0f1c] border-l border-slate-700/50 shadow-2xl flex flex-col transition-transform duration-300 ease-in-out ${open ? 'translate-x-0' : 'translate-x-full'}`}>
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50 bg-slate-800/30">
               <div className="flex items-center gap-2">
