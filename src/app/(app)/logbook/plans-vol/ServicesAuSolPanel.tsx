@@ -159,21 +159,22 @@ export default function ServicesAuSolPanel({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => setOpen(v => !v)}
         title="Services au Sol"
-        className="fixed right-0 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center justify-center gap-1 rounded-l-xl border border-r-0 border-emerald-700/50 bg-emerald-900/30 px-2 py-4 hover:bg-emerald-900/50 transition-colors shadow-xl"
+        aria-label="Ouvrir le panel services au sol"
+        className="fixed right-0 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center justify-center gap-1 rounded-l-xl border border-r-0 border-emerald-700/50 bg-emerald-900/30 px-2 py-6 hover:bg-emerald-900/50 active:bg-emerald-900/70 transition-colors shadow-xl cursor-pointer"
       >
         <Wrench className="h-4 w-4 text-emerald-400" />
-        <ChevronLeft className="h-3 w-3 text-emerald-400" />
         <span className="text-[9px] font-bold text-emerald-400" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
           Sol
         </span>
+        <ChevronLeft className={`h-3 w-3 text-emerald-400 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
-        <>
-          <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={() => setOpen(false)} />
-          <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-sm bg-[#0a0f1c] border-l border-slate-700/50 shadow-2xl flex flex-col">
+        <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]" onClick={() => setOpen(false)} />
+      )}
+      <div className={`fixed right-0 top-[4.5rem] h-[calc(100vh-4.5rem)] z-50 w-[420px] max-w-[100vw] bg-[#0a0f1c] border-l border-slate-700/50 shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${open ? 'translate-x-0' : 'translate-x-full'}`}>
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50 bg-slate-800/30">
               <div className="flex items-center gap-2">
@@ -441,9 +442,7 @@ export default function ServicesAuSolPanel({
                 </section>
               )}
             </div>
-          </div>
-        </>
-      )}
+      </div>
     </>
   );
 }
