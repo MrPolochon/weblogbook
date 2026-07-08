@@ -241,26 +241,6 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // ── Redirection ground_crew vers /ground ────────────────────────────────────
-  // Si l'utilisateur est ground_crew et accède à / ou /logbook, on le redirige.
-  if (!pathname.startsWith('/api/') && !pathname.startsWith('/ground') && (pathname === '/' || pathname.startsWith('/logbook'))) {
-    let groundRole: string | null = null;
-    if (discordResult) {
-      groundRole = ((discordResult as [{ data: { role?: string } | null }, unknown])[0]?.data as { role?: string } | null)?.role ?? null;
-    }
-    if (!groundRole) {
-      try {
-        const { data: gcProfile } = await admin.from('profiles').select('role').eq('id', user.id).single();
-        groundRole = gcProfile?.role ?? null;
-      } catch { /* ignore */ }
-    }
-    if (groundRole === 'ground_crew') {
-      const url = request.nextUrl.clone();
-      url.pathname = '/ground';
-      return NextResponse.redirect(url);
-    }
-  }
-
   // Handle Discord checks
   if (discordRequired && discordResult) {
     const [profileResult, discordLinkResult] = discordResult as [

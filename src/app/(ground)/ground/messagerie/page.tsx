@@ -12,11 +12,11 @@ export default async function MessagerieGroundPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, identifiant')
+    .select('role, ground_crew, identifiant')
     .eq('id', user.id)
     .single();
 
-  const canGround = profile?.role === 'admin' || profile?.role === 'ground_crew';
+  const canGround = profile?.role === 'admin' || Boolean(profile?.ground_crew);
   if (!canGround) redirect('/logbook');
 
   const admin = createAdminClient();

@@ -17,7 +17,7 @@ export async function PATCH(
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
 
     const body = await request.json();
-    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, verification_code: verificationCodeBody, armee: armeeBody, atc: atcBody, atc_grade_id: atcGradeIdBody, role: roleBody, ifsa: ifsaBody, siavi: siaviBody, superadmin_code: superadminCodeBody } = body;
+    const { heures_initiales_minutes, blocked_until, block_reason, identifiant: identifiantBody, reset_password, verification_code: verificationCodeBody, armee: armeeBody, atc: atcBody, atc_grade_id: atcGradeIdBody, role: roleBody, ifsa: ifsaBody, siavi: siaviBody, ground_crew: groundCrewBody, superadmin_code: superadminCodeBody } = body;
 
     const updates: Record<string, unknown> = {};
     if (typeof heures_initiales_minutes === 'number' && heures_initiales_minutes >= 0) {
@@ -31,6 +31,7 @@ export async function PATCH(
     if (atcGradeIdBody !== undefined) updates.atc_grade_id = (atcGradeIdBody === null || atcGradeIdBody === '') ? null : atcGradeIdBody;
     if (ifsaBody !== undefined) updates.ifsa = Boolean(ifsaBody);
     if (siaviBody !== undefined) updates.siavi = Boolean(siaviBody);
+    if (groundCrewBody !== undefined) updates.ground_crew = Boolean(groundCrewBody);
 
     const admin = createAdminClient();
 
@@ -43,8 +44,8 @@ export async function PATCH(
       }
     }
 
-    // Gestion du changement de rôle (pilote, instructeur, atc, siavi, admin, ground_crew)
-    if (roleBody && ['pilote', 'instructeur', 'atc', 'siavi', 'admin', 'ground_crew'].includes(roleBody)) {
+    // Gestion du changement de rôle (pilote, instructeur, atc, siavi, admin)
+    if (roleBody && ['pilote', 'instructeur', 'atc', 'siavi', 'admin'].includes(roleBody)) {
       const { data: target } = await admin.from('profiles').select('role').eq('id', id).single();
       if (!target) return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
 
@@ -97,12 +98,6 @@ export async function PATCH(
         updates.atc = false;
         // siavi est défini par le frontend (peut être true ou laisser tel quel)
         if (siaviBody === undefined) updates.siavi = true;
-      }
-      // Si on passe en ground_crew : désactiver armee, atc, siavi
-      else if (roleBody === 'ground_crew') {
-        updates.armee = false;
-        updates.atc = false;
-        updates.siavi = false;
       }
       // Si on passe en pilote ou instructeur, utiliser les valeurs du frontend
       else if (roleBody === 'pilote' || roleBody === 'instructeur') {

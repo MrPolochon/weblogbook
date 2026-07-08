@@ -17,9 +17,9 @@ export async function PATCH(
 
   const admin = createAdminClient();
 
-  const { data: profile } = await admin.from('profiles').select('role, identifiant').eq('id', user.id).single();
-  const isGroundCrew = profile?.role === 'ground_crew' || profile?.role === 'admin';
-  const isPilote = profile?.role === 'pilote' || profile?.role === 'admin';
+  const { data: profile } = await admin.from('profiles').select('role, ground_crew, identifiant').eq('id', user.id).single();
+  const isGroundCrew = Boolean(profile?.ground_crew) || profile?.role === 'admin';
+  const isPilote = profile?.role === 'pilote' || profile?.role === 'instructeur' || profile?.role === 'admin';
 
   const body = await request.json() as {
     statut?: ServiceStatut;

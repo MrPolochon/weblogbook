@@ -44,7 +44,7 @@ export default async function AdminPilotesPage() {
   const [profilesRes, trackingResult, recentPlansResult, recentVolsResult] = await Promise.all([
     admin
       .from('profiles')
-      .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc, ifsa, siavi, inactivity_warning_status, inactivity_warned_at, inactivity_delete_after, inactivity_warning_error')
+      .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc, ifsa, siavi, ground_crew, inactivity_warning_status, inactivity_warned_at, inactivity_delete_after, inactivity_warning_error')
       .order('identifiant'),
     Promise.resolve(admin.from('user_login_tracking').select('user_id, last_login_at')).then(r => r.data).catch(() => null),
     Promise.resolve(
@@ -66,7 +66,7 @@ export default async function AdminPilotesPage() {
   if (profilesRes.error) {
     const fallback = await admin
       .from('profiles')
-      .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc, ifsa, siavi')
+      .select('id, identifiant, role, heures_initiales_minutes, blocked_until, created_at, armee, atc, ifsa, siavi, ground_crew')
       .order('identifiant');
     profiles = fallback.data;
   }
@@ -102,6 +102,7 @@ export default async function AdminPilotesPage() {
     atc: boolean | null;
     ifsa: boolean | null;
     siavi: boolean | null;
+    ground_crew: boolean | null;
     inactivity_warning_status?: InactivityStatus;
     inactivity_warned_at?: string | null;
     inactivity_delete_after?: string | null;

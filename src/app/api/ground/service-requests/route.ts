@@ -44,16 +44,16 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
 
-  // Seul un pilote (ou admin) peut créer une demande — jamais un ground crew
+  // Vérifier que l'utilisateur est authentifié (rôle quelconque, GC inclus puisqu'ils sont pilotes)
   const { data: profile } = await admin
     .from('profiles')
     .select('role')
     .eq('id', user.id)
     .single();
 
-  if (!profile || profile.role === 'ground_crew') {
+  if (!profile) {
     return NextResponse.json(
-      { error: 'Seul un pilote peut créer une demande de service au sol' },
+      { error: 'Profil introuvable' },
       { status: 403 }
     );
   }

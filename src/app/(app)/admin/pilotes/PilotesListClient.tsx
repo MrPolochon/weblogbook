@@ -25,6 +25,7 @@ export type PiloteRow = {
   atc: boolean | null;
   ifsa: boolean | null;
   siavi: boolean | null;
+  ground_crew: boolean | null;
   last_login_at: string | null;
   last_plan_at: string | null;
   last_vol_at: string | null;
@@ -79,11 +80,11 @@ function getAvatarColor(id: string): string {
 function matchesFilter(p: PiloteRow, tab: FilterTab): boolean {
   const role = p.role ?? 'pilote';
   if (tab === 'tous') return true;
-  if (tab === 'pilote') return role === 'pilote' || (role !== 'admin' && role !== 'atc' && role !== 'siavi' && role !== 'ground_crew' && role !== 'instructeur');
+  if (tab === 'pilote') return role === 'pilote' || (role !== 'admin' && role !== 'atc' && role !== 'siavi' && role !== 'instructeur');
   if (tab === 'instructeur') return role === 'instructeur';
   if (tab === 'atc') return role === 'atc' || Boolean(p.atc);
   if (tab === 'siavi') return role === 'siavi' || Boolean(p.siavi);
-  if (tab === 'ground_crew') return role === 'ground_crew';
+  if (tab === 'ground_crew') return Boolean(p.ground_crew);
   if (tab === 'admin') return role === 'admin';
   return true;
 }
@@ -107,7 +108,7 @@ function PiloteCard({
   const accessBadges = [];
   if (role === 'atc' || p.atc)         accessBadges.push({ label: 'ATC',         cls: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/25' });
   if (role === 'siavi' || p.siavi)     accessBadges.push({ label: 'SIAVI',       cls: 'text-purple-300 bg-purple-500/10 border-purple-500/25' });
-  if (role === 'ground_crew')          accessBadges.push({ label: 'Ground Crew', cls: 'text-orange-300 bg-orange-500/10 border-orange-500/25' });
+  if (p.ground_crew)                   accessBadges.push({ label: 'Ground Crew', cls: 'text-orange-300 bg-orange-500/10 border-orange-500/25' });
   if (p.armee)                         accessBadges.push({ label: 'Armée',       cls: 'text-slate-300 bg-slate-700/30 border-slate-600/30' });
   if (p.ifsa)                          accessBadges.push({ label: 'IFSA',        cls: 'text-indigo-300 bg-indigo-500/10 border-indigo-500/25' });
 
@@ -273,7 +274,7 @@ export default function PilotesListClient({
     instructeur: (roleCounts.instructeur ?? 0),
     atc:         (roleCounts.atc ?? 0) + allRows.filter((p) => p.atc && p.role !== 'atc').length,
     siavi:       (roleCounts.siavi ?? 0) + allRows.filter((p) => p.siavi && p.role !== 'siavi').length,
-    ground_crew: (roleCounts.ground_crew ?? 0),
+    ground_crew: allRows.filter((p) => Boolean(p.ground_crew)).length,
     admin:       (roleCounts.admin ?? 0),
   };
 

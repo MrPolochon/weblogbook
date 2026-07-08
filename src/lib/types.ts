@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'pilote' | 'atc' | 'ifsa' | 'siavi' | 'ground_crew';
+export type Role = 'admin' | 'pilote' | 'instructeur' | 'atc' | 'ifsa' | 'siavi';
 
 // ── Ground Crew types ─────────────────────────────────────────────────────────
 export type GateType = 'light' | 'medium' | 'heavy' | 'super_heavy' | 'helicopter' | 'cargo' | 'general_aviation' | 'unrestricted' | 'special';
@@ -248,6 +248,7 @@ export interface Profile {
   atc: boolean;
   siavi: boolean;
   ifsa: boolean;
+  ground_crew: boolean;
   atc_grade_id: string | null;
   siavi_grade_id: string | null;
   created_at: string;

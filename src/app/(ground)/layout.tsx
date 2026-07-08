@@ -18,12 +18,12 @@ export default async function GroundLayout({
   const admin = createAdminClient();
   const { data: profile } = await admin
     .from('profiles')
-    .select('role')
+    .select('role, ground_crew')
     .eq('id', user.id)
     .single();
 
   const isAdmin = profile?.role === 'admin';
-  const isGroundCrew = profile?.role === 'ground_crew';
+  const isGroundCrew = Boolean(profile?.ground_crew);
 
   if (!isAdmin && !isGroundCrew) {
     redirect('/logbook');

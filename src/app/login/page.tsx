@@ -423,7 +423,7 @@ function LoginPageContent() {
         const regData = await regRes.json().catch(() => ({}));
         requireCode = regData.requireCode !== false;
       } catch { /* ignore */ }
-      const { data: profile } = await supabase.from('profiles').select('role, atc, siavi').eq('id', uid).single();
+      const { data: profile } = await supabase.from('profiles').select('role, atc, siavi, ground_crew').eq('id', uid).single();
       if (loginAdminOnly && profile?.role !== 'admin') {
         await supabase.auth.signOut();
         throw new Error('Les connexions sont temporairement réservées aux administrateurs.');
@@ -440,14 +440,13 @@ function LoginPageContent() {
         targetPath = '/atc';
         setRedirectTo('/atc');
       } else if (mode === 'ground_crew') {
-        const canGround = profile?.role === 'admin' || profile?.role === 'ground_crew';
+        const canGround = profile?.role === 'admin' || Boolean(profile?.ground_crew);
         if (!canGround) throw new Error('Ce compte n\'a pas accès à l\'espace Ground Crew.');
         targetPath = '/ground';
         setRedirectTo('/ground');
       } else {
         if (profile?.role === 'atc') throw new Error('Ce compte est uniquement ATC. Sélectionnez "Contrôleur ATC" pour vous connecter.');
         if (profile?.role === 'siavi') throw new Error('Ce compte est uniquement SIAVI. Sélectionnez "SIAVI" pour vous connecter.');
-        if (profile?.role === 'ground_crew') throw new Error('Ce compte est uniquement Ground Crew. Sélectionnez "Ground Crew" pour vous connecter.');
         setRedirectTo('/logbook');
       }
       // Mémorise le mode/destination choisi pour qu'un /login?step=verify (déclenché par le middleware)

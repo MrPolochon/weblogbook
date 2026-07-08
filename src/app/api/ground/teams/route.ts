@@ -118,13 +118,13 @@ export async function GET(request: Request) {
   // GC disponibles à inviter : en ligne sur l'aéroport, sans équipe
   const { data: allSessions } = await admin
     .from('ground_sessions')
-    .select('user_id, profiles!inner(identifiant, role)')
+    .select('user_id, profiles!inner(identifiant, role, ground_crew)')
     .eq('aeroport', aeroport)
     .neq('user_id', user.id);
 
   const invitablesRaw = (allSessions ?? []).filter((s) => {
-    const profile = s.profiles as unknown as { identifiant: string; role: string };
-    return profile.role === 'ground_crew' || profile.role === 'admin';
+    const profile = s.profiles as unknown as { identifiant: string; role: string; ground_crew: boolean };
+    return Boolean(profile.ground_crew) || profile.role === 'admin';
   });
 
   const invitableUserIds = invitablesRaw.map((s) => s.user_id as string);
@@ -161,15 +161,15 @@ export async function POST() {
 
   const admin = createAdminClient();
 
-  // Vérifier le rôle
+  // Vérifier l'accès Ground Crew
   const { data: profile } = await admin
     .from('profiles')
-    .select('role')
+    .select('role, ground_crew')
     .eq('id', user.id)
     .single();
 
-  if (!profile || (profile.role !== 'ground_crew' && profile.role !== 'admin')) {
-    return NextResponse.json({ error: 'Rôle ground_crew requis' }, { status: 403 });
+  if (!profile || (!profile.ground_crew && profile.role !== 'admin')) {
+    return NextResponse.json({ error: 'Accès Ground Crew requis' }, { status: 403 });
   }
 
   // Vérifier qu'une session est active

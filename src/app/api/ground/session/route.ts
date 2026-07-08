@@ -44,12 +44,12 @@ export async function POST(request: Request) {
 
   const { data: profile } = await admin
     .from('profiles')
-    .select('role')
+    .select('role, ground_crew')
     .eq('id', user.id)
     .single();
 
-  if (!profile || (profile.role !== 'ground_crew' && profile.role !== 'admin')) {
-    return NextResponse.json({ error: 'Accès refusé — rôle ground_crew requis' }, { status: 403 });
+  if (!profile || (!profile.ground_crew && profile.role !== 'admin')) {
+    return NextResponse.json({ error: 'Accès refusé — accès Ground Crew requis' }, { status: 403 });
   }
 
   const body = await request.json() as { aeroport?: string };
