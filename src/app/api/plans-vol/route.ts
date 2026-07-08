@@ -620,7 +620,10 @@ export async function POST(request: Request) {
         armee_mission_id: armeeMissionId,
       }).select('id').single();
 
-      if (error) return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });
+      if (error) {
+        console.error('plans-vol POST INSERT (vol_sans_atc):', JSON.stringify(error));
+        return NextResponse.json({ error: `Erreur lors de la création : ${error.message || error.code || 'erreur base de données'}` }, { status: 400 });
+      }
 
       if (vol_commercial && nbPaxFinal > 0) {
         try {
@@ -741,7 +744,10 @@ export async function POST(request: Request) {
       armee_mission_id: armeeMissionId,
     }).select('id').single();
 
-    if (error) return NextResponse.json({ error: 'Erreur lors de la création' }, { status: 400 });
+    if (error) {
+      console.error('plans-vol POST INSERT:', JSON.stringify(error));
+      return NextResponse.json({ error: `Erreur lors de la création : ${error.message || error.code || 'erreur base de données'}` }, { status: 400 });
+    }
 
     // Vérification de secours : si la session ATC a disparu juste après l'assignation
     if (holder) {

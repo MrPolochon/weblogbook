@@ -158,6 +158,7 @@ export default function DepotPlanVolForm({
   const [loading, setLoading] = useState(false);
   const submitBusyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showBria, setShowBria] = useState(false);
 
   // SID/STAR depuis la base admin (pour remplir strip_route)
@@ -638,57 +639,43 @@ export default function DepotPlanVolForm({
     e.preventDefault();
     if (submitBusyRef.current) return;
     setError(null);
+    setFieldErrors({});
     setShowNoAtcConfirm(false);
-    
+
+    // Validation par champ — accumule toutes les erreurs avant d'arrêter
+    const errs: Record<string, string> = {};
     const t = parseInt(temps_prev_min, 10);
-    if (!aeroport_depart || !aeroport_arrivee || !numero_vol.trim() || isNaN(t) || t < 1 || !type_vol) {
-      setError('Remplissez tous les champs requis.');
-      return;
-    }
-    if (aeroport_depart && !porte.trim()) {
-      setError('La porte de départ est obligatoire.');
-      return;
-    }
-    if (!heure_depart.trim()) {
-      setError('L\'heure de départ (UTC) est obligatoire.');
-      return;
-    }
-    if (type_vol === 'VFR' && !intentions_vol.trim()) { setError('Intentions de vol requises pour VFR.'); return; }
-    if (type_vol === 'IFR' && (!sid_depart.trim() || !star_arrivee.trim())) { setError('SID de départ et STAR d\'arrivée requises pour IFR.'); return; }
+
+    if (!aeroport_depart) errs.aeroport_depart = 'Aéroport de départ requis.';
+    if (!aeroport_arrivee) errs.aeroport_arrivee = 'Aéroport d\'arrivée requis.';
+    if (!numero_vol.trim()) errs.numero_vol = 'Numéro de vol requis.';
+    if (isNaN(t) || t < 1) errs.temps_prev_min = 'Durée invalide (minimum 1 min).';
+    if (aeroport_depart && !porte.trim()) errs.porte = 'La porte de départ est obligatoire.';
+    if (!heure_depart.trim()) errs.heure_depart = 'Heure de départ (UTC) obligatoire.';
+    if (type_vol === 'VFR' && !intentions_vol.trim()) errs.intentions_vol = 'Intentions de vol requises pour VFR.';
+    if (type_vol === 'IFR' && !sid_depart.trim()) errs.sid_depart = 'SID de départ requise pour IFR.';
+    if (type_vol === 'IFR' && !star_arrivee.trim()) errs.star_arrivee = 'STAR d\'arrivée requise pour IFR.';
+
+    if ((vol_commercial || vol_ferry) && !selectedCompagnieId) errs.compagnie = 'Sélectionnez une compagnie.';
+    if ((vol_commercial || vol_ferry) && !compagnie_avion_id) errs.compagnie_avion_id = vol_ferry ? 'Sélectionnez un avion à déplacer.' : 'Sélectionnez un avion de la flotte.';
+
     const missionErr = missionArmeeValidationError();
-    if (missionErr) {
-      setError(missionErr);
-      return;
-    }
-    
-    // Validation vol commercial
-    if (vol_commercial && !selectedCompagnieId) {
-      setError('Sélectionnez une compagnie pour un vol commercial.');
-      return;
-    }
-    // Un avion individuel est requis pour les vols commerciaux
-    if (vol_commercial && !compagnie_avion_id) {
-      setError('Sélectionnez un avion pour un vol commercial.');
-      return;
-    }
-    
-    // Vol ferry nécessite un avion individuel et une compagnie
-    if (vol_ferry && !compagnie_avion_id) {
-      setError('Sélectionnez un avion à déplacer pour le vol ferry.');
-      return;
-    }
-    if (vol_ferry && !selectedCompagnieId) {
-      setError('Sélectionnez une compagnie pour le vol ferry.');
-      return;
-    }
-    
-    // Validation taux de remplissage minimum (25%) - uniquement pour vols commerciaux
+    if (missionErr) errs.armee_mission = missionErr;
+
     if (vol_commercial && !vol_ferry && nature_transport === 'passagers' && !remplissageValidePax) {
-      setError(`Le vol ne peut pas être effectué : l'avion doit être rempli à au moins 25% de sa capacité. Actuellement : ${nbPax}/${capacitePaxMax} (${Math.round(tauxRemplissagePax * 100)}%)`);
-      return;
+      errs.remplissage = `Remplissage insuffisant : minimum 25% requis. Actuellement ${nbPax}/${capacitePaxMax} (${Math.round(tauxRemplissagePax * 100)}%)`;
     }
     if (vol_commercial && !vol_ferry && nature_transport === 'cargo' && !remplissageValideCargo) {
-      setError(`Le vol ne peut pas être effectué : l'avion doit être rempli à au moins 25% de sa capacité cargo. Actuellement : ${cargoKg.toLocaleString('fr-FR')}/${capaciteCargoMax.toLocaleString('fr-FR')} kg (${Math.round(tauxRemplissageCargo * 100)}%)`);
+      errs.remplissage = `Remplissage cargo insuffisant : minimum 25% requis. Actuellement ${cargoKg.toLocaleString('fr-FR')}/${capaciteCargoMax.toLocaleString('fr-FR')} kg (${Math.round(tauxRemplissageCargo * 100)}%)`;
+    }
+
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      // Scroller vers la première erreur visible
+      setTimeout(() => {
+        const el = document.querySelector('[data-field-error="true"]');
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
       return;
     }
     
@@ -747,6 +734,7 @@ export default function DepotPlanVolForm({
     if (submitBusyRef.current) return;
     submitBusyRef.current = true;
     setError(null);
+    setFieldErrors({});
     setShowNoAtcConfirm(false);
     setLoading(true);
     
@@ -905,9 +893,9 @@ export default function DepotPlanVolForm({
                 Pour quelle compagnie ? *
               </label>
               <select 
-                className="input w-full" 
+                className={`input w-full ${fieldErrors.compagnie ? 'border-red-500/60 focus:border-red-500' : ''}`}
                 value={selectedCompagnieId} 
-                onChange={(e) => setSelectedCompagnieId(e.target.value)}
+                onChange={(e) => { setSelectedCompagnieId(e.target.value); setFieldErrors(p => ({ ...p, compagnie: '' })); }}
                 required
               >
                 <option value="">— Choisir une compagnie —</option>
@@ -917,6 +905,12 @@ export default function DepotPlanVolForm({
                   </option>
                 ))}
               </select>
+              {fieldErrors.compagnie && (
+                <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
+                  <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
+                  {fieldErrors.compagnie}
+                </p>
+              )}
             </div>
           )}
           
@@ -954,10 +948,11 @@ export default function DepotPlanVolForm({
           {/* Avions individuels avec immatriculation */}
           <div>
               <select 
-                className="input w-full" 
+                className={`input w-full ${fieldErrors.compagnie_avion_id ? 'border-red-500/60 focus:border-red-500' : ''}`}
                 value={compagnie_avion_id} 
                 onChange={(e) => {
                   setCompagnieAvionId(e.target.value);
+                  setFieldErrors(p => ({ ...p, compagnie_avion_id: '' }));
                   // Pour les vols ferry, définir automatiquement l'aéroport de départ
                   if (vol_ferry && e.target.value) {
                     const avionSelect = avionsCompagnie.find(a => a.id === e.target.value);
@@ -1051,6 +1046,12 @@ export default function DepotPlanVolForm({
               {avionsCompagnie.length === 0 && (
                 <p className="text-amber-400 text-sm mt-2">
                   Aucun avion dans la flotte de cette compagnie. Le PDG doit acheter des avions sur le Marketplace.
+                </p>
+              )}
+              {fieldErrors.compagnie_avion_id && (
+                <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
+                  <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
+                  {fieldErrors.compagnie_avion_id}
                 </p>
               )}
             </div>
@@ -1401,24 +1402,48 @@ export default function DepotPlanVolForm({
               <MapPin className="h-3.5 w-3.5 text-sky-400" />
               Départ <span className="text-rose-400">*</span>
             </label>
-            <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required disabled={missionLocked}>
+            <select
+              className={`input ${fieldErrors.aeroport_depart ? 'border-red-500/60 focus:border-red-500' : ''}`}
+              value={aeroport_depart}
+              onChange={(e) => { setAeroportDepart(e.target.value); setFieldErrors(p => ({ ...p, aeroport_depart: '' })); }}
+              required
+              disabled={missionLocked}
+            >
               <option value="">— Choisir —</option>
               {AEROPORTS_VOL_CIVIL.map((a) => (
                 <option key={`route-dep-${a.code}`} value={a.code}>{a.code} – {a.nom}</option>
               ))}
             </select>
+            {fieldErrors.aeroport_depart && (
+              <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
+                <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
+                {fieldErrors.aeroport_depart}
+              </p>
+            )}
           </div>
           <div>
             <label className="label flex items-center gap-1.5">
               <MapPin className="h-3.5 w-3.5 text-emerald-400" />
               Arrivée <span className="text-rose-400">*</span>
             </label>
-            <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required disabled={missionLocked}>
+            <select
+              className={`input ${fieldErrors.aeroport_arrivee ? 'border-red-500/60 focus:border-red-500' : ''}`}
+              value={aeroport_arrivee}
+              onChange={(e) => { setAeroportArrivee(e.target.value); setFieldErrors(p => ({ ...p, aeroport_arrivee: '' })); }}
+              required
+              disabled={missionLocked}
+            >
               <option value="">— Choisir —</option>
               {AEROPORTS_VOL_CIVIL.map((a) => (
                 <option key={`route-arr-${a.code}`} value={a.code}>{a.code} – {a.nom}</option>
               ))}
             </select>
+            {fieldErrors.aeroport_arrivee && (
+              <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
+                <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
+                {fieldErrors.aeroport_arrivee}
+              </p>
+            )}
           </div>
         </div>
 
@@ -1452,17 +1477,30 @@ export default function DepotPlanVolForm({
                 </span>
                 <input
                   type="text"
-                  className="input rounded-l-none flex-1 font-mono"
+                  className={`input rounded-l-none flex-1 font-mono ${fieldErrors.numero_vol ? 'border-red-500/60 focus:border-red-500' : ''}`}
                   value={numero_vol}
-                  onChange={(e) => setNumeroVol(e.target.value)}
+                  onChange={(e) => { setNumeroVol(e.target.value); setFieldErrors(p => ({ ...p, numero_vol: '' })); }}
                   placeholder="2425"
                   required
                 />
               </div>
             ) : (
-              <input type="text" className="input font-mono" value={numero_vol} onChange={(e) => setNumeroVol(e.target.value)} placeholder="N° de vol" required />
+              <input
+                type="text"
+                className={`input font-mono ${fieldErrors.numero_vol ? 'border-red-500/60 focus:border-red-500' : ''}`}
+                value={numero_vol}
+                onChange={(e) => { setNumeroVol(e.target.value); setFieldErrors(p => ({ ...p, numero_vol: '' })); }}
+                placeholder="N° de vol"
+                required
+              />
             )}
-            {selectedCompagnie?.code_oaci && (
+            {fieldErrors.numero_vol && (
+              <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
+                <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
+                {fieldErrors.numero_vol}
+              </p>
+            )}
+            {selectedCompagnie?.code_oaci && !fieldErrors.numero_vol && (
               <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1">
                 <Sparkles className="h-3 w-3" />
                 Ex: 2425 → <span className="font-mono text-sky-400/80">{selectedCompagnie.code_oaci}2425</span> · ou callsign libre (ex: RAIDER)
@@ -1472,24 +1510,30 @@ export default function DepotPlanVolForm({
           <div>
             <label className="label">
               Porte de départ <span className="text-red-400">*</span>
-              {aeroport_depart && <span className="ml-1 text-emerald-400/70 text-xs">(sélectionner depuis le catalogue)</span>}
+              {aeroport_depart && <span className="ml-1 text-emerald-400/70 text-xs">(depuis le catalogue)</span>}
             </label>
             {aeroport_depart ? (
               <PorteDepartSelect
                 aeroport={aeroport_depart}
                 value={porte}
-                onChange={setPorte}
+                onChange={(v) => { setPorte(v); setFieldErrors(p => ({ ...p, porte: '' })); }}
                 required
               />
             ) : (
               <input
                 type="text"
-                className="input font-mono"
+                className="input font-mono opacity-50"
                 value={porte}
                 onChange={(e) => setPorte(e.target.value)}
                 placeholder="Choisir un aéroport de départ d'abord"
                 disabled
               />
+            )}
+            {fieldErrors.porte && (
+              <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
+                <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
+                {fieldErrors.porte}
+              </p>
             )}
           </div>
         </div>
@@ -1500,9 +1544,9 @@ export default function DepotPlanVolForm({
             <div className="relative">
               <input
                 type="number"
-                className="input w-full pr-12 font-mono"
+                className={`input w-full pr-12 font-mono ${fieldErrors.temps_prev_min ? 'border-red-500/60 focus:border-red-500' : ''}`}
                 value={temps_prev_min}
-                onChange={(e) => setTempsPrevMin(e.target.value)}
+                onChange={(e) => { setTempsPrevMin(e.target.value); setFieldErrors(p => ({ ...p, temps_prev_min: '' })); }}
                 min={1}
                 required
                 placeholder="45"
@@ -1510,23 +1554,37 @@ export default function DepotPlanVolForm({
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono uppercase tracking-widest text-slate-500">min</span>
             </div>
+            {fieldErrors.temps_prev_min && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
+                <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
+                {fieldErrors.temps_prev_min}
+              </p>
+            )}
           </div>
           <div className="flex-1 max-w-[160px]">
             <label className="label">Heure de départ (UTC) <span className="text-red-400">*</span></label>
             <div className="relative">
               <input
                 type="time"
-                className="input w-full pr-10 font-mono tabular-nums"
+                className={`input w-full pr-10 font-mono tabular-nums ${fieldErrors.heure_depart ? 'border-red-500/60 focus:border-red-500' : ''}`}
                 value={heure_depart}
-                onChange={(e) => setHeureDepart(e.target.value)}
+                onChange={(e) => { setHeureDepart(e.target.value); setFieldErrors(p => ({ ...p, heure_depart: '' })); }}
                 placeholder="14:30"
                 required
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono uppercase tracking-widest text-slate-500">UTC</span>
             </div>
-            <p className="text-[10px] text-slate-500 mt-1 leading-snug">
-              Affichée dans la case <span className="font-mono text-sky-400/80">CTOT</span> du strip ATC.
-            </p>
+            {fieldErrors.heure_depart && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
+                <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
+                {fieldErrors.heure_depart}
+              </p>
+            )}
+            {!fieldErrors.heure_depart && (
+              <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+                Affichée dans la case <span className="font-mono text-sky-400/80">CTOT</span> du strip ATC.
+              </p>
+            )}
           </div>
           {temps_prev_min && parseInt(temps_prev_min, 10) > 0 && (
             <div className="rounded-lg border border-slate-700/60 bg-slate-900/40 px-3 py-2 text-xs animate-fade-in">
@@ -1601,7 +1659,19 @@ export default function DepotPlanVolForm({
       {type_vol === 'VFR' && (
         <div className="mt-4 animate-fade-in">
           <label className="label">Intentions de vol *</label>
-          <textarea className="input min-h-[80px]" value={intentions_vol} onChange={(e) => setIntentionsVol(e.target.value)} required placeholder="Ex: Tour de piste, navigation locale, vols école..." />
+          <textarea
+            className={`input min-h-[80px] ${fieldErrors.intentions_vol ? 'border-red-500/60 focus:border-red-500' : ''}`}
+            value={intentions_vol}
+            onChange={(e) => { setIntentionsVol(e.target.value); setFieldErrors(p => ({ ...p, intentions_vol: '' })); }}
+            required
+            placeholder="Ex: Tour de piste, navigation locale, vols école..."
+          />
+          {fieldErrors.intentions_vol && (
+            <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
+              <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
+              {fieldErrors.intentions_vol}
+            </p>
+          )}
         </div>
       )}
       {type_vol === 'IFR' && (
@@ -1615,10 +1685,11 @@ export default function DepotPlanVolForm({
               {sidList.length > 0 ? (
                 <>
                   <select
-                    className="input"
+                    className={`input ${fieldErrors.sid_depart ? 'border-red-500/60 focus:border-red-500' : ''}`}
                     value={sidCustomMode ? '__custom__' : (sidList.some((s) => s.nom === sid_depart) ? sid_depart : '')}
                     onChange={(e) => {
                       const v = e.target.value;
+                      setFieldErrors(p => ({ ...p, sid_depart: '' }));
                       if (v === '__custom__') {
                         setSidDepart('');
                         setSelectedSidRoute(null);
@@ -1645,16 +1716,28 @@ export default function DepotPlanVolForm({
                   {sidCustomMode && (
                     <input
                       type="text"
-                      className="input mt-2"
+                      className={`input mt-2 ${fieldErrors.sid_depart ? 'border-red-500/60 focus:border-red-500' : ''}`}
                       value={sid_depart}
-                      onChange={(e) => { setSidDepart(e.target.value); setSelectedSidRoute(null); }}
+                      onChange={(e) => { setSidDepart(e.target.value); setSelectedSidRoute(null); setFieldErrors(p => ({ ...p, sid_depart: '' })); }}
                       placeholder="Nom de la SID"
                       required
                     />
                   )}
                 </>
               ) : (
-                <input type="text" className="input" value={sid_depart} onChange={(e) => { setSidDepart(e.target.value); setSelectedSidRoute(null); }} required />
+                <input
+                  type="text"
+                  className={`input ${fieldErrors.sid_depart ? 'border-red-500/60 focus:border-red-500' : ''}`}
+                  value={sid_depart}
+                  onChange={(e) => { setSidDepart(e.target.value); setSelectedSidRoute(null); setFieldErrors(p => ({ ...p, sid_depart: '' })); }}
+                  required
+                />
+              )}
+              {fieldErrors.sid_depart && (
+                <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
+                  <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
+                  {fieldErrors.sid_depart}
+                </p>
               )}
             </div>
             <div>
@@ -1665,10 +1748,11 @@ export default function DepotPlanVolForm({
               {starList.length > 0 ? (
                 <>
                   <select
-                    className="input"
+                    className={`input ${fieldErrors.star_arrivee ? 'border-red-500/60 focus:border-red-500' : ''}`}
                     value={starCustomMode ? '__custom__' : (starList.some((s) => s.nom === star_arrivee) ? star_arrivee : '')}
                     onChange={(e) => {
                       const v = e.target.value;
+                      setFieldErrors(p => ({ ...p, star_arrivee: '' }));
                       if (v === '__custom__') {
                         setStarArrivee('');
                         setSelectedStarRoute(null);
@@ -1695,16 +1779,28 @@ export default function DepotPlanVolForm({
                   {starCustomMode && (
                     <input
                       type="text"
-                      className="input mt-2"
+                      className={`input mt-2 ${fieldErrors.star_arrivee ? 'border-red-500/60 focus:border-red-500' : ''}`}
                       value={star_arrivee}
-                      onChange={(e) => { setStarArrivee(e.target.value); setSelectedStarRoute(null); }}
+                      onChange={(e) => { setStarArrivee(e.target.value); setSelectedStarRoute(null); setFieldErrors(p => ({ ...p, star_arrivee: '' })); }}
                       placeholder="Nom de la STAR"
                       required
                     />
                   )}
                 </>
               ) : (
-                <input type="text" className="input" value={star_arrivee} onChange={(e) => { setStarArrivee(e.target.value); setSelectedStarRoute(null); }} required />
+                <input
+                  type="text"
+                  className={`input ${fieldErrors.star_arrivee ? 'border-red-500/60 focus:border-red-500' : ''}`}
+                  value={star_arrivee}
+                  onChange={(e) => { setStarArrivee(e.target.value); setSelectedStarRoute(null); setFieldErrors(p => ({ ...p, star_arrivee: '' })); }}
+                  required
+                />
+              )}
+              {fieldErrors.star_arrivee && (
+                <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
+                  <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
+                  {fieldErrors.star_arrivee}
+                </p>
               )}
             </div>
           </div>
@@ -1820,10 +1916,34 @@ export default function DepotPlanVolForm({
         </div>
       )}
       
+      {/* Erreurs de mission armée ou de remplissage */}
+      {(fieldErrors.armee_mission || fieldErrors.remplissage) && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 animate-fade-in" data-field-error="true">
+          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/30 text-amber-200 text-xs font-bold">!</span>
+          <p className="text-amber-200 text-sm">{fieldErrors.armee_mission || fieldErrors.remplissage}</p>
+        </div>
+      )}
+
       {error && (
         <div className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 p-3 animate-fade-in">
           <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500/30 text-red-200 text-xs font-bold">!</span>
           <p className="text-red-300 text-sm">{error}</p>
+        </div>
+      )}
+      
+      {/* Résumé des erreurs de champs manquants */}
+      {Object.entries(fieldErrors).filter(([k, v]) => v && !['armee_mission', 'remplissage'].includes(k)).length > 0 && (
+        <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 animate-fade-in">
+          <p className="text-red-300 text-sm font-semibold mb-2 flex items-center gap-1.5">
+            <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500/30 text-red-200 text-[10px] font-bold">!</span>
+            Champs requis manquants :
+          </p>
+          <ul className="space-y-1 text-xs text-red-300/80 pl-5 list-disc">
+            {Object.entries(fieldErrors)
+              .filter(([k, v]) => v && !['armee_mission', 'remplissage'].includes(k))
+              .map(([k, v]) => <li key={k}>{v}</li>)
+            }
+          </ul>
         </div>
       )}
 
@@ -2181,19 +2301,12 @@ function SubmitButton({ loading, disabled }: { loading: boolean; disabled: boole
     <button
       type="submit"
       disabled={disabled}
-      className={`group relative w-full overflow-hidden rounded-2xl px-6 py-4 font-bold text-base text-white shadow-xl transition-all duration-300 ${
+      className={`group relative w-full overflow-hidden rounded-xl py-3 px-8 font-bold text-base text-white shadow-xl transition-all duration-300 ${
         disabled
           ? 'bg-slate-700/60 text-slate-400 cursor-not-allowed'
-          : 'bg-gradient-to-r from-sky-600 via-blue-600 to-indigo-600 hover:from-sky-500 hover:via-blue-500 hover:to-indigo-500 hover:shadow-[0_18px_48px_rgba(14,165,233,0.45)] active:scale-[0.99]'
+          : 'bg-emerald-600 hover:bg-emerald-500 hover:shadow-[0_18px_48px_rgba(52,211,153,0.40)] active:scale-[0.99]'
       }`}
     >
-      {/* Ligne d'horizon défilante en bas (subtle) */}
-      {!disabled && (
-        <span
-          className="pointer-events-none absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-300 to-transparent opacity-70"
-          style={{ backgroundSize: '200% 100%', animation: 'shimmer 2.4s linear infinite' }}
-        />
-      )}
       {/* Brillance qui balaye au hover */}
       {!disabled && (
         <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
@@ -2202,10 +2315,17 @@ function SubmitButton({ loading, disabled }: { loading: boolean; disabled: boole
       <span className="relative flex items-center justify-center gap-3">
         {loading ? (
           <>
-            <span className="relative inline-flex h-5 w-5 items-center justify-center">
-              <Plane className="h-5 w-5 -rotate-12 animate-plane-takeoff" />
-            </span>
-            <span className="font-mono uppercase tracking-widest text-sm animate-pulse">Décollage en cours…</span>
+            {/* Spinner SVG */}
+            <svg
+              className="h-5 w-5 animate-spin text-white"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span className="font-mono uppercase tracking-widest text-sm">Dépôt en cours…</span>
           </>
         ) : (
           <>
