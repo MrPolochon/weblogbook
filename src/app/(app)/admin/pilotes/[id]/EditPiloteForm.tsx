@@ -533,13 +533,25 @@ export default function EditPiloteForm({
               </label>
             )}
 
-            {/* Ground Crew — badge informatif quand c'est le rôle */}
-            {role === 'ground_crew' && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-orange-500/30 bg-orange-500/10">
-                <span className="w-2 h-2 rounded-full bg-orange-400" />
-                <span className="text-sm text-orange-200 font-medium">🔧 Ground Crew actif</span>
-              </div>
-            )}
+            {/* Ground Crew */}
+            <label className={`flex items-center gap-2 cursor-pointer px-3 py-2 rounded-xl border transition-colors ${
+              role === 'atc' || role === 'siavi'
+                ? 'border-orange-500/10 bg-orange-500/5 opacity-40'
+                : role === 'ground_crew'
+                ? 'border-orange-500/40 bg-orange-500/15 hover:bg-orange-500/20'
+                : 'border-orange-500/20 bg-orange-500/5 hover:bg-orange-500/10'
+            }`}>
+              <input
+                type="checkbox"
+                checked={role === 'ground_crew'}
+                onChange={(e) => handleRoleChange(e.target.checked ? 'ground_crew' : 'pilote')}
+                className="rounded accent-orange-400"
+                disabled={role === 'atc' || role === 'siavi'}
+              />
+              <span className={`text-sm ${role === 'ground_crew' ? 'text-orange-200 font-medium' : 'text-orange-200'}`}>
+                🔧 Accès Ground Crew
+              </span>
+            </label>
           </div>
 
           <p className="text-xs text-slate-500">
