@@ -4,117 +4,98 @@ import { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import {
   X, Package, Utensils, Fuel, Users, Loader2,
-  CheckCircle2, AlertTriangle, ArrowLeftRight, Navigation,
-  Clock,
+  CheckCircle2, AlertTriangle, ArrowLeftRight, Navigation, Clock,
 } from 'lucide-react';
-import type { GroundServiceRequest, ServiceType } from '@/lib/types';
+import type { ServiceType } from '@/lib/types';
+import type { PlanVol, ServiceRequest } from './GroundDashboard';
 
-// ── Mini-jeux (chargement dynamique) ─────────────────────────────────────────
-const MinijeuBagages   = dynamic(() => import('./minijeux/MinijeuBagages'));
-const MinijeuCatering  = dynamic(() => import('./minijeux/MinijeuCatering'));
-const MinijeuFuel      = dynamic(() => import('./minijeux/MinijeuFuel'));
-const MinijeuBoarding  = dynamic(() => import('./minijeux/MinijeuBoarding'));
+// Mini-jeux chargés dynamiquement
+const MinijeuBagages  = dynamic(() => import('./minijeux/MinijeuBagages'));
+const MinijeuCatering = dynamic(() => import('./minijeux/MinijeuCatering'));
+const MinijeuFuel     = dynamic(() => import('./minijeux/MinijeuFuel'));
+const MinijeuBoarding = dynamic(() => import('./minijeux/MinijeuBoarding'));
 
-type PlanActif = {
-  id: string;
-  numero_vol: string;
-  callsign: string | null;
-  immatriculation?: string | null;
-  type_avion?: string | null;
-  aeroport_depart: string;
-  aeroport_arrivee: string;
-  statut: string;
-  porte: string | null;
-  pilote: { identifiant: string } | null;
-  gate_assignments: Array<{
-    id: string;
-    gate_id: string;
-    assignment_type: string;
-    status: string;
-    gate: { gate_code: string; terminal: string | null } | null;
-  }>;
-};
-
-interface Props {
-  plan: PlanActif;
-  requests: GroundServiceRequest[];
-  gcIdentifiant: string;
-  onClose: () => void;
-  onUpdateRequest: (updated: GroundServiceRequest) => void;
-  onServiceComplete: (score: number, serviceType: ServiceType, paxCount: number | null) => void;
-}
+// ── Constantes ────────────────────────────────────────────────────────────────
 
 const SERVICE_ICONS: Partial<Record<ServiceType, React.ReactNode>> = {
-  bagages:    <Package className="h-4 w-4" />,
-  catering:   <Utensils className="h-4 w-4" />,
-  fuel:       <Fuel className="h-4 w-4" />,
-  boarding:   <Users className="h-4 w-4" />,
-  repoussage: <ArrowLeftRight className="h-4 w-4" />,
-  marshalling:<Navigation className="h-4 w-4" />,
+  bagages:     <Package className="h-4 w-4" />,
+  catering:    <Utensils className="h-4 w-4" />,
+  fuel:        <Fuel className="h-4 w-4" />,
+  boarding:    <Users className="h-4 w-4" />,
+  repoussage:  <ArrowLeftRight className="h-4 w-4" />,
+  marshalling: <Navigation className="h-4 w-4" />,
 };
 
 const SERVICE_LABELS: Record<ServiceType, string> = {
-  bagages:    'Chargement bagages',
-  catering:   'Service catering',
-  fuel:       'Ravitaillement carburant',
-  boarding:   'Boarding passagers',
-  repoussage: 'Repoussage',
-  marshalling:'Marshalling',
+  bagages:     'Chargement bagages',
+  catering:    'Service catering',
+  fuel:        'Ravitaillement carburant',
+  boarding:    'Boarding passagers',
+  repoussage:  'Repoussage',
+  marshalling: 'Marshalling',
 };
 
 const SERVICE_COLORS: Record<ServiceType, string> = {
-  bagages:    'text-amber-400 bg-amber-900/20 border-amber-800/40',
-  catering:   'text-emerald-400 bg-emerald-900/20 border-emerald-800/40',
-  fuel:       'text-sky-400 bg-sky-900/20 border-sky-800/40',
-  boarding:   'text-purple-400 bg-purple-900/20 border-purple-800/40',
-  repoussage: 'text-orange-400 bg-orange-900/20 border-orange-800/40',
-  marshalling:'text-red-400 bg-red-900/20 border-red-800/40',
+  bagages:     'text-amber-400 bg-amber-900/20 border-amber-800/40',
+  catering:    'text-emerald-400 bg-emerald-900/20 border-emerald-800/40',
+  fuel:        'text-sky-400 bg-sky-900/20 border-sky-800/40',
+  boarding:    'text-purple-400 bg-purple-900/20 border-purple-800/40',
+  repoussage:  'text-orange-400 bg-orange-900/20 border-orange-800/40',
+  marshalling: 'text-red-400 bg-red-900/20 border-red-800/40',
 };
 
-// Types qui utilisent un mini-jeu
 const MINIGAME_TYPES: ServiceType[] = ['bagages', 'catering', 'fuel', 'boarding'];
-// Types confirmation uniquement
 const CONFIRM_ONLY_TYPES: ServiceType[] = ['marshalling', 'repoussage'];
 
 function formatAge(dateStr: string): string {
   const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
-  if (mins < 1) return 'à l\'instant';
+  if (mins < 1) return "à l'instant";
   if (mins < 60) return `${mins} min`;
   return `${Math.floor(mins / 60)}h${mins % 60 > 0 ? String(mins % 60).padStart(2, '0') : ''}`;
 }
 
+// ── Props ─────────────────────────────────────────────────────────────────────
+
+interface Props {
+  plan: PlanVol;
+  requests: ServiceRequest[];
+  userId: string;
+  gcIdentifiant: string;
+  onClose: () => void;
+  onUpdateRequest: (updated: ServiceRequest) => void;
+  onServiceComplete: (score: number, serviceType: ServiceType, paxCount: number | null) => void;
+}
+
+// ── Composant ─────────────────────────────────────────────────────────────────
+
 export default function ModalAvion({
-  plan, requests, gcIdentifiant, onClose, onUpdateRequest, onServiceComplete,
+  plan, requests, userId, gcIdentifiant,
+  onClose, onUpdateRequest, onServiceComplete,
 }: Props) {
   const [activeGameReqId, setActiveGameReqId] = useState<string | null>(null);
   const [loadingReqId, setLoadingReqId] = useState<string | null>(null);
-
-  const gateDepart = plan.gate_assignments?.find(g => g.assignment_type === 'depart');
-  const gateArrivee = plan.gate_assignments?.find(g => g.assignment_type === 'arrivee');
-  const gateCode = gateDepart?.gate?.gate_code ?? plan.porte ?? null;
 
   const activeGameReq = activeGameReqId
     ? requests.find(r => r.id === activeGameReqId) ?? null
     : null;
 
-  // Alerts actives
-  const marshallingReq = requests.find(r =>
-    r.service_type === 'marshalling' && ['pending', 'accepted'].includes(r.statut)
+  const marshallingReq = requests.find(
+    r => r.service_type === 'marshalling' && ['pending', 'accepted'].includes(r.statut)
   ) ?? null;
-  const repoussageReq = requests.find(r =>
-    r.service_type === 'repoussage' && ['pending', 'accepted'].includes(r.statut)
+  const repoussageReq = requests.find(
+    r => r.service_type === 'repoussage' && ['pending', 'accepted'].includes(r.statut)
   ) ?? null;
 
   const patchRequest = useCallback(async (
     reqId: string,
     body: Record<string, unknown>
-  ): Promise<GroundServiceRequest | null> => {
+  ): Promise<ServiceRequest | null> => {
     const res = await fetch(`/api/ground/service-requests/${reqId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await res.json() as { request?: GroundServiceRequest };
+    const data = await res.json() as { request?: ServiceRequest };
     if (res.ok && data.request) {
       onUpdateRequest(data.request);
       return data.request;
@@ -122,18 +103,21 @@ export default function ModalAvion({
     return null;
   }, [onUpdateRequest]);
 
-  // GC clique "Effectuer" sur un service mini-jeu
-  async function handleEffectuer(req: GroundServiceRequest) {
+  async function handleAccepter(req: ServiceRequest) {
     setLoadingReqId(req.id);
     try {
-      const updated = await patchRequest(req.id, { statut: 'accepted' });
-      if (updated) setActiveGameReqId(req.id);
+      const updated = await patchRequest(req.id, {
+        statut: 'accepted',
+        accepted_by: userId,
+      });
+      if (updated && MINIGAME_TYPES.includes(req.service_type)) {
+        setActiveGameReqId(req.id);
+      }
     } finally {
       setLoadingReqId(null);
     }
   }
 
-  // Mini-jeu terminé
   async function handleMinigameFinish(score: number) {
     if (!activeGameReq) return;
     const req = activeGameReq;
@@ -141,28 +125,26 @@ export default function ModalAvion({
     setLoadingReqId(req.id);
     try {
       await patchRequest(req.id, { statut: 'completed', score_minijeu: score });
-      onServiceComplete(score, req.service_type as ServiceType, req.pax_count);
+      onServiceComplete(score, req.service_type, req.pax_count);
     } finally {
       setLoadingReqId(null);
     }
   }
 
-  // GC prend en charge marshalling/repoussage (pas de mini-jeu)
-  async function handlePrendreEnCharge(req: GroundServiceRequest) {
+  async function handlePrendreEnCharge(req: ServiceRequest) {
     setLoadingReqId(req.id);
     try {
-      await patchRequest(req.id, { statut: 'accepted' });
+      await patchRequest(req.id, { statut: 'accepted', accepted_by: userId });
     } finally {
       setLoadingReqId(null);
     }
   }
 
-  // GC confirme que le service est terminé (après confirmation pilote)
-  async function handleGCConfirme(req: GroundServiceRequest) {
+  async function handleGCConfirme(req: ServiceRequest) {
     setLoadingReqId(req.id);
     try {
       await patchRequest(req.id, { statut: 'completed' });
-      onServiceComplete(1.0, req.service_type as ServiceType, null);
+      onServiceComplete(1.0, req.service_type, null);
     } finally {
       setLoadingReqId(null);
     }
@@ -180,23 +162,20 @@ export default function ModalAvion({
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xl font-black font-mono text-slate-100">{plan.numero_vol}</span>
-                {plan.callsign && (
-                  <span className="text-sm text-slate-400 font-medium">{plan.callsign}</span>
+                <span className="text-xl font-black font-mono text-slate-100">
+                  {plan.callsign || plan.immatriculation || '—'}
+                </span>
+                {plan.callsign && plan.immatriculation && (
+                  <span className="text-sm text-slate-400 font-medium">{plan.immatriculation}</span>
                 )}
-                {gateCode && (
+                {plan.porte && (
                   <span className="px-2.5 py-1 rounded-xl bg-emerald-900/30 border border-emerald-800/40 text-emerald-300 text-xs font-bold">
-                    Porte {gateCode}
-                  </span>
-                )}
-                {gateArrivee?.gate?.gate_code && (
-                  <span className="px-2.5 py-1 rounded-xl bg-sky-900/30 border border-sky-800/40 text-sky-300 text-xs font-bold">
-                    Arr. {gateArrivee.gate.gate_code}
+                    Porte {plan.porte}
                   </span>
                 )}
               </div>
               <p className="text-slate-500 text-sm mt-0.5">
-                {plan.pilote?.identifiant} · {plan.aeroport_depart} → {plan.aeroport_arrivee}
+                {plan.aeroport_depart} → {plan.aeroport_arrivee}
               </p>
             </div>
           </div>
@@ -212,18 +191,17 @@ export default function ModalAvion({
         {/* Corps scrollable */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
 
-          {/* ── Mini-jeu inline ── */}
+          {/* Mini-jeu inline */}
           {activeGameReq && (
             <div className="rounded-xl border border-slate-600/50 bg-slate-800/40 p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-slate-100 text-sm">
-                  {SERVICE_LABELS[activeGameReq.service_type as ServiceType]}
+                  {SERVICE_LABELS[activeGameReq.service_type]}
                 </h3>
                 <button
                   type="button"
-                  onClick={() => {
-                    // Annuler : remettre en pending
-                    patchRequest(activeGameReq.id, { statut: 'pending' });
+                  onClick={async () => {
+                    await patchRequest(activeGameReq.id, { statut: 'pending' });
                     setActiveGameReqId(null);
                   }}
                   className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1"
@@ -240,7 +218,7 @@ export default function ModalAvion({
             </div>
           )}
 
-          {/* ── Alertes Marshalling / Repoussage ── */}
+          {/* Alerte Marshalling */}
           {marshallingReq && marshallingReq.statut === 'pending' && (
             <div className="rounded-xl border-2 border-red-600/60 bg-red-950/30 p-4 space-y-3">
               <div className="flex items-center gap-2">
@@ -258,7 +236,10 @@ export default function ModalAvion({
                 onClick={() => handlePrendreEnCharge(marshallingReq)}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-700 hover:bg-red-600 text-white font-bold text-sm transition-colors disabled:opacity-50"
               >
-                {loadingReqId === marshallingReq.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Navigation className="h-4 w-4" />}
+                {loadingReqId === marshallingReq.id
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Navigation className="h-4 w-4" />
+                }
                 Je prends en charge — {gcIdentifiant}
               </button>
             </div>
@@ -268,18 +249,25 @@ export default function ModalAvion({
             <div className="rounded-xl border border-red-700/40 bg-red-950/20 p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <Navigation className="h-4 w-4 text-red-400" />
-                <p className="font-semibold text-red-200 text-sm">Marshalling en cours — {marshallingReq.accepteur?.identifiant ?? gcIdentifiant}</p>
+                <p className="font-semibold text-red-200 text-sm">
+                  Marshalling en cours — {gcIdentifiant}
+                </p>
               </div>
               {marshallingReq.pilote_confirme ? (
                 <div className="space-y-2">
-                  <p className="text-emerald-300 text-xs font-semibold">✓ Pilote a confirmé la fin du marshalling</p>
+                  <p className="text-emerald-300 text-xs font-semibold">
+                    ✓ Pilote a confirmé la fin du marshalling
+                  </p>
                   <button
                     type="button"
                     disabled={loadingReqId === marshallingReq.id}
                     onClick={() => handleGCConfirme(marshallingReq)}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-sm transition-colors disabled:opacity-50"
                   >
-                    {loadingReqId === marshallingReq.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    {loadingReqId === marshallingReq.id
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <CheckCircle2 className="h-4 w-4" />
+                    }
                     Confirmer terminé
                   </button>
                 </div>
@@ -291,6 +279,7 @@ export default function ModalAvion({
             </div>
           )}
 
+          {/* Alerte Repoussage */}
           {repoussageReq && repoussageReq.statut === 'pending' && (
             <div className="rounded-xl border-2 border-orange-600/60 bg-orange-950/30 p-4 space-y-3">
               <div className="flex items-center gap-2">
@@ -308,7 +297,10 @@ export default function ModalAvion({
                 onClick={() => handlePrendreEnCharge(repoussageReq)}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-orange-700 hover:bg-orange-600 text-white font-bold text-sm transition-colors disabled:opacity-50"
               >
-                {loadingReqId === repoussageReq.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
+                {loadingReqId === repoussageReq.id
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <ArrowLeftRight className="h-4 w-4" />
+                }
                 Je prends en charge — {gcIdentifiant}
               </button>
             </div>
@@ -319,19 +311,24 @@ export default function ModalAvion({
               <div className="flex items-center gap-2">
                 <ArrowLeftRight className="h-4 w-4 text-orange-400" />
                 <p className="font-semibold text-orange-200 text-sm">
-                  Pushback {repoussageReq.direction === 'gauche' ? 'LEFT' : 'RIGHT'} en cours — {repoussageReq.accepteur?.identifiant ?? gcIdentifiant}
+                  Pushback {repoussageReq.direction === 'gauche' ? 'LEFT' : 'RIGHT'} en cours — {gcIdentifiant}
                 </p>
               </div>
               {repoussageReq.pilote_confirme ? (
                 <div className="space-y-2">
-                  <p className="text-emerald-300 text-xs font-semibold">✓ Pilote a confirmé la fin du repoussage</p>
+                  <p className="text-emerald-300 text-xs font-semibold">
+                    ✓ Pilote a confirmé la fin du repoussage
+                  </p>
                   <button
                     type="button"
                     disabled={loadingReqId === repoussageReq.id}
                     onClick={() => handleGCConfirme(repoussageReq)}
                     className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-sm transition-colors disabled:opacity-50"
                   >
-                    {loadingReqId === repoussageReq.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    {loadingReqId === repoussageReq.id
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <CheckCircle2 className="h-4 w-4" />
+                    }
                     Confirmer terminé
                   </button>
                 </div>
@@ -343,7 +340,7 @@ export default function ModalAvion({
             </div>
           )}
 
-          {/* ── Services demandés ── */}
+          {/* Liste de tous les services */}
           {!activeGameReq && (
             <section>
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
@@ -356,26 +353,24 @@ export default function ModalAvion({
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {requests.map((req) => {
-                    const serviceType = req.service_type as ServiceType;
-                    const colorClass = SERVICE_COLORS[serviceType];
-                    const isMinigame = MINIGAME_TYPES.includes(serviceType);
-                    const isConfirmOnly = CONFIRM_ONLY_TYPES.includes(serviceType);
+                  {requests.map(req => {
+                    const colorClass = SERVICE_COLORS[req.service_type];
+                    const isMinigame = MINIGAME_TYPES.includes(req.service_type);
+                    const isConfirmOnly = CONFIRM_ONLY_TYPES.includes(req.service_type);
                     const isLoading = loadingReqId === req.id;
-                    const isActiveGame = activeGameReqId === req.id;
 
                     return (
                       <div
                         key={req.id}
-                        className={`rounded-xl border p-3.5 transition-all ${colorClass} ${isActiveGame ? 'ring-1 ring-white/20' : ''}`}
+                        className={`rounded-xl border p-3.5 ${colorClass}`}
                       >
                         <div className="flex items-center justify-between gap-3 flex-wrap">
                           <div className="flex items-center gap-2.5">
-                            <div className="opacity-80">{SERVICE_ICONS[serviceType]}</div>
+                            <div className="opacity-80">{SERVICE_ICONS[req.service_type]}</div>
                             <div>
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="font-semibold text-sm text-slate-200">
-                                  {SERVICE_LABELS[serviceType]}
+                                  {SERVICE_LABELS[req.service_type]}
                                 </span>
                                 {req.service_type === 'repoussage' && req.direction && (
                                   <span className="text-[10px] font-bold text-orange-300">
@@ -385,25 +380,22 @@ export default function ModalAvion({
                                 <StatutBadge statut={req.statut} />
                               </div>
                               <p className="text-xs opacity-60 mt-0.5 flex items-center gap-1">
-                                <Clock className="h-3 w-3" /> {formatAge(req.requested_at)}
-                                {req.pax_count && ` · ${req.pax_count} pax`}
-                                {req.statut === 'completed' && req.montant_paye && (
-                                  <span className="text-emerald-400 font-semibold ml-1">+{req.montant_paye.toLocaleString()} F$</span>
-                                )}
+                                <Clock className="h-3 w-3" />
+                                {formatAge(req.requested_at)}
+                                {req.pax_count != null && ` · ${req.pax_count} pax`}
                               </p>
                             </div>
                           </div>
 
-                          {/* Boutons d'action */}
                           <div className="shrink-0">
                             {req.statut === 'pending' && isMinigame && !isConfirmOnly && (
                               <button
                                 type="button"
                                 disabled={isLoading || !!activeGameReqId}
-                                onClick={() => handleEffectuer(req)}
+                                onClick={() => handleAccepter(req)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors disabled:opacity-50"
                               >
-                                {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                                {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                                 Effectuer
                               </button>
                             )}
@@ -424,11 +416,11 @@ export default function ModalAvion({
 
 function StatutBadge({ statut }: { statut: string }) {
   const config: Record<string, { label: string; cls: string }> = {
-    pending:     { label: 'En attente',  cls: 'bg-amber-500/20 text-amber-300' },
-    accepted:    { label: 'Pris en charge', cls: 'bg-sky-500/20 text-sky-300' },
-    in_progress: { label: 'En cours',    cls: 'bg-purple-500/20 text-purple-300' },
-    completed:   { label: 'Terminé',     cls: 'bg-emerald-500/20 text-emerald-300' },
-    rejected:    { label: 'Rejeté',      cls: 'bg-red-500/20 text-red-300' },
+    pending:     { label: 'En attente',      cls: 'bg-amber-500/20 text-amber-300' },
+    accepted:    { label: 'Pris en charge',  cls: 'bg-sky-500/20 text-sky-300' },
+    in_progress: { label: 'En cours',        cls: 'bg-purple-500/20 text-purple-300' },
+    completed:   { label: 'Terminé',         cls: 'bg-emerald-500/20 text-emerald-300' },
+    rejected:    { label: 'Rejeté',          cls: 'bg-red-500/20 text-red-300' },
     ground_crew_unavailable: { label: 'GC indisponible', cls: 'bg-slate-500/20 text-slate-400' },
   };
   const c = config[statut] ?? config.pending;

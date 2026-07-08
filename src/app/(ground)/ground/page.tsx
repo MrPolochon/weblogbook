@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import GroundDashboard from './GroundDashboard';
-import GroundConnexionForm from './GroundConnexionForm';
+import GroundConnexion from './GroundConnexion';
+import type { PlanVol, ServiceRequest, Gate, Profile } from './GroundDashboard';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,92 +14,56 @@ export default async function GroundPage() {
 
   const admin = createAdminClient();
 
-  // Session ground active ?
-  const { data: groundSession } = await admin
+  const { data: session } = await admin
     .from('ground_sessions')
     .select('id, aeroport, started_at')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  if (!groundSession) {
-    return <GroundConnexionForm />;
+  if (!session) {
+    return <GroundConnexion userId={user.id} />;
   }
 
-  // Profil du GC (pour afficher son pseudo dans les modals)
-  const { data: gcProfile } = await admin
+  const aeroport = session.aeroport;
+
+  const { data: plans, error: plansError } = await admin
+    .from('plans_vol')
+    .select('id, callsign, immatriculation, porte, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
+    .or(`aeroport_depart.eq.${aeroport},aeroport_arrivee.eq.${aeroport}`)
+    .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture', 'automonitoring'])
+    .order('created_at', { ascending: false });
+
+  if (plansError) console.error('[GC page] plans_vol error:', plansError);
+
+  const { data: demandes } = await admin
+    .from('ground_service_requests')
+    .select('id, plan_vol_id, service_type, statut, accepted_by, direction, pilote_confirme, pax_count, score_minijeu, aeroport, requested_at')
+    .eq('aeroport', aeroport)
+    .in('statut', ['pending', 'accepted', 'in_progress'])
+    .order('requested_at', { ascending: true });
+
+  const { data: gates } = await admin
+    .from('airport_gates')
+    .select('id, gate_code, gate_type, max_aircraft_size, terminal, reserved_for, requires_separation, notes, display_order')
+    .eq('aeroport', aeroport)
+    .order('display_order', { ascending: true });
+
+  const { data: profile } = await admin
     .from('profiles')
-    .select('identifiant')
+    .select('id, identifiant, role')
     .eq('id', user.id)
     .single();
 
-  // En service : charger toutes les données du dashboard
-  const [
-    { data: serviceRequests },
-    { data: gates },
-    { data: plansActifs },
-    { data: myTeamMembership },
-    { count: pendingInvitationsCount },
-  ] = await Promise.all([
-    admin.from('ground_service_requests')
-      .select(`
-        id, plan_vol_id, pilote_id, aeroport, service_type, statut,
-        accepted_by, requested_at, accepted_at, completed_at, pax_count, notes, team_id,
-        pilote:profiles!ground_service_requests_pilote_id_fkey(identifiant),
-        plan_vol:plans_vol!ground_service_requests_plan_vol_id_fkey(numero_vol, callsign, immatriculation, aeroport_depart, aeroport_arrivee)
-      `)
-      .eq('aeroport', groundSession.aeroport)
-      .in('statut', ['pending', 'accepted', 'in_progress'])
-      .order('requested_at', { ascending: false }),
-
-    admin.from('airport_gates')
-      .select('*')
-      .eq('aeroport', groundSession.aeroport)
-      .order('display_order'),
-
-    admin.from('plans_vol')
-      .select(`
-        id, numero_vol, callsign, immatriculation, type_avion, aeroport_depart, aeroport_arrivee, statut, porte,
-        pilote:profiles!plans_vol_pilote_id_fkey(identifiant),
-        gate_assignments(id, gate_id, assignment_type, status,
-          gate:airport_gates!gate_assignments_gate_id_fkey(gate_code, terminal)
-        )
-      `)
-      .or(`aeroport_depart.eq.${groundSession.aeroport},aeroport_arrivee.eq.${groundSession.aeroport}`)
-      .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture', 'automonitoring'])
-      .order('created_at', { ascending: false })
-      .limit(50),
-
-    // Équipe active du GC
-    admin.from('ground_crew_team_members')
-      .select('team_id')
-      .eq('user_id', user.id)
-      .is('left_at', null)
-      .maybeSingle(),
-
-    // Nombre d'invitations en attente
-    admin.from('ground_crew_team_invitations')
-      .select('*', { count: 'exact', head: true })
-      .eq('to_user_id', user.id)
-      .eq('status', 'pending')
-      .gt('expires_at', new Date().toISOString()),
-  ]);
-
-  const invCount = pendingInvitationsCount ?? 0;
-
-  console.log('[GC Avions] aeroportSession:', groundSession.aeroport);
-  console.log('[GC Avions] plans trouvés:', plansActifs?.length, plansActifs?.map(p => ({ id: p.id, numero_vol: p.numero_vol, statut: p.statut, dep: p.aeroport_depart, arr: p.aeroport_arrivee })));
-
   return (
     <GroundDashboard
-      aeroport={groundSession.aeroport}
-      sessionId={groundSession.id}
       userId={user.id}
-      gcIdentifiant={gcProfile?.identifiant ?? 'GC'}
-      myTeamId={myTeamMembership?.team_id ?? null}
-      pendingInvitationsCount={invCount}
-      serviceRequests={(serviceRequests ?? []) as unknown as import('@/lib/types').GroundServiceRequest[]}
-      gates={gates ?? []}
-      plansActifs={(plansActifs ?? []) as unknown as Parameters<typeof GroundDashboard>[0]['plansActifs']}
+      sessionId={session.id}
+      aeroport={aeroport}
+      sessionStartedAt={session.started_at}
+      plansInitiaux={(plans ?? []) as PlanVol[]}
+      demandesInitiales={(demandes ?? []) as ServiceRequest[]}
+      gatesInitiales={(gates ?? []) as Gate[]}
+      profile={profile as Profile | null}
     />
   );
 }
