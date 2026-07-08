@@ -169,7 +169,8 @@ export default function GroundDashboard({
     return () => { supabase.removeChannel(channel); };
   }, [sessionId, aeroport, fetchPlanIfMissing]);
 
-  const pendingCount = demandes.filter(d => d.statut === 'pending').length;
+  const activePlanIds = new Set(plans.map(p => p.id));
+  const pendingCount = demandes.filter(d => d.statut === 'pending' && activePlanIds.has(d.plan_vol_id)).length;
 
   const handleServiceComplete = useCallback((score: number, serviceType: ServiceType, paxCount: number | null) => {
     const bases: Record<ServiceType, number> = {

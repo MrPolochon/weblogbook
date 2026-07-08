@@ -1089,6 +1089,18 @@ export async function finaliserCloturePlan(
     // Non bloquant
   }
 
+  // Annuler toutes les demandes GC en attente pour ce plan (non bloquant).
+  // Évite que les badges "N demandes en attente" du dashboard GC restent
+  // affichés après la clôture d'un plan de vol.
+  try {
+    await admin.from('ground_service_requests')
+      .update({ statut: 'rejected' })
+      .eq('plan_vol_id', plan.id)
+      .in('statut', ['pending', 'accepted', 'in_progress']);
+  } catch {
+    // Non bloquant
+  }
+
   // Pour un segment MEDEVAC intermédiaire, on passe à 'en_pause' (pas 'cloture')
   // afin que le pilote voie la page de pause + bouton "Reprendre le vol".
   // Le statut 'cloture' sera mis au moment où le segment suivant sera activé.

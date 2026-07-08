@@ -69,6 +69,11 @@ export default async function GroundPage() {
     console.error('[GC page] demandes exception - table probablement manquante:', e);
   }
 
+  // Exclure les demandes liées à des plans déjà clôturés (nettoyage défensif).
+  // Les plans actifs sont déjà filtrés par statut dans la requête ci-dessus.
+  const planIdsActifs = new Set(plans.map(p => p.id));
+  demandes = demandes.filter(d => planIdsActifs.has(d.plan_vol_id));
+
   const { data: gates } = await admin
     .from('airport_gates')
     .select('id, gate_code, gate_type, max_aircraft_size, terminal, reserved_for, requires_separation, notes, display_order')
