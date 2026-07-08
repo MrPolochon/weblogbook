@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Wrench, LayoutDashboard, LogOut, MessageSquare, Building2, MapPin, Clock, ChevronDown } from 'lucide-react';
+import { Wrench, LayoutDashboard, LogOut, MessageSquare, Building2, MapPin, Clock, ChevronDown, Power, Loader2 } from 'lucide-react';
 import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useTransition } from 'react';
@@ -52,6 +52,23 @@ export default function GroundNavBar({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [horsServiceLoading, setHorsServiceLoading] = useState(false);
+
+  async function handleHorsService() {
+    setHorsServiceLoading(true);
+    try {
+      const res = await fetch('/api/ground/session', { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error || 'Erreur');
+      }
+      startTransition(() => router.refresh());
+    } catch {
+      // Non bloquant
+    } finally {
+      setHorsServiceLoading(false);
+    }
+  }
 
   async function handleLogout() {
     const supabase = createClient();
@@ -134,6 +151,23 @@ export default function GroundNavBar({
                 )}
               />
             )}
+            {sessionInfo && (
+              <button
+                type="button"
+                onClick={handleHorsService}
+                disabled={horsServiceLoading}
+                className={cn(linkBase, 'border-red-700/50 bg-red-900/20 text-red-300 hover:bg-red-900/40 hover:text-red-200 disabled:opacity-60')}
+              >
+                {horsServiceLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                ) : (
+                  <Power className="h-4 w-4 flex-shrink-0" />
+                )}
+                <span className="hidden lg:inline">
+                  {horsServiceLoading ? 'Déconnexion...' : 'Hors service'}
+                </span>
+              </button>
+            )}
             <button
               type="button"
               onClick={handleLogout}
@@ -160,6 +194,21 @@ export default function GroundNavBar({
         {mobileMenuOpen && (
           <div className="mt-2 grid gap-2">
             {isAdmin && <AdminSpaceSelector />}
+            {sessionInfo && (
+              <button
+                type="button"
+                onClick={handleHorsService}
+                disabled={horsServiceLoading}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors bg-red-900/20 text-red-300 border border-red-700/50 hover:bg-red-900/40 hover:text-red-200 disabled:opacity-60"
+              >
+                {horsServiceLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Power className="h-4 w-4" />
+                )}
+                {horsServiceLoading ? 'Déconnexion...' : 'Hors service'}
+              </button>
+            )}
             <button
               type="button"
               onClick={handleLogout}
