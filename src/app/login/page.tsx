@@ -440,14 +440,14 @@ function LoginPageContent() {
         targetPath = '/atc';
         setRedirectTo('/atc');
       } else if (mode === 'ground_crew') {
-        // Rétrocompatibilité : role='ground_crew' (avant migration) OU ground_crew=true (colonne booléenne après migration)
-        let canGround = profile?.role === 'admin' || profile?.role === 'ground_crew';
-        if (!canGround) {
-          try {
-            const { data: gcData } = await supabase.from('profiles').select('ground_crew').eq('id', uid).maybeSingle();
-            canGround = Boolean(gcData?.ground_crew);
-          } catch { /* colonne ground_crew absente si migration non encore appliquée */ }
-        }
+        // Lire ground_crew de façon optionnelle (colonne absente si migration non encore appliquée)
+        let groundCrewAccess = false;
+        try {
+          const { data: gc } = await supabase.from('profiles')
+            .select('ground_crew').eq('id', uid).maybeSingle();
+          groundCrewAccess = gc?.ground_crew === true;
+        } catch { /* colonne ground_crew absente */ }
+        const canGround = profile?.role === 'admin' || profile?.role === 'ground_crew' || groundCrewAccess;
         if (!canGround) throw new Error('Ce compte n\'a pas accès à l\'espace Ground Crew.');
         targetPath = '/ground';
         setRedirectTo('/ground');

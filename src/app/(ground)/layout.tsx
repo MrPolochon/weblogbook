@@ -6,6 +6,13 @@ import InactivityLogout from '@/components/InactivityLogout';
 
 export const dynamic = 'force-dynamic';
 
+function canAccessGround(profile: Record<string, unknown>): boolean {
+  if (profile.role === 'admin') return true;
+  if (profile.role === 'ground_crew') return true; // rétrocompatibilité avant migration
+  if (profile.ground_crew === true) return true;   // nouveau système booléen
+  return false;
+}
+
 export default async function GroundLayout({
   children,
 }: {
@@ -17,34 +24,31 @@ export default async function GroundLayout({
 
   const admin = createAdminClient();
 
-  // Tentative avec la colonne ground_crew (ajoutée par migration fix_ground_crew_boolean.sql)
-  const { data: profileFull, error: profileError } = await admin
-    .from('profiles')
-    .select('role, ground_crew')
-    .eq('id', user.id)
-    .single();
-
-  let role: string | null = profileFull?.role ?? null;
-  let groundCrewFlag = Boolean(profileFull?.ground_crew);
-
-  // Fallback si la colonne ground_crew n'existe pas encore en base
-  if (profileError && !profileFull) {
-    const { data: basicProfile } = await admin
+  // Query résiliente : ground_crew peut ne pas exister en BDD si migration non encore appliquée
+  let profile: Record<string, unknown> | null = null;
+  try {
+    const { data, error } = await admin
+      .from('profiles')
+      .select('role, ground_crew')
+      .eq('id', user.id)
+      .single();
+    if (error) throw error;
+    profile = data;
+  } catch {
+    // Si ground_crew n'existe pas encore, retry sans cette colonne
+    const { data } = await admin
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single();
-    role = basicProfile?.role ?? null;
-    groundCrewFlag = false;
+    profile = data;
   }
 
-  const isAdmin = role === 'admin';
-  // Rétrocompatibilité : ground_crew=true (après migration) OU role='ground_crew' (avant migration)
-  const isGroundCrew = groundCrewFlag || role === 'ground_crew';
-
-  if (!isAdmin && !isGroundCrew) {
+  if (!profile || !canAccessGround(profile)) {
     redirect('/logbook');
   }
+
+  const isAdmin = profile.role === 'admin';
 
   // Récupérer la session ground active si elle existe
   const { data: groundSession } = await admin
