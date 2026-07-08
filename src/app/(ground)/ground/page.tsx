@@ -63,8 +63,8 @@ export default async function GroundPage() {
           gate:airport_gates!gate_assignments_gate_id_fkey(gate_code, terminal)
         )
       `)
-      .eq('aeroport_depart', groundSession.aeroport)
-      .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture'])
+      .or(`aeroport_depart.eq.${groundSession.aeroport},aeroport_arrivee.eq.${groundSession.aeroport}`)
+      .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture', 'automonitoring'])
       .order('created_at', { ascending: false })
       .limit(50),
 
@@ -84,6 +84,9 @@ export default async function GroundPage() {
   ]);
 
   const invCount = pendingInvitationsCount ?? 0;
+
+  console.log('[GC Avions] aeroportSession:', groundSession.aeroport);
+  console.log('[GC Avions] plans trouvés:', plansActifs?.length, plansActifs?.map(p => ({ id: p.id, numero_vol: p.numero_vol, statut: p.statut, dep: p.aeroport_depart, arr: p.aeroport_arrivee })));
 
   return (
     <GroundDashboard

@@ -317,10 +317,15 @@ function AvionsTab({
   requests: GroundServiceRequest[];
   onSelectPlan: (planId: string) => void;
 }) {
+  console.log('[GC Avions] aeroportSession (client):', aeroport);
+  console.log('[GC Avions] plans reçus (client):', plans.length, plans.map(p => ({ id: p.id, numero_vol: p.numero_vol, statut: p.statut, dep: p.aeroport_depart, arr: p.aeroport_arrivee })));
+
   const allPlans = [
     ...plans.filter(p => p.aeroport_depart === aeroport).map(p => ({ ...p, dirType: 'depart' as const })),
     ...plans.filter(p => p.aeroport_arrivee === aeroport && p.aeroport_depart !== aeroport).map(p => ({ ...p, dirType: 'arrivee' as const })),
   ];
+
+  console.log('[GC Avions] allPlans après filtre:', allPlans.length);
 
   if (allPlans.length === 0) {
     return (
