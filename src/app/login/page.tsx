@@ -423,7 +423,7 @@ function LoginPageContent() {
         const regData = await regRes.json().catch(() => ({}));
         requireCode = regData.requireCode !== false;
       } catch { /* ignore */ }
-      const { data: profile } = await supabase.from('profiles').select('role, atc, siavi, ground_crew').eq('id', uid).single();
+      const { data: profile } = await supabase.from('profiles').select('role, atc, siavi').eq('id', uid).single();
       if (loginAdminOnly && profile?.role !== 'admin') {
         await supabase.auth.signOut();
         throw new Error('Les connexions sont temporairement réservées aux administrateurs.');
@@ -440,7 +440,14 @@ function LoginPageContent() {
         targetPath = '/atc';
         setRedirectTo('/atc');
       } else if (mode === 'ground_crew') {
-        const canGround = profile?.role === 'admin' || Boolean(profile?.ground_crew);
+        // Rétrocompatibilité : role='ground_crew' (avant migration) OU ground_crew=true (colonne booléenne après migration)
+        let canGround = profile?.role === 'admin' || profile?.role === 'ground_crew';
+        if (!canGround) {
+          try {
+            const { data: gcData } = await supabase.from('profiles').select('ground_crew').eq('id', uid).maybeSingle();
+            canGround = Boolean(gcData?.ground_crew);
+          } catch { /* colonne ground_crew absente si migration non encore appliquée */ }
+        }
         if (!canGround) throw new Error('Ce compte n\'a pas accès à l\'espace Ground Crew.');
         targetPath = '/ground';
         setRedirectTo('/ground');

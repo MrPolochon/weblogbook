@@ -16,14 +16,31 @@ export default async function GroundLayout({
   if (!user) redirect('/login');
 
   const admin = createAdminClient();
-  const { data: profile } = await admin
+
+  // Tentative avec la colonne ground_crew (ajoutée par migration fix_ground_crew_boolean.sql)
+  const { data: profileFull, error: profileError } = await admin
     .from('profiles')
     .select('role, ground_crew')
     .eq('id', user.id)
     .single();
 
-  const isAdmin = profile?.role === 'admin';
-  const isGroundCrew = Boolean(profile?.ground_crew);
+  let role: string | null = profileFull?.role ?? null;
+  let groundCrewFlag = Boolean(profileFull?.ground_crew);
+
+  // Fallback si la colonne ground_crew n'existe pas encore en base
+  if (profileError && !profileFull) {
+    const { data: basicProfile } = await admin
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+    role = basicProfile?.role ?? null;
+    groundCrewFlag = false;
+  }
+
+  const isAdmin = role === 'admin';
+  // Rétrocompatibilité : ground_crew=true (après migration) OU role='ground_crew' (avant migration)
+  const isGroundCrew = groundCrewFlag || role === 'ground_crew';
 
   if (!isAdmin && !isGroundCrew) {
     redirect('/logbook');
