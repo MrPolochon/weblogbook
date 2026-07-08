@@ -123,6 +123,22 @@ export default function GroundDashboard({
   const plansRef = useRef<PlanVol[]>(plansInitiaux);
   useEffect(() => { plansRef.current = plans; }, [plans]);
 
+  // Fallback client-side si le SSR n'a retourné aucun plan
+  useEffect(() => {
+    if (plansInitiaux.length > 0) return;
+    const supabase = createClient();
+    const fetchPlans = async () => {
+      const { data, error } = await supabase
+        .from('plans_vol')
+        .select('id, callsign, immatriculation, porte, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
+        .or(`aeroport_depart.eq.${aeroport},aeroport_arrivee.eq.${aeroport}`)
+        .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture', 'automonitoring']);
+      console.log('[GC client] plans fallback:', data?.length, error?.message ?? 'ok');
+      if (data && data.length > 0) setPlans(data as PlanVol[]);
+    };
+    void fetchPlans();
+  }, [aeroport, plansInitiaux.length]);
+
   const gcIdentifiant = profile?.identifiant ?? 'GC';
 
   const fetchPlanIfMissing = useCallback(async (planVolId: string) => {
@@ -307,18 +323,27 @@ function AvionsTab({
   aeroport: string;
   onSelectPlan: (plan: PlanVol) => void;
 }) {
+  const norm = (s: string) => s.trim().toUpperCase();
+  const aeroportNorm = norm(aeroport);
+
   const allPlans = [
     ...plans
-      .filter(p => p.aeroport_depart === aeroport)
+      .filter(p => norm(p.aeroport_depart) === aeroportNorm)
       .map(p => ({ ...p, dirType: 'depart' as const })),
     ...plans
-      .filter(p => p.aeroport_arrivee === aeroport && p.aeroport_depart !== aeroport)
+      .filter(p => norm(p.aeroport_arrivee) === aeroportNorm && norm(p.aeroport_depart) !== aeroportNorm)
       .map(p => ({ ...p, dirType: 'arrivee' as const })),
   ];
 
   if (allPlans.length === 0) {
     return (
       <div className="rounded-xl border border-slate-700/40 bg-slate-800/20 p-12 text-center">
+        <div className="text-xs text-yellow-400 p-2 bg-yellow-900/20 rounded mb-4 font-mono text-left">
+          Debug: {plans.length} plans reçus | aéroport: &quot;{aeroport}&quot; | filtrés: {allPlans.length}
+          {plans.length > 0 && (
+            <span> | ex: dep=&quot;{plans[0]?.aeroport_depart}&quot; arr=&quot;{plans[0]?.aeroport_arrivee}&quot;</span>
+          )}
+        </div>
         <Plane className="h-10 w-10 text-slate-600 mx-auto mb-3" />
         <p className="text-slate-400">Aucun avion actif sur cet aéroport</p>
       </div>
@@ -327,6 +352,9 @@ function AvionsTab({
 
   return (
     <div className="space-y-2">
+      <div className="text-xs text-yellow-400 p-2 bg-yellow-900/20 rounded font-mono">
+        Debug: {plans.length} plans reçus | aéroport: &quot;{aeroport}&quot; | filtrés: {allPlans.length}
+      </div>
       {allPlans.map(plan => {
         const planDemandes = demandes.filter(d => d.plan_vol_id === plan.id);
         const pendingCount = planDemandes.filter(d => d.statut === 'pending').length;

@@ -28,6 +28,16 @@ export default async function GroundPage() {
 
   console.log(`[GC page] aeroport avant query=${aeroport}`);
 
+  // Test sans filtre pour vérifier que la table contient des données
+  const { data: testPlans } = await admin
+    .from('plans_vol')
+    .select('id, callsign, aeroport_depart, aeroport_arrivee, statut')
+    .limit(10);
+  console.log('[GC DEBUG] plans sans filtre (10 premiers):',
+    testPlans?.length ?? 0,
+    testPlans?.map(p => `${p.aeroport_depart}→${p.aeroport_arrivee} [${p.statut}]`),
+  );
+
   let plans: PlanVol[] = [];
   try {
     const { data, error } = await admin
