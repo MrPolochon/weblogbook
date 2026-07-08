@@ -500,8 +500,21 @@ function PortesTab({
   const activePlans = plans.filter(
     p => p.aeroport_depart === aeroport || p.aeroport_arrivee === aeroport
   );
+
+  const normalizeGate = (s: string) =>
+    s.trim().toLowerCase().replace(/\s+/g, ' ');
+
+  const matchesGate = (planPorte: string | null | undefined, gateCode: string) => {
+    if (!planPorte || !gateCode) return false;
+    const pNorm = normalizeGate(planPorte);
+    const gNorm = normalizeGate(gateCode);
+    return pNorm === gNorm || pNorm === gNorm.replace(/^(gate|parking)\s+/i, '');
+  };
+
+  const hasPorteData = activePlans.some(p => p.porte != null && p.porte.trim() !== '');
+
   const libreCount = gates.filter(
-    g => !activePlans.find(p => p.porte?.toLowerCase() === g.gate_code.toLowerCase())
+    g => !activePlans.find(p => matchesGate(p.porte, g.gate_code))
   ).length;
   const terminals = Array.from(new Set(gates.map(g => g.terminal ?? 'Hors terminal')));
 
@@ -510,6 +523,12 @@ function PortesTab({
       <p className="text-sm text-slate-400">
         {gates.length} porte(s) — {libreCount} disponible(s)
       </p>
+      {activePlans.length > 0 && !hasPorteData && (
+        <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 px-4 py-3 text-amber-300 text-sm flex items-center gap-2">
+          <span>⚠</span>
+          <span>Données de porte non disponibles — migration SQL requise.</span>
+        </div>
+      )}
       {terminals.map(terminal => {
         const terminalGates = gates.filter(g => (g.terminal ?? 'Hors terminal') === terminal);
         return (
@@ -519,9 +538,7 @@ function PortesTab({
             </div>
             <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {terminalGates.map(gate => {
-                const occupant = activePlans.find(
-                  p => p.porte?.toLowerCase() === gate.gate_code.toLowerCase()
-                );
+                const occupant = activePlans.find(p => matchesGate(p.porte, gate.gate_code));
                 const isOccupied = !!occupant;
                 return (
                   <div

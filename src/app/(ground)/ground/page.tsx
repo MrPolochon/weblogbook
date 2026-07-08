@@ -26,21 +26,48 @@ export default async function GroundPage() {
 
   const aeroport = session.aeroport;
 
-  const { data: plans, error: plansError } = await admin
-    .from('plans_vol')
-    .select('id, callsign, immatriculation, porte, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
-    .or(`aeroport_depart.eq.${aeroport},aeroport_arrivee.eq.${aeroport}`)
-    .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture', 'automonitoring'])
-    .order('created_at', { ascending: false });
+  let plans: PlanVol[] = [];
+  try {
+    const { data, error } = await admin
+      .from('plans_vol')
+      .select('id, callsign, immatriculation, porte, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
+      .or(`aeroport_depart.eq.${aeroport},aeroport_arrivee.eq.${aeroport}`)
+      .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture', 'automonitoring'])
+      .order('created_at', { ascending: false });
 
-  if (plansError) console.error('[GC page] plans_vol error:', plansError);
+    if (error) {
+      console.error('[GC page] plans_vol error:', JSON.stringify(error));
+      if (error.message?.includes('porte')) {
+        const { data: data2 } = await admin
+          .from('plans_vol')
+          .select('id, callsign, immatriculation, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
+          .or(`aeroport_depart.eq.${aeroport},aeroport_arrivee.eq.${aeroport}`)
+          .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture', 'automonitoring'])
+          .order('created_at', { ascending: false });
+        plans = (data2 ?? []) as PlanVol[];
+      }
+    } else {
+      plans = (data ?? []) as PlanVol[];
+    }
+    console.log(`[GC page] aeroport=${aeroport} plans trouvés:`, plans.length, plans.map(p => ({ id: p.id, callsign: p.callsign, statut: p.statut, dep: p.aeroport_depart })));
+  } catch (e) {
+    console.error('[GC page] plans_vol exception:', e);
+  }
 
-  const { data: demandes } = await admin
-    .from('ground_service_requests')
-    .select('id, plan_vol_id, service_type, statut, accepted_by, direction, pilote_confirme, pax_count, score_minijeu, aeroport, requested_at')
-    .eq('aeroport', aeroport)
-    .in('statut', ['pending', 'accepted', 'in_progress'])
-    .order('requested_at', { ascending: true });
+  let demandes: ServiceRequest[] = [];
+  try {
+    const { data, error } = await admin
+      .from('ground_service_requests')
+      .select('id, plan_vol_id, service_type, statut, accepted_by, direction, pilote_confirme, pax_count, aeroport, requested_at')
+      .eq('aeroport', aeroport)
+      .in('statut', ['pending', 'accepted', 'in_progress'])
+      .order('requested_at', { ascending: true });
+
+    if (error) console.error('[GC page] demandes error:', JSON.stringify(error));
+    else demandes = (data ?? []) as ServiceRequest[];
+  } catch (e) {
+    console.error('[GC page] demandes exception - table probablement manquante:', e);
+  }
 
   const { data: gates } = await admin
     .from('airport_gates')
@@ -60,8 +87,8 @@ export default async function GroundPage() {
       sessionId={session.id}
       aeroport={aeroport}
       sessionStartedAt={session.started_at}
-      plansInitiaux={(plans ?? []) as PlanVol[]}
-      demandesInitiales={(demandes ?? []) as ServiceRequest[]}
+      plansInitiaux={plans}
+      demandesInitiales={demandes}
       gatesInitiales={(gates ?? []) as Gate[]}
       profile={profile as Profile | null}
     />
