@@ -160,6 +160,8 @@ export default function DepotPlanVolForm({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showBria, setShowBria] = useState(false);
+  /** null = en chargement, true = portes existent, false = aucune porte configurée */
+  const [aHasGates, setAHasGates] = useState<boolean | null>(null);
 
   // SID/STAR depuis la base admin (pour remplir strip_route)
   const [sidList, setSidList] = useState<{ id: string; nom: string; route: string }[]>([]);
@@ -558,7 +560,7 @@ export default function DepotPlanVolForm({
     const items: { label: string; ok: boolean }[] = [
       { label: 'Aéroport de départ', ok: Boolean(aeroport_depart?.trim()) },
       { label: 'Aéroport d\'arrivée', ok: Boolean(aeroport_arrivee?.trim()) },
-      { label: 'Porte de départ', ok: Boolean(aeroport_depart && porte?.trim()) },
+      { label: 'Porte de départ', ok: !aeroport_depart || aHasGates !== true || Boolean(porte?.trim()) },
       { label: 'Numéro de vol', ok: !!numero_vol.trim() },
       { label: 'Durée de vol', ok: !!(temps_prev_min && parseInt(temps_prev_min, 10) > 0) },
     ];
@@ -572,7 +574,7 @@ export default function DepotPlanVolForm({
       items.push({ label: 'Flotte armée (mission)', ok: !!armee_avion_id });
     }
     return items;
-  }, [aeroport_depart, aeroport_arrivee, numero_vol, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee, vol_commercial, vol_ferry, compagnie_avion_id, armee_mission_id, armee_avion_id, armeeAvions.length]);
+  }, [aeroport_depart, aeroport_arrivee, porte, aHasGates, numero_vol, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee, vol_commercial, vol_ferry, compagnie_avion_id, armee_mission_id, armee_avion_id, armeeAvions.length]);
 
   function missionArmeeValidationError(): string | null {
     if (vol_commercial || vol_ferry) return null;
@@ -650,7 +652,7 @@ export default function DepotPlanVolForm({
     if (!aeroport_arrivee) errs.aeroport_arrivee = 'Aéroport d\'arrivée requis.';
     if (!numero_vol.trim()) errs.numero_vol = 'Numéro de vol requis.';
     if (isNaN(t) || t < 1) errs.temps_prev_min = 'Durée invalide (minimum 1 min).';
-    if (aeroport_depart && !porte.trim()) errs.porte = 'La porte de départ est obligatoire.';
+    if (aeroport_depart && aHasGates === true && !porte.trim()) errs.porte = 'La porte de départ est obligatoire pour cet aéroport.';
     if (!heure_depart.trim()) errs.heure_depart = 'Heure de départ (UTC) obligatoire.';
     if (type_vol === 'VFR' && !intentions_vol.trim()) errs.intentions_vol = 'Intentions de vol requises pour VFR.';
     if (type_vol === 'IFR' && !sid_depart.trim()) errs.sid_depart = 'SID de départ requise pour IFR.';
@@ -1405,7 +1407,7 @@ export default function DepotPlanVolForm({
             <select
               className={`input ${fieldErrors.aeroport_depart ? 'border-red-500/60 focus:border-red-500' : ''}`}
               value={aeroport_depart}
-              onChange={(e) => { setAeroportDepart(e.target.value); setFieldErrors(p => ({ ...p, aeroport_depart: '' })); }}
+              onChange={(e) => { setAeroportDepart(e.target.value); setFieldErrors(p => ({ ...p, aeroport_depart: '', porte: '' })); setPorte(''); setAHasGates(null); }}
               required
               disabled={missionLocked}
             >
@@ -1509,7 +1511,7 @@ export default function DepotPlanVolForm({
           </div>
           <div>
             <label className="label">
-              Porte de départ <span className="text-red-400">*</span>
+              Porte de départ{aeroport_depart && aHasGates === true ? <span className="text-red-400"> *</span> : null}
               {aeroport_depart && <span className="ml-1 text-emerald-400/70 text-xs">(depuis le catalogue)</span>}
             </label>
             {aeroport_depart ? (
@@ -1517,7 +1519,8 @@ export default function DepotPlanVolForm({
                 aeroport={aeroport_depart}
                 value={porte}
                 onChange={(v) => { setPorte(v); setFieldErrors(p => ({ ...p, porte: '' })); }}
-                required
+                onGatesLoaded={(hasGates) => setAHasGates(hasGates)}
+                required={aHasGates === true}
               />
             ) : (
               <input

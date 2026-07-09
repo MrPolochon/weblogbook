@@ -11,6 +11,8 @@ interface Props {
   onChange: (value: string) => void;
   required?: boolean;
   disabled?: boolean;
+  /** Appelé dès que les portes ont été chargées ; `hasGates=false` si aucune porte configurée. */
+  onGatesLoaded?: (hasGates: boolean) => void;
 }
 
 const GATE_TYPE_LABEL: Record<string, string> = {
@@ -41,6 +43,7 @@ export default function PorteDepartSelect({
   onChange,
   required = false,
   disabled = false,
+  onGatesLoaded,
 }: Props) {
   const [gates, setGates] = useState<GateWithStatus[]>([]);
   const [loading, setLoading] = useState(false);
@@ -49,6 +52,7 @@ export default function PorteDepartSelect({
     if (!aeroport) {
       setGates([]);
       onChange('');
+      onGatesLoaded?.(false);
       return;
     }
 
@@ -58,11 +62,15 @@ export default function PorteDepartSelect({
       .then((d: { gates?: GateWithStatus[] }) => {
         const filtered = (d.gates ?? []).filter((g) => g.gate_type !== 'special');
         setGates(filtered);
+        onGatesLoaded?.(filtered.length > 0);
         if (value && !filtered.find((g) => g.gate_code === value)) {
           onChange('');
         }
       })
-      .catch(() => setGates([]))
+      .catch(() => {
+        setGates([]);
+        onGatesLoaded?.(false);
+      })
       .finally(() => setLoading(false));
   }, [aeroport]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -106,9 +114,9 @@ export default function PorteDepartSelect({
           Chargement des portes…
         </div>
       ) : gates.length === 0 ? (
-        <div className="h-10 rounded-xl border border-slate-700/50 bg-slate-900/30 flex items-center px-3 text-sm text-slate-500">
-          <DoorOpen className="h-3.5 w-3.5 mr-2 shrink-0" />
-          Aucune porte configurée pour {aeroport}
+        <div className="flex items-center gap-2 py-2 text-sm italic text-slate-400">
+          <DoorOpen className="h-3.5 w-3.5 shrink-0" />
+          Aucune porte configurée pour {aeroport} — porte non requise
         </div>
       ) : (
         <select
