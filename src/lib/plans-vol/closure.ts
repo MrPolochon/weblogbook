@@ -446,17 +446,25 @@ export async function envoyerChequesVol(
   plan: PlanPaiement,
   dateFinVol: Date // Date de fin du vol pour le calcul (demande_cloture_at, pas confirmation ATC)
 ): Promise<PaiementVolResult> {
+  const logRef = `[CHEQUE][Vol ${plan.numero_vol || plan.id}][Pilote ${plan.pilote_id}]`;
+  console.log(`${logRef} envoyerChequesVol démarré (vol_commercial=${plan.vol_commercial}, compagnie_id=${plan.compagnie_id}, revenue_brut=${plan.revenue_brut})`);
+
   const missionArmee = await payerMissionArmee(admin, plan, dateFinVol);
   if (missionArmee && 'error' in missionArmee) {
+    console.warn(`${logRef} Erreur mission armée: ${missionArmee.error}`);
     return { success: false, message: missionArmee.error };
   }
 
   if (!plan.vol_commercial || !plan.compagnie_id || !plan.revenue_brut || plan.revenue_brut <= 0) {
+    if (!plan.vol_commercial) console.warn(`${logRef} Vol non commercial → pas de chèque`);
+    else if (!plan.compagnie_id) console.warn(`${logRef} compagnie_id absent → pas de chèque`);
+    else console.warn(`${logRef} revenue_brut=${plan.revenue_brut} nul ou ≤ 0 → pas de chèque`);
     return { success: true, message: 'Vol non commercial ou sans revenus', missionArmee: missionArmee || undefined };
   }
 
   // Sécurité : vérifier que le plan a été accepté avant de payer
   if (!plan.accepted_at) {
+    console.warn(`${logRef} Plan non accepté (accepted_at null) → pas de paiement`);
     return { success: false, message: 'Le plan de vol doit être accepté avant le paiement.' };
   }
 
@@ -493,6 +501,7 @@ export async function envoyerChequesVol(
     .eq('id', plan.compagnie_id)
     .single();
   if (!compagnie) {
+    console.warn(`${logRef} Compagnie ${plan.compagnie_id} introuvable en BDD → abandon`);
     return { success: false, message: 'Compagnie introuvable' };
   }
 
@@ -501,6 +510,7 @@ export async function envoyerChequesVol(
   const revBrut = Number(plan.revenue_brut) || 0;
   let salairePlanning = 0;
   if (pctSalaireCompagnie === 0) {
+    console.warn(`${logRef} pourcentage_salaire=0% pour la compagnie → pas de salaire pilote`);
     salairePlanning = 0;
   } else if (revBrut > 0) {
     const depuisPourcent = Math.floor(revBrut * pctSalaireCompagnie / 100);
@@ -510,29 +520,35 @@ export async function envoyerChequesVol(
 
   const compagnieIdFelitz = plan.compagnie_id;
   if (!compagnieIdFelitz) {
+    console.warn(`${logRef} compagnie_id null après vérification (ne devrait pas arriver ici) → abandon`);
     return { success: false, message: 'Compagnie introuvable pour la clôture' };
   }
 
   const comptePilote = await ensureComptePersonnel(admin, plan.pilote_id);
   if (!comptePilote) {
+    console.warn(`${logRef} Compte Felitz du pilote ${plan.pilote_id} introuvable même après ensureComptePersonnel → abandon`);
     return {
       success: false,
       message:
         'Compte Felitz du pilote introuvable. Si le pilote est récent ou migré, vérifiez son profil ; le compte aurait dû être créé automatiquement.',
     };
   }
+  console.log(`${logRef} Compte Felitz pilote OK (id=${comptePilote.id})`);
 
   const compteCompagnie = await ensureCompteEntreprise(admin, compagnieIdFelitz);
   if (!compteCompagnie) {
+    console.warn(`${logRef} Compte Felitz de la compagnie ${compagnieIdFelitz} introuvable même après ensureCompteEntreprise → abandon`);
     return {
       success: false,
       message:
         'Compte Felitz de la compagnie introuvable. Si la compagnie a été créée hors processus normal, vérifiez qu’elle existe et son VBAN.',
     };
   }
+  console.log(`${logRef} Compte Felitz compagnie OK (id=${compteCompagnie.id})`);
+  console.log(`${logRef} salairePlanning=${salairePlanning}, coefficient=${coefficient}, revenuEffectif=${revenuEffectif}`);
 
   const baseTaxes = coefficient === 0 ? plan.revenue_brut : revenuEffectif;
-  
+
   // Distribuer les taxes aux ATC et/ou AFIS
   const { taxesTotales, atcPayes } = await distribuerTaxesATC(
     admin,
@@ -632,6 +648,10 @@ export async function envoyerChequesVol(
   }
 
   // Chèque salaire pilote
+  console.log(`${logRef} salaireEffectif=${salaireEffectif} (salairePlanning=${salairePlanning}, coeff=${Math.round(coefficient * 100)}%, revenuLocataireAvantSalaire=${revenuLocataireAvantSalaire})`);
+  if (salaireEffectif === 0) {
+    console.warn(`${logRef} salaireEffectif=0 → pas de chèque salaire pilote`);
+  }
   if (salaireEffectif > 0) {
     let contenuSalaire = `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min`;
     if (arriveePrevueAt) {
@@ -647,7 +667,7 @@ export async function envoyerChequesVol(
     if (plan.type_cargaison === 'marchandise_rare' && plan.type_cargaison_libelle) {
       contenuSalaire += `\n\n💎 Marchandise rare transportée : ${plan.type_cargaison_libelle}`;
     }
-    await admin.from('messages').insert({
+    const { data: chequeSalaireInsere, error: chequeSalaireError } = await admin.from('messages').insert({
       destinataire_id: plan.pilote_id,
       expediteur_id: null,
       titre: `Salaire vol ${numeroVol}`,
@@ -660,7 +680,9 @@ export async function envoyerChequesVol(
       cheque_numero_vol: numeroVol,
       cheque_compagnie_nom: compagnie.nom,
       cheque_pour_compagnie: false
-    });
+    }).select('id, cheque_montant').single();
+    if (chequeSalaireError) console.error(`${logRef} [ERREUR] Insertion chèque salaire:`, chequeSalaireError);
+    else console.log(`${logRef} Chèque salaire créé: id=${chequeSalaireInsere?.id}, montant=${chequeSalaireInsere?.cheque_montant}`);
   }
 
   // Vérifier si la compagnie a un prêt actif
@@ -867,7 +889,7 @@ export async function envoyerChequesVol(
     if (codeshareTotal > 0) metadataCheque.codeshare = codeshareTotal;
     if (numeroVol) metadataCheque.numero_vol = numeroVol;
 
-    await admin.from('messages').insert({
+    const { data: chequeCompagnieInsere, error: chequeCompagnieError } = await admin.from('messages').insert({
       destinataire_id: compagnie.pdg_id,
       expediteur_id: null,
       titre: `Revenu vol ${numeroVol} - ${compagnie.nom}`,
@@ -881,7 +903,9 @@ export async function envoyerChequesVol(
       cheque_compagnie_nom: compagnie.nom,
       cheque_pour_compagnie: true,
       metadata: Object.keys(metadataCheque).length > 0 ? metadataCheque : undefined,
-    });
+    }).select('id, cheque_montant').single();
+    if (chequeCompagnieError) console.error(`${logRef} [ERREUR] Insertion chèque revenu compagnie:`, chequeCompagnieError);
+    else console.log(`${logRef} Chèque revenu compagnie créé: id=${chequeCompagnieInsere?.id}, montant=${chequeCompagnieInsere?.cheque_montant}`);
   }
 
   if (revenuLoueur > 0 && loueurInfo?.pdg_id) {
@@ -914,6 +938,7 @@ export async function envoyerChequesVol(
     });
   }
 
+  console.log(`${logRef} envoyerChequesVol terminé ✓ (salaire=${salaireEffectif}, revenuCompagnie=${revenuLocataire}, taxes=${taxesReellementPrelevees})`);
   return {
     success: true,
     revenus: {

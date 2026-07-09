@@ -146,6 +146,7 @@ export async function PATCH(
           paiementResult = result.paiementResult;
           usureAppliquee = result.usureAppliquee;
         } else {
+          console.log(`[CLOTURE][Plan ${id}] Vol ${plan.numero_vol} - closDirect=${closDirect}, vol_commercial=${plan.vol_commercial}, revenue_brut=${plan.revenue_brut}, compagnie_id=${plan.compagnie_id}`);
           paiementResult = await envoyerChequesVol(admin, { ...plan, demande_cloture_at: demandeClotureAt.toISOString() }, demandeClotureAt);
           if (!paiementResult.success) {
             console.error('Erreur paiement vol:', paiementResult.message);
