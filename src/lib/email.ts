@@ -4,18 +4,37 @@ const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
 
+if (!process.env.RESEND_API_KEY) {
+  console.error('[email] ❌ RESEND_API_KEY manquante — aucun email ne sera envoyé. Configurez cette variable dans Vercel (Settings > Environment Variables).');
+}
+
 const FROM_EMAIL = process.env.EMAIL_FROM ?? 'PTFS Logbook <onboarding@resend.dev>';
+
+// onboarding@resend.dev est un domaine de test Resend : en production, les emails
+// ne sont livrés qu'à l'adresse du propriétaire du compte Resend.
+// Configurez EMAIL_FROM avec un domaine vérifié dans Resend pour la production.
+if (process.env.NODE_ENV === 'production' && !process.env.EMAIL_FROM) {
+  console.warn('[email] ⚠ EMAIL_FROM non défini — utilisation de onboarding@resend.dev (domaine de test). Les emails ne seront livrés qu\'à l\'adresse du compte Resend. Configurez EMAIL_FROM avec un domaine vérifié sur resend.com pour envoyer à tous les utilisateurs.');
+}
+
+function maskEmailLog(address: string): string {
+  const match = address.match(/<(.+)>/) ?? [null, address];
+  const email = match[1] ?? address;
+  const [local = '', domain = ''] = email.split('@');
+  return `${local[0] ?? '*'}***@${domain}`;
+}
 
 /**
  * Envoie le code de vérification de connexion par email.
- * Retourne true si l'envoi a réussi, false sinon (ex: RESEND_API_KEY non configuré).
+ * Retourne { ok: true } si l'envoi a réussi, { ok: false, error } sinon.
  */
 export async function sendLoginCodeEmail(to: string, code: string): Promise<{ ok: boolean; error?: string }> {
   if (!resend) {
-    console.warn('[email] RESEND_API_KEY non configuré, envoi de code désactivé');
-    return { ok: false, error: 'Envoi d\'email non configuré' };
+    console.error('[email] sendLoginCodeEmail — RESEND_API_KEY non configuré, envoi impossible vers', maskEmailLog(to));
+    return { ok: false, error: 'Envoi d\'email non configuré (RESEND_API_KEY manquante). Contactez l\'administrateur.' };
   }
   try {
+    console.log('[email] Envoi code de connexion vers', maskEmailLog(to), '— from:', FROM_EMAIL);
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: [to],
@@ -29,12 +48,13 @@ export async function sendLoginCodeEmail(to: string, code: string): Promise<{ ok
       `,
     });
     if (error) {
-      console.error('[email] Resend error:', error);
+      console.error('[email] ❌ Resend a refusé l\'envoi vers', maskEmailLog(to), '— erreur:', error);
       return { ok: false, error: error.message };
     }
+    console.log('[email] ✓ Code envoyé avec succès vers', maskEmailLog(to));
     return { ok: true };
   } catch (e) {
-    console.error('[email] sendLoginCodeEmail:', e);
+    console.error('[email] ❌ Exception lors de sendLoginCodeEmail vers', maskEmailLog(to), ':', e);
     return { ok: false, error: e instanceof Error ? e.message : 'Erreur envoi email' };
   }
 }
@@ -44,7 +64,7 @@ export async function sendLoginCodeEmail(to: string, code: string): Promise<{ ok
  */
 export async function sendSuperadminAccessCodeEmail(to: string, code: string): Promise<{ ok: boolean; error?: string }> {
   if (!resend) {
-    console.warn('[email] RESEND_API_KEY non configuré');
+    console.error('[email] sendSuperadminAccessCodeEmail — RESEND_API_KEY non configuré');
     return { ok: false, error: 'Envoi d\'email non configuré' };
   }
   try {
@@ -61,12 +81,13 @@ export async function sendSuperadminAccessCodeEmail(to: string, code: string): P
       `,
     });
     if (error) {
-      console.error('[email] Resend error:', error);
+      console.error('[email] ❌ Resend error (sendSuperadminAccessCodeEmail):', error);
       return { ok: false, error: error.message };
     }
+    console.log('[email] ✓ Code superadmin envoyé vers', maskEmailLog(to));
     return { ok: true };
   } catch (e) {
-    console.error('[email] sendSuperadminAccessCodeEmail:', e);
+    console.error('[email] ❌ sendSuperadminAccessCodeEmail:', e);
     return { ok: false, error: e instanceof Error ? e.message : 'Erreur envoi email' };
   }
 }
@@ -77,7 +98,7 @@ export async function sendSuperadminAccessCodeEmail(to: string, code: string): P
  */
 export async function sendAdminPasswordResetCodeEmail(to: string, code: string): Promise<{ ok: boolean; error?: string }> {
   if (!resend) {
-    console.warn('[email] RESEND_API_KEY non configuré');
+    console.error('[email] sendAdminPasswordResetCodeEmail — RESEND_API_KEY non configuré');
     return { ok: false, error: 'Envoi d\'email non configuré' };
   }
   try {
@@ -94,12 +115,13 @@ export async function sendAdminPasswordResetCodeEmail(to: string, code: string):
       `,
     });
     if (error) {
-      console.error('[email] Resend error:', error);
+      console.error('[email] ❌ Resend error (sendAdminPasswordResetCodeEmail):', error);
       return { ok: false, error: error.message };
     }
+    console.log('[email] ✓ Code reset mot de passe envoyé vers', maskEmailLog(to));
     return { ok: true };
   } catch (e) {
-    console.error('[email] sendAdminPasswordResetCodeEmail:', e);
+    console.error('[email] ❌ sendAdminPasswordResetCodeEmail:', e);
     return { ok: false, error: e instanceof Error ? e.message : 'Erreur envoi email' };
   }
 }
@@ -109,7 +131,7 @@ export async function sendAdminPasswordResetCodeEmail(to: string, code: string):
  */
 export async function sendPasswordResetLinkEmail(to: string, resetUrl: string): Promise<{ ok: boolean; error?: string }> {
   if (!resend) {
-    console.warn('[email] RESEND_API_KEY non configuré');
+    console.error('[email] sendPasswordResetLinkEmail — RESEND_API_KEY non configuré');
     return { ok: false, error: 'Envoi d\'email non configuré' };
   }
   try {
@@ -126,12 +148,13 @@ export async function sendPasswordResetLinkEmail(to: string, resetUrl: string): 
       `,
     });
     if (error) {
-      console.error('[email] Resend error:', error);
+      console.error('[email] ❌ Resend error (sendPasswordResetLinkEmail):', error);
       return { ok: false, error: error.message };
     }
+    console.log('[email] ✓ Lien reset mot de passe envoyé vers', maskEmailLog(to));
     return { ok: true };
   } catch (e) {
-    console.error('[email] sendPasswordResetLinkEmail:', e);
+    console.error('[email] ❌ sendPasswordResetLinkEmail:', e);
     return { ok: false, error: e instanceof Error ? e.message : 'Erreur envoi email' };
   }
 }

@@ -110,14 +110,17 @@ export async function POST(req: NextRequest) {
       { onConflict: 'user_id' }
     );
 
+    console.log('[send-login-code] Tentative envoi code vers:', maskEmail(email), '— user:', user.id);
     const { ok, error } = await sendLoginCodeEmail(email, code);
     if (!ok) {
+      console.error('[send-login-code] Échec envoi email vers:', maskEmail(email), '— raison:', error);
       return NextResponse.json(
         { error: error || "Impossible d'envoyer l'email. Réessayez ou contactez l'administrateur." },
         { status: 502 }
       );
     }
 
+    console.log('[send-login-code] Code envoyé avec succès vers:', maskEmail(email));
     return NextResponse.json({ ok: true, emailMasked: maskEmail(email) });
   } catch (e) {
     console.error('[send-login-code]', e);

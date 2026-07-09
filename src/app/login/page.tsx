@@ -373,20 +373,24 @@ function LoginPageContent() {
         if (isSafeRedirectPath(stored)) setRedirectTo(stored);
       } catch { /* sessionStorage indispo */ }
       setStep('code');
-      fetch('/api/auth/send-login-code', { method: 'POST', credentials: 'include' })
-        .then(async (res) => {
-          const d = await res.json().catch(() => ({}));
-          if (res.ok && d.skipCode) {
-            clearPendingVerificationCookie();
-            try { window.sessionStorage.removeItem(REDIRECT_STORAGE_KEY); } catch { /* ignore */ }
-            router.replace(redirectTo);
-            startTransition(() => router.refresh());
-            return;
-          }
-          if (d.emailMasked) setEmailMasked(d.emailMasked);
-          if (res.status === 400) setStep('email');
-        })
-        .catch(() => setStep('email'));
+    fetch('/api/auth/send-login-code', { method: 'POST', credentials: 'include' })
+      .then(async (res) => {
+        const d = await res.json().catch(() => ({}));
+        if (res.ok && d.skipCode) {
+          clearPendingVerificationCookie();
+          try { window.sessionStorage.removeItem(REDIRECT_STORAGE_KEY); } catch { /* ignore */ }
+          router.replace(redirectTo);
+          startTransition(() => router.refresh());
+          return;
+        }
+        if (res.status === 400) { setStep('email'); return; }
+        if (!res.ok) {
+          setError(d.error || 'Impossible d\'envoyer le code de vérification par email. Contactez un administrateur.');
+          return;
+        }
+        if (d.emailMasked) setEmailMasked(d.emailMasked);
+      })
+      .catch(() => setStep('email'));
     }
   }, [loading, searchParams, step, redirectTo, router]);
 
