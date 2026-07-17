@@ -12,6 +12,7 @@ import {
   sendDiscordWebhook,
 } from '@/lib/aeroschool/discord-webhook';
 import { loadAeroSchoolRespondentProfiles } from '@/lib/aeroschool-respondent-profiles';
+import { defaultCarteForIdentifiant } from '@/lib/cartes/default-carte';
 import { renderCartePng } from '@/lib/cartes/render-carte-png';
 import { verifyAeroSchoolTestToken } from '@/lib/aeroschool-test-token';
 import { NextResponse } from 'next/server';
@@ -223,9 +224,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
               identifiant: profile.identifiant,
               discordUsername: profile.discord_username,
             };
-            if (profile.carte) {
-              cartePng = await renderCartePng(profile.carte, profile.identifiant);
-            }
+            const carteData = profile.carte ?? defaultCarteForIdentifiant(profile.identifiant);
+            cartePng = await renderCartePng(carteData, {
+              identifiant: profile.identifiant,
+              discordUsername: profile.discord_username,
+            });
           } else {
             respondentInfo = {
               identifiant: respondent.identifiant,

@@ -24,6 +24,11 @@ const securityHeaders = [
 ];
 
 const nextConfig = {
+  experimental: {
+    outputFileTracingIncludes: {
+      '/api/aeroschool/forms/[id]/submit': ['./src/lib/cartes/fonts/**/*'],
+    },
+  },
   images: {
     remotePatterns: [
       {
