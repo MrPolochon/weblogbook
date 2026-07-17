@@ -53,7 +53,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const micTestRafRef = useRef<number | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Éviter les erreurs d'hydratation
+  // Ã‰viter les erreurs d'hydratation
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -88,7 +88,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const refreshAudioDevices = useCallback(async () => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
     try {
-      // Demande d'accès micro pour obtenir les labels de périphériques.
+      // Demande d'accÃ¨s micro pour obtenir les labels de pÃ©riphÃ©riques.
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((t) => t.stop());
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -105,7 +105,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       setAudioDeviceError(null);
     } catch (e) {
       console.error('[ATC Phone] refreshAudioDevices error:', e);
-      setAudioDeviceError('Accès micro refusé ou périphériques indisponibles');
+      setAudioDeviceError('AccÃ¨s micro refusÃ© ou pÃ©riphÃ©riques indisponibles');
     }
   }, []);
 
@@ -195,14 +195,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     speakNow(message);
   }, []);
 
-  const { audioContainerRef, audioLevel, isMuted, cleanupLiveKit, joinLiveKitCall, toggleMute } = useLiveKitCall({
-    selectedInputId,
-    selectedOutputId,
-    playSound,
-    playMessage,
-    onConnectionStatusChange: setConnectionStatus,
-  });
-
   // Sons
   const playSound = useCallback((type: 'ring' | 'dial' | 'end' | 'beep' | 'connected') => {
     if (!shouldPlaySoundRef.current && type !== 'beep' && type !== 'connected') return;
@@ -249,6 +241,14 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     } catch (e) { console.error('Audio error:', e); }
   }, []);
 
+  const { audioContainerRef, audioLevel, isMuted, cleanupLiveKit, joinLiveKitCall, toggleMute } = useLiveKitCall({
+    selectedInputId,
+    selectedOutputId,
+    playSound,
+    playMessage,
+    onConnectionStatusChange: setConnectionStatus,
+  });
+
   // Sonnerie
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -266,7 +266,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     return () => { shouldPlaySoundRef.current = false; if (interval) clearInterval(interval); };
   }, [callState, playSound]);
 
-  // Timer appel connecté
+  // Timer appel connectÃ©
   useEffect(() => {
     if (callState === 'connected') {
       setCallDuration(0);
@@ -308,11 +308,11 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   }, [callState, incomingCall]);
 
 
-  // Timeout 30s pour appels non connectés
+  // Timeout 30s pour appels non connectÃ©s
   useEffect(() => {
     if (callState === 'ringing' || callState === 'connecting' || callState === 'incoming') {
       const timeout = setTimeout(async () => {
-        playMessage('Délai dépassé');
+        playMessage('DÃ©lai dÃ©passÃ©');
         await cleanupLiveKit();
         const callId = currentCall?.callId || incomingCall?.callId;
         if (callId) {
@@ -368,7 +368,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       // Code secret pour reset: 159753
       if (newNumber === '159753') {
         resetPhone();
-        playMessage('Téléphone réinitialisé');
+        playMessage('TÃ©lÃ©phone rÃ©initialisÃ©');
       }
     }
   };
@@ -527,8 +527,8 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
         if (data.error === 'offline') playMessage('Votre correspondant est hors ligne');
         else if (data.error === 'position_offline') playMessage(data.message || 'Position non disponible');
         else if (data.error === 'no_afis') playMessage('Aucun agent AFIS disponible');
-        else if (data.error === 'cible_occupee') playMessage('Votre correspondant est déjà en ligne');
-        else if (data.error === 'appel_en_cours') playMessage('Vous avez déjà un appel en cours');
+        else if (data.error === 'cible_occupee') playMessage('Votre correspondant est dÃ©jÃ  en ligne');
+        else if (data.error === 'appel_en_cours') playMessage('Vous avez dÃ©jÃ  un appel en cours');
         else playMessage('Erreur lors de l\'appel');
         playSound('end');
         setCallState('idle');
@@ -539,7 +539,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       if (data.call) {
         setCurrentCall({ to: parsed.aeroport || aeroport, toPosition: parsed.position, callId: data.call.id });
         
-        // Attendre réponse
+        // Attendre rÃ©ponse
         for (let i = 0; i < 60; i++) {
           await new Promise(resolve => setTimeout(resolve, 500));
           const statusRes = await fetch(`/api/atc/telephone/status?callId=${data.call.id}`);
@@ -558,7 +558,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ callId: data.call.id }),
               }).catch(() => {});
-              playMessage('Connexion audio échouée');
+              playMessage('Connexion audio Ã©chouÃ©e');
               setCallState('idle');
               setCurrentCall(null);
             }
@@ -574,7 +574,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
         }).catch(console.error);
         
         playSound('end');
-        playMessage('Votre correspondant ne répond pas');
+        playMessage('Votre correspondant ne rÃ©pond pas');
         setCallState('idle');
         setNumber('');
         setCurrentCall(null);
@@ -673,7 +673,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       }).catch(console.error);
     }
     playSound('end');
-    if (wasConnected) playMessage('Appel terminé');
+    if (wasConnected) playMessage('Appel terminÃ©');
     setCallState('idle');
     setNumber('');
     setIncomingCall(null);
@@ -713,7 +713,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const keyBg = isDark ? 'border border-slate-700 bg-slate-900 hover:bg-slate-800 shadow-lg shadow-slate-950/20' : 'bg-slate-700 hover:bg-slate-600 shadow-lg';
   const keyText = isDark ? 'text-slate-100' : 'text-white';
 
-  // Éviter le rendu côté serveur pour les fonctionnalités audio
+  // Ã‰viter le rendu cÃ´tÃ© serveur pour les fonctionnalitÃ©s audio
   if (!isMounted) {
     return null;
   }
@@ -721,14 +721,14 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   if (!isOpen) {
     return (
       <>
-        {/* Conteneur audio: éviter display:none qui bloque la lecture (cf. bug unidirectionnel) */}
+        {/* Conteneur audio: Ã©viter display:none qui bloque la lecture (cf. bug unidirectionnel) */}
         <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
         <button onClick={() => { unlockAudioForIOS(); setIsOpen(true); }}
           className={`fixed bottom-4 right-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl`}>
           <div className={`p-2 rounded-xl ${isDark ? 'bg-sky-500/15' : 'bg-sky-500/20'}`}>
             <Phone className={`h-5 w-5 ${isDark ? 'text-sky-300' : 'text-sky-400'}`} />
           </div>
-          <span className="font-medium">Téléphone</span>
+          <span className="font-medium">TÃ©lÃ©phone</span>
           {callState === 'incoming' && <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-ping" />}
         </button>
       </>
@@ -737,13 +737,13 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
 
   return (
     <>
-    {/* Conteneur audio: éviter display:none qui bloque la lecture (cf. bug unidirectionnel) */}
+    {/* Conteneur audio: Ã©viter display:none qui bloque la lecture (cf. bug unidirectionnel) */}
     <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
     <div className={`fixed right-4 bottom-4 z-50 ${bgMain} rounded-3xl shadow-2xl overflow-hidden transition-all duration-500`} style={{ width: '240px' }}>
       <div className={`px-4 py-3 flex items-center justify-between border-b ${isDark ? 'border-slate-800' : 'border-slate-700'}`}>
         <div className="flex items-center gap-2">
           <Phone className={`h-4 w-4 ${isDark ? 'text-sky-300' : 'text-sky-400'}`} />
-          <span className={`text-sm font-semibold ${textMain}`}>Téléphone ATC</span>
+          <span className={`text-sm font-semibold ${textMain}`}>TÃ©lÃ©phone ATC</span>
         </div>
         <button onClick={() => { setIsOpen(false); if (callState === 'idle') setNumber(''); }} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-700'}`}>
           <X className={`h-3.5 w-3.5 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
@@ -795,7 +795,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
               <p className="text-xs text-slate-400">{currentCall.toPosition}</p>
             </div>
           ) : (
-            <p className={`text-2xl font-mono tracking-wider ${number ? 'text-emerald-400' : 'text-slate-600'}`}>{number || '—'}</p>
+            <p className={`text-2xl font-mono tracking-wider ${number ? 'text-emerald-400' : 'text-slate-600'}`}>{number || 'â€”'}</p>
           )}
         </div>
         
@@ -819,7 +819,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
             onClick={() => { void refreshAudioDevices(); }}
             className="px-2 py-1 rounded-md text-[10px] bg-slate-700 text-slate-200 hover:bg-slate-600"
           >
-            Rafraîchir
+            RafraÃ®chir
           </button>
         </div>
         {/* Annuaires ATIS et ATC : deplaces dans la nav ATC (AtcPhonebookButton).
@@ -827,7 +827,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
         {showAudioPanel && (
           <div className="mt-2 space-y-2 text-[10px]">
             <div>
-              <p className="text-slate-400 mb-1">Entrée micro</p>
+              <p className="text-slate-400 mb-1">EntrÃ©e micro</p>
               <select
                 value={selectedInputId}
                 onChange={(e) => setSelectedInputId(e.target.value)}
@@ -847,7 +847,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
                   isMicTestActive ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'
                 }`}
               >
-                {isMicTestActive ? 'Arrêter test micro' : 'Tester micro local'}
+                {isMicTestActive ? 'ArrÃªter test micro' : 'Tester micro local'}
               </button>
               <div className="mt-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
                 <div
