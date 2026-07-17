@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
@@ -434,7 +434,7 @@ export default function ExamensTab({
                         {!reassignListLoading[r.id] &&
                           reassignCandidates[r.id] &&
                           reassignCandidates[r.id].length === 0 && (
-                            <p className="text-xs text-amber-500/90">Aucun autre examinateur habilité n'est disponible.</p>
+                            <p className="text-xs text-amber-500/90">Aucun autre examinateur habilité n&apos;est disponible.</p>
                           )}
                       </div>
                     )}

@@ -501,7 +501,7 @@ export default function FormationTab({
         {!rattachCandidatesLoading && rattachCandidates.length === 0 && (
           <p className="text-xs text-amber-500/90">
             Aucun compte éligible : compte admin, déjà en formation chez un autre instructeur, ou déjà parmi vos élèves
-            actifs. Les autres comptes apparaissent ici dès qu'ils sont éligibles.
+            actifs. Les autres comptes apparaissent ici dès qu&apos;ils sont éligibles.
           </p>
         )}
       </form>
@@ -535,7 +535,7 @@ export default function FormationTab({
         </form>
       ) : isManager ? (
         <p className="text-sm text-slate-500 card py-3 px-4 border border-slate-700/40">
-          Aucun élève en formation <strong className="text-slate-400">vol</strong> actif : l'assignation d'avion temporaire ne s'applique pas aux seuls parcours ATC-INIT.
+          Aucun élève en formation <strong className="text-slate-400">vol</strong> actif : l&apos;assignation d&apos;avion temporaire ne s&apos;applique pas aux seuls parcours ATC-INIT.
         </p>
       ) : null}
 

@@ -338,9 +338,11 @@ WHERE id NOT IN (
   ORDER BY entreprise_id, created_at DESC, id
 );
 
--- 3) Supprimer l'ancienne contrainte composite (entreprise_id, type_avion_id)
+-- 3) Supprimer l'ancienne contrainte composite et l'eventuelle contrainte existante
 ALTER TABLE public.reparation_tarifs
   DROP CONSTRAINT IF EXISTS reparation_tarifs_entreprise_id_type_avion_id_key;
+ALTER TABLE public.reparation_tarifs
+  DROP CONSTRAINT IF EXISTS reparation_tarifs_entreprise_id_key;
 
 -- 4) Ajouter la contrainte UNIQUE(entreprise_id) -- un seul tarif par entreprise
 ALTER TABLE public.reparation_tarifs
