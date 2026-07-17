@@ -29,6 +29,7 @@ export default function AdminAeroSchoolEditPage() {
           is_published: Boolean(data.is_published),
           time_limit_minutes: data.time_limit_minutes != null ? Number(data.time_limit_minutes) : null,
           antitriche_enabled: data.antitriche_enabled !== false,
+          requires_auth: Boolean(data.requires_auth),
           sections: Array.isArray(data.sections) ? data.sections : [],
         });
       } catch (e) {

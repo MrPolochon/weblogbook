@@ -1,16 +1,23 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAntiCheat } from '@/hooks/useAntiCheat';
 import { formatModuleAnswerKey } from '@/lib/aeroschool-module-answers';
-import { ChevronLeft, ChevronRight, Send, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { buildIdentityPrefills } from '@/lib/aeroschool-identity';
+import { ChevronLeft, ChevronRight, Send, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Lock, User } from 'lucide-react';
 
 interface ModuleQuestion {
   id: string;
   title: string;
   options: string[];
-  correct_answers: string[];
+}
+
+interface RespondentSession {
+  authenticated: boolean;
+  identifiant?: string;
+  discordUsername?: string | null;
 }
 
 interface Question {
@@ -45,6 +52,8 @@ interface FormData {
   time_limit_minutes?: number | null;
   /** Détection de triche activée (false = désactivée par l'admin) */
   antitriche_enabled?: boolean;
+  /** Connexion obligatoire pour accéder au formulaire */
+  requires_auth?: boolean;
   sections: Section[];
 }
 
@@ -75,6 +84,31 @@ export default function FormRenderer({ form }: Props) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [moduleQuestions, setModuleQuestions] = useState<Record<string, ModuleQuestion[]>>({});
   const [moduleLoading, setModuleLoading] = useState(true);
+  const [session, setSession] = useState<RespondentSession | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [testToken, setTestToken] = useState<string | null>(null);
+  const [startingTest, setStartingTest] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+
+  const testTokenRef = useRef<string | null>(null);
+  useEffect(() => { testTokenRef.current = testToken; }, [testToken]);
+
+  useEffect(() => {
+    fetch('/api/aeroschool/session')
+      .then((r) => r.json())
+      .then((data) => setSession(data))
+      .catch(() => setSession({ authenticated: false }))
+      .finally(() => setSessionLoading(false));
+  }, []);
+
+  const requiresAuth = form.requires_auth === true;
+  const isLoggedIn = session?.authenticated === true;
+  const canAccess = !requiresAuth || isLoggedIn;
+
+  const buildSubmitPayload = useCallback((extra: Record<string, unknown>) => ({
+    ...extra,
+    ...(testTokenRef.current ? { test_token: testTokenRef.current } : {}),
+  }), []);
 
   const timeLimitMinutes = form.time_limit_minutes ?? null;
   const totalSeconds = timeLimitMinutes != null ? timeLimitMinutes * 60 : 0;
@@ -106,22 +140,22 @@ export default function FormRenderer({ form }: Props) {
         await fetch(`/api/aeroschool/forms/${form.id}/submit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ answers, time_expired: true }),
+          body: JSON.stringify(buildSubmitPayload({ answers, time_expired: true })),
         });
       } catch { /* ignore */ }
       router.replace('/login?message=test_echoue_temps_termine');
     })();
-  }, [remainingSeconds, timeLimitMinutes, form.id, answers, router]);
+  }, [remainingSeconds, timeLimitMinutes, form.id, answers, router, buildSubmitPayload]);
 
   const handleCheat = useCallback(async (reason: string) => {
     try {
       await fetch(`/api/aeroschool/forms/${form.id}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers, cheating_detected: true, cheat_reason: reason }),
+        body: JSON.stringify(buildSubmitPayload({ answers, cheating_detected: true, cheat_reason: reason })),
       });
     } catch { /* ignore */ }
-  }, [form.id, answers]);
+  }, [form.id, answers, buildSubmitPayload]);
 
   /** Toast d'avertissement non bloquant (anti-triche) */
   const [warningToast, setWarningToast] = useState<{ msg: string; key: number } | null>(null);
@@ -218,7 +252,7 @@ export default function FormRenderer({ form }: Props) {
       if (!currentAnswers || Object.keys(currentAnswers).length === 0) return;
       try {
         const blob = new Blob(
-          [JSON.stringify({ answers: currentAnswers, status_override: 'abandoned' })],
+          [JSON.stringify(buildSubmitPayload({ answers: currentAnswers, status_override: 'abandoned' }))],
           { type: 'application/json' },
         );
         navigator.sendBeacon(`/api/aeroschool/forms/${form.id}/submit`, blob);
@@ -232,7 +266,45 @@ export default function FormRenderer({ form }: Props) {
 
     window.addEventListener('pagehide', handlePageHide);
     return () => window.removeEventListener('pagehide', handlePageHide);
-  }, [testStarted, antitricheEnabled, form.id]);
+  }, [testStarted, antitricheEnabled, form.id, buildSubmitPayload]);
+
+  const handleStartTest = async () => {
+    setStartError(null);
+    setStartingTest(true);
+    try {
+      const res = await fetch(`/api/aeroschool/forms/${form.id}/start`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Impossible de démarrer le test');
+
+      setTestToken(data.test_token);
+      testTokenRef.current = data.test_token;
+
+      if (isLoggedIn && session?.identifiant) {
+        const prefills = buildIdentityPrefills(form.sections, {
+          identifiant: session.identifiant,
+          discordUsername: session.discordUsername ?? null,
+        });
+        if (Object.keys(prefills).length > 0) {
+          setAnswers((prev) => {
+            const merged = { ...prev };
+            for (const [key, value] of Object.entries(prefills)) {
+              const existing = merged[key];
+              if (!existing || (typeof existing === 'string' && !existing.trim())) {
+                merged[key] = value;
+              }
+            }
+            return merged;
+          });
+        }
+      }
+
+      setTestStarted(true);
+    } catch (e) {
+      setStartError(e instanceof Error ? e.message : 'Erreur au démarrage');
+    } finally {
+      setStartingTest(false);
+    }
+  };
 
   const section = form.sections[currentSection];
   const isLast = currentSection === form.sections.length - 1;
@@ -305,7 +377,7 @@ export default function FormRenderer({ form }: Props) {
       const res = await fetch(`/api/aeroschool/forms/${form.id}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers, cheating_detected: false }),
+        body: JSON.stringify(buildSubmitPayload({ answers, cheating_detected: false })),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur lors de la soumission');
@@ -320,8 +392,43 @@ export default function FormRenderer({ form }: Props) {
 
   // Page d'avertissement avant de commencer le test
   if (!testStarted) {
+    if (sessionLoading) {
+      return (
+        <div className="min-h-screen relative overflow-hidden flex items-center justify-center">
+          <AeroSchoolBackdrop />
+          <Loader2 className="relative z-10 h-10 w-10 text-amber-400 animate-spin" />
+        </div>
+      );
+    }
+
+    if (!canAccess) {
+      return (
+        <div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center p-6">
+          <AeroSchoolBackdrop />
+          <div className="relative z-10 max-w-lg w-full text-center space-y-6 animate-page-reveal">
+            <div className="rounded-3xl border border-sky-300/25 bg-slate-900/75 p-8 shadow-2xl backdrop-blur-xl">
+              <Lock className="h-16 w-16 text-sky-300 mx-auto mb-4" />
+              <h2 className="text-2xl font-black text-white">Connexion requise</h2>
+              <p className="text-slate-400 mt-3 text-sm leading-relaxed">
+                Le formulaire <strong className="text-slate-200">&quot;{form.title}&quot;</strong> est réservé aux membres connectés.
+              </p>
+              <Link
+                href={`/login?redirect=${encodeURIComponent(`/aeroschool/${form.id}`)}`}
+                className="mt-6 inline-flex items-center justify-center gap-2 px-8 py-3.5 bg-gradient-to-r from-sky-400 to-amber-300 text-slate-950 font-black rounded-2xl shadow-lg hover:brightness-110 transition"
+              >
+                Se connecter
+              </Link>
+              <Link href="/aeroschool" className="block mt-4 text-sm text-slate-500 hover:text-slate-300 transition-colors">
+                ← Retour à AeroSchool
+              </Link>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center p-6">
+      <div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center p-4 sm:p-6">
         <AeroSchoolBackdrop />
         <div className="relative z-10 max-w-2xl w-full text-center space-y-6 animate-page-reveal">
           <div className="rounded-3xl border border-amber-200/25 bg-slate-900/75 p-6 sm:p-8 space-y-5 shadow-2xl shadow-slate-950/40 backdrop-blur-xl">
@@ -333,7 +440,16 @@ export default function FormRenderer({ form }: Props) {
               <h2 className="mt-2 text-2xl font-black text-white">Avant de commencer</h2>
               <p className="mt-1 text-sm text-slate-400">{form.title}</p>
             </div>
-            <p className="text-slate-300 text-left leading-relaxed rounded-2xl border border-slate-700/60 bg-slate-950/40 p-4">
+            {isLoggedIn && session?.identifiant && (
+              <div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
+                <User className="h-4 w-4 shrink-0" />
+                <span>Connecté en tant que <strong>{session.identifiant}</strong></span>
+                {session.discordUsername && (
+                  <span className="text-emerald-200/70">· Discord : {session.discordUsername}</span>
+                )}
+              </div>
+            )}
+            <p className="text-slate-300 text-left leading-relaxed rounded-2xl border border-slate-700/60 bg-slate-950/40 p-4 text-sm sm:text-base">
               {antitricheEnabled ? (
                 <>
                   Fermez toutes les applications en arrière-plan et tous les autres onglets du navigateur.
@@ -349,13 +465,18 @@ export default function FormRenderer({ form }: Props) {
                 Temps limite : <strong>{timeLimitMinutes} min</strong>
               </div>
             )}
+            {startError && (
+              <p className="text-red-400 text-sm font-medium">{startError}</p>
+            )}
           </div>
           <button
             type="button"
-            onClick={() => setTestStarted(true)}
-            className="px-10 py-4 bg-gradient-to-r from-sky-400 via-cyan-400 to-amber-300 hover:brightness-110 text-slate-950 font-black text-lg rounded-2xl shadow-lg shadow-sky-500/25 transition"
+            onClick={handleStartTest}
+            disabled={startingTest}
+            className="w-full sm:w-auto px-10 py-4 min-h-[3.25rem] bg-gradient-to-r from-sky-400 via-cyan-400 to-amber-300 hover:brightness-110 text-slate-950 font-black text-lg rounded-2xl shadow-lg shadow-sky-500/25 transition disabled:opacity-60 flex items-center justify-center gap-2 mx-auto"
           >
-            Commencer
+            {startingTest ? <Loader2 className="h-5 w-5 animate-spin" /> : null}
+            {startingTest ? 'Préparation…' : 'Commencer'}
           </button>
         </div>
       </div>
@@ -422,26 +543,33 @@ export default function FormRenderer({ form }: Props) {
   };
 
   return (
-    <div ref={antiCheatShellRef} className="min-h-screen relative overflow-hidden py-8 px-4">
+    <div ref={antiCheatShellRef} className="min-h-screen relative overflow-x-hidden py-24 sm:py-28 px-3 sm:px-4 pb-32">
       <AeroSchoolBackdrop />
-      {/* Chrono fixe en haut au centre */}
-      {testStarted && timeLimitMinutes != null && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-slate-950/90 border border-amber-200/25 shadow-xl backdrop-blur-xl">
-          <Clock className="h-6 w-6 text-amber-400" />
-          <span className={`text-2xl font-mono font-bold tabular-nums ${remainingSeconds <= 60 ? 'text-amber-400' : 'text-slate-200'}`}>
-            {formatTime(Math.max(0, remainingSeconds))}
-          </span>
-        </div>
-      )}
 
-      <form className="relative z-10 max-w-4xl mx-auto space-y-6 animate-page-reveal" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
-        {/* Barre de progression */}
-        <div className="w-full bg-slate-950/70 rounded-full h-2 overflow-hidden border border-slate-700/60">
-          <div
-            className="h-full bg-gradient-to-r from-sky-400 via-cyan-400 to-amber-300 transition-all duration-500"
-            style={{ width: `${progress}%` }}
-          />
+      {/* Barre fixe : progression + chrono */}
+      <div className="fixed top-0 inset-x-0 z-50 border-b border-slate-700/60 bg-slate-950/92 backdrop-blur-xl safe-x">
+        <div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between gap-3 text-xs text-slate-400">
+            <span>Section {currentSection + 1} / {form.sections.length}</span>
+            {timeLimitMinutes != null && (
+              <div className="flex items-center gap-1.5 font-mono font-bold tabular-nums text-sm">
+                <Clock className={`h-4 w-4 ${remainingSeconds <= 60 ? 'text-amber-400' : 'text-sky-300'}`} />
+                <span className={remainingSeconds <= 60 ? 'text-amber-400' : 'text-slate-200'}>
+                  {formatTime(Math.max(0, remainingSeconds))}
+                </span>
+              </div>
+            )}
+          </div>
+          <div className="w-full bg-slate-800/80 rounded-full h-2 overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-sky-400 via-cyan-400 to-amber-300 transition-all duration-500 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
         </div>
+      </div>
+
+      <form className="relative z-10 max-w-4xl mx-auto space-y-5 sm:space-y-6 animate-page-reveal" autoComplete="off" onSubmit={(e) => e.preventDefault()}>
 
         {/* En-tête du formulaire */}
         {currentSection === 0 && (
@@ -504,15 +632,15 @@ export default function FormRenderer({ form }: Props) {
                         <h3 className="text-slate-100 font-medium">{mq.title}</h3>
                         <div className="space-y-2">
                           {(mq.options || []).map((opt) => (
-                            <label key={opt} className="flex items-center gap-3 p-3 rounded-xl border border-transparent hover:border-sky-400/20 hover:bg-sky-400/5 cursor-pointer transition-colors">
+                            <label key={opt} className="flex items-center gap-3 p-3.5 sm:p-4 min-h-[3rem] rounded-xl border border-transparent hover:border-sky-400/20 hover:bg-sky-400/5 active:scale-[0.99] cursor-pointer transition-all">
                               <input
                                 type="radio"
                                 name={answerKey}
                                 checked={(answers[answerKey] as string) === opt}
                                 onChange={() => updateAnswer(answerKey, opt)}
-                                className="w-4 h-4 text-sky-500 accent-sky-500"
+                                className="w-5 h-5 shrink-0 text-sky-500 accent-sky-500"
                               />
-                              <span className="text-slate-200">{opt}</span>
+                              <span className="text-slate-200 text-sm sm:text-base break-words">{opt}</span>
                             </label>
                           ))}
                         </div>
@@ -530,9 +658,9 @@ export default function FormRenderer({ form }: Props) {
             }
 
             return (
-            <div key={q.id} className="bg-slate-900/70 border border-slate-700/60 rounded-2xl p-5 space-y-3 shadow-xl shadow-slate-950/20 backdrop-blur-md transition-colors hover:border-sky-300/20">
+            <div key={q.id} className="bg-slate-900/70 border border-slate-700/60 rounded-2xl p-4 sm:p-5 space-y-3 shadow-xl shadow-slate-950/20 backdrop-blur-md transition-colors hover:border-sky-300/20 animate-fade-in">
               <div className="flex items-start gap-1">
-                <h3 className="text-slate-100 font-medium">{q.title}</h3>
+                <h3 className="text-slate-100 font-medium text-base sm:text-lg break-words">{q.title}</h3>
                 {q.required && <span className="text-red-400 text-sm">*</span>}
               </div>
               {q.description && <p className="text-slate-400 text-sm">{q.description}</p>}
@@ -573,15 +701,15 @@ export default function FormRenderer({ form }: Props) {
               {q.type === 'radio' && q.options && (
                 <div className="space-y-2">
                   {q.options.map((opt) => (
-                    <label key={opt} className="flex items-center gap-3 p-3 rounded-xl border border-transparent hover:border-sky-400/20 hover:bg-sky-400/5 cursor-pointer transition-colors">
+                    <label key={opt} className="flex items-center gap-3 p-3.5 sm:p-4 min-h-[3rem] rounded-xl border border-transparent hover:border-sky-400/20 hover:bg-sky-400/5 active:scale-[0.99] cursor-pointer transition-all">
                       <input
                         type="radio"
                         name={q.id}
                         checked={(answers[q.id] as string) === opt}
                         onChange={() => updateAnswer(q.id, opt)}
-                        className="w-4 h-4 text-sky-500 accent-sky-500"
+                        className="w-5 h-5 shrink-0 text-sky-500 accent-sky-500"
                       />
-                      <span className="text-slate-200">{opt}</span>
+                      <span className="text-slate-200 text-sm sm:text-base break-words">{opt}</span>
                     </label>
                   ))}
                 </div>
@@ -591,14 +719,14 @@ export default function FormRenderer({ form }: Props) {
               {q.type === 'checkbox' && q.options && (
                 <div className="space-y-2">
                   {q.options.map((opt) => (
-                    <label key={opt} className="flex items-center gap-3 p-3 rounded-xl border border-transparent hover:border-sky-400/20 hover:bg-sky-400/5 cursor-pointer transition-colors">
+                    <label key={opt} className="flex items-center gap-3 p-3.5 sm:p-4 min-h-[3rem] rounded-xl border border-transparent hover:border-sky-400/20 hover:bg-sky-400/5 active:scale-[0.99] cursor-pointer transition-all">
                       <input
                         type="checkbox"
                         checked={Array.isArray(answers[q.id]) && (answers[q.id] as string[]).includes(opt)}
                         onChange={() => toggleCheckbox(q.id, opt)}
-                        className="w-4 h-4 text-sky-500 accent-sky-500 rounded"
+                        className="w-5 h-5 shrink-0 text-sky-500 accent-sky-500 rounded"
                       />
-                      <span className="text-slate-200">{opt}</span>
+                      <span className="text-slate-200 text-sm sm:text-base break-words">{opt}</span>
                     </label>
                   ))}
                 </div>
@@ -666,16 +794,17 @@ export default function FormRenderer({ form }: Props) {
           </div>
         )}
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between rounded-2xl border border-slate-700/60 bg-slate-900/65 p-3 backdrop-blur-md">
+        {/* Navigation — sticky en bas sur mobile */}
+        <div className="fixed bottom-0 inset-x-0 z-40 border-t border-slate-700/60 bg-slate-950/95 backdrop-blur-xl safe-x sm:relative sm:border sm:rounded-2xl sm:bg-slate-900/65">
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-2 p-3 sm:p-3">
           <button
             type="button"
             onClick={handlePrev}
             disabled={isFirst}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+            className="flex items-center gap-2 px-4 sm:px-5 py-3 min-h-[3rem] rounded-xl border border-slate-600 text-slate-300 hover:bg-slate-700/50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm font-medium"
           >
             <ChevronLeft className="h-4 w-4" />
-            Précédent
+            <span className="hidden sm:inline">Précédent</span>
           </button>
 
           {isLast ? (
@@ -683,7 +812,7 @@ export default function FormRenderer({ form }: Props) {
               type="button"
               onClick={handleSubmit}
               disabled={submitting}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-400 to-sky-400 text-slate-950 font-black text-sm shadow-lg shadow-emerald-500/20 hover:brightness-110 transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-5 sm:px-6 py-3 min-h-[3rem] rounded-xl bg-gradient-to-r from-emerald-400 to-sky-400 text-slate-950 font-black text-sm shadow-lg shadow-emerald-500/20 hover:brightness-110 transition-all disabled:opacity-50"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               {submitting ? 'Envoi…' : 'Envoyer'}
@@ -692,12 +821,13 @@ export default function FormRenderer({ form }: Props) {
             <button
               type="button"
               onClick={handleNext}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-sky-400 to-amber-300 text-slate-950 font-black text-sm shadow-lg shadow-sky-500/20 hover:brightness-110 transition-all"
+              className="flex items-center gap-2 px-4 sm:px-5 py-3 min-h-[3rem] rounded-xl bg-gradient-to-r from-sky-400 to-amber-300 text-slate-950 font-black text-sm shadow-lg shadow-sky-500/20 hover:brightness-110 transition-all"
             >
               Suivant
               <ChevronRight className="h-4 w-4" />
             </button>
           )}
+          </div>
         </div>
       </form>
 

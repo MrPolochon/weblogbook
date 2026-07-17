@@ -34,7 +34,8 @@ export type CheatReason =
   | 'presence_check_timeout'
   | 'clipboard_action'
   | 'context_menu'
-  | 'print_or_save_shortcut';
+  | 'print_or_save_shortcut'
+  | 'devtools_dock_open';
 
 interface AntiCheatOptions {
   enabled?: boolean;
@@ -96,7 +97,23 @@ const PRESENCE_SKIP_IF_ACTIVE_MS = 30_000;
  */
 const CLICK_OUTSIDE_TOLERANCE_PX = 40;
 
-/* ── Helpers structurels ──────────────────────────────────────────────────── */
+/** Seuil de différence outer/inner (px) suggérant un dock DevTools — desktop uniquement. */
+const DEVTOOLS_DOCK_WIDTH_THRESHOLD = 160;
+
+function isLikelyTouchDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(pointer: coarse)').matches ||
+    window.matchMedia('(max-width: 768px)').matches
+  );
+}
+
+function detectDevtoolsDockOpen(): boolean {
+  if (isLikelyTouchDevice()) return false;
+  const widthGap = window.outerWidth - window.innerWidth;
+  const heightGap = window.outerHeight - window.innerHeight;
+  return widthGap > DEVTOOLS_DOCK_WIDTH_THRESHOLD || heightGap > DEVTOOLS_DOCK_WIDTH_THRESHOLD;
+}
 
 const EXTENSION_PROTOCOLS = new Set([
   'chrome-extension:',
@@ -220,7 +237,7 @@ export function useAntiCheat({
     focusLostTicks: 0,
     tabHiddenTicks: 0,
     /** Compteurs d'infractions ambiguës (1ʳᵉ = warning, 2ᵉ = triche). */
-    strikes: { devtools: 0, viewSource: 0, clickOutside: 0, clipboard: 0, contextMenu: 0, printSave: 0 },
+    strikes: { devtools: 0, viewSource: 0, clickOutside: 0, clipboard: 0, contextMenu: 0, printSave: 0, devtoolsDock: 0 },
     /** Timestamp de la dernière interaction utilisateur (ms). */
     lastActivityAt: 0,
   });
@@ -292,7 +309,7 @@ export function useAntiCheat({
     state.hadFocus = false;
     state.focusLostTicks = 0;
     state.tabHiddenTicks = 0;
-    state.strikes = { devtools: 0, viewSource: 0, clickOutside: 0, clipboard: 0, contextMenu: 0, printSave: 0 };
+    state.strikes = { devtools: 0, viewSource: 0, clickOutside: 0, clipboard: 0, contextMenu: 0, printSave: 0, devtoolsDock: 0 };
     state.lastActivityAt = Date.now();
     setCheatingDetected(false);
     setPresencePromptVisible(false);
@@ -435,6 +452,15 @@ export function useAntiCheat({
     const focusInterval = setInterval(() => {
       if (state.cheating || !state.active) return;
       if (!state.hadFocus) return;
+
+      if (detectDevtoolsDockOpen()) {
+        strikeOrCheat(
+          'devtoolsDock',
+          'devtools_dock_open',
+          'Fenêtre des outils de développement détectée. Fermez-la pour continuer le test.',
+        );
+        if (state.cheating) return;
+      }
 
       if (document.hidden) {
         state.tabHiddenTicks += 1;

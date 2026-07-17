@@ -365,6 +365,11 @@ function LoginPageContent() {
   }, [router]);
 
   useEffect(() => {
+    const r = searchParams.get('redirect');
+    if (isSafeRedirectPath(r)) setRedirectTo(r);
+  }, [searchParams]);
+
+  useEffect(() => {
     if (loading || step !== 'form') return;
     if (searchParams.get('step') === 'verify') {
       // On reprend le returnTo stocké lors du précédent submit (ATC/SIAVI ne tombent plus sur /logbook).
@@ -458,7 +463,8 @@ function LoginPageContent() {
       } else {
         if (profile?.role === 'atc') throw new Error('Ce compte est uniquement ATC. Sélectionnez "Contrôleur ATC" pour vous connecter.');
         if (profile?.role === 'siavi') throw new Error('Ce compte est uniquement SIAVI. Sélectionnez "SIAVI" pour vous connecter.');
-        setRedirectTo('/logbook');
+        targetPath = isSafeRedirectPath(redirectTo) ? redirectTo : '/logbook';
+        setRedirectTo(targetPath);
       }
       // Mémorise le mode/destination choisi pour qu'un /login?step=verify (déclenché par le middleware)
       // ne fasse pas atterrir un compte ATC/SIAVI sur /logbook après vérification.

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { requireAeroSchoolRespondent } from '@/lib/aeroschool-auth';
 import { NextResponse } from 'next/server';
 
 // GET — récupérer un formulaire pour le remplir (public si publié) ou éditer (admin)
@@ -28,6 +29,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     // Si pas admin, on ne retourne que les formulaires publiés et on masque certains champs
     if (!isAdmin) {
       if (!data.is_published) return NextResponse.json({ error: 'Formulaire introuvable' }, { status: 404 });
+      if (data.requires_auth) {
+        const auth = await requireAeroSchoolRespondent();
+        if (!auth.ok) {
+          return NextResponse.json({ error: 'Connexion requise pour accéder à ce formulaire', requires_auth: true }, { status: 401 });
+        }
+      }
       // Masquer les réponses correctes et les points pour les candidats
       const sanitizedSections = Array.isArray(data.sections) ? data.sections.map((s: Record<string, unknown>) => ({
         ...s,
@@ -68,6 +75,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (body.sections !== undefined) updates.sections = Array.isArray(body.sections) ? body.sections : [];
     if (body.is_published !== undefined) updates.is_published = Boolean(body.is_published);
     if (body.antitriche_enabled !== undefined) updates.antitriche_enabled = Boolean(body.antitriche_enabled);
+    if (body.requires_auth !== undefined) updates.requires_auth = Boolean(body.requires_auth);
     if (body.time_limit_minutes !== undefined) {
       const v = body.time_limit_minutes;
       if (v === null || v === '' || v === undefined) {

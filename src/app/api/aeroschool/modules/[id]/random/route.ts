@@ -41,7 +41,13 @@ export async function GET(
     }
     const selected = shuffled.slice(0, Math.min(count, shuffled.length));
 
-    return NextResponse.json({ questions: selected });
+    // Ne jamais exposer les bonnes réponses côté client (scoring serveur uniquement)
+    const sanitized = selected.map(({ correct_answers, ...rest }) => {
+      void correct_answers;
+      return rest;
+    });
+
+    return NextResponse.json({ questions: sanitized });
   } catch {
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }

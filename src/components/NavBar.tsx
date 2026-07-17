@@ -7,7 +7,7 @@ import Link from 'next/link';
 import {
   BookOpen, BookUser, LayoutDashboard, FileText, User, Users, LogOut, Radio, Shield,
   ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map,
-  Store, AlertTriangle, Flame, Gauge, Wrench, Eye, Trophy, Menu, X, Clock,
+  Store, AlertTriangle, Flame, Gauge, Wrench, Eye, Trophy, Menu, X, Clock, GraduationCap,
 } from 'lucide-react';
 import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import { createClient } from '@/lib/supabase/client';
@@ -172,6 +172,7 @@ export default function NavBar({
       items: [
         { href: '/documents', label: 'Documents', icon: FileText, badge: 0 },
         { href: '/notams', label: 'NOTAMs', icon: ScrollText, badge: 0 },
+        { href: '/aeroschool', label: 'AeroSchool', icon: GraduationCap, badge: 0 },
         { href: '/signalement', label: 'Signalement IFSA', icon: AlertTriangle, badge: 0 },
         { href: '/classement', label: 'Classement', icon: Trophy, badge: 0 },
       ],
@@ -185,7 +186,7 @@ export default function NavBar({
     '/logbook', '/militaire', '/felitz-bank', '/ma-compagnie', '/marketplace',
     '/hangar-market', '/inventaire', '/messagerie', '/marche-passagers',
     '/marche-cargo', '/perf-ptfs', '/alliance', '/signalement', '/reparation',
-    '/documents', '/notams', '/classement',
+    '/documents', '/notams', '/classement', '/aeroschool',
   ].some(p => pathname.startsWith(p));
 
   const totalAdminBadge = pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount;
@@ -286,6 +287,11 @@ export default function NavBar({
             <NavLink href="/annuaire" active={pathname.startsWith('/annuaire')}>
               <BookUser className="h-3.5 w-3.5 shrink-0" />
               <span className="hidden lg:inline">Annuaire</span>
+            </NavLink>
+
+            <NavLink href="/aeroschool" active={pathname.startsWith('/aeroschool')}>
+              <GraduationCap className="h-3.5 w-3.5 shrink-0" />
+              <span className="hidden lg:inline">AeroSchool</span>
             </NavLink>
 
             {isAdmin && (

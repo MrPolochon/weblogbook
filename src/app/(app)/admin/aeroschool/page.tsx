@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  Plus, GraduationCap, Globe, EyeOff, Webhook, Eye, Trash2, Loader2,
+  Plus, GraduationCap, Globe, EyeOff, Webhook, Eye, Trash2, Loader2, Lock,
 } from 'lucide-react';
 
 interface FormSummary {
@@ -21,6 +21,7 @@ interface FormSummary {
   webhook_url?: string;
   /** Nombre de réponses à vérifier (triche, trashed, time_expired) */
   pending_review_count?: number;
+  requires_auth?: boolean;
 }
 
 export default function AdminAeroSchoolPage() {
@@ -181,6 +182,11 @@ export default function AdminAeroSchoolPage() {
                       >
                         <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                         {f.pending_review_count}
+                      </span>
+                    )}
+                    {f.requires_auth && (
+                      <span className="flex items-center gap-1 text-xs font-medium text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-full">
+                        <Lock className="h-3 w-3" /> Membre
                       </span>
                     )}
                   </div>

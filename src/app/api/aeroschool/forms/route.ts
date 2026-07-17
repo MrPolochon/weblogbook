@@ -21,7 +21,7 @@ export async function GET() {
 
     let query = adminDb
       .from('aeroschool_forms')
-      .select('id, title, description, is_published, delivery_mode, sections, created_at, updated_at')
+      .select('id, title, description, is_published, delivery_mode, requires_auth, time_limit_minutes, antitriche_enabled, sections, created_at, updated_at')
       .order('created_at', { ascending: false });
 
     if (!isAdmin) {
@@ -48,7 +48,18 @@ export async function GET() {
     }
 
     // Retourne un résumé (nombre de sections/questions, pas le contenu complet)
-    const summary = (data || []).map((f: { id: string; sections?: unknown[]; title: string; description: string; is_published: boolean; delivery_mode: string; created_at: string }) => {
+    const summary = (data || []).map((f: {
+      id: string;
+      sections?: unknown[];
+      title: string;
+      description: string;
+      is_published: boolean;
+      delivery_mode: string;
+      requires_auth?: boolean;
+      time_limit_minutes?: number | null;
+      antitriche_enabled?: boolean;
+      created_at: string;
+    }) => {
       const sections = Array.isArray(f.sections) ? f.sections : [];
       const questionCount = (sections as { questions?: unknown[] }[]).reduce(
         (acc, s) => acc + (Array.isArray(s.questions) ? s.questions.length : 0),
@@ -60,6 +71,9 @@ export async function GET() {
         description: f.description,
         is_published: f.is_published,
         delivery_mode: f.delivery_mode,
+        requires_auth: Boolean(f.requires_auth),
+        time_limit_minutes: f.time_limit_minutes ?? null,
+        antitriche_enabled: f.antitriche_enabled !== false,
         sectionCount: sections.length,
         questionCount,
         created_at: f.created_at,
@@ -102,6 +116,7 @@ export async function POST(request: Request) {
       sections: Array.isArray(sections) ? sections : [],
       is_published: Boolean(is_published),
     };
+    if (body.requires_auth !== undefined) insertRow.requires_auth = Boolean(body.requires_auth);
     const { data, error } = await admin.from('aeroschool_forms').insert(insertRow).select('id').single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

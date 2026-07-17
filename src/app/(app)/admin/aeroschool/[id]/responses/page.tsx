@@ -46,6 +46,9 @@ interface Response {
   score: number | null;
   max_score: number | null;
   cheating_detected: boolean;
+  cheat_reason?: string | null;
+  respondent_identifiant?: string | null;
+  user_id?: string | null;
   status: string;
 }
 
@@ -212,6 +215,12 @@ export default function AdminResponsesPage() {
                   </span>
                 )}
               </div>
+              {resp.respondent_identifiant && (
+                <p className="text-xs text-sky-300/80 mt-0.5">Répondant : {resp.respondent_identifiant}</p>
+              )}
+              {resp.cheating_detected && resp.cheat_reason && (
+                <p className="text-xs text-red-300/80 mt-0.5">Raison : {resp.cheat_reason}</p>
+              )}
               {resp.max_score !== null && resp.max_score > 0 && (
                 <span className="text-sm text-slate-400">
                   Score : <span className="text-white font-medium">{resp.score ?? 0}</span> / {resp.max_score}

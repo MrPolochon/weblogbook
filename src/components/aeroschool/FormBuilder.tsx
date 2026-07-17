@@ -4,7 +4,7 @@ import React, { useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Plus, Trash2, Save, Eye, EyeOff, ChevronUp, ChevronDown,
-  Globe, Webhook, GripVertical, Loader2, Clock, ShieldCheck, ShieldOff, FolderOpen,
+  Globe, Webhook, GripVertical, Loader2, Clock, ShieldCheck, ShieldOff, FolderOpen, Lock,
 } from 'lucide-react';
 import QuestionEditor, { createEmptyQuestion, type Question } from './QuestionEditor';
 
@@ -43,6 +43,8 @@ export interface FormData {
   time_limit_minutes: number | null;
   /** Détection de triche activée (changement d'onglet, extensions IA, etc.) */
   antitriche_enabled: boolean;
+  /** Accès réservé aux utilisateurs connectés */
+  requires_auth: boolean;
   sections: Section[];
 }
 
@@ -76,6 +78,7 @@ export default function FormBuilder({ initial }: Props) {
     is_published: false,
     time_limit_minutes: null,
     antitriche_enabled: true,
+    requires_auth: false,
     sections: [createEmptySection()],
   });
 
@@ -185,6 +188,7 @@ export default function FormBuilder({ initial }: Props) {
         is_published: form.is_published,
         time_limit_minutes: form.time_limit_minutes ?? null,
         antitriche_enabled: form.antitriche_enabled,
+        requires_auth: form.requires_auth,
         sections: form.sections,
       };
 
@@ -333,6 +337,24 @@ export default function FormBuilder({ initial }: Props) {
               )}
               <span className={`text-sm font-medium ${form.is_published ? 'text-emerald-400' : 'text-slate-500'}`}>
                 {form.is_published ? 'Publié — visible par tous' : 'Brouillon — non visible'}
+              </span>
+            </button>
+          </div>
+
+          {/* Accès connecté uniquement */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => updateForm({ requires_auth: !form.requires_auth })}
+              className="flex items-center gap-2"
+            >
+              {form.requires_auth ? (
+                <Lock className="h-5 w-5 text-sky-400" />
+              ) : (
+                <Globe className="h-5 w-5 text-slate-500" />
+              )}
+              <span className={`text-sm font-medium ${form.requires_auth ? 'text-sky-400' : 'text-slate-500'}`}>
+                {form.requires_auth ? 'Connexion requise pour passer le test' : 'Accès public (sans compte)'}
               </span>
             </button>
           </div>

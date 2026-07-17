@@ -5,6 +5,8 @@ import {
   getModuleAnswerEntries,
   getModuleQuestionIdFromKey,
 } from '@/lib/aeroschool-module-answers';
+import { getAeroSchoolRespondent, requireAeroSchoolRespondent } from '@/lib/aeroschool-auth';
+import { verifyAeroSchoolTestToken } from '@/lib/aeroschool-test-token';
 import { NextResponse } from 'next/server';
 
 interface ModuleQuestion {
@@ -132,14 +134,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const body = await request.json();
-    const { answers, cheating_detected, time_expired, cheat_reason, status_override } = body;
+    const { answers, cheating_detected, time_expired, cheat_reason, status_override, test_token } = body;
 
     if (!answers || typeof answers !== 'object') {
       return NextResponse.json({ error: 'Réponses manquantes' }, { status: 400 });
     }
 
-    if (cheating_detected && typeof cheat_reason === 'string' && cheat_reason.length <= 100) {
-      console.warn(`[AeroSchool] Triche détectée sur form ${id} — raison: ${cheat_reason}`);
+    const sanitizedCheatReason =
+      typeof cheat_reason === 'string' && cheat_reason.length > 0 && cheat_reason.length <= 100
+        ? cheat_reason
+        : null;
+
+    if (cheating_detected && sanitizedCheatReason) {
+      console.warn(`[AeroSchool] Triche détectée sur form ${id} — raison: ${sanitizedCheatReason}`);
     }
 
     const isAbandoned = status_override === 'abandoned';
@@ -159,6 +166,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     if (formError || !form) {
       return NextResponse.json({ error: 'Formulaire introuvable ou non publié' }, { status: 404 });
+    }
+
+    let respondent = await getAeroSchoolRespondent();
+    if (form.requires_auth) {
+      const auth = await requireAeroSchoolRespondent();
+      if (!auth.ok) {
+        return NextResponse.json({ error: 'Connexion requise pour soumettre ce formulaire' }, { status: 401 });
+      }
+      respondent = auth.profile;
+    }
+
+    const antitricheOn = form.antitriche_enabled !== false;
+    const isCheatOrAbandon = Boolean(cheating_detected) || status_override === 'abandoned';
+    if (antitricheOn && !isCheatOrAbandon && !time_expired) {
+      if (typeof test_token !== 'string' || !verifyAeroSchoolTestToken(test_token, id)) {
+        return NextResponse.json({ error: 'Session de test invalide ou expirée. Recommencez le formulaire.' }, { status: 403 });
+      }
     }
 
     // Calculer le score si des questions sont notées
@@ -228,7 +252,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           ? 'trashed'
           : 'submitted';
 
-    const responseRow = {
+    const responseRow: Record<string, unknown> = {
       form_id: id,
       answers,
       score: maxScore > 0 ? score : null,
@@ -236,6 +260,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       cheating_detected: Boolean(cheating_detected),
       status,
     };
+
+    if (respondent) {
+      responseRow.user_id = respondent.userId;
+      responseRow.respondent_identifiant = respondent.identifiant;
+    }
+    if (sanitizedCheatReason) {
+      responseRow.cheat_reason = sanitizedCheatReason;
+    }
 
     // Récupérer les titres des questions module pour l'embed Discord
     let moduleQuestionTitles: Record<string, string> | undefined;
