@@ -2,11 +2,14 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   ArrowLeft, Loader2, Trash2, AlertTriangle, CheckCircle2, XCircle, ChevronDown, ChevronUp,
-  Check, Eye,
+  Check, Eye, User,
 } from 'lucide-react';
 import { getModuleAnswerEntries, getModuleQuestionIdFromKey } from '@/lib/aeroschool-module-answers';
+import CarteIdentite from '@/components/CarteIdentite';
+import type { AeroSchoolRespondentProfile } from '@/lib/aeroschool-respondent-profiles';
 
 interface ModuleQuestion {
   id: string;
@@ -49,7 +52,72 @@ interface Response {
   cheat_reason?: string | null;
   respondent_identifiant?: string | null;
   user_id?: string | null;
+  respondent_profile?: AeroSchoolRespondentProfile | null;
   status: string;
+}
+
+function RespondentBlock({ resp }: { resp: Response }) {
+  const profile = resp.respondent_profile;
+  const identifiant = profile?.identifiant || resp.respondent_identifiant;
+  const isAnonymous = !resp.user_id && !identifiant;
+
+  if (isAnonymous) {
+    return (
+      <div className="px-4 pb-3 border-b border-slate-700/30">
+        <p className="text-xs text-slate-500 italic flex items-center gap-1.5">
+          <User className="h-3.5 w-3.5 shrink-0" />
+          Répondant anonyme
+        </p>
+      </div>
+    );
+  }
+
+  if (profile) {
+    return (
+      <div className="px-4 pb-3 border-b border-slate-700/30">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start">
+          <div className="shrink-0">
+            <CarteIdentite
+              carte={profile.carte}
+              identifiant={profile.identifiant}
+              size="sm"
+            />
+          </div>
+          <div className="flex-1 min-w-0 rounded-lg border border-slate-700/50 bg-slate-900/40 p-3 space-y-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Répondant</p>
+              <p className="text-slate-100 font-semibold truncate">{profile.identifiant}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">Discord</p>
+              {profile.discord_username ? (
+                <p className="text-slate-300 text-sm truncate">{profile.discord_username}</p>
+              ) : (
+                <p className="text-slate-600 italic text-sm">Pas de compte Discord lié</p>
+              )}
+            </div>
+            {resp.user_id && (
+              <Link
+                href={`/admin/pilotes/${resp.user_id}`}
+                className="inline-flex text-xs text-sky-400 hover:text-sky-300 transition-colors"
+              >
+                Voir le profil pilote →
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 pb-3 border-b border-slate-700/30">
+      <p className="text-xs text-sky-300/80 flex items-center gap-1.5">
+        <User className="h-3.5 w-3.5 shrink-0" />
+        Répondant : {identifiant}
+      </p>
+    </div>
+  );
 }
 
 export default function AdminResponsesPage() {
@@ -215,9 +283,6 @@ export default function AdminResponsesPage() {
                   </span>
                 )}
               </div>
-              {resp.respondent_identifiant && (
-                <p className="text-xs text-sky-300/80 mt-0.5">Répondant : {resp.respondent_identifiant}</p>
-              )}
               {resp.cheating_detected && resp.cheat_reason && (
                 <p className="text-xs text-red-300/80 mt-0.5">Raison : {resp.cheat_reason}</p>
               )}
@@ -251,6 +316,8 @@ export default function AdminResponsesPage() {
             {expanded === resp.id ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
           </div>
         </div>
+
+        <RespondentBlock resp={resp} />
 
         {expanded === resp.id && (
           <div className="border-t border-slate-700/50 p-4 space-y-4">

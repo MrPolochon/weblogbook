@@ -61,6 +61,64 @@ function createEmptySection(): Section {
   };
 }
 
+function SettingSwitch({
+  id,
+  icon,
+  title,
+  description,
+  checked,
+  onChange,
+  activeClass,
+  switchActiveClass = 'bg-emerald-500 border-emerald-400',
+}: {
+  id: string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  activeClass: string;
+  switchActiveClass?: string;
+}) {
+  return (
+    <div
+      className={`rounded-xl border-2 p-4 transition-all ${
+        checked
+          ? `${activeClass} shadow-sm`
+          : 'border-slate-600/80 bg-slate-800/40'
+      }`}
+    >
+      <label htmlFor={id} className="flex items-start gap-4 cursor-pointer select-none">
+        <div className={`mt-0.5 shrink-0 ${checked ? '' : 'opacity-70'}`}>{icon}</div>
+        <div className="flex-1 min-w-0 pr-2">
+          <span className="text-base font-semibold text-slate-100 block">{title}</span>
+          <span className="text-sm text-slate-400 block mt-1 leading-snug">{description}</span>
+        </div>
+        <button
+          id={id}
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          onClick={(e) => {
+            e.preventDefault();
+            onChange(!checked);
+          }}
+          className={`relative shrink-0 w-14 h-8 rounded-full border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+            checked ? switchActiveClass : 'bg-slate-700 border-slate-500'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${
+              checked ? 'translate-x-6' : 'translate-x-0'
+            }`}
+          />
+          <span className="sr-only">{title}</span>
+        </button>
+      </label>
+    </div>
+  );
+}
+
 export default function FormBuilder({ initial }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -202,7 +260,15 @@ export default function FormBuilder({ initial }: Props) {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erreur de sauvegarde');
+      if (!res.ok) {
+        const msg = data.error || 'Erreur de sauvegarde';
+        if (/requires_auth|column.*does not exist/i.test(msg)) {
+          throw new Error(
+            'Impossible d\'enregistrer « Connexion requise » : exécutez la migration SQL supabase/aeroschool_auth_and_cheat.sql dans Supabase, puis réessayez.'
+          );
+        }
+        throw new Error(msg);
+      }
 
       if (!form.id && data.id) {
         // Rediriger vers l'éditeur du nouveau formulaire
@@ -246,11 +312,65 @@ export default function FormBuilder({ initial }: Props) {
       </div>
 
       {/* Paramètres */}
-      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-4">
-        <h3 className="text-slate-200 font-semibold">Paramètres</h3>
-        <div className="grid sm:grid-cols-2 gap-4">
-          {/* Mode de livraison */}
+      <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5 space-y-6">
+        <h3 className="text-slate-200 font-semibold text-lg">Paramètres</h3>
+
+        {/* Visibilité et accès — en premier, bien visible */}
+        <div className="space-y-3">
           <div>
+            <h4 className="text-slate-300 font-medium text-sm uppercase tracking-wide">Visibilité et accès</h4>
+            <p className="text-slate-500 text-xs mt-1">
+              Contrôlez si le formulaire apparaît dans la liste publique et qui peut le passer.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SettingSwitch
+              id="is-published"
+              icon={
+                form.is_published ? (
+                  <Globe className="h-6 w-6 text-emerald-400" />
+                ) : (
+                  <EyeOff className="h-6 w-6 text-slate-400" />
+                )
+              }
+              title={form.is_published ? 'Publié' : 'Brouillon'}
+              description={
+                form.is_published
+                  ? 'Visible dans la liste AeroSchool pour les candidats.'
+                  : 'Masqué du public — seuls les admins le voient.'
+              }
+              checked={form.is_published}
+              onChange={(checked) => updateForm({ is_published: checked })}
+              activeClass="border-emerald-500/60 bg-emerald-500/10"
+            />
+            <SettingSwitch
+              id="requires-auth"
+              icon={
+                form.requires_auth ? (
+                  <Lock className="h-6 w-6 text-sky-400" />
+                ) : (
+                  <Globe className="h-6 w-6 text-slate-400" />
+                )
+              }
+              title={form.requires_auth ? 'Connexion requise' : 'Accès public'}
+              description={
+                form.requires_auth
+                  ? 'Seuls les membres connectés peuvent ouvrir et soumettre le test.'
+                  : 'Tout le monde peut passer le test sans compte.'
+              }
+              checked={form.requires_auth}
+              onChange={(checked) => updateForm({ requires_auth: checked })}
+              activeClass="border-sky-500/60 bg-sky-500/10"
+              switchActiveClass="bg-sky-500 border-sky-400"
+            />
+          </div>
+        </div>
+
+        <div className="border-t border-slate-700/50 pt-5 space-y-4">
+          <h4 className="text-slate-300 font-medium text-sm uppercase tracking-wide">Livraison des réponses</h4>
+          <div className="grid sm:grid-cols-2 gap-4">
+          {/* Mode de livraison */}
+          <div className="sm:col-span-2">
             <label className="text-slate-400 text-sm mb-2 block">Mode de livraison des réponses</label>
             <div className="flex gap-2">
               <button
@@ -323,62 +443,32 @@ export default function FormBuilder({ initial }: Props) {
             </>
           )}
 
-          {/* Publié */}
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => updateForm({ is_published: !form.is_published })}
-              className="flex items-center gap-2"
-            >
-              {form.is_published ? (
-                <Globe className="h-5 w-5 text-emerald-400" />
-              ) : (
-                <EyeOff className="h-5 w-5 text-slate-500" />
-              )}
-              <span className={`text-sm font-medium ${form.is_published ? 'text-emerald-400' : 'text-slate-500'}`}>
-                {form.is_published ? 'Publié — visible par tous' : 'Brouillon — non visible'}
-              </span>
-            </button>
-          </div>
-
-          {/* Accès connecté uniquement */}
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => updateForm({ requires_auth: !form.requires_auth })}
-              className="flex items-center gap-2"
-            >
-              {form.requires_auth ? (
-                <Lock className="h-5 w-5 text-sky-400" />
-              ) : (
-                <Globe className="h-5 w-5 text-slate-500" />
-              )}
-              <span className={`text-sm font-medium ${form.requires_auth ? 'text-sky-400' : 'text-slate-500'}`}>
-                {form.requires_auth ? 'Connexion requise pour passer le test' : 'Accès public (sans compte)'}
-              </span>
-            </button>
-          </div>
-
           {/* Détection de triche */}
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => updateForm({ antitriche_enabled: !form.antitriche_enabled })}
-              className="flex items-center gap-2"
-            >
-              {form.antitriche_enabled ? (
-                <ShieldCheck className="h-5 w-5 text-amber-400" />
-              ) : (
-                <ShieldOff className="h-5 w-5 text-slate-500" />
-              )}
-              <span className={`text-sm font-medium ${form.antitriche_enabled ? 'text-amber-400' : 'text-slate-500'}`}>
-                {form.antitriche_enabled ? 'Détection de triche activée' : 'Détection de triche désactivée'}
-              </span>
-            </button>
+          <div className="sm:col-span-2">
+            <SettingSwitch
+              id="antitriche-enabled"
+              icon={
+                form.antitriche_enabled ? (
+                  <ShieldCheck className="h-6 w-6 text-amber-400" />
+                ) : (
+                  <ShieldOff className="h-6 w-6 text-slate-400" />
+                )
+              }
+              title={form.antitriche_enabled ? 'Détection de triche activée' : 'Détection de triche désactivée'}
+              description={
+                form.antitriche_enabled
+                  ? 'Surveille les changements d\'onglet et extensions suspectes pendant le test.'
+                  : 'Aucune surveillance anti-triche pendant le passage du test.'
+              }
+              checked={form.antitriche_enabled}
+              onChange={(checked) => updateForm({ antitriche_enabled: checked })}
+              activeClass="border-amber-500/60 bg-amber-500/10"
+              switchActiveClass="bg-amber-500 border-amber-400"
+            />
           </div>
 
           {/* Temps limite (chrono) */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="sm:col-span-2 flex flex-wrap items-center gap-3 p-4 rounded-xl border border-slate-600/80 bg-slate-800/40">
             <div className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-slate-400" />
               <span className="text-slate-400 text-sm">Temps limite</span>
@@ -412,10 +502,11 @@ export default function FormBuilder({ initial }: Props) {
 
           {/* Barème total */}
           {totalPoints > 0 && (
-            <div className="flex items-center gap-2">
+            <div className="sm:col-span-2 flex items-center gap-2">
               <span className="text-amber-400 text-sm font-medium">Barème total : {totalPoints} points</span>
             </div>
           )}
+          </div>
         </div>
       </div>
 

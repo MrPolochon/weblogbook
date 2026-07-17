@@ -88,7 +88,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const admin = createAdminClient();
     const { error } = await admin.from('aeroschool_forms').update(updates).eq('id', id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      if (/requires_auth|column.*does not exist/i.test(error.message)) {
+        return NextResponse.json({
+          error: 'Colonne requires_auth absente — exécutez supabase/aeroschool_auth_and_cheat.sql dans Supabase.',
+        }, { status: 500 });
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
     return NextResponse.json({ ok: true });
   } catch {

@@ -201,7 +201,7 @@ export default function FelitzBankClient({ compteId, vban, transactions: initial
   const accentColor: 'emerald' | 'sky' | 'red' = isMilitaire ? 'red' : isEntreprise ? 'sky' : 'emerald';
 
   const montantNum = parseInt(montant) || 0;
-  const libelleRequired = montantNum > MONTANT_LIBELLE_REQUIRED;
+  const libelleRequired = montantNum >= MONTANT_LIBELLE_REQUIRED;
   const libelleError = libelleRequired && !libelle.trim();
 
   // Stats mois courant
@@ -293,7 +293,7 @@ export default function FelitzBankClient({ compteId, vban, transactions: initial
     setError('');
     setSuccess('');
     if (libelleError) {
-      setError('Le libellé est obligatoire pour les virements supérieurs à 1 000 000 F$');
+      setError('Le libellé est obligatoire pour les virements supérieurs ou égaux à 1 000 000 F$');
       return;
     }
     setLoading(true);
@@ -585,10 +585,10 @@ export default function FelitzBankClient({ compteId, vban, transactions: initial
                 className="input w-full tabular-nums"
                 required
               />
-              {montantNum > MONTANT_LIBELLE_REQUIRED && (
+              {montantNum >= MONTANT_LIBELLE_REQUIRED && (
                 <p className="text-[10px] text-amber-400/90 mt-1 flex items-center gap-1">
                   <Activity className="h-3 w-3 shrink-0" />
-                  Libellé obligatoire pour les virements supérieurs à 1 000 000 F$
+                  Libellé obligatoire pour les virements supérieurs ou égaux à 1 000 000 F$
                 </p>
               )}
             </div>
@@ -612,7 +612,7 @@ export default function FelitzBankClient({ compteId, vban, transactions: initial
               />
               {libelleError && (
                 <p className="text-[10px] text-amber-400 mt-1">
-                  Libellé obligatoire pour les virements supérieurs à 1 000 000 F$
+                  Libellé obligatoire pour les virements supérieurs ou égaux à 1 000 000 F$
                 </p>
               )}
             </div>

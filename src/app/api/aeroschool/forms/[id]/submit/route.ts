@@ -179,7 +179,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const antitricheOn = form.antitriche_enabled !== false;
     const isCheatOrAbandon = Boolean(cheating_detected) || status_override === 'abandoned';
-    if (antitricheOn && !isCheatOrAbandon && !time_expired) {
+    // Jeton HMAC uniquement pour les examens en mode review — ne pas bloquer l'envoi Discord webhook.
+    const needsTestToken =
+      antitricheOn &&
+      form.delivery_mode !== 'webhook' &&
+      !isCheatOrAbandon &&
+      !time_expired;
+    if (needsTestToken) {
       if (typeof test_token !== 'string' || !verifyAeroSchoolTestToken(test_token, id)) {
         return NextResponse.json({ error: 'Session de test invalide ou expirée. Recommencez le formulaire.' }, { status: 403 });
       }

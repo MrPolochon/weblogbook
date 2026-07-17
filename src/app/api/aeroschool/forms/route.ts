@@ -28,7 +28,19 @@ export async function GET() {
       query = query.eq('is_published', true);
     }
 
-    const { data, error } = await query;
+    let { data, error } = await query;
+
+    // Colonne requires_auth absente si migration SQL non exécutée
+    if (error && /requires_auth|column.*does not exist/i.test(error.message)) {
+      let fallbackQuery = adminDb
+        .from('aeroschool_forms')
+        .select('id, title, description, is_published, delivery_mode, time_limit_minutes, antitriche_enabled, sections, created_at, updated_at')
+        .order('created_at', { ascending: false });
+      if (!isAdmin) fallbackQuery = fallbackQuery.eq('is_published', true);
+      const fallback = await fallbackQuery;
+      data = (fallback.data || []).map((row) => ({ ...row, requires_auth: false }));
+      error = fallback.error;
+    }
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
