@@ -1,7 +1,7 @@
-/**
- * Licences actives — réforme juillet 2026.
- * Supprimés : PPL, CPL, ATPL, IR ME, Multi Crew attestation,
- *             CLASS-M, CLASS-MT, CLASS-MRP, IFR, VFR, COM 1-6.
+﻿/**
+ * Licences actives.
+ * Supprimees : PPL, CPL, ATPL, IR ME, Multi Crew attestation,
+ *              CLASS-M, CLASS-MT, CLASS-MRP, IFR, VFR.
  */
 export const ALL_LICENCE_TYPES = [
   'FI', 'FE', 'ATC FI', 'ATC FE',
@@ -11,4 +11,5 @@ export const ALL_LICENCE_TYPES = [
   'CAL-ATC', 'CAL-AFIS',
   'PCAL-ATC', 'PCAL-AFIS',
   'LPAFIS', 'LATC',
+  'COM 1', 'COM 2', 'COM 3', 'COM 4', 'COM 5', 'COM 6',
 ] as const;

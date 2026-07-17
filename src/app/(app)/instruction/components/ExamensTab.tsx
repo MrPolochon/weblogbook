@@ -258,8 +258,8 @@ export default function ExamensTab({
           {titresCiblesPilotes.length === 0 ? (
             <p className="text-sm text-slate-500">
               {viewerRole === 'admin'
-                ? 'Aucun profil chargé. Rechargez la page ou corrigez les droits d'accès base de données.'
-                : 'Aucun élève actif rattaché à vous comme instructeur référent. Rattachez d'abord un élève ou demandez un administrateur.'}
+                ? "Aucun profil chargé. Rechargez la page ou corrigez les droits d'accès base de données."
+                : "Aucun élève actif rattaché à vous comme instructeur référent. Rattachez d'abord un élève ou demandez un administrateur."}
             </p>
           ) : (
             <>
