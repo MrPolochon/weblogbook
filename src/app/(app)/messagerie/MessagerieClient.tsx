@@ -246,12 +246,19 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
     const unread = currentTabMessages().filter(m => !m.lu);
     if (unread.length === 0) return;
     setMarkAllLoading(true);
-    // Mise à jour locale immédiate
     unread.forEach(m => patchLocal(m.id, { lu: true }));
     try {
-      await Promise.all(unread.map(m => fetch(`/api/messages/${m.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'marquer_lu' }) })));
+      const res = await fetch('/api/messages/marquer-tout-lu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: unread.map(m => m.id) }),
+      });
+      if (!res.ok) throw new Error(await res.text());
       toast.success(`${unread.length} message${unread.length > 1 ? 's' : ''} marqué${unread.length > 1 ? 's' : ''} comme lu${unread.length > 1 ? 's' : ''}`);
-    } catch { toast.error('Erreur'); } finally { setMarkAllLoading(false); }
+    } catch {
+      unread.forEach(m => patchLocal(m.id, { lu: false }));
+      toast.error('Erreur marquage lu');
+    } finally { setMarkAllLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, messagesNormaux, invitations, cheques, sanctions, patchLocal]);
 
@@ -370,6 +377,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
             <span className={`text-xs truncate flex-1 min-w-0 ${unread ? 'text-slate-200' : 'text-slate-400'}`}>{msg.titre}</span>
             <div className="shrink-0">{badge(msg)}</div>
           </div>
+          <span className="text-[11px] text-slate-600 truncate block mt-0.5">{truncate(msg.contenu, 80)}</span>
         </div>
       </button>
     );
