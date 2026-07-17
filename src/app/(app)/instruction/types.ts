@@ -28,6 +28,12 @@ export type ExamRequestAssigned = {
   created_at: string;
   updated_at: string;
   requester: { identifiant: string } | { identifiant: string }[] | null;
+  instructeur?: { identifiant: string } | { identifiant: string }[] | null;
+};
+
+/** Demandes ouvertes visibles par un admin (réassignation staff). */
+export type ExamRequestStaffOpen = ExamRequestAssigned & {
+  instructeur: { identifiant: string } | { identifiant: string }[] | null;
 };
 
 export type Eleve = {

@@ -6,12 +6,10 @@ import {
   getInstructionCapabilities,
   canAccessInstructionManagerTools,
   listProfilesEligibleAsFormationReferent,
-  LICENCE_FI,
-  LICENCE_FE,
-  LICENCE_ATC_FI,
-  LICENCE_ATC_FE,
+  getExaminerPoolUserIds,
 } from '@/lib/instruction-permissions';
 import { notifyUser } from '@/lib/notifications';
+import { selectExaminerForRequest } from '@/lib/instruction-exam-rules';
 
 /**
  * GET — Récupère le statut de disponibilité de l'instructeur connecté.
@@ -169,42 +167,19 @@ export async function POST(request: Request) {
 
       for (const exam of examsPending || []) {
         const licenceCode = exam.licence_code as string;
-        const isAtcExam = ['CAL-ATC', 'PCAL-ATC', 'CAL-AFIS', 'PCAL-AFIS', 'LPAFIS', 'LATC'].includes(licenceCode);
-
-        const { data: examinateurs } = await admin
-          .from('licences_qualifications')
-          .select('user_id')
-          .eq('type', isAtcExam ? LICENCE_ATC_FE : LICENCE_FE);
-
-        const pool = (examinateurs || [])
-          .map((r) => r.user_id as string)
-          .filter((id) => id !== user.id);
-
-        if (pool.length === 0) continue;
-
-        // Filtrer les indisponibles
-        const { data: dispRows } = await admin
-          .from('profiles')
-          .select('id')
-          .in('id', pool)
-          .eq('instruction_indisponible', false);
-        const disponiblesExam = (dispRows || []).map((r) => r.id as string);
-
+        const requesterId = exam.requester_id as string;
+        const pool = await getExaminerPoolUserIds(admin, licenceCode);
+        const disponiblesExam = pool.filter((id) => id !== user.id);
         if (disponiblesExam.length === 0) continue;
 
-        // Charge d'examen (demandes assigne/accepte)
-        const chargesExam = new Map<string, number>();
-        for (const id of disponiblesExam) chargesExam.set(id, 0);
-        const { data: examChargeRows } = await admin
-          .from('instruction_exam_requests')
-          .select('instructeur_id')
-          .in('instructeur_id', disponiblesExam)
-          .in('statut', ['assigne', 'accepte']);
-        for (const r of examChargeRows || []) {
-          const id = r.instructeur_id as string;
-          chargesExam.set(id, (chargesExam.get(id) || 0) + 1);
-        }
-        const nouvelExaminateurId = [...chargesExam.entries()].sort((a, b) => a[1] - b[1])[0][0];
+        const { instructorId: nouvelExaminateurId } = await selectExaminerForRequest(
+          admin,
+          disponiblesExam,
+          requesterId,
+          licenceCode,
+          { tieBreakKey: exam.id as string },
+        );
+        if (!nouvelExaminateurId) continue;
 
         await admin
           .from('instruction_exam_requests')

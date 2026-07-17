@@ -5,7 +5,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { logActivity, getClientIp } from '@/lib/activity-log';
 import { getExaminerPoolUserIds, userCanConcludeThisExam } from '@/lib/instruction-permissions';
 import { notifyExamInstructorReassignment } from '@/lib/instruction-exam-reassign-notify';
-import { selectExamInstructorByWorkload } from '@/lib/instruction-exam-assign';
+import {
+  getTrainingInstructorIdsForExam,
+  selectExaminerForRequest,
+} from '@/lib/instruction-exam-rules';
 import { notifyUser } from '@/lib/notifications';
 
 const VALID_STATUSES = ['assigne', 'accepte', 'en_cours', 'termine', 'refuse'] as const;
@@ -47,6 +50,20 @@ export async function PATCH(
     const responseNote = body.response_note != null ? String(body.response_note).trim() : null;
     if (!(VALID_STATUSES as readonly string[]).includes(statut)) {
       return NextResponse.json({ error: 'Statut invalide.' }, { status: 400 });
+    }
+
+    // Un instructeur ayant formé le candidat sur cette licence ne peut ni accepter ni conduire l'examen.
+    if (statut === 'accepte' || statut === 'en_cours' || statut === 'termine') {
+      const trainerIds = await getTrainingInstructorIdsForExam(admin, row.requester_id, row.licence_code);
+      if (trainerIds.has(user.id)) {
+        return NextResponse.json(
+          {
+            error:
+              'Vous ne pouvez pas examiner ce candidat : vous l’avez déjà formé sur cette licence (session de training).',
+          },
+          { status: 403 },
+        );
+      }
     }
 
     // ── Démarrer la session (accepte → en_cours) ──
@@ -244,14 +261,24 @@ export async function PATCH(
         instructeur_id: refusedBy,
       });
 
-      const eligible = poolIds.filter((iid) => iid !== row.requester_id && !alreadyRefusedIds.has(iid));
+      const eligibleBase = poolIds.filter((iid) => iid !== row.requester_id && !alreadyRefusedIds.has(iid));
 
-      if (eligible.length > 0) {
-        const newInstructorId = await selectExamInstructorByWorkload(admin, eligible, row.requester_id, {
-          tieBreakKey: id,
-        });
+      if (eligibleBase.length > 0) {
+        const { instructorId: newInstructorId } = await selectExaminerForRequest(
+          admin,
+          eligibleBase,
+          row.requester_id,
+          row.licence_code,
+          { tieBreakKey: id },
+        );
         if (!newInstructorId) {
-          return NextResponse.json({ error: 'Aucun examinateur de remplacement disponible.' }, { status: 400 });
+          return NextResponse.json(
+            {
+              error:
+                'Aucun examinateur de remplacement disponible (conflit avec les instructeurs ayant formé le candidat sur cette licence).',
+            },
+            { status: 400 },
+          );
         }
 
         const { error } = await admin

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logActivity } from '@/lib/activity-log';
+import { recordTrainingCompletion } from '@/lib/instruction-exam-rules';
 
 export async function PATCH(
   request: Request,
@@ -23,13 +24,25 @@ export async function PATCH(
     const admin = createAdminClient();
     const { data: row } = await admin
       .from('instruction_pilot_training_requests')
-      .select('id, requester_id, assignee_id')
+      .select('id, requester_id, assignee_id, licence_code')
       .eq('id', id)
       .maybeSingle();
     if (!row) return NextResponse.json({ error: 'Demande introuvable.' }, { status: 404 });
     if (row.assignee_id !== user.id) {
       return NextResponse.json({ error: 'Seul l’instructeur assigné peut clôturer la session.' }, { status: 403 });
     }
+    if (!row.licence_code) {
+      return NextResponse.json(
+        { error: 'Cette session n’a pas de licence associée. Annulez-la et demandez une nouvelle session avec la licence visée.' },
+        { status: 400 },
+      );
+    }
+
+    await recordTrainingCompletion(admin, {
+      requesterId: row.requester_id as string,
+      licenceCode: row.licence_code as string,
+      instructorId: row.assignee_id as string,
+    });
 
     const { error: delErr } = await admin.from('instruction_pilot_training_requests').delete().eq('id', id);
     if (delErr) return NextResponse.json({ error: delErr.message }, { status: 400 });
@@ -39,7 +52,7 @@ export async function PATCH(
       action: 'pilot_training_completed',
       targetType: 'pilot_training',
       targetId: id,
-      details: { requester_id: row.requester_id },
+      details: { requester_id: row.requester_id, licence_code: row.licence_code },
     });
     return NextResponse.json({ ok: true });
   } catch (e) {

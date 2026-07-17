@@ -21,6 +21,8 @@ const EXAM_MINE_STATUT_MAP: Record<string, StatusBadgeConfig> = {
 
 interface MonEspaceTabProps {
   examLicenceOptions: string[];
+  pilotTrainingLicenceOptions: string[];
+  atcTrainingLicenceOptions: string[];
   myFormationActive: boolean;
   myFormationLicence: string | null;
   myProgram: InstructionProgram | null;
@@ -38,6 +40,8 @@ interface MonEspaceTabProps {
 
 export default function MonEspaceTab({
   examLicenceOptions,
+  pilotTrainingLicenceOptions,
+  atcTrainingLicenceOptions,
   myFormationActive,
   myFormationLicence,
   myProgram,
@@ -57,6 +61,12 @@ export default function MonEspaceTab({
   const [loading, setLoading] = useState(false);
   const [examLicence, setExamLicence] = useState(myFormationLicence || examLicenceOptions[0] || 'CAL-ATC');
   const [examMessage, setExamMessage] = useState('');
+  const [pilotTrainingLicence, setPilotTrainingLicence] = useState(
+    pilotTrainingLicenceOptions[0] || 'COM 1',
+  );
+  const [atcTrainingLicence, setAtcTrainingLicence] = useState(
+    atcTrainingLicenceOptions[0] || 'LATC',
+  );
   const [pilotTrainingMessage, setPilotTrainingMessage] = useState('');
   const [atcTrainingMessage, setAtcTrainingMessage] = useState('');
 
@@ -83,7 +93,7 @@ export default function MonEspaceTab({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur demande examen');
       setExamMessage('');
-      toast.success('Action effectuee.');
+      toast.success('Demande d\'examen envoyée.');
     });
   }
 
@@ -103,7 +113,10 @@ export default function MonEspaceTab({
       const res = await fetch('/api/instruction/pilot-trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: pilotTrainingMessage.trim() || null }),
+        body: JSON.stringify({
+          licence_code: pilotTrainingLicence,
+          message: pilotTrainingMessage.trim() || null,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur demande training');
@@ -141,7 +154,10 @@ export default function MonEspaceTab({
       const res = await fetch('/api/instruction/atc-trainings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: atcTrainingMessage.trim() || null }),
+        body: JSON.stringify({
+          licence_code: atcTrainingLicence,
+          message: atcTrainingMessage.trim() || null,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur demande training');
@@ -180,6 +196,10 @@ export default function MonEspaceTab({
           <div className="p-2 rounded-lg bg-amber-500/10"><ClipboardList className="h-5 w-5 text-amber-400" /></div>
           <h2 className="text-lg font-semibold text-slate-100">Demander un examen</h2>
         </div>
+        <p className="text-sm text-slate-500">
+          Aucun training préalable n&apos;est requis. Si un instructeur vous a déjà formé sur la licence choisie,
+          il ne pourra pas être votre examinateur.
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <select className="input" value={examLicence} onChange={(e) => setExamLicence(e.target.value)} required>
             {examLicenceOptions.map((licence) => (
@@ -286,13 +306,21 @@ export default function MonEspaceTab({
           <h2 className="text-lg font-semibold text-slate-100">Session de training (vol / pilote)</h2>
         </div>
         <p className="text-sm text-slate-500">
-          <strong className="text-slate-400">Tout le monde</strong> peut demander un accompagnement vol. Un{' '}
-          <strong className="text-slate-400">FI</strong> est assigné en priorité (répartition de charge) ; un{' '}
-          <strong className="text-slate-400">FE</strong> n&apos;intervient que si les FI sont déjà très chargés.
-          Convenez d&apos;une date <strong>en message privé</strong>. L&apos;instructeur clôt la fiche ici à la fin
-          (elle disparaît).
+          Choisissez la licence visée. Un <strong className="text-slate-400">FI</strong> est assigné en priorité ;
+          un <strong className="text-slate-400">FE</strong> n&apos;intervient que si les FI sont très chargés.
+          L&apos;instructeur qui clôture cette session ne pourra pas être votre examinateur pour cette même licence.
         </p>
         <form onSubmit={requestPilotTraining} className="space-y-2">
+          <select
+            className="input w-full"
+            value={pilotTrainingLicence}
+            onChange={(e) => setPilotTrainingLicence(e.target.value)}
+            required
+          >
+            {pilotTrainingLicenceOptions.map((code) => (
+              <option key={code} value={code}>{code}</option>
+            ))}
+          </select>
           <input
             className="input w-full"
             value={pilotTrainingMessage}
@@ -310,7 +338,8 @@ export default function MonEspaceTab({
               {pilotTrainingsMine.map((t) => (
                 <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-700/50 bg-slate-800/20 px-4 py-3 text-sm">
                   <span className="text-slate-300">
-                    Assigné à <span className="text-slate-100 font-medium">{t.assignee_identifiant || '—'}</span>
+                    <span className="text-teal-300 font-medium">{t.licence_code || '—'}</span>
+                    {' · '}Assigné à <span className="text-slate-100 font-medium">{t.assignee_identifiant || '—'}</span>
                     {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
                   </span>
                   <button
@@ -333,7 +362,8 @@ export default function MonEspaceTab({
               {pilotTrainingsAssigned.map((t) => (
                 <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-4 py-3 text-sm">
                   <span className="text-slate-300">
-                    Avec <span className="text-slate-100 font-medium">{t.requester_identifiant || '—'}</span>
+                    <span className="text-teal-300 font-medium">{t.licence_code || '—'}</span>
+                    {' · '}Avec <span className="text-slate-100 font-medium">{t.requester_identifiant || '—'}</span>
                     {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
                   </span>
                   <button
@@ -357,12 +387,20 @@ export default function MonEspaceTab({
           <h2 className="text-lg font-semibold text-slate-100">Session de training (ATC)</h2>
         </div>
         <p className="text-sm text-slate-500">
-          Tout le monde peut demander un accompagnement. Un <strong className="text-slate-400">ATC FI</strong> est assigné
-          en priorité (répartition de charge) ; un <strong className="text-slate-400">ATC FE</strong> n&apos;intervient
-          que si les ATC FI sont déjà très chargés. Convenez d&apos;une date <strong>en message privé</strong>.
-          L&apos;instructeur clôt la fiche ici quand c&apos;est fini (elle disparaît).
+          Choisissez la licence ATC/AFIS visée. L&apos;instructeur qui clôture la session ne pourra pas être
+          examinateur pour cette même licence.
         </p>
         <form onSubmit={requestAtcTraining} className="space-y-2">
+          <select
+            className="input w-full"
+            value={atcTrainingLicence}
+            onChange={(e) => setAtcTrainingLicence(e.target.value)}
+            required
+          >
+            {atcTrainingLicenceOptions.map((code) => (
+              <option key={code} value={code}>{code}</option>
+            ))}
+          </select>
           <input
             className="input w-full"
             value={atcTrainingMessage}
@@ -380,7 +418,8 @@ export default function MonEspaceTab({
               {atcTrainingsMine.map((t) => (
                 <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-700/50 bg-slate-800/20 px-4 py-3 text-sm">
                   <span className="text-slate-300">
-                    Assigné à <span className="text-slate-100 font-medium">{t.assignee_identifiant || '—'}</span>
+                    <span className="text-indigo-300 font-medium">{t.licence_code || '—'}</span>
+                    {' · '}Assigné à <span className="text-slate-100 font-medium">{t.assignee_identifiant || '—'}</span>
                     {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
                   </span>
                   <button
@@ -403,7 +442,8 @@ export default function MonEspaceTab({
               {atcTrainingsAssigned.map((t) => (
                 <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
                   <span className="text-slate-300">
-                    Avec <span className="text-slate-100 font-medium">{t.requester_identifiant || '—'}</span>
+                    <span className="text-indigo-300 font-medium">{t.licence_code || '—'}</span>
+                    {' · '}Avec <span className="text-slate-100 font-medium">{t.requester_identifiant || '—'}</span>
                     {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
                   </span>
                   <button

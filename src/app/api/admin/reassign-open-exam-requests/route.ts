@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logActivity, getClientIp } from '@/lib/activity-log';
 import { getCachedExaminerPool, notifyExamInstructorReassignment } from '@/lib/instruction-exam-reassign-notify';
-import { selectExamInstructorByWorkload } from '@/lib/instruction-exam-assign';
+import { selectExaminerForRequest } from '@/lib/instruction-exam-rules';
 
 type ExamRow = {
   id: string;
@@ -68,10 +68,16 @@ export async function POST(request: Request) {
 
       for (const r of rows) {
         const pool = await getCachedExaminerPool(admin, r.licence_code, poolCache);
-        const newId = await selectExamInstructorByWorkload(admin, pool, r.requester_id, {
-          simulatedExtraLoad: simulatedExtra,
-          tieBreakKey: r.id,
-        });
+        const { instructorId: newId } = await selectExaminerForRequest(
+          admin,
+          pool,
+          r.requester_id,
+          r.licence_code,
+          {
+            simulatedExtraLoad: simulatedExtra,
+            tieBreakKey: r.id,
+          },
+        );
         if (!newId || newId === r.instructeur_id) continue;
         preview.push({
           id: r.id,
@@ -93,7 +99,13 @@ export async function POST(request: Request) {
     let changed = 0;
     for (const r of rows) {
       const pool = await getCachedExaminerPool(admin, r.licence_code, poolCache);
-      const newId = await selectExamInstructorByWorkload(admin, pool, r.requester_id, { tieBreakKey: r.id });
+      const { instructorId: newId } = await selectExaminerForRequest(
+        admin,
+        pool,
+        r.requester_id,
+        r.licence_code,
+        { tieBreakKey: r.id },
+      );
       if (!newId || newId === r.instructeur_id) continue;
 
       const { error: upErr } = await admin

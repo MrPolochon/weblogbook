@@ -7,6 +7,11 @@ import {
   getAtcTrainingTier2UserIds,
   selectTrainingAssigneeFiFirst,
 } from '@/lib/instruction-permissions';
+import {
+  examLicencesForTrainingSide,
+  isExamRequestLicence,
+  trainingSideForExamLicence,
+} from '@/lib/instruction-exam-rules';
 import { logActivity } from '@/lib/activity-log';
 
 export async function GET() {
@@ -18,7 +23,7 @@ export async function GET() {
     const admin = createAdminClient();
     const { data: mineRows } = await admin
       .from('instruction_atc_training_requests')
-      .select('id, requester_id, assignee_id, message, created_at, updated_at')
+      .select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at')
       .eq('requester_id', user.id)
       .order('created_at', { ascending: false });
     const assigneeFromMine = new Set((mineRows || []).map((r) => r.assignee_id as string).filter(Boolean));
@@ -33,7 +38,7 @@ export async function GET() {
 
     const { data: toMe } = await admin
       .from('instruction_atc_training_requests')
-      .select('id, requester_id, assignee_id, message, created_at, updated_at')
+      .select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at')
       .eq('assignee_id', user.id)
       .order('created_at', { ascending: false });
     const reqIds = new Set((toMe || []).map((r) => r.requester_id as string).filter(Boolean));
@@ -73,6 +78,15 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const message = body.message != null ? String(body.message).trim() : null;
+    const licenceCode = String(body.licence_code || '').trim();
+    if (!isExamRequestLicence(licenceCode) || trainingSideForExamLicence(licenceCode) !== 'atc') {
+      return NextResponse.json(
+        {
+          error: `Licence de training invalide. Choisissez une licence d'examen ATC/AFIS (ex. LATC, CAL-ATC…) parmi : ${examLicencesForTrainingSide('atc').join(', ')}.`,
+        },
+        { status: 400 },
+      );
+    }
 
     const tier1 = await getAtcTrainingTier1UserIds(admin);
     const tier1Set = new Set(tier1);
@@ -106,6 +120,7 @@ export async function POST(request: Request) {
       .insert({
         requester_id: user.id,
         assignee_id: assigneeId,
+        licence_code: licenceCode,
         message: message || null,
         updated_at: new Date().toISOString(),
       })
@@ -118,7 +133,7 @@ export async function POST(request: Request) {
       action: 'atc_training_request',
       targetType: 'atc_training',
       targetId: row.id,
-      details: { assignee_id: assigneeId },
+      details: { assignee_id: assigneeId, licence_code: licenceCode },
     });
     return NextResponse.json({ ok: true, id: row.id, assignee_id: assigneeId });
   } catch (e) {

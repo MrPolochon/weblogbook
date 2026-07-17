@@ -3,6 +3,10 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getExaminerPoolUserIds, userCanConcludeThisExam } from '@/lib/instruction-permissions';
+import {
+  filterExaminerPoolExcludingTrainers,
+  getTrainingInstructorIdsForExam,
+} from '@/lib/instruction-exam-rules';
 import { notifyExamInstructorReassignment } from '@/lib/instruction-exam-reassign-notify';
 import { logActivity, getClientIp } from '@/lib/activity-log';
 
@@ -56,7 +60,12 @@ async function getReassignContext(
     return { error: NextResponse.json({ error: 'État de la demande incompatible avec une transmission.' }, { status: 400 }) };
   }
   const pool = await getExaminerPoolUserIds(admin, row.licence_code);
-  const eligible = pool.filter((eid) => eid !== user.id);
+  const trainerIds = await getTrainingInstructorIdsForExam(admin, row.requester_id, row.licence_code);
+  const eligible = filterExaminerPoolExcludingTrainers(
+    pool.filter((eid) => eid !== user.id),
+    trainerIds,
+    row.requester_id,
+  );
   return { row, me, eligible };
 }
 
@@ -126,7 +135,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
     if (!eligible.includes(targetId)) {
       return NextResponse.json(
-        { error: 'Cet examinateur ne peut pas recevoir ce type d’examen (ou c’est vous-même).' },
+        {
+          error:
+            'Cet examinateur ne peut pas recevoir ce type d’examen (c’est vous-même, ou il a formé le candidat sur cette licence).',
+        },
         { status: 400 },
       );
     }

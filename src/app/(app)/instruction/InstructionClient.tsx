@@ -8,7 +8,7 @@ import {
   GraduationCap, BookOpen, Users, Award, Plane,
   ClipboardList, FileCheck2,
 } from 'lucide-react';
-import type { ExamRequestMine, ExamRequestAssigned, Eleve, TypeAvion, AvionTemp } from './types';
+import type { ExamRequestMine, ExamRequestAssigned, ExamRequestStaffOpen, Eleve, TypeAvion, AvionTemp } from './types';
 import MonEspaceTab from './components/MonEspaceTab';
 import FormationTab from './components/FormationTab';
 import ExamensTab from './components/ExamensTab';
@@ -29,6 +29,8 @@ export default function InstructionClient({
   programs,
   createFormationPrograms,
   examLicenceOptions,
+  pilotTrainingLicenceOptions,
+  atcTrainingLicenceOptions,
   pilotTrainingsMine,
   pilotTrainingsAssigned,
   atcTrainingsMine,
@@ -39,6 +41,7 @@ export default function InstructionClient({
   myProgression,
   examRequestsMine,
   examRequestsAssigned,
+  examRequestsStaffOpen = [],
   eleves,
   typesAvion,
   avionsTemp,
@@ -58,6 +61,8 @@ export default function InstructionClient({
   programs: InstructionProgram[];
   createFormationPrograms: InstructionProgram[];
   examLicenceOptions: string[];
+  pilotTrainingLicenceOptions: string[];
+  atcTrainingLicenceOptions: string[];
   pilotTrainingsMine: Array<Record<string, string | null | undefined>>;
   pilotTrainingsAssigned: Array<Record<string, string | null | undefined>>;
   atcTrainingsMine: Array<Record<string, string | null | undefined>>;
@@ -68,6 +73,7 @@ export default function InstructionClient({
   myProgression: Array<{ licence_code: string; module_code: string; completed: boolean; note?: string | null }>;
   examRequestsMine: ExamRequestMine[];
   examRequestsAssigned: ExamRequestAssigned[];
+  examRequestsStaffOpen?: ExamRequestStaffOpen[];
   eleves: Eleve[];
   typesAvion: TypeAvion[];
   avionsTemp: AvionTemp[];
@@ -91,7 +97,8 @@ export default function InstructionClient({
     return out;
   }, [canGrantTitreInstructionFlight, canGrantTitreInstructionAtc]);
 
-  const showExamensTab = canViewExaminerInbox || instructionTitreOptions.length > 0;
+  const showExamensTab =
+    canViewExaminerInbox || instructionTitreOptions.length > 0 || viewerRole === 'admin';
 
   const myProgram = useMemo(
     () => programs.find((p) => p.licenceCode === myFormationLicence) || null,
@@ -265,6 +272,8 @@ export default function InstructionClient({
       {activeTab === 'espace' && (
         <MonEspaceTab
           examLicenceOptions={examLicenceOptions}
+          pilotTrainingLicenceOptions={pilotTrainingLicenceOptions}
+          atcTrainingLicenceOptions={atcTrainingLicenceOptions}
           myFormationActive={myFormationActive}
           myFormationLicence={myFormationLicence}
           myProgram={myProgram}
@@ -300,6 +309,7 @@ export default function InstructionClient({
           viewerRole={viewerRole}
           canViewExaminerInbox={canViewExaminerInbox}
           examRequestsAssigned={examRequestsAssigned}
+          examRequestsStaffOpen={examRequestsStaffOpen}
         />
       )}
     </div>

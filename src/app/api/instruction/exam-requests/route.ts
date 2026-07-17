@@ -2,10 +2,12 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
 import { logActivity } from '@/lib/activity-log';
 import { getInstructionCapabilities, getExaminerPoolUserIds } from '@/lib/instruction-permissions';
-import { selectExamInstructorByWorkload } from '@/lib/instruction-exam-assign';
+import {
+  isExamRequestLicence,
+  selectExaminerForRequest,
+} from '@/lib/instruction-exam-rules';
 import { notifyUser } from '@/lib/notifications';
 
 type ExamStatus = 'assigne' | 'accepte' | 'termine' | 'refuse';
@@ -54,7 +56,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const licenceCode = String(body.licence_code || '').trim();
     const message = body.message ? String(body.message).trim() : null;
-    if (!(ALL_LICENCE_TYPES as readonly string[]).includes(licenceCode)) {
+    if (!isExamRequestLicence(licenceCode)) {
       return NextResponse.json({ error: 'Licence invalide.' }, { status: 400 });
     }
 
@@ -69,23 +71,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Une demande est déjà en cours pour cette licence.' }, { status: 400 });
     }
 
-    // Vérifier qu'au moins 1 session de training a été effectuée avant de demander un examen.
-    // Formation ATC → vérifier instruction_atc_training_requests ; sinon → pilot_training_requests.
-    const isAtcLicence = ['CAL-ATC', 'PCAL-ATC', 'CAL-AFIS', 'PCAL-AFIS', 'LPAFIS', 'LATC'].includes(licenceCode);
-    const trainingTable = isAtcLicence
-      ? 'instruction_atc_training_requests'
-      : 'instruction_pilot_training_requests';
-    const { count: trainingCount } = await admin
-      .from(trainingTable)
-      .select('*', { count: 'exact', head: true })
-      .eq('requester_id', user.id);
-    if ((trainingCount ?? 0) === 0) {
-      return NextResponse.json(
-        { error: 'Vous devez avoir effectué au moins une session de training avant de demander un examen.' },
-        { status: 400 },
-      );
-    }
-
     const instructorIds = await getExaminerPoolUserIds(admin, licenceCode);
     if (instructorIds.length === 0) {
       return NextResponse.json(
@@ -93,14 +78,26 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const pool = instructorIds.filter((id) => id !== user.id);
-    const eligible = pool.length > 0 ? pool : instructorIds;
 
-    const selectedInstructorId = await selectExamInstructorByWorkload(admin, eligible, user.id, {
-      // Départage à charge identique (évite de toujours donner le même id lexicographique)
-      tieBreakKey: `${user.id}::${licenceCode}::${crypto.randomUUID()}`,
-    });
+    const { instructorId: selectedInstructorId, trainerIds } = await selectExaminerForRequest(
+      admin,
+      instructorIds,
+      user.id,
+      licenceCode,
+      {
+        tieBreakKey: `${user.id}::${licenceCode}::${crypto.randomUUID()}`,
+      },
+    );
     if (!selectedInstructorId) {
+      if (trainerIds.size > 0) {
+        return NextResponse.json(
+          {
+            error:
+              'Aucun examinateur disponible : l’instructeur qui vous a formé sur cette licence ne peut pas être votre examinateur, et aucun autre examinateur habilité n’est libre.',
+          },
+          { status: 400 },
+        );
+      }
       return NextResponse.json({ error: 'Impossible d’assigner un examinateur.' }, { status: 400 });
     }
 

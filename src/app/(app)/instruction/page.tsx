@@ -10,6 +10,7 @@ import {
   LICENCE_FE,
   LICENCE_FI,
 } from '@/lib/instruction-permissions';
+import { examLicencesForTrainingSide } from '@/lib/instruction-exam-rules';
 import { getUserPhotosMap } from '@/lib/user-photos';
 
 export default async function InstructionPage() {
@@ -136,11 +137,21 @@ export default async function InstructionPage() {
       ])
     : [{ data: [] as Array<Record<string, unknown>>, error: null }, { data: [] as Array<Record<string, unknown>>, error: null }];
 
+  const isStaffAdmin = viewer.role === 'admin';
+
   const examAssignedResult = canViewExaminerInbox
     ? await admin
         .from('instruction_exam_requests')
         .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, resultat, dossier_conserve, licence_creee_id, created_at, updated_at, requester:profiles!instruction_exam_requests_requester_id_fkey(identifiant)')
         .eq('instructeur_id', user.id)
+        .order('created_at', { ascending: false })
+    : { data: [] as Array<Record<string, unknown>>, error: null };
+
+  const examStaffOpenResult = isStaffAdmin
+    ? await admin
+        .from('instruction_exam_requests')
+        .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, resultat, dossier_conserve, licence_creee_id, created_at, updated_at, requester:profiles!instruction_exam_requests_requester_id_fkey(identifiant), instructeur:profiles!instruction_exam_requests_instructeur_id_fkey(identifiant)')
+        .in('statut', ['assigne', 'accepte'])
         .order('created_at', { ascending: false })
     : { data: [] as Array<Record<string, unknown>>, error: null };
 
@@ -150,10 +161,10 @@ export default async function InstructionPage() {
     { data: atcMine, error: atcMineErr },
     { data: atcToMe, error: atcToMeErr },
   ] = await Promise.all([
-    admin.from('instruction_pilot_training_requests').select('id, requester_id, assignee_id, message, created_at, updated_at').eq('requester_id', user.id).order('created_at', { ascending: false }),
-    admin.from('instruction_pilot_training_requests').select('id, requester_id, assignee_id, message, created_at, updated_at').eq('assignee_id', user.id).order('created_at', { ascending: false }),
-    admin.from('instruction_atc_training_requests').select('id, requester_id, assignee_id, message, created_at, updated_at').eq('requester_id', user.id).order('created_at', { ascending: false }),
-    admin.from('instruction_atc_training_requests').select('id, requester_id, assignee_id, message, created_at, updated_at').eq('assignee_id', user.id).order('created_at', { ascending: false }),
+    admin.from('instruction_pilot_training_requests').select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at').eq('requester_id', user.id).order('created_at', { ascending: false }),
+    admin.from('instruction_pilot_training_requests').select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at').eq('assignee_id', user.id).order('created_at', { ascending: false }),
+    admin.from('instruction_atc_training_requests').select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at').eq('requester_id', user.id).order('created_at', { ascending: false }),
+    admin.from('instruction_atc_training_requests').select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at').eq('assignee_id', user.id).order('created_at', { ascending: false }),
   ]);
 
   if (pilotMineErr) errors.push(`Training pilote: ${pilotMineErr.message}`);
@@ -178,10 +189,12 @@ export default async function InstructionPage() {
   if (avionsTempResult.error) errors.push(`Avions temp: ${avionsTempResult.error.message}`);
   if (elevesProgressionResult.error) errors.push(`Progression élèves: ${elevesProgressionResult.error.message}`);
   if (examAssignedResult.error) errors.push(`Examens assignés: ${examAssignedResult.error.message}`);
+  if (examStaffOpenResult.error) errors.push(`Examens (admin): ${examStaffOpenResult.error.message}`);
 
   const avionsTemp = avionsTempResult.data;
   const elevesProgression = elevesProgressionResult.data;
   const examAssigned = examAssignedResult.data;
+  const examStaffOpen = examStaffOpenResult.data;
 
   const loadError = errors.length > 0 ? errors.join(' · ') : undefined;
 
@@ -211,6 +224,8 @@ export default async function InstructionPage() {
       programs={INSTRUCTION_PROGRAMS}
       createFormationPrograms={createFormationPrograms}
       examLicenceOptions={examLicenceOptions}
+      pilotTrainingLicenceOptions={examLicencesForTrainingSide('pilot')}
+      atcTrainingLicenceOptions={examLicencesForTrainingSide('atc')}
       pilotTrainingsMine={pilotTrainingsMine as Array<Record<string, string | null | undefined>>}
       pilotTrainingsAssigned={pilotTrainingsAssigned as Array<Record<string, string | null | undefined>>}
       atcTrainingsMine={atcTrainingsMine as Array<Record<string, string | null | undefined>>}
@@ -221,6 +236,7 @@ export default async function InstructionPage() {
       myProgression={(myProgression || []) as Array<{ licence_code: string; module_code: string; completed: boolean; note?: string | null }>}
       examRequestsMine={(examMine || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; instructeur: { identifiant: string } | { identifiant: string }[] | null }>}
       examRequestsAssigned={(examAssigned || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; requester: { identifiant: string } | { identifiant: string }[] | null }>}
+      examRequestsStaffOpen={(examStaffOpen || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; requester: { identifiant: string } | { identifiant: string }[] | null; instructeur: { identifiant: string } | { identifiant: string }[] | null }>}
       eleves={elevesWithPhoto as Array<{ id: string; identifiant: string; formation_instruction_active: boolean; formation_instruction_licence: string | null; created_at: string; photoUrl: string | null }>}
       typesAvion={(typesAvion || []) as Array<{ id: string; nom: string; constructeur: string | null; code_oaci: string | null }>}
       avionsTemp={(avionsTemp || []) as Array<{ id: string; proprietaire_id: string; type_avion_id: string; nom_personnalise: string | null; immatriculation: string | null; aeroport_actuel: string | null; statut: string | null; usure_percent: number | null; instruction_actif: boolean }>}
