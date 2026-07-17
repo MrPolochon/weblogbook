@@ -6,6 +6,13 @@ import {
   getModuleQuestionIdFromKey,
 } from '@/lib/aeroschool-module-answers';
 import { getAeroSchoolRespondent, requireAeroSchoolRespondent } from '@/lib/aeroschool-auth';
+import {
+  buildDiscordEmbed,
+  buildWebhookPayload,
+  sendDiscordWebhook,
+} from '@/lib/aeroschool/discord-webhook';
+import { loadAeroSchoolRespondentProfiles } from '@/lib/aeroschool-respondent-profiles';
+import { renderCartePng } from '@/lib/cartes/render-carte-png';
 import { verifyAeroSchoolTestToken } from '@/lib/aeroschool-test-token';
 import { NextResponse } from 'next/server';
 
@@ -31,102 +38,6 @@ interface Question {
 interface Section {
   title?: string;
   questions?: Question[];
-}
-
-// Construit le payload Discord embed pour le webhook
-function buildDiscordEmbed(
-  formTitle: string,
-  sections: Section[],
-  answers: Record<string, unknown>,
-  score: number,
-  maxScore: number,
-  moduleQuestionTitles?: Record<string, string>,
-) {
-  const EMBED_COLOR = 0xF59E0B;
-  const fields: { name: string; value: string; inline: boolean }[] = [];
-
-  for (const section of sections) {
-    const questions = Array.isArray(section.questions) ? section.questions : [];
-    if (sections.length > 1 && section.title) {
-      fields.push({
-        name: `\u200B`,
-        value: `**── ${section.title} ──**`,
-        inline: false,
-      });
-    }
-
-    for (const q of questions) {
-      if (q.type === 'question_module') {
-        for (const [key, answer] of getModuleAnswerEntries(q, answers)) {
-          const questionId = getModuleQuestionIdFromKey(key, q);
-          const title = moduleQuestionTitles?.[key] || `Question ${questionId.slice(0, 8)}`;
-          const displayAnswer = answer === undefined || answer === null || answer === ''
-            ? '*Non répondu*'
-            : Array.isArray(answer) ? (answer.length > 0 ? answer.join(', ') : '*Non répondu*') : String(answer);
-          fields.push({
-            name: title.length > 256 ? title.slice(0, 253) + '...' : title,
-            value: displayAnswer.length > 1024 ? displayAnswer.slice(0, 1021) + '...' : displayAnswer,
-            inline: false,
-          });
-        }
-        continue;
-      }
-      const answer = answers[q.id];
-      let displayAnswer: string;
-
-      if (answer === undefined || answer === null || answer === '') {
-        displayAnswer = '*Non répondu*';
-      } else if (Array.isArray(answer)) {
-        displayAnswer = answer.length > 0 ? answer.join(', ') : '*Non répondu*';
-      } else {
-        displayAnswer = String(answer);
-      }
-
-      if (displayAnswer.length > 1024) {
-        displayAnswer = displayAnswer.slice(0, 1021) + '...';
-      }
-
-      fields.push({
-        name: q.title || 'Question',
-        value: displayAnswer,
-        inline: false,
-      });
-    }
-  }
-
-  // Footer avec score si applicable
-  let footerText = `AeroSchool — ${new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
-  if (maxScore > 0) {
-    footerText = `Score : ${score} / ${maxScore} — ${footerText}`;
-  }
-
-  return {
-    embeds: [
-      {
-        title: `📋 ${formTitle}`,
-        description: 'Nouvelle réponse reçue via AeroSchool.',
-        color: EMBED_COLOR,
-        fields,
-        footer: { text: footerText },
-        timestamp: new Date().toISOString(),
-      },
-    ],
-  };
-}
-
-// Ajoute la mention de rôle dans le content (hors embed) pour que Discord ping
-function buildWebhookPayload(
-  embedPayload: ReturnType<typeof buildDiscordEmbed>,
-  webhookRoleId?: string | null,
-) {
-  if (webhookRoleId && /^\d+$/.test(webhookRoleId)) {
-    return {
-      content: `<@&${webhookRoleId}>`,
-      allowed_mentions: { roles: [webhookRoleId] },
-      ...embedPayload,
-    };
-  }
-  return embedPayload;
 }
 
 // POST — soumettre une réponse (public, pas besoin d'auth)
@@ -301,6 +212,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // Mode webhook : envoyer un embed Discord puis ne pas stocker (sauf si triche/abandon/temps écoulé)
     if (form.delivery_mode === 'webhook' && form.webhook_url && !cheating_detected && !time_expired && !isAbandoned) {
       try {
+        let respondentInfo: { identifiant: string; discordUsername: string | null } | undefined;
+        let cartePng: Buffer | null = null;
+
+        if (respondent?.userId) {
+          const profiles = await loadAeroSchoolRespondentProfiles(admin, [respondent.userId]);
+          const profile = profiles.get(respondent.userId);
+          if (profile) {
+            respondentInfo = {
+              identifiant: profile.identifiant,
+              discordUsername: profile.discord_username,
+            };
+            if (profile.carte) {
+              cartePng = await renderCartePng(profile.carte, profile.identifiant);
+            }
+          } else {
+            respondentInfo = {
+              identifiant: respondent.identifiant,
+              discordUsername: respondent.discordUsername,
+            };
+          }
+        }
+
         const embedPayload = buildDiscordEmbed(
           form.title,
           sections,
@@ -308,15 +241,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           score,
           maxScore,
           moduleQuestionTitles,
+          respondentInfo,
+          Boolean(cartePng),
         );
 
         const payload = buildWebhookPayload(embedPayload, form.webhook_role_id);
 
-        const webhookRes = await fetch(form.webhook_url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        const webhookRes = await sendDiscordWebhook(form.webhook_url, payload, cartePng);
 
         if (!webhookRes.ok) {
           console.error('[AeroSchool] Webhook HTTP error:', webhookRes.status, await webhookRes.text().catch(() => ''));
