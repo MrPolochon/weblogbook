@@ -3,6 +3,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isAlliancePresidentOrVice } from '@/lib/co-pdg-utils';
+import { enrichTransactionsWithVban, fetchAllFelitzTransactions } from '@/lib/felitz/utils';
 
 // GET - Récupérer les transactions d'un compte
 export async function GET(req: NextRequest) {
@@ -63,65 +64,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
 
-    const { data: raw, error } = await admin.from('felitz_transactions')
-      .select('*')
-      .eq('compte_id', compteId)
-      .order('created_at', { ascending: false })
-      .limit(500);
-
-    if (error) return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 400 });
-
-    // Enrichir les libellés : remplacer les UUID par les VBAN quand possible
-    const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
-    const toResolve = new Set<string>();
-    (raw || []).forEach((t: { libelle?: string | null }) => {
-      const m = (t.libelle || '').match(UUID_REGEX);
-      m?.forEach(u => toResolve.add(u));
-    });
-
-    const vbanByUuid: Record<string, string> = {};
-    if (toResolve.size > 0) {
-      const ids = Array.from(toResolve);
-      const { data: comptesId } = await admin.from('felitz_comptes')
-        .select('id, vban')
-        .in('id', ids);
-      (comptesId || []).forEach((c: { id: string; vban: string }) => {
-        if (c.id) vbanByUuid[c.id] = c.vban;
-      });
-      const { data: comptesComp } = await admin.from('felitz_comptes')
-        .select('compagnie_id, vban')
-        .in('compagnie_id', ids);
-      (comptesComp || []).forEach((c: { compagnie_id: string; vban: string }) => {
-        if (c.compagnie_id) vbanByUuid[c.compagnie_id] = c.vban;
-      });
-      const { data: comptesPerso } = await admin.from('felitz_comptes')
-        .select('proprietaire_id, vban')
-        .in('proprietaire_id', ids);
-      (comptesPerso || []).forEach((c: { proprietaire_id: string; vban: string }) => {
-        if (c.proprietaire_id) vbanByUuid[c.proprietaire_id] = c.vban;
-      });
-      const { data: comptesAlliance } = await admin.from('felitz_comptes')
-        .select('alliance_id, vban')
-        .in('alliance_id', ids);
-      (comptesAlliance || []).forEach((c: { alliance_id: string; vban: string }) => {
-        if (c.alliance_id) vbanByUuid[c.alliance_id] = c.vban;
-      });
-      const { data: comptesRep } = await admin.from('felitz_comptes')
-        .select('entreprise_reparation_id, vban')
-        .in('entreprise_reparation_id', ids);
-      (comptesRep || []).forEach((c: { entreprise_reparation_id: string; vban: string }) => {
-        if (c.entreprise_reparation_id) vbanByUuid[c.entreprise_reparation_id] = c.vban;
-      });
+    let raw: Array<Record<string, unknown>>;
+    try {
+      raw = await fetchAllFelitzTransactions(admin, compteId);
+    } catch {
+      return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 400 });
     }
 
-    const data = (raw || []).map((t: { libelle?: string | null; [k: string]: unknown }) => {
-      let libelle = t.libelle || '';
-      for (const [uuid, vban] of Object.entries(vbanByUuid)) {
-        const escaped = uuid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        libelle = libelle.replace(new RegExp(escaped, 'gi'), vban);
-      }
-      return { ...t, libelle };
-    });
+    const data = await enrichTransactionsWithVban(admin, raw);
 
     return NextResponse.json(data);
   } catch (e) {

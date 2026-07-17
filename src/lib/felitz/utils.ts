@@ -1,6 +1,69 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 
+type AdminClient = ReturnType<typeof createAdminClient>;
 type TxRow = { libelle?: string | null; [k: string]: unknown };
+
+const FELITZ_PAGE_SIZE = 1000;
+
+/** Charge toutes les transactions d'un compte (pagination interne PostgREST). */
+export async function fetchAllFelitzTransactions(
+  admin: AdminClient,
+  compteId: string,
+): Promise<Array<Record<string, unknown>>> {
+  const all: Array<Record<string, unknown>> = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await admin
+      .from('felitz_transactions')
+      .select('*')
+      .eq('compte_id', compteId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + FELITZ_PAGE_SIZE - 1);
+
+    if (error) throw error;
+    if (!data?.length) break;
+
+    all.push(...data);
+    if (data.length < FELITZ_PAGE_SIZE) break;
+    offset += FELITZ_PAGE_SIZE;
+  }
+
+  return all;
+}
+
+/** Charge tout l'historique des virements émis depuis un compte (ou par auteur). */
+export async function fetchAllFelitzVirements(
+  admin: AdminClient,
+  filters: { compteSourceId?: string; createdBy?: string },
+): Promise<Array<Record<string, unknown>>> {
+  const all: Array<Record<string, unknown>> = [];
+  let offset = 0;
+
+  while (true) {
+    let query = admin
+      .from('felitz_virements')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + FELITZ_PAGE_SIZE - 1);
+
+    if (filters.compteSourceId) {
+      query = query.eq('compte_source_id', filters.compteSourceId);
+    } else if (filters.createdBy) {
+      query = query.eq('created_by', filters.createdBy);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    if (!data?.length) break;
+
+    all.push(...data);
+    if (data.length < FELITZ_PAGE_SIZE) break;
+    offset += FELITZ_PAGE_SIZE;
+  }
+
+  return all;
+}
 
 export async function enrichTransactionsWithVban<T extends TxRow>(
   admin: ReturnType<typeof createAdminClient>,

@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useTransition, useEffect, useMemo } from 'react';
+import { useState, useTransition, useEffect, useMemo, useCallback } from 'react';
 import {
   Send, RefreshCw, History, ArrowUpRight, ArrowDownLeft,
   Copy, Check, TrendingUp, TrendingDown, ChevronRight, X,
   Activity, CreditCard, BadgeCheck, Plane, Wrench, Receipt,
-  ArrowLeftRight, DollarSign, FileText, Ban
+  ArrowLeftRight, DollarSign, FileText, Ban, Loader2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
@@ -177,11 +177,14 @@ function TxDetailModal({ tx, onClose }: { tx: Transaction; onClose: () => void }
   );
 }
 
-export default function FelitzBankClient({ compteId, vban, transactions, isEntreprise, isMilitaire }: Props) {
+export default function FelitzBankClient({ compteId, vban, transactions: initialTransactions, isEntreprise, isMilitaire }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [transactions, setTransactions] = useState(initialTransactions);
+  const [fullHistoryLoaded, setFullHistoryLoaded] = useState(false);
+  const [loadingFullHistory, setLoadingFullHistory] = useState(false);
   const [vbanDest, setVbanDest] = useState('');
   const [montant, setMontant] = useState('');
   const [libelle, setLibelle] = useState('');
@@ -232,11 +235,58 @@ export default function FelitzBankClient({ compteId, vban, transactions, isEntre
   }), [transactions]);
 
   useEffect(() => {
-    fetch(`/api/felitz/virement?compte_id=${compteId}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(d => setVirements(Array.isArray(d) ? d : []))
-      .catch(() => setVirements([]));
+    if (!fullHistoryLoaded) {
+      setTransactions(initialTransactions);
+    }
+  }, [initialTransactions, fullHistoryLoaded]);
+
+  const loadFullHistory = useCallback(async () => {
+    if (fullHistoryLoaded || loadingFullHistory) return;
+    setLoadingFullHistory(true);
+    try {
+      const res = await fetch(`/api/felitz/transactions?compte_id=${compteId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setTransactions(data);
+          setFullHistoryLoaded(true);
+        }
+      }
+    } catch {
+      // silencieux — on garde l'aperçu SSR
+    } finally {
+      setLoadingFullHistory(false);
+    }
+  }, [compteId, fullHistoryLoaded, loadingFullHistory]);
+
+  const loadVirements = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/felitz/virement?compte_id=${compteId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setVirements(Array.isArray(data) ? data : []);
+      }
+    } catch {
+      setVirements([]);
+    }
   }, [compteId]);
+
+  function openFullHistory() {
+    setTxFilter('all');
+    setTxPeriod('all');
+    setActiveTab('transactions');
+    void loadFullHistory();
+  }
+
+  useEffect(() => {
+    if (activeTab === 'transactions') {
+      void loadFullHistory();
+    }
+  }, [activeTab, loadFullHistory]);
+
+  useEffect(() => {
+    void loadVirements();
+  }, [loadVirements]);
 
   async function handleVirement(e: React.FormEvent) {
     e.preventDefault();
@@ -264,7 +314,7 @@ export default function FelitzBankClient({ compteId, vban, transactions, isEntre
       setVbanDest('');
       setMontant('');
       setLibelle('');
-      setVirements(prev => [data.virement, ...prev].filter(Boolean).slice(0, 50));
+      void loadVirements();
       startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -403,10 +453,10 @@ export default function FelitzBankClient({ compteId, vban, transactions, isEntre
               {transactions.length > 5 && (
                 <button
                   type="button"
-                  onClick={() => setActiveTab('transactions')}
+                  onClick={openFullHistory}
                   className="w-full text-center text-xs text-slate-500 hover:text-slate-400 py-2 flex items-center justify-center gap-1"
                 >
-                  Voir toutes les transactions <ChevronRight className="h-3 w-3" />
+                  Voir tout l&apos;historique <ChevronRight className="h-3 w-3" />
                 </button>
               )}
             </div>
@@ -456,6 +506,15 @@ export default function FelitzBankClient({ compteId, vban, transactions, isEntre
           />
           <div className="text-[9px] text-slate-500 px-1">
             {filteredTx.length} / {transactions.length} transaction{transactions.length > 1 ? 's' : ''}
+            {loadingFullHistory && (
+              <span className="ml-2 inline-flex items-center gap-1 text-slate-400">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Chargement…
+              </span>
+            )}
+            {!loadingFullHistory && !fullHistoryLoaded && transactions.length >= 100 && (
+              <span className="ml-2 text-amber-400/80">(aperçu — historique en cours de chargement)</span>
+            )}
             {' · '}
             <span className="text-emerald-400">
               +{formatAmt(filteredTx.filter(t => t.type === 'credit').reduce((s, t) => s + t.montant, 0))} F$

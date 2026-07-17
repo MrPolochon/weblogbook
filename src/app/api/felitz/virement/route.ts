@@ -3,6 +3,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { rateLimit } from '@/lib/rate-limit';
+import { fetchAllFelitzVirements } from '@/lib/felitz/utils';
 import { canVirementCompteAllianceFelitz } from '@/lib/co-pdg-utils';
 import { virerFelitzAvecTrace } from '@/lib/felitz/atomic';
 
@@ -178,18 +179,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    let query = admin.from('felitz_virements')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (compteId) {
-      query = query.eq('compte_source_id', compteId);
-    } else {
-      query = query.eq('created_by', user.id);
+    let data: Array<Record<string, unknown>>;
+    try {
+      data = compteId
+        ? await fetchAllFelitzVirements(admin, { compteSourceId: compteId })
+        : await fetchAllFelitzVirements(admin, { createdBy: user.id });
+    } catch {
+      return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 400 });
     }
-
-    const { data, error } = await query.limit(50);
-    if (error) return NextResponse.json({ error: 'Erreur lors du chargement' }, { status: 400 });
 
     return NextResponse.json(data);
   } catch (e) {
