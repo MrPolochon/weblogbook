@@ -210,11 +210,6 @@ export default async function FelitzBankPage() {
 
           {comptePerso ? (
             <div className="p-5 space-y-4">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-800/60">
-                <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">VBAN</span>
-                <span className="font-mono text-slate-300 text-xs break-all">{comptePerso.vban}</span>
-              </div>
-
               <div className="rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 p-5">
                 <p className="text-xs text-emerald-400/80 uppercase tracking-wider font-medium mb-1">Solde disponible</p>
                 <p className="text-3xl font-bold text-emerald-300 tabular-nums">
@@ -225,6 +220,7 @@ export default async function FelitzBankPage() {
               <FelitzBankClient
                 compteId={comptePerso.id}
                 solde={comptePerso.solde}
+                vban={comptePerso.vban}
                 transactions={transactionsPerso}
                 isAdmin={isAdmin}
               />
@@ -266,6 +262,7 @@ export default async function FelitzBankPage() {
                     <FelitzBankClient
                       compteId={compte.id}
                       solde={compte.solde}
+                      vban={compte.vban}
                       transactions={transactionsEntrepriseByCompte[compte.id] || []}
                       isAdmin={isAdmin}
                       isEntreprise
@@ -293,11 +290,6 @@ export default async function FelitzBankPage() {
 
             <div className="grid gap-5 sm:grid-cols-2 p-5">
               <div className="space-y-4">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800/40 border border-red-500/10">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">VBAN</span>
-                  <span className="font-mono text-slate-300 text-xs break-all">{compteMilitaire.vban}</span>
-                </div>
-
                 <div className="rounded-xl bg-gradient-to-br from-red-500/10 to-red-600/5 border border-red-500/20 p-5">
                   <p className="text-xs text-red-400/80 uppercase tracking-wider font-medium mb-1">Solde disponible</p>
                   <p className="text-3xl font-bold text-red-300 tabular-nums">
@@ -308,6 +300,7 @@ export default async function FelitzBankPage() {
                 <FelitzBankClient
                   compteId={compteMilitaire.id}
                   solde={compteMilitaire.solde}
+                  vban={compteMilitaire.vban}
                   transactions={transactionsMilitaire}
                   isAdmin={isAdmin}
                   isMilitaire

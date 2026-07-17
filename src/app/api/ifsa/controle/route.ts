@@ -131,35 +131,54 @@ export async function GET(req: NextRequest) {
 
       if (!compagnie) return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
 
-      const { data: compteEntreprise, error: compteError } = await admin
-        .from('felitz_comptes')
-        .select('*')
-        .eq('compagnie_id', id)
-        .eq('type', 'entreprise')
-        .maybeSingle();
+      // Compte entreprise + compte perso PDG en parallèle
+      const [
+        { data: compteEntreprise, error: compteError },
+        { data: pdgProfile },
+      ] = await Promise.all([
+        admin.from('felitz_comptes').select('*').eq('compagnie_id', id).eq('type', 'entreprise').maybeSingle(),
+        compagnie.pdg_id
+          ? admin.from('profiles').select('id, identifiant, role').eq('id', compagnie.pdg_id).single()
+          : Promise.resolve({ data: null }),
+      ]);
 
       if (compteError) {
         console.error('Erreur chargement compte compagnie:', compteError);
       }
 
-      let transactions: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
-      if (compteEntreprise && compteEntreprise.id) {
-        const { data, error: txError } = await admin
-          .from('felitz_transactions')
-          .select('*')
-          .eq('compte_id', compteEntreprise.id)
-          .order('created_at', { ascending: false })
-          .limit(100);
-        if (txError) {
-          console.error('Erreur chargement transactions compagnie:', txError, 'compte_id:', compteEntreprise.id);
-        }
-        transactions = (data || []).map(t => ({
-          id: t.id,
-          type: t.type,
-          montant: t.montant,
-          libelle: t.libelle,
-          description: t.description,
-          created_at: t.created_at
+      // Transactions entreprise + compte perso PDG en parallèle
+      const [txEntrepriseRes, pdgCompteRes] = await Promise.all([
+        compteEntreprise?.id
+          ? admin.from('felitz_transactions').select('*').eq('compte_id', compteEntreprise.id)
+            .order('created_at', { ascending: false }).limit(200)
+          : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+        compagnie.pdg_id
+          ? admin.from('felitz_comptes').select('*').eq('proprietaire_id', compagnie.pdg_id).eq('type', 'personnel').maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+
+      const transactions = (txEntrepriseRes.data || []).map((t: Record<string, unknown>) => ({
+        id: t.id as string,
+        type: t.type as string,
+        montant: t.montant as number,
+        libelle: (t.libelle as string) ?? '',
+        description: (t.description as string | null) ?? null,
+        created_at: t.created_at as string,
+      }));
+
+      // Transactions du compte perso PDG
+      let pdgTransactions: typeof transactions = [];
+      if (pdgCompteRes.data?.id) {
+        const { data: pdgTx } = await admin.from('felitz_transactions').select('*')
+          .eq('compte_id', pdgCompteRes.data.id)
+          .order('created_at', { ascending: false }).limit(100);
+        pdgTransactions = (pdgTx || []).map((t: Record<string, unknown>) => ({
+          id: t.id as string,
+          type: t.type as string,
+          montant: t.montant as number,
+          libelle: (t.libelle as string) ?? '',
+          description: (t.description as string | null) ?? null,
+          created_at: t.created_at as string,
         }));
       }
 
@@ -196,6 +215,9 @@ export async function GET(req: NextRequest) {
         compagnie,
         compte: compteEntreprise,
         transactions,
+        pdgProfile: pdgProfile ?? null,
+        pdgCompte: pdgCompteRes.data ?? null,
+        pdgTransactions,
         pilotes,
         logbook: {
           totalMinutes,

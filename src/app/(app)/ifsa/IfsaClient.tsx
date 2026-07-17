@@ -8,12 +8,13 @@ import {
   AlertTriangle, FileSearch, Gavel, Plus, X, Check, Loader2,
   Clock, User, Building2, Search, Eye, CheckCircle2, BookOpen, Landmark,
   ShieldCheck, XCircle, Ban, Plane, Wrench, MapPin, Hash, Calendar, Timer,
-  Filter, Inbox, Sparkles
+  Filter, Inbox, Sparkles, ChevronDown
 } from 'lucide-react';
 import { formatDateMediumUTC, formatTimeUTC, toLocaleDateStringUTC, toLocaleStringUTC } from '@/lib/date-utils';
 import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { formatDuree } from '@/lib/utils';
 import CarteIdentite from '@/components/CarteIdentite';
+import FelitzTransactionsHistory from '@/components/FelitzTransactionsHistory';
 
 interface Signalement {
   id: string;
@@ -150,6 +151,9 @@ interface IfsaCompagnieData {
   compagnie: { id: string; nom: string; vban: string | null; pdg_id: string | null };
   compte: IfsaCompte | null;
   transactions: IfsaTransaction[];
+  pdgProfile: { id: string; identifiant: string; role: string | null } | null;
+  pdgCompte: IfsaCompte | null;
+  pdgTransactions: IfsaTransaction[];
   pilotes: Array<{ id: string; identifiant: string; role: string | null }>;
   logbook: { totalMinutes: number; vols: IfsaVol[] };
 }
@@ -219,6 +223,11 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   const [piloteData, setPiloteData] = useState<IfsaPiloteData | null>(null);
   const [loadingCompagnie, setLoadingCompagnie] = useState(false);
   const [loadingPilote, setLoadingPilote] = useState(false);
+  const [txCompagniePeriod, setTxCompagniePeriod] = useState<'7d' | '30d' | '90d' | 'all'>('all');
+  const [txPilotePeriod, setTxPilotePeriod] = useState<'7d' | '30d' | '90d' | 'all'>('all');
+  const [showPdgCompte, setShowPdgCompte] = useState(false);
+  const [showExportCompagnie, setShowExportCompagnie] = useState(false);
+  const [showExportPilote, setShowExportPilote] = useState(false);
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [verificationResult, setVerificationResult] = useState<{
     soldeCalculee: number;
@@ -1284,6 +1293,34 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                     <p className="text-slate-200 font-semibold">{compagnieData.compagnie.nom}</p>
                   </div>
 
+                  {/* Indicateurs financiers compagnie */}
+                  {compagnieData.transactions.length > 0 && (() => {
+                    const txAll = compagnieData.transactions;
+                    const totalSalaires = txAll.filter(t => t.type === 'credit' && (t.libelle || '').toLowerCase().includes('salaire')).reduce((s, t) => s + t.montant, 0);
+                    const totalTaxes = txAll.filter(t => t.type === 'debit' && (t.libelle || '').toLowerCase().includes('taxe')).reduce((s, t) => s + t.montant, 0);
+                    const nbVols = compagnieData.logbook.vols.filter(v => v.statut === 'validé').length;
+                    const revMoyParVol = nbVols > 0 ? Math.round(totalSalaires / nbVols) : 0;
+                    return (
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="p-2 rounded-lg bg-sky-500/8 border border-sky-500/15 text-center">
+                          <p className="text-[9px] text-sky-400/70 uppercase tracking-wider font-semibold">Salaires reçus</p>
+                          <p className="text-sm font-bold text-sky-300 tabular-nums">+{totalSalaires.toLocaleString('fr-FR')}</p>
+                          <p className="text-[9px] text-slate-600">F$</p>
+                        </div>
+                        <div className="p-2 rounded-lg bg-orange-500/8 border border-orange-500/15 text-center">
+                          <p className="text-[9px] text-orange-400/70 uppercase tracking-wider font-semibold">Taxes payées</p>
+                          <p className="text-sm font-bold text-orange-300 tabular-nums">{totalTaxes.toLocaleString('fr-FR')}</p>
+                          <p className="text-[9px] text-slate-600">F$</p>
+                        </div>
+                        <div className="p-2 rounded-lg bg-purple-500/8 border border-purple-500/15 text-center">
+                          <p className="text-[9px] text-purple-400/70 uppercase tracking-wider font-semibold">Moy./vol</p>
+                          <p className="text-sm font-bold text-purple-300 tabular-nums">{revMoyParVol.toLocaleString('fr-FR')}</p>
+                          <p className="text-[9px] text-slate-600">F$</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-900/40">
                     <p className="text-sm font-medium text-slate-200 mb-2 flex items-center gap-2">
                       <Landmark className="h-4 w-4 text-emerald-400" />
@@ -1295,42 +1332,56 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                         <p className="text-2xl font-bold text-emerald-300">
                           {compagnieData.compte.solde.toLocaleString('fr-FR')} F$
                         </p>
-                        <div className="mt-3">
-                          <p className="text-xs text-slate-400 mb-1">Transactions récentes</p>
-                          {compagnieData.transactions && compagnieData.transactions.length > 0 ? (
-                            <div className="space-y-1 max-h-72 overflow-y-auto">
-                              {compagnieData.transactions.map((t: { id: string; type: string; montant: number; libelle?: string; description?: string | null; created_at: string }) => (
-                                <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1 gap-2">
-                                  <div className="flex-1 min-w-0">
-                                    <span className="text-slate-400 break-all text-xs">{t.libelle || t.description || '—'}</span>
-                                    <span className="text-[10px] text-slate-600 ml-2">{new Date(t.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                                  </div>
-                                  <span className={`whitespace-nowrap font-medium ${t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}`}>
-                                    {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-slate-500">Aucune transaction</p>
-                          )}
+
+                        {/* Filtres période + export */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          {(['7d', '30d', '90d', 'all'] as const).map(p => (
+                            <button key={p} type="button" onClick={() => setTxCompagniePeriod(p)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${txCompagniePeriod === p ? 'bg-emerald-600/60 text-emerald-200' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}`}>
+                              {p === 'all' ? 'Tout' : p === '7d' ? '7j' : p === '30d' ? '30j' : '3m'}
+                            </button>
+                          ))}
+                          <button type="button" onClick={() => setShowExportCompagnie(v => !v)}
+                            className="ml-auto px-2 py-0.5 rounded text-[10px] bg-slate-700/50 text-slate-400 hover:bg-slate-700 transition-colors">
+                            {showExportCompagnie ? 'Masquer export' : 'Export'}
+                          </button>
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => verifierSolde('compagnie', selectedCompagnieId)}
-                            disabled={verificationLoading}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 disabled:opacity-50"
-                          >
+
+                        {/* Export texte copier-coller */}
+                        {showExportCompagnie && (() => {
+                          const nowMs = Date.now();
+                          const days = txCompagniePeriod === '7d' ? 7 : txCompagniePeriod === '30d' ? 30 : txCompagniePeriod === '90d' ? 90 : Infinity;
+                          const txExp = compagnieData.transactions.filter(t =>
+                            (nowMs - new Date(t.created_at).getTime()) / 86_400_000 <= days
+                          );
+                          const txt = txExp.map(t =>
+                            `${new Date(t.created_at).toISOString().slice(0, 16).replace('T', ' ')} | ${t.type === 'credit' ? '+' : '-'}${Math.abs(t.montant).toLocaleString('fr-FR')} F$ | ${t.libelle || '—'}`
+                          ).join('\n');
+                          return (
+                            <textarea readOnly value={txt}
+                              className="w-full h-32 text-[10px] font-mono bg-slate-800/60 border border-slate-700/50 rounded-lg p-2 text-slate-400 resize-none" />
+                          );
+                        })()}
+
+                        <FelitzTransactionsHistory
+                          transactions={(() => {
+                            const nowMs = Date.now();
+                            const days = txCompagniePeriod === '7d' ? 7 : txCompagniePeriod === '30d' ? 30 : txCompagniePeriod === '90d' ? 90 : Infinity;
+                            return compagnieData.transactions.filter(t =>
+                              (nowMs - new Date(t.created_at).getTime()) / 86_400_000 <= days
+                            );
+                          })()}
+                          maxHeight="300px"
+                        />
+
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button type="button" onClick={() => verifierSolde('compagnie', selectedCompagnieId)} disabled={verificationLoading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 disabled:opacity-50">
                             {verificationLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
                             Vérifier la solde
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => verifierOrigineVirements('compagnie', selectedCompagnieId)}
-                            disabled={verificationLoading}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 disabled:opacity-50"
-                          >
+                          <button type="button" onClick={() => verifierOrigineVirements('compagnie', selectedCompagnieId)} disabled={verificationLoading}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 disabled:opacity-50">
                             {verificationLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
                             Vérifier l&apos;origine des virements
                           </button>
@@ -1347,6 +1398,38 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                       <p className="text-sm text-slate-500">Aucun compte entreprise.</p>
                     )}
                   </div>
+
+                  {/* Compte perso PDG */}
+                  {compagnieData.pdgProfile && (
+                    <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-900/40">
+                      <button type="button" onClick={() => setShowPdgCompte(v => !v)}
+                        className="w-full flex items-center justify-between text-sm font-medium text-slate-200 mb-0">
+                        <span className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-amber-400" />
+                          Compte perso PDG — {compagnieData.pdgProfile.identifiant}
+                        </span>
+                        <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${showPdgCompte ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showPdgCompte && (
+                        <div className="mt-3 space-y-2 animate-fade-in">
+                          {compagnieData.pdgCompte ? (
+                            <>
+                              <p className="text-xs text-slate-500 font-mono">{compagnieData.pdgCompte.vban}</p>
+                              <p className="text-xl font-bold text-amber-300 tabular-nums">
+                                {compagnieData.pdgCompte.solde.toLocaleString('fr-FR')} F$
+                              </p>
+                              <FelitzTransactionsHistory
+                                transactions={compagnieData.pdgTransactions}
+                                maxHeight="240px"
+                              />
+                            </>
+                          ) : (
+                            <p className="text-xs text-slate-500 mt-2">Aucun compte personnel trouvé.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="p-3 rounded-lg border border-slate-700/50 bg-slate-800/40">
                     <p className="text-sm font-medium text-slate-200 mb-2">Pilotes de la compagnie</p>
@@ -1505,27 +1588,77 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                         <p className="text-2xl font-bold text-emerald-300">
                           {piloteData.compte.solde.toLocaleString('fr-FR')} F$
                         </p>
-                        <div className="mt-3">
-                          <p className="text-xs text-slate-400 mb-1">Transactions récentes</p>
-                          {piloteData.transactions && piloteData.transactions.length > 0 ? (
-                            <div className="space-y-1 max-h-72 overflow-y-auto">
-                              {piloteData.transactions.map((t: { id: string; type: string; montant: number; libelle?: string; description?: string | null; created_at: string }) => (
-                                <div key={t.id} className="flex items-center justify-between text-sm border-b border-slate-700/40 pb-1 gap-2">
-                                  <div className="flex-1 min-w-0">
-                                    <span className="text-slate-400 break-all text-xs">{t.libelle || t.description || '—'}</span>
-                                    <span className="text-[10px] text-slate-600 ml-2">{new Date(t.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                                  </div>
-                                  <span className={`whitespace-nowrap font-medium ${t.type === 'credit' ? 'text-emerald-400' : 'text-red-400'}`}>
-                                    {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
-                                  </span>
-                                </div>
-                              ))}
+
+                        {/* Indicateurs financiers pilote */}
+                        {piloteData.transactions.length > 0 && (() => {
+                          const txAll = piloteData.transactions;
+                          const totalSalaires = txAll.filter(t => t.type === 'credit' && (t.libelle || '').toLowerCase().includes('salaire')).reduce((s, t) => s + t.montant, 0);
+                          const totalTaxes = txAll.filter(t => t.type === 'debit' && (t.libelle || '').toLowerCase().includes('taxe')).reduce((s, t) => s + t.montant, 0);
+                          const nbVols = piloteData.logbook.vols.filter(v => v.statut === 'validé').length;
+                          const revMoyParVol = nbVols > 0 ? Math.round(totalSalaires / nbVols) : 0;
+                          return (
+                            <div className="grid grid-cols-3 gap-2 mt-1">
+                              <div className="p-2 rounded-lg bg-sky-500/8 border border-sky-500/15 text-center">
+                                <p className="text-[9px] text-sky-400/70 uppercase tracking-wider font-semibold">Salaires reçus</p>
+                                <p className="text-sm font-bold text-sky-300 tabular-nums">+{totalSalaires.toLocaleString('fr-FR')}</p>
+                                <p className="text-[9px] text-slate-600">F$</p>
+                              </div>
+                              <div className="p-2 rounded-lg bg-orange-500/8 border border-orange-500/15 text-center">
+                                <p className="text-[9px] text-orange-400/70 uppercase tracking-wider font-semibold">Taxes payées</p>
+                                <p className="text-sm font-bold text-orange-300 tabular-nums">{totalTaxes.toLocaleString('fr-FR')}</p>
+                                <p className="text-[9px] text-slate-600">F$</p>
+                              </div>
+                              <div className="p-2 rounded-lg bg-purple-500/8 border border-purple-500/15 text-center">
+                                <p className="text-[9px] text-purple-400/70 uppercase tracking-wider font-semibold">Moy./vol</p>
+                                <p className="text-sm font-bold text-purple-300 tabular-nums">{revMoyParVol.toLocaleString('fr-FR')}</p>
+                                <p className="text-[9px] text-slate-600">F$</p>
+                              </div>
                             </div>
-                          ) : (
-                            <p className="text-xs text-slate-500">Aucune transaction</p>
-                          )}
+                          );
+                        })()}
+
+                        {/* Filtres période + export */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          {(['7d', '30d', '90d', 'all'] as const).map(p => (
+                            <button key={p} type="button" onClick={() => setTxPilotePeriod(p)}
+                              className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${txPilotePeriod === p ? 'bg-emerald-600/60 text-emerald-200' : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'}`}>
+                              {p === 'all' ? 'Tout' : p === '7d' ? '7j' : p === '30d' ? '30j' : '3m'}
+                            </button>
+                          ))}
+                          <button type="button" onClick={() => setShowExportPilote(v => !v)}
+                            className="ml-auto px-2 py-0.5 rounded text-[10px] bg-slate-700/50 text-slate-400 hover:bg-slate-700 transition-colors">
+                            {showExportPilote ? 'Masquer export' : 'Export'}
+                          </button>
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
+
+                        {/* Export texte copier-coller */}
+                        {showExportPilote && (() => {
+                          const nowMs = Date.now();
+                          const days = txPilotePeriod === '7d' ? 7 : txPilotePeriod === '30d' ? 30 : txPilotePeriod === '90d' ? 90 : Infinity;
+                          const txExp = piloteData.transactions.filter(t =>
+                            (nowMs - new Date(t.created_at).getTime()) / 86_400_000 <= days
+                          );
+                          const txt = txExp.map(t =>
+                            `${new Date(t.created_at).toISOString().slice(0, 16).replace('T', ' ')} | ${t.type === 'credit' ? '+' : '-'}${Math.abs(t.montant).toLocaleString('fr-FR')} F$ | ${t.libelle || '—'}`
+                          ).join('\n');
+                          return (
+                            <textarea readOnly value={txt}
+                              className="w-full h-32 text-[10px] font-mono bg-slate-800/60 border border-slate-700/50 rounded-lg p-2 text-slate-400 resize-none" />
+                          );
+                        })()}
+
+                        <FelitzTransactionsHistory
+                          transactions={(() => {
+                            const nowMs = Date.now();
+                            const days = txPilotePeriod === '7d' ? 7 : txPilotePeriod === '30d' ? 30 : txPilotePeriod === '90d' ? 90 : Infinity;
+                            return piloteData.transactions.filter(t =>
+                              (nowMs - new Date(t.created_at).getTime()) / 86_400_000 <= days
+                            );
+                          })()}
+                          maxHeight="300px"
+                        />
+
+                        <div className="mt-2 flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => verifierSolde('pilote', selectedPiloteId)}

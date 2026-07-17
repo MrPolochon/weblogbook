@@ -246,7 +246,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
     <>
       <button
         onClick={openModal}
-        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40 flex items-center gap-1.5 shrink-0"
       >
         <ShoppingCart className="h-4 w-4" />
         Acheter

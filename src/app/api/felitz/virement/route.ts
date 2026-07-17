@@ -34,6 +34,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Montant invalide (entier positif requis)' }, { status: 400 });
     }
 
+    // Libellé obligatoire pour virements > 1 000 000 F$
+    if (montant > 1_000_000 && (!libelle || !String(libelle).trim())) {
+      return NextResponse.json(
+        { error: 'Le libellé est obligatoire pour les virements supérieurs à 1 000 000 F$' },
+        { status: 400 },
+      );
+    }
+
     const admin = createAdminClient();
 
     // Compte source + profil en parallèle (indépendants).

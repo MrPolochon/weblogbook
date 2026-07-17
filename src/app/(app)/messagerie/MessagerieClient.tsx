@@ -91,6 +91,14 @@ function truncate(text: string, max: number): string {
   return oneLine.length <= max ? oneLine : oneLine.slice(0, max) + '…';
 }
 
+function sortByUnread(msgs: Message[]): Message[] {
+  return [...msgs].sort((a, b) => {
+    if (!a.lu && b.lu) return -1;
+    if (a.lu && !b.lu) return 1;
+    return 0;
+  });
+}
+
 function avatar(name: string, photoByIdentifiant?: Record<string, string | null>) {
   const photoUrl = photoByIdentifiant ? photoByIdentifiant[name] ?? null : null;
   return <UserAvatar identifiant={name} photoUrl={photoUrl} size="md" />;
@@ -145,10 +153,10 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
 
   function currentTabMessages(): Message[] {
     switch (activeTab) {
-      case 'inbox': return messagesNormaux;
-      case 'recrutement': return invitations;
-      case 'cheques': return cheques;
-      case 'sanctions': return sanctions;
+      case 'inbox': return sortByUnread(messagesNormaux);
+      case 'recrutement': return sortByUnread(invitations);
+      case 'cheques': return sortByUnread(cheques);
+      case 'sanctions': return sortByUnread(sanctions);
       case 'sent': return localEnvoyes;
       default: return [];
     }
@@ -226,7 +234,12 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
 
   async function handleMarkAsRead(id: string) {
     patchLocal(id, { lu: true });
-    await fetch(`/api/messages/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'marquer_lu' }) });
+    await new Promise<void>(r => setTimeout(r, 500));
+    const res = await fetch(`/api/messages/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'marquer_lu' }) });
+    if (!res.ok) {
+      patchLocal(id, { lu: false });
+      console.error('[MESSAGERIE] Erreur marquage lu:', await res.text());
+    }
   }
 
   const handleMarkAllAsRead = useCallback(async () => {
