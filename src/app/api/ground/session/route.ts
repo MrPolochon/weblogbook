@@ -59,9 +59,11 @@ export async function POST(request: Request) {
 
   await admin.from('ground_sessions').delete().eq('user_id', user.id);
 
+  const ap = String(body.aeroport).toUpperCase();
+
   const { data: session, error } = await admin
     .from('ground_sessions')
-    .insert({ user_id: user.id, aeroport: body.aeroport })
+    .insert({ user_id: user.id, aeroport: ap })
     .select()
     .single();
 

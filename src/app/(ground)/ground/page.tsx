@@ -26,42 +26,28 @@ export default async function GroundPage() {
 
   const aeroport = session.aeroport.toUpperCase();
 
-  console.log(`[GC page] aeroport avant query=${aeroport}`);
-
-  // Test sans filtre pour vérifier que la table contient des données
-  const { data: testPlans } = await admin
-    .from('plans_vol')
-    .select('id, callsign, aeroport_depart, aeroport_arrivee, statut')
-    .limit(10);
-  console.log('[GC DEBUG] plans sans filtre (10 premiers):',
-    testPlans?.length ?? 0,
-    testPlans?.map(p => `${p.aeroport_depart}→${p.aeroport_arrivee} [${p.statut}]`),
-  );
+  const STATUTS_ACTIFS = ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture', 'automonitoring'];
 
   let plans: PlanVol[] = [];
   try {
     const { data, error } = await admin
       .from('plans_vol')
       .select('id, callsign, immatriculation, porte, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
-      .or(`aeroport_depart.eq.${aeroport},aeroport_arrivee.eq.${aeroport}`)
-      .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture', 'automonitoring'])
+      .or(`aeroport_depart.ilike.${aeroport},aeroport_arrivee.ilike.${aeroport}`)
+      .in('statut', STATUTS_ACTIFS)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('[GC page] plans_vol error:', JSON.stringify(error));
-      if (error.message?.includes('porte')) {
-        const { data: data2 } = await admin
-          .from('plans_vol')
-          .select('id, callsign, immatriculation, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
-          .or(`aeroport_depart.eq.${aeroport},aeroport_arrivee.eq.${aeroport}`)
-          .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture', 'automonitoring'])
-          .order('created_at', { ascending: false });
-        plans = (data2 ?? []) as PlanVol[];
-      }
+    if (error?.message?.includes('porte')) {
+      const { data: data2 } = await admin
+        .from('plans_vol')
+        .select('id, callsign, immatriculation, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
+        .or(`aeroport_depart.ilike.${aeroport},aeroport_arrivee.ilike.${aeroport}`)
+        .in('statut', STATUTS_ACTIFS)
+        .order('created_at', { ascending: false });
+      plans = (data2 ?? []) as PlanVol[];
     } else {
       plans = (data ?? []) as PlanVol[];
     }
-    console.log(`[GC page] aeroport=${aeroport} plans trouvés:`, plans.length, plans.map(p => ({ id: p.id, callsign: p.callsign, statut: p.statut, dep: p.aeroport_depart })));
   } catch (e) {
     console.error('[GC page] plans_vol exception:', e);
   }
@@ -71,7 +57,7 @@ export default async function GroundPage() {
     const { data, error } = await admin
       .from('ground_service_requests')
       .select('id, plan_vol_id, service_type, statut, accepted_by, direction, pilote_confirme, pax_count, aeroport, requested_at')
-      .eq('aeroport', aeroport)
+      .ilike('aeroport', aeroport)
       .in('statut', ['pending', 'accepted', 'in_progress'])
       .order('requested_at', { ascending: true });
 
