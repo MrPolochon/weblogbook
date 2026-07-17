@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { unlockAudioForIOS } from '@/lib/phone-sounds';
 import { speakNow } from '@/lib/tts';
 import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX, AlertTriangle } from 'lucide-react';
-import { Room, RoomEvent, Track, ConnectionState } from 'livekit-client';
+import { useLiveKitCall } from '@/hooks/useLiveKitCall';
 
 type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connecting' | 'connected';
 
@@ -42,9 +42,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   const [callState, setCallState] = useState<CallState>('idle');
   const [incomingCall, setIncomingCall] = useState<{ from: string; fromPosition: string; callId: string; isEmergency?: boolean } | null>(null);
   const [currentCall, setCurrentCall] = useState<{ to: string; toPosition: string; callId: string } | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
-  const [audioLevel, setAudioLevel] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState('');
   const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
   const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
@@ -56,14 +54,10 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   const [micTestLevel, setMicTestLevel] = useState(0);
   const [showEmergencyOverlay, setShowEmergencyOverlay] = useState(false);
   
-  const roomRef = useRef<Room | null>(null);
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const shouldPlaySoundRef = useRef(false);
   const emergencyAlarmRef = useRef<{ osc: OscillatorNode; ctx: AudioContext } | null>(null);
-  const audioContainerRef = useRef<HTMLDivElement | null>(null);
-  const attachedAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
   const micTestStreamRef = useRef<MediaStream | null>(null);
   const micTestAudioContextRef = useRef<AudioContext | null>(null);
   const micTestRafRef = useRef<number | null>(null);
@@ -106,29 +100,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     return () => mediaDevices.removeEventListener('devicechange', onDeviceChange);
   }, [refreshAudioDevices]);
 
-  const applyOutputDevice = useCallback(async (audioElement: HTMLAudioElement) => {
-    audioElement.volume = 1.0;
-    audioElement.autoplay = true;
-    audioElement.setAttribute('playsinline', 'true');
-    audioElement.setAttribute('webkit-playsinline', 'true');
-    audioElement.style.position = 'absolute';
-    audioElement.style.left = '-9999px';
-    audioElement.style.width = '1px';
-    audioElement.style.height = '1px';
-    audioElement.style.opacity = '0';
-    const maybeSetSink = audioElement as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
-    if (selectedOutputId && typeof maybeSetSink.setSinkId === 'function') {
-      try {
-        await maybeSetSink.setSinkId(selectedOutputId);
-      } catch (e) {
-        console.warn('[SIAVI Phone] setSinkId failed:', e);
-      }
-    }
-    const playPromise = audioElement.play();
-    if (playPromise) {
-      playPromise.catch((e) => console.warn('[SIAVI Phone] audio play blocked:', e));
-    }
-  }, [selectedOutputId]);
 
   const stopLocalMicTest = useCallback(() => {
     if (micTestRafRef.current != null) {
@@ -281,6 +252,15 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     setShowEmergencyOverlay(false);
   }, []);
 
+  const { audioContainerRef, audioLevel, isMuted, cleanupLiveKit, joinLiveKitCall, toggleMute } = useLiveKitCall({
+    selectedInputId,
+    selectedOutputId,
+    playSound,
+    playMessage,
+    onConnectionStatusChange: setConnectionStatus,
+    onExtraCleanup: stopEmergencyAlarm,
+  });
+
   // Sonnerie
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -346,26 +326,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     return () => { if (checkIntervalRef.current) clearInterval(checkIntervalRef.current); };
   }, [callState, incomingCall, stopEmergencyAlarm]);
 
-  // Cleanup LiveKit
-  const cleanupLiveKit = useCallback(async () => {
-    if (audioLevelIntervalRef.current) {
-      clearInterval(audioLevelIntervalRef.current);
-      audioLevelIntervalRef.current = null;
-    }
-    attachedAudioElementsRef.current.forEach((el) => {
-      try {
-        el.remove();
-      } catch (_) { /* ignore */ }
-    });
-    attachedAudioElementsRef.current.clear();
-    if (roomRef.current) {
-      await roomRef.current.disconnect();
-      roomRef.current = null;
-    }
-    stopEmergencyAlarm();
-    setAudioLevel(0);
-    setConnectionStatus('');
-  }, [stopEmergencyAlarm]);
 
   // Timeout 30s pour appels non connectés
   useEffect(() => {
@@ -386,226 +346,11 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         setNumber('');
         setIncomingCall(null);
         setCurrentCall(null);
-        setIsMuted(false);
       }, 30000);
       return () => clearTimeout(timeout);
     }
   }, [callState, currentCall, incomingCall, cleanupLiveKit, playMessage, stopEmergencyAlarm]);
 
-  // Rejoindre appel LiveKit
-  const joinLiveKitCall = useCallback(async (callId: string): Promise<boolean> => {
-    setConnectionStatus('Connexion...');
-    
-    try {
-      const response = await fetch('/api/livekit/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomName: `call-${callId}`, participantName: `${aeroport}-AFIS` }),
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        console.error('[LiveKit SIAVI] Token error:', data);
-        throw new Error(data.details || data.error || 'Erreur token LiveKit');
-      }
-      
-      const { token, url } = data;
-      
-      if (!url) {
-        console.error('[LiveKit SIAVI] URL manquante');
-        throw new Error('URL LiveKit non configurée');
-      }
-      
-      const room = new Room({
-        adaptiveStream: true,
-        dynacast: true,
-        audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      roomRef.current = room;
-      
-      room.on(RoomEvent.Connected, () => {
-        setConnectionStatus('En attente...');
-        // Ne pas dire "Communications établie" ici, attendre l'autre participant
-      });
-      
-      room.on(RoomEvent.Disconnected, (_reason) => {
-        cleanupLiveKit();
-        setCallState('idle');
-        setNumber('');
-        setIncomingCall(null);
-        setCurrentCall(null);
-        setIsMuted(false);
-        playSound('end');
-        playMessage('Appel terminé');
-      });
-      
-      room.on(RoomEvent.ParticipantConnected, (participant) => {
-        stopEmergencyAlarm();
-        setCallState('connected');
-        setConnectionStatus('Connecté');
-        playSound('connected');
-        playMessage('Communications établie');
-        
-        // Attacher les tracks audio déjà publiés (si le participant a rejoint avant nous).
-        // Dédoublonné par sid pour éviter l'écho dû à un attache via TrackSubscribed.
-        participant.audioTrackPublications.forEach((publication) => {
-          if (publication.track && publication.isSubscribed) {
-            const trackSid = (publication.track as { sid?: string }).sid ?? 'audio-fallback';
-            if (attachedAudioElementsRef.current.has(trackSid)) return;
-            const audioElement = publication.track.attach() as HTMLAudioElement;
-            const container = audioContainerRef.current ?? document.body;
-            container.appendChild(audioElement);
-            void applyOutputDevice(audioElement);
-            attachedAudioElementsRef.current.set(trackSid, audioElement);
-          }
-        });
-      });
-
-      // Quand l'autre participant raccroche
-      room.on(RoomEvent.ParticipantDisconnected, (_participant) => {
-        stopEmergencyAlarm();
-        cleanupLiveKit();
-        setCallState('idle');
-        setNumber('');
-        setIncomingCall(null);
-        setCurrentCall(null);
-        setIsMuted(false);
-        playSound('end');
-        playMessage('Correspondant a raccroché');
-      });
-      
-      room.on(RoomEvent.TrackSubscribed, (track, _publication, _participant) => {
-        if (track.kind === Track.Kind.Audio) {
-          const trackSid = (track as { sid?: string }).sid ?? 'audio-fallback';
-          if (attachedAudioElementsRef.current.has(trackSid)) return;
-          const audioElement = track.attach() as HTMLAudioElement;
-          const container = audioContainerRef.current ?? document.body;
-          container.appendChild(audioElement);
-          void applyOutputDevice(audioElement);
-          attachedAudioElementsRef.current.set(trackSid, audioElement);
-          
-          if (!audioLevelIntervalRef.current) {
-            audioLevelIntervalRef.current = setInterval(() => {
-              const participants = Array.from(room.remoteParticipants.values());
-              if (participants.length > 0) {
-                setAudioLevel(participants[0].audioLevel || 0);
-              }
-            }, 100);
-          }
-        }
-      });
-
-      room.on(RoomEvent.TrackUnsubscribed, (track) => {
-        if (track.kind === Track.Kind.Audio) {
-          const sid = (track as { sid?: string }).sid;
-          if (sid) {
-            const el = attachedAudioElementsRef.current.get(sid);
-            if (el) {
-              el.remove();
-              attachedAudioElementsRef.current.delete(sid);
-            }
-          }
-          track.detach();
-        }
-      });
-      
-      room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
-        if (state === ConnectionState.Connected) {
-          setConnectionStatus('Connecté');
-        } else if (state === ConnectionState.Reconnecting) {
-          setConnectionStatus('Reconnexion...');
-        } else if (state === ConnectionState.Disconnected) {
-          setConnectionStatus('Déconnecté');
-        } else {
-          setConnectionStatus(state);
-        }
-      });
-
-      room.on(RoomEvent.MediaDevicesError, (error) => {
-        console.error('[LiveKit SIAVI] Media devices error:', error);
-        playMessage('Erreur microphone');
-      });
-      
-      const connectPromise = room.connect(url, token, { autoSubscribe: true });
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout connexion')), 15000)
-      );
-      
-      await Promise.race([connectPromise, timeoutPromise]);
-      
-      if (selectedInputId) {
-        const roomWithSwitch = room as unknown as {
-          switchActiveDevice?: (kind: string, deviceId: string) => Promise<void>;
-        };
-        try {
-          await roomWithSwitch.switchActiveDevice?.('audioinput', selectedInputId);
-        } catch (e) {
-          console.warn('[SIAVI Phone] switchActiveDevice(audioinput) failed:', e);
-        }
-      }
-      if (selectedOutputId) {
-        const roomWithSwitch = room as unknown as {
-          switchActiveDevice?: (kind: string, deviceId: string) => Promise<void>;
-        };
-        try {
-          await roomWithSwitch.switchActiveDevice?.('audiooutput', selectedOutputId);
-        } catch (e) {
-          console.warn('[SIAVI Phone] switchActiveDevice(audiooutput) failed:', e);
-        }
-      }
-      await room.localParticipant.setMicrophoneEnabled(true);
-      
-      // Vérifier si l'autre participant est DÉJÀ dans la room (rejoint avant nous)
-      const existingParticipants = Array.from(room.remoteParticipants.values());
-      if (existingParticipants.length > 0) {
-        stopEmergencyAlarm();
-        setCallState('connected');
-        setConnectionStatus('Connecté');
-        playSound('connected');
-        playMessage('Communications établie');
-        existingParticipants.forEach(p => {
-          p.audioTrackPublications.forEach(pub => {
-            if (pub.track && pub.track.kind === Track.Kind.Audio) {
-              const trackSid = (pub.track as { sid?: string }).sid ?? 'audio-fallback';
-              if (attachedAudioElementsRef.current.has(trackSid)) return;
-              const audioElement = pub.track.attach() as HTMLAudioElement;
-              const container = audioContainerRef.current ?? document.body;
-              container.appendChild(audioElement);
-              void applyOutputDevice(audioElement);
-              attachedAudioElementsRef.current.set(trackSid, audioElement);
-            }
-          });
-        });
-        if (!audioLevelIntervalRef.current) {
-          audioLevelIntervalRef.current = setInterval(() => {
-            const participants = Array.from(room.remoteParticipants.values());
-            if (participants.length > 0) setAudioLevel(participants[0].audioLevel || 0);
-          }, 100);
-        }
-      }
-      return true;
-    } catch (err) {
-      console.error('[LiveKit SIAVI] Error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
-      setConnectionStatus(`Erreur: ${errorMessage}`);
-      playMessage('Impossible d\'établir la communication');
-      await cleanupLiveKit();
-      setCallState('idle');
-      return false;
-    }
-  }, [aeroport, cleanupLiveKit, playSound, playMessage, stopEmergencyAlarm, selectedInputId, selectedOutputId, applyOutputDevice]);
-
-  useEffect(() => {
-    if (!roomRef.current || !selectedOutputId) return;
-    const roomWithSwitch = roomRef.current as unknown as {
-      switchActiveDevice?: (kind: string, deviceId: string) => Promise<void>;
-    };
-    void roomWithSwitch.switchActiveDevice?.('audiooutput', selectedOutputId);
-    attachedAudioElementsRef.current.forEach((el) => {
-      void applyOutputDevice(el);
-    });
-  }, [selectedOutputId, applyOutputDevice]);
 
   useEffect(() => {
     if (!isMicTestActive) return;
@@ -678,7 +423,11 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           const statusData = await statusRes.json();
           if (statusData.status === 'connected') {
             setCallState('connecting');
-            const ok = await joinLiveKitCall(data.call.id);
+            const ok = await joinLiveKitCall(data.call.id, `${aeroport}-AFIS`, {
+              onConnected: () => { stopEmergencyAlarm(); setCallState('connected'); },
+              onDisconnected: () => { setCallState('idle'); setNumber(''); setIncomingCall(null); setCurrentCall(null); },
+              onParticipantDisconnected: () => { setCallState('idle'); setNumber(''); setIncomingCall(null); setCurrentCall(null); },
+            });
             if (!ok) {
               await fetch('/api/siavi/telephone/hangup', {
                 method: 'POST',
@@ -686,6 +435,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
                 body: JSON.stringify({ callId: data.call.id }),
               }).catch(() => {});
               playMessage('Connexion audio échouée');
+              setCallState('idle');
+              setCurrentCall(null);
             }
             return;
           }
@@ -721,7 +472,11 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       });
       if (res.ok) {
         setCurrentCall({ to: incomingCall.from, toPosition: incomingCall.fromPosition, callId: incomingCall.callId });
-        const ok = await joinLiveKitCall(incomingCall.callId);
+        const ok = await joinLiveKitCall(incomingCall.callId, `${aeroport}-AFIS`, {
+          onConnected: () => { stopEmergencyAlarm(); setCallState('connected'); },
+          onDisconnected: () => { setCallState('idle'); setNumber(''); setIncomingCall(null); setCurrentCall(null); },
+          onParticipantDisconnected: () => { setCallState('idle'); setNumber(''); setIncomingCall(null); setCurrentCall(null); },
+        });
         if (!ok) {
           await fetch('/api/siavi/telephone/hangup', {
             method: 'POST',
@@ -764,15 +519,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     setNumber('');
     setIncomingCall(null);
     setCurrentCall(null);
-    setIsMuted(false);
-  };
-
-  const toggleMute = async () => {
-    if (roomRef.current?.localParticipant) {
-      const newMuted = !isMuted;
-      await roomRef.current.localParticipant.setMicrophoneEnabled(!newMuted);
-      setIsMuted(newMuted);
-    }
   };
 
   const resetPhone = async () => {
@@ -783,7 +529,6 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     setNumber('');
     setIncomingCall(null);
     setCurrentCall(null);
-    setIsMuted(false);
   };
 
   useEffect(() => () => {

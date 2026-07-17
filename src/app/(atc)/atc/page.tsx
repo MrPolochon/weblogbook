@@ -42,59 +42,97 @@ export default async function AtcPage() {
     .filter((p) => !p.current_holder_user_id || !sessionsActivesSet.has(p.current_holder_user_id))
     .map((p) => ({ id: p.id, numero_vol: p.numero_vol, aeroport_depart: p.aeroport_depart, aeroport_arrivee: p.aeroport_arrivee }));
 
-  // Enrichir les plans avec les données pilote, compagnie et avion (pour strips)
-  const plansChezMoi: StripData[] = await Promise.all((plansChezMoiRaw || []).map(async (plan) => {
+  // Enrichir les plans — batch queries pour éviter N+1 (6 requêtes totales au lieu de N×4-6)
+  const rawPlans = plansChezMoiRaw || [];
+
+  // Collecter tous les IDs uniques pour les jointures
+  const compagnieAvionIds = [...new Set(rawPlans.map(p => p.compagnie_avion_id).filter((id): id is string => Boolean(id)))];
+  const inventaireAvionIds = [...new Set(rawPlans.map(p => p.inventaire_avion_id).filter((id): id is string => Boolean(id)))];
+  const siaviAvionIds = [...new Set(rawPlans.map(p => p.siavi_avion_id).filter((id): id is string => Boolean(id)))];
+  const piloteIds = [...new Set(rawPlans.map(p => p.pilote_id).filter((id): id is string => Boolean(id)))];
+  const compagnieIds = [...new Set(rawPlans.map(p => p.compagnie_id).filter((id): id is string => Boolean(id)))];
+
+  type AvionRow = { id: string; immatriculation: string | null; type_avion_id: string | null };
+  type PiloteRow = { id: string; identifiant: string | null };
+  type CompagnieRow = { id: string; code_oaci: string | null; callsign_telephonie: string | null };
+
+  // Batch 1 : 5 requêtes en parallèle
+  const [compAvionsRes, invAvionsRes, siaviAvionsRes, pilotesRes, compagniesRes] = await Promise.all([
+    compagnieAvionIds.length > 0
+      ? admin.from('compagnie_avions').select('id, immatriculation, type_avion_id').in('id', compagnieAvionIds)
+      : Promise.resolve({ data: [] as AvionRow[] }),
+    inventaireAvionIds.length > 0
+      ? admin.from('inventaire_avions').select('id, immatriculation, type_avion_id').in('id', inventaireAvionIds)
+      : Promise.resolve({ data: [] as AvionRow[] }),
+    siaviAvionIds.length > 0
+      ? admin.from('siavi_avions').select('id, immatriculation, type_avion_id').in('id', siaviAvionIds)
+      : Promise.resolve({ data: [] as AvionRow[] }),
+    piloteIds.length > 0
+      ? admin.from('profiles').select('id, identifiant').in('id', piloteIds)
+      : Promise.resolve({ data: [] as PiloteRow[] }),
+    compagnieIds.length > 0
+      ? admin.from('compagnies').select('id, code_oaci, callsign_telephonie').in('id', compagnieIds)
+      : Promise.resolve({ data: [] as CompagnieRow[] }),
+  ]);
+
+  const compAvionById = new Map((compAvionsRes.data ?? []).map(a => [a.id, a]));
+  const invAvionById = new Map((invAvionsRes.data ?? []).map(a => [a.id, a]));
+  const siaviAvionById = new Map((siaviAvionsRes.data ?? []).map(a => [a.id, a]));
+  const piloteById = new Map((pilotesRes.data ?? []).map(p => [p.id, p]));
+  const compagnieById = new Map((compagniesRes.data ?? []).map(c => [c.id, c]));
+
+  // Déterminer tous les type_avion_id effectifs (cascade compagnie > inventaire > siavi par plan)
+  const typeAvionIdSet = new Set<string>();
+  for (const plan of rawPlans) {
+    const compAvion = plan.compagnie_avion_id ? compAvionById.get(plan.compagnie_avion_id) : undefined;
+    const invAvion = (!compAvion?.type_avion_id && plan.inventaire_avion_id)
+      ? invAvionById.get(plan.inventaire_avion_id) : undefined;
+    const siaviAvion = (!compAvion?.type_avion_id && !invAvion?.type_avion_id && plan.siavi_avion_id)
+      ? siaviAvionById.get(plan.siavi_avion_id) : undefined;
+    const typeId = compAvion?.type_avion_id ?? invAvion?.type_avion_id ?? siaviAvion?.type_avion_id;
+    if (typeId) typeAvionIdSet.add(typeId);
+  }
+
+  // Batch 2 : types_avion (1 seule requête)
+  type TypeAvionRow = { id: string; nom: string | null; code_oaci: string | null };
+  const typeAvionIdList = [...typeAvionIdSet];
+  const { data: typesAvionData } = typeAvionIdList.length > 0
+    ? await admin.from('types_avion').select('id, nom, code_oaci').in('id', typeAvionIdList)
+    : { data: [] as TypeAvionRow[] };
+  const typeAvionById = new Map((typesAvionData ?? []).map(t => [t.id, t]));
+
+  // Enrichissement synchrone en O(1) — plus aucune requête DB
+  const plansChezMoi: StripData[] = rawPlans.map(plan => {
     let immatriculation: string | null = null;
     let typeAvionCodeOaci: string | null = null;
     let typeAvionNom: string | null = null;
     let piloteIdentifiant: string | null = null;
     let callsignTelephonie: string | null = null;
 
-    let typeAvionId: string | null = null;
-
-    if (plan.compagnie_avion_id) {
-      const { data: avionData } = await admin.from('compagnie_avions')
-        .select('immatriculation, type_avion_id')
-        .eq('id', plan.compagnie_avion_id)
-        .single();
-      if (avionData) {
-        immatriculation = avionData.immatriculation;
-        typeAvionId = avionData.type_avion_id ?? null;
-      }
+    // Cascade avion : compagnie → inventaire → siavi
+    const compAvion = plan.compagnie_avion_id ? compAvionById.get(plan.compagnie_avion_id) : undefined;
+    if (compAvion) {
+      immatriculation = compAvion.immatriculation ?? null;
     }
 
-    // Fallback : avion personnel (inventaire pilote)
-    if (!typeAvionId && plan.inventaire_avion_id) {
-      const { data: invData } = await admin.from('inventaire_avions')
-        .select('immatriculation, type_avion_id')
-        .eq('id', plan.inventaire_avion_id)
-        .single();
-      if (invData) {
-        if (!immatriculation) immatriculation = invData.immatriculation ?? null;
-        typeAvionId = invData.type_avion_id ?? null;
-      }
+    const invAvion = (!compAvion?.type_avion_id && plan.inventaire_avion_id)
+      ? invAvionById.get(plan.inventaire_avion_id) : undefined;
+    if (invAvion) {
+      if (!immatriculation) immatriculation = invAvion.immatriculation ?? null;
     }
 
-    // Fallback : avion institutionnel SIAVI (MEDEVAC, etc.)
-    if (!typeAvionId && plan.siavi_avion_id) {
-      const { data: siaviData } = await admin.from('siavi_avions')
-        .select('immatriculation, type_avion_id')
-        .eq('id', plan.siavi_avion_id)
-        .single();
-      if (siaviData) {
-        if (!immatriculation) immatriculation = siaviData.immatriculation ?? null;
-        typeAvionId = siaviData.type_avion_id ?? null;
-      }
+    const siaviAvion = (!compAvion?.type_avion_id && !invAvion?.type_avion_id && plan.siavi_avion_id)
+      ? siaviAvionById.get(plan.siavi_avion_id) : undefined;
+    if (siaviAvion) {
+      if (!immatriculation) immatriculation = siaviAvion.immatriculation ?? null;
     }
 
+    const typeAvionId = compAvion?.type_avion_id ?? invAvion?.type_avion_id ?? siaviAvion?.type_avion_id ?? null;
     if (typeAvionId) {
-      const { data: typeData } = await admin.from('types_avion')
-        .select('nom, code_oaci')
-        .eq('id', typeAvionId)
-        .single();
+      const typeData = typeAvionById.get(typeAvionId);
       if (typeData) {
-        typeAvionCodeOaci = typeData.code_oaci;
-        typeAvionNom = typeData.nom;
+        typeAvionCodeOaci = typeData.code_oaci ?? null;
+        typeAvionNom = typeData.nom ?? null;
       }
     }
 
@@ -106,19 +144,12 @@ export default async function AtcPage() {
     }
 
     if (plan.pilote_id) {
-      const { data: piloteData } = await admin.from('profiles')
-        .select('identifiant')
-        .eq('id', plan.pilote_id)
-        .single();
-      if (piloteData) piloteIdentifiant = piloteData.identifiant;
+      const piloteData = piloteById.get(plan.pilote_id);
+      if (piloteData) piloteIdentifiant = piloteData.identifiant ?? null;
     }
 
-    // Récupérer le callsign téléphonie de la compagnie (seulement si le n° de vol utilise le code OACI)
     if (plan.compagnie_id) {
-      const { data: compData } = await admin.from('compagnies')
-        .select('code_oaci, callsign_telephonie')
-        .eq('id', plan.compagnie_id)
-        .single();
+      const compData = compagnieById.get(plan.compagnie_id);
       if (compData?.callsign_telephonie && compData?.code_oaci) {
         const nv = (plan.numero_vol || '').toUpperCase();
         if (nv.startsWith(compData.code_oaci.toUpperCase())) {
@@ -171,7 +202,7 @@ export default async function AtcPage() {
       bria_conversation: plan.bria_conversation || null,
       current_holder_user_id: plan.current_holder_user_id || null,
     } as StripData;
-  }));
+  });
 
   // Les sessions sont déjà enrichies avec les JOIN dans la requête ci-dessus
   // Fallback pour éviter les erreurs TypeScript

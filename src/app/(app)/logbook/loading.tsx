@@ -1,15 +1,18 @@
-import { BookOpen } from 'lucide-react';
+import { SkeletonTable } from '@/components/Skeleton';
 
 export default function LogbookLoading() {
   return (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
-      <div className="relative">
-        <div className="h-16 w-16 rounded-full border-2 border-slate-700/50 border-t-sky-500 animate-spin" />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <BookOpen className="h-6 w-6 text-sky-400" />
-        </div>
+    <div className="space-y-6">
+      <div className="h-36 animate-pulse bg-gradient-to-br from-sky-600/20 via-sky-700/15 to-indigo-800/20 rounded-2xl" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-24 rounded-xl animate-pulse bg-slate-800/40" />
+        ))}
       </div>
-      <p className="text-slate-400 text-sm animate-pulse">Chargement du logbook…</p>
+      <div className="card border-slate-700/40">
+        <div className="h-5 w-1/4 rounded animate-pulse bg-slate-700/50 mb-4" />
+        <SkeletonTable rows={6} />
+      </div>
     </div>
   );
 }

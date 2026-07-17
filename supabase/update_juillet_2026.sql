@@ -22,12 +22,8 @@ WHERE type IN (
   'CLASS-MRP',
   'IFR',
   'VFR',
-  'COM 1',
-  'COM 2',
-  'COM 3',
-  'COM 4',
-  'COM 5',
-  'COM 6'
+  'IFR',
+  'VFR'
 );
 
 -- -----------------------------------------------------------------------------
@@ -56,7 +52,7 @@ WHERE statut IN ('assigne', 'accepte', 'en_cours')
     'Multi Crew attestation',
     'CLASS-M', 'CLASS-MT', 'CLASS-MRP',
     'IFR', 'VFR',
-    'COM 1', 'COM 2', 'COM 3', 'COM 4', 'COM 5', 'COM 6'
+    'IFR', 'VFR'
   );
 
 -- Annuler les demandes de training pilote en cours

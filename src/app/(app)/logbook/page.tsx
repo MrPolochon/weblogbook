@@ -7,6 +7,14 @@ import { Plus, BookOpen, Plane, FileText, Clock, CheckCircle2, XCircle, Timer, T
 import VolDeleteButton from '@/components/VolDeleteButton';
 import NePasEnregistrerPlanButton from './NePasEnregistrerPlanButton';
 import ExportLogbookButton from './ExportLogbookButton';
+import { StatusBadge } from '@/components/StatusBadge';
+import type { StatusBadgeConfig } from '@/components/StatusBadge';
+
+const VOL_STATUT_MAP: Record<string, StatusBadgeConfig> = {
+  'validé': { label: 'Valide', className: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25', icon: <CheckCircle2 className="h-3 w-3" /> },
+  'refusé': { label: 'Refusé', className: 'bg-red-500/15 text-red-400 border border-red-500/25', icon: <XCircle className="h-3 w-3" /> },
+  'en_attente': { label: 'Attente', className: 'bg-amber-500/15 text-amber-400 border border-amber-500/25', icon: <Timer className="h-3 w-3" /> },
+};
 
 export default async function LogbookPage() {
   const supabase = await createClient();
@@ -254,15 +262,7 @@ export default async function LogbookPage() {
                         <span className="font-mono text-xs bg-slate-700/60 px-1.5 py-0.5 rounded text-slate-200 font-bold">{v.aeroport_depart || '—'}</span>
                         <ArrowRight className="h-3 w-3 text-slate-500 shrink-0" />
                         <span className="font-mono text-xs bg-slate-700/60 px-1.5 py-0.5 rounded text-slate-200 font-bold">{v.aeroport_arrivee || '—'}</span>
-                        <span className={cn(
-                          'ml-auto inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-medium shrink-0',
-                          v.statut === 'validé' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25' :
-                          v.statut === 'refusé' ? 'bg-red-500/15 text-red-400 border border-red-500/25' :
-                          'bg-amber-500/15 text-amber-400 border border-amber-500/25'
-                        )}>
-                          {v.statut === 'validé' ? <CheckCircle2 className="h-3 w-3" /> : v.statut === 'refusé' ? <XCircle className="h-3 w-3" /> : <Timer className="h-3 w-3" />}
-                          {v.statut === 'validé' ? 'Valide' : v.statut === 'refusé' ? 'Refusé' : 'Attente'}
-                        </span>
+                        <StatusBadge status={v.statut} map={VOL_STATUT_MAP} className="ml-auto shrink-0" />
                       </div>
                       <div className="flex items-center gap-3 flex-wrap">
                         <span className="text-xs text-slate-400">{formatDateMediumUTC(v.depart_utc)}</span>
@@ -340,13 +340,7 @@ export default async function LogbookPage() {
                         })()}
                       </td>
                       <td className="py-3 pr-4">
-                        <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
-                          v.statut === 'validé' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25' :
-                          v.statut === 'refusé' ? 'bg-red-500/15 text-red-400 border border-red-500/25' :
-                          'bg-amber-500/15 text-amber-400 border border-amber-500/25')}>
-                          {v.statut === 'validé' ? <CheckCircle2 className="h-3 w-3" /> : v.statut === 'refusé' ? <XCircle className="h-3 w-3" /> : <Timer className="h-3 w-3" />}
-                          {v.statut === 'validé' ? 'Valide' : v.statut === 'refusé' ? 'Refusé' : 'Attente'}
-                        </span>
+                        <StatusBadge status={v.statut} map={VOL_STATUT_MAP} />
                       </td>
                       <td className="py-3">
                         <VolDeleteButton volId={v.id} canDelete={isAdmin || (v.type_vol === 'Instruction' && v.instructeur_id ? v.instructeur_id === user.id : (v.pilote_id === user.id || v.copilote_id === user.id))} />
