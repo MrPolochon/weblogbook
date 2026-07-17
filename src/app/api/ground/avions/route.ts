@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic';
+﻿export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
       .or(`aeroport_depart.ilike.${aeroport},aeroport_arrivee.ilike.${aeroport}`)
       .in('statut', STATUTS_ACTIFS)
       .order('created_at', { ascending: false });
-    data = res.data;
+    data = res.data as unknown as typeof data;
     error = res.error;
   }
 
@@ -41,6 +41,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const plans = (data ?? []).map(p => ({ porte: null, ...p }));
+  const plans = (data ?? []).map(p => ({ ...p, porte: p.porte ?? null }));
   return NextResponse.json({ plans });
 }
