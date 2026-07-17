@@ -1,7 +1,10 @@
 export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { loadAeroSchoolRespondentProfiles } from '@/lib/aeroschool-respondent-profiles';
+import {
+  fallbackRespondentProfile,
+  loadAeroSchoolRespondentProfiles,
+} from '@/lib/aeroschool-respondent-profiles';
 import { NextResponse } from 'next/server';
 
 // GET — liste des réponses pour un formulaire (admin)
@@ -30,10 +33,18 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     const enriched = rows.map((row) => {
       const uid = row.user_id as string | null;
-      if (!uid) return row;
-      const profile = profilesByUserId.get(uid);
-      if (!profile) return row;
-      return { ...row, respondent_profile: profile };
+      const respondentIdentifiant = (row.respondent_identifiant as string | null)?.trim() || null;
+
+      if (uid) {
+        const profile = profilesByUserId.get(uid);
+        if (profile) return { ...row, respondent_profile: profile };
+      }
+
+      if (respondentIdentifiant) {
+        return { ...row, respondent_profile: fallbackRespondentProfile(respondentIdentifiant) };
+      }
+
+      return row;
     });
 
     return NextResponse.json(enriched);

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { defaultCarteForIdentifiant } from '@/lib/cartes/default-carte';
 
 export type AeroSchoolRespondentCarte = {
   couleur_fond: string;
@@ -68,12 +69,24 @@ export async function loadAeroSchoolRespondentProfiles(
   );
 
   for (const id of uniqueIds) {
+    const identifiant = identifiantById.get(id) || id.slice(0, 8);
+    const carte = carteById.get(id) ?? null;
     map.set(id, {
-      identifiant: identifiantById.get(id) || id.slice(0, 8),
+      identifiant,
       discord_username: discordById.get(id) ?? null,
-      carte: carteById.get(id) ?? null,
+      carte: carte ?? defaultCarteForIdentifiant(identifiant),
     });
   }
 
   return map;
+}
+
+/** Profil minimal quand seul respondent_identifiant est connu (pas de user_id). */
+export function fallbackRespondentProfile(identifiant: string): AeroSchoolRespondentProfile {
+  const id = identifiant.trim() || '—';
+  return {
+    identifiant: id,
+    discord_username: null,
+    carte: defaultCarteForIdentifiant(id),
+  };
 }

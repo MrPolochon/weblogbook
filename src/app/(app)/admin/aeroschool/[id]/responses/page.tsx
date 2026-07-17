@@ -58,64 +58,59 @@ interface Response {
 
 function RespondentBlock({ resp }: { resp: Response }) {
   const profile = resp.respondent_profile;
-  const identifiant = profile?.identifiant || resp.respondent_identifiant;
-  const isAnonymous = !resp.user_id && !identifiant;
+  const identifiant = profile?.identifiant || resp.respondent_identifiant?.trim() || null;
+  const isAnonymous = !identifiant;
 
   if (isAnonymous) {
     return (
-      <div className="px-4 pb-3 border-b border-slate-700/30">
+      <div className="px-4 py-3 border-b border-slate-700/30 bg-slate-900/30">
         <p className="text-xs text-slate-500 italic flex items-center gap-1.5">
           <User className="h-3.5 w-3.5 shrink-0" />
-          Répondant anonyme
+          Répondant anonyme — aucune carte disponible
         </p>
       </div>
     );
   }
 
-  if (profile) {
-    return (
-      <div className="px-4 pb-3 border-b border-slate-700/30">
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-start">
-          <div className="shrink-0">
-            <CarteIdentite
-              carte={profile.carte}
-              identifiant={profile.identifiant}
-              size="sm"
-            />
-          </div>
-          <div className="flex-1 min-w-0 rounded-lg border border-slate-700/50 bg-slate-900/40 p-3 space-y-2">
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-slate-500">Répondant</p>
-              <p className="text-slate-100 font-semibold truncate">{profile.identifiant}</p>
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-wide text-slate-500">Discord</p>
-              {profile.discord_username ? (
-                <p className="text-slate-300 text-sm truncate">{profile.discord_username}</p>
-              ) : (
-                <p className="text-slate-600 italic text-sm">Pas de compte Discord lié</p>
-              )}
-            </div>
-            {resp.user_id && (
-              <Link
-                href={`/admin/pilotes/${resp.user_id}`}
-                className="inline-flex text-xs text-sky-400 hover:text-sky-300 transition-colors"
-              >
-                Voir le profil pilote →
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const carte = profile?.carte ?? null;
+  const discordUsername = profile?.discord_username ?? null;
 
   return (
-    <div className="px-4 pb-3 border-b border-slate-700/30">
-      <p className="text-xs text-sky-300/80 flex items-center gap-1.5">
-        <User className="h-3.5 w-3.5 shrink-0" />
-        Répondant : {identifiant}
+    <div className="px-4 py-4 border-b border-slate-700/40 bg-gradient-to-b from-slate-900/60 to-slate-900/20">
+      <p className="text-[10px] uppercase tracking-widest text-sky-400/90 font-semibold mb-3">
+        Carte d&apos;identité pilote
       </p>
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-center lg:items-start">
+        <div className="shrink-0 mx-auto lg:mx-0">
+          <CarteIdentite
+            carte={carte}
+            identifiant={identifiant}
+            size="md"
+          />
+        </div>
+        <div className="flex-1 w-full min-w-0 rounded-xl border border-slate-600/50 bg-slate-900/50 p-4 space-y-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-slate-500">Identifiant pilote</p>
+            <p className="text-slate-100 font-bold text-lg truncate">{identifiant}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wide text-slate-500">Discord</p>
+            {discordUsername ? (
+              <p className="text-slate-200 text-base font-medium truncate">{discordUsername}</p>
+            ) : (
+              <p className="text-slate-600 italic text-sm">Pas de compte Discord lié</p>
+            )}
+          </div>
+          {resp.user_id && (
+            <Link
+              href={`/admin/pilotes/${resp.user_id}`}
+              className="inline-flex items-center gap-1 text-sm text-sky-400 hover:text-sky-300 transition-colors font-medium"
+            >
+              Voir le profil pilote complet →
+            </Link>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -245,6 +240,8 @@ export default function AdminResponsesPage() {
               : 'border-slate-700/50 bg-slate-800/60'
         }`}
       >
+        <RespondentBlock resp={resp} />
+
         <div
           className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-700/20 transition-colors"
           onClick={() => setExpanded(expanded === resp.id ? null : resp.id)}
@@ -316,8 +313,6 @@ export default function AdminResponsesPage() {
             {expanded === resp.id ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
           </div>
         </div>
-
-        <RespondentBlock resp={resp} />
 
         {expanded === resp.id && (
           <div className="border-t border-slate-700/50 p-4 space-y-4">
