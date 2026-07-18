@@ -4,8 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { addMinutes, parseISO } from 'date-fns';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
-import { NATURES_VOL_MILITAIRE } from '@/lib/avions-militaires';
-import { ARME_MISSIONS } from '@/lib/armee-missions';
+import { canSubmitVolMilitaire, createVolMilitaire } from '@/lib/armee';
 import { isQualifiedFlightInstructorInLogbook } from '@/lib/instruction-permissions';
 
 export async function POST(request: Request) {
@@ -23,195 +22,14 @@ export async function POST(request: Request) {
     const body = await request.json();
     const type_vol = body.type_vol;
 
-    // --- Vol militaire ---
+    // --- Vol militaire (délègue au service armée ; préférer POST /api/armee/vols) ---
     if (type_vol === 'Vol militaire') {
-      if (!profile.armee && profile.role !== 'admin') return NextResponse.json({ error: 'Réservé aux utilisateurs avec le rôle Armée (ou aux admins).' }, { status: 403 });
-      const {
-        armee_avion_id: armeeAvionId,
-        mission_id: missionIdBody,
-        escadrille_ou_escadron: eoe,
-        nature_vol_militaire: nvm,
-        nature_vol_militaire_autre: nvma,
-        aeroport_depart: ad,
-        aeroport_arrivee: aa,
-        duree_minutes: dm,
-        depart_utc: du,
-        commandant_bord: cb,
-        role_pilote: rp,
-        pilote_id: pidB,
-        copilote_id: cidB,
-        callsign: csB,
-        equipage_ids: equipageIdsBody,
-      } = body;
-      if (!armeeAvionId) {
-        return NextResponse.json({ error: 'Avion militaire requis.' }, { status: 400 });
+      if (!canSubmitVolMilitaire(profile)) {
+        return NextResponse.json({ error: 'Réservé aux utilisateurs avec le rôle Armée (ou aux admins).' }, { status: 403 });
       }
-      if (!['escadrille', 'escadron', 'autre'].includes(String(eoe))) {
-        return NextResponse.json({ error: 'Indiquez si le vol était en escadrille, en escadron ou autre.' }, { status: 400 });
-      }
-      if (eoe === 'autre') {
-        if (!nvm || !(NATURES_VOL_MILITAIRE as readonly string[]).includes(String(nvm))) {
-          return NextResponse.json({ error: 'Nature du vol militaire requise (entraînement, escorte, sauvetage, reconnaissance ou autre).' }, { status: 400 });
-        }
-        if (nvm === 'autre' && (!nvma || !String(nvma).trim())) {
-          return NextResponse.json({ error: 'Précisez la nature du vol (champ autre).' }, { status: 400 });
-        }
-      }
-      if (!ad || !CODES_OACI_VALIDES.has(String(ad).toUpperCase()) || !aa || !CODES_OACI_VALIDES.has(String(aa).toUpperCase())) {
-        return NextResponse.json({ error: 'Aéroports de départ et d\'arrivée requis (code OACI valide).' }, { status: 400 });
-      }
-      const dmNum = typeof dm === 'number' ? dm : parseInt(String(dm), 10);
-      if (isNaN(dmNum) || dmNum < 1 || !du || !cb) {
-        return NextResponse.json({ error: 'Champs requis manquants ou invalides.' }, { status: 400 });
-      }
-
-      const admin = createAdminClient();
-      const { data: avionArmee } = await admin.from('armee_avions')
-        .select('id, nom_personnalise, types_avion:types_avion(id, nom, est_militaire)')
-        .eq('id', armeeAvionId)
-        .single();
-
-      if (!avionArmee?.types_avion) {
-        return NextResponse.json({ error: 'Avion militaire introuvable.' }, { status: 404 });
-      }
-
-      const typeAvion = Array.isArray(avionArmee.types_avion) ? avionArmee.types_avion[0] : avionArmee.types_avion;
-      if (!typeAvion?.est_militaire) {
-        return NextResponse.json({ error: 'Cet avion n\'est pas militaire.' }, { status: 400 });
-      }
-
-      const typeAvionMilitaire = (avionArmee.nom_personnalise || typeAvion.nom || '').trim();
-      if (!typeAvionMilitaire) {
-        return NextResponse.json({ error: 'Type d\'avion militaire invalide.' }, { status: 400 });
-      }
-
-      const mission = missionIdBody
-        ? ARME_MISSIONS.find((m) => m.id === String(missionIdBody))
-        : null;
-      if (missionIdBody && !mission) {
-        return NextResponse.json({ error: 'Mission introuvable.' }, { status: 404 });
-      }
-      if (mission) {
-        if (!nvm) {
-          return NextResponse.json({ error: 'Nature de mission requise.' }, { status: 400 });
-        }
-        if (
-          String(ad).toUpperCase() !== mission.aeroport_depart ||
-          String(aa).toUpperCase() !== mission.aeroport_arrivee ||
-          dmNum !== mission.duree_minutes ||
-          String(eoe) !== mission.escadrille_ou_escadron ||
-          String(nvm) !== mission.nature_vol_militaire
-        ) {
-          return NextResponse.json({ error: 'Le plan de vol ne correspond pas à la mission sélectionnée.' }, { status: 400 });
-        }
-
-        const cooldownMs = mission.cooldownMinutes * 60000;
-        const { data: lastGlobal } = await admin.from('armee_missions_log')
-          .select('created_at')
-          .eq('mission_id', mission.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (lastGlobal?.created_at) {
-          const last = new Date(lastGlobal.created_at).getTime();
-          if (Date.now() - last < cooldownMs) {
-            return NextResponse.json({ error: `Mission indisponible (cooldown global ${mission.cooldownMinutes} min).` }, { status: 400 });
-          }
-        }
-      }
-
-      const missionRewardBase = mission
-        ? Math.floor(Math.random() * (mission.rewardMax - mission.rewardMin + 1)) + mission.rewardMin
-        : null;
-
-      const isEscadrilleOuEscadron = eoe === 'escadrille' || eoe === 'escadron';
-      let targetPiloteId: string;
-      let targetCopiloteId: string | null = null;
-      let rolePiloteVal: string;
-
-      if (isEscadrilleOuEscadron) {
-        targetPiloteId = user.id;
-        targetCopiloteId = null;
-        rolePiloteVal = 'Pilote';
-        const equipageIds: string[] = Array.isArray(equipageIdsBody) ? equipageIdsBody.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
-        for (const eid of equipageIds) {
-          if (eid === user.id) continue;
-          const { data: ep } = await supabase.from('profiles').select('id, armee').eq('id', eid).single();
-          if (!ep || !ep.armee) return NextResponse.json({ error: 'Tous les pilotes de l\'équipage doivent avoir le rôle Armée.' }, { status: 400 });
-        }
-      } else {
-        if (!rp || !['Pilote', 'Co-pilote'].includes(String(rp))) {
-          return NextResponse.json({ error: 'Rôle pilote requis.' }, { status: 400 });
-        }
-        rolePiloteVal = String(rp);
-        if (rp === 'Co-pilote') {
-          if (!pidB) return NextResponse.json({ error: 'Qui était le pilote (commandant) ?' }, { status: 400 });
-          if (pidB === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être pilote et co-pilote.' }, { status: 400 });
-          const { data: pp } = await supabase.from('profiles').select('id, armee').eq('id', pidB).single();
-          if (!pp || !pp.armee) return NextResponse.json({ error: 'Le pilote doit avoir le rôle Armée.' }, { status: 400 });
-          targetPiloteId = pidB;
-          targetCopiloteId = user.id;
-        } else {
-          targetPiloteId = user.id;
-          if (cidB) {
-            if (cidB === user.id) return NextResponse.json({ error: 'Vous ne pouvez pas être pilote et co-pilote.' }, { status: 400 });
-            const { data: cp } = await supabase.from('profiles').select('id, armee').eq('id', cidB).single();
-            if (!cp || !cp.armee) return NextResponse.json({ error: 'Le co-pilote doit avoir le rôle Armée.' }, { status: 400 });
-            targetCopiloteId = cidB;
-          }
-        }
-      }
-
-      const depStr = /Z$/.test(String(du)) ? String(du) : String(du) + 'Z';
-      const dep = parseISO(depStr);
-      const arrivee = addMinutes(dep, dmNum);
-      const row = {
-        pilote_id: targetPiloteId,
-        copilote_id: targetCopiloteId,
-        copilote_confirme_par_pilote: false,
-        type_avion_id: null,
-        compagnie_id: null,
-        compagnie_libelle: 'Vol militaire',
-        type_avion_militaire: typeAvionMilitaire,
-        armee_avion_id: avionArmee.id,
-        mission_id: mission?.id || null,
-        mission_titre: mission?.titre || null,
-        mission_reward_base: missionRewardBase,
-        mission_status: mission ? 'en_attente' : null,
-        mission_refusals: mission ? 0 : 0,
-        escadrille_ou_escadron: String(eoe),
-        chef_escadron_id: eoe === 'escadron' ? user.id : null,
-        nature_vol_militaire: mission ? String(nvm) : (eoe === 'autre' ? String(nvm) : null),
-        nature_vol_militaire_autre: mission ? null : (eoe === 'autre' && nvm === 'autre' && nvma ? String(nvma).trim() : null),
-        aeroport_depart: String(ad).toUpperCase(),
-        aeroport_arrivee: String(aa).toUpperCase(),
-        duree_minutes: dmNum,
-        depart_utc: dep.toISOString(),
-        arrivee_utc: arrivee.toISOString(),
-        type_vol: 'Vol militaire',
-        instructeur_id: null,
-        instruction_type: null,
-        commandant_bord: String(cb).trim(),
-        role_pilote: rolePiloteVal,
-        callsign: csB != null && String(csB).trim() ? String(csB).trim() : null,
-        statut: 'en_attente',
-        created_by_admin: false,
-        created_by_user_id: null,
-      };
-      // Insert via service_role : RLS vols_insert exige pilote_id = auth.uid(), ce qui bloque
-      // un dépôt en tant que co-pilote (pilote réel = autre compte). Aligné sur le vol civil co-pilote.
-      const { data, error } = await admin.from('vols').insert(row).select('id').single();
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-
-      if (isEscadrilleOuEscadron) {
-        const equipageIds: string[] = Array.isArray(equipageIdsBody) ? equipageIdsBody.filter((x): x is string => typeof x === 'string' && x.length > 0) : [];
-        const tous = Array.from(new Set([user.id, ...equipageIds]));
-        if (tous.length > 0) {
-          await admin.from('vols_equipage_militaire').insert(tous.map((pid) => ({ vol_id: data.id, profile_id: pid })));
-        }
-      }
-
-      return NextResponse.json({ ok: true, id: data.id });
+      const result = await createVolMilitaire(body, { userId: user.id, supabase });
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+      return NextResponse.json({ ok: true, id: result.data.id });
     }
 
     const {

@@ -125,6 +125,15 @@ export default function ArmeeConfigClient({ compteMilitaire, pdgActuel, tousPilo
               </div>
             </div>
 
+            <div className="p-3 rounded-lg border border-slate-700/40 bg-slate-900/40 text-xs text-slate-400 space-y-1.5">
+              <p className="font-medium text-slate-300">Rôle du PDG militaire</p>
+              <p>
+                Commandant opérationnel de l&apos;espace militaire (pas un admin du site).
+                Il gère le briefing, valide/refuse les vols militaires et le compte Felitz Armée.
+                Seul un admin peut le nommer ou le révoquer ici.
+              </p>
+            </div>
+
             {/* Modifier le PDG */}
             <div className="p-4 bg-slate-800/30 rounded-lg border border-slate-700/50">
               <label className="block text-sm font-medium text-slate-300 mb-2">

@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getCargaisonInfo, TypeCargaison } from '@/lib/aeroports-ptfs';
 import { calculerUsureVol, TAUX_PRELEVEMENT_PRET } from '@/lib/compagnie-utils';
-import { ARME_MISSIONS } from '@/lib/armee-missions';
+import { getMissionById } from '@/lib/armee';
 import {
   ensureCompteEntreprise,
   ensureComptePersonnel,
@@ -203,7 +203,7 @@ async function payerMissionArmee(
 ): Promise<PaiementVolResult['missionArmee'] | { error: string } | null> {
   if (!plan.armee_mission_id) return null;
 
-  const mission = ARME_MISSIONS.find((m) => m.id === plan.armee_mission_id);
+  const mission = getMissionById(plan.armee_mission_id);
   if (!mission) {
     return { error: 'Mission militaire introuvable pour ce plan.' };
   }

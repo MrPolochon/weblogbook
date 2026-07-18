@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { addMinutes, subMinutes } from 'date-fns';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { NATURES_VOL_MILITAIRE } from '@/lib/avions-militaires';
-import { ARME_MISSIONS } from '@/lib/armee-missions';
+import { ARME_MISSIONS, LIB_ESC_FORM, LIB_NATURE_VOL } from '@/lib/armee';
 
 type Profil = { id: string; identifiant: string };
 type InventaireItem = {
@@ -41,13 +41,6 @@ function parseUtcLocal(s: string): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-const LIB_ESC = {
-  escadrille: 'Vol en escadrille',
-  escadron: 'Vol en escadron (vous = chef d\'escadron)',
-  autre: 'Ni l\'un ni l\'autre (précisez la nature)',
-} as const;
-const LIB_NATURE: Record<string, string> = { entrainement: 'Entraînement', escorte: 'Escorte', sauvetage: 'Sauvetage', reconnaissance: 'Reconnaissance', autre: 'Autre' };
-
 interface Props {
   vol: VolData;
   pilotesArmee: Profil[];
@@ -63,7 +56,7 @@ export default function EditVolMilitaireClient({ vol, pilotesArmee, inventaireMi
 
   const [armee_avion_id, setArmeeAvionId] = useState(vol.armee_avion_id || '');
   const [escadrille_ou_escadron, setEscadrilleOuEscadron] = useState<'escadrille' | 'escadron' | 'autre'>(
-    (vol.escadrille_ou_escadron as 'escadrille' | 'escadron' | 'autre') || 'escadrille'
+    (vol.escadrille_ou_escadron as 'escadrille' | 'escadron' | 'autre') || 'escadrille',
   );
   const [nature_vol_militaire, setNatureVolMilitaire] = useState(vol.nature_vol_militaire || '');
   const [nature_vol_militaire_autre, setNatureVolMilitaireAutre] = useState(vol.nature_vol_militaire_autre || '');
@@ -81,10 +74,11 @@ export default function EditVolMilitaireClient({ vol, pilotesArmee, inventaireMi
   const [error, setError] = useState<string | null>(null);
 
   const isEscadrilleOuEscadron = escadrille_ou_escadron === 'escadrille' || escadrille_ou_escadron === 'escadron';
-  const selectedMission = vol.mission_id ? ARME_MISSIONS.find(m => m.id === vol.mission_id) || null : null;
+  const selectedMission = vol.mission_id ? ARME_MISSIONS.find((m) => m.id === vol.mission_id) || null : null;
+  const missionLocked = Boolean(selectedMission);
 
   function toggleEquipage(id: string) {
-    setEquipageIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setEquipageIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   function computeDepartUtc(): string {
@@ -115,15 +109,6 @@ export default function EditVolMilitaireClient({ vol, pilotesArmee, inventaireMi
       setError('Veuillez remplir tous les champs requis.');
       return;
     }
-    if (selectedMission) {
-      if (
-        aeroport_depart !== selectedMission.aeroport_depart ||
-        aeroport_arrivee !== selectedMission.aeroport_arrivee
-      ) {
-        setError('Le plan de vol doit correspondre à la mission sélectionnée.');
-        return;
-      }
-    }
     if (escadrille_ou_escadron === 'autre' && !nature_vol_militaire) {
       setError('Indiquez la nature du vol.');
       return;
@@ -134,27 +119,31 @@ export default function EditVolMilitaireClient({ vol, pilotesArmee, inventaireMi
     }
 
     const depart_utc = computeDepartUtc();
-    if (!depart_utc) { setError('Heure invalide.'); return; }
+    if (!depart_utc) {
+      setError('Heure invalide.');
+      return;
+    }
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/vols/${vol.id}`, {
+      const res = await fetch(`/api/armee/vols/${vol.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          _edit_militaire: true,
-          type_vol: 'Vol militaire',
           armee_avion_id,
           escadrille_ou_escadron,
-          nature_vol_militaire: isEscadrilleOuEscadron ? null : nature_vol_militaire,
-          nature_vol_militaire_autre: isEscadrilleOuEscadron ? null : (nature_vol_militaire === 'autre' ? nature_vol_militaire_autre.trim() : null),
+          nature_vol_militaire: isEscadrilleOuEscadron && !selectedMission ? null : nature_vol_militaire,
+          nature_vol_militaire_autre:
+            isEscadrilleOuEscadron || nature_vol_militaire !== 'autre'
+              ? null
+              : nature_vol_militaire_autre.trim(),
           aeroport_depart,
           aeroport_arrivee,
           duree_minutes: d,
           depart_utc,
           commandant_bord: commandant_bord.trim(),
           callsign: callsign.trim() || null,
-          copilote_id: isEscadrilleOuEscadron ? null : (role_pilote === 'Pilote' && copilote_id ? copilote_id : null),
+          copilote_id: isEscadrilleOuEscadron ? null : role_pilote === 'Pilote' && copilote_id ? copilote_id : null,
           chef_escadron_id: escadrille_ou_escadron === 'escadron' ? vol.pilote_id : null,
           equipage_ids: isEscadrilleOuEscadron ? equipage_ids : [],
         }),
@@ -171,156 +160,259 @@ export default function EditVolMilitaireClient({ vol, pilotesArmee, inventaireMi
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card space-y-4 max-w-xl">
+    <form onSubmit={handleSubmit} className="space-y-5 max-w-2xl">
       {selectedMission && (
-        <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
-          <p className="text-sm font-medium text-sky-400">Mission : {selectedMission.titre}</p>
+        <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-4">
+          <p className="text-sm font-medium text-sky-300">Mission : {selectedMission.titre}</p>
           <p className="text-xs text-slate-400 mt-1">{selectedMission.description}</p>
+          <p className="text-xs text-amber-400/90 mt-2">Les champs de mission (itinéraire, durée, nature) restent verrouillés.</p>
         </div>
       )}
 
-      <div>
-        <label className="label">Avion de l&apos;armée *</label>
-        <select className="input" value={armee_avion_id} onChange={e => setArmeeAvionId(e.target.value)} required>
-          <option value="">— Choisir un avion —</option>
-          {inventaireMilitaire.map(inv => {
-            const typeAvion = inv.types_avion ? (Array.isArray(inv.types_avion) ? inv.types_avion[0] : inv.types_avion) : null;
-            return (
-              <option key={inv.id} value={inv.id}>
-                {inv.nom_personnalise || typeAvion?.nom || 'Avion militaire'}
-                {typeAvion?.code_oaci && ` (${typeAvion.code_oaci})`}
-              </option>
-            );
-          })}
-        </select>
-      </div>
-
-      <div>
-        <span className="label block">Type de vol militaire *</span>
-        <div className="space-y-2 mt-1">
-          {(['escadrille', 'escadron', 'autre'] as const).map(k => (
-            <label key={k} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-              <input
-                type="radio" name="esc" checked={escadrille_ou_escadron === k}
-                onChange={() => {
-                  if (selectedMission) return;
-                  setEscadrilleOuEscadron(k);
-                  if (k === 'autre') { setEquipageIds([]); setNatureVolMilitaire(''); }
-                  else { setNatureVolMilitaire(''); setNatureVolMilitaireAutre(''); }
-                }}
-                className="rounded" disabled={Boolean(selectedMission)}
-              />
-              {LIB_ESC[k]}
-            </label>
-          ))}
+      <section className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-5 space-y-4">
+        <div>
+          <label className="label">Avion de l&apos;armée *</label>
+          <select className="input" value={armee_avion_id} onChange={(e) => setArmeeAvionId(e.target.value)} required>
+            <option value="">— Choisir un avion —</option>
+            {inventaireMilitaire.map((inv) => {
+              const typeAvion = inv.types_avion
+                ? Array.isArray(inv.types_avion)
+                  ? inv.types_avion[0]
+                  : inv.types_avion
+                : null;
+              return (
+                <option key={inv.id} value={inv.id}>
+                  {inv.nom_personnalise || typeAvion?.nom || 'Avion militaire'}
+                  {typeAvion?.code_oaci && ` (${typeAvion.code_oaci})`}
+                </option>
+              );
+            })}
+          </select>
         </div>
-      </div>
 
-      {escadrille_ou_escadron === 'autre' && (
-        <div className="space-y-2 rounded-lg border border-slate-600/50 bg-slate-800/30 p-4">
-          <span className="label block">Nature du vol *</span>
-          <div className="flex flex-wrap gap-3">
-            {NATURES_VOL_MILITAIRE.map(n => (
-              <label key={n} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                <input type="radio" name="nature" checked={nature_vol_militaire === n} onChange={() => setNatureVolMilitaire(n)} className="rounded" disabled={Boolean(selectedMission)} />
-                {LIB_NATURE[n] || n}
+        <div>
+          <span className="label block">Type de vol militaire *</span>
+          <div className="space-y-2 mt-1">
+            {(['escadrille', 'escadron', 'autre'] as const).map((k) => (
+              <label key={k} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                <input
+                  type="radio"
+                  name="esc"
+                  checked={escadrille_ou_escadron === k}
+                  onChange={() => {
+                    if (missionLocked) return;
+                    setEscadrilleOuEscadron(k);
+                    if (k === 'autre') {
+                      setEquipageIds([]);
+                      setNatureVolMilitaire('');
+                    } else {
+                      setNatureVolMilitaire('');
+                      setNatureVolMilitaireAutre('');
+                    }
+                  }}
+                  className="rounded"
+                  disabled={missionLocked}
+                />
+                {LIB_ESC_FORM[k]}
               </label>
             ))}
           </div>
-          {nature_vol_militaire === 'autre' && (
-            <div>
-              <label className="label">Précisez la nature *</label>
-              <input type="text" className="input" value={nature_vol_militaire_autre} onChange={e => setNatureVolMilitaireAutre(e.target.value)} placeholder="ex. mission spéciale…" />
+        </div>
+
+        {escadrille_ou_escadron === 'autre' && (
+          <div className="space-y-2 rounded-lg border border-slate-600/50 bg-slate-900/40 p-4">
+            <span className="label block">Nature du vol *</span>
+            <div className="flex flex-wrap gap-3">
+              {NATURES_VOL_MILITAIRE.map((n) => (
+                <label key={n} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="nature"
+                    checked={nature_vol_militaire === n}
+                    onChange={() => setNatureVolMilitaire(n)}
+                    className="rounded"
+                    disabled={missionLocked}
+                  />
+                  {LIB_NATURE_VOL[n] || n}
+                </label>
+              ))}
             </div>
-          )}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="label">Aéroport de départ *</label>
-          <select className="input" value={aeroport_depart} onChange={e => setAeroportDepart(e.target.value)} required disabled={Boolean(selectedMission)}>
-            <option value="">— Choisir —</option>
-            {AEROPORTS_PTFS.map(a => <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="label">Aéroport d&apos;arrivée *</label>
-          <select className="input" value={aeroport_arrivee} onChange={e => setAeroportArrivee(e.target.value)} required disabled={Boolean(selectedMission)}>
-            <option value="">— Choisir —</option>
-            {AEROPORTS_PTFS.map(a => <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>)}
-          </select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="label">Durée (minutes) *</label>
-          <input type="number" className="input" value={duree_minutes} onChange={e => setDureeMinutes(e.target.value)} min={1} required />
-        </div>
-        <div className="space-y-2">
-          <span className="label block">Heure (UTC) *</span>
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-              <input type="radio" name="heure_mode" checked={heure_mode === 'depart'} onChange={() => handleHeureModeChange('depart')} className="rounded" />
-              Départ
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-              <input type="radio" name="heure_mode" checked={heure_mode === 'arrivee'} onChange={() => handleHeureModeChange('arrivee')} className="rounded" />
-              Arrivée
-            </label>
+            {nature_vol_militaire === 'autre' && (
+              <div>
+                <label className="label">Précisez la nature *</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={nature_vol_militaire_autre}
+                  onChange={(e) => setNatureVolMilitaireAutre(e.target.value)}
+                  placeholder="ex. mission spéciale…"
+                  disabled={missionLocked}
+                />
+              </div>
+            )}
           </div>
-          <input type="datetime-local" className="input" value={heure_utc} onChange={e => setHeureUtc(e.target.value)} required />
-        </div>
-      </div>
+        )}
+      </section>
 
-      {isEscadrilleOuEscadron && (
-        <div className="rounded-lg border border-slate-600/50 bg-slate-800/30 p-4">
-          <label className="label block mb-2">Pilotes du vol :</label>
-          <div className="flex flex-wrap gap-3 max-h-40 overflow-y-auto">
-            {pilotesArmee.map(p => (
-              <label key={p.id} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={equipage_ids.includes(p.id)} onChange={() => toggleEquipage(p.id)} className="rounded" />
-                {p.identifiant}
-              </label>
-            ))}
-          </div>
-          {pilotesArmee.length === 0 && <p className="text-slate-500 text-sm">Aucun autre pilote armée.</p>}
-        </div>
-      )}
-
-      {!isEscadrilleOuEscadron && (
-        <>
+      <section className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-5 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="label">Rôle *</label>
-            <select className="input" value={role_pilote} onChange={e => setRolePilote(e.target.value as 'Pilote' | 'Co-pilote')}>
-              <option value="Pilote">Pilote</option>
-              <option value="Co-pilote">Co-pilote</option>
+            <label className="label">Aéroport de départ *</label>
+            <select
+              className="input"
+              value={aeroport_depart}
+              onChange={(e) => setAeroportDepart(e.target.value)}
+              required
+              disabled={missionLocked}
+            >
+              <option value="">— Choisir —</option>
+              {AEROPORTS_PTFS.map((a) => (
+                <option key={a.code} value={a.code}>
+                  {a.code} – {a.nom}
+                </option>
+              ))}
             </select>
           </div>
-          {role_pilote === 'Pilote' && (
+          <div>
+            <label className="label">Aéroport d&apos;arrivée *</label>
+            <select
+              className="input"
+              value={aeroport_arrivee}
+              onChange={(e) => setAeroportArrivee(e.target.value)}
+              required
+              disabled={missionLocked}
+            >
+              <option value="">— Choisir —</option>
+              {AEROPORTS_PTFS.map((a) => (
+                <option key={a.code} value={a.code}>
+                  {a.code} – {a.nom}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="label">Durée (minutes) *</label>
+            <input
+              type="number"
+              className="input"
+              value={duree_minutes}
+              onChange={(e) => setDureeMinutes(e.target.value)}
+              min={1}
+              required
+              disabled={missionLocked}
+            />
+          </div>
+          <div className="space-y-2">
+            <span className="label block">Heure (UTC) *</span>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                <input
+                  type="radio"
+                  name="heure_mode"
+                  checked={heure_mode === 'depart'}
+                  onChange={() => handleHeureModeChange('depart')}
+                  className="rounded"
+                />
+                Départ
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                <input
+                  type="radio"
+                  name="heure_mode"
+                  checked={heure_mode === 'arrivee'}
+                  onChange={() => handleHeureModeChange('arrivee')}
+                  className="rounded"
+                />
+                Arrivée
+              </label>
+            </div>
+            <input
+              type="datetime-local"
+              className="input"
+              value={heure_utc}
+              onChange={(e) => setHeureUtc(e.target.value)}
+              required
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-5 space-y-4">
+        {isEscadrilleOuEscadron && (
+          <div>
+            <label className="label block mb-2">Pilotes du vol</label>
+            <div className="flex flex-wrap gap-3 max-h-40 overflow-y-auto">
+              {pilotesArmee.map((p) => (
+                <label key={p.id} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={equipage_ids.includes(p.id)}
+                    onChange={() => toggleEquipage(p.id)}
+                    className="rounded"
+                  />
+                  {p.identifiant}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!isEscadrilleOuEscadron && (
+          <>
             <div>
-              <label className="label">Co-pilote (optionnel)</label>
-              <select className="input" value={copilote_id} onChange={e => setCopiloteId(e.target.value)}>
-                <option value="">— Aucun —</option>
-                {pilotesArmee.map(p => <option key={p.id} value={p.id}>{p.identifiant}</option>)}
+              <label className="label">Rôle *</label>
+              <select
+                className="input"
+                value={role_pilote}
+                onChange={(e) => setRolePilote(e.target.value as 'Pilote' | 'Co-pilote')}
+              >
+                <option value="Pilote">Pilote</option>
+                <option value="Co-pilote">Co-pilote</option>
               </select>
             </div>
-          )}
-        </>
+            {role_pilote === 'Pilote' && (
+              <div>
+                <label className="label">Co-pilote (optionnel)</label>
+                <select className="input" value={copilote_id} onChange={(e) => setCopiloteId(e.target.value)}>
+                  <option value="">— Aucun —</option>
+                  {pilotesArmee.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.identifiant}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </>
+        )}
+
+        <div>
+          <label className="label">Nom / pseudo du commandant de bord *</label>
+          <input
+            type="text"
+            className="input"
+            value={commandant_bord}
+            onChange={(e) => setCommandantBord(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label className="label">Callsign / N° de vol</label>
+          <input
+            type="text"
+            className="input"
+            value={callsign}
+            onChange={(e) => setCallsign(e.target.value)}
+            placeholder="ex. ARM-PAT123… (optionnel)"
+          />
+        </div>
+      </section>
+
+      {error && (
+        <p className="text-red-400 text-sm rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">{error}</p>
       )}
-
-      <div>
-        <label className="label">Nom / pseudo du commandant de bord *</label>
-        <input type="text" className="input" value={commandant_bord} onChange={e => setCommandantBord(e.target.value)} required />
-      </div>
-
-      <div>
-        <label className="label">Callsign / N° de vol</label>
-        <input type="text" className="input" value={callsign} onChange={e => setCallsign(e.target.value)} placeholder="ex. ARM-PAT123… (optionnel)" />
-      </div>
-
-      {error && <p className="text-red-400 text-sm">{error}</p>}
       <button type="submit" className="btn-primary" disabled={loading}>
         {loading ? 'Enregistrement…' : 'Enregistrer les modifications'}
       </button>

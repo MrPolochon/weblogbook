@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import { canAccessEspaceMilitaire, canEditVolMilitaire } from '@/lib/armee';
 import EditVolMilitaireClient from './EditVolMilitaireClient';
 
 export default async function ModifierVolMilitairePage({ params }: { params: Promise<{ id: string }> }) {
@@ -12,8 +13,9 @@ export default async function ModifierVolMilitairePage({ params }: { params: Pro
   if (!user) redirect('/login');
 
   const { data: profile } = await supabase.from('profiles').select('armee, role').eq('id', user.id).single();
-  if (!profile?.armee && profile?.role !== 'admin') redirect('/militaire');
+  if (!canAccessEspaceMilitaire(profile)) redirect('/militaire');
 
+  const isAdminUser = profile?.role === 'admin';
   const admin = createAdminClient();
   const { data: vol } = await admin
     .from('vols')
@@ -28,10 +30,7 @@ export default async function ModifierVolMilitairePage({ params }: { params: Pro
     .single();
 
   if (!vol) notFound();
-  if (vol.statut !== 'en_attente' && profile?.role !== 'admin') redirect(`/militaire/vol/${id}`);
-
-  const canEdit = vol.pilote_id === user.id || vol.copilote_id === user.id || vol.chef_escadron_id === user.id || profile?.role === 'admin';
-  if (!canEdit) redirect(`/militaire/vol/${id}`);
+  if (!canEditVolMilitaire(vol, user.id, Boolean(isAdminUser))) redirect(`/militaire/vol/${id}`);
 
   const { data: equipage } = await admin
     .from('vols_equipage_militaire')
@@ -48,17 +47,18 @@ export default async function ModifierVolMilitairePage({ params }: { params: Pro
 
   const { data: inventaireMilitaire } = await admin.from('armee_avions')
     .select('id, nom_personnalise, types_avion(id, nom, code_oaci)')
+    .eq('detruit', false)
     .order('created_at', { ascending: false });
 
   const volData = {
     ...vol,
-    equipage_ids: (equipage || []).map(e => e.profile_id),
+    equipage_ids: (equipage || []).map((e) => e.profile_id),
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-3xl mx-auto animate-page-reveal">
       <div className="flex items-center gap-4">
-        <Link href={`/militaire/vol/${id}`} className="text-slate-400 hover:text-slate-200">
+        <Link href={`/militaire/vol/${id}`} className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 transition-colors">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <h1 className="text-2xl font-semibold text-slate-100">Modifier le vol militaire</h1>

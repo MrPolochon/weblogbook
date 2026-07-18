@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { addMinutes, parseISO } from 'date-fns';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
-import { ARME_MISSIONS } from '@/lib/armee-missions';
+import { applyMissionOnAdminDecision, canValidateVolMilitaire, TYPE_VOL_MILITAIRE, updateVolMilitaire } from '@/lib/armee';
 import { isQualifiedFlightInstructorInLogbook } from '@/lib/instruction-permissions';
 
 export async function PATCH(
@@ -23,12 +23,21 @@ export async function PATCH(
     const body = await request.json();
 
     if (body.statut === 'validé' || body.statut === 'refusé') {
-      if (!isAdmin) return NextResponse.json({ error: 'Réservé aux admins' }, { status: 403 });
       const { data: vol } = await supabase.from('vols')
         .select('id, pilote_id, statut, type_vol, mission_id, mission_titre, mission_reward_base, mission_reward_final, mission_refusals, refusal_count, depart_utc, arrivee_utc')
         .eq('id', id)
         .single();
       if (!vol) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
+
+      const isVolMilitaire = vol.type_vol === TYPE_VOL_MILITAIRE;
+      const canValidateMil = isVolMilitaire && (await canValidateVolMilitaire(user.id, profile));
+      if (!isAdmin && !canValidateMil) {
+        return NextResponse.json(
+          { error: isVolMilitaire ? 'Réservé au PDG militaire ou aux admins' : 'Réservé aux admins' },
+          { status: 403 },
+        );
+      }
+
       const updates: Record<string, unknown> = {
         statut: body.statut,
         editing_by_pilot_id: null,
@@ -37,53 +46,16 @@ export async function PATCH(
       if (body.statut === 'refusé') {
         updates.refusal_reason = body.refusal_reason ?? null;
         updates.refusal_count = ((vol as { refusal_count?: number }).refusal_count ?? 0) + 1;
-        if (vol.type_vol === 'Vol militaire' && vol.mission_id) {
-          const nextRefusals = (vol.mission_refusals ?? 0) + 1;
-          updates.mission_refusals = nextRefusals;
-          if (nextRefusals >= 3) {
-            updates.mission_status = 'echec';
-          }
-        }
-      }
-      if (body.statut === 'validé' && vol.type_vol === 'Vol militaire' && vol.mission_id && !vol.mission_reward_final) {
-        const mission = ARME_MISSIONS.find((m) => m.id === vol.mission_id);
-        const base = vol.mission_reward_base ?? (mission ? Math.round((mission.rewardMin + mission.rewardMax) / 2) : 0);
-        const now = Date.now();
-        const arrivee = vol.arrivee_utc ? new Date(vol.arrivee_utc).getTime() : now;
-        const delayMinutes = Math.max(0, Math.round((now - arrivee) / 60000));
-        const coeff = Math.max(0.2, 1 - delayMinutes * 0.01);
-        const finalReward = Math.max(0, Math.round(base * coeff));
-
-        updates.mission_reward_final = finalReward;
-        updates.mission_delay_minutes = delayMinutes;
-        updates.mission_status = 'valide';
-
-        const adminClient = createAdminClient();
-        const { data: compteMilitaire } = await adminClient.from('felitz_comptes')
-          .select('id, solde')
-          .eq('type', 'militaire')
-          .single();
-        if (!compteMilitaire) {
-          return NextResponse.json({ error: 'Compte militaire introuvable (mission non payée).' }, { status: 400 });
-        }
-
-        await adminClient.rpc('crediter_compte_safe', { p_compte_id: compteMilitaire.id, p_montant: finalReward });
-
-        await adminClient.from('felitz_transactions').insert({
-          compte_id: compteMilitaire.id,
-          type: 'credit',
-          montant: finalReward,
-          libelle: `Mission militaire: ${vol.mission_titre || vol.mission_id}`
-        });
-
-        await adminClient.from('armee_missions_log').insert({
-          mission_id: vol.mission_id,
-          user_id: vol.pilote_id,
-          reward: finalReward
-        });
       }
 
-      const { error } = await supabase.from('vols').update(updates).eq('id', id);
+      const missionFx = await applyMissionOnAdminDecision(vol, body.statut);
+      if (!missionFx.ok) {
+        return NextResponse.json({ error: missionFx.error }, { status: missionFx.status });
+      }
+      Object.assign(updates, missionFx.data);
+
+      const writer = canValidateMil && !isAdmin ? createAdminClient() : supabase;
+      const { error } = await writer.from('vols').update(updates).eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ ok: true });
     }
@@ -119,85 +91,10 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    // ===== Branche modification vol militaire =====
+    // ===== Branche modification vol militaire (préférer PATCH /api/armee/vols/[id]) =====
     if (body.type_vol === 'Vol militaire' || body._edit_militaire) {
-      const adminMil = createAdminClient();
-      const { data: volMil } = await adminMil.from('vols')
-        .select('id, pilote_id, copilote_id, chef_escadron_id, statut, type_vol, mission_id')
-        .eq('id', id).single();
-      if (!volMil) return NextResponse.json({ error: 'Vol introuvable' }, { status: 404 });
-      if (volMil.type_vol !== 'Vol militaire') return NextResponse.json({ error: 'Ce vol n\'est pas un vol militaire.' }, { status: 400 });
-      if (volMil.statut !== 'en_attente' && !isAdmin) return NextResponse.json({ error: 'Seuls les vols en attente peuvent être modifiés.' }, { status: 400 });
-
-      const isMilAuthorized = volMil.pilote_id === user.id || volMil.copilote_id === user.id || volMil.chef_escadron_id === user.id || isAdmin;
-      if (!isMilAuthorized) return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
-
-      const {
-        armee_avion_id, aeroport_depart: milDep, aeroport_arrivee: milArr, duree_minutes: milDuree,
-        depart_utc: milDepUtc, escadrille_ou_escadron: milEsc, nature_vol_militaire: milNature,
-        nature_vol_militaire_autre: milNatureAutre, commandant_bord: milCmdt,
-        callsign: milCallsign, copilote_id: milCopiloteId, chef_escadron_id: milChefId,
-        equipage_ids: milEquipageIds,
-      } = body;
-
-      if (!milDep || !milArr || typeof milDuree !== 'number' || milDuree < 1 || !milDepUtc || !milCmdt) {
-        return NextResponse.json({ error: 'Champs requis manquants.' }, { status: 400 });
-      }
-
-      if (volMil.mission_id) {
-        const mission = ARME_MISSIONS.find(m => m.id === volMil.mission_id);
-        if (mission) {
-          if (milDep !== mission.aeroport_depart || milArr !== mission.aeroport_arrivee) {
-            return NextResponse.json({ error: 'Le plan de vol doit correspondre à la mission.' }, { status: 400 });
-          }
-        }
-      }
-
-      let typeAvionMil: string | null = null;
-      if (armee_avion_id) {
-        const { data: inv } = await adminMil.from('armee_avions')
-          .select('id, nom_personnalise, types_avion(nom, code_oaci)')
-          .eq('id', armee_avion_id).single();
-        if (!inv) return NextResponse.json({ error: 'Avion militaire introuvable.' }, { status: 400 });
-        const t = inv.types_avion ? (Array.isArray(inv.types_avion) ? inv.types_avion[0] : inv.types_avion) : null;
-        typeAvionMil = inv.nom_personnalise || t?.nom || 'Avion militaire';
-      }
-
-      const milDepStr = /Z$/.test(String(milDepUtc)) ? String(milDepUtc) : String(milDepUtc) + 'Z';
-      const milDepDate = parseISO(milDepStr);
-      const milArrDate = addMinutes(milDepDate, milDuree);
-
-      const milUpdates: Record<string, unknown> = {
-        aeroport_depart: String(milDep).toUpperCase(),
-        aeroport_arrivee: String(milArr).toUpperCase(),
-        duree_minutes: milDuree,
-        depart_utc: milDepDate.toISOString(),
-        arrivee_utc: milArrDate.toISOString(),
-        commandant_bord: String(milCmdt).trim(),
-        callsign: milCallsign ? String(milCallsign).trim() : null,
-      };
-
-      if (armee_avion_id) {
-        milUpdates.armee_avion_id = armee_avion_id;
-        milUpdates.type_avion_militaire = typeAvionMil;
-      }
-      if (milEsc) milUpdates.escadrille_ou_escadron = milEsc;
-      if (milNature !== undefined) milUpdates.nature_vol_militaire = milNature;
-      if (milNatureAutre !== undefined) milUpdates.nature_vol_militaire_autre = milNatureAutre || null;
-      if (milCopiloteId !== undefined) milUpdates.copilote_id = milCopiloteId || null;
-      if (milChefId !== undefined) milUpdates.chef_escadron_id = milChefId || null;
-
-      const { error: milErr } = await adminMil.from('vols').update(milUpdates).eq('id', id);
-      if (milErr) return NextResponse.json({ error: milErr.message }, { status: 400 });
-
-      if (milEquipageIds !== undefined) {
-        await adminMil.from('vols_equipage_militaire').delete().eq('vol_id', id);
-        if (Array.isArray(milEquipageIds) && milEquipageIds.length > 0) {
-          await adminMil.from('vols_equipage_militaire').insert(
-            milEquipageIds.map((pid: string) => ({ vol_id: id, profile_id: pid }))
-          );
-        }
-      }
+      const result = await updateVolMilitaire(id, body, { userId: user.id, isAdmin });
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
 
       return NextResponse.json({ ok: true });
     }

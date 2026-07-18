@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire, calculerCoefficientRemplissage, calculerCoefficientChargementCargo } from '@/lib/aeroports-ptfs';
 import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
 import { heureDepartToIso } from '@/lib/heure-depart';
-import { ARME_MISSIONS } from '@/lib/armee-missions';
+import { getMissionById, getMissionCooldownForUser } from '@/lib/armee';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol (uniquement à l’aéroport de départ)
 // Delivery → Clairance → Ground → Tower → DEP → APP → Center
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
       armeeAvionId = uuidArmee;
 
       if (missionIdPlan) {
-        const mission = ARME_MISSIONS.find((m) => m.id === missionIdPlan);
+        const mission = getMissionById(missionIdPlan);
         if (!mission) {
           return NextResponse.json({ error: 'Mission militaire introuvable.' }, { status: 404 });
         }
@@ -120,19 +120,11 @@ export async function POST(request: Request) {
         ) {
           return NextResponse.json({ error: 'Le plan ne correspond pas à la mission (liaison ou durée).' }, { status: 400 });
         }
-        const cooldownMs = mission.cooldownMinutes * 60_000;
-        const { data: lastGlobal } = await admin
-          .from('armee_missions_log')
-          .select('created_at')
-          .eq('mission_id', mission.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (lastGlobal?.created_at) {
-          const last = new Date(lastGlobal.created_at).getTime();
-          if (Date.now() - last < cooldownMs) {
-            return NextResponse.json({ error: `Mission indisponible (cooldown global ${mission.cooldownMinutes} min).` }, { status: 400 });
-          }
+        const cooldown = await getMissionCooldownForUser(admin, mission.id, user.id, mission.cooldownMinutes);
+        if (!cooldown.available) {
+          return NextResponse.json({
+            error: `Mission indisponible pour vous (cooldown ${mission.cooldownMinutes} min, encore ${cooldown.remainingMinutes} min).`,
+          }, { status: 400 });
         }
         armeeMissionId = mission.id;
       }
