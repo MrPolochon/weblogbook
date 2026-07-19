@@ -14,6 +14,12 @@ import {
 import { examLicencesForTrainingSide } from '@/lib/instruction-exam-rules';
 import { getUserPhotosMap } from '@/lib/user-photos';
 import { getActiveInstructionSessionForAssignee } from '@/lib/instruction-active-session';
+import {
+  loadAdminExamTrainerConflicts,
+  loadAdminStaffReassignPools,
+  EMPTY_POOLS,
+} from '@/lib/instruction-admin-staff-pools';
+import type { AdminExamTrainerConflicts, AdminStaffReassignPools } from '@/lib/instruction-admin-staff-pools';
 
 export default async function InstructionPage() {
   const supabase = await createClient();
@@ -244,6 +250,8 @@ export default async function InstructionPage() {
   }));
 
   let adminOpenDemandes: AdminOpenDemande[] = [];
+  let adminStaffPools: AdminStaffReassignPools = EMPTY_POOLS;
+  let adminExamTrainerConflicts: AdminExamTrainerConflicts = {};
   if (isStaffAdmin) {
     const adminProfileIds = new Set<string>();
     for (const r of examStaffOpen || []) {
@@ -334,6 +342,12 @@ export default async function InstructionPage() {
         reassignable: true,
       })),
     ];
+
+    const reassignableExams = adminOpenDemandes.filter((d) => d.kind === 'exam' && d.reassignable);
+    [adminStaffPools, adminExamTrainerConflicts] = await Promise.all([
+      loadAdminStaffReassignPools(admin),
+      loadAdminExamTrainerConflicts(admin, reassignableExams),
+    ]);
   }
 
   return (
@@ -364,6 +378,8 @@ export default async function InstructionPage() {
       examRequestsMine={(examMine || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; instructeur: { identifiant: string } | { identifiant: string }[] | null }>}
       examRequestsAssigned={(examAssigned || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; requester: { identifiant: string } | { identifiant: string }[] | null }>}
       adminOpenDemandes={adminOpenDemandes}
+      adminStaffPools={adminStaffPools}
+      adminExamTrainerConflicts={adminExamTrainerConflicts}
       eleves={elevesWithPhoto as Array<{ id: string; identifiant: string; formation_instruction_active: boolean; formation_instruction_licence: string | null; created_at: string; photoUrl: string | null }>}
       typesAvion={(typesAvion || []) as Array<{ id: string; nom: string; constructeur: string | null; code_oaci: string | null }>}
       avionsTemp={(avionsTemp || []) as Array<{ id: string; proprietaire_id: string; type_avion_id: string; nom_personnalise: string | null; immatriculation: string | null; aeroport_actuel: string | null; statut: string | null; usure_percent: number | null; instruction_actif: boolean }>}

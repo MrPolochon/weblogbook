@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { InstructionProgram } from '@/lib/instruction-programs';
 import { isAtcInstructionProgram } from '@/lib/instruction-programs';
-import { UserPlus, Link2, Users } from 'lucide-react';
+import { UserPlus, Users } from 'lucide-react';
 import UserAvatar from '@/components/UserAvatar';
 import type { Eleve } from '../types';
 import ReferentsSection from './ReferentsSection';
@@ -33,13 +33,10 @@ export default function FormationTab({
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
 
-  const [identifiant, setIdentifiant] = useState('');
-  const [password, setPassword] = useState('');
-  const [rattachUserId, setRattachUserId] = useState('');
-  const [rattachCandidates, setRattachCandidates] = useState<Array<{ id: string; identifiant: string }>>([]);
-  const [rattachCandidatesLoading, setRattachCandidatesLoading] = useState(false);
-  const [formationLicence, setFormationLicence] = useState('ATC-INIT');
-  const [formationLicenceRattach, setFormationLicenceRattach] = useState('ATC-INIT');
+  const [addEleveIdentifiant, setAddEleveIdentifiant] = useState('');
+  const [formationLicence, setFormationLicence] = useState(
+    () => formationProgramsForCreate[0]?.licenceCode ?? 'ATC-INIT',
+  );
   const [progressionOverrides, setProgressionOverrides] = useState<Record<string, boolean>>({});
   const [savingProgKeys, setSavingProgKeys] = useState<Set<string>>(() => new Set());
   const [notesDraft, setNotesDraft] = useState<Record<string, string>>({});
@@ -62,24 +59,6 @@ export default function FormationTab({
       setLoading(false);
     }
   }
-
-  useEffect(() => {
-    if (!isManager) return;
-    let cancelled = false;
-    setRattachCandidatesLoading(true);
-    void (async () => {
-      try {
-        const res = await fetch('/api/instruction/eleves/rattach-candidates');
-        const d = (await res.json().catch(() => ({}))) as { candidates?: { id: string; identifiant: string }[] };
-        if (!cancelled && res.ok) {
-          setRattachCandidates(d.candidates ?? []);
-        }
-      } finally {
-        if (!cancelled) setRattachCandidatesLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isManager]);
 
   useEffect(() => {
     setProgressionOverrides((prev) => {
@@ -178,48 +157,27 @@ export default function FormationTab({
     return map;
   }, [elevesProgression, progressionOverrides]);
 
-  async function createEleve(e: React.FormEvent) {
+  async function addEleveToFormation(e: React.FormEvent) {
     e.preventDefault();
-    await run(async () => {
-      const res = await fetch('/api/instruction/eleves', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identifiant: identifiant.trim(),
-          password,
-          formation_instruction_licence: formationLicence,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Erreur création élève');
-      setIdentifiant('');
-      setPassword('');
-      toast.success('Eleve cree et rattache a votre formation.');
-    });
-  }
-
-  async function rattachCompteExistant(e: React.FormEvent) {
-    e.preventDefault();
-    if (!rattachUserId) {
-      toast.error('Choisissez un compte dans la liste.');
+    const ident = addEleveIdentifiant.trim().toLowerCase();
+    if (ident.length < 2) {
+      toast.error('Indiquez un identifiant valide.');
       return;
     }
-    const pickedId = rattachUserId;
     await run(async () => {
       const res = await fetch('/api/instruction/eleves', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          link_existing: true,
-          existing_user_id: pickedId,
-          formation_instruction_licence: formationLicenceRattach,
+          existing_identifiant: ident,
+          formation_instruction_licence: formationLicence,
+          set_assignment_referent: true,
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Erreur rattachement');
-      setRattachUserId('');
-      setRattachCandidates((list) => list.filter((c) => c.id !== pickedId));
-      toast.success('Compte rattaché à votre formation. Le rôle (ex. pilote) est conservé.');
+      if (!res.ok) throw new Error(data.error || 'Erreur ajout élève');
+      setAddEleveIdentifiant('');
+      toast.success('Élève rattaché à votre formation et ajouté à vos référents d\'assignation.');
     });
   }
 
@@ -352,82 +310,52 @@ export default function FormationTab({
 
   return (
     <>
-      <form onSubmit={createEleve} className="card space-y-4 border-l-4 border-l-sky-500/60">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-sky-500/10"><UserPlus className="h-5 w-5 text-sky-400" /></div>
-          <h2 className="text-lg font-semibold text-slate-100">Créer un élève</h2>
-        </div>
-        <p className="text-sm text-slate-500">
-          Crée un <strong className="text-slate-400">nouveau</strong> compte dédié. Pour quelqu&apos;un qui a déjà un compte pilote (ex. PPL), préférez le rattachement ci-dessous.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <input className="input" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} placeholder="Identifiant élève" required />
-          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mot de passe temporaire" required minLength={8} />
-          <select className="input" value={formationLicence} onChange={(e) => setFormationLicence(e.target.value)}>
-            {formationProgramsForCreate.map((p) => (
-              <option key={p.licenceCode} value={p.licenceCode}>{p.label}</option>
-            ))}
-          </select>
-          <button className="btn-primary" type="submit" disabled={loading}>Créer l&apos;élève</button>
-        </div>
-      </form>
-
-      <form onSubmit={rattachCompteExistant} className="card space-y-4 border-l-4 border-l-cyan-500/60">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-cyan-500/10"><Link2 className="h-5 w-5 text-cyan-400" /></div>
-          <h2 className="text-lg font-semibold text-slate-100">Rattacher un compte existant</h2>
-        </div>
-        <p className="text-sm text-slate-500">
-          Associe un pilote (ou un autre compte non administrateur) déjà inscrit sur le site à votre formation, sans doublon de compte. Son carnet et son identifiant restent les mêmes.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <label className="min-w-0 space-y-1 text-sm text-slate-400">
-            <span className="text-slate-500">Compte existant</span>
-            <select
-              className="input w-full"
-              value={rattachUserId}
-              onChange={(e) => setRattachUserId(e.target.value)}
-              disabled={loading || rattachCandidatesLoading}
-              required
-            >
-              <option value="">— Choisir un compte —</option>
-              {rattachCandidates.map((c) => (
-                <option key={c.id} value={c.id}>{c.identifiant}</option>
-              ))}
-            </select>
-          </label>
-          <label className="min-w-0 space-y-1 text-sm text-slate-400">
-            <span className="text-slate-500">Parcours</span>
-            <select
-              className="input w-full"
-              value={formationLicenceRattach}
-              onChange={(e) => setFormationLicenceRattach(e.target.value)}
-            >
-              {formationProgramsForCreate.map((p) => (
-                <option key={p.licenceCode} value={p.licenceCode}>{p.label}</option>
-              ))}
-            </select>
-          </label>
-          <div className="flex items-end">
-            <button
-              className="btn-primary w-full"
-              type="submit"
-              disabled={loading || rattachCandidatesLoading || rattachCandidates.length === 0}
-            >
-              Rattacher à ma formation
-            </button>
+      {formationProgramsForCreate.length > 0 && (
+        <form onSubmit={addEleveToFormation} className="card space-y-4 border-l-4 border-l-sky-500/60">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-sky-500/10"><UserPlus className="h-5 w-5 text-sky-400" /></div>
+            <h2 className="text-lg font-semibold text-slate-100">Ajouter un élève à ma formation</h2>
           </div>
-        </div>
-        {rattachCandidatesLoading && (
-          <p className="text-xs text-slate-500">Chargement de la liste des comptes…</p>
-        )}
-        {!rattachCandidatesLoading && rattachCandidates.length === 0 && (
-          <p className="text-xs text-amber-500/90">
-            Aucun compte éligible : compte admin, déjà en formation chez un autre instructeur, ou déjà parmi vos élèves
-            actifs. Les autres comptes apparaissent ici dès qu&apos;ils sont éligibles.
+          <p className="text-sm text-slate-500">
+            Rattache un compte <strong className="text-slate-400">existant</strong> par identifiant (aucun compte fictif).
+            L&apos;élève devient aussi votre référent d&apos;assignation pour les demandes de training et d&apos;examen.
           </p>
-        )}
-      </form>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <label className="min-w-0 space-y-1 text-sm text-slate-400">
+              <span className="text-slate-500">Identifiant du compte</span>
+              <input
+                className="input w-full"
+                value={addEleveIdentifiant}
+                onChange={(e) => setAddEleveIdentifiant(e.target.value)}
+                placeholder="ex. jean.dupont"
+                required
+                minLength={2}
+                autoComplete="off"
+              />
+            </label>
+            <label className="min-w-0 space-y-1 text-sm text-slate-400">
+              <span className="text-slate-500">Parcours</span>
+              <select
+                className="input w-full"
+                value={formationLicence}
+                onChange={(e) => setFormationLicence(e.target.value)}
+              >
+                {formationProgramsForCreate.map((p) => (
+                  <option key={p.licenceCode} value={p.licenceCode}>{p.label}</option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-end">
+              <button className="btn-primary w-full" type="submit" disabled={loading}>
+                Ajouter l&apos;élève
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500">
+            Comptes non éligibles : administrateur, déjà en formation active chez un autre instructeur, ou déjà parmi vos élèves actifs.
+          </p>
+        </form>
+      )}
 
       {eleves.some((e) => e.formation_instruction_active) && <ReferentsSection eleves={eleves} />}
 

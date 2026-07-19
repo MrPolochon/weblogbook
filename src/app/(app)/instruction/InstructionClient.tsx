@@ -8,7 +8,7 @@ import {
   GraduationCap, BookOpen, Users, Award, Plane,
   ClipboardList, FileCheck2, Shield, Lock,
 } from 'lucide-react';
-import type { ExamRequestMine, ExamRequestAssigned, Eleve, TypeAvion, AvionTemp, AdminOpenDemande, ActiveInstructionSession } from './types';
+import type { ExamRequestMine, ExamRequestAssigned, Eleve, TypeAvion, AvionTemp, AdminOpenDemande, ActiveInstructionSession, AdminStaffReassignPools, AdminExamTrainerConflicts } from './types';
 import MonEspaceTab from './components/MonEspaceTab';
 import FormationTab from './components/FormationTab';
 import ExamensTab from './components/ExamensTab';
@@ -44,6 +44,8 @@ export default function InstructionClient({
   examRequestsMine,
   examRequestsAssigned,
   adminOpenDemandes = [],
+  adminStaffPools,
+  adminExamTrainerConflicts,
   eleves,
   typesAvion,
   avionsTemp,
@@ -77,6 +79,8 @@ export default function InstructionClient({
   examRequestsMine: ExamRequestMine[];
   examRequestsAssigned: ExamRequestAssigned[];
   adminOpenDemandes?: AdminOpenDemande[];
+  adminStaffPools?: AdminStaffReassignPools;
+  adminExamTrainerConflicts?: AdminExamTrainerConflicts;
   eleves: Eleve[];
   typesAvion: TypeAvion[];
   avionsTemp: AvionTemp[];
@@ -385,7 +389,11 @@ export default function InstructionClient({
 
       {activeTab === 'admin' && isStaffAdmin && (
         <div className="space-y-6 min-w-0 w-full max-w-none">
-          <AdminDemandesTab adminOpenDemandes={adminOpenDemandes} />
+          <AdminDemandesTab
+            adminOpenDemandes={adminOpenDemandes}
+            adminStaffPools={adminStaffPools}
+            adminExamTrainerConflicts={adminExamTrainerConflicts}
+          />
           <AdminReferentsTab />
         </div>
       )}

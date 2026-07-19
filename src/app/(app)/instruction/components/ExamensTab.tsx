@@ -8,6 +8,7 @@ import type { ExamRequestAssigned, ExamFinishDialog, TypeAvion, AvionTemp, Activ
 import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
 import FictiveAircraftPanel from './FictiveAircraftPanel';
+import DemandeRaisonButton from './DemandeRaisonButton';
 
 const EXAM_ASSIGNED_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   assigne: { label: 'Nouvelle demande', className: 'bg-amber-500/20 text-amber-300' },
@@ -274,7 +275,7 @@ export default function ExamensTab({
             <p className="text-sm text-slate-500">
               {viewerRole === 'admin'
                 ? "Aucun profil chargé. Rechargez la page ou corrigez les droits d'accès base de données."
-                : "Aucun élève actif rattaché à vous comme instructeur référent. Rattachez d'abord un élève ou demandez un administrateur."}
+                : "Aucun élève actif rattaché à vous. Ajoutez d'abord un élève depuis l'onglet Formation ou demandez un administrateur."}
             </p>
           ) : (
             <>
@@ -398,7 +399,13 @@ export default function ExamensTab({
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-slate-200 font-medium">{requesterName} · {r.licence_code}</p>
-                        {r.message && <p className="text-sm text-slate-400 mt-1">Message: {r.message}</p>}
+                        {r.message && (
+                          <DemandeRaisonButton
+                            message={r.message}
+                            auteur={requesterName}
+                            className="mt-1"
+                          />
+                        )}
                       </div>
                       <StatusBadge status={effectiveStatut} map={EXAM_ASSIGNED_STATUT_MAP} size="md" />
                     </div>

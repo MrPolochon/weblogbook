@@ -9,6 +9,7 @@ import type { ExamRequestMine, TypeAvion, AvionTemp, ActiveInstructionSession } 
 import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
 import FictiveAircraftPanel from './FictiveAircraftPanel';
+import DemandeRaisonButton from './DemandeRaisonButton';
 
 const EXAM_MINE_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   assigne: { label: 'En attente de confirmation', className: 'bg-amber-500/15 text-amber-300 border border-amber-500/25' },
@@ -455,7 +456,13 @@ export default function MonEspaceTab({
                       <span className="ml-2 inline-block">
                         <StatusBadge status={statut} map={PILOT_TRAINING_STATUT_MAP} />
                       </span>
-                      {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
+                      {t.message ? (
+                        <DemandeRaisonButton
+                          message={String(t.message)}
+                          auteur={String(requesterName)}
+                          className="mt-1"
+                        />
+                      ) : null}
                     </span>
                     <div className="flex flex-wrap gap-2">
                       {statut === 'assigne' && (
@@ -559,7 +566,13 @@ export default function MonEspaceTab({
                   <span className="text-slate-300">
                     <span className="text-indigo-300 font-medium">{t.licence_code || '—'}</span>
                     {' · '}Avec <span className="text-slate-100 font-medium">{t.requester_identifiant || '—'}</span>
-                    {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
+                    {t.message ? (
+                      <DemandeRaisonButton
+                        message={String(t.message)}
+                        auteur={String(t.requester_identifiant || '—')}
+                        className="mt-1"
+                      />
+                    ) : null}
                   </span>
                   <button
                     type="button"

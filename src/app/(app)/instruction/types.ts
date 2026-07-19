@@ -54,6 +54,8 @@ export type AdminOpenDemande = {
   reassignable: boolean;
 };
 
+export type { AdminStaffReassignPools, AdminExamTrainerConflicts } from '@/lib/instruction-admin-staff-pools';
+
 export type Eleve = {
   id: string;
   identifiant: string;

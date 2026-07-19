@@ -2,8 +2,8 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { identifiantToEmail } from '@/lib/constants';
 import { ensureComptePersonnel } from '@/lib/felitz/ensure-comptes';
+import { logActivity } from '@/lib/activity-log';
 import { INSTRUCTION_LICENCE_CODES } from '@/lib/instruction-programs';
 import {
   canAccessInstructionManagerTools,
@@ -28,8 +28,10 @@ function canBecomeInstructionStudent(role: string | null | undefined): boolean {
 async function attachExistingStudent(
   admin: SupabaseClient,
   instructorId: string,
-  target: InstructionLinkTarget,
+  instructorIdentifiant: string | null | undefined,
+  target: InstructionLinkTarget & { identifiant?: string | null },
   requestedLicence: string,
+  setAssignmentReferent: boolean,
 ): Promise<NextResponse> {
   if (target.id === instructorId) {
     return NextResponse.json({ error: 'Vous ne pouvez pas vous rattacher vous-même comme élève.' }, { status: 400 });
@@ -50,6 +52,24 @@ async function attachExistingStudent(
       { status: 409 },
     );
   }
+
+  if (setAssignmentReferent) {
+    const { data: existingReferent } = await admin
+      .from('instruction_eleve_referent')
+      .select('instructeur_id')
+      .eq('eleve_id', target.id)
+      .maybeSingle();
+    if (existingReferent && existingReferent.instructeur_id !== instructorId) {
+      return NextResponse.json(
+        {
+          error:
+            'Cet élève a déjà un instructeur référent d\'assignation. Contactez un administrateur pour réassigner.',
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   const { error: upErr } = await admin
     .from('profiles')
     .update({
@@ -59,6 +79,27 @@ async function attachExistingStudent(
     })
     .eq('id', target.id);
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
+
+  if (setAssignmentReferent) {
+    const now = new Date().toISOString();
+    const { error: refErr } = await admin.from('instruction_eleve_referent').upsert(
+      {
+        eleve_id: target.id,
+        instructeur_id: instructorId,
+        updated_at: now,
+      },
+      { onConflict: 'eleve_id' },
+    );
+    if (refErr) return NextResponse.json({ error: refErr.message }, { status: 400 });
+    logActivity({
+      userId: instructorId,
+      userIdentifiant: instructorIdentifiant,
+      action: 'add_assignment_referent',
+      targetType: 'profile',
+      targetId: target.id,
+      details: { instructeur_id: instructorId, eleve_identifiant: target.identifiant },
+    });
+  }
 
   const { data: felitzExistants } = await admin
     .from('felitz_comptes')
@@ -118,15 +159,14 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const admin = createAdminClient();
-    const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
+    const { data: me } = await admin.from('profiles').select('role, identifiant').eq('id', user.id).single();
     const cap = await getInstructionCapabilities(admin, user.id, me?.role);
     if (!canAccessInstructionManagerTools(cap)) {
       return NextResponse.json({ error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI).' }, { status: 403 });
     }
 
     const body = await request.json();
-    const linkExisting = body.link_existing === true;
-    const requestedLicence = String(body.formation_instruction_licence || 'PPL').trim();
+    const requestedLicence = String(body.formation_instruction_licence || 'ATC-INIT').trim();
 
     if (!INSTRUCTION_LICENCE_CODES.includes(requestedLicence)) {
       return NextResponse.json({ error: 'Licence de formation invalide.' }, { status: 400 });
@@ -141,84 +181,49 @@ export async function POST(request: Request) {
       );
     }
 
-    if (linkExisting) {
-      const existingUserId = String(body.existing_user_id || '').trim();
-      const existingIdent = String(body.existing_identifiant || '').trim().toLowerCase();
-      if (!existingUserId && (!existingIdent || existingIdent.length < 2)) {
-        return NextResponse.json(
-          { error: 'Indiquez l’identifiant du compte existant (ou existing_user_id).' },
-          { status: 400 },
-        );
-      }
+    const existingUserId = String(body.existing_user_id || '').trim();
+    const existingIdent = String(body.existing_identifiant || body.identifiant || '').trim().toLowerCase();
+    if (!existingUserId && (!existingIdent || existingIdent.length < 2)) {
+      return NextResponse.json(
+        { error: 'Indiquez l’identifiant du compte existant à rattacher.' },
+        { status: 400 },
+      );
+    }
+    const setAssignmentReferent = body.set_assignment_referent !== false;
 
-      if (existingUserId) {
-        const { data: target, error: findErr } = await admin
-          .from('profiles')
-          .select('id, role, instructeur_referent_id, formation_instruction_active')
-          .eq('id', existingUserId)
-          .maybeSingle();
-        if (findErr) return NextResponse.json({ error: findErr.message }, { status: 400 });
-        if (!target) return NextResponse.json({ error: 'Compte introuvable.' }, { status: 404 });
-        return attachExistingStudent(admin, user.id, target, requestedLicence);
-      }
-
+    if (existingUserId) {
       const { data: target, error: findErr } = await admin
         .from('profiles')
-        .select('id, role, instructeur_referent_id, formation_instruction_active')
-        .eq('identifiant', existingIdent)
+        .select('id, identifiant, role, instructeur_referent_id, formation_instruction_active')
+        .eq('id', existingUserId)
         .maybeSingle();
       if (findErr) return NextResponse.json({ error: findErr.message }, { status: 400 });
-      if (!target) return NextResponse.json({ error: 'Aucun compte avec cet identifiant.' }, { status: 404 });
-      return attachExistingStudent(admin, user.id, target, requestedLicence);
+      if (!target) return NextResponse.json({ error: 'Compte introuvable.' }, { status: 404 });
+      return attachExistingStudent(
+        admin,
+        user.id,
+        me?.identifiant,
+        target,
+        requestedLicence,
+        setAssignmentReferent,
+      );
     }
 
-    const identifiant = String(body.identifiant || '').trim().toLowerCase();
-    const password = String(body.password || '');
-
-    if (!identifiant || identifiant.length < 2) {
-      return NextResponse.json({ error: 'Identifiant invalide.' }, { status: 400 });
-    }
-    if (password.length < 8) {
-      return NextResponse.json({ error: 'Le mot de passe doit faire au moins 8 caractères.' }, { status: 400 });
-    }
-
-    const email = identifiantToEmail(identifiant);
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
-    if (createErr || !created?.user?.id) {
-      return NextResponse.json({ error: createErr?.message || 'Erreur création utilisateur.' }, { status: 400 });
-    }
-
-    const userId = created.user.id;
-    const payload = {
-      id: userId,
-      identifiant,
-      role: 'pilote',
-      heures_initiales_minutes: 0,
-      instructeur_referent_id: user.id,
-      formation_instruction_active: true,
-      formation_instruction_licence: requestedLicence,
-    };
-    const { error: profileErr } = await admin.from('profiles').upsert(payload, { onConflict: 'id' });
-    if (profileErr) {
-      await admin.auth.admin.deleteUser(userId);
-      return NextResponse.json({ error: profileErr.message || 'Erreur création profil.' }, { status: 400 });
-    }
-
-    const { data: felitzExistants } = await admin
-      .from('felitz_comptes')
-      .select('id')
-      .eq('proprietaire_id', userId)
-      .eq('type', 'personnel')
-      .limit(1);
-    if (!felitzExistants?.length) {
-      await ensureComptePersonnel(admin, userId);
-    }
-
-    return NextResponse.json({ ok: true, id: userId });
+    const { data: target, error: findErr } = await admin
+      .from('profiles')
+      .select('id, identifiant, role, instructeur_referent_id, formation_instruction_active')
+      .eq('identifiant', existingIdent)
+      .maybeSingle();
+    if (findErr) return NextResponse.json({ error: findErr.message }, { status: 400 });
+    if (!target) return NextResponse.json({ error: 'Aucun compte avec cet identifiant.' }, { status: 404 });
+    return attachExistingStudent(
+      admin,
+      user.id,
+      me?.identifiant,
+      target,
+      requestedLicence,
+      setAssignmentReferent,
+    );
   } catch (e) {
     console.error('instruction/eleves POST:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

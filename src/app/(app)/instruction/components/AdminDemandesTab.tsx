@@ -1,13 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Shield, UserRound, XCircle } from 'lucide-react';
-import type { AdminOpenDemande } from '../types';
+import type { AdminExamTrainerConflicts, AdminOpenDemande, AdminStaffReassignPools } from '../types';
 import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
 import { assigneeLicenceHint } from '@/lib/instruction-exam-rules';
+import {
+  buildAdminReassignCandidates,
+  EMPTY_POOLS,
+} from '@/lib/instruction-admin-staff-pools';
+import DemandeRaisonButton from './DemandeRaisonButton';
 
 const EXAM_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   assigne: { label: 'En attente de confirmation', className: 'bg-amber-500/20 text-amber-300' },
@@ -64,61 +69,41 @@ function canAdminCancel(d: AdminOpenDemande): boolean {
 
 interface AdminDemandesTabProps {
   adminOpenDemandes: AdminOpenDemande[];
+  adminStaffPools?: AdminStaffReassignPools;
+  adminExamTrainerConflicts?: AdminExamTrainerConflicts;
 }
 
-export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTabProps) {
+export default function AdminDemandesTab({
+  adminOpenDemandes,
+  adminStaffPools = EMPTY_POOLS,
+  adminExamTrainerConflicts = {},
+}: AdminDemandesTabProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
 
-  const [candidates, setCandidates] = useState<Record<string, StaffCandidate[]>>({});
   const [pick, setPick] = useState<Record<string, string>>({});
   const [force, setForce] = useState<Record<string, boolean>>({});
-  const [listLoading, setListLoading] = useState<Record<string, boolean>>({});
 
   const [cancelTarget, setCancelTarget] = useState<AdminOpenDemande | null>(null);
   const [cancelAck, setCancelAck] = useState(false);
 
-  const reassignableKey = useMemo(
-    () =>
-      adminOpenDemandes
-        .filter((d) => d.reassignable)
-        .map((d) => `${d.kind}:${d.id}`)
-        .sort()
-        .join(','),
-    [adminOpenDemandes],
-  );
-
-  useEffect(() => {
-    const entries = reassignableKey
-      ? reassignableKey.split(',').filter(Boolean).map((k) => {
-          const [kind, id] = k.split(':') as [AdminOpenDemande['kind'], string];
-          return { kind, id, key: k };
-        })
-      : [];
-    if (entries.length === 0) return;
-
-    let cancelled = false;
-    void (async () => {
-      for (const { kind, id, key } of entries) {
-        setListLoading((L) => ({ ...L, [key]: true }));
-        try {
-          const res = await fetch(staffAssignUrl(kind, id));
-          const d = (await res.json().catch(() => ({}))) as { candidates?: StaffCandidate[] };
-          if (!cancelled && res.ok) {
-            setCandidates((c) => ({ ...c, [key]: d.candidates ?? [] }));
-          }
-        } finally {
-          if (!cancelled) {
-            setListLoading((L) => ({ ...L, [key]: false }));
-          }
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [reassignableKey]);
+  const candidates = useMemo(() => {
+    const result: Record<string, StaffCandidate[]> = {};
+    for (const d of adminOpenDemandes) {
+      if (!d.reassignable) continue;
+      const key = `${d.kind}:${d.id}`;
+      result[key] = buildAdminReassignCandidates(
+        d.kind,
+        d.requester_id,
+        d.assignee_id,
+        d.licence_code,
+        adminStaffPools,
+        adminExamTrainerConflicts,
+      );
+    }
+    return result;
+  }, [adminOpenDemandes, adminStaffPools, adminExamTrainerConflicts]);
 
   const sortedDemandes = useMemo(
     () => [...adminOpenDemandes].sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -318,9 +303,11 @@ export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTab
                           <div className="min-w-0">
                             <p className="text-slate-200 font-medium truncate">{d.requester_identifiant}</p>
                             {d.message && (
-                              <p className="text-xs text-slate-500 mt-0.5 truncate" title={d.message}>
-                                {d.message}
-                              </p>
+                              <DemandeRaisonButton
+                                message={d.message}
+                                auteur={d.requester_identifiant}
+                                compact
+                              />
                             )}
                           </div>
                         </div>
@@ -359,7 +346,7 @@ export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTab
                                 aria-label={licenceHint}
                                 value={selected}
                                 onChange={(e) => setPick((p) => ({ ...p, [key]: e.target.value }))}
-                                disabled={loading || listLoading[key]}
+                                disabled={loading}
                               >
                                 <option value="">— Choisir —</option>
                                 {(candidates[key] || [])
@@ -375,7 +362,7 @@ export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTab
                               <button
                                 type="button"
                                 className="btn-primary text-xs py-1.5 px-3 shrink-0 whitespace-nowrap"
-                                disabled={loading || listLoading[key] || !selected}
+                                disabled={loading || !selected}
                                 onClick={() => reassignDemande(d)}
                               >
                                 Réassigner
@@ -391,9 +378,6 @@ export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTab
                                 />
                                 <span>Forcer malgré conflit formateur ≠ examinateur</span>
                               </label>
-                            )}
-                            {listLoading[key] && (
-                              <p className="text-xs text-slate-500">Chargement…</p>
                             )}
                           </div>
                         )}
