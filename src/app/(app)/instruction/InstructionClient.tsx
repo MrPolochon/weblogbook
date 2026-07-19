@@ -6,14 +6,16 @@ import { toast } from 'sonner';
 import type { InstructionProgram } from '@/lib/instruction-programs';
 import {
   GraduationCap, BookOpen, Users, Award, Plane,
-  ClipboardList, FileCheck2,
+  ClipboardList, FileCheck2, Shield,
 } from 'lucide-react';
-import type { ExamRequestMine, ExamRequestAssigned, ExamRequestStaffOpen, Eleve, TypeAvion, AvionTemp } from './types';
+import type { ExamRequestMine, ExamRequestAssigned, Eleve, TypeAvion, AvionTemp, AdminOpenDemande } from './types';
 import MonEspaceTab from './components/MonEspaceTab';
 import FormationTab from './components/FormationTab';
 import ExamensTab from './components/ExamensTab';
+import AdminDemandesTab from './components/AdminDemandesTab';
+import AdminReferentsTab from './components/AdminReferentsTab';
 
-type TabId = 'espace' | 'formation' | 'examens';
+type TabId = 'espace' | 'formation' | 'examens' | 'admin';
 
 export default function InstructionClient({
   loadError,
@@ -41,7 +43,7 @@ export default function InstructionClient({
   myProgression,
   examRequestsMine,
   examRequestsAssigned,
-  examRequestsStaffOpen = [],
+  adminOpenDemandes = [],
   eleves,
   typesAvion,
   avionsTemp,
@@ -73,7 +75,7 @@ export default function InstructionClient({
   myProgression: Array<{ licence_code: string; module_code: string; completed: boolean; note?: string | null }>;
   examRequestsMine: ExamRequestMine[];
   examRequestsAssigned: ExamRequestAssigned[];
-  examRequestsStaffOpen?: ExamRequestStaffOpen[];
+  adminOpenDemandes?: AdminOpenDemande[];
   eleves: Eleve[];
   typesAvion: TypeAvion[];
   avionsTemp: AvionTemp[];
@@ -97,8 +99,9 @@ export default function InstructionClient({
     return out;
   }, [canGrantTitreInstructionFlight, canGrantTitreInstructionAtc]);
 
+  const isStaffAdmin = viewerRole === 'admin';
   const showExamensTab =
-    canViewExaminerInbox || instructionTitreOptions.length > 0 || viewerRole === 'admin';
+    canViewExaminerInbox || instructionTitreOptions.length > 0 || isStaffAdmin;
 
   const myProgram = useMemo(
     () => programs.find((p) => p.licenceCode === myFormationLicence) || null,
@@ -248,6 +251,7 @@ export default function InstructionClient({
           { id: 'espace' as TabId, label: 'Mon Espace', icon: BookOpen, visible: true },
           { id: 'formation' as TabId, label: 'Formation', icon: Users, visible: isManager },
           { id: 'examens' as TabId, label: 'Examens & Titres', icon: Award, visible: showExamensTab },
+          { id: 'admin' as TabId, label: 'Admin', icon: Shield, visible: isStaffAdmin },
         ]).filter((t) => t.visible).map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -309,8 +313,14 @@ export default function InstructionClient({
           viewerRole={viewerRole}
           canViewExaminerInbox={canViewExaminerInbox}
           examRequestsAssigned={examRequestsAssigned}
-          examRequestsStaffOpen={examRequestsStaffOpen}
         />
+      )}
+
+      {activeTab === 'admin' && isStaffAdmin && (
+        <div className="space-y-6">
+          <AdminDemandesTab adminOpenDemandes={adminOpenDemandes} />
+          <AdminReferentsTab />
+        </div>
       )}
     </div>
   );

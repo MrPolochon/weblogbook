@@ -1,0 +1,339 @@
+'use client';
+
+import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { Shield, UserRound } from 'lucide-react';
+import type { AdminOpenDemande } from '../types';
+import { StatusBadge } from '@/components/StatusBadge';
+import type { StatusBadgeConfig } from '@/components/StatusBadge';
+
+const EXAM_STATUT_MAP: Record<string, StatusBadgeConfig> = {
+  assigne: { label: 'En attente de confirmation', className: 'bg-amber-500/20 text-amber-300' },
+  accepte: { label: 'Accepté', className: 'bg-sky-500/20 text-sky-300' },
+  en_cours: { label: 'Session en cours', className: 'bg-violet-500/20 text-violet-300' },
+};
+
+const TRAINING_STATUT_MAP: Record<string, StatusBadgeConfig> = {
+  open: { label: 'Session ouverte', className: 'bg-emerald-500/20 text-emerald-300' },
+};
+
+const KIND_LABELS: Record<AdminOpenDemande['kind'], string> = {
+  exam: 'Examen',
+  pilot_training: 'Training vol',
+  atc_training: 'Training ATC',
+};
+
+type StaffCandidate = {
+  id: string;
+  identifiant: string;
+  trained_conflict?: boolean;
+  currently_assigned?: boolean;
+  tier?: string;
+};
+
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function staffAssignUrl(kind: AdminOpenDemande['kind'], id: string): string {
+  if (kind === 'exam') return `/api/instruction/exam-requests/${id}/staff-assign`;
+  if (kind === 'pilot_training') return `/api/instruction/pilot-trainings/${id}/staff-assign`;
+  return `/api/instruction/atc-trainings/${id}/staff-assign`;
+}
+
+interface AdminDemandesTabProps {
+  adminOpenDemandes: AdminOpenDemande[];
+}
+
+export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTabProps) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  const [loading, setLoading] = useState(false);
+
+  const [candidates, setCandidates] = useState<Record<string, StaffCandidate[]>>({});
+  const [pick, setPick] = useState<Record<string, string>>({});
+  const [force, setForce] = useState<Record<string, boolean>>({});
+  const [listLoading, setListLoading] = useState<Record<string, boolean>>({});
+
+  const reassignableKey = useMemo(
+    () =>
+      adminOpenDemandes
+        .filter((d) => d.reassignable)
+        .map((d) => `${d.kind}:${d.id}`)
+        .sort()
+        .join(','),
+    [adminOpenDemandes],
+  );
+
+  useEffect(() => {
+    const entries = reassignableKey
+      ? reassignableKey.split(',').filter(Boolean).map((k) => {
+          const [kind, id] = k.split(':') as [AdminOpenDemande['kind'], string];
+          return { kind, id, key: k };
+        })
+      : [];
+    if (entries.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      for (const { kind, id, key } of entries) {
+        setListLoading((L) => ({ ...L, [key]: true }));
+        try {
+          const res = await fetch(staffAssignUrl(kind, id));
+          const d = (await res.json().catch(() => ({}))) as { candidates?: StaffCandidate[] };
+          if (!cancelled && res.ok) {
+            setCandidates((c) => ({ ...c, [key]: d.candidates ?? [] }));
+          }
+        } finally {
+          if (!cancelled) {
+            setListLoading((L) => ({ ...L, [key]: false }));
+          }
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [reassignableKey]);
+
+  const sortedDemandes = useMemo(
+    () => [...adminOpenDemandes].sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    [adminOpenDemandes],
+  );
+
+  async function run(action: () => Promise<void>) {
+    setLoading(true);
+    try {
+      await action();
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function reassignDemande(d: AdminOpenDemande) {
+    const key = `${d.kind}:${d.id}`;
+    const assigneeId = pick[key];
+    if (!assigneeId) {
+      toast.error('Choisissez un instructeur.');
+      return;
+    }
+
+    const candidate = (candidates[key] || []).find((c) => c.id === assigneeId);
+    const isExam = d.kind === 'exam';
+    const forceVal = Boolean(force[key]);
+
+    if (isExam && candidate?.trained_conflict && !forceVal) {
+      toast.error(
+        'Cet instructeur a formé le candidat sur cette licence. Cochez « Forcer » uniquement en cas exceptionnel.',
+      );
+      return;
+    }
+
+    if (isExam && candidate?.trained_conflict && forceVal) {
+      if (
+        !window.confirm(
+          'ATTENTION : vous allez forcer l’assignation d’un instructeur qui a formé ce candidat sur cette licence. Confirmer ?',
+        )
+      ) {
+        return;
+      }
+    } else if (
+      !window.confirm(
+        isExam
+          ? 'Réassigner cette demande à l’examinateur choisi ? La demande repassera en « à confirmer ».'
+          : 'Réassigner cette session de training à l’instructeur choisi ?',
+      )
+    ) {
+      return;
+    }
+
+    await run(async () => {
+      const body: Record<string, unknown> = isExam
+        ? { instructeur_id: assigneeId, force: forceVal }
+        : { assignee_id: assigneeId };
+
+      const res = await fetch(staffAssignUrl(d.kind, d.id), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || 'Erreur de réassignation');
+
+      setPick((p) => {
+        const next = { ...p };
+        delete next[key];
+        return next;
+      });
+      setForce((p) => {
+        const next = { ...p };
+        delete next[key];
+        return next;
+      });
+      toast.success(
+        (data as { forced?: boolean }).forced
+          ? 'Instructeur réassigné (contournement forcé).'
+          : 'Instructeur réassigné.',
+      );
+    });
+  }
+
+  return (
+    <div className="card space-y-5 border-l-4 border-l-orange-500/60">
+      <div className="flex items-start gap-3">
+        <div className="p-2 rounded-lg bg-orange-500/10 shrink-0">
+          <Shield className="h-5 w-5 text-orange-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-lg font-semibold text-slate-100">Administration — Demandes ouvertes</h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Sessions de training et examens en attente. Réassignez un instructeur ou examinateur depuis cette vue.
+          </p>
+        </div>
+        {sortedDemandes.length > 0 && (
+          <span className="shrink-0 text-xs px-2.5 py-1 rounded-full bg-orange-500/10 text-orange-300 font-medium">
+            {sortedDemandes.length}
+          </span>
+        )}
+      </div>
+
+      {sortedDemandes.length === 0 ? (
+        <p className="text-slate-500 text-sm">Aucune demande ouverte pour le moment.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-slate-700/60">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-700/60 bg-slate-800/40 text-left text-xs uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-2.5 font-medium">Élève</th>
+                <th className="px-3 py-2.5 font-medium">Type</th>
+                <th className="px-3 py-2.5 font-medium">Licence</th>
+                <th className="px-3 py-2.5 font-medium">Statut</th>
+                <th className="px-3 py-2.5 font-medium">Instructeur</th>
+                <th className="px-3 py-2.5 font-medium">Dates</th>
+                <th className="px-3 py-2.5 font-medium min-w-[220px]">Réassignation</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700/40">
+              {sortedDemandes.map((d) => {
+                const key = `${d.kind}:${d.id}`;
+                const selected = pick[key] || '';
+                const picked = (candidates[key] || []).find((c) => c.id === selected);
+                const effectiveStatut = d.kind === 'exam' ? d.statut || 'assigne' : 'open';
+
+                return (
+                  <tr key={key} className="align-top hover:bg-slate-800/20">
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2">
+                        {d.requester_photo_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={d.requester_photo_url}
+                            alt=""
+                            className="h-8 w-8 rounded-full object-cover border border-slate-600/60"
+                          />
+                        ) : (
+                          <div className="h-8 w-8 rounded-full bg-slate-700/60 flex items-center justify-center">
+                            <UserRound className="h-4 w-4 text-slate-500" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-slate-200 font-medium">{d.requester_identifiant}</p>
+                          {d.message && (
+                            <p className="text-xs text-slate-500 mt-0.5 max-w-[180px] truncate" title={d.message}>
+                              {d.message}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-slate-300">{KIND_LABELS[d.kind]}</td>
+                    <td className="px-3 py-3 text-slate-300 font-medium">{d.licence_code}</td>
+                    <td className="px-3 py-3">
+                      <StatusBadge
+                        status={effectiveStatut}
+                        map={d.kind === 'exam' ? EXAM_STATUT_MAP : TRAINING_STATUT_MAP}
+                        size="sm"
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-slate-400">
+                      {d.assignee_identifiant || '—'}
+                    </td>
+                    <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
+                      <div>Créée {formatDate(d.created_at)}</div>
+                      {d.updated_at !== d.created_at && (
+                        <div className="mt-0.5">Màj {formatDate(d.updated_at)}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      {!d.reassignable ? (
+                        <p className="text-xs text-slate-500">
+                          {d.kind === 'exam' && d.statut === 'en_cours'
+                            ? 'Session en cours — réassignation indisponible.'
+                            : 'Non réassignable.'}
+                        </p>
+                      ) : (
+                        <div className="space-y-2 min-w-[200px]">
+                          <select
+                            className="input w-full text-sm"
+                            value={selected}
+                            onChange={(e) => setPick((p) => ({ ...p, [key]: e.target.value }))}
+                            disabled={loading || listLoading[key]}
+                          >
+                            <option value="">— Choisir —</option>
+                            {(candidates[key] || [])
+                              .filter((c) => !c.currently_assigned)
+                              .map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.identifiant}
+                                  {c.tier ? ` (${c.tier})` : ''}
+                                  {c.trained_conflict ? ' — a formé le candidat' : ''}
+                                </option>
+                              ))}
+                          </select>
+                          {d.kind === 'exam' && picked?.trained_conflict && (
+                            <label className="flex items-start gap-2 text-xs text-amber-200/90">
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 rounded border-slate-600"
+                                checked={Boolean(force[key])}
+                                onChange={(e) => setForce((p) => ({ ...p, [key]: e.target.checked }))}
+                              />
+                              <span>Forcer malgré conflit FI≠FE</span>
+                            </label>
+                          )}
+                          <button
+                            type="button"
+                            className="btn-primary w-full text-xs py-1.5"
+                            disabled={loading || listLoading[key] || !selected}
+                            onClick={() => reassignDemande(d)}
+                          >
+                            Réassigner
+                          </button>
+                          {listLoading[key] && (
+                            <p className="text-xs text-slate-500">Chargement…</p>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
 import { isAtcSideExamRequest } from '@/lib/instruction-permissions';
 import { selectExamInstructorByWorkload } from '@/lib/instruction-exam-assign';
+import { tryPreferAssignmentReferent } from '@/lib/instruction-referent';
 
 /** Titres instructeur / examinateur — non demandables en examen. */
 export const EXAM_INELIGIBLE_LICENCE_CODES = new Set(['FI', 'FE', 'ATC FI', 'ATC FE']);
@@ -67,6 +68,15 @@ export async function selectExaminerForRequest(
   if (eligible.length === 0) {
     return { instructorId: null, trainerIds };
   }
+
+  const referentId = await tryPreferAssignmentReferent(admin, requesterId, eligible, {
+    requesterId,
+    excludeIds: trainerIds,
+  });
+  if (referentId) {
+    return { instructorId: referentId, trainerIds };
+  }
+
   const instructorId = await selectExamInstructorByWorkload(admin, eligible, requesterId, options);
   return { instructorId, trainerIds };
 }

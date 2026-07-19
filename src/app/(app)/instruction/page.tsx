@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import InstructionClient from './InstructionClient';
+import type { AdminOpenDemande } from './types';
 import { INSTRUCTION_PROGRAMS, ATC_INIT_LICENCE_CODE } from '@/lib/instruction-programs';
 import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
 import {
@@ -151,9 +152,22 @@ export default async function InstructionPage() {
     ? await admin
         .from('instruction_exam_requests')
         .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, resultat, dossier_conserve, licence_creee_id, created_at, updated_at, requester:profiles!instruction_exam_requests_requester_id_fkey(identifiant), instructeur:profiles!instruction_exam_requests_instructeur_id_fkey(identifiant)')
-        .in('statut', ['assigne', 'accepte'])
+        .in('statut', ['assigne', 'accepte', 'en_cours'])
         .order('created_at', { ascending: false })
     : { data: [] as Array<Record<string, unknown>>, error: null };
+
+  const [pilotStaffOpenResult, atcStaffOpenResult] = isStaffAdmin
+    ? await Promise.all([
+        admin
+          .from('instruction_pilot_training_requests')
+          .select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at')
+          .order('created_at', { ascending: false }),
+        admin
+          .from('instruction_atc_training_requests')
+          .select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at')
+          .order('created_at', { ascending: false }),
+      ])
+    : [{ data: [] as Array<Record<string, unknown>>, error: null }, { data: [] as Array<Record<string, unknown>>, error: null }];
 
   const [
     { data: pilotMine, error: pilotMineErr },
@@ -190,11 +204,15 @@ export default async function InstructionPage() {
   if (elevesProgressionResult.error) errors.push(`Progression élèves: ${elevesProgressionResult.error.message}`);
   if (examAssignedResult.error) errors.push(`Examens assignés: ${examAssignedResult.error.message}`);
   if (examStaffOpenResult.error) errors.push(`Examens (admin): ${examStaffOpenResult.error.message}`);
+  if (pilotStaffOpenResult.error) errors.push(`Trainings vol (admin): ${pilotStaffOpenResult.error.message}`);
+  if (atcStaffOpenResult.error) errors.push(`Trainings ATC (admin): ${atcStaffOpenResult.error.message}`);
 
   const avionsTemp = avionsTempResult.data;
   const elevesProgression = elevesProgressionResult.data;
   const examAssigned = examAssignedResult.data;
   const examStaffOpen = examStaffOpenResult.data;
+  const pilotStaffOpen = pilotStaffOpenResult.data;
+  const atcStaffOpen = atcStaffOpenResult.data;
 
   const loadError = errors.length > 0 ? errors.join(' · ') : undefined;
 
@@ -208,6 +226,99 @@ export default async function InstructionPage() {
     ...e,
     photoUrl: elevePhotos.get(e.id) ?? null,
   }));
+
+  let adminOpenDemandes: AdminOpenDemande[] = [];
+  if (isStaffAdmin) {
+    const adminProfileIds = new Set<string>();
+    for (const r of examStaffOpen || []) {
+      if (r.requester_id) adminProfileIds.add(r.requester_id as string);
+      if (r.instructeur_id) adminProfileIds.add(r.instructeur_id as string);
+    }
+    for (const r of pilotStaffOpen || []) {
+      if (r.requester_id) adminProfileIds.add(r.requester_id as string);
+      if (r.assignee_id) adminProfileIds.add(r.assignee_id as string);
+    }
+    for (const r of atcStaffOpen || []) {
+      if (r.requester_id) adminProfileIds.add(r.requester_id as string);
+      if (r.assignee_id) adminProfileIds.add(r.assignee_id as string);
+    }
+
+    const adminPhotos = adminProfileIds.size > 0
+      ? await getUserPhotosMap(admin, Array.from(adminProfileIds))
+      : new Map<string, string>();
+
+    const profileIdToIdent = new Map<string, string>();
+    if (adminProfileIds.size > 0) {
+      const { data: adminProfiles } = await admin
+        .from('profiles')
+        .select('id, identifiant')
+        .in('id', Array.from(adminProfileIds));
+      for (const p of adminProfiles || []) {
+        profileIdToIdent.set(p.id as string, p.identifiant as string);
+      }
+    }
+
+    const resolveIdent = (rel: unknown, fallbackId: string | null | undefined): string => {
+      if (rel && typeof rel === 'object' && !Array.isArray(rel) && 'identifiant' in rel) {
+        return String((rel as { identifiant: string }).identifiant);
+      }
+      if (Array.isArray(rel) && rel[0] && typeof rel[0] === 'object' && 'identifiant' in rel[0]) {
+        return String((rel[0] as { identifiant: string }).identifiant);
+      }
+      if (fallbackId) return profileIdToIdent.get(fallbackId) || fallbackId;
+      return '—';
+    };
+
+    adminOpenDemandes = [
+      ...(examStaffOpen || []).map((r) => ({
+        id: r.id as string,
+        kind: 'exam' as const,
+        requester_id: r.requester_id as string,
+        requester_identifiant: resolveIdent(r.requester, r.requester_id as string),
+        requester_photo_url: adminPhotos.get(r.requester_id as string) ?? null,
+        licence_code: r.licence_code as string,
+        statut: r.statut as string,
+        assignee_id: (r.instructeur_id as string | null) ?? null,
+        assignee_identifiant: r.instructeur_id
+          ? resolveIdent(r.instructeur, r.instructeur_id as string)
+          : null,
+        message: (r.message as string | null) ?? null,
+        created_at: r.created_at as string,
+        updated_at: r.updated_at as string,
+        reassignable: r.statut === 'assigne' || r.statut === 'accepte',
+      })),
+      ...(pilotStaffOpen || []).map((r) => ({
+        id: r.id as string,
+        kind: 'pilot_training' as const,
+        requester_id: r.requester_id as string,
+        requester_identifiant: profileIdToIdent.get(r.requester_id as string) || (r.requester_id as string),
+        requester_photo_url: adminPhotos.get(r.requester_id as string) ?? null,
+        licence_code: (r.licence_code as string) || '—',
+        statut: null,
+        assignee_id: (r.assignee_id as string) ?? null,
+        assignee_identifiant: profileIdToIdent.get(r.assignee_id as string) || null,
+        message: (r.message as string | null) ?? null,
+        created_at: r.created_at as string,
+        updated_at: r.updated_at as string,
+        reassignable: true,
+      })),
+      ...(atcStaffOpen || []).map((r) => ({
+        id: r.id as string,
+        kind: 'atc_training' as const,
+        requester_id: r.requester_id as string,
+        requester_identifiant: profileIdToIdent.get(r.requester_id as string) || (r.requester_id as string),
+        requester_photo_url: adminPhotos.get(r.requester_id as string) ?? null,
+        licence_code: (r.licence_code as string) || '—',
+        statut: null,
+        assignee_id: (r.assignee_id as string) ?? null,
+        assignee_identifiant: profileIdToIdent.get(r.assignee_id as string) || null,
+        message: (r.message as string | null) ?? null,
+        created_at: r.created_at as string,
+        updated_at: r.updated_at as string,
+        reassignable: true,
+      })),
+    ];
+  }
 
   return (
     <InstructionClient
@@ -236,7 +347,7 @@ export default async function InstructionPage() {
       myProgression={(myProgression || []) as Array<{ licence_code: string; module_code: string; completed: boolean; note?: string | null }>}
       examRequestsMine={(examMine || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; instructeur: { identifiant: string } | { identifiant: string }[] | null }>}
       examRequestsAssigned={(examAssigned || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; requester: { identifiant: string } | { identifiant: string }[] | null }>}
-      examRequestsStaffOpen={(examStaffOpen || []) as Array<{ id: string; requester_id: string; licence_code: string; instructeur_id: string | null; statut: string; message: string | null; response_note: string | null; resultat: string | null; dossier_conserve: boolean | null; licence_creee_id: string | null; created_at: string; updated_at: string; requester: { identifiant: string } | { identifiant: string }[] | null; instructeur: { identifiant: string } | { identifiant: string }[] | null }>}
+      adminOpenDemandes={adminOpenDemandes}
       eleves={elevesWithPhoto as Array<{ id: string; identifiant: string; formation_instruction_active: boolean; formation_instruction_licence: string | null; created_at: string; photoUrl: string | null }>}
       typesAvion={(typesAvion || []) as Array<{ id: string; nom: string; constructeur: string | null; code_oaci: string | null }>}
       avionsTemp={(avionsTemp || []) as Array<{ id: string; proprietaire_id: string; type_avion_id: string; nom_personnalise: string | null; immatriculation: string | null; aeroport_actuel: string | null; statut: string | null; usure_percent: number | null; instruction_actif: boolean }>}

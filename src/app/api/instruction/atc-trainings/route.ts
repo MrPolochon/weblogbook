@@ -7,6 +7,7 @@ import {
   getAtcTrainingTier2UserIds,
   selectTrainingAssigneeFiFirst,
 } from '@/lib/instruction-permissions';
+import { tryPreferAssignmentReferent } from '@/lib/instruction-referent';
 import {
   examLicencesForTrainingSide,
   isExamRequestLicence,
@@ -110,7 +111,9 @@ export async function POST(request: Request) {
       workload.set(r.assignee_id, (workload.get(r.assignee_id) || 0) + 1);
     }
 
-    const assigneeId = selectTrainingAssigneeFiFirst(tier1, tier2, user.id, workload);
+    const assigneeId =
+      (await tryPreferAssignmentReferent(admin, user.id, combinedPool, { requesterId: user.id })) ??
+      selectTrainingAssigneeFiFirst(tier1, tier2, user.id, workload);
     if (!assigneeId) {
       return NextResponse.json({ error: 'Aucun instructeur assignable.' }, { status: 400 });
     }

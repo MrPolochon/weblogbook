@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Award, FileCheck2, Shield } from 'lucide-react';
-import type { ExamRequestAssigned, ExamRequestStaffOpen, ExamFinishDialog } from '../types';
+import { Award, FileCheck2 } from 'lucide-react';
+import type { ExamRequestAssigned, ExamFinishDialog } from '../types';
 import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
 
@@ -17,20 +17,12 @@ const EXAM_ASSIGNED_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   refuse: { label: 'Refusé', className: 'bg-red-500/20 text-red-300' },
 };
 
-type StaffCandidate = {
-  id: string;
-  identifiant: string;
-  trained_conflict: boolean;
-  currently_assigned?: boolean;
-};
-
 interface ExamensTabProps {
   instructionTitreOptions: string[];
   titresCiblesPilotes: Array<{ id: string; identifiant: string }>;
   viewerRole: string;
   canViewExaminerInbox: boolean;
   examRequestsAssigned: ExamRequestAssigned[];
-  examRequestsStaffOpen?: ExamRequestStaffOpen[];
 }
 
 export default function ExamensTab({
@@ -39,12 +31,10 @@ export default function ExamensTab({
   viewerRole,
   canViewExaminerInbox,
   examRequestsAssigned,
-  examRequestsStaffOpen = [],
 }: ExamensTabProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
-  const isStaffAdmin = viewerRole === 'admin';
 
   const [titreUserId, setTitreUserId] = useState('');
   const [titreType, setTitreType] = useState('FI');
@@ -68,11 +58,6 @@ export default function ExamensTab({
   >({});
   const [reassignPick, setReassignPick] = useState<Record<string, string>>({});
   const [reassignListLoading, setReassignListLoading] = useState<Record<string, boolean>>({});
-
-  const [staffCandidates, setStaffCandidates] = useState<Record<string, StaffCandidate[]>>({});
-  const [staffPick, setStaffPick] = useState<Record<string, string>>({});
-  const [staffForce, setStaffForce] = useState<Record<string, boolean>>({});
-  const [staffListLoading, setStaffListLoading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (instructionTitreOptions.length > 0 && !instructionTitreOptions.includes(titreType)) {
@@ -114,35 +99,6 @@ export default function ExamensTab({
     })();
     return () => { cancelled = true; };
   }, [reassignableExamRequestIds]);
-
-  const staffOpenIds = useMemo(
-    () => examRequestsStaffOpen.map((r) => r.id).sort().join(','),
-    [examRequestsStaffOpen],
-  );
-
-  useEffect(() => {
-    if (!isStaffAdmin) return;
-    const ids = staffOpenIds ? staffOpenIds.split(',').filter(Boolean) : [];
-    if (ids.length === 0) return;
-    let cancelled = false;
-    void (async () => {
-      for (const reqId of ids) {
-        setStaffListLoading((L) => ({ ...L, [reqId]: true }));
-        try {
-          const res = await fetch(`/api/instruction/exam-requests/${reqId}/staff-assign`);
-          const d = (await res.json().catch(() => ({}))) as { candidates?: StaffCandidate[] };
-          if (!cancelled && res.ok) {
-            setStaffCandidates((c) => ({ ...c, [reqId]: d.candidates ?? [] }));
-          }
-        } finally {
-          if (!cancelled) {
-            setStaffListLoading((L) => ({ ...L, [reqId]: false }));
-          }
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isStaffAdmin, staffOpenIds]);
 
   async function run(action: () => Promise<void>) {
     setLoading(true);
@@ -286,156 +242,8 @@ export default function ExamensTab({
     });
   }
 
-  async function staffReassignExam(requestId: string) {
-    const instructeurId = staffPick[requestId];
-    if (!instructeurId) {
-      toast.error('Choisissez un examinateur.');
-      return;
-    }
-    const candidate = (staffCandidates[requestId] || []).find((c) => c.id === instructeurId);
-    const force = Boolean(staffForce[requestId]);
-    if (candidate?.trained_conflict && !force) {
-      toast.error(
-        'Cet instructeur a formé le candidat sur cette licence. Cochez « Forcer » uniquement en cas exceptionnel.',
-      );
-      return;
-    }
-    if (candidate?.trained_conflict && force) {
-      if (
-        !window.confirm(
-          'ATTENTION : vous allez forcer l’assignation d’un instructeur qui a formé ce candidat sur cette licence. Confirmer ce contournement exceptionnel ?',
-        )
-      ) return;
-    } else if (
-      !window.confirm(
-        'Réassigner cette demande à l’examinateur choisi ? La demande repassera en « à confirmer ».',
-      )
-    ) {
-      return;
-    }
-    await run(async () => {
-      const res = await fetch(`/api/instruction/exam-requests/${requestId}/staff-assign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instructeur_id: instructeurId, force }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((d as { error?: string }).error || 'Erreur de réassignation');
-      setStaffPick((p) => {
-        const next = { ...p };
-        delete next[requestId];
-        return next;
-      });
-      setStaffForce((p) => {
-        const next = { ...p };
-        delete next[requestId];
-        return next;
-      });
-      toast.success(
-        (d as { forced?: boolean }).forced
-          ? 'Examinateur réassigné (contournement forcé).'
-          : 'Examinateur réassigné.',
-      );
-    });
-  }
-
   return (
     <>
-      {isStaffAdmin && (
-        <div className="card space-y-4 border-l-4 border-l-orange-500/60">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-orange-500/10"><Shield className="h-5 w-5 text-orange-400" /></div>
-            <div>
-              <h2 className="text-lg font-semibold text-slate-100">Admin — Réassigner un examinateur</h2>
-              <p className="text-sm text-slate-500">
-                Changez l&apos;examinateur d&apos;une demande ouverte. Par défaut, un instructeur ayant formé
-                le candidat sur la même licence est bloqué (option « Forcer » pour cas exceptionnels).
-              </p>
-            </div>
-            {examRequestsStaffOpen.length > 0 && (
-              <span className="ml-auto text-xs px-2.5 py-1 rounded-full bg-orange-500/10 text-orange-300 font-medium">
-                {examRequestsStaffOpen.length}
-              </span>
-            )}
-          </div>
-          {examRequestsStaffOpen.length === 0 ? (
-            <p className="text-slate-500 text-sm">Aucune demande d&apos;examen ouverte (assigne / accepte).</p>
-          ) : (
-            <div className="space-y-3">
-              {examRequestsStaffOpen.map((r) => {
-                const requester = Array.isArray(r.requester) ? r.requester[0] : r.requester;
-                const instructeur = Array.isArray(r.instructeur) ? r.instructeur[0] : r.instructeur;
-                const pick = staffPick[r.id] || '';
-                const picked = (staffCandidates[r.id] || []).find((c) => c.id === pick);
-                return (
-                  <div key={r.id} className="rounded-lg border border-slate-700/60 p-4 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="text-slate-200 font-medium">
-                          {requester?.identifiant || r.requester_id} · {r.licence_code}
-                        </p>
-                        <p className="text-xs text-slate-500 mt-1">
-                          Examinateur actuel :{' '}
-                          <span className="text-slate-400">{instructeur?.identifiant || '—'}</span>
-                        </p>
-                      </div>
-                      <StatusBadge status={r.statut} map={EXAM_ASSIGNED_STATUT_MAP} size="md" />
-                    </div>
-                    <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
-                      <label className="flex-1 min-w-0 space-y-1 text-sm text-slate-400">
-                        <span className="text-slate-500">Nouvel examinateur</span>
-                        <select
-                          className="input w-full"
-                          value={pick}
-                          onChange={(e) => setStaffPick((p) => ({ ...p, [r.id]: e.target.value }))}
-                          disabled={loading || staffListLoading[r.id]}
-                        >
-                          <option value="">— Choisir —</option>
-                          {(staffCandidates[r.id] || [])
-                            .filter((c) => !c.currently_assigned)
-                            .map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.identifiant}
-                                {c.trained_conflict ? ' (a formé le candidat)' : ''}
-                              </option>
-                            ))}
-                        </select>
-                      </label>
-                      <button
-                        type="button"
-                        className="btn-primary shrink-0 h-[42px]"
-                        disabled={loading || staffListLoading[r.id] || !pick}
-                        onClick={() => staffReassignExam(r.id)}
-                      >
-                        Réassigner
-                      </button>
-                    </div>
-                    {picked?.trained_conflict && (
-                      <label className="flex items-start gap-2 text-sm text-amber-200/90">
-                        <input
-                          type="checkbox"
-                          className="mt-1 rounded border-slate-600"
-                          checked={Boolean(staffForce[r.id])}
-                          onChange={(e) =>
-                            setStaffForce((p) => ({ ...p, [r.id]: e.target.checked }))
-                          }
-                        />
-                        <span>
-                          Forcer malgré le conflit training (exceptionnel — confirmation obligatoire)
-                        </span>
-                      </label>
-                    )}
-                    {staffListLoading[r.id] && (
-                      <p className="text-xs text-slate-500">Chargement des examinateurs…</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
       {instructionTitreOptions.length > 0 && (
         <form onSubmit={submitTitreDelivrance} className="card space-y-4 border-l-4 border-l-violet-500/60">
           <div className="flex items-center gap-3">

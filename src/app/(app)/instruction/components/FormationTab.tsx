@@ -8,6 +8,7 @@ import { isAtcInstructionProgram } from '@/lib/instruction-programs';
 import { Plane, UserPlus, Link2, Users } from 'lucide-react';
 import UserAvatar from '@/components/UserAvatar';
 import type { Eleve, TypeAvion, AvionTemp } from '../types';
+import ReferentsSection from './ReferentsSection';
 
 function progressionToggleKey(eleveId: string, licenceCode: string, moduleCode: string) {
   return `${eleveId}::${licenceCode}::${moduleCode}`;
@@ -505,6 +506,8 @@ export default function FormationTab({
           </p>
         )}
       </form>
+
+      {eleves.some((e) => e.formation_instruction_active) && <ReferentsSection eleves={eleves} />}
 
       {elevesForAvion.some((e) => e.formation_instruction_active) ? (
         <form onSubmit={addAvionTemp} className="card space-y-4 border-l-4 border-l-lime-500/60">

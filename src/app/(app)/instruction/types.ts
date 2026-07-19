@@ -36,6 +36,24 @@ export type ExamRequestStaffOpen = ExamRequestAssigned & {
   instructeur: { identifiant: string } | { identifiant: string }[] | null;
 };
 
+/** Ligne unifiée pour la vue admin (examens + trainings ouverts). */
+export type AdminOpenDemande = {
+  id: string;
+  kind: 'exam' | 'pilot_training' | 'atc_training';
+  requester_id: string;
+  requester_identifiant: string;
+  requester_photo_url?: string | null;
+  licence_code: string;
+  statut: string | null;
+  assignee_id: string | null;
+  assignee_identifiant: string | null;
+  message: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Examens assigne/accepte uniquement — réassignation staff possible. */
+  reassignable: boolean;
+};
+
 export type Eleve = {
   id: string;
   identifiant: string;
