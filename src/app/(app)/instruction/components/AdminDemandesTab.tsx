@@ -250,8 +250,11 @@ export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTab
             <p className="text-sm text-slate-500 mt-0.5">
               Sessions de training et examens en attente. Réassignez ou annulez une demande depuis cette vue.
             </p>
-            <p className="text-xs text-slate-500 mt-1.5">
-              Training vol : tous les FI · Training ATC : tous les ATC FI · Examens vol : tous les FE · Examens ATC : tous les ATC FE
+            <p className="text-xs text-slate-500 mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+              <span>Training vol : tous les FI</span>
+              <span>Training ATC : tous les ATC FI</span>
+              <span>Examens vol : tous les FE</span>
+              <span>Examens ATC : tous les ATC FE</span>
             </p>
           </div>
           {sortedDemandes.length > 0 && (
@@ -264,8 +267,18 @@ export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTab
         {sortedDemandes.length === 0 ? (
           <p className="text-slate-500 text-sm">Aucune demande ouverte pour le moment.</p>
         ) : (
-          <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-slate-700/50 -mx-0">
-            <table className="w-full min-w-[720px] text-sm">
+          <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-slate-700/50">
+            <table className="w-full min-w-[72rem] table-fixed text-sm">
+              <colgroup>
+                <col className="w-[14%]" />
+                <col className="w-[10%]" />
+                <col className="w-[7%]" />
+                <col className="w-[11%]" />
+                <col className="w-[10%]" />
+                <col className="w-[10%]" />
+                <col className="w-[30%]" />
+                <col className="w-[8%]" />
+              </colgroup>
               <thead>
                 <tr className="border-b border-slate-700/60 bg-slate-800/40 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-3 py-2.5 font-medium">Élève</th>
@@ -274,7 +287,7 @@ export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTab
                   <th className="px-3 py-2.5 font-medium">Statut</th>
                   <th className="px-3 py-2.5 font-medium">Instructeur</th>
                   <th className="px-3 py-2.5 font-medium">Dates</th>
-                  <th className="px-3 py-2.5 font-medium min-w-[200px]">Réassignation</th>
+                  <th className="px-3 py-2.5 font-medium">Réassignation</th>
                   <th className="px-3 py-2.5 font-medium">Annuler</th>
                 </tr>
               </thead>
@@ -305,7 +318,7 @@ export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTab
                           <div className="min-w-0">
                             <p className="text-slate-200 font-medium truncate">{d.requester_identifiant}</p>
                             {d.message && (
-                              <p className="text-xs text-slate-500 mt-0.5 max-w-[160px] truncate" title={d.message}>
+                              <p className="text-xs text-slate-500 mt-0.5 truncate" title={d.message}>
                                 {d.message}
                               </p>
                             )}
@@ -332,50 +345,53 @@ export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTab
                       </td>
                       <td className="px-3 py-3">
                         {!d.reassignable ? (
-                          <p className="text-xs text-slate-500 max-w-[12rem]">
+                          <p className="text-xs text-slate-500">
                             {d.kind === 'exam' && d.statut === 'en_cours'
                               ? 'Session en cours — réassignation indisponible.'
                               : 'Non réassignable.'}
                           </p>
                         ) : (
-                          <div className="space-y-2 min-w-[180px] max-w-[240px]">
-                            <p className="text-[11px] leading-snug text-slate-500">{licenceHint}</p>
-                            <select
-                              className="input w-full text-sm"
-                              value={selected}
-                              onChange={(e) => setPick((p) => ({ ...p, [key]: e.target.value }))}
-                              disabled={loading || listLoading[key]}
-                            >
-                              <option value="">— Choisir —</option>
-                              {(candidates[key] || [])
-                                .filter((c) => !c.currently_assigned)
-                                .map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    {c.identifiant}
-                                    {c.tier ? ` (${c.tier})` : ''}
-                                    {c.trained_conflict ? ' — a formé le candidat' : ''}
-                                  </option>
-                                ))}
-                            </select>
+                          <div className="space-y-1.5 min-w-[16rem]">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <select
+                                className="input text-sm min-w-[11rem] flex-1"
+                                title={licenceHint}
+                                aria-label={licenceHint}
+                                value={selected}
+                                onChange={(e) => setPick((p) => ({ ...p, [key]: e.target.value }))}
+                                disabled={loading || listLoading[key]}
+                              >
+                                <option value="">— Choisir —</option>
+                                {(candidates[key] || [])
+                                  .filter((c) => !c.currently_assigned)
+                                  .map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {c.identifiant}
+                                      {c.tier ? ` (${c.tier})` : ''}
+                                      {c.trained_conflict ? ' — a formé le candidat' : ''}
+                                    </option>
+                                  ))}
+                              </select>
+                              <button
+                                type="button"
+                                className="btn-primary text-xs py-1.5 px-3 shrink-0 whitespace-nowrap"
+                                disabled={loading || listLoading[key] || !selected}
+                                onClick={() => reassignDemande(d)}
+                              >
+                                Réassigner
+                              </button>
+                            </div>
                             {d.kind === 'exam' && picked?.trained_conflict && (
                               <label className="flex items-start gap-2 text-xs text-amber-200/90">
                                 <input
                                   type="checkbox"
-                                  className="mt-0.5 rounded border-slate-600"
+                                  className="mt-0.5 rounded border-slate-600 shrink-0"
                                   checked={Boolean(force[key])}
                                   onChange={(e) => setForce((p) => ({ ...p, [key]: e.target.checked }))}
                                 />
                                 <span>Forcer malgré conflit formateur ≠ examinateur</span>
                               </label>
                             )}
-                            <button
-                              type="button"
-                              className="btn-primary w-full text-xs py-1.5"
-                              disabled={loading || listLoading[key] || !selected}
-                              onClick={() => reassignDemande(d)}
-                            >
-                              Réassigner
-                            </button>
                             {listLoading[key] && (
                               <p className="text-xs text-slate-500">Chargement…</p>
                             )}
@@ -394,7 +410,7 @@ export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTab
                             Annuler
                           </button>
                         ) : (
-                          <p className="text-xs text-slate-500 max-w-[8rem]">
+                          <p className="text-xs text-slate-500 whitespace-nowrap">
                             {d.kind === 'exam' && d.statut === 'en_cours'
                               ? 'Session en cours'
                               : '—'}

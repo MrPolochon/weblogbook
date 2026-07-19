@@ -152,7 +152,11 @@ export default function InstructionClient({
   }
 
   return (
-    <div className="space-y-6 animate-page-reveal max-w-5xl mx-auto w-full">
+    <div
+      className={`space-y-6 animate-page-reveal mx-auto w-full ${
+        activeTab === 'admin' ? 'max-w-7xl' : 'max-w-5xl'
+      }`}
+    >
       {loadError && (
         <div className="sticky top-0 z-10 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {loadError}
@@ -319,7 +323,7 @@ export default function InstructionClient({
       )}
 
       {activeTab === 'admin' && isStaffAdmin && (
-        <div className="space-y-6 min-w-0 w-full">
+        <div className="space-y-6 min-w-0 w-full max-w-none">
           <AdminDemandesTab adminOpenDemandes={adminOpenDemandes} />
           <AdminReferentsTab />
         </div>

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { ArrowDownLeft, ArrowUpRight, Search, Filter } from 'lucide-react';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
+import FelitzTransactionDetailModal from '@/components/FelitzTransactionDetailModal';
 
 export interface FelitzTransaction {
   id: string;
@@ -37,6 +38,7 @@ function formatDate(dateStr: string) {
 export default function FelitzTransactionsHistory({ transactions, light = false, maxHeight = '500px' }: Props) {
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
+  const [selectedTx, setSelectedTx] = useState<FelitzTransaction | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -83,8 +85,8 @@ export default function FelitzTransactionsHistory({ transactions, light = false,
     : 'rounded-xl border border-slate-800/40 bg-slate-800/10';
 
   const itemClass = light
-    ? 'border-b border-slate-100 hover:bg-slate-50'
-    : 'border-b border-slate-800/20 hover:bg-slate-800/30';
+    ? 'border-b border-slate-100 hover:bg-slate-50 cursor-pointer'
+    : 'border-b border-slate-800/20 hover:bg-slate-800/30 cursor-pointer';
 
   return (
     <div className="space-y-2">
@@ -163,9 +165,11 @@ export default function FelitzTransactionsHistory({ transactions, light = false,
           </p>
         ) : (
           filtered.map((t) => (
-            <div
+            <button
               key={t.id}
-              className={`flex items-center justify-between gap-3 px-3 py-2.5 last:border-0 transition-colors ${itemClass}`}
+              type="button"
+              onClick={() => setSelectedTx(t)}
+              className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 last:border-0 transition-colors text-left ${itemClass}`}
             >
               <div className="flex items-start gap-2.5 min-w-0">
                 <div className={`mt-0.5 p-1 rounded-md flex-shrink-0 ${
@@ -195,10 +199,18 @@ export default function FelitzTransactionsHistory({ transactions, light = false,
               }`}>
                 {t.type === 'credit' ? '+' : '-'}{Math.abs(t.montant).toLocaleString('fr-FR')} F$
               </span>
-            </div>
+            </button>
           ))
         )}
       </div>
+
+      {selectedTx && (
+        <FelitzTransactionDetailModal
+          tx={selectedTx}
+          light={light}
+          onClose={() => setSelectedTx(null)}
+        />
+      )}
     </div>
   );
 }

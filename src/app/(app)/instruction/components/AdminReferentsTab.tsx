@@ -125,7 +125,14 @@ export default function AdminReferentsTab() {
         <p className="text-sm text-slate-500">Aucun lien élève ↔ référent enregistré.</p>
       ) : (
         <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-slate-700/50">
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="w-full min-w-[48rem] table-fixed text-sm">
+            <colgroup>
+              <col className="w-[18%]" />
+              <col className="w-[14%]" />
+              <col className="w-[18%]" />
+              <col className="w-[38%]" />
+              <col className="w-[12%]" />
+            </colgroup>
             <thead>
               <tr className="border-b border-slate-700/60 bg-slate-800/40 text-left text-xs uppercase tracking-wide text-slate-500">
                 <th className="px-3 py-2.5 font-medium">Élève</th>
@@ -150,9 +157,9 @@ export default function AdminReferentsTab() {
                       {r.instructeur?.identifiant ?? r.instructeur_id}
                     </td>
                     <td className="px-3 py-3">
-                      <div className="flex flex-wrap items-center gap-2 min-w-[14rem]">
+                      <div className="flex flex-wrap items-center gap-2 min-w-[16rem]">
                         <select
-                          className="input text-xs min-w-[10rem] max-w-[14rem]"
+                          className="input text-sm min-w-[11rem] flex-1"
                           value={pick[r.eleve_id] ?? ''}
                           onFocus={() => {
                             if (!candidates[r.eleve_id]) void loadCandidates(r.eleve_id);
@@ -167,7 +174,7 @@ export default function AdminReferentsTab() {
                         </select>
                         <button
                           type="button"
-                          className="btn-secondary text-xs flex items-center gap-1"
+                          className="btn-secondary text-xs flex items-center gap-1 shrink-0 whitespace-nowrap"
                           disabled={loading || !pick[r.eleve_id]}
                           onClick={() => void reassign(r.eleve_id)}
                         >

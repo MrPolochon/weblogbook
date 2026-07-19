@@ -3,12 +3,13 @@
 import { useState, useTransition, useEffect, useMemo, useCallback } from 'react';
 import {
   Send, RefreshCw, History, ArrowUpRight, ArrowDownLeft,
-  Copy, Check, TrendingUp, TrendingDown, ChevronRight, X,
+  Copy, Check, TrendingUp, TrendingDown, ChevronRight,
   Activity, CreditCard, BadgeCheck, Plane, Wrench, Receipt,
   ArrowLeftRight, DollarSign, FileText, Ban, Loader2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
+import FelitzTransactionDetailModal from '@/components/FelitzTransactionDetailModal';
 
 interface Transaction {
   id: string;
@@ -116,63 +117,6 @@ function MiniBarChart({ transactions }: { transactions: Transaction[] }) {
           />
         );
       })}
-    </div>
-  );
-}
-
-function TxDetailModal({ tx, onClose }: { tx: Transaction; onClose: () => void }) {
-  const meta = detectTransactionMeta(tx);
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="relative w-full max-w-md rounded-2xl border border-slate-700/50 bg-slate-900 shadow-2xl p-6 animate-fade-in"
-        onClick={e => e.stopPropagation()}
-      >
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-slate-300 transition-colors">
-          <X className="h-5 w-5" />
-        </button>
-        <div className="flex items-center gap-3 mb-5">
-          <div className={`p-3 rounded-xl ${tx.type === 'credit' ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
-            <TxIcon tx={tx} />
-          </div>
-          <div>
-            <p className={`text-xs font-semibold uppercase tracking-wider ${meta.colorClass}`}>{meta.label}</p>
-            <p className={`text-2xl font-bold tabular-nums ${tx.type === 'credit' ? 'text-emerald-300' : 'text-red-300'}`}>
-              {tx.type === 'credit' ? '+' : '−'}{formatAmt(tx.montant)} F$
-            </p>
-          </div>
-        </div>
-        <div className="space-y-3.5">
-          <div>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Libellé</p>
-            <p className="text-slate-300 text-sm break-all">{tx.libelle || '—'}</p>
-          </div>
-          {tx.description && (
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Description</p>
-              <p className="text-slate-400 text-sm break-all">{tx.description}</p>
-            </div>
-          )}
-          <div>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Date &amp; Heure</p>
-            <p className="text-slate-300 text-sm">{formatDate(tx.created_at)}</p>
-          </div>
-          <div>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Sens</p>
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-              tx.type === 'credit'
-                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                : 'bg-red-500/10 text-red-400 border border-red-500/20'
-            }`}>
-              {tx.type === 'credit' ? <ArrowDownLeft className="h-3 w-3" /> : <ArrowUpRight className="h-3 w-3" />}
-              {tx.type === 'credit' ? 'Crédit' : 'Débit'}
-            </span>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -722,7 +666,9 @@ export default function FelitzBankClient({ compteId, vban, transactions: initial
       <span className="hidden"><DollarSign /><FileText /></span>
 
       {/* Modal détail transaction */}
-      {selectedTx && <TxDetailModal tx={selectedTx} onClose={() => setSelectedTx(null)} />}
+      {selectedTx && (
+        <FelitzTransactionDetailModal tx={selectedTx} onClose={() => setSelectedTx(null)} />
+      )}
     </div>
   );
 }
