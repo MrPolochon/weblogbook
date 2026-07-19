@@ -252,160 +252,154 @@ export default function AdminDemandesTab({
         {sortedDemandes.length === 0 ? (
           <p className="text-slate-500 text-sm">Aucune demande ouverte pour le moment.</p>
         ) : (
-          <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-slate-700/50">
-            <table className="w-full min-w-[72rem] table-fixed text-sm">
-              <colgroup>
-                <col className="w-[14%]" />
-                <col className="w-[10%]" />
-                <col className="w-[7%]" />
-                <col className="w-[11%]" />
-                <col className="w-[10%]" />
-                <col className="w-[10%]" />
-                <col className="w-[30%]" />
-                <col className="w-[8%]" />
-              </colgroup>
-              <thead>
-                <tr className="border-b border-slate-700/60 bg-slate-800/40 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-2.5 font-medium">Élève</th>
-                  <th className="px-3 py-2.5 font-medium">Type</th>
-                  <th className="px-3 py-2.5 font-medium">Licence</th>
-                  <th className="px-3 py-2.5 font-medium">Statut</th>
-                  <th className="px-3 py-2.5 font-medium">Instructeur</th>
-                  <th className="px-3 py-2.5 font-medium">Dates</th>
-                  <th className="px-3 py-2.5 font-medium">Réassignation</th>
-                  <th className="px-3 py-2.5 font-medium">Annuler</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700/40">
-                {sortedDemandes.map((d) => {
-                  const key = `${d.kind}:${d.id}`;
-                  const selected = pick[key] || '';
-                  const picked = (candidates[key] || []).find((c) => c.id === selected);
-                  const effectiveStatut = d.kind === 'exam' ? d.statut || 'assigne' : 'open';
-                  const licenceHint = assigneeLicenceHint(d.kind, d.licence_code, { admin: true });
+          <div className="space-y-3 min-w-0">
+            {sortedDemandes.map((d) => {
+              const key = `${d.kind}:${d.id}`;
+              const selected = pick[key] || '';
+              const picked = (candidates[key] || []).find((c) => c.id === selected);
+              const effectiveStatut = d.kind === 'exam' ? d.statut || 'assigne' : 'open';
+              const licenceHint = assigneeLicenceHint(d.kind, d.licence_code, { admin: true });
 
-                  return (
-                    <tr key={key} className="align-top hover:bg-slate-800/20">
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                          {d.requester_photo_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={d.requester_photo_url}
-                              alt=""
-                              className="h-8 w-8 rounded-full object-cover border border-slate-600/60 shrink-0"
-                            />
-                          ) : (
-                            <div className="h-8 w-8 rounded-full bg-slate-700/60 flex items-center justify-center shrink-0">
-                              <UserRound className="h-4 w-4 text-slate-500" />
-                            </div>
-                          )}
-                          <div className="min-w-0">
-                            <p className="text-slate-200 font-medium truncate">{d.requester_identifiant}</p>
-                            {d.message && (
-                              <DemandeRaisonButton
-                                message={d.message}
-                                auteur={d.requester_identifiant}
-                                compact
-                              />
-                            )}
-                          </div>
+              return (
+                <article
+                  key={key}
+                  className="rounded-xl border border-slate-700/50 bg-slate-800/10 p-4 space-y-3 hover:bg-slate-800/20 transition-colors min-w-0"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3 min-w-0">
+                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                      {d.requester_photo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={d.requester_photo_url}
+                          alt=""
+                          className="h-9 w-9 rounded-full object-cover border border-slate-600/60 shrink-0"
+                        />
+                      ) : (
+                        <div className="h-9 w-9 rounded-full bg-slate-700/60 flex items-center justify-center shrink-0">
+                          <UserRound className="h-4 w-4 text-slate-500" />
                         </div>
-                      </td>
-                      <td className="px-3 py-3 text-slate-300 whitespace-nowrap">{KIND_LABELS[d.kind]}</td>
-                      <td className="px-3 py-3 text-slate-300 font-medium whitespace-nowrap">{d.licence_code}</td>
-                      <td className="px-3 py-3">
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500">Élève</p>
+                        <p className="text-slate-200 font-medium truncate">{d.requester_identifiant}</p>
+                        {d.message && (
+                          <DemandeRaisonButton
+                            message={d.message}
+                            auteur={d.requester_identifiant}
+                            compact
+                          />
+                        )}
+                      </div>
+                    </div>
+                    <div className="shrink-0">
+                      {canAdminCancel(d) ? (
+                        <button
+                          type="button"
+                          className="btn-secondary text-xs text-red-300 border-red-500/30 flex items-center gap-1"
+                          disabled={loading}
+                          onClick={() => openCancelModal(d)}
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          Annuler
+                        </button>
+                      ) : (
+                        <p className="text-xs text-slate-500">
+                          {d.kind === 'exam' && d.statut === 'en_cours'
+                            ? 'Session en cours'
+                            : '—'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-x-4 gap-y-3 text-sm min-w-0">
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Type</p>
+                      <p className="text-slate-300 mt-0.5">{KIND_LABELS[d.kind]}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Licence</p>
+                      <p className="text-slate-300 font-medium mt-0.5">{d.licence_code}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Statut</p>
+                      <div className="mt-1">
                         <StatusBadge
                           status={effectiveStatut}
                           map={d.kind === 'exam' ? EXAM_STATUT_MAP : TRAINING_STATUT_MAP}
                           size="sm"
                         />
-                      </td>
-                      <td className="px-3 py-3 text-slate-400 whitespace-nowrap">
-                        {d.assignee_identifiant || '—'}
-                      </td>
-                      <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
-                        <div>Créée {formatDate(d.created_at)}</div>
-                        {d.updated_at !== d.created_at && (
-                          <div className="mt-0.5">Màj {formatDate(d.updated_at)}</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        {!d.reassignable ? (
-                          <p className="text-xs text-slate-500">
-                            {d.kind === 'exam' && d.statut === 'en_cours'
-                              ? 'Session en cours — réassignation indisponible.'
-                              : 'Non réassignable.'}
-                          </p>
-                        ) : (
-                          <div className="space-y-1.5 min-w-[16rem]">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <select
-                                className="input text-sm min-w-[11rem] flex-1"
-                                title={licenceHint}
-                                aria-label={licenceHint}
-                                value={selected}
-                                onChange={(e) => setPick((p) => ({ ...p, [key]: e.target.value }))}
-                                disabled={loading}
-                              >
-                                <option value="">— Choisir —</option>
-                                {(candidates[key] || [])
-                                  .filter((c) => !c.currently_assigned)
-                                  .map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                      {c.identifiant}
-                                      {c.tier ? ` (${c.tier})` : ''}
-                                      {c.trained_conflict ? ' — a formé le candidat' : ''}
-                                    </option>
-                                  ))}
-                              </select>
-                              <button
-                                type="button"
-                                className="btn-primary text-xs py-1.5 px-3 shrink-0 whitespace-nowrap"
-                                disabled={loading || !selected}
-                                onClick={() => reassignDemande(d)}
-                              >
-                                Réassigner
-                              </button>
-                            </div>
-                            {d.kind === 'exam' && picked?.trained_conflict && (
-                              <label className="flex items-start gap-2 text-xs text-amber-200/90">
-                                <input
-                                  type="checkbox"
-                                  className="mt-0.5 rounded border-slate-600 shrink-0"
-                                  checked={Boolean(force[key])}
-                                  onChange={(e) => setForce((p) => ({ ...p, [key]: e.target.checked }))}
-                                />
-                                <span>Forcer malgré conflit formateur ≠ examinateur</span>
-                              </label>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        {canAdminCancel(d) ? (
+                      </div>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Instructeur</p>
+                      <p className="text-slate-400 mt-0.5 truncate">{d.assignee_identifiant || '—'}</p>
+                    </div>
+                    <div className="min-w-0 col-span-2 sm:col-span-1">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Dates</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Créée {formatDate(d.created_at)}</p>
+                      {d.updated_at !== d.created_at && (
+                        <p className="text-xs text-slate-500 mt-0.5">Màj {formatDate(d.updated_at)}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-700/40 min-w-0">
+                    <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-2">Réassignation</p>
+                    {!d.reassignable ? (
+                      <p className="text-xs text-slate-500">
+                        {d.kind === 'exam' && d.statut === 'en_cours'
+                          ? 'Session en cours — réassignation indisponible.'
+                          : 'Non réassignable.'}
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0">
+                          <select
+                            className="input text-sm w-full sm:w-auto sm:flex-1 sm:max-w-md min-w-0"
+                            title={licenceHint}
+                            aria-label={licenceHint}
+                            value={selected}
+                            onChange={(e) => setPick((p) => ({ ...p, [key]: e.target.value }))}
+                            disabled={loading}
+                          >
+                            <option value="">— Choisir —</option>
+                            {(candidates[key] || [])
+                              .filter((c) => !c.currently_assigned)
+                              .map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.identifiant}
+                                  {c.tier ? ` (${c.tier})` : ''}
+                                  {c.trained_conflict ? ' — a formé le candidat' : ''}
+                                </option>
+                              ))}
+                          </select>
                           <button
                             type="button"
-                            className="btn-secondary text-xs text-red-300 border-red-500/30 flex items-center gap-1 whitespace-nowrap"
-                            disabled={loading}
-                            onClick={() => openCancelModal(d)}
+                            className="btn-primary text-xs py-1.5 px-3 shrink-0"
+                            disabled={loading || !selected}
+                            onClick={() => reassignDemande(d)}
                           >
-                            <XCircle className="h-3.5 w-3.5" />
-                            Annuler
+                            Réassigner
                           </button>
-                        ) : (
-                          <p className="text-xs text-slate-500 whitespace-nowrap">
-                            {d.kind === 'exam' && d.statut === 'en_cours'
-                              ? 'Session en cours'
-                              : '—'}
-                          </p>
+                        </div>
+                        {d.kind === 'exam' && picked?.trained_conflict && (
+                          <label className="flex items-start gap-2 text-xs text-amber-200/90">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 rounded border-slate-600 shrink-0"
+                              checked={Boolean(force[key])}
+                              onChange={(e) => setForce((p) => ({ ...p, [key]: e.target.checked }))}
+                            />
+                            <span>Forcer malgré conflit formateur ≠ examinateur</span>
+                          </label>
                         )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </div>

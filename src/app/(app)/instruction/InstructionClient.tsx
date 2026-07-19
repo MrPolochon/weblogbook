@@ -188,8 +188,8 @@ export default function InstructionClient({
 
   return (
     <div
-      className={`space-y-6 animate-page-reveal mx-auto w-full ${
-        activeTab === 'admin' ? 'max-w-7xl' : 'max-w-5xl'
+      className={`space-y-6 animate-page-reveal mx-auto w-full min-w-0 ${
+        activeTab === 'admin' ? 'max-w-full' : 'max-w-5xl'
       }`}
     >
       {loadError && (
@@ -388,7 +388,7 @@ export default function InstructionClient({
       )}
 
       {activeTab === 'admin' && isStaffAdmin && (
-        <div className="space-y-6 min-w-0 w-full max-w-none">
+        <div className="space-y-6 min-w-0 w-full">
           <AdminDemandesTab
             adminOpenDemandes={adminOpenDemandes}
             adminStaffPools={adminStaffPools}

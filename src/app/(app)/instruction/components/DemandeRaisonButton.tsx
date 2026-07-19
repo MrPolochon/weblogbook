@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { MessageSquareText, X } from 'lucide-react';
 
 type DemandeRaisonButtonProps = {
@@ -27,7 +28,11 @@ export default function DemandeRaisonButton({
 }: DemandeRaisonButtonProps) {
   const text = message.trim();
   const [open, setOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -35,14 +40,74 @@ export default function DemandeRaisonButton({
       if (e.key === 'Escape') setOpen(false);
     };
     document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      document.body.style.overflow = prevOverflow;
     };
   }, [open]);
 
   if (!text) return null;
+
+  const close = () => setOpen(false);
+
+  const modal =
+    open && mounted && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+            onClick={close}
+            role="presentation"
+          >
+            <div
+              className="relative w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden animate-fade-in"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="demande-raison-title"
+            >
+              <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-slate-800">
+                <div className="min-w-0">
+                  <h3 id="demande-raison-title" className="text-base font-semibold text-slate-100">
+                    Raison de la demande
+                  </h3>
+                  {auteur && (
+                    <p className="text-xs text-slate-500 mt-0.5 truncate">
+                      De <span className="text-slate-300">{auteur}</span>
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors shrink-0"
+                  onClick={close}
+                  aria-label="Fermer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="px-5 py-4 max-h-[60vh] overflow-y-auto">
+                <div className="rounded-2xl rounded-tl-sm bg-slate-800/80 border border-slate-700/60 px-4 py-3">
+                  <p className="text-sm text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
+                    {text}
+                  </p>
+                </div>
+              </div>
+              <div className="px-5 pb-5">
+                <button
+                  type="button"
+                  className="w-full px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-colors"
+                  onClick={close}
+                >
+                  Fermer
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <>
@@ -66,63 +131,7 @@ export default function DemandeRaisonButton({
           Voir la raison
         </button>
       </div>
-
-      {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          role="presentation"
-          onMouseDown={(e) => {
-            if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-              setOpen(false);
-            }
-          }}
-        >
-          <div
-            ref={panelRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="demande-raison-title"
-            className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden"
-          >
-            <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-slate-800">
-              <div className="min-w-0">
-                <h3 id="demande-raison-title" className="text-base font-semibold text-slate-100">
-                  Raison de la demande
-                </h3>
-                {auteur && (
-                  <p className="text-xs text-slate-500 mt-0.5 truncate">
-                    De <span className="text-slate-300">{auteur}</span>
-                  </p>
-                )}
-              </div>
-              <button
-                type="button"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors shrink-0"
-                onClick={() => setOpen(false)}
-                aria-label="Fermer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="px-5 py-4 max-h-[60vh] overflow-y-auto">
-              <div className="rounded-2xl rounded-tl-sm bg-slate-800/80 border border-slate-700/60 px-4 py-3">
-                <p className="text-sm text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
-                  {text}
-                </p>
-              </div>
-            </div>
-            <div className="px-5 pb-5">
-              <button
-                type="button"
-                className="w-full px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm transition-colors"
-                onClick={() => setOpen(false)}
-              >
-                Fermer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {modal}
     </>
   );
 }
