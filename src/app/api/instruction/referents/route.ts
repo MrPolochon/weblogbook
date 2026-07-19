@@ -28,7 +28,7 @@ export async function GET() {
     const cap = await getInstructionCapabilities(admin, user.id, me?.role);
     if (!canAccessInstructionManagerTools(cap)) {
       return NextResponse.json(
-        { error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI / ATC FE).' },
+        { error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI).' },
         { status: 403 },
       );
     }
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     const cap = await getInstructionCapabilities(admin, user.id, me?.role);
     if (!canAccessInstructionManagerTools(cap)) {
       return NextResponse.json(
-        { error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI / ATC FE).' },
+        { error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI).' },
         { status: 403 },
       );
     }
@@ -143,7 +143,7 @@ export async function DELETE(request: Request) {
     const cap = await getInstructionCapabilities(admin, user.id, me?.role);
     if (!canAccessInstructionManagerTools(cap)) {
       return NextResponse.json(
-        { error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI / ATC FE).' },
+        { error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI).' },
         { status: 403 },
       );
     }

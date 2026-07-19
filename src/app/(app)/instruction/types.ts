@@ -80,6 +80,9 @@ export type AvionTemp = {
   statut: string | null;
   usure_percent: number | null;
   instruction_actif: boolean;
+  instruction_lifecycle?: string | null;
+  instruction_session_kind?: string | null;
+  instruction_session_id?: string | null;
 };
 
 export type ExamFinishDialog = {

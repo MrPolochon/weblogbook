@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getExaminerPoolUserIds } from '@/lib/instruction-permissions';
+import { getAdminExaminerPoolUserIds } from '@/lib/instruction-permissions';
 import { getTrainingInstructorIdsForExam } from '@/lib/instruction-exam-rules';
 import { notifyExamInstructorReassignment } from '@/lib/instruction-exam-reassign-notify';
 import { logActivity, getClientIp } from '@/lib/activity-log';
@@ -67,8 +67,8 @@ async function requireAdminAndOpenExam(
 }
 
 /**
- * GET — Admin : liste des examinateurs habilités (FE / ATC FE) pour cette demande,
- * avec indication de conflit training (même licence).
+ * GET — Admin : tous les examinateurs habilités (FE / ATC FE) pour cette demande,
+ * avec indication de conflit training (même licence) — sans filtrer indisponibles.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -77,7 +77,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if ('error' in ctx) return ctx.error;
 
     const { admin, row } = ctx;
-    const pool = await getExaminerPoolUserIds(admin, row.licence_code);
+    const pool = await getAdminExaminerPoolUserIds(admin, row.licence_code);
     const trainerIds = await getTrainingInstructorIdsForExam(admin, row.requester_id, row.licence_code);
     const candidateIds = pool.filter((eid) => eid !== row.requester_id);
     if (candidateIds.length === 0) {
@@ -135,7 +135,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Cet examinateur est déjà assigné à cette demande.' }, { status: 400 });
     }
 
-    const pool = await getExaminerPoolUserIds(admin, row.licence_code);
+    const pool = await getAdminExaminerPoolUserIds(admin, row.licence_code);
     if (!pool.includes(targetId)) {
       return NextResponse.json(
         { error: 'Cet utilisateur n’est pas un examinateur habilité pour ce type d’examen (FE / ATC FE).' },
@@ -165,6 +165,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       })
       .eq('id', id);
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
+
+    await admin
+      .from('inventaire_avions')
+      .update({ instruction_instructeur_id: targetId })
+      .eq('instruction_session_kind', 'exam')
+      .eq('instruction_session_id', id)
+      .eq('instruction_actif', true)
+      .in('instruction_lifecycle', ['brouillon', 'actif']);
 
     try {
       await notifyExamInstructorReassignment(admin, {

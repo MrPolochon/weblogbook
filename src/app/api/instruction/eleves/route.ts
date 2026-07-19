@@ -94,7 +94,7 @@ export async function GET() {
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
     const cap = await getInstructionCapabilities(admin, user.id, me?.role);
     if (!canAccessInstructionManagerTools(cap)) {
-      return NextResponse.json({ error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI / ATC FE).' }, { status: 403 });
+      return NextResponse.json({ error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI).' }, { status: 403 });
     }
 
     const { data: eleves, error } = await admin
@@ -121,7 +121,7 @@ export async function POST(request: Request) {
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
     const cap = await getInstructionCapabilities(admin, user.id, me?.role);
     if (!canAccessInstructionManagerTools(cap)) {
-      return NextResponse.json({ error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI / ATC FE).' }, { status: 403 });
+      return NextResponse.json({ error: 'Réservé aux instructeurs (FI) ou formateurs ATC (ATC FI).' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            'Vous n’êtes pas autorisé à ouvrir ce parcours (formation vol : FI ou rôle instructeur ; parcours ATC-INIT : ATC FI ou ATC FE).',
+            'Vous n’êtes pas autorisé à ouvrir ce parcours (formation vol : FI ou rôle instructeur ; parcours ATC-INIT : ATC FI).',
         },
         { status: 403 },
       );

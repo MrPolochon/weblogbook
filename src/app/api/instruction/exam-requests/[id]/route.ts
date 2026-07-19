@@ -10,6 +10,10 @@ import {
   selectExaminerForRequest,
 } from '@/lib/instruction-exam-rules';
 import { notifyUser } from '@/lib/notifications';
+import {
+  activateFictiveAircraftForSession,
+  removeFictiveAircraftForSession,
+} from '@/lib/instruction-fictive-aircraft';
 
 const VALID_STATUSES = ['assigne', 'accepte', 'en_cours', 'termine', 'refuse'] as const;
 
@@ -76,6 +80,15 @@ export async function PATCH(
         .update({ statut: 'en_cours', response_note: responseNote, updated_at: new Date().toISOString() })
         .eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      try {
+        await activateFictiveAircraftForSession(admin, 'exam', id);
+      } catch (planeErr) {
+        console.error('activateFictiveAircraftForSession exam:', planeErr);
+        return NextResponse.json(
+          { error: planeErr instanceof Error ? planeErr.message : 'Erreur activation avion fictif.' },
+          { status: 400 },
+        );
+      }
       logActivity({ userId: user.id, userIdentifiant: me?.identifiant, action: 'exam_start_session', targetType: 'exam_request', targetId: id, details: { licence_code: row.licence_code, requester_id: row.requester_id }, ip: getClientIp(request) });
       try {
         await notifyUser(row.requester_id, {
@@ -151,6 +164,16 @@ export async function PATCH(
           .eq('id', id);
         if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 400 });
 
+        try {
+          await removeFictiveAircraftForSession(admin, 'exam', id);
+        } catch (planeErr) {
+          console.error('removeFictiveAircraftForSession exam reussi:', planeErr);
+          return NextResponse.json(
+            { error: planeErr instanceof Error ? planeErr.message : 'Erreur retrait avion fictif.' },
+            { status: 400 },
+          );
+        }
+
         const expirationText = licence.a_vie
           ? 'À vie'
           : `Expire le ${licence.date_expiration || 'N/A'}`;
@@ -201,6 +224,16 @@ export async function PATCH(
         })
         .eq('id', id);
       if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 400 });
+
+      try {
+        await removeFictiveAircraftForSession(admin, 'exam', id);
+      } catch (planeErr) {
+        console.error('removeFictiveAircraftForSession exam echoue:', planeErr);
+        return NextResponse.json(
+          { error: planeErr instanceof Error ? planeErr.message : 'Erreur retrait avion fictif.' },
+          { status: 400 },
+        );
+      }
 
       const messageEchec = dossierConserve
         ? `Votre dossier a été conservé. Contactez l'instructeur ${me?.identifiant || ''} pour repasser l'examen.`
@@ -292,6 +325,14 @@ export async function PATCH(
           .eq('id', id);
         if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
+        await admin
+          .from('inventaire_avions')
+          .update({ instruction_instructeur_id: newInstructorId })
+          .eq('instruction_session_kind', 'exam')
+          .eq('instruction_session_id', id)
+          .eq('instruction_actif', true)
+          .in('instruction_lifecycle', ['brouillon', 'actif']);
+
         try {
           await notifyExamInstructorReassignment(admin, {
             expediteurId: user.id,
@@ -337,6 +378,12 @@ export async function PATCH(
         })
         .eq('id', id);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+      try {
+        await removeFictiveAircraftForSession(admin, 'exam', id);
+      } catch (planeErr) {
+        console.error('removeFictiveAircraftForSession exam refuse:', planeErr);
+      }
 
       await admin.from('messages').insert({
         expediteur_id: null,
@@ -406,9 +453,10 @@ export async function DELETE(
       .single();
     if (!row) return NextResponse.json({ error: 'Demande introuvable.' }, { status: 404 });
 
-    if (row.requester_id !== user.id) {
-      const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
-      if (me?.role !== 'admin') return NextResponse.json({ error: 'Vous ne pouvez annuler que vos propres demandes.' }, { status: 403 });
+    const { data: me } = await admin.from('profiles').select('role, identifiant').eq('id', user.id).single();
+    const isAdmin = me?.role === 'admin';
+    if (row.requester_id !== user.id && !isAdmin) {
+      return NextResponse.json({ error: 'Vous ne pouvez annuler que vos propres demandes.' }, { status: 403 });
     }
 
     if (row.statut === 'en_cours') {
@@ -417,23 +465,58 @@ export async function DELETE(
     if (row.statut === 'termine') {
       return NextResponse.json({ error: 'Cette demande est déjà terminée.' }, { status: 400 });
     }
+    if (row.statut === 'refuse') {
+      return NextResponse.json({ error: 'Cette demande est déjà refusée / close.' }, { status: 400 });
+    }
+
+    try {
+      await removeFictiveAircraftForSession(admin, 'exam', id);
+    } catch (planeErr) {
+      console.error('removeFictiveAircraftForSession exam cancel:', planeErr);
+      return NextResponse.json(
+        { error: planeErr instanceof Error ? planeErr.message : 'Erreur retrait avion fictif.' },
+        { status: 400 },
+      );
+    }
 
     await admin.from('instruction_exam_request_refusals').delete().eq('request_id', id);
     await admin.from('instruction_exam_requests').delete().eq('id', id);
 
-    logActivity({ userId: user.id, action: 'cancel_exam_request', targetType: 'exam_request', targetId: id, details: { licence_code: row.licence_code } });
+    logActivity({
+      userId: user.id,
+      userIdentifiant: me?.identifiant,
+      action: isAdmin ? 'admin_cancel_exam_request' : 'cancel_exam_request',
+      targetType: 'exam_request',
+      targetId: id,
+      details: { licence_code: row.licence_code, requester_id: row.requester_id },
+    });
+
+    const { data: req } = await admin
+      .from('profiles').select('identifiant').eq('id', row.requester_id).maybeSingle();
+    const reqIdent = req?.identifiant ?? 'L\'élève';
 
     if (row.instructeur_id && row.instructeur_id !== user.id) {
       try {
-        const { data: req } = await admin
-          .from('profiles').select('identifiant').eq('id', row.requester_id).maybeSingle();
         await notifyUser(row.instructeur_id, {
           type: 'exam_cancelled',
-          title: `Demande d'examen ${row.licence_code} annulee`,
-          body: `${req?.identifiant ?? 'L\'eleve'} a annule sa demande d'examen ${row.licence_code}.`,
+          title: `Demande d'examen ${row.licence_code} annulée`,
+          body: isAdmin
+            ? `Un administrateur a annulé la demande d'examen ${row.licence_code} de ${reqIdent}.`
+            : `${reqIdent} a annulé sa demande d'examen ${row.licence_code}.`,
           link: '/instruction',
         });
-      } catch (e) { console.error('notifyUser exam_cancelled:', e); }
+      } catch (e) { console.error('notifyUser exam_cancelled instructor:', e); }
+    }
+
+    if (isAdmin && row.requester_id !== user.id) {
+      try {
+        await notifyUser(row.requester_id, {
+          type: 'exam_cancelled',
+          title: `Demande d'examen ${row.licence_code} annulée`,
+          body: `Un administrateur a annulé votre demande d'examen ${row.licence_code}. Vous pouvez en créer une nouvelle si besoin.`,
+          link: '/instruction',
+        });
+      } catch (e) { console.error('notifyUser exam_cancelled requester:', e); }
     }
 
     return NextResponse.json({ ok: true });

@@ -291,6 +291,8 @@ export default function InstructionClient({
           atcTrainingsMine={atcTrainingsMine}
           isAtcTrainingInstructor={isAtcTrainingInstructor}
           atcTrainingsAssigned={atcTrainingsAssigned}
+          typesAvion={typesAvion}
+          avionsTemp={avionsTemp}
         />
       )}
 
@@ -300,8 +302,6 @@ export default function InstructionClient({
           programs={programs}
           isManager={isManager}
           eleves={eleves}
-          typesAvion={typesAvion}
-          avionsTemp={avionsTemp}
           elevesProgression={elevesProgression}
         />
       )}
@@ -313,11 +313,13 @@ export default function InstructionClient({
           viewerRole={viewerRole}
           canViewExaminerInbox={canViewExaminerInbox}
           examRequestsAssigned={examRequestsAssigned}
+          typesAvion={typesAvion}
+          avionsTemp={avionsTemp}
         />
       )}
 
       {activeTab === 'admin' && isStaffAdmin && (
-        <div className="space-y-6">
+        <div className="space-y-6 min-w-0 w-full">
           <AdminDemandesTab adminOpenDemandes={adminOpenDemandes} />
           <AdminReferentsTab />
         </div>

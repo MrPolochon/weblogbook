@@ -26,7 +26,9 @@ export type NotificationType =
   | 'transfer_in'
   | 'transfer_out'
   | 'formation_done_eleve'
-  | 'formation_done_admin';
+  | 'formation_done_admin'
+  | 'pilot_training_accepted'
+  | 'pilot_training_started';
 
 export interface NotifyUserOptions {
   type: NotificationType;

@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Plane, Radio, Compass, Navigation2 } from 'lucide-react';
 import DepotPlanVolForm, { type AvionArmeeItem } from './DepotPlanVolForm';
+import { filterStudentInventory } from '@/lib/instruction-fictive-aircraft';
 
 export default async function DepotPlanVolPage({ searchParams }: { searchParams?: { mission?: string } }) {
   const supabase = await createClient();
@@ -76,8 +77,10 @@ export default async function DepotPlanVolPage({ searchParams }: { searchParams?
     .select('*, types_avion:type_avion_id(id, nom, code_oaci, capacite_pax, capacite_cargo_kg, est_militaire, has_mode_s)')
     .eq('proprietaire_id', user.id);
 
+  const visibleInventaire = filterStudentInventory(inventaireData || []);
+
   // Vérifier disponibilité
-  const inventairePersonnel = await Promise.all((inventaireData || []).map(async (item) => {
+  const inventairePersonnel = await Promise.all(visibleInventaire.map(async (item) => {
     const { count } = await admin.from('plans_vol')
       .select('*', { count: 'exact', head: true })
       .eq('inventaire_avion_id', item.id)

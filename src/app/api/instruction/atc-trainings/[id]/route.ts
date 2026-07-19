@@ -74,19 +74,33 @@ export async function DELETE(
     const admin = createAdminClient();
     const { data: row } = await admin
       .from('instruction_atc_training_requests')
-      .select('id, requester_id')
+      .select('id, requester_id, assignee_id, licence_code')
       .eq('id', id)
       .maybeSingle();
     if (!row) return NextResponse.json({ error: 'Demande introuvable.' }, { status: 404 });
-    if (row.requester_id !== user.id) {
-      const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
-      if (me?.role !== 'admin') {
-        return NextResponse.json({ error: 'Seul le demandeur peut annuler.' }, { status: 403 });
-      }
+
+    const { data: me } = await admin.from('profiles').select('role, identifiant').eq('id', user.id).single();
+    const isAdmin = me?.role === 'admin';
+    if (row.requester_id !== user.id && !isAdmin) {
+      return NextResponse.json({ error: 'Seul le demandeur ou un administrateur peut annuler.' }, { status: 403 });
     }
 
     const { error } = await admin.from('instruction_atc_training_requests').delete().eq('id', id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    logActivity({
+      userId: user.id,
+      userIdentifiant: me?.identifiant,
+      action: isAdmin ? 'admin_cancel_atc_training' : 'cancel_atc_training',
+      targetType: 'atc_training',
+      targetId: id,
+      details: {
+        requester_id: row.requester_id,
+        assignee_id: row.assignee_id,
+        licence_code: row.licence_code,
+      },
+    });
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error('instruction/atc-trainings/[id] DELETE:', e);

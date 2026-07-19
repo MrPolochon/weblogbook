@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { filterStudentInventory } from '@/lib/instruction-fictive-aircraft';
 
 // GET - Inventaire personnel d'avions
 export async function GET(req: NextRequest) {
@@ -29,8 +30,10 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query.order('created_at', { ascending: false });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
+    const visibleRows = filterStudentInventory(data || []);
+
     // Vérifier disponibilité (pas en vol)
-    const inventoryWithAvailability = await Promise.all((data || []).map(async (item) => {
+    const inventoryWithAvailability = await Promise.all(visibleRows.map(async (item) => {
       const { count: enVol } = await admin.from('plans_vol')
         .select('*', { count: 'exact', head: true })
         .eq('inventaire_avion_id', item.id)

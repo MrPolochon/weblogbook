@@ -154,6 +154,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .eq('id', id);
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
 
+    await admin
+      .from('inventaire_avions')
+      .update({ instruction_instructeur_id: targetId })
+      .eq('instruction_session_kind', 'exam')
+      .eq('instruction_session_id', id)
+      .eq('instruction_actif', true)
+      .in('instruction_lifecycle', ['brouillon', 'actif']);
+
     try {
       await notifyExamInstructorReassignment(admin, {
         expediteurId: user.id,

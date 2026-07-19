@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Shield, UserRound } from 'lucide-react';
+import { Shield, UserRound, XCircle } from 'lucide-react';
 import type { AdminOpenDemande } from '../types';
 import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
+import { assigneeLicenceHint } from '@/lib/instruction-exam-rules';
 
 const EXAM_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   assigne: { label: 'En attente de confirmation', className: 'bg-amber-500/20 text-amber-300' },
@@ -50,6 +51,17 @@ function staffAssignUrl(kind: AdminOpenDemande['kind'], id: string): string {
   return `/api/instruction/atc-trainings/${id}/staff-assign`;
 }
 
+function cancelUrl(kind: AdminOpenDemande['kind'], id: string): string {
+  if (kind === 'exam') return `/api/instruction/exam-requests/${id}`;
+  if (kind === 'pilot_training') return `/api/instruction/pilot-trainings/${id}`;
+  return `/api/instruction/atc-trainings/${id}`;
+}
+
+function canAdminCancel(d: AdminOpenDemande): boolean {
+  if (d.kind !== 'exam') return true;
+  return d.statut !== 'en_cours' && d.statut !== 'termine' && d.statut !== 'refuse';
+}
+
 interface AdminDemandesTabProps {
   adminOpenDemandes: AdminOpenDemande[];
 }
@@ -63,6 +75,9 @@ export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTab
   const [pick, setPick] = useState<Record<string, string>>({});
   const [force, setForce] = useState<Record<string, boolean>>({});
   const [listLoading, setListLoading] = useState<Record<string, boolean>>({});
+
+  const [cancelTarget, setCancelTarget] = useState<AdminOpenDemande | null>(null);
+  const [cancelAck, setCancelAck] = useState(false);
 
   const reassignableKey = useMemo(
     () =>
@@ -190,150 +205,261 @@ export default function AdminDemandesTab({ adminOpenDemandes }: AdminDemandesTab
     });
   }
 
+  function openCancelModal(d: AdminOpenDemande) {
+    if (!canAdminCancel(d)) {
+      toast.error(
+        d.kind === 'exam' && d.statut === 'en_cours'
+          ? 'Impossible d’annuler une session d’examen en cours.'
+          : 'Cette demande ne peut pas être annulée.',
+      );
+      return;
+    }
+    setCancelAck(false);
+    setCancelTarget(d);
+  }
+
+  async function confirmCancel() {
+    if (!cancelTarget || !cancelAck) {
+      toast.error('Cochez la case de confirmation avant d’annuler.');
+      return;
+    }
+    const d = cancelTarget;
+    await run(async () => {
+      const res = await fetch(cancelUrl(d.kind, d.id), { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || 'Erreur d’annulation');
+      setCancelTarget(null);
+      setCancelAck(false);
+      toast.success(
+        d.kind === 'exam'
+          ? 'Demande d’examen annulée.'
+          : 'Session de training annulée.',
+      );
+    });
+  }
+
   return (
-    <div className="card space-y-5 border-l-4 border-l-orange-500/60">
-      <div className="flex items-start gap-3">
-        <div className="p-2 rounded-lg bg-orange-500/10 shrink-0">
-          <Shield className="h-5 w-5 text-orange-400" />
+    <>
+      <div className="card space-y-4 border-l-4 border-l-orange-500/60 min-w-0">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-orange-500/10 shrink-0">
+            <Shield className="h-5 w-5 text-orange-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-semibold text-slate-100">Administration — Demandes ouvertes</h2>
+            <p className="text-sm text-slate-500 mt-0.5">
+              Sessions de training et examens en attente. Réassignez ou annulez une demande depuis cette vue.
+            </p>
+            <p className="text-xs text-slate-500 mt-1.5">
+              Training vol : tous les FI · Training ATC : tous les ATC FI · Examens vol : tous les FE · Examens ATC : tous les ATC FE
+            </p>
+          </div>
+          {sortedDemandes.length > 0 && (
+            <span className="shrink-0 text-xs px-2.5 py-1 rounded-full bg-orange-500/10 text-orange-300 font-medium">
+              {sortedDemandes.length}
+            </span>
+          )}
         </div>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-semibold text-slate-100">Administration — Demandes ouvertes</h2>
-          <p className="text-sm text-slate-500 mt-0.5">
-            Sessions de training et examens en attente. Réassignez un instructeur ou examinateur depuis cette vue.
-          </p>
-        </div>
-        {sortedDemandes.length > 0 && (
-          <span className="shrink-0 text-xs px-2.5 py-1 rounded-full bg-orange-500/10 text-orange-300 font-medium">
-            {sortedDemandes.length}
-          </span>
+
+        {sortedDemandes.length === 0 ? (
+          <p className="text-slate-500 text-sm">Aucune demande ouverte pour le moment.</p>
+        ) : (
+          <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-slate-700/50 -mx-0">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-700/60 bg-slate-800/40 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-2.5 font-medium">Élève</th>
+                  <th className="px-3 py-2.5 font-medium">Type</th>
+                  <th className="px-3 py-2.5 font-medium">Licence</th>
+                  <th className="px-3 py-2.5 font-medium">Statut</th>
+                  <th className="px-3 py-2.5 font-medium">Instructeur</th>
+                  <th className="px-3 py-2.5 font-medium">Dates</th>
+                  <th className="px-3 py-2.5 font-medium min-w-[200px]">Réassignation</th>
+                  <th className="px-3 py-2.5 font-medium">Annuler</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/40">
+                {sortedDemandes.map((d) => {
+                  const key = `${d.kind}:${d.id}`;
+                  const selected = pick[key] || '';
+                  const picked = (candidates[key] || []).find((c) => c.id === selected);
+                  const effectiveStatut = d.kind === 'exam' ? d.statut || 'assigne' : 'open';
+                  const licenceHint = assigneeLicenceHint(d.kind, d.licence_code, { admin: true });
+
+                  return (
+                    <tr key={key} className="align-top hover:bg-slate-800/20">
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {d.requester_photo_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={d.requester_photo_url}
+                              alt=""
+                              className="h-8 w-8 rounded-full object-cover border border-slate-600/60 shrink-0"
+                            />
+                          ) : (
+                            <div className="h-8 w-8 rounded-full bg-slate-700/60 flex items-center justify-center shrink-0">
+                              <UserRound className="h-4 w-4 text-slate-500" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-slate-200 font-medium truncate">{d.requester_identifiant}</p>
+                            {d.message && (
+                              <p className="text-xs text-slate-500 mt-0.5 max-w-[160px] truncate" title={d.message}>
+                                {d.message}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-slate-300 whitespace-nowrap">{KIND_LABELS[d.kind]}</td>
+                      <td className="px-3 py-3 text-slate-300 font-medium whitespace-nowrap">{d.licence_code}</td>
+                      <td className="px-3 py-3">
+                        <StatusBadge
+                          status={effectiveStatut}
+                          map={d.kind === 'exam' ? EXAM_STATUT_MAP : TRAINING_STATUT_MAP}
+                          size="sm"
+                        />
+                      </td>
+                      <td className="px-3 py-3 text-slate-400 whitespace-nowrap">
+                        {d.assignee_identifiant || '—'}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
+                        <div>Créée {formatDate(d.created_at)}</div>
+                        {d.updated_at !== d.created_at && (
+                          <div className="mt-0.5">Màj {formatDate(d.updated_at)}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        {!d.reassignable ? (
+                          <p className="text-xs text-slate-500 max-w-[12rem]">
+                            {d.kind === 'exam' && d.statut === 'en_cours'
+                              ? 'Session en cours — réassignation indisponible.'
+                              : 'Non réassignable.'}
+                          </p>
+                        ) : (
+                          <div className="space-y-2 min-w-[180px] max-w-[240px]">
+                            <p className="text-[11px] leading-snug text-slate-500">{licenceHint}</p>
+                            <select
+                              className="input w-full text-sm"
+                              value={selected}
+                              onChange={(e) => setPick((p) => ({ ...p, [key]: e.target.value }))}
+                              disabled={loading || listLoading[key]}
+                            >
+                              <option value="">— Choisir —</option>
+                              {(candidates[key] || [])
+                                .filter((c) => !c.currently_assigned)
+                                .map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.identifiant}
+                                    {c.tier ? ` (${c.tier})` : ''}
+                                    {c.trained_conflict ? ' — a formé le candidat' : ''}
+                                  </option>
+                                ))}
+                            </select>
+                            {d.kind === 'exam' && picked?.trained_conflict && (
+                              <label className="flex items-start gap-2 text-xs text-amber-200/90">
+                                <input
+                                  type="checkbox"
+                                  className="mt-0.5 rounded border-slate-600"
+                                  checked={Boolean(force[key])}
+                                  onChange={(e) => setForce((p) => ({ ...p, [key]: e.target.checked }))}
+                                />
+                                <span>Forcer malgré conflit formateur ≠ examinateur</span>
+                              </label>
+                            )}
+                            <button
+                              type="button"
+                              className="btn-primary w-full text-xs py-1.5"
+                              disabled={loading || listLoading[key] || !selected}
+                              onClick={() => reassignDemande(d)}
+                            >
+                              Réassigner
+                            </button>
+                            {listLoading[key] && (
+                              <p className="text-xs text-slate-500">Chargement…</p>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        {canAdminCancel(d) ? (
+                          <button
+                            type="button"
+                            className="btn-secondary text-xs text-red-300 border-red-500/30 flex items-center gap-1 whitespace-nowrap"
+                            disabled={loading}
+                            onClick={() => openCancelModal(d)}
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            Annuler
+                          </button>
+                        ) : (
+                          <p className="text-xs text-slate-500 max-w-[8rem]">
+                            {d.kind === 'exam' && d.statut === 'en_cours'
+                              ? 'Session en cours'
+                              : '—'}
+                          </p>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
-      {sortedDemandes.length === 0 ? (
-        <p className="text-slate-500 text-sm">Aucune demande ouverte pour le moment.</p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-700/60">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-700/60 bg-slate-800/40 text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="px-3 py-2.5 font-medium">Élève</th>
-                <th className="px-3 py-2.5 font-medium">Type</th>
-                <th className="px-3 py-2.5 font-medium">Licence</th>
-                <th className="px-3 py-2.5 font-medium">Statut</th>
-                <th className="px-3 py-2.5 font-medium">Instructeur</th>
-                <th className="px-3 py-2.5 font-medium">Dates</th>
-                <th className="px-3 py-2.5 font-medium min-w-[220px]">Réassignation</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700/40">
-              {sortedDemandes.map((d) => {
-                const key = `${d.kind}:${d.id}`;
-                const selected = pick[key] || '';
-                const picked = (candidates[key] || []).find((c) => c.id === selected);
-                const effectiveStatut = d.kind === 'exam' ? d.statut || 'assigne' : 'open';
-
-                return (
-                  <tr key={key} className="align-top hover:bg-slate-800/20">
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-2">
-                        {d.requester_photo_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={d.requester_photo_url}
-                            alt=""
-                            className="h-8 w-8 rounded-full object-cover border border-slate-600/60"
-                          />
-                        ) : (
-                          <div className="h-8 w-8 rounded-full bg-slate-700/60 flex items-center justify-center">
-                            <UserRound className="h-4 w-4 text-slate-500" />
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-slate-200 font-medium">{d.requester_identifiant}</p>
-                          {d.message && (
-                            <p className="text-xs text-slate-500 mt-0.5 max-w-[180px] truncate" title={d.message}>
-                              {d.message}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 text-slate-300">{KIND_LABELS[d.kind]}</td>
-                    <td className="px-3 py-3 text-slate-300 font-medium">{d.licence_code}</td>
-                    <td className="px-3 py-3">
-                      <StatusBadge
-                        status={effectiveStatut}
-                        map={d.kind === 'exam' ? EXAM_STATUT_MAP : TRAINING_STATUT_MAP}
-                        size="sm"
-                      />
-                    </td>
-                    <td className="px-3 py-3 text-slate-400">
-                      {d.assignee_identifiant || '—'}
-                    </td>
-                    <td className="px-3 py-3 text-xs text-slate-500 whitespace-nowrap">
-                      <div>Créée {formatDate(d.created_at)}</div>
-                      {d.updated_at !== d.created_at && (
-                        <div className="mt-0.5">Màj {formatDate(d.updated_at)}</div>
-                      )}
-                    </td>
-                    <td className="px-3 py-3">
-                      {!d.reassignable ? (
-                        <p className="text-xs text-slate-500">
-                          {d.kind === 'exam' && d.statut === 'en_cours'
-                            ? 'Session en cours — réassignation indisponible.'
-                            : 'Non réassignable.'}
-                        </p>
-                      ) : (
-                        <div className="space-y-2 min-w-[200px]">
-                          <select
-                            className="input w-full text-sm"
-                            value={selected}
-                            onChange={(e) => setPick((p) => ({ ...p, [key]: e.target.value }))}
-                            disabled={loading || listLoading[key]}
-                          >
-                            <option value="">— Choisir —</option>
-                            {(candidates[key] || [])
-                              .filter((c) => !c.currently_assigned)
-                              .map((c) => (
-                                <option key={c.id} value={c.id}>
-                                  {c.identifiant}
-                                  {c.tier ? ` (${c.tier})` : ''}
-                                  {c.trained_conflict ? ' — a formé le candidat' : ''}
-                                </option>
-                              ))}
-                          </select>
-                          {d.kind === 'exam' && picked?.trained_conflict && (
-                            <label className="flex items-start gap-2 text-xs text-amber-200/90">
-                              <input
-                                type="checkbox"
-                                className="mt-0.5 rounded border-slate-600"
-                                checked={Boolean(force[key])}
-                                onChange={(e) => setForce((p) => ({ ...p, [key]: e.target.checked }))}
-                              />
-                              <span>Forcer malgré conflit FI≠FE</span>
-                            </label>
-                          )}
-                          <button
-                            type="button"
-                            className="btn-primary w-full text-xs py-1.5"
-                            disabled={loading || listLoading[key] || !selected}
-                            onClick={() => reassignDemande(d)}
-                          >
-                            Réassigner
-                          </button>
-                          {listLoading[key] && (
-                            <p className="text-xs text-slate-500">Chargement…</p>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 space-y-4 shadow-2xl">
+            <h3 className="text-lg font-semibold text-slate-100">
+              Annuler cette demande ?
+            </h3>
+            <p className="text-sm text-slate-400">
+              {KIND_LABELS[cancelTarget.kind]} · {cancelTarget.licence_code} ·{' '}
+              <span className="text-slate-200">{cancelTarget.requester_identifiant}</span>
+            </p>
+            <p className="text-sm text-slate-300">
+              Cette action est définitive : la demande disparaîtra de la liste des demandes ouvertes
+              et l’élève pourra en créer une nouvelle.
+            </p>
+            <label className="flex items-start gap-2 text-sm text-amber-200/90 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-1 rounded border-slate-600"
+                checked={cancelAck}
+                onChange={(e) => setCancelAck(e.target.checked)}
+              />
+              <span>
+                Je confirme vouloir annuler définitivement cette demande
+                {cancelTarget.kind === 'exam' ? ' d’examen' : ' de training'}.
+              </span>
+            </label>
+            <div className="flex gap-3 pt-1">
+              <button
+                type="button"
+                className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition-colors disabled:opacity-50"
+                disabled={loading || !cancelAck}
+                onClick={() => void confirmCancel()}
+              >
+                {loading ? 'Annulation…' : 'Confirmer l’annulation'}
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+                disabled={loading}
+                onClick={() => {
+                  setCancelTarget(null);
+                  setCancelAck(false);
+                }}
+              >
+                Retour
+              </button>
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

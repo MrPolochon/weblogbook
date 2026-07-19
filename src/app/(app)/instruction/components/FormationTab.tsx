@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { InstructionProgram } from '@/lib/instruction-programs';
 import { isAtcInstructionProgram } from '@/lib/instruction-programs';
-import { Plane, UserPlus, Link2, Users } from 'lucide-react';
+import { UserPlus, Link2, Users } from 'lucide-react';
 import UserAvatar from '@/components/UserAvatar';
-import type { Eleve, TypeAvion, AvionTemp } from '../types';
+import type { Eleve } from '../types';
 import ReferentsSection from './ReferentsSection';
 
 function progressionToggleKey(eleveId: string, licenceCode: string, moduleCode: string) {
@@ -19,8 +19,6 @@ interface FormationTabProps {
   programs: InstructionProgram[];
   isManager: boolean;
   eleves: Eleve[];
-  typesAvion: TypeAvion[];
-  avionsTemp: AvionTemp[];
   elevesProgression: Array<{ eleve_id: string; licence_code: string; module_code: string; completed: boolean; note?: string | null }>;
 }
 
@@ -29,8 +27,6 @@ export default function FormationTab({
   programs,
   isManager,
   eleves,
-  typesAvion,
-  avionsTemp,
   elevesProgression,
 }: FormationTabProps) {
   const router = useRouter();
@@ -44,11 +40,6 @@ export default function FormationTab({
   const [rattachCandidatesLoading, setRattachCandidatesLoading] = useState(false);
   const [formationLicence, setFormationLicence] = useState('ATC-INIT');
   const [formationLicenceRattach, setFormationLicenceRattach] = useState('ATC-INIT');
-  const [selectedEleveId, setSelectedEleveId] = useState('');
-  const [typeAvionId, setTypeAvionId] = useState('');
-  const [nomPerso, setNomPerso] = useState('');
-  const [immat, setImmat] = useState('');
-  const [editById, setEditById] = useState<Record<string, { nom: string; immat: string; aeroport: string }>>({});
   const [progressionOverrides, setProgressionOverrides] = useState<Record<string, boolean>>({});
   const [savingProgKeys, setSavingProgKeys] = useState<Set<string>>(() => new Set());
   const [notesDraft, setNotesDraft] = useState<Record<string, string>>({});
@@ -165,24 +156,6 @@ export default function FormationTab({
     return m;
   }, [elevesProgression]);
 
-  const avionsByEleve = useMemo(() => {
-    const map = new Map<string, AvionTemp[]>();
-    for (const a of avionsTemp) {
-      const arr = map.get(a.proprietaire_id) || [];
-      arr.push(a);
-      map.set(a.proprietaire_id, arr);
-    }
-    return map;
-  }, [avionsTemp]);
-
-  const elevesForAvion = useMemo(
-    () =>
-      eleves.filter(
-        (e) => e.formation_instruction_licence && !isAtcInstructionProgram(e.formation_instruction_licence),
-      ),
-    [eleves],
-  );
-
   const progressionByEleve = useMemo(() => {
     const map = new Map<string, Set<string>>();
     for (const row of elevesProgression) {
@@ -247,57 +220,6 @@ export default function FormationTab({
       setRattachUserId('');
       setRattachCandidates((list) => list.filter((c) => c.id !== pickedId));
       toast.success('Compte rattaché à votre formation. Le rôle (ex. pilote) est conservé.');
-    });
-  }
-
-  async function addAvionTemp(e: React.FormEvent) {
-    e.preventDefault();
-    await run(async () => {
-      const res = await fetch('/api/instruction/avions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eleve_id: selectedEleveId,
-          type_avion_id: typeAvionId,
-          nom_personnalise: nomPerso.trim() || null,
-          immatriculation: immat.trim() || null,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Erreur assignation avion');
-      setTypeAvionId('');
-      setNomPerso('');
-      setImmat('');
-      toast.success('Avion temporaire assigne.');
-    });
-  }
-
-  async function saveAvion(id: string) {
-    const v = editById[id];
-    if (!v) return;
-    await run(async () => {
-      const res = await fetch('/api/instruction/avions', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id,
-          nom_personnalise: v.nom,
-          immatriculation: v.immat,
-          aeroport_actuel: v.aeroport,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Erreur mise à jour avion');
-      toast.success('Avion temporaire mis a jour.');
-    });
-  }
-
-  async function removeAvion(id: string) {
-    await run(async () => {
-      const res = await fetch(`/api/instruction/avions?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Erreur suppression avion');
-      toast.success('Avion temporaire supprime.');
     });
   }
 
@@ -509,39 +431,6 @@ export default function FormationTab({
 
       {eleves.some((e) => e.formation_instruction_active) && <ReferentsSection eleves={eleves} />}
 
-      {elevesForAvion.some((e) => e.formation_instruction_active) ? (
-        <form onSubmit={addAvionTemp} className="card space-y-4 border-l-4 border-l-lime-500/60">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-lime-500/10"><Plane className="h-5 w-5 text-lime-400" /></div>
-            <h2 className="text-lg font-semibold text-slate-100">Assigner un avion temporaire</h2>
-          </div>
-          <p className="text-xs text-slate-500">Réservé aux parcours <strong className="text-slate-400">vol</strong> (PPL, CPL, etc.), pas à la formation ATC-INIT.</p>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <select className="input" value={selectedEleveId} onChange={(e) => setSelectedEleveId(e.target.value)} required>
-              <option value="">Élève</option>
-              {elevesForAvion.filter((e) => e.formation_instruction_active).map((e) => (
-                <option key={e.id} value={e.id}>{e.identifiant}</option>
-              ))}
-            </select>
-            <select className="input" value={typeAvionId} onChange={(e) => setTypeAvionId(e.target.value)} required>
-              <option value="">Type avion</option>
-              {typesAvion.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.nom}{t.code_oaci ? ` (${t.code_oaci})` : ''}{t.constructeur ? ` - ${t.constructeur}` : ''}
-                </option>
-              ))}
-            </select>
-            <input className="input" value={immat} onChange={(e) => setImmat(e.target.value.toUpperCase())} placeholder="Immatriculation (optionnel)" />
-            <input className="input" value={nomPerso} onChange={(e) => setNomPerso(e.target.value)} placeholder="Nom personnalisé (optionnel)" />
-          </div>
-          <button className="btn-primary" type="submit" disabled={loading}>Assigner</button>
-        </form>
-      ) : isManager ? (
-        <p className="text-sm text-slate-500 card py-3 px-4 border border-slate-700/40">
-          Aucun élève en formation <strong className="text-slate-400">vol</strong> actif : l&apos;assignation d&apos;avion temporaire ne s&apos;applique pas aux seuls parcours ATC-INIT.
-        </p>
-      ) : null}
-
       <div className="card space-y-4 border-l-4 border-l-orange-500/60">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-orange-500/10"><Users className="h-5 w-5 text-orange-400" /></div>
@@ -552,7 +441,6 @@ export default function FormationTab({
         </div>
         {eleves.length === 0 && <p className="text-slate-500">Aucun élève rattaché.</p>}
         {eleves.map((e) => {
-          const avions = avionsByEleve.get(e.id) || [];
           const licenceCode = e.formation_instruction_licence || 'PPL';
           const program = programs.find((p) => p.licenceCode === licenceCode) || null;
           const key = `${e.id}::${licenceCode}`;
@@ -620,7 +508,7 @@ export default function FormationTab({
                           </select>
                           {noCandidates && (
                             <span className="text-[11px] text-amber-400 mt-1 max-w-[15rem] leading-tight">
-                              Vous êtes le seul {isAtcInit ? 'ATC FI / ATC FE' : 'FI / instructeur'} disponible. Un autre référent doit être créé pour permettre le transfert.
+                              Vous êtes le seul {isAtcInit ? 'ATC FI' : 'FI / instructeur'} disponible. Un autre référent doit être créé pour permettre le transfert.
                             </span>
                           )}
                         </div>
@@ -697,44 +585,6 @@ export default function FormationTab({
                 </div>
               )}
 
-              {avions.length === 0 && <p className="text-sm text-slate-500">Aucun avion temporaire assigné.</p>}
-              {avions.map((a) => {
-                const type = typesAvion.find((t) => t.id === a.type_avion_id);
-                const edit = editById[a.id] || {
-                  nom: a.nom_personnalise || '',
-                  immat: a.immatriculation || '',
-                  aeroport: a.aeroport_actuel || 'IRFD',
-                };
-                return (
-                  <div key={a.id} className="rounded border border-slate-700/60 p-3 space-y-2">
-                    <p className="text-sm text-slate-300">{type?.nom || 'Type inconnu'}</p>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                      <input
-                        className="input"
-                        value={edit.immat}
-                        onChange={(ev) => setEditById((prev) => ({ ...prev, [a.id]: { ...edit, immat: ev.target.value.toUpperCase() } }))}
-                        placeholder="Immatriculation"
-                      />
-                      <input
-                        className="input"
-                        value={edit.nom}
-                        onChange={(ev) => setEditById((prev) => ({ ...prev, [a.id]: { ...edit, nom: ev.target.value } }))}
-                        placeholder="Nom personnalisé"
-                      />
-                      <input
-                        className="input"
-                        value={edit.aeroport}
-                        onChange={(ev) => setEditById((prev) => ({ ...prev, [a.id]: { ...edit, aeroport: ev.target.value.toUpperCase() } }))}
-                        placeholder="Aéroport actuel"
-                      />
-                      <div className="flex gap-2">
-                        <button type="button" className="btn-primary" disabled={loading} onClick={() => saveAvion(a.id)}>Enregistrer</button>
-                        <button type="button" className="btn-secondary" disabled={loading} onClick={() => removeAvion(a.id)}>Supprimer</button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           );
         })}

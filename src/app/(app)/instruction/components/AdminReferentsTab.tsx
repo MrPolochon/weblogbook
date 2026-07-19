@@ -103,15 +103,18 @@ export default function AdminReferentsTab() {
   }
 
   return (
-    <div className="card space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="p-2 rounded-lg bg-amber-500/10">
+    <div className="card space-y-4 border-l-4 border-l-amber-500/60 min-w-0">
+      <div className="flex items-start gap-3">
+        <div className="p-2 rounded-lg bg-amber-500/10 shrink-0">
           <Star className="h-5 w-5 text-amber-400" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h2 className="text-lg font-semibold text-slate-100">Référents d&apos;assignation</h2>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-slate-500 mt-0.5">
             Priorité automatique pour training et examens. Sans référent, retour à l&apos;assignation least-busy.
+          </p>
+          <p className="text-xs text-slate-500 mt-1.5">
+            Référents éligibles : FI (parcours vol) ou ATC FI (parcours ATC).
           </p>
         </div>
       </div>
@@ -121,29 +124,35 @@ export default function AdminReferentsTab() {
       ) : rows.length === 0 ? (
         <p className="text-sm text-slate-500">Aucun lien élève ↔ référent enregistré.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-slate-700/50">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
-              <tr className="text-left text-slate-500 border-b border-slate-700/50">
-                <th className="py-2 pr-4">Élève</th>
-                <th className="py-2 pr-4">Parcours</th>
-                <th className="py-2 pr-4">Référent actuel</th>
-                <th className="py-2 pr-4">Réassigner</th>
-                <th className="py-2">Actions</th>
+              <tr className="border-b border-slate-700/60 bg-slate-800/40 text-left text-xs uppercase tracking-wide text-slate-500">
+                <th className="px-3 py-2.5 font-medium">Élève</th>
+                <th className="px-3 py-2.5 font-medium">Parcours</th>
+                <th className="px-3 py-2.5 font-medium">Référent actuel</th>
+                <th className="px-3 py-2.5 font-medium">Réassigner</th>
+                <th className="px-3 py-2.5 font-medium">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-slate-700/40">
               {rows.map((r) => {
                 const cands = candidates[r.eleve_id] ?? [];
                 return (
-                  <tr key={r.eleve_id} className="border-b border-slate-800/60">
-                    <td className="py-3 pr-4 text-slate-200">{r.eleve?.identifiant ?? r.eleve_id}</td>
-                    <td className="py-3 pr-4 text-slate-400">{r.eleve?.formation_instruction_licence ?? '—'}</td>
-                    <td className="py-3 pr-4 text-amber-200">{r.instructeur?.identifiant ?? r.instructeur_id}</td>
-                    <td className="py-3 pr-4">
-                      <div className="flex flex-wrap items-center gap-2">
+                  <tr key={r.eleve_id} className="align-top hover:bg-slate-800/20">
+                    <td className="px-3 py-3 text-slate-200 whitespace-nowrap">
+                      {r.eleve?.identifiant ?? r.eleve_id}
+                    </td>
+                    <td className="px-3 py-3 text-slate-400 whitespace-nowrap">
+                      {r.eleve?.formation_instruction_licence ?? '—'}
+                    </td>
+                    <td className="px-3 py-3 text-amber-200 whitespace-nowrap">
+                      {r.instructeur?.identifiant ?? r.instructeur_id}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap items-center gap-2 min-w-[14rem]">
                         <select
-                          className="input text-xs max-w-[12rem]"
+                          className="input text-xs min-w-[10rem] max-w-[14rem]"
                           value={pick[r.eleve_id] ?? ''}
                           onFocus={() => {
                             if (!candidates[r.eleve_id]) void loadCandidates(r.eleve_id);
@@ -167,7 +176,7 @@ export default function AdminReferentsTab() {
                         </button>
                       </div>
                     </td>
-                    <td className="py-3">
+                    <td className="px-3 py-3">
                       <button
                         type="button"
                         className="btn-secondary text-xs text-red-300 border-red-500/30 flex items-center gap-1"

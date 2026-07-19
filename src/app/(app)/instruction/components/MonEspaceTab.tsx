@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { InstructionProgram } from '@/lib/instruction-programs';
 import { Check, ClipboardList, FileCheck2, PlaneTakeoff, Radio, BookOpen } from 'lucide-react';
-import type { ExamRequestMine } from '../types';
+import type { ExamRequestMine, TypeAvion, AvionTemp } from '../types';
 import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
+import FictiveAircraftPanel from './FictiveAircraftPanel';
 
 const EXAM_MINE_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   assigne: { label: 'En attente de confirmation', className: 'bg-amber-500/15 text-amber-300 border border-amber-500/25' },
@@ -17,6 +18,12 @@ const EXAM_MINE_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   termine_echoue: { label: 'Échoué', className: 'bg-red-500/15 text-red-300 border border-red-500/25' },
   termine_unknown: { label: 'Terminé', className: 'bg-slate-700/60 text-slate-400' },
   refuse: { label: 'Refusé', className: 'bg-red-500/15 text-red-300 border border-red-500/25' },
+};
+
+const PILOT_TRAINING_STATUT_MAP: Record<string, StatusBadgeConfig> = {
+  assigne: { label: 'En attente', className: 'bg-amber-500/15 text-amber-300 border border-amber-500/25' },
+  accepte: { label: 'Accepté — prêt à démarrer', className: 'bg-sky-500/15 text-sky-300 border border-sky-500/25' },
+  en_cours: { label: 'Session en cours', className: 'bg-violet-500/15 text-violet-300 border border-violet-500/25' },
 };
 
 interface MonEspaceTabProps {
@@ -36,6 +43,8 @@ interface MonEspaceTabProps {
   atcTrainingsMine: Array<Record<string, string | null | undefined>>;
   isAtcTrainingInstructor: boolean;
   atcTrainingsAssigned: Array<Record<string, string | null | undefined>>;
+  typesAvion: TypeAvion[];
+  avionsTemp: AvionTemp[];
 }
 
 export default function MonEspaceTab({
@@ -55,6 +64,8 @@ export default function MonEspaceTab({
   atcTrainingsMine,
   isAtcTrainingInstructor,
   atcTrainingsAssigned,
+  typesAvion,
+  avionsTemp,
 }: MonEspaceTabProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -134,6 +145,32 @@ export default function MonEspaceTab({
     });
   }
 
+  async function acceptPilotTraining(id: string) {
+    await run(async () => {
+      const res = await fetch(`/api/instruction/pilot-trainings/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statut: 'accepte' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur acceptation');
+      toast.success('Session de training acceptée.');
+    });
+  }
+
+  async function startPilotTraining(id: string) {
+    await run(async () => {
+      const res = await fetch(`/api/instruction/pilot-trainings/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statut: 'en_cours' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Erreur démarrage session');
+      toast.success('Session démarrée — l\'avion fictif est visible pour l\'élève.');
+    });
+  }
+
   async function terminePilotTraining(id: string) {
     if (!confirm('Marquer la session de training comme terminée ? Cette fiche sera effacée.')) return;
     await run(async () => {
@@ -162,7 +199,7 @@ export default function MonEspaceTab({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur demande training');
       setAtcTrainingMessage('');
-      toast.success('Demande envoyée. Un ATC FI est assigné en priorité (ATC FE si les ATC FI sont très chargés) — convenez de la date en message privé.');
+      toast.success('Demande envoyée. Un instructeur ATC FI est assigné — convenez de la date en message privé.');
     });
   }
 
@@ -340,16 +377,28 @@ export default function MonEspaceTab({
                   <span className="text-slate-300">
                     <span className="text-teal-300 font-medium">{t.licence_code || '—'}</span>
                     {' · '}Assigné à <span className="text-slate-100 font-medium">{t.assignee_identifiant || '—'}</span>
+                    {t.statut ? (
+                      <span className="ml-2 inline-block">
+                        <StatusBadge status={String(t.statut)} map={PILOT_TRAINING_STATUT_MAP} />
+                      </span>
+                    ) : null}
+                    {t.statut === 'en_cours' && (
+                      <span className="block text-xs text-violet-300 mt-1">
+                        Session en cours — l&apos;avion fictif est disponible dans votre inventaire.
+                      </span>
+                    )}
                     {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
                   </span>
-                  <button
-                    type="button"
-                    className="text-xs text-red-400 border border-red-500/30 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors"
-                    onClick={() => annulePilotTraining(String(t.id))}
-                    disabled={loading}
-                  >
-                    Annuler
-                  </button>
+                  {(t.statut === 'assigne' || t.statut === 'accepte' || !t.statut) && (
+                    <button
+                      type="button"
+                      className="text-xs text-red-400 border border-red-500/30 hover:bg-red-500/10 rounded-lg px-3 py-1.5 transition-colors"
+                      onClick={() => annulePilotTraining(String(t.id))}
+                      disabled={loading}
+                    >
+                      Annuler
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -359,23 +408,53 @@ export default function MonEspaceTab({
           <div>
             <p className="text-sm font-medium text-emerald-300/80 mb-2">Training vol à assurer (côté instructeur)</p>
             <ul className="space-y-2">
-              {pilotTrainingsAssigned.map((t) => (
-                <li key={String(t.id)} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-4 py-3 text-sm">
-                  <span className="text-slate-300">
-                    <span className="text-teal-300 font-medium">{t.licence_code || '—'}</span>
-                    {' · '}Avec <span className="text-slate-100 font-medium">{t.requester_identifiant || '—'}</span>
-                    {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
-                  </span>
-                  <button
-                    type="button"
-                    className="btn-primary text-xs py-1"
-                    onClick={() => terminePilotTraining(String(t.id))}
-                    disabled={loading}
-                  >
-                    Session terminée
-                  </button>
+              {pilotTrainingsAssigned.map((t) => {
+                const statut = String(t.statut || 'assigne');
+                const requesterName = t.requester_identifiant || '—';
+                return (
+                <li key={String(t.id)} className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-4 py-3 text-sm space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-slate-300">
+                      <span className="text-teal-300 font-medium">{t.licence_code || '—'}</span>
+                      {' · '}Avec <span className="text-slate-100 font-medium">{requesterName}</span>
+                      <span className="ml-2 inline-block">
+                        <StatusBadge status={statut} map={PILOT_TRAINING_STATUT_MAP} />
+                      </span>
+                      {t.message ? <span className="block text-xs text-slate-500 mt-1">{t.message}</span> : null}
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {statut === 'assigne' && (
+                        <button type="button" className="btn-primary text-xs py-1" onClick={() => acceptPilotTraining(String(t.id))} disabled={loading}>
+                          Accepter
+                        </button>
+                      )}
+                      {statut === 'accepte' && (
+                        <button type="button" className="px-3 py-1 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium" onClick={() => startPilotTraining(String(t.id))} disabled={loading}>
+                          Démarrer la session
+                        </button>
+                      )}
+                      {statut === 'en_cours' && (
+                        <button type="button" className="btn-primary text-xs py-1" onClick={() => terminePilotTraining(String(t.id))} disabled={loading}>
+                          Session terminée
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {['assigne', 'accepte', 'en_cours'].includes(statut) && (
+                    <FictiveAircraftPanel
+                      sessionKind="pilot_training"
+                      sessionId={String(t.id)}
+                      sessionLabel={`${t.licence_code || '—'} — ${requesterName}`}
+                      sessionStatut={statut}
+                      typesAvion={typesAvion}
+                      avions={avionsTemp.filter(
+                        (a) => a.instruction_session_kind === 'pilot_training' && a.instruction_session_id === String(t.id),
+                      )}
+                      disabled={loading}
+                    />
+                  )}
                 </li>
-              ))}
+              );})}
             </ul>
           </div>
         )}

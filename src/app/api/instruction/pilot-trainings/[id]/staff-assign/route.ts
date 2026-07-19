@@ -3,8 +3,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
-  getPilotTrainingTier1UserIds,
-  getPilotTrainingTier2UserIds,
+  getAdminPilotTrainingStaffPoolUserIds,
 } from '@/lib/instruction-permissions';
 import { trainingSideForExamLicence } from '@/lib/instruction-exam-rules';
 import { logActivity, getClientIp } from '@/lib/activity-log';
@@ -60,7 +59,7 @@ async function requireAdminAndOpenTraining(
 }
 
 /**
- * GET — Admin : instructeurs FI / FE disponibles pour réassigner une session training vol.
+ * GET — Admin : tous les instructeurs FI pour réassigner une session training vol.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -69,25 +68,24 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if ('error' in ctx) return ctx.error;
 
     const { admin, row } = ctx;
-    const tier1 = await getPilotTrainingTier1UserIds(admin);
-    const tier1Set = new Set(tier1);
-    const tier2 = await getPilotTrainingTier2UserIds(admin, tier1Set);
-    const candidateIds = Array.from(new Set(tier1.concat(tier2))).filter((eid) => eid !== row.requester_id);
-    if (candidateIds.length === 0) {
+    const poolIds = (await getAdminPilotTrainingStaffPoolUserIds(admin)).filter(
+      (eid) => eid !== row.requester_id,
+    );
+    if (poolIds.length === 0) {
       return NextResponse.json({ candidates: [] as Array<{ id: string; identifiant: string; tier: string; currently_assigned: boolean }> });
     }
 
     const { data: profs, error: perr } = await admin
       .from('profiles')
       .select('id, identifiant')
-      .in('id', candidateIds)
+      .in('id', poolIds)
       .order('identifiant', { ascending: true });
     if (perr) return NextResponse.json({ error: perr.message }, { status: 400 });
 
     const candidates = (profs || []).map((p) => ({
       id: p.id as string,
       identifiant: p.identifiant as string,
-      tier: tier1Set.has(p.id as string) ? 'FI' : 'FE',
+      tier: 'FI',
       currently_assigned: p.id === row.assignee_id,
     }));
 
@@ -125,13 +123,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Cet instructeur est déjà assigné à cette demande.' }, { status: 400 });
     }
 
-    const tier1 = await getPilotTrainingTier1UserIds(admin);
-    const tier1Set = new Set(tier1);
-    const tier2 = await getPilotTrainingTier2UserIds(admin, tier1Set);
-    const pool = new Set(tier1.concat(tier2));
+    const pool = new Set(await getAdminPilotTrainingStaffPoolUserIds(admin));
     if (!pool.has(targetId)) {
       return NextResponse.json(
-        { error: 'Cet utilisateur n’est pas un instructeur FI/FE disponible pour le training vol.' },
+        { error: 'Cet utilisateur n’est pas titulaire de la licence FI (instructeur training vol).' },
         { status: 400 },
       );
     }
@@ -144,6 +139,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       })
       .eq('id', id);
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
+
+    await admin
+      .from('inventaire_avions')
+      .update({ instruction_instructeur_id: targetId })
+      .eq('instruction_session_kind', 'pilot_training')
+      .eq('instruction_session_id', id)
+      .eq('instruction_actif', true)
+      .in('instruction_lifecycle', ['brouillon', 'actif']);
 
     logActivity({
       userId: user.id,

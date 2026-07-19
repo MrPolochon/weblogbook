@@ -2,10 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import {
-  getAtcTrainingTier1UserIds,
-  getAtcTrainingTier2UserIds,
-} from '@/lib/instruction-permissions';
+import { getAdminAtcTrainingStaffPoolUserIds } from '@/lib/instruction-permissions';
 import { trainingSideForExamLicence } from '@/lib/instruction-exam-rules';
 import { logActivity, getClientIp } from '@/lib/activity-log';
 
@@ -60,7 +57,7 @@ async function requireAdminAndOpenTraining(
 }
 
 /**
- * GET — Admin : instructeurs ATC FI / ATC FE disponibles pour réassigner une session training ATC.
+ * GET — Admin : tous les instructeurs ATC FI pour réassigner une session training ATC.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -69,10 +66,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if ('error' in ctx) return ctx.error;
 
     const { admin, row } = ctx;
-    const tier1 = await getAtcTrainingTier1UserIds(admin);
-    const tier1Set = new Set(tier1);
-    const tier2 = await getAtcTrainingTier2UserIds(admin, tier1Set);
-    const candidateIds = Array.from(new Set(tier1.concat(tier2))).filter((eid) => eid !== row.requester_id);
+    const candidateIds = (await getAdminAtcTrainingStaffPoolUserIds(admin)).filter(
+      (eid) => eid !== row.requester_id,
+    );
     if (candidateIds.length === 0) {
       return NextResponse.json({ candidates: [] as Array<{ id: string; identifiant: string; tier: string; currently_assigned: boolean }> });
     }
@@ -87,7 +83,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const candidates = (profs || []).map((p) => ({
       id: p.id as string,
       identifiant: p.identifiant as string,
-      tier: tier1Set.has(p.id as string) ? 'ATC FI' : 'ATC FE',
+      tier: 'ATC FI',
       currently_assigned: p.id === row.assignee_id,
     }));
 
@@ -125,13 +121,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Cet instructeur est déjà assigné à cette demande.' }, { status: 400 });
     }
 
-    const tier1 = await getAtcTrainingTier1UserIds(admin);
-    const tier1Set = new Set(tier1);
-    const tier2 = await getAtcTrainingTier2UserIds(admin, tier1Set);
-    const pool = new Set(tier1.concat(tier2));
+    const pool = new Set(await getAdminAtcTrainingStaffPoolUserIds(admin));
     if (!pool.has(targetId)) {
       return NextResponse.json(
-        { error: 'Cet utilisateur n’est pas un instructeur ATC FI/ATC FE disponible.' },
+        { error: 'Cet utilisateur n’est pas titulaire de la licence ATC FI.' },
         { status: 400 },
       );
     }

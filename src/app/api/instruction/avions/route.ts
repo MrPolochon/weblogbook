@@ -4,10 +4,13 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   canAccessInstructionManagerTools,
-  canInstructorManageEleveForFormation,
   getInstructionCapabilities,
 } from '@/lib/instruction-permissions';
-import { isAtcInstructionProgram } from '@/lib/instruction-programs';
+import {
+  type InstructionSessionKind,
+  OPEN_EXAM_STATUTS,
+  OPEN_PILOT_TRAINING_STATUTS,
+} from '@/lib/instruction-fictive-aircraft';
 
 function randomImmat(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -30,6 +33,44 @@ async function generateUniqueImmat(admin: ReturnType<typeof createAdminClient>):
   throw new Error('Impossible de générer une immatriculation unique.');
 }
 
+async function assertInstructorOwnsOpenSession(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  isAdmin: boolean,
+  sessionKind: InstructionSessionKind,
+  sessionId: string,
+): Promise<{ requesterId: string } | { error: string; status: number }> {
+  if (sessionKind === 'exam') {
+    const { data: row } = await admin
+      .from('instruction_exam_requests')
+      .select('id, requester_id, instructeur_id, statut, licence_code')
+      .eq('id', sessionId)
+      .maybeSingle();
+    if (!row) return { error: 'Session d\'examen introuvable.', status: 404 };
+    if (row.instructeur_id !== userId && !isAdmin) {
+      return { error: 'Vous n\'êtes pas l\'examinateur assigné à cette session.', status: 403 };
+    }
+    if (!(OPEN_EXAM_STATUTS as readonly string[]).includes(String(row.statut))) {
+      return { error: 'Cette session d\'examen n\'est plus ouverte.', status: 400 };
+    }
+    return { requesterId: row.requester_id as string };
+  }
+
+  const { data: row } = await admin
+    .from('instruction_pilot_training_requests')
+    .select('id, requester_id, assignee_id, statut, licence_code')
+    .eq('id', sessionId)
+    .maybeSingle();
+  if (!row) return { error: 'Session de training introuvable.', status: 404 };
+  if (row.assignee_id !== userId && !isAdmin) {
+    return { error: 'Vous n\'êtes pas l\'instructeur assigné à cette session.', status: 403 };
+  }
+  if (!(OPEN_PILOT_TRAINING_STATUTS as readonly string[]).includes(String(row.statut))) {
+    return { error: 'Cette session de training n\'est plus ouverte.', status: 400 };
+  }
+  return { requesterId: row.requester_id as string };
+}
+
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
@@ -37,37 +78,42 @@ export async function GET(request: Request) {
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const { searchParams } = new URL(request.url);
-    const eleveId = String(searchParams.get('eleve_id') || '');
-    if (!eleveId) return NextResponse.json({ error: 'eleve_id requis.' }, { status: 400 });
+    const sessionKind = String(searchParams.get('session_kind') || '').trim() as InstructionSessionKind;
+    const sessionId = String(searchParams.get('session_id') || '').trim();
+    if (!sessionKind || !sessionId) {
+      return NextResponse.json({ error: 'session_kind et session_id requis.' }, { status: 400 });
+    }
+    if (sessionKind !== 'exam' && sessionKind !== 'pilot_training') {
+      return NextResponse.json({ error: 'session_kind invalide.' }, { status: 400 });
+    }
 
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
     const cap = await getInstructionCapabilities(admin, user.id, me?.role);
-    if (!canAccessInstructionManagerTools(cap)) {
-      return NextResponse.json({ error: 'Réservé aux formateurs (FI / ATC FI / …).' }, { status: 403 });
+    if (!canAccessInstructionManagerTools(cap) && !cap.canViewExaminerInbox) {
+      return NextResponse.json({ error: 'Réservé aux formateurs / examinateurs.' }, { status: 403 });
     }
 
-    const { data: pEleve } = await admin
-      .from('profiles')
-      .select('instructeur_referent_id, formation_instruction_licence')
-      .eq('id', eleveId)
-      .maybeSingle();
-    if (pEleve?.instructeur_referent_id !== user.id && me?.role !== 'admin') {
-      return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 });
-    }
-    if (isAtcInstructionProgram(pEleve?.formation_instruction_licence)) {
-      return NextResponse.json([]);
-    }
-    if (me?.role !== 'admin' && pEleve && !canInstructorManageEleveForFormation(cap, pEleve.formation_instruction_licence)) {
-      return NextResponse.json({ error: 'Non autorisé pour ce type de formation.' }, { status: 403 });
+    const sessionCheck = await assertInstructorOwnsOpenSession(
+      admin,
+      user.id,
+      me?.role === 'admin',
+      sessionKind,
+      sessionId,
+    );
+    if ('error' in sessionCheck) {
+      return NextResponse.json({ error: sessionCheck.error }, { status: sessionCheck.status });
     }
 
     const { data: rows, error } = await admin
       .from('inventaire_avions')
-      .select('id, type_avion_id, nom_personnalise, immatriculation, aeroport_actuel, statut, usure_percent, instruction_actif, types_avion(id, nom, code_oaci)')
+      .select(
+        'id, type_avion_id, nom_personnalise, immatriculation, aeroport_actuel, statut, usure_percent, instruction_actif, instruction_lifecycle, instruction_session_kind, instruction_session_id, types_avion(id, nom, code_oaci)',
+      )
       .eq('instruction_actif', true)
-      .eq('instruction_eleve_id', eleveId)
-      .eq('instruction_instructeur_id', user.id)
+      .eq('instruction_session_kind', sessionKind)
+      .eq('instruction_session_id', sessionId)
+      .in('instruction_lifecycle', ['brouillon', 'actif'])
       .order('created_at', { ascending: false });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -87,41 +133,35 @@ export async function POST(request: Request) {
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
     const cap = await getInstructionCapabilities(admin, user.id, me?.role);
-    if (!canAccessInstructionManagerTools(cap)) {
-      return NextResponse.json({ error: 'Réservé aux formateurs (FI / ATC FI / …).' }, { status: 403 });
+    if (!canAccessInstructionManagerTools(cap) && !cap.canViewExaminerInbox) {
+      return NextResponse.json({ error: 'Réservé aux formateurs / examinateurs.' }, { status: 403 });
     }
 
     const body = await request.json();
-    const eleveId = String(body.eleve_id || '');
+    const sessionKind = String(body.session_kind || '').trim() as InstructionSessionKind;
+    const sessionId = String(body.session_id || '').trim();
     const typeAvionId = String(body.type_avion_id || '');
     const nomPersonnalise = body.nom_personnalise ? String(body.nom_personnalise).trim() : null;
     let immat = body.immatriculation ? String(body.immatriculation).trim().toUpperCase() : '';
 
-    if (!eleveId || !typeAvionId) {
-      return NextResponse.json({ error: 'eleve_id et type_avion_id requis.' }, { status: 400 });
+    if (!sessionKind || !sessionId || !typeAvionId) {
+      return NextResponse.json({ error: 'session_kind, session_id et type_avion_id requis.' }, { status: 400 });
+    }
+    if (sessionKind !== 'exam' && sessionKind !== 'pilot_training') {
+      return NextResponse.json({ error: 'session_kind invalide (exam ou pilot_training).' }, { status: 400 });
     }
 
-    const { data: eleve } = await admin
-      .from('profiles')
-      .select('id, formation_instruction_active, instructeur_referent_id, formation_instruction_licence')
-      .eq('id', eleveId)
-      .single();
-    if (!eleve) return NextResponse.json({ error: 'Élève introuvable.' }, { status: 404 });
-    if (isAtcInstructionProgram(eleve.formation_instruction_licence)) {
-      return NextResponse.json(
-        { error: 'Les avions temporaires ne s’appliquent pas à la formation ATC-INIT (aucun appareil logbook ici).' },
-        { status: 400 },
-      );
+    const sessionCheck = await assertInstructorOwnsOpenSession(
+      admin,
+      user.id,
+      me?.role === 'admin',
+      sessionKind,
+      sessionId,
+    );
+    if ('error' in sessionCheck) {
+      return NextResponse.json({ error: sessionCheck.error }, { status: sessionCheck.status });
     }
-    if (me?.role !== 'admin' && !canInstructorManageEleveForFormation(cap, eleve.formation_instruction_licence)) {
-      return NextResponse.json({ error: 'Vous n’êtes pas autorisé pour ce parcours vol.' }, { status: 403 });
-    }
-    if (!eleve.formation_instruction_active) {
-      return NextResponse.json({ error: 'La formation de cet élève n’est pas active.' }, { status: 400 });
-    }
-    if (eleve.instructeur_referent_id !== user.id && me?.role !== 'admin') {
-      return NextResponse.json({ error: 'Cet élève n’est pas rattaché à vous.' }, { status: 403 });
-    }
+    const { requesterId } = sessionCheck;
 
     if (!immat) {
       immat = await generateUniqueImmat(admin);
@@ -130,7 +170,7 @@ export async function POST(request: Request) {
     const { data: insertRow, error } = await admin
       .from('inventaire_avions')
       .insert({
-        proprietaire_id: eleveId,
+        proprietaire_id: requesterId,
         type_avion_id: typeAvionId,
         nom_personnalise: nomPersonnalise,
         immatriculation: immat,
@@ -138,14 +178,17 @@ export async function POST(request: Request) {
         usure_percent: 100,
         statut: 'ground',
         instruction_instructeur_id: user.id,
-        instruction_eleve_id: eleveId,
+        instruction_eleve_id: requesterId,
         instruction_actif: true,
+        instruction_session_kind: sessionKind,
+        instruction_session_id: sessionId,
+        instruction_lifecycle: 'brouillon',
       })
-      .select('id')
+      .select('id, instruction_lifecycle')
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ ok: true, id: insertRow.id });
+    return NextResponse.json({ ok: true, id: insertRow.id, lifecycle: insertRow.instruction_lifecycle });
   } catch (e) {
     console.error('instruction/avions POST:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
@@ -161,8 +204,8 @@ export async function PATCH(request: Request) {
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
     const cap = await getInstructionCapabilities(admin, user.id, me?.role);
-    if (!canAccessInstructionManagerTools(cap)) {
-      return NextResponse.json({ error: 'Réservé aux formateurs (FI / ATC FI / …).' }, { status: 403 });
+    if (!canAccessInstructionManagerTools(cap) && !cap.canViewExaminerInbox) {
+      return NextResponse.json({ error: 'Réservé aux formateurs / examinateurs.' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -171,14 +214,17 @@ export async function PATCH(request: Request) {
 
     const { data: row } = await admin
       .from('inventaire_avions')
-      .select('id, instruction_actif, instruction_instructeur_id')
+      .select('id, instruction_actif, instruction_instructeur_id, instruction_lifecycle, instruction_session_kind, instruction_session_id')
       .eq('id', id)
       .single();
     if (!row || !row.instruction_actif) {
-      return NextResponse.json({ error: 'Avion temporaire introuvable.' }, { status: 404 });
+      return NextResponse.json({ error: 'Avion fictif introuvable.' }, { status: 404 });
     }
     if (row.instruction_instructeur_id !== user.id && me?.role !== 'admin') {
       return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 });
+    }
+    if (row.instruction_lifecycle === 'supprime') {
+      return NextResponse.json({ error: 'Cet avion fictif a déjà été retiré.' }, { status: 400 });
     }
 
     const updates: Record<string, unknown> = {};
@@ -213,8 +259,8 @@ export async function DELETE(request: Request) {
     const admin = createAdminClient();
     const { data: me } = await admin.from('profiles').select('role').eq('id', user.id).single();
     const cap = await getInstructionCapabilities(admin, user.id, me?.role);
-    if (!canAccessInstructionManagerTools(cap)) {
-      return NextResponse.json({ error: 'Réservé aux formateurs (FI / ATC FI / …).' }, { status: 403 });
+    if (!canAccessInstructionManagerTools(cap) && !cap.canViewExaminerInbox) {
+      return NextResponse.json({ error: 'Réservé aux formateurs / examinateurs.' }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -223,11 +269,11 @@ export async function DELETE(request: Request) {
 
     const { data: row } = await admin
       .from('inventaire_avions')
-      .select('id, instruction_actif, instruction_instructeur_id')
+      .select('id, instruction_actif, instruction_instructeur_id, instruction_lifecycle')
       .eq('id', id)
       .single();
     if (!row || !row.instruction_actif) {
-      return NextResponse.json({ error: 'Avion temporaire introuvable.' }, { status: 404 });
+      return NextResponse.json({ error: 'Avion fictif introuvable.' }, { status: 404 });
     }
     if (row.instruction_instructeur_id !== user.id && me?.role !== 'admin') {
       return NextResponse.json({ error: 'Non autorisé.' }, { status: 403 });

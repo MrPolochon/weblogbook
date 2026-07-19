@@ -18,6 +18,36 @@ export function trainingSideForExamLicence(licenceCode: string): 'atc' | 'pilot'
   return isAtcSideExamRequest(licenceCode) ? 'atc' : 'pilot';
 }
 
+/** Rappel métier — titres requis pour chaque type d'assignation. */
+export function assigneeLicenceHint(
+  kind: 'exam' | 'pilot_training' | 'atc_training',
+  licenceCode?: string | null,
+  opts?: { admin?: boolean },
+): string {
+  if (opts?.admin) {
+    if (kind === 'pilot_training') {
+      return 'Tous les titulaires FI (liste complète, sans filtre charge / indisponibilité).';
+    }
+    if (kind === 'atc_training') {
+      return 'Tous les titulaires ATC FI (liste complète, sans filtre charge / indisponibilité).';
+    }
+    if (trainingSideForExamLicence(licenceCode ?? '') === 'atc') {
+      return 'Tous les titulaires ATC FE (conflit formateur signalé, forçable au besoin).';
+    }
+    return 'Tous les titulaires FE (conflit formateur signalé, forçable au besoin).';
+  }
+  if (kind === 'pilot_training') {
+    return 'Instructeurs éligibles : FI (FE uniquement en secours si les FI sont très chargés).';
+  }
+  if (kind === 'atc_training') {
+    return 'Instructeurs éligibles : ATC FI uniquement.';
+  }
+  if (trainingSideForExamLicence(licenceCode ?? '') === 'atc') {
+    return 'Examinateurs éligibles : ATC FE uniquement (pas ATC FI).';
+  }
+  return 'Examinateurs éligibles : FE uniquement (pas FI).';
+}
+
 export function examLicencesForTrainingSide(side: 'atc' | 'pilot'): string[] {
   return (ALL_LICENCE_TYPES as readonly string[]).filter((code) => {
     if (EXAM_INELIGIBLE_LICENCE_CODES.has(code)) return false;

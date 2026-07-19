@@ -126,17 +126,30 @@ export default async function InstructionPage() {
     ? await Promise.all([
         admin
           .from('inventaire_avions')
-          .select('id, proprietaire_id, type_avion_id, nom_personnalise, immatriculation, aeroport_actuel, statut, usure_percent, instruction_actif')
+          .select('id, proprietaire_id, type_avion_id, nom_personnalise, immatriculation, aeroport_actuel, statut, usure_percent, instruction_actif, instruction_lifecycle, instruction_session_kind, instruction_session_id')
           .eq('instruction_actif', true)
           .eq('instruction_instructeur_id', user.id)
-          .in('proprietaire_id', eleveIds)
+          .not('instruction_session_id', 'is', null)
+          .in('instruction_lifecycle', ['brouillon', 'actif'])
           .order('created_at', { ascending: false }),
         admin
           .from('instruction_progression_items')
           .select('eleve_id, licence_code, module_code, completed, note')
           .in('eleve_id', eleveIds),
       ])
-    : [{ data: [] as Array<Record<string, unknown>>, error: null }, { data: [] as Array<Record<string, unknown>>, error: null }];
+    : canViewExaminerInbox
+      ? await Promise.all([
+          admin
+            .from('inventaire_avions')
+            .select('id, proprietaire_id, type_avion_id, nom_personnalise, immatriculation, aeroport_actuel, statut, usure_percent, instruction_actif, instruction_lifecycle, instruction_session_kind, instruction_session_id')
+            .eq('instruction_actif', true)
+            .eq('instruction_instructeur_id', user.id)
+            .not('instruction_session_id', 'is', null)
+            .in('instruction_lifecycle', ['brouillon', 'actif'])
+            .order('created_at', { ascending: false }),
+          Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null }),
+        ])
+      : [{ data: [] as Array<Record<string, unknown>>, error: null }, { data: [] as Array<Record<string, unknown>>, error: null }];
 
   const isStaffAdmin = viewer.role === 'admin';
 
@@ -160,7 +173,7 @@ export default async function InstructionPage() {
     ? await Promise.all([
         admin
           .from('instruction_pilot_training_requests')
-          .select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at')
+          .select('id, requester_id, assignee_id, licence_code, statut, message, created_at, updated_at')
           .order('created_at', { ascending: false }),
         admin
           .from('instruction_atc_training_requests')
@@ -175,8 +188,8 @@ export default async function InstructionPage() {
     { data: atcMine, error: atcMineErr },
     { data: atcToMe, error: atcToMeErr },
   ] = await Promise.all([
-    admin.from('instruction_pilot_training_requests').select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at').eq('requester_id', user.id).order('created_at', { ascending: false }),
-    admin.from('instruction_pilot_training_requests').select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at').eq('assignee_id', user.id).order('created_at', { ascending: false }),
+    admin.from('instruction_pilot_training_requests').select('id, requester_id, assignee_id, licence_code, statut, message, created_at, updated_at').eq('requester_id', user.id).order('created_at', { ascending: false }),
+    admin.from('instruction_pilot_training_requests').select('id, requester_id, assignee_id, licence_code, statut, message, created_at, updated_at').eq('assignee_id', user.id).order('created_at', { ascending: false }),
     admin.from('instruction_atc_training_requests').select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at').eq('requester_id', user.id).order('created_at', { ascending: false }),
     admin.from('instruction_atc_training_requests').select('id, requester_id, assignee_id, licence_code, message, created_at, updated_at').eq('assignee_id', user.id).order('created_at', { ascending: false }),
   ]);
@@ -294,13 +307,13 @@ export default async function InstructionPage() {
         requester_identifiant: profileIdToIdent.get(r.requester_id as string) || (r.requester_id as string),
         requester_photo_url: adminPhotos.get(r.requester_id as string) ?? null,
         licence_code: (r.licence_code as string) || '—',
-        statut: null,
+        statut: (r.statut as string | null) ?? 'assigne',
         assignee_id: (r.assignee_id as string) ?? null,
         assignee_identifiant: profileIdToIdent.get(r.assignee_id as string) || null,
         message: (r.message as string | null) ?? null,
         created_at: r.created_at as string,
         updated_at: r.updated_at as string,
-        reassignable: true,
+        reassignable: !r.statut || r.statut === 'assigne' || r.statut === 'accepte',
       })),
       ...(atcStaffOpen || []).map((r) => ({
         id: r.id as string,

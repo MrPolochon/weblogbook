@@ -44,6 +44,12 @@ export async function fetchUserLicenceTypes(admin: SupabaseClient, userId: strin
   return new Set((data || []).map((r) => r.type as string));
 }
 
+/** Tous les utilisateurs détenant un type de licence (sans filtre indisponibilité / charge). */
+export async function getUserIdsWithLicenceType(admin: SupabaseClient, licType: string): Promise<string[]> {
+  const { data } = await admin.from('licences_qualifications').select('user_id').eq('type', licType);
+  return Array.from(new Set((data || []).map((r) => r.user_id as string)));
+}
+
 export function buildInstructionCapabilities(
   role: string | null | undefined,
   licenceTypes: Set<string>,
@@ -58,13 +64,13 @@ export function buildInstructionCapabilities(
   return {
     types: licenceTypes,
     canManageFlightInstruction: isAdmin || legacyInstructeur || hasFi,
-    canManageAtcInstruction: isAdmin || hasAtcFi || hasAtcFe,
+    canManageAtcInstruction: isAdmin || hasAtcFi,
     /** Examens vol : exclusivement la licence FE (les admins n’héritent plus du droit d’examen). */
     canExamineFlight: hasFe,
     /** Examens ATC / AFIS : exclusivement la licence ATC FE. */
     canExamineAtc: hasAtcFe,
-    /** Training ATC assignable / file reçue : titres ATC FI ou ATC FE uniquement (pas le seul rôle admin). */
-    isAtcTrainingInstructor: hasAtcFi || hasAtcFe,
+    /** Training ATC assignable / file reçue : titre ATC FI uniquement (pas le seul rôle admin). */
+    isAtcTrainingInstructor: hasAtcFi,
     /** File examinateur reçue : dès qu’on a FE et/ou ATC FE (jamais par le seul rôle admin). */
     canViewExaminerInbox: hasFe || hasAtcFe,
   };
@@ -245,12 +251,9 @@ export async function getAtcTrainingTier2UserIds(
   return (dispRows || []).map((r) => r.id as string);
 }
 
-/** Union des deux pools (ex. listes déroulantes) — l’assignation utilise les tiers + selectTrainingAssigneeFiFirst. */
+/** Pool instructeurs ATC (référents, transferts) — **ATC FI** uniquement. */
 export async function getAtcTrainingInstructorPoolUserIds(admin: SupabaseClient): Promise<string[]> {
-  const t1 = await getAtcTrainingTier1UserIds(admin);
-  const t1s = new Set(t1);
-  const t2 = await getAtcTrainingTier2UserIds(admin, t1s);
-  return Array.from(new Set(t1.concat(t2)));
+  return getAtcTrainingTier1UserIds(admin);
 }
 
 /**
@@ -285,18 +288,42 @@ export async function getPilotTrainingTier2UserIds(
   return (dispRows || []).map((r) => r.id as string);
 }
 
-/** Instructeurs pouvant être désignés comme nouveau référent pour ce parcours (FI/FÉ ou ATC FI/FÉ selon la licence). */
+/**
+ * Pool admin réassignation training vol : **tous** les titulaires FI
+ * (indisponibles inclus ; pas de filtre charge ni référent).
+ */
+export async function getAdminPilotTrainingStaffPoolUserIds(admin: SupabaseClient): Promise<string[]> {
+  return getUserIdsWithLicenceType(admin, LICENCE_FI);
+}
+
+/**
+ * Pool admin réassignation training ATC : **tous** les titulaires ATC FI.
+ */
+export async function getAdminAtcTrainingStaffPoolUserIds(admin: SupabaseClient): Promise<string[]> {
+  return getUserIdsWithLicenceType(admin, LICENCE_ATC_FI);
+}
+
+/**
+ * Pool admin réassignation examen : **tous** les FE / ATC FE selon la licence
+ * (indisponibles inclus ; conflit formateur ≠ examinateur géré au POST).
+ */
+export async function getAdminExaminerPoolUserIds(admin: SupabaseClient, licenceCode: string): Promise<string[]> {
+  const licType = isAtcSideExamRequest(licenceCode) ? LICENCE_ATC_FE : LICENCE_FE;
+  return getUserIdsWithLicenceType(admin, licType);
+}
+
+/** Instructeurs pouvant être désignés comme nouveau référent (FI vol ; ATC FI côté tour). */
 export async function listProfilesEligibleAsFormationReferent(
   admin: SupabaseClient,
   licenceCode: string,
 ): Promise<Array<{ id: string; identifiant: string }>> {
   const idsPool = new Set<string>();
   if (isAtcInstructionProgram(licenceCode)) {
-    const ids = await getAtcTrainingInstructorPoolUserIds(admin);
+    const ids = await getAtcTrainingTier1UserIds(admin);
     for (const id of ids) idsPool.add(id);
   } else {
-    const rows = await getFlightInstructorProfilesForSelect(admin);
-    for (const r of rows) idsPool.add(r.id);
+    const ids = await getPilotTrainingTier1UserIds(admin);
+    for (const id of ids) idsPool.add(id);
   }
   const ids = Array.from(idsPool);
   if (ids.length === 0) return [];

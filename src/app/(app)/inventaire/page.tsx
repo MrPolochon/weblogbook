@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
+import { filterStudentInventory } from '@/lib/instruction-fictive-aircraft';
 import { Plane, Package, Users, Weight, CheckCircle, Clock, Shield } from 'lucide-react';
 import Link from 'next/link';
 
@@ -17,8 +18,10 @@ export default async function InventairePage() {
     .eq('proprietaire_id', user.id)
     .order('created_at', { ascending: false });
 
+  const visibleInventaire = filterStudentInventory(inventaire || []);
+
   // Vérifier disponibilité de chaque avion
-  const inventaireWithStatus = await Promise.all((inventaire || []).map(async (item) => {
+  const inventaireWithStatus = await Promise.all(visibleInventaire.map(async (item) => {
     const { count } = await admin.from('plans_vol')
       .select('*', { count: 'exact', head: true })
       .eq('inventaire_avion_id', item.id)

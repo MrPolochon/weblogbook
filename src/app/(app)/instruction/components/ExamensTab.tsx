@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Award, FileCheck2 } from 'lucide-react';
-import type { ExamRequestAssigned, ExamFinishDialog } from '../types';
+import type { ExamRequestAssigned, ExamFinishDialog, TypeAvion, AvionTemp } from '../types';
 import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
+import FictiveAircraftPanel from './FictiveAircraftPanel';
 
 const EXAM_ASSIGNED_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   assigne: { label: 'Nouvelle demande', className: 'bg-amber-500/20 text-amber-300' },
@@ -23,6 +24,8 @@ interface ExamensTabProps {
   viewerRole: string;
   canViewExaminerInbox: boolean;
   examRequestsAssigned: ExamRequestAssigned[];
+  typesAvion: TypeAvion[];
+  avionsTemp: AvionTemp[];
 }
 
 export default function ExamensTab({
@@ -31,6 +34,8 @@ export default function ExamensTab({
   viewerRole,
   canViewExaminerInbox,
   examRequestsAssigned,
+  typesAvion,
+  avionsTemp,
 }: ExamensTabProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -446,6 +451,20 @@ export default function ExamensTab({
                           Terminer la session
                         </button>
                       </div>
+                    )}
+
+                    {['assigne', 'accepte', 'en_cours'].includes(r.statut) && (
+                      <FictiveAircraftPanel
+                        sessionKind="exam"
+                        sessionId={r.id}
+                        sessionLabel={`${r.licence_code} — ${requesterName}`}
+                        sessionStatut={r.statut}
+                        typesAvion={typesAvion}
+                        avions={avionsTemp.filter(
+                          (a) => a.instruction_session_kind === 'exam' && a.instruction_session_id === r.id,
+                        )}
+                        disabled={loading}
+                      />
                     )}
 
                     {r.statut === 'termine' && r.resultat === 'echoue' && r.dossier_conserve && (
