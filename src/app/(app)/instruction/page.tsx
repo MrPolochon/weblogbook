@@ -13,6 +13,7 @@ import {
 } from '@/lib/instruction-permissions';
 import { examLicencesForTrainingSide } from '@/lib/instruction-exam-rules';
 import { getUserPhotosMap } from '@/lib/user-photos';
+import { getActiveInstructionSessionForAssignee } from '@/lib/instruction-active-session';
 
 export default async function InstructionPage() {
   const supabase = await createClient();
@@ -229,6 +230,8 @@ export default async function InstructionPage() {
 
   const loadError = errors.length > 0 ? errors.join(' · ') : undefined;
 
+  const activeSession = await getActiveInstructionSessionForAssignee(admin, user.id);
+
   const titresCiblesPilotes = (titresCiblesResult.data || []) as Array<{ id: string; identifiant: string }>;
 
   // Photos officielles (carte d'identite) pour tous les eleves listes : on les
@@ -366,6 +369,7 @@ export default async function InstructionPage() {
       avionsTemp={(avionsTemp || []) as Array<{ id: string; proprietaire_id: string; type_avion_id: string; nom_personnalise: string | null; immatriculation: string | null; aeroport_actuel: string | null; statut: string | null; usure_percent: number | null; instruction_actif: boolean }>}
       elevesProgression={(elevesProgression || []) as Array<{ eleve_id: string; licence_code: string; module_code: string; completed: boolean; note?: string | null }>}
       initialIndisponible={viewer.instruction_indisponible}
+      activeSession={activeSession}
     />
   );
 }

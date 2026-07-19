@@ -1,10 +1,10 @@
 ﻿'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Award, FileCheck2 } from 'lucide-react';
-import type { ExamRequestAssigned, ExamFinishDialog, TypeAvion, AvionTemp } from '../types';
+import type { ExamRequestAssigned, ExamFinishDialog, TypeAvion, AvionTemp, ActiveInstructionSession } from '../types';
 import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
 import FictiveAircraftPanel from './FictiveAircraftPanel';
@@ -26,6 +26,7 @@ interface ExamensTabProps {
   examRequestsAssigned: ExamRequestAssigned[];
   typesAvion: TypeAvion[];
   avionsTemp: AvionTemp[];
+  sessionLock?: ActiveInstructionSession | null;
 }
 
 export default function ExamensTab({
@@ -36,10 +37,19 @@ export default function ExamensTab({
   examRequestsAssigned,
   typesAvion,
   avionsTemp,
+  sessionLock = null,
 }: ExamensTabProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
+  const lockedSessionRef = useRef<HTMLDivElement | null>(null);
+  const isLocked = sessionLock?.kind === 'exam';
+
+  useEffect(() => {
+    if (isLocked && lockedSessionRef.current) {
+      lockedSessionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [isLocked, sessionLock?.id]);
 
   const [titreUserId, setTitreUserId] = useState('');
   const [titreType, setTitreType] = useState('FI');
@@ -249,7 +259,7 @@ export default function ExamensTab({
 
   return (
     <>
-      {instructionTitreOptions.length > 0 && (
+      {!isLocked && instructionTitreOptions.length > 0 && (
         <form onSubmit={submitTitreDelivrance} className="card space-y-4 border-l-4 border-l-violet-500/60">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-violet-500/10"><Award className="h-5 w-5 text-violet-400" /></div>
@@ -346,10 +356,17 @@ export default function ExamensTab({
       )}
 
       {canViewExaminerInbox && (
-        <div className="card space-y-4 border-l-4 border-l-rose-500/60">
+        <div className={`card space-y-4 border-l-4 ${isLocked ? 'border-l-violet-500 ring-2 ring-violet-500/30' : 'border-l-rose-500/60'}`}>
+          {isLocked && (
+            <p className="text-sm text-violet-300 bg-violet-500/10 border border-violet-500/25 rounded-lg px-3 py-2">
+              Session d&apos;examen en cours — rendez votre décision (réussi / échoué) pour retrouver l&apos;accès aux autres sections.
+            </p>
+          )}
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-rose-500/10"><FileCheck2 className="h-5 w-5 text-rose-400" /></div>
-            <h2 className="text-lg font-semibold text-slate-100">Demandes d&apos;examen assignées</h2>
+            <h2 className="text-lg font-semibold text-slate-100">
+              {isLocked ? 'Session d\'examen en cours' : 'Demandes d\'examen assignées'}
+            </h2>
             {examRequestsAssigned.length > 0 && (
               <span className="ml-auto text-xs px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-300 font-medium">{examRequestsAssigned.length}</span>
             )}
@@ -358,14 +375,26 @@ export default function ExamensTab({
             <p className="text-slate-500">Aucune demande assignée.</p>
           ) : (
             <div className="space-y-3">
-              {examRequestsAssigned.map((r) => {
+              {examRequestsAssigned
+                .filter((r) => !isLocked || r.id === sessionLock?.id)
+                .map((r) => {
                 const requester = Array.isArray(r.requester) ? r.requester[0] : r.requester;
                 const requesterName = requester?.identifiant || r.requester_id;
                 const effectiveStatut = r.statut === 'termine'
                   ? `termine_${r.resultat || 'unknown'}`
                   : r.statut;
+                const isFocused = isLocked && r.id === sessionLock?.id;
                 return (
-                  <div key={r.id} className="rounded-lg border border-slate-700/60 p-4 space-y-3">
+                  <div
+                    key={r.id}
+                    ref={isFocused ? lockedSessionRef : undefined}
+                    id={isFocused ? `instruction-session-${sessionLock?.id}` : undefined}
+                    className={`rounded-lg border p-4 space-y-3 ${
+                      isFocused
+                        ? 'border-violet-500/50 bg-violet-500/10 ring-2 ring-violet-500/25'
+                        : 'border-slate-700/60'
+                    }`}
+                  >
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-slate-200 font-medium">{requesterName} · {r.licence_code}</p>

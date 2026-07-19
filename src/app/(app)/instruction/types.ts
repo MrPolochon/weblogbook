@@ -91,3 +91,12 @@ export type ExamFinishDialog = {
   licenceCode: string;
   step: 'choose_result' | 'form_reussi' | 'form_echoue';
 };
+
+export type ActiveInstructionSession = {
+  kind: 'exam' | 'pilot_training';
+  id: string;
+  licence_code: string;
+  counterpart_id: string;
+  counterpart_identifiant: string | null;
+  updated_at: string;
+};

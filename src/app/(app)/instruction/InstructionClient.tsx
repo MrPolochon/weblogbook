@@ -1,14 +1,14 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { InstructionProgram } from '@/lib/instruction-programs';
 import {
   GraduationCap, BookOpen, Users, Award, Plane,
-  ClipboardList, FileCheck2, Shield,
+  ClipboardList, FileCheck2, Shield, Lock,
 } from 'lucide-react';
-import type { ExamRequestMine, ExamRequestAssigned, Eleve, TypeAvion, AvionTemp, AdminOpenDemande } from './types';
+import type { ExamRequestMine, ExamRequestAssigned, Eleve, TypeAvion, AvionTemp, AdminOpenDemande, ActiveInstructionSession } from './types';
 import MonEspaceTab from './components/MonEspaceTab';
 import FormationTab from './components/FormationTab';
 import ExamensTab from './components/ExamensTab';
@@ -49,6 +49,7 @@ export default function InstructionClient({
   avionsTemp,
   elevesProgression,
   initialIndisponible,
+  activeSession: activeSessionProp = null,
 }: {
   loadError?: string;
   viewerRole: string;
@@ -81,16 +82,47 @@ export default function InstructionClient({
   avionsTemp: AvionTemp[];
   elevesProgression: Array<{ eleve_id: string; licence_code: string; module_code: string; completed: boolean; note?: string | null }>;
   initialIndisponible?: boolean;
+  activeSession?: ActiveInstructionSession | null;
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const isManager = isManagerProp;
   const formationProgramsForCreate = createFormationPrograms.length > 0 ? createFormationPrograms : programs;
   const isInstructeurOuExaminateur = isManager || canViewExaminerInbox;
+  const isStaffAdmin = viewerRole === 'admin';
 
   const [indisponible, setIndisponible] = useState(initialIndisponible ?? false);
   const [togglingDispo, setTogglingDispo] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabId>('espace');
+
+  const lockedTab = useMemo<TabId | null>(() => {
+    if (!activeSessionProp) return null;
+    return activeSessionProp.kind === 'exam' ? 'examens' : 'espace';
+  }, [activeSessionProp]);
+
+  const [activeTab, setActiveTab] = useState<TabId>(() => lockedTab ?? 'espace');
+
+  useEffect(() => {
+    if (lockedTab) setActiveTab(lockedTab);
+  }, [lockedTab, activeSessionProp?.id]);
+
+  const sessionLockLabel = useMemo(() => {
+    if (!activeSessionProp) return null;
+    const who = activeSessionProp.counterpart_identifiant || 'l\'élève';
+    if (activeSessionProp.kind === 'exam') {
+      return `Examen ${activeSessionProp.licence_code} avec ${who}`;
+    }
+    return `Training vol ${activeSessionProp.licence_code} avec ${who}`;
+  }, [activeSessionProp]);
+
+  function trySetActiveTab(tabId: TabId) {
+    if (activeSessionProp && tabId !== lockedTab && !(tabId === 'admin' && isStaffAdmin)) {
+      toast.error(
+        'Session en cours — terminez-la (clôturer le training ou rendre la décision d\'examen) avant de changer d\'onglet.',
+      );
+      return;
+    }
+    setActiveTab(tabId);
+  }
 
   const instructionTitreOptions = useMemo(() => {
     const out: string[] = [];
@@ -99,7 +131,6 @@ export default function InstructionClient({
     return out;
   }, [canGrantTitreInstructionFlight, canGrantTitreInstructionAtc]);
 
-  const isStaffAdmin = viewerRole === 'admin';
   const showExamensTab =
     canViewExaminerInbox || instructionTitreOptions.length > 0 || isStaffAdmin;
 
@@ -224,7 +255,7 @@ export default function InstructionClient({
             )}
           </div>
 
-          {isInstructeurOuExaminateur && (
+          {isInstructeurOuExaminateur && !activeSessionProp && (
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -249,6 +280,20 @@ export default function InstructionClient({
         </div>
       </div>
 
+      {activeSessionProp && sessionLockLabel && (
+        <div className="rounded-xl border border-violet-500/40 bg-violet-500/10 px-4 py-3 flex items-start gap-3">
+          <Lock className="h-5 w-5 text-violet-400 shrink-0 mt-0.5" />
+          <div className="space-y-1 text-sm">
+            <p className="font-medium text-violet-200">Session en cours — navigation limitée</p>
+            <p className="text-violet-300/90">
+              {sessionLockLabel}. Vous devez terminer cette session (clôturer le training ou rendre la décision
+              d&apos;examen) avant de consulter les autres onglets.
+              {isStaffAdmin ? ' L\'onglet Admin reste accessible.' : ''}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ===== Tab Bar ===== */}
       <div className="flex gap-1.5 p-1 rounded-xl bg-slate-800/40 border border-slate-800/60">
         {([
@@ -259,14 +304,26 @@ export default function InstructionClient({
         ]).filter((t) => t.visible).map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
+          const lockedOut =
+            Boolean(activeSessionProp) &&
+            tab.id !== lockedTab &&
+            !(tab.id === 'admin' && isStaffAdmin);
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => trySetActiveTab(tab.id)}
+              disabled={lockedOut}
+              title={
+                lockedOut
+                  ? 'Terminez la session en cours avant de changer d\'onglet.'
+                  : undefined
+              }
               className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                 active
                   ? 'bg-slate-700/80 text-slate-50 shadow-lg shadow-slate-900/50 border border-slate-600/50'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  : lockedOut
+                    ? 'text-slate-600 cursor-not-allowed opacity-60'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
               <Icon className={`h-4 w-4 ${active ? 'text-sky-400' : ''}`} />
@@ -297,6 +354,9 @@ export default function InstructionClient({
           atcTrainingsAssigned={atcTrainingsAssigned}
           typesAvion={typesAvion}
           avionsTemp={avionsTemp}
+          sessionLock={
+            activeSessionProp?.kind === 'pilot_training' ? activeSessionProp : null
+          }
         />
       )}
 
@@ -319,6 +379,7 @@ export default function InstructionClient({
           examRequestsAssigned={examRequestsAssigned}
           typesAvion={typesAvion}
           avionsTemp={avionsTemp}
+          sessionLock={activeSessionProp?.kind === 'exam' ? activeSessionProp : null}
         />
       )}
 

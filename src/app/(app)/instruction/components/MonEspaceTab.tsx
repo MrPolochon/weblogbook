@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { InstructionProgram } from '@/lib/instruction-programs';
 import { Check, ClipboardList, FileCheck2, PlaneTakeoff, Radio, BookOpen } from 'lucide-react';
-import type { ExamRequestMine, TypeAvion, AvionTemp } from '../types';
+import type { ExamRequestMine, TypeAvion, AvionTemp, ActiveInstructionSession } from '../types';
 import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
 import FictiveAircraftPanel from './FictiveAircraftPanel';
@@ -45,6 +45,7 @@ interface MonEspaceTabProps {
   atcTrainingsAssigned: Array<Record<string, string | null | undefined>>;
   typesAvion: TypeAvion[];
   avionsTemp: AvionTemp[];
+  sessionLock?: ActiveInstructionSession | null;
 }
 
 export default function MonEspaceTab({
@@ -66,10 +67,19 @@ export default function MonEspaceTab({
   atcTrainingsAssigned,
   typesAvion,
   avionsTemp,
+  sessionLock = null,
 }: MonEspaceTabProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
+  const lockedSessionRef = useRef<HTMLLIElement | null>(null);
+  const isLocked = sessionLock?.kind === 'pilot_training';
+
+  useEffect(() => {
+    if (isLocked && lockedSessionRef.current) {
+      lockedSessionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [isLocked, sessionLock?.id]);
   const [examLicence, setExamLicence] = useState(myFormationLicence || examLicenceOptions[0] || 'CAL-ATC');
   const [examMessage, setExamMessage] = useState('');
   const [pilotTrainingLicence, setPilotTrainingLicence] = useState(
@@ -228,6 +238,7 @@ export default function MonEspaceTab({
 
   return (
     <>
+      {!isLocked && (
       <form onSubmit={createExamRequest} className="card space-y-4 border-l-4 border-l-amber-500/60">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-amber-500/10"><ClipboardList className="h-5 w-5 text-amber-400" /></div>
@@ -252,8 +263,9 @@ export default function MonEspaceTab({
         </div>
         <button className="btn-primary" type="submit" disabled={loading}>Envoyer la demande</button>
       </form>
+      )}
 
-      {myFormationActive && myProgram && (
+      {!isLocked && myFormationActive && myProgram && (
         <div className="card space-y-4 border-l-4 border-l-emerald-500/60">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-emerald-500/10"><BookOpen className="h-5 w-5 text-emerald-400" /></div>
@@ -290,6 +302,7 @@ export default function MonEspaceTab({
         </div>
       )}
 
+      {!isLocked && (
       <div className="card space-y-4 border-l-4 border-l-sky-500/60">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-sky-500/10"><FileCheck2 className="h-5 w-5 text-sky-400" /></div>
@@ -336,8 +349,14 @@ export default function MonEspaceTab({
           </div>
         )}
       </div>
+      )}
 
-      <div className="card space-y-4 border-l-4 border-l-teal-500/60">
+      <div className={`card space-y-4 border-l-4 ${isLocked ? 'border-l-violet-500 ring-2 ring-violet-500/30' : 'border-l-teal-500/60'}`}>
+        {isLocked && (
+          <p className="text-sm text-violet-300 bg-violet-500/10 border border-violet-500/25 rounded-lg px-3 py-2">
+            Session de training en cours — clôturez-la avec « Session terminée » pour retrouver l&apos;accès aux autres sections.
+          </p>
+        )}
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-teal-500/10"><PlaneTakeoff className="h-5 w-5 text-teal-400" /></div>
           <h2 className="text-lg font-semibold text-slate-100">Session de training (vol / pilote)</h2>
@@ -347,6 +366,7 @@ export default function MonEspaceTab({
           un <strong className="text-slate-400">FE</strong> n&apos;intervient que si les FI sont très chargés.
           L&apos;instructeur qui clôture cette session ne pourra pas être votre examinateur pour cette même licence.
         </p>
+        {!isLocked && (
         <form onSubmit={requestPilotTraining} className="space-y-2">
           <select
             className="input w-full"
@@ -368,7 +388,8 @@ export default function MonEspaceTab({
             Demander une session de training
           </button>
         </form>
-        {pilotTrainingsMine.length > 0 && (
+        )}
+        {!isLocked && pilotTrainingsMine.length > 0 && (
           <div>
             <p className="text-sm font-medium text-slate-400 mb-2">Mes demandes en cours (vol)</p>
             <ul className="space-y-2">
@@ -406,13 +427,27 @@ export default function MonEspaceTab({
         )}
         {isPilotTrainingInstructor && pilotTrainingsAssigned.length > 0 && (
           <div>
-            <p className="text-sm font-medium text-emerald-300/80 mb-2">Training vol à assurer (côté instructeur)</p>
+            <p className="text-sm font-medium text-emerald-300/80 mb-2">
+              {isLocked ? 'Session de training à clôturer' : 'Training vol à assurer (côté instructeur)'}
+            </p>
             <ul className="space-y-2">
-              {pilotTrainingsAssigned.map((t) => {
+              {pilotTrainingsAssigned
+                .filter((t) => !isLocked || String(t.id) === sessionLock?.id)
+                .map((t) => {
                 const statut = String(t.statut || 'assigne');
                 const requesterName = t.requester_identifiant || '—';
+                const isFocused = isLocked && String(t.id) === sessionLock?.id;
                 return (
-                <li key={String(t.id)} className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-4 py-3 text-sm space-y-2">
+                <li
+                  key={String(t.id)}
+                  ref={isFocused ? lockedSessionRef : undefined}
+                  id={isFocused ? `instruction-session-${sessionLock?.id}` : undefined}
+                  className={`rounded-xl border px-4 py-3 text-sm space-y-2 ${
+                    isFocused
+                      ? 'border-violet-500/50 bg-violet-500/10 ring-2 ring-violet-500/25'
+                      : 'border-emerald-500/25 bg-emerald-500/5'
+                  }`}
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-slate-300">
                       <span className="text-teal-300 font-medium">{t.licence_code || '—'}</span>
@@ -460,6 +495,7 @@ export default function MonEspaceTab({
         )}
       </div>
 
+      {!isLocked && (
       <div className="card space-y-4 border-l-4 border-l-indigo-500/60">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-indigo-500/10"><Radio className="h-5 w-5 text-indigo-400" /></div>
@@ -539,6 +575,7 @@ export default function MonEspaceTab({
           </div>
         )}
       </div>
+      )}
     </>
   );
 }
