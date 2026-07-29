@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Award, Calendar, FileText, X } from 'lucide-react';
 import { formatDateMediumUTC } from '@/lib/date-utils';
+import { formatLicenceLabel } from '@/lib/licence-types';
 
 type Licence = {
   id: string;
@@ -48,13 +49,7 @@ export default function LicencesSection({ userId, variant = 'default' }: Props) 
   }
 
   function formatLibelle(lic: Licence): string {
-    if (lic.type === 'Qualification Type' && lic.types_avion) {
-      return `Qualification Type ${lic.types_avion.constructeur} ${lic.types_avion.nom}`;
-    }
-    if (lic.type.startsWith('COM') && lic.langue) {
-      return `${lic.type} ${lic.langue}`;
-    }
-    return lic.type;
+    return formatLicenceLabel(lic);
   }
 
   function isExpired(lic: Licence): boolean {

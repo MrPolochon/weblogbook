@@ -15,6 +15,7 @@ import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { formatDuree } from '@/lib/utils';
 import CarteIdentite from '@/components/CarteIdentite';
 import FelitzTransactionsHistory from '@/components/FelitzTransactionsHistory';
+import { formatLicenceLabel } from '@/lib/licence-types';
 
 interface Signalement {
   id: string;
@@ -662,16 +663,6 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
     } finally {
       setLoading(false);
     }
-  }
-
-  function formatLicenceLabel(lic: IfsaLicence): string {
-    if (lic.type === 'Qualification Type' && lic.types_avion) {
-      return `Qualification Type ${lic.types_avion.constructeur} ${lic.types_avion.nom}`;
-    }
-    if (lic.type.startsWith('COM') && lic.langue) {
-      return `${lic.type} ${lic.langue}`;
-    }
-    return lic.type;
   }
 
   function formatLicenceDate(dateStr: string | null): string {

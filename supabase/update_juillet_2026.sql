@@ -7,7 +7,8 @@
 -- -----------------------------------------------------------------------------
 -- 1. Suppression des licences obsolètes de la table licences_qualifications
 --    Licences concernées : PPL, CPL, ATPL, IR ME, Multi Crew attestation,
---    CLASS-M, CLASS-MT, CLASS-MRP, IFR, VFR, COM 1-6.
+--    CLASS-M, CLASS-MT, CLASS-MRP.
+--    CONSERVÉES : VFR, IFR, COM 1–6, CAT, FI/FE/ATC FI/ATC FE, LATC, etc.
 -- -----------------------------------------------------------------------------
 
 DELETE FROM public.licences_qualifications
@@ -19,11 +20,7 @@ WHERE type IN (
   'Multi Crew attestation',
   'CLASS-M',
   'CLASS-MT',
-  'CLASS-MRP',
-  'IFR',
-  'VFR',
-  'IFR',
-  'VFR'
+  'CLASS-MRP'
 );
 
 -- -----------------------------------------------------------------------------
@@ -50,9 +47,7 @@ WHERE statut IN ('assigne', 'accepte', 'en_cours')
   AND licence_code IN (
     'PPL', 'CPL', 'ATPL', 'IR ME',
     'Multi Crew attestation',
-    'CLASS-M', 'CLASS-MT', 'CLASS-MRP',
-    'IFR', 'VFR',
-    'IFR', 'VFR'
+    'CLASS-M', 'CLASS-MT', 'CLASS-MRP'
   );
 
 -- Annuler les demandes de training pilote en cours

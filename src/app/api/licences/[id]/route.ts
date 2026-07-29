@@ -2,13 +2,10 @@ export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
+import { ALL_LICENCE_TYPES, isComLicenceType } from '@/lib/licence-types';
 import { isInstructionTitreType } from '@/lib/licence-titres-instruction';
 
 const TYPES_VALIDES = ALL_LICENCE_TYPES as readonly string[];
-
-const TYPES_COM = ['COM 1', 'COM 2', 'COM 3', 'COM 4', 'COM 5', 'COM 6'] as const;
-const isTypeCom = (type: string): boolean => (TYPES_COM as readonly string[]).includes(type);
 const TYPE_QUALIFICATION_TYPE = 'Qualification Type';
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
@@ -78,7 +75,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     }
 
     const currentType = type || existing.type;
-    if (isTypeCom(currentType)) {
+    if (isComLicenceType(currentType)) {
       if (langue !== undefined) {
         if (!langue || !String(langue).trim()) {
           return NextResponse.json({ error: 'langue requise pour COM' }, { status: 400 });

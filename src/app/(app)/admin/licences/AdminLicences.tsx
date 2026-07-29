@@ -4,14 +4,15 @@ import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Award, Plus, Edit2, Trash2, X, Layers } from 'lucide-react';
 import { formatDateMediumUTC } from '@/lib/date-utils';
-import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
+import {
+  ALL_LICENCE_TYPES,
+  COM_LANGUE_SUGGESTIONS,
+  formatLicenceLabel,
+  isComLicenceType,
+} from '@/lib/licence-types';
 import { isInstructionTitreType } from '@/lib/licence-titres-instruction';
 
 const TYPES = ALL_LICENCE_TYPES;
-
-const TYPES_COM = ['COM 1', 'COM 2', 'COM 3', 'COM 4', 'COM 5', 'COM 6'] as const;
-type TypeCom = typeof TYPES_COM[number];
-const isTypeCom = (type: string): type is TypeCom => (TYPES_COM as readonly string[]).includes(type);
 const TYPE_QUALIFICATION_TYPE = 'Qualification Type';
 
 type Pilote = { id: string; identifiant: string };
@@ -157,7 +158,7 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
         }
         body.type_avion_id = formData.type_avion_id;
       }
-      if (isTypeCom(formData.type)) {
+      if (isComLicenceType(formData.type)) {
         if (!formData.langue) {
           alert('Langue requise pour COM');
           setLoading(false);
@@ -242,7 +243,7 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
           }
           body.type_avion_id = lic.type_avion_id;
         }
-        if (isTypeCom(lic.type)) {
+        if (isComLicenceType(lic.type)) {
           if (!lic.langue) {
             throw new Error('Langue requise pour COM');
           }
@@ -313,7 +314,7 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
 
   const selectedPilote = pilotes.find((p) => p.id === selectedPiloteId);
   const needsTypeAvion = formData.type === TYPE_QUALIFICATION_TYPE;
-  const needsLangue = isTypeCom(formData.type);
+  const needsLangue = isComLicenceType(formData.type);
 
   return (
     <div className="space-y-6">
@@ -372,12 +373,7 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
             ) : (
               <div className="space-y-3">
                 {licences.map((lic) => {
-                  const libelle =
-                    lic.type === TYPE_QUALIFICATION_TYPE && lic.types_avion
-                      ? `Qualification Type ${lic.types_avion.constructeur} ${lic.types_avion.nom}`
-                      : lic.type.startsWith('COM') && lic.langue
-                        ? `${lic.type} ${lic.langue}`
-                        : lic.type;
+                  const libelle = formatLicenceLabel(lic);
                   return (
                     <div key={lic.id} className="border border-slate-700/50 rounded-lg p-3 bg-slate-800/30">
                       <div className="flex items-start justify-between gap-2">
@@ -474,15 +470,21 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
 
                 {needsLangue && (
                   <div>
-                    <label className="label">Langue</label>
+                    <label className="label">Langue de validité (COM)</label>
                     <input
                       type="text"
                       className="input"
+                      list="com-langue-suggestions"
                       value={formData.langue}
                       onChange={(e) => setFormData({ ...formData, langue: e.target.value })}
-                      placeholder="Ex: Français, Anglais, etc."
+                      placeholder="Ex. Français, Anglais…"
                       required
                     />
+                    <datalist id="com-langue-suggestions">
+                      {COM_LANGUE_SUGGESTIONS.map((l) => (
+                        <option key={l} value={l} />
+                      ))}
+                    </datalist>
                   </div>
                 )}
 
@@ -580,7 +582,7 @@ export default function AdminLicences({ pilotes, typesAvion }: Props) {
                     <tbody>
                       {multipleLicences.map((lic, index) => {
                         const needsTypeAvion = lic.type === TYPE_QUALIFICATION_TYPE;
-                        const needsLangue = isTypeCom(lic.type);
+                        const needsLangue = isComLicenceType(lic.type);
                         return (
                           <tr key={index} className="border-b border-slate-700/50">
                             <td className="py-2 pr-2">
