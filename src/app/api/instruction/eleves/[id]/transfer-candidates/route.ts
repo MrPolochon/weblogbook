@@ -8,6 +8,7 @@ import {
   getInstructionCapabilities,
   listProfilesEligibleAsFormationReferent,
 } from '@/lib/instruction-permissions';
+import { ATC_INIT_LICENCE_CODE } from '@/lib/instruction-programs';
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -41,7 +42,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Non autorisé pour ce parcours.' }, { status: 403 });
     }
 
-    const licenceCode = eleve.formation_instruction_licence || 'PPL';
+    const licenceCode = eleve.formation_instruction_licence || ATC_INIT_LICENCE_CODE;
     const pool = await listProfilesEligibleAsFormationReferent(admin, licenceCode);
     const candidates = pool.filter((p) => p.id !== user.id && p.id !== eleveId);
 

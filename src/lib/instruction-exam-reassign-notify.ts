@@ -14,7 +14,7 @@ export async function getCachedExaminerPool(
     return cache.atc;
   }
   if (!cache.flight) {
-    cache.flight = await getExaminerPoolUserIds(admin, 'PPL');
+    cache.flight = await getExaminerPoolUserIds(admin, 'COM 1');
   }
   return cache.flight;
 }

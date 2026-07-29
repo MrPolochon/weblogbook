@@ -46,7 +46,8 @@ async function requireAdminAndOpenTraining(
   if (!row) {
     return { error: NextResponse.json({ error: 'Demande introuvable.' }, { status: 404 }) };
   }
-  if (!row.licence_code || trainingSideForExamLicence(row.licence_code) !== 'pilot') {
+  // Sessions legacy sans licence_code : la ligne est déjà dans instruction_pilot_training_requests.
+  if (row.licence_code && trainingSideForExamLicence(row.licence_code) !== 'pilot') {
     return { error: NextResponse.json({ error: 'Demande de training vol invalide.' }, { status: 400 }) };
   }
 

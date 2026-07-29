@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
 import FictiveAircraftPanel from './FictiveAircraftPanel';
 import DemandeRaisonButton from './DemandeRaisonButton';
+import { formatLicenceOptionLabel } from '@/lib/licence-types';
 
 const EXAM_MINE_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   assigne: { label: 'En attente de confirmation', className: 'bg-amber-500/15 text-amber-300 border border-amber-500/25' },
@@ -252,7 +253,7 @@ export default function MonEspaceTab({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <select className="input" value={examLicence} onChange={(e) => setExamLicence(e.target.value)} required>
             {examLicenceOptions.map((licence) => (
-              <option key={licence} value={licence}>{licence}</option>
+              <option key={licence} value={licence}>{formatLicenceOptionLabel(licence)}</option>
             ))}
           </select>
           <input
@@ -376,7 +377,7 @@ export default function MonEspaceTab({
             required
           >
             {pilotTrainingLicenceOptions.map((code) => (
-              <option key={code} value={code}>{code}</option>
+              <option key={code} value={code}>{formatLicenceOptionLabel(code)}</option>
             ))}
           </select>
           <input
@@ -520,7 +521,7 @@ export default function MonEspaceTab({
             required
           >
             {atcTrainingLicenceOptions.map((code) => (
-              <option key={code} value={code}>{code}</option>
+              <option key={code} value={code}>{formatLicenceOptionLabel(code)}</option>
             ))}
           </select>
           <input

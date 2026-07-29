@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import type { InstructionProgram } from '@/lib/instruction-programs';
-import { isAtcInstructionProgram } from '@/lib/instruction-programs';
+import { ATC_INIT_LICENCE_CODE, isAtcInstructionProgram, type InstructionProgram } from '@/lib/instruction-programs';
 import { UserPlus, Users } from 'lucide-react';
 import UserAvatar from '@/components/UserAvatar';
 import type { Eleve } from '../types';
@@ -369,7 +368,7 @@ export default function FormationTab({
         </div>
         {eleves.length === 0 && <p className="text-slate-500">Aucun élève rattaché.</p>}
         {eleves.map((e) => {
-          const licenceCode = e.formation_instruction_licence || 'PPL';
+          const licenceCode = e.formation_instruction_licence || ATC_INIT_LICENCE_CODE;
           const program = programs.find((p) => p.licenceCode === licenceCode) || null;
           const key = `${e.id}::${licenceCode}`;
           const completedSet = progressionByEleve.get(key) || new Set<string>();

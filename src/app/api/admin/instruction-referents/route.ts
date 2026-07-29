@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logActivity, getClientIp } from '@/lib/activity-log';
 import { listProfilesEligibleAsFormationReferent } from '@/lib/instruction-permissions';
+import { ATC_INIT_LICENCE_CODE } from '@/lib/instruction-programs';
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -66,7 +67,7 @@ export async function PATCH(request: Request) {
       .maybeSingle();
     if (!eleve) return NextResponse.json({ error: 'Élève introuvable.' }, { status: 404 });
 
-    const licence = (eleve.formation_instruction_licence as string | null) || 'PPL';
+    const licence = (eleve.formation_instruction_licence as string | null) || ATC_INIT_LICENCE_CODE;
     const eligible = await listProfilesEligibleAsFormationReferent(admin, licence);
     if (!eligible.some((p) => p.id === instructeurId)) {
       return NextResponse.json(
@@ -170,7 +171,7 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (!eleve) return NextResponse.json({ error: 'Élève introuvable.' }, { status: 404 });
 
-    const licence = (eleve.formation_instruction_licence as string | null) || 'PPL';
+    const licence = (eleve.formation_instruction_licence as string | null) || ATC_INIT_LICENCE_CODE;
     const candidates = await listProfilesEligibleAsFormationReferent(admin, licence);
     return NextResponse.json({ candidates });
   } catch (e) {

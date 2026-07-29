@@ -10,6 +10,7 @@ import {
   selectExaminerForRequest,
 } from '@/lib/instruction-exam-rules';
 import { notifyUser } from '@/lib/notifications';
+import { formatLicenceLabel, isComLicenceType } from '@/lib/licence-types';
 import {
   activateFictiveAircraftForSession,
   removeFictiveAircraftForSession,
@@ -143,12 +144,19 @@ export async function PATCH(
         }
         if (note) licenceRow.note = String(note).trim();
         if (type_avion_id) licenceRow.type_avion_id = type_avion_id;
-        if (langue) licenceRow.langue = String(langue).trim();
+        if (isComLicenceType(row.licence_code)) {
+          if (!langue || !String(langue).trim()) {
+            return NextResponse.json({ error: 'Langue de validité requise pour une licence COM.' }, { status: 400 });
+          }
+          licenceRow.langue = String(langue).trim();
+        } else if (langue) {
+          licenceRow.langue = String(langue).trim();
+        }
 
         const { data: licence, error: licErr } = await admin
           .from('licences_qualifications')
           .insert(licenceRow)
-          .select('id, type, a_vie, date_delivrance, date_expiration, note')
+          .select('id, type, langue, a_vie, date_delivrance, date_expiration, note')
           .single();
         if (licErr) return NextResponse.json({ error: `Erreur création licence: ${licErr.message}` }, { status: 400 });
 
@@ -178,6 +186,11 @@ export async function PATCH(
           ? 'À vie'
           : `Expire le ${licence.date_expiration || 'N/A'}`;
 
+        const licenceLabel = formatLicenceLabel({
+          type: licence.type as string,
+          langue: licence.langue as string | null,
+        });
+
         await admin.from('messages').insert({
           expediteur_id: user.id,
           destinataire_id: row.requester_id,
@@ -189,7 +202,7 @@ export async function PATCH(
             `Votre licence vous a été délivrée par ${me?.identifiant || 'votre instructeur'}.`,
             ``,
             `── Détails de la licence ──`,
-            `Type : ${licence.type}`,
+            `Type : ${licenceLabel}`,
             `Date de délivrance : ${licence.date_delivrance}`,
             `Validité : ${expirationText}`,
             licence.note ? `Note : ${licence.note}` : '',

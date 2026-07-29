@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Shield, UserRound, XCircle } from 'lucide-react';
@@ -81,12 +82,31 @@ export default function AdminDemandesTab({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const [pick, setPick] = useState<Record<string, string>>({});
   const [force, setForce] = useState<Record<string, boolean>>({});
 
   const [cancelTarget, setCancelTarget] = useState<AdminOpenDemande | null>(null);
   const [cancelAck, setCancelAck] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!cancelTarget) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !loading) closeCancelModal();
+    };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [cancelTarget, loading]);
 
   const candidates = useMemo(() => {
     const result: Record<string, StaffCandidate[]> = {};
@@ -190,6 +210,11 @@ export default function AdminDemandesTab({
     });
   }
 
+  function closeCancelModal() {
+    setCancelTarget(null);
+    setCancelAck(false);
+  }
+
   function openCancelModal(d: AdminOpenDemande) {
     if (!canAdminCancel(d)) {
       toast.error(
@@ -213,8 +238,7 @@ export default function AdminDemandesTab({
       const res = await fetch(cancelUrl(d.kind, d.id), { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as { error?: string }).error || 'Erreur d’annulation');
-      setCancelTarget(null);
-      setCancelAck(false);
+      closeCancelModal();
       toast.success(
         d.kind === 'exam'
           ? 'Demande d’examen annulée.'
@@ -222,6 +246,70 @@ export default function AdminDemandesTab({
       );
     });
   }
+
+  const cancelModal =
+    cancelTarget && mounted && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+            onClick={() => {
+              if (!loading) closeCancelModal();
+            }}
+            role="presentation"
+          >
+            <div
+              className="relative w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 space-y-4 shadow-2xl animate-fade-in"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="admin-cancel-demande-title"
+            >
+              <h3 id="admin-cancel-demande-title" className="text-lg font-semibold text-slate-100">
+                Annuler cette demande ?
+              </h3>
+              <p className="text-sm text-slate-400">
+                {KIND_LABELS[cancelTarget.kind]} · {cancelTarget.licence_code} ·{' '}
+                <span className="text-slate-200">{cancelTarget.requester_identifiant}</span>
+              </p>
+              <p className="text-sm text-slate-300">
+                Cette action est définitive : la demande disparaîtra de la liste des demandes ouvertes
+                et l’élève pourra en créer une nouvelle.
+              </p>
+              <label className="flex items-start gap-2 text-sm text-amber-200/90 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1 rounded border-slate-600"
+                  checked={cancelAck}
+                  onChange={(e) => setCancelAck(e.target.checked)}
+                />
+                <span>
+                  Je confirme vouloir annuler définitivement cette demande
+                  {cancelTarget.kind === 'exam' ? ' d’examen' : ' de training'}.
+                </span>
+              </label>
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition-colors disabled:opacity-50"
+                  disabled={loading || !cancelAck}
+                  onClick={() => void confirmCancel()}
+                >
+                  {loading ? 'Annulation…' : 'Confirmer l’annulation'}
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+                  disabled={loading}
+                  onClick={closeCancelModal}
+                >
+                  Retour
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <>
@@ -404,56 +492,7 @@ export default function AdminDemandesTab({
         )}
       </div>
 
-      {cancelTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-6 space-y-4 shadow-2xl">
-            <h3 className="text-lg font-semibold text-slate-100">
-              Annuler cette demande ?
-            </h3>
-            <p className="text-sm text-slate-400">
-              {KIND_LABELS[cancelTarget.kind]} · {cancelTarget.licence_code} ·{' '}
-              <span className="text-slate-200">{cancelTarget.requester_identifiant}</span>
-            </p>
-            <p className="text-sm text-slate-300">
-              Cette action est définitive : la demande disparaîtra de la liste des demandes ouvertes
-              et l’élève pourra en créer une nouvelle.
-            </p>
-            <label className="flex items-start gap-2 text-sm text-amber-200/90 cursor-pointer">
-              <input
-                type="checkbox"
-                className="mt-1 rounded border-slate-600"
-                checked={cancelAck}
-                onChange={(e) => setCancelAck(e.target.checked)}
-              />
-              <span>
-                Je confirme vouloir annuler définitivement cette demande
-                {cancelTarget.kind === 'exam' ? ' d’examen' : ' de training'}.
-              </span>
-            </label>
-            <div className="flex gap-3 pt-1">
-              <button
-                type="button"
-                className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition-colors disabled:opacity-50"
-                disabled={loading || !cancelAck}
-                onClick={() => void confirmCancel()}
-              >
-                {loading ? 'Annulation…' : 'Confirmer l’annulation'}
-              </button>
-              <button
-                type="button"
-                className="px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
-                disabled={loading}
-                onClick={() => {
-                  setCancelTarget(null);
-                  setCancelAck(false);
-                }}
-              >
-                Retour
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {cancelModal}
     </>
   );
 }

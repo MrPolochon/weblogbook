@@ -44,7 +44,8 @@ async function requireAdminAndOpenTraining(
   if (!row) {
     return { error: NextResponse.json({ error: 'Demande introuvable.' }, { status: 404 }) };
   }
-  if (!row.licence_code || trainingSideForExamLicence(row.licence_code) !== 'atc') {
+  // Sessions legacy sans licence_code : la ligne est déjà dans instruction_atc_training_requests.
+  if (row.licence_code && trainingSideForExamLicence(row.licence_code) !== 'atc') {
     return { error: NextResponse.json({ error: 'Demande de training ATC invalide.' }, { status: 400 }) };
   }
 

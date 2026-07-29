@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { INSTRUCTION_LICENCE_CODES, INSTRUCTION_PROGRAMS } from '@/lib/instruction-programs';
+import { INSTRUCTION_LICENCE_CODES, INSTRUCTION_PROGRAMS, ATC_INIT_LICENCE_CODE } from '@/lib/instruction-programs';
 import {
   canInstructorManageEleveForFormation,
   canAccessInstructionManagerTools,
@@ -80,7 +80,7 @@ export async function PATCH(
       if (nouvelId === eleveId) {
         return NextResponse.json({ error: 'Transfert invalide.' }, { status: 400 });
       }
-      const licenceRef = eleve.formation_instruction_licence || 'PPL';
+      const licenceRef = eleve.formation_instruction_licence || ATC_INIT_LICENCE_CODE;
       const { data: nouveauProf } = await admin.from('profiles').select('id, role').eq('id', nouvelId).maybeSingle();
       if (!nouveauProf?.id) {
         return NextResponse.json({ error: 'Instructeur cible introuvable.' }, { status: 404 });
@@ -160,7 +160,7 @@ export async function PATCH(
       }
     }
 
-    const licenceCode = eleve.formation_instruction_licence || 'PPL';
+    const licenceCode = eleve.formation_instruction_licence || ATC_INIT_LICENCE_CODE;
     const program = INSTRUCTION_PROGRAMS.find((p) => p.licenceCode === licenceCode);
     const licenceLabel = program?.label ?? licenceCode;
 

@@ -9,6 +9,11 @@ import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
 import FictiveAircraftPanel from './FictiveAircraftPanel';
 import DemandeRaisonButton from './DemandeRaisonButton';
+import {
+  COM_LANGUE_SUGGESTIONS,
+  formatLicenceOptionLabel,
+  isComLicenceType,
+} from '@/lib/licence-types';
 
 const EXAM_ASSIGNED_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   assigne: { label: 'Nouvelle demande', className: 'bg-amber-500/20 text-amber-300' },
@@ -65,6 +70,7 @@ export default function ExamensTab({
     date_delivrance: new Date().toISOString().split('T')[0],
     date_expiration: '',
     note: '',
+    langue: '',
   });
   const [examEchoueKeep, setExamEchoueKeep] = useState(true);
   const [examEchoueNote, setExamEchoueNote] = useState('');
@@ -183,7 +189,7 @@ export default function ExamensTab({
 
   function openFinishDialog(requestId: string, requesterName: string, licenceCode: string) {
     setExamFinishDialog({ requestId, requesterName, licenceCode, step: 'choose_result' });
-    setExamResultForm({ a_vie: false, date_delivrance: new Date().toISOString().split('T')[0], date_expiration: '', note: '' });
+    setExamResultForm({ a_vie: false, date_delivrance: new Date().toISOString().split('T')[0], date_expiration: '', note: '', langue: '' });
     setExamEchoueKeep(true);
     setExamEchoueNote('');
   }
@@ -202,6 +208,9 @@ export default function ExamensTab({
           date_expiration: examResultForm.a_vie ? null : examResultForm.date_expiration,
           note: examResultForm.note || null,
           response_note: examResultForm.note || null,
+          langue: examFinishDialog.licenceCode && isComLicenceType(examFinishDialog.licenceCode)
+            ? examResultForm.langue.trim()
+            : undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -555,7 +564,7 @@ export default function ExamensTab({
             {examFinishDialog.step === 'form_reussi' && (
               <>
                 <h3 className="text-xl font-semibold text-emerald-400">
-                  Délivrance de licence — {examFinishDialog.licenceCode}
+                  Délivrance de licence — {formatLicenceOptionLabel(examFinishDialog.licenceCode)}
                 </h3>
                 <p className="text-sm text-slate-400">
                   Candidat: <span className="text-slate-200">{examFinishDialog.requesterName}</span>
@@ -591,6 +600,25 @@ export default function ExamensTab({
                       />
                     </div>
                   )}
+                  {isComLicenceType(examFinishDialog.licenceCode) && (
+                    <div>
+                      <label className="block text-sm text-slate-400 mb-1">Langue de validité (COM)</label>
+                      <input
+                        type="text"
+                        className="input w-full"
+                        list="exam-com-langue-suggestions"
+                        value={examResultForm.langue}
+                        onChange={(e) => setExamResultForm((f) => ({ ...f, langue: e.target.value }))}
+                        placeholder="Ex. Français, Anglais…"
+                        required
+                      />
+                      <datalist id="exam-com-langue-suggestions">
+                        {COM_LANGUE_SUGGESTIONS.map((l) => (
+                          <option key={l} value={l} />
+                        ))}
+                      </datalist>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm text-slate-400 mb-1">Note (optionnel)</label>
                     <textarea
@@ -606,7 +634,12 @@ export default function ExamensTab({
                   <button
                     type="button"
                     className="flex-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition-colors disabled:opacity-50"
-                    disabled={loading || !examResultForm.date_delivrance || (!examResultForm.a_vie && !examResultForm.date_expiration)}
+                    disabled={
+                      loading
+                      || !examResultForm.date_delivrance
+                      || (!examResultForm.a_vie && !examResultForm.date_expiration)
+                      || (isComLicenceType(examFinishDialog.licenceCode) && !examResultForm.langue.trim())
+                    }
                     onClick={submitExamReussi}
                   >
                     {loading ? 'Validation...' : 'Valider et délivrer la licence'}
