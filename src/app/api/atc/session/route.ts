@@ -7,6 +7,7 @@ import { ATC_POSITIONS } from '@/lib/atc-positions';
 import { ATC_TAUX_PAR_MINUTE } from '@/lib/atc-salaire';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { ensureComptePersonnel, getComptePersonnelCanonique } from '@/lib/felitz/ensure-comptes';
+import { checkAtcAccess, loadAtcAccessContext } from '@/lib/atc-grade-restrictions';
 
 /**
  * POST - Se mettre en service sur une position.
@@ -33,6 +34,13 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
+
+    const accessCtx = await loadAtcAccessContext(admin, user.id);
+    const access = checkAtcAccess(ap, String(position), accessCtx);
+    if (!access.allowed) {
+      return NextResponse.json({ error: access.reason }, { status: 403 });
+    }
+
     // Position déjà prise par un autre contrôleur → refuser (ne jamais le déconnecter)
     const { data: existing } = await admin.from('atc_sessions').select('id, user_id').eq('aeroport', ap).eq('position', position).maybeSingle();
     if (existing) return NextResponse.json({ error: 'Position déjà prise. Le contrôleur en place doit se mettre hors service.' }, { status: 400 });

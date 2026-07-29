@@ -7,6 +7,9 @@ import AdminCreateAtcForm from './AdminCreateAtcForm';
 import AdminAtcComptes from './AdminAtcComptes';
 import AdminAtcSessionsEnLigne from './AdminAtcSessionsEnLigne';
 import FrequencesVhfSection from './FrequencesVhfSection';
+import AdminAtcAccessRules from './AdminAtcAccessRules';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { loadAllAtcAccessRules } from '@/lib/atc-grade-restrictions';
 
 export default async function AtcAdminPage() {
   const supabase = await createClient();
@@ -15,8 +18,10 @@ export default async function AtcAdminPage() {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   if (profile?.role !== 'admin') redirect('/atc');
 
-  const [{ data: grades }, { data: atcComptes }, { data: sessions }] = await Promise.all([
-    supabase.from('atc_grades').select('id, nom, ordre').order('ordre', { ascending: true }),
+  const admin = createAdminClient();
+  const accessRules = await loadAllAtcAccessRules(admin);
+
+  const [{ data: atcComptes }, { data: sessions }] = await Promise.all([
     supabase.from('profiles').select('id, identifiant, role, atc, atc_grade_id').or('role.eq.atc,atc.eq.true').order('identifiant'),
     supabase.from('atc_sessions').select('user_id, aeroport, position, started_at').order('aeroport').order('position'),
   ]);
@@ -43,9 +48,14 @@ export default async function AtcAdminPage() {
 
       <AdminAtcSessionsEnLigne sessions={sessionsEnLigne} />
       <FrequencesVhfSection />
-      <AdminAtcGrades grades={grades || []} />
-      <AdminCreateAtcForm grades={grades || []} />
-      <AdminAtcComptes comptes={atcComptes || []} grades={grades || []} />
+      <AdminAtcGrades grades={accessRules.grades} />
+      <AdminAtcAccessRules
+        grades={accessRules.grades}
+        forbidden={accessRules.forbidden}
+        minGrades={accessRules.minGrades}
+      />
+      <AdminCreateAtcForm grades={accessRules.grades} />
+      <AdminAtcComptes comptes={atcComptes || []} grades={accessRules.grades} />
     </div>
   );
 }

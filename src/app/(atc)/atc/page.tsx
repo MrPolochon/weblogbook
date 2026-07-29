@@ -14,6 +14,7 @@ import { getTypeWake } from '@/lib/wake-turbulence';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { StripData } from '@/components/FlightStrip';
+import { loadAtcAccessContext } from '@/lib/atc-grade-restrictions';
 
 
 export default async function AtcPage() {
@@ -22,6 +23,8 @@ export default async function AtcPage() {
   if (!user) return null;
 
   const admin = createAdminClient();
+
+  const accessContext = await loadAtcAccessContext(admin, user.id);
   
   // D'abord récupérer la session pour l'utiliser dans les requêtes suivantes
   const { data: session } = await supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single();
@@ -276,7 +279,7 @@ export default async function AtcPage() {
               <p className="text-slate-400 text-sm mb-4">
                 Vous n&apos;êtes pas en service. Sélectionnez un aéroport et une position pour commencer à contrôler.
               </p>
-              <SeMettreEnServiceForm />
+              <SeMettreEnServiceForm accessContext={accessContext} />
             </div>
           </div>
         </div>

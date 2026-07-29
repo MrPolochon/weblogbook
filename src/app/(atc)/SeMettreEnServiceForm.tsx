@@ -1,12 +1,21 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
+import {
+  checkAtcAccess,
+  isAirportSelectable,
+  type AtcAccessContext,
+} from '@/lib/atc-grade-restrictions';
 import { MapPin, Radio, Loader2 } from 'lucide-react';
 
-export default function SeMettreEnServiceForm() {
+type Props = {
+  accessContext: AtcAccessContext;
+};
+
+export default function SeMettreEnServiceForm({ accessContext }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [aeroport, setAeroport] = useState('');
@@ -14,13 +23,55 @@ export default function SeMettreEnServiceForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const airportOptions = useMemo(() => {
+    return AEROPORTS_PTFS.map((a) => {
+      const selectable = isAirportSelectable(a.code, accessContext);
+      let reason: string | undefined;
+      if (!selectable && !accessContext.bypass) {
+        const firstBlocked = ATC_POSITIONS.map((p) => checkAtcAccess(a.code, p, accessContext)).find((r) => !r.allowed);
+        reason = firstBlocked && !firstBlocked.allowed ? firstBlocked.reason : 'Non autorisé pour votre grade';
+      }
+      return { ...a, selectable, reason };
+    });
+  }, [accessContext]);
+
+  const positionOptions = useMemo(() => {
+    if (!aeroport) return [];
+    return ATC_POSITIONS.map((p) => {
+      const result = checkAtcAccess(aeroport, p, accessContext);
+      return {
+        position: p,
+        allowed: result.allowed,
+        reason: result.allowed ? undefined : result.reason,
+      };
+    });
+  }, [aeroport, accessContext]);
+
+  function handleAeroportChange(code: string) {
+    setAeroport(code);
+    setPosition('');
+    setError(null);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!aeroport || !position) { setError('Sélectionnez l\'aéroport et la position.'); return; }
+    if (!aeroport || !position) {
+      setError('Sélectionnez l\'aéroport et la position.');
+      return;
+    }
+    const access = checkAtcAccess(aeroport, position, accessContext);
+    if (!access.allowed) {
+      setError(access.reason);
+      return;
+    }
     setLoading(true);
     try {
-      const res = await fetch('/api/atc/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ aeroport, position }) });
+      const res = await fetch('/api/atc/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aeroport, position }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
       startTransition(() => router.refresh());
@@ -31,23 +82,34 @@ export default function SeMettreEnServiceForm() {
     }
   }
 
+  const hasAnyAirport = airportOptions.some((a) => a.selectable);
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {!accessContext.bypass && accessContext.userGrade && (
+        <p className="text-sm text-slate-500">
+          Votre grade : <span className="font-medium text-slate-300">{accessContext.userGrade.nom}</span>
+        </p>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="label flex items-center gap-2">
             <MapPin className="h-4 w-4 text-sky-600" />
             Aéroport
           </label>
-          <select 
-            className="input w-full font-mono" 
-            value={aeroport} 
-            onChange={(e) => setAeroport(e.target.value)} 
+          <select
+            className="input w-full font-mono"
+            value={aeroport}
+            onChange={(e) => handleAeroportChange(e.target.value)}
             required
+            disabled={!hasAnyAirport}
           >
             <option value="">— Sélectionner —</option>
-            {AEROPORTS_PTFS.map((a) => (
-              <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
+            {airportOptions.map((a) => (
+              <option key={a.code} value={a.code} disabled={!a.selectable} title={a.reason}>
+                {a.selectable ? `${a.code} – ${a.nom}` : `${a.code} – ${a.nom} (non autorisé)`}
+              </option>
             ))}
           </select>
         </div>
@@ -56,30 +118,42 @@ export default function SeMettreEnServiceForm() {
             <Radio className="h-4 w-4 text-emerald-600" />
             Position
           </label>
-          <select 
-            className="input w-full" 
-            value={position} 
-            onChange={(e) => setPosition(e.target.value)} 
+          <select
+            className="input w-full"
+            value={position}
+            onChange={(e) => setPosition(e.target.value)}
             required
+            disabled={!aeroport}
           >
             <option value="">— Sélectionner —</option>
-            {ATC_POSITIONS.map((p) => (
-              <option key={p} value={p}>{p}</option>
+            {positionOptions.map((p) => (
+              <option key={p.position} value={p.position} disabled={!p.allowed} title={p.reason}>
+                {p.allowed ? p.position : `${p.position} (non autorisé)`}
+              </option>
             ))}
           </select>
+          {aeroport && positionOptions.every((p) => !p.allowed) && (
+            <p className="text-amber-600 text-xs mt-1">
+              Aucune position disponible sur {aeroport} pour votre grade.
+            </p>
+          )}
         </div>
       </div>
-      
+
+      {!hasAnyAirport && !accessContext.bypass && (
+        <p className="text-amber-600 text-sm">Aucun aéroport disponible pour votre grade actuel.</p>
+      )}
+
       {error && (
         <div className="p-3 rounded-lg bg-red-100 border border-red-300">
           <p className="text-red-700 text-sm">{error}</p>
         </div>
       )}
-      
-      <button 
-        type="submit" 
-        className="btn-primary flex items-center justify-center gap-2" 
-        disabled={loading || !aeroport || !position}
+
+      <button
+        type="submit"
+        className="btn-primary flex items-center justify-center gap-2"
+        disabled={loading || !aeroport || !position || !hasAnyAirport}
       >
         {loading ? (
           <>
