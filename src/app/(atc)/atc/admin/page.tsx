@@ -51,6 +51,7 @@ export default async function AtcAdminPage() {
       <AdminAtcGrades grades={accessRules.grades} />
       <AdminAtcAccessRules
         grades={accessRules.grades}
+        airportOptions={accessRules.airportOptions}
         forbidden={accessRules.forbidden}
         minGrades={accessRules.minGrades}
       />

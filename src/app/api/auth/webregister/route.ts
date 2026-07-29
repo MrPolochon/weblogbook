@@ -5,6 +5,23 @@ import { ensureComptePersonnel } from '@/lib/felitz/ensure-comptes';
 
 export const dynamic = 'force-dynamic';
 
+const LOGIN_URL = '/login';
+
+function jsonError(
+  error: string,
+  status: number,
+  extra?: Record<string, unknown>
+) {
+  return NextResponse.json(
+    {
+      ok: false,
+      error,
+      ...extra,
+    },
+    { status }
+  );
+}
+
 async function readBody(request: Request): Promise<Record<string, unknown>> {
   const contentType = request.headers.get('content-type') || '';
   if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
@@ -38,7 +55,7 @@ export async function POST(request: Request) {
     const fallbackSecret = process.env.WEBREGISTER_BOT_TOKEN;
     if (!atisSecret && !fallbackSecret) {
       console.error('[webregister] Aucun secret configuré (ATIS_WEBHOOK_SECRET ou WEBREGISTER_BOT_TOKEN)');
-      return NextResponse.json({ error: 'Endpoint désactivé (configuration manquante).' }, { status: 503 });
+      return jsonError('Inscription Discord indisponible pour le moment (configuration manquante).', 503);
     }
     const auth = request.headers.get('authorization');
     const bearer = auth?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || null;
@@ -54,49 +71,62 @@ export async function POST(request: Request) {
       )
     );
     if (!isValid) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+      return jsonError('Non autorisé', 401);
     }
 
     let body: Record<string, unknown>;
     try {
       body = await readBody(request);
     } catch {
-      return NextResponse.json({ error: 'Corps de requête invalide. Envoyez du JSON ou un formulaire.' }, { status: 400 });
+      return jsonError('Corps de requête invalide. Envoyez du JSON ou un formulaire.', 400);
     }
 
-    const identifiant = readString(body, ['identifiant', 'username', 'pseudo', 'login']);
-    const password = readString(body, ['password', 'mot_de_passe', 'motdepasse']);
-    const discordIdRaw = readString(body, ['discord_id', 'discordId', 'discord_user_id', 'discordUserId', 'user_id', 'userId']);
+    const identifiant = readString(body, ['identifiant', 'identifiant_site', 'site_identifiant', 'username', 'pseudo', 'login']);
+    const password = readString(body, ['password', 'mot_de_passe', 'motdepasse', 'site_password', 'sitePassword']);
+    const discordIdRaw = readString(body, ['discord_id', 'discordId', 'discord_user_id', 'discordUserId', 'user_id', 'userId', 'discord_mention', 'discordMention']);
     const discord_id = normalizeDiscordId(discordIdRaw);
-    const discord_username = readString(body, ['discord_username', 'discordUsername', 'username_discord', 'global_name', 'globalName', 'display_name', 'displayName', 'tag']);
+    const discord_username = readString(body, ['discord_username', 'discordUsername', 'username_discord', 'global_name', 'globalName', 'display_name', 'displayName', 'tag', 'discord_tag']);
     const discord_avatar = readString(body, ['discord_avatar', 'discordAvatar', 'avatar']);
 
     if (!identifiant) {
-      return NextResponse.json({ error: 'Identifiant requis' }, { status: 400 });
+      return jsonError('Identifiant manquant.', 400, {
+        help: 'Indiquez l’identifiant souhaité pour le site WebLogBook.',
+        example: '/register identifiant:monpseudo mot_de_passe:********',
+      });
     }
     if (!password) {
-      return NextResponse.json({ error: 'Mot de passe requis' }, { status: 400 });
+      return jsonError('Mot de passe manquant.', 400, {
+        help: 'Indiquez un mot de passe d’au moins 8 caractères pour votre nouveau compte site.',
+      });
     }
 
     const id = String(identifiant).trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
     if (id.length < 2) {
-      return NextResponse.json({ error: 'Identifiant trop court (minimum 2 caracteres)' }, { status: 400 });
+      return jsonError('Identifiant trop court (minimum 2 caractères).', 400, {
+        normalized_identifiant: id,
+      });
     }
     if (id.length > 30) {
-      return NextResponse.json({ error: 'Identifiant trop long (maximum 30 caracteres)' }, { status: 400 });
+      return jsonError('Identifiant trop long (maximum 30 caractères).', 400, {
+        normalized_identifiant: id,
+      });
     }
     if (password.length < 8) {
-      return NextResponse.json({ error: 'Le mot de passe doit faire au moins 8 caracteres' }, { status: 400 });
+      return jsonError('Le mot de passe doit faire au moins 8 caractères.', 400);
     }
 
     if (!discord_id) {
-      return NextResponse.json({ error: 'discord_id requis' }, { status: 400 });
+      return jsonError('Identité Discord introuvable.', 400, {
+        help: 'Cette commande doit être exécutée directement depuis Discord afin que le bot puisse récupérer votre compte.',
+      });
     }
     if (!/^\d{15,21}$/.test(discord_id)) {
-      return NextResponse.json({ error: 'discord_id invalide (snowflake Discord attendu)' }, { status: 400 });
+      return jsonError('Identité Discord invalide (snowflake Discord attendu).', 400);
     }
     if (!discord_username) {
-      return NextResponse.json({ error: 'discord_username requis' }, { status: 400 });
+      return jsonError('Nom Discord introuvable.', 400, {
+        help: 'Le bot doit transmettre votre pseudo Discord pour finaliser la liaison.',
+      });
     }
 
     const admin = createAdminClient();
@@ -120,11 +150,12 @@ export async function POST(request: Request) {
         // Lien orphelin historique : on le libère pour permettre la commande.
         await admin.from('discord_links').delete().eq('discord_user_id', discord_id);
       } else {
-        return NextResponse.json({
-          error: 'Un compte est deja enregistre avec ce compte Discord.',
+        return jsonError('Ce compte Discord est déjà lié à un compte WebLogBook.', 409, {
           already_linked: true,
           identifiant: linkedIdentifiant,
-        }, { status: 409 });
+          message: `Ton Discord est déjà relié au compte "${linkedIdentifiant}". Connecte-toi sur le site avec cet identifiant au lieu de recréer un compte.`,
+          login_url: LOGIN_URL,
+        });
       }
     }
 
@@ -136,7 +167,10 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (existingProfile) {
-      return NextResponse.json({ error: 'Cet identifiant est deja utilise' }, { status: 400 });
+      return jsonError('Cet identifiant est déjà utilisé.', 400, {
+        normalized_identifiant: id,
+        help: 'Choisissez un autre identifiant et relancez /register.',
+      });
     }
 
     const email = identifiantToEmail(id);
@@ -149,12 +183,14 @@ export async function POST(request: Request) {
 
     if (createErr) {
       if (createErr.message?.includes('already been registered')) {
-        return NextResponse.json({ error: 'Cet identifiant est deja utilise' }, { status: 400 });
+        return jsonError('Cet identifiant est déjà utilisé.', 400, {
+          normalized_identifiant: id,
+        });
       }
-      return NextResponse.json({ error: createErr.message || 'Erreur creation' }, { status: 400 });
+      return jsonError(createErr.message || 'Erreur lors de la création du compte.', 400);
     }
     if (!u?.user?.id) {
-      return NextResponse.json({ error: 'Erreur creation' }, { status: 500 });
+      return jsonError('Erreur lors de la création du compte.', 500);
     }
 
     const { error: profileErr } = await admin.from('profiles').upsert({
@@ -169,9 +205,11 @@ export async function POST(request: Request) {
     if (profileErr) {
       await admin.auth.admin.deleteUser(u.user.id);
       if (profileErr.code === '23505' && String(profileErr.message || '').includes('identifiant')) {
-        return NextResponse.json({ error: 'Cet identifiant est deja utilise par un autre compte.' }, { status: 400 });
+        return jsonError('Cet identifiant est déjà utilisé par un autre compte.', 400, {
+          normalized_identifiant: id,
+        });
       }
-      return NextResponse.json({ error: profileErr.message || 'Erreur creation profil' }, { status: 500 });
+      return jsonError(profileErr.message || 'Erreur lors de la création du profil.', 500);
     }
 
     // Creer le compte Felitz Bank
@@ -197,17 +235,25 @@ export async function POST(request: Request) {
     });
     if (linkErr) {
       await admin.auth.admin.deleteUser(u.user.id);
-      return NextResponse.json({ error: linkErr.message || 'Erreur liaison Discord' }, { status: 500 });
+      return jsonError(linkErr.message || 'Erreur lors de la liaison Discord.', 500);
     }
 
     return NextResponse.json({
       ok: true,
       identifiant: id,
       discord_linked: true,
-      message: `Compte cree pour ${id}. Discord lie automatiquement. Connecte-toi sur le site avec l'identifiant "${id}" et ton mot de passe.`,
+      message: `Compte créé pour ${id}. Ton Discord est déjà lié. Connecte-toi maintenant sur le site avec l’identifiant "${id}" et le mot de passe que tu viens de choisir.`,
+      login_url: LOGIN_URL,
+      login_identifiant: id,
+      next_step: 'Se connecter sur le site',
+      instructions: [
+        'Ouvre la page de connexion du site.',
+        `Saisis l’identifiant "${id}".`,
+        'Entre le mot de passe choisi dans la commande /register.',
+      ],
     });
   } catch (e) {
     console.error('webregister error:', e);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return jsonError('Erreur serveur.', 500);
   }
 }

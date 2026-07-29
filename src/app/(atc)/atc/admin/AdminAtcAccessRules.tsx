@@ -3,9 +3,9 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Trash2, ShieldBan, ShieldCheck } from 'lucide-react';
-import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
 import {
+  type AtcAirportOption,
   formatForbiddenLabel,
   formatMinGradeLabel,
   type AtcGradeForbidden,
@@ -15,6 +15,7 @@ import {
 
 type Props = {
   grades: AtcGradeInfo[];
+  airportOptions: AtcAirportOption[];
   forbidden: AtcGradeForbidden[];
   minGrades: AtcPositionMinGrade[];
 };
@@ -25,7 +26,7 @@ const TARGET_KINDS = [
   { value: 'pair', label: 'Aéroport + position' },
 ] as const;
 
-export default function AdminAtcAccessRules({ grades, forbidden, minGrades }: Props) {
+export default function AdminAtcAccessRules({ grades, airportOptions, forbidden, minGrades }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -140,9 +141,14 @@ export default function AdminAtcAccessRules({ grades, forbidden, minGrades }: Pr
     <div className="card space-y-6">
       <div>
         <h2 className="text-lg font-medium text-slate-800 mb-1">Règles d&apos;accès aux positions</h2>
-        <p className="text-slate-600 text-sm">
-          Interdictions par grade (ex. IRFD interdit pour CAT 1) et grade minimum requis (ex. Tower IRFD → CAT 3+).
+        <p className="text-slate-600 text-sm mb-2">
+          Deux types de règles coexistent : une <span className="font-medium">interdiction</span> bloque totalement une cible,
+          tandis qu&apos;un <span className="font-medium">grade minimum</span> autorise seulement les grades suffisants.
           Rang 1 = grade le plus bas.
+        </p>
+        <p className="text-slate-500 text-xs">
+          Les listes d&apos;aéroports réutilisent désormais le catalogue ATC du site et incluent aussi les codes déjà présents
+          dans les fréquences, sessions ou règles existantes.
         </p>
       </div>
 
@@ -186,8 +192,8 @@ export default function AdminAtcAccessRules({ grades, forbidden, minGrades }: Pr
               <label className="label text-xs">Aéroport</label>
               <select className="input font-mono" value={forbidAeroport} onChange={(e) => setForbidAeroport(e.target.value)} required>
                 <option value="">—</option>
-                {AEROPORTS_PTFS.map((a) => (
-                  <option key={a.code} value={a.code}>{a.code}</option>
+                {airportOptions.map((a) => (
+                  <option key={a.code} value={a.code}>{a.label}</option>
                 ))}
               </select>
             </div>
@@ -209,6 +215,9 @@ export default function AdminAtcAccessRules({ grades, forbidden, minGrades }: Pr
           </label>
           <button type="submit" className="btn-primary" disabled={loading || !forbidGradeId}>Ajouter</button>
         </form>
+        <p className="text-xs text-slate-500 mt-2">
+          Exemple : interdire `Tower` sur `IRFD` pour `CAT 1` et inférieur, ou interdire `Center` pour un grade précis uniquement.
+        </p>
       </section>
 
       {/* Grade minimum */}
@@ -251,8 +260,8 @@ export default function AdminAtcAccessRules({ grades, forbidden, minGrades }: Pr
               <label className="label text-xs">Aéroport</label>
               <select className="input font-mono" value={minAeroport} onChange={(e) => setMinAeroport(e.target.value)} required>
                 <option value="">—</option>
-                {AEROPORTS_PTFS.map((a) => (
-                  <option key={a.code} value={a.code}>{a.code}</option>
+                {airportOptions.map((a) => (
+                  <option key={a.code} value={a.code}>{a.label}</option>
                 ))}
               </select>
             </div>
@@ -270,6 +279,9 @@ export default function AdminAtcAccessRules({ grades, forbidden, minGrades }: Pr
           )}
           <button type="submit" className="btn-primary" disabled={loading || !minGradeId}>Ajouter</button>
         </form>
+        <p className="text-xs text-slate-500 mt-2">
+          Exemple : exiger `CAT 3` minimum pour `Tower` sur `IRFD`, sans forcément interdire les autres positions de cet aéroport.
+        </p>
       </section>
 
       {error && <p className="text-red-600 text-sm">{error}</p>}

@@ -7,7 +7,7 @@ import { ATC_POSITIONS } from '@/lib/atc-positions';
 import { ATC_TAUX_PAR_MINUTE } from '@/lib/atc-salaire';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { ensureComptePersonnel, getComptePersonnelCanonique } from '@/lib/felitz/ensure-comptes';
-import { checkAtcAccess, loadAtcAccessContext } from '@/lib/atc-grade-restrictions';
+import { checkAtcAccess, isKnownAtcAirportCode, loadAllAtcAccessRules, loadAtcAccessContext } from '@/lib/atc-grade-restrictions';
 
 /**
  * POST - Se mettre en service sur une position.
@@ -28,7 +28,10 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { aeroport, position } = body;
     const ap = String(aeroport || '').toUpperCase();
-    if (!CODES_OACI_VALIDES.has(ap)) return NextResponse.json({ error: 'Aéroport invalide.' }, { status: 400 });
+    const airportOptions = CODES_OACI_VALIDES.has(ap) ? null : (await loadAllAtcAccessRules(createAdminClient())).airportOptions;
+    if (!isKnownAtcAirportCode(ap, airportOptions ?? undefined)) {
+      return NextResponse.json({ error: 'Aéroport ATC inconnu.' }, { status: 400 });
+    }
     if (!position || !(ATC_POSITIONS as readonly string[]).includes(String(position))) {
       return NextResponse.json({ error: 'Position invalide (Delivery, Clairance, Ground, Tower, APP, DEP, Center).' }, { status: 400 });
     }

@@ -2,20 +2,21 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
 import {
   checkAtcAccess,
   isAirportSelectable,
+  type AtcAirportOption,
   type AtcAccessContext,
 } from '@/lib/atc-grade-restrictions';
 import { MapPin, Radio, Loader2 } from 'lucide-react';
 
 type Props = {
   accessContext: AtcAccessContext;
+  airportOptions: AtcAirportOption[];
 };
 
-export default function SeMettreEnServiceForm({ accessContext }: Props) {
+export default function SeMettreEnServiceForm({ accessContext, airportOptions }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [aeroport, setAeroport] = useState('');
@@ -23,8 +24,8 @@ export default function SeMettreEnServiceForm({ accessContext }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const airportOptions = useMemo(() => {
-    return AEROPORTS_PTFS.map((a) => {
+  const airportChoices = useMemo(() => {
+    return airportOptions.map((a) => {
       const selectable = isAirportSelectable(a.code, accessContext);
       let reason: string | undefined;
       if (!selectable && !accessContext.bypass) {
@@ -33,7 +34,7 @@ export default function SeMettreEnServiceForm({ accessContext }: Props) {
       }
       return { ...a, selectable, reason };
     });
-  }, [accessContext]);
+  }, [accessContext, airportOptions]);
 
   const positionOptions = useMemo(() => {
     if (!aeroport) return [];
@@ -82,14 +83,19 @@ export default function SeMettreEnServiceForm({ accessContext }: Props) {
     }
   }
 
-  const hasAnyAirport = airportOptions.some((a) => a.selectable);
+  const hasAnyAirport = airportChoices.some((a) => a.selectable);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {!accessContext.bypass && accessContext.userGrade && (
-        <p className="text-sm text-slate-500">
+        <div className="space-y-1">
+          <p className="text-sm text-slate-500">
           Votre grade : <span className="font-medium text-slate-300">{accessContext.userGrade.nom}</span>
-        </p>
+          </p>
+          <p className="text-xs text-slate-500">
+            Les aéroports et positions indisponibles sont masqués ou désactivés selon vos règles de grade.
+          </p>
+        </div>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -106,9 +112,9 @@ export default function SeMettreEnServiceForm({ accessContext }: Props) {
             disabled={!hasAnyAirport}
           >
             <option value="">— Sélectionner —</option>
-            {airportOptions.map((a) => (
+            {airportChoices.map((a) => (
               <option key={a.code} value={a.code} disabled={!a.selectable} title={a.reason}>
-                {a.selectable ? `${a.code} – ${a.nom}` : `${a.code} – ${a.nom} (non autorisé)`}
+                {a.selectable ? a.label : `${a.label} (non autorisé)`}
               </option>
             ))}
           </select>

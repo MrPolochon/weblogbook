@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { validateRuleTarget } from '@/lib/atc-grade-restrictions';
+import { loadAllAtcAccessRules, validateRuleTarget } from '@/lib/atc-grade-restrictions';
 
 export async function GET() {
   try {
@@ -37,7 +38,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Grade requis.' }, { status: 400 });
     }
 
-    const target = validateRuleTarget(body);
+    const admin = createAdminClient();
+    const accessRules = await loadAllAtcAccessRules(admin);
+    const target = validateRuleTarget(body, accessRules.airportOptions);
     if ('error' in target) return NextResponse.json({ error: target.error }, { status: 400 });
 
     const { data, error } = await supabase
