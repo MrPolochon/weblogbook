@@ -11,6 +11,7 @@ import MaCartePhoto from './MaCartePhoto';
 import MonLogoSelector from '@/components/MonLogoSelector';
 import RadarBetaSection from '@/components/RadarBetaSection';
 import DiscordLinkSection from '@/components/DiscordLinkSection';
+import PasskeysSection from '@/components/PasskeysSection';
 import RobloxUsernameSection from '@/components/RobloxUsernameSection';
 import CompteHeader from './CompteHeader';
 import Link from 'next/link';
@@ -175,13 +176,14 @@ export default async function ComptePage() {
             <MonLogoSelector />
           </Section>
 
-          <Section title="Sécurité" Icon={Lock} description="Mot de passe et accès privilégiés liés à votre compte.">
+          <Section title="Sécurité" Icon={Lock} description="Mot de passe, passkeys biométriques et accès privilégiés liés à votre compte.">
             <CompteForm
               armee={Boolean(profile?.armee)}
               isAdmin={profile?.role === 'admin'}
               initialEmail={profile?.email ?? ''}
               showOnlyPassword
             />
+            <PasskeysSection variant="default" />
           </Section>
 
           <Section title="Outils & accès" Icon={Settings2} description="Radar ATC, qualifications et licences.">

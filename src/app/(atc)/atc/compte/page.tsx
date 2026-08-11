@@ -4,6 +4,7 @@ import CompteForm from '@/app/(app)/compte/CompteForm';
 import LicencesSection from '@/components/LicencesSection';
 import RadarBetaSection from '@/components/RadarBetaSection';
 import DiscordLinkSection from '@/components/DiscordLinkSection';
+import PasskeysSection from '@/components/PasskeysSection';
 import RobloxUsernameSection from '@/components/RobloxUsernameSection';
 
 function formatTemps(min: number | null | undefined): string {
@@ -49,6 +50,7 @@ export default async function AtcComptePage() {
         <RobloxUsernameSection variant="atc" />
         <DiscordLinkSection variant="atc" />
         <CompteForm armee={false} isAdmin={isAdmin} variant="atc" showArmee={false} />
+        <PasskeysSection variant="atc" />
         <RadarBetaSection variant="atc" />
         <LicencesSection userId={user.id} variant="atc" />
       </div>

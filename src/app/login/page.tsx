@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind, Clock, User, Lock, Wrench } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind, Clock, User, Lock, Wrench, Fingerprint } from 'lucide-react';
+import { authenticateWithPasskey, registerPasskeyOnDevice } from '@/components/PasskeysSection';
 
 const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
 
@@ -289,7 +290,7 @@ function LoginPageFallback() {
   );
 }
 
-type LoginStep = 'form' | 'email' | 'code' | 'forgot' | 'reset';
+type LoginStep = 'form' | 'verify' | 'email' | 'code' | 'passkey-offer' | 'forgot' | 'reset';
 
 function LoginPageContent() {
   const router = useRouter();
@@ -323,6 +324,9 @@ function LoginPageContent() {
   const resetSuccessRef = useRef(false);
   const [logoImg, setLogoImg] = useState<string>('');
   const [logoFade, setLogoFade] = useState(true);
+  const [forceEmail, setForceEmail] = useState(false);
+  const [hasPasskeys, setHasPasskeys] = useState(false);
+  const [registeringPasskey, setRegisteringPasskey] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -372,30 +376,36 @@ function LoginPageContent() {
   useEffect(() => {
     if (loading || step !== 'form') return;
     if (searchParams.get('step') === 'verify') {
-      // On reprend le returnTo stocké lors du précédent submit (ATC/SIAVI ne tombent plus sur /logbook).
       try {
         const stored = typeof window !== 'undefined' ? window.sessionStorage.getItem(REDIRECT_STORAGE_KEY) : null;
         if (isSafeRedirectPath(stored)) setRedirectTo(stored);
       } catch { /* sessionStorage indispo */ }
-      setStep('code');
-    fetch('/api/auth/send-login-code', { method: 'POST', credentials: 'include' })
-      .then(async (res) => {
-        const d = await res.json().catch(() => ({}));
-        if (res.ok && d.skipCode) {
-          clearPendingVerificationCookie();
-          try { window.sessionStorage.removeItem(REDIRECT_STORAGE_KEY); } catch { /* ignore */ }
-          router.replace(redirectTo);
-          startTransition(() => router.refresh());
-          return;
-        }
-        if (res.status === 400) { setStep('email'); return; }
-        if (!res.ok) {
-          setError(d.error || 'Impossible d\'envoyer le code de vérification par email. Contactez un administrateur.');
-          return;
-        }
-        if (d.emailMasked) setEmailMasked(d.emailMasked);
-      })
-      .catch(() => setStep('email'));
+
+      fetch('/api/auth/register-login', { method: 'POST', credentials: 'include' })
+        .then(async (regRes) => {
+          const regData = await regRes.json().catch(() => ({}));
+          const monthlyForce = Boolean(regData.forceEmail);
+          const passkeys = Boolean(regData.hasPasskeys);
+          setForceEmail(monthlyForce);
+          setHasPasskeys(passkeys);
+
+          if (regData.requireCode === false) {
+            clearPendingVerificationCookie();
+            try { window.sessionStorage.removeItem(REDIRECT_STORAGE_KEY); } catch { /* ignore */ }
+            router.replace(redirectTo);
+            startTransition(() => router.refresh());
+            return;
+          }
+
+          if (!monthlyForce && passkeys) {
+            setStep('verify');
+            setError(null);
+            return;
+          }
+
+          await beginEmailVerificationFlow();
+        })
+        .catch(() => setStep('email'));
     }
   }, [loading, searchParams, step, redirectTo, router]);
 
@@ -415,6 +425,49 @@ function LoginPageContent() {
     startTransition(() => router.refresh());
   }
 
+  async function beginEmailVerificationFlow() {
+    const codeRes = await fetch('/api/auth/send-login-code', { method: 'POST', credentials: 'include' });
+    const codeData = await codeRes.json().catch(() => ({}));
+    if (codeRes.ok && codeData.skipCode) {
+      await doRedirect();
+      return;
+    }
+    if (codeRes.status === 400) {
+      setStep('email');
+      setError(null);
+      return;
+    }
+    if (!codeRes.ok) {
+      setError(codeData.error || 'Impossible d\'envoyer le code par email.');
+      return;
+    }
+    setEmailMasked(codeData.emailMasked || 'votre adresse');
+    setStep('code');
+    setError(null);
+  }
+
+  async function handleBiometricVerify() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const result = await authenticateWithPasskey();
+      if (!result.ok) {
+        if (result.forceEmail) {
+          setForceEmail(true);
+          setError(result.error);
+          await beginEmailVerificationFlow();
+          return;
+        }
+        throw new Error(result.error);
+      }
+      await doRedirect();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Vérification biométrique échouée.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -427,10 +480,16 @@ function LoginPageContent() {
       const uid = signData?.user?.id;
       if (!uid) { router.replace('/logbook'); startTransition(() => router.refresh()); return; }
       let requireCode = true;
+      let monthlyForce = false;
+      let passkeysAvailable = false;
       try {
         const regRes = await fetch('/api/auth/register-login', { method: 'POST', credentials: 'include' });
         const regData = await regRes.json().catch(() => ({}));
         requireCode = regData.requireCode !== false;
+        monthlyForce = Boolean(regData.forceEmail);
+        passkeysAvailable = Boolean(regData.hasPasskeys);
+        setForceEmail(monthlyForce);
+        setHasPasskeys(passkeysAvailable);
       } catch { /* ignore */ }
       const { data: profile } = await supabase.from('profiles').select('role, atc, siavi').eq('id', uid).single();
       if (loginAdminOnly && profile?.role !== 'admin') {
@@ -478,22 +537,12 @@ function LoginPageContent() {
         return;
       }
       setPendingVerificationCookie();
-      const codeRes = await fetch('/api/auth/send-login-code', { method: 'POST', credentials: 'include' });
-      const codeData = await codeRes.json().catch(() => ({}));
-      if (codeRes.ok && codeData.skipCode) {
-        await doRedirect();
+      if (!monthlyForce && passkeysAvailable) {
+        setStep('verify');
+        setError(null);
         return;
       }
-      if (codeRes.status === 400) {
-        setStep('email');
-        setError(null);
-      } else if (!codeRes.ok) {
-        setError(codeData.error || 'Impossible d\'envoyer le code par email.');
-      } else {
-        setEmailMasked(codeData.emailMasked || 'votre adresse');
-        setStep('code');
-        setError(null);
-      }
+      await beginEmailVerificationFlow();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur de connexion');
     } finally {
@@ -540,6 +589,11 @@ function LoginPageContent() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Code invalide.');
+      if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+        setStep('passkey-offer');
+        setError(null);
+        return;
+      }
       await doRedirect();
       return;
     } catch (err: unknown) {
@@ -1010,6 +1064,104 @@ function LoginPageContent() {
           </div>
         )}
 
+        {/* Étape : choix Email ou Biométrie */}
+        {step === 'verify' && (
+          <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur delay-500">
+            <h2 className="text-lg font-semibold text-slate-200 mb-2">Vérification de connexion</h2>
+            <p className="text-slate-400 text-sm mb-4">
+              {forceEmail
+                ? 'Reconnexion mensuelle obligatoire : validez votre identité par code email.'
+                : 'Choisissez comment confirmer votre identité pour cette connexion.'}
+            </p>
+            {error && (
+              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 backdrop-blur-sm mb-4">
+                <p className="text-red-400 text-sm font-medium">{error}</p>
+              </div>
+            )}
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={async () => {
+                  setError(null);
+                  setSubmitting(true);
+                  try {
+                    await beginEmailVerificationFlow();
+                  } finally {
+                    setSubmitting(false);
+                  }
+                }}
+                disabled={submitting}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold bg-gradient-to-r from-sky-500 to-sky-400 hover:from-sky-400 hover:to-sky-300 text-white shadow-lg shadow-sky-500/30 disabled:opacity-50"
+              >
+                <Mail className="h-5 w-5" />
+                {submitting ? 'Envoi…' : 'Code par email'}
+              </button>
+              {!forceEmail && hasPasskeys && (
+                <button
+                  type="button"
+                  onClick={handleBiometricVerify}
+                  disabled={submitting}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold bg-slate-700/80 hover:bg-slate-600/80 text-slate-100 border border-slate-600/50 disabled:opacity-50"
+                >
+                  <Fingerprint className="h-5 w-5 text-emerald-400" />
+                  {submitting ? 'Vérification…' : 'Biométrie (passkey)'}
+                </button>
+              )}
+            </div>
+            <p className="text-slate-500 text-xs mt-4 text-center">
+              Le code email reste toujours disponible en secours.
+            </p>
+          </div>
+        )}
+
+        {/* Étape : proposition d'enregistrement passkey après validation email */}
+        {step === 'passkey-offer' && (
+          <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur delay-500">
+            <div className="flex items-center gap-2 text-emerald-300 mb-3">
+              <Fingerprint className="h-5 w-5" />
+              <h2 className="text-lg font-semibold">Connexion validée</h2>
+            </div>
+            <p className="text-slate-300 text-sm mb-4">
+              Souhaitez-vous enregistrer une passkey sur cet appareil (Face ID, Touch ID, Windows Hello)
+              pour accélérer vos prochaines vérifications ? Une reconnexion par email restera obligatoire
+              une fois par mois.
+            </p>
+            {error && (
+              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 backdrop-blur-sm mb-4">
+                <p className="text-red-400 text-sm font-medium">{error}</p>
+              </div>
+            )}
+            <div className="space-y-3">
+              <button
+                type="button"
+                disabled={registeringPasskey}
+                onClick={async () => {
+                  setError(null);
+                  setRegisteringPasskey(true);
+                  const result = await registerPasskeyOnDevice();
+                  setRegisteringPasskey(false);
+                  if (!result.ok) {
+                    setError(result.error);
+                    return;
+                  }
+                  await doRedirect();
+                }}
+                className="w-full py-3.5 rounded-xl font-bold bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-white shadow-lg shadow-emerald-500/30 disabled:opacity-50"
+              >
+                {registeringPasskey ? 'Enregistrement…' : 'Enregistrer une passkey'}
+              </button>
+              <button
+                type="button"
+                onClick={() => doRedirect()}
+                disabled={registeringPasskey}
+                className="w-full py-2 text-slate-400 hover:text-sky-400 text-sm transition-colors"
+              >
+                Plus tard
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Étape : aucun email défini → demander d'ajouter un email */}
         {step === 'email' && (
           <div className="card backdrop-blur-xl bg-slate-800/60 border-slate-700/50 shadow-2xl animate-init animate-reveal-blur delay-500">
@@ -1055,6 +1207,11 @@ function LoginPageContent() {
             <div className="flex items-center gap-2 text-slate-300 mb-4">
               <Mail className="h-5 w-5 text-sky-400" />
               <p className="text-sm">
+                {forceEmail && (
+                  <span className="block text-amber-300/90 text-xs mb-2">
+                    Reconnexion mensuelle : validation par email obligatoire.
+                  </span>
+                )}
                 Un code de confirmation a été envoyé à <strong className="text-slate-200">{emailMasked || 'votre adresse'}</strong>. Saisissez-le ci-dessous pour valider la connexion.
               </p>
             </div>

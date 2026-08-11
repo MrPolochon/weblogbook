@@ -4,6 +4,7 @@ import CompteForm from '@/app/(app)/compte/CompteForm';
 import LicencesSection from '@/components/LicencesSection';
 import RadarBetaSection from '@/components/RadarBetaSection';
 import DiscordLinkSection from '@/components/DiscordLinkSection';
+import PasskeysSection from '@/components/PasskeysSection';
 import RobloxUsernameSection from '@/components/RobloxUsernameSection';
 
 function formatTemps(min: number | null | undefined): string {
@@ -71,6 +72,9 @@ export default async function SiaviComptePage() {
         </div>
         <div className="rounded-xl border-2 border-red-300 bg-white p-4 shadow-sm">
           <CompteForm armee={false} isAdmin={isAdmin} variant="siavi" showArmee={false} />
+        </div>
+        <div className="rounded-xl border-2 border-red-300 bg-white p-4 shadow-sm">
+          <PasskeysSection variant="siavi" />
         </div>
         <RadarBetaSection variant="siavi" />
         <LicencesSection userId={user.id} variant="siavi" />
