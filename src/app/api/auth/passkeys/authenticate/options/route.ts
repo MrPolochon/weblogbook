@@ -43,21 +43,24 @@ export async function POST(req: NextRequest) {
       .select('credential_id')
       .eq('user_id', user.id);
 
+    // internal = biométrie locale ; hybrid = QR → téléphone (caBLE).
     const allowCredentials = (passkeys ?? []).map((p) => ({
       id: p.credential_id as string,
-      type: 'public-key' as const,
+      transports: ['internal', 'hybrid'] as ('internal' | 'hybrid')[],
     }));
 
     const options = await generateAuthenticationOptions({
       rpID: getWebAuthnRpId(req),
       allowCredentials,
-      // Obligatoire : Face ID / Touch ID / Windows Hello doit être présenté (pas de silent auth).
       userVerification: 'required',
     });
 
     await storeWebAuthnChallenge(admin, user.id, options.challenge, 'authentication');
 
-    return NextResponse.json(options);
+    return NextResponse.json({
+      ...options,
+      hints: ['client-device', 'hybrid'],
+    });
   } catch (e) {
     console.error('[passkeys/authenticate/options]', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

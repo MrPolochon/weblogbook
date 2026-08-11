@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
       type: 'public-key' as const,
     }));
 
+    // Pas de verrou "platform only" : permet biométrie locale ET passkey téléphone (QR hybride).
     const options = await generateRegistrationOptions({
       rpName: getWebAuthnRpName(),
       rpID: getWebAuthnRpId(req),
@@ -42,15 +43,17 @@ export async function POST(req: NextRequest) {
       excludeCredentials,
       authenticatorSelection: {
         residentKey: 'preferred',
-        // Obligatoire dès l'enregistrement : la passkey exige une vérif utilisateur (biométrie/PIN).
         userVerification: 'required',
-        authenticatorAttachment: 'platform',
       },
     });
 
     await storeWebAuthnChallenge(admin, user.id, options.challenge, 'registration');
 
-    return NextResponse.json(options);
+    // client-device d'abord, hybrid (QR téléphone) en secours — le navigateur choisit selon l'appareil.
+    return NextResponse.json({
+      ...options,
+      hints: ['client-device', 'hybrid'],
+    });
   } catch (e) {
     console.error('[passkeys/register/options]', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

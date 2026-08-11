@@ -188,9 +188,10 @@ export default function PasskeysSection({
         Vérification biométrique (passkey)
       </h2>
       <p className={`${textMuted} text-sm mb-4`}>
-        Enregistrez Face ID, Touch ID ou Windows Hello pour valider votre connexion sans code email
-        (sauf une fois par mois, où le code email reste obligatoire). Seules des clés publiques sont
-        stockées — jamais vos données biométriques.
+        Enregistrez une passkey pour valider la connexion sans code email (sauf une fois par mois).
+        Sur PC/Mac : biométrie locale si disponible, sinon QR à scanner avec le téléphone.
+        Astuce : ajoutez aussi une passkey depuis votre téléphone pour que le QR fonctionne partout.
+        Seules des clés publiques sont stockées — jamais vos données biométriques.
       </p>
 
       {loading ? (

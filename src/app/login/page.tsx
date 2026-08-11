@@ -1104,12 +1104,12 @@ function LoginPageContent() {
                   className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold bg-slate-700/80 hover:bg-slate-600/80 text-slate-100 border border-slate-600/50 disabled:opacity-50"
                 >
                   <Fingerprint className="h-5 w-5 text-emerald-400" />
-                  {submitting ? 'Vérification…' : 'Biométrie (passkey)'}
+                  {submitting ? 'Vérification…' : 'Passkey (biométrie / QR)'}
                 </button>
               )}
             </div>
             <p className="text-slate-500 text-xs mt-4 text-center">
-              La biométrie demande obligatoirement Face ID, Touch ID, Windows Hello ou le PIN de l’appareil.
+              Sur cet appareil : Face ID, empreinte ou Windows Hello. Sinon le navigateur peut afficher un QR à scanner avec votre téléphone pour valider là-bas.
               Le code email reste disponible en secours.
             </p>
           </div>
@@ -1123,7 +1123,7 @@ function LoginPageContent() {
               <h2 className="text-lg font-semibold">Connexion validée</h2>
             </div>
             <p className="text-slate-300 text-sm mb-4">
-              Souhaitez-vous enregistrer une passkey sur cet appareil (Face ID, Touch ID, Windows Hello)
+              Souhaitez-vous enregistrer une passkey (biométrie locale ou via QR sur téléphone)
               pour accélérer vos prochaines vérifications ? Une reconnexion par email restera obligatoire
               une fois par mois.
             </p>
