@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       expectedChallenge,
       expectedOrigin: getWebAuthnOrigin(req),
       expectedRPID: getWebAuthnRpId(req),
-      requireUserVerification: false,
+      requireUserVerification: true,
       credential: {
         id: passkey.credential_id as string,
         publicKey: publicKeyBytes,
@@ -83,8 +83,11 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    if (!verification.verified) {
-      return NextResponse.json({ error: 'Vérification biométrique échouée.' }, { status: 400 });
+    if (!verification.verified || !verification.authenticationInfo.userVerified) {
+      return NextResponse.json(
+        { error: 'Vérification biométrique obligatoire. Réessayez avec empreinte, Face ID ou PIN appareil.' },
+        { status: 400 }
+      );
     }
 
     const newCounter = verification.authenticationInfo.newCounter;
@@ -104,6 +107,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error('[passkeys/authenticate/verify]', e);
+    const msg = e instanceof Error ? e.message : '';
+    if (/user verification|userVerified|UV/i.test(msg)) {
+      return NextResponse.json(
+        { error: 'Vérification biométrique obligatoire. Réessayez avec empreinte, Face ID ou PIN appareil.' },
+        { status: 400 }
+      );
+    }
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }

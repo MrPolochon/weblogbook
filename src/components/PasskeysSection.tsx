@@ -75,7 +75,11 @@ export async function authenticateWithPasskey(): Promise<{ ok: true } | { ok: fa
       };
     }
 
-    const assertion = await startAuthentication({ optionsJSON: optData });
+    // Ceremony modale obligatoire (pas d'autofill silencieux) + UV required côté serveur.
+    const assertion = await startAuthentication({
+      optionsJSON: optData,
+      useBrowserAutofill: false,
+    });
 
     const verifyRes = await fetch('/api/auth/passkeys/authenticate/verify', {
       method: 'POST',

@@ -42,7 +42,8 @@ export async function POST(req: NextRequest) {
       excludeCredentials,
       authenticatorSelection: {
         residentKey: 'preferred',
-        userVerification: 'preferred',
+        // Obligatoire dès l'enregistrement : la passkey exige une vérif utilisateur (biométrie/PIN).
+        userVerification: 'required',
         authenticatorAttachment: 'platform',
       },
     });

@@ -1109,7 +1109,8 @@ function LoginPageContent() {
               )}
             </div>
             <p className="text-slate-500 text-xs mt-4 text-center">
-              Le code email reste toujours disponible en secours.
+              La biométrie demande obligatoirement Face ID, Touch ID, Windows Hello ou le PIN de l’appareil.
+              Le code email reste disponible en secours.
             </p>
           </div>
         )}

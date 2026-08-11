@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
     const options = await generateAuthenticationOptions({
       rpID: getWebAuthnRpId(req),
       allowCredentials,
-      userVerification: 'preferred',
+      // Obligatoire : Face ID / Touch ID / Windows Hello doit être présenté (pas de silent auth).
+      userVerification: 'required',
     });
 
     await storeWebAuthnChallenge(admin, user.id, options.challenge, 'authentication');

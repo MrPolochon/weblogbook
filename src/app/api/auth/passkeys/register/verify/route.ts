@@ -41,11 +41,18 @@ export async function POST(req: NextRequest) {
       expectedChallenge,
       expectedOrigin: getWebAuthnOrigin(req),
       expectedRPID: getWebAuthnRpId(req),
-      requireUserVerification: false,
+      requireUserVerification: true,
     });
 
-    if (!verification.verified || !verification.registrationInfo) {
-      return NextResponse.json({ error: 'Vérification biométrique échouée.' }, { status: 400 });
+    if (
+      !verification.verified ||
+      !verification.registrationInfo ||
+      !verification.registrationInfo.userVerified
+    ) {
+      return NextResponse.json(
+        { error: 'Enregistrement refusé : la vérification biométrique (ou PIN appareil) est obligatoire.' },
+        { status: 400 }
+      );
     }
 
     const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
