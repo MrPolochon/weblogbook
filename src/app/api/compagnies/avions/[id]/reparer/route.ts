@@ -104,6 +104,11 @@ export async function POST(
     if (avion.statut === 'in_flight') {
       return NextResponse.json({ error: 'Impossible de réparer un avion en vol.' }, { status: 400 });
     }
+    if (avion.statut === 'en_reparation' || avion.statut === 'en_transit') {
+      return NextResponse.json({
+        error: 'Cet avion est engagé en réparation professionnelle. Terminez le cycle (ou demandez à un admin de forcer la libération à 100 %).',
+      }, { status: 400 });
+    }
     if (avion.usure_percent >= 100) {
       return NextResponse.json({ error: 'L\'avion est déjà à 100% de santé.' }, { status: 400 });
     }

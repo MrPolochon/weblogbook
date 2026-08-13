@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { processDueEntrepriseTransits, processDueRetourTransits } from '@/lib/reparation-transit';
+import {
+  processDueEntrepriseTransits,
+  processDueRetourTransits,
+  healCompagnieAvionsReparationStatuts,
+} from '@/lib/reparation-transit';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,11 +19,13 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient();
     const entrepriseDone = await processDueEntrepriseTransits(admin);
     const retourDone = await processDueRetourTransits(admin);
+    const heal = await healCompagnieAvionsReparationStatuts(admin);
 
     return NextResponse.json({
       ok: true,
       entreprise_transits: entrepriseDone,
       retours_base: retourDone,
+      heal,
     });
   } catch (e) {
     console.error('cron reparation-transit:', e);

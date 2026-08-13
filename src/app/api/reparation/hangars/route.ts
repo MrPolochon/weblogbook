@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { calculerPrixHangar } from '@/lib/compagnie-utils';
+import { REPARATION_STATUTS_ACTIFS } from '@/lib/reparation-transit';
 
 export const dynamic = 'force-dynamic';
 
@@ -120,6 +121,39 @@ export async function DELETE(req: Request) {
   const isPdg = ent && String(ent.pdg_id) === String(user.id);
   if (!ent || (!isPdg && !isAdmin)) return NextResponse.json({ error: 'Seul le PDG peut supprimer un hangar' }, { status: 403 });
 
+  // CASCADE sur hangar_id effacerait les demandes et laisserait les avions
+  // bloqués en_reparation / en_transit « invisibles » côté workflow.
+  const { data: hangarFull } = await admin
+    .from('reparation_hangars')
+    .select('aeroport_code')
+    .eq('id', hangarId)
+    .single();
+
+  const { data: actives } = await admin
+    .from('reparation_demandes')
+    .select('id, avion_id, statut')
+    .eq('hangar_id', hangarId)
+    .in('statut', [...REPARATION_STATUTS_ACTIFS]);
+
+  if (actives?.length) {
+    const avionIds = Array.from(new Set(actives.map((d) => d.avion_id).filter(Boolean)));
+    if (avionIds.length > 0) {
+      const updates: Record<string, unknown> = { statut: 'ground' };
+      if (hangarFull?.aeroport_code) {
+        updates.aeroport_actuel = String(hangarFull.aeroport_code).trim().toUpperCase();
+      }
+      await admin.from('compagnie_avions').update(updates).in('id', avionIds);
+    }
+    await admin
+      .from('reparation_demandes')
+      .update({ statut: 'annulee' })
+      .in('id', actives.map((d) => d.id));
+  }
+
   await admin.from('reparation_hangars').delete().eq('id', hangarId);
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    demandes_annulees: actives?.length ?? 0,
+    avions_liberes: actives ? Array.from(new Set(actives.map((d) => d.avion_id))).length : 0,
+  });
 }

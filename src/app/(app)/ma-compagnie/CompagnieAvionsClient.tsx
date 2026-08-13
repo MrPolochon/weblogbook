@@ -452,6 +452,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
   const avionsBloques = avions.filter(a => a.statut === 'bloque' && a.usure_percent === 0 && a.location_status !== 'leased_out');
   const avionsEnVol = avions.filter(a => a.statut === 'in_flight').length;
   const avionsDisponibles = avions.filter(a => isAvionCompagnieAuSol(a.statut) && a.usure_percent > 0 && a.location_status !== 'leased_out').length;
+  const avionsEnReparation = avions.filter(a => a.statut === 'en_reparation' || a.statut === 'en_transit').length;
   const hasLeasedIn = avions.some((a) => a.location_status === 'leased_in');
 
   return (
@@ -471,6 +472,13 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                   <span className="text-slate-600 mx-1">•</span>
                   <span className="text-sky-400">{avionsEnVol}</span>
                   <span className="text-slate-500"> en vol</span>
+                </>
+              )}
+              {avionsEnReparation > 0 && (
+                <>
+                  <span className="text-slate-600 mx-1">•</span>
+                  <span className="text-orange-400">{avionsEnReparation}</span>
+                  <span className="text-slate-500"> en réparation</span>
                 </>
               )}
             </div>
@@ -563,6 +571,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                   !isLeasedOut &&
                   !a.bloque_incident &&
                   a.statut !== 'en_reparation' &&
+                  a.statut !== 'en_transit' &&
                   (a.statut === 'bloque' || isAvionCompagnieAuSol(a.statut));
                 const leasedReasons: string[] = [];
                 if (isLeasedIn && !isAtHub) leasedReasons.push('pas au hub');

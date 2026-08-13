@@ -26,6 +26,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   terminee: { label: 'Terminee', color: 'bg-sky-500/20 text-sky-400' },
   facturee: { label: 'A payer', color: 'bg-red-500/20 text-red-400' },
   payee: { label: 'Payee', color: 'bg-emerald-500/20 text-emerald-400' },
+  retour_transit: { label: 'Retour transit', color: 'bg-sky-500/20 text-sky-300' },
   completee: { label: 'Completee', color: 'bg-slate-500/20 text-slate-400' },
 };
 

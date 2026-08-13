@@ -287,7 +287,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }).eq('id', id);
 
     const { data: avionActuel } = await admin.from('compagnie_avions').select('statut').eq('id', demande.avion_id).single();
-    if (avionActuel?.statut === 'en_reparation') {
+    if (avionActuel?.statut === 'en_reparation' || avionActuel?.statut === 'en_transit') {
       await admin.from('compagnie_avions').update({ statut: 'ground' }).eq('id', demande.avion_id);
     }
 
@@ -647,7 +647,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     if (livraison === 'parking') {
       if (hangar) {
-        await admin.from('compagnie_avions').update({ aeroport_actuel: hangar.aeroport_code, statut: 'disponible' }).eq('id', demande.avion_id);
+        await admin.from('compagnie_avions').update({ aeroport_actuel: hangar.aeroport_code, statut: 'ground' }).eq('id', demande.avion_id);
       }
       await admin.from('reparation_demandes').update({
         statut: 'completee',
@@ -680,7 +680,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (hangarCode && baseCible === hangarCode) {
       await admin.from('compagnie_avions').update({
         aeroport_actuel: baseCible,
-        statut: 'disponible',
+        statut: 'ground',
       }).eq('id', demande.avion_id);
       await admin.from('reparation_demandes').update({
         statut: 'completee',
@@ -778,8 +778,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     await admin.from('reparation_demandes').update({ statut: 'annulee' }).eq('id', id);
 
+    // Toujours libérer l'avion si le cycle réparation l'avait verrouillé
+    // (en_reparation, en_transit, ou orphelin après étape intermédiaire).
     const { data: avionActuel } = await admin.from('compagnie_avions').select('statut').eq('id', demande.avion_id).single();
-    if (avionActuel?.statut === 'en_reparation') {
+    if (
+      avionActuel?.statut === 'en_reparation' ||
+      avionActuel?.statut === 'en_transit' ||
+      ['en_transit', 'en_reparation', 'mini_jeux', 'terminee', 'retour_transit'].includes(demande.statut)
+    ) {
       await admin.from('compagnie_avions').update({ statut: 'ground' }).eq('id', demande.avion_id);
     }
 

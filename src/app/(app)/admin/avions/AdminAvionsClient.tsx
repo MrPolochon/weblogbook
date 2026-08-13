@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plane, MapPin, Edit2, Trash2, Save, X, RefreshCw, Building2, Plus, Skull, AlertTriangle, User } from 'lucide-react';
+import { Plane, MapPin, Edit2, Trash2, Save, X, RefreshCw, Building2, Plus, Skull, AlertTriangle, User, Wrench } from 'lucide-react';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { toast } from 'sonner';
 
@@ -47,7 +47,7 @@ function typeSansCapaciteCommercial(t: TypeAvion): boolean {
   return (t.capacite_pax ?? 0) <= 0 && (t.capacite_cargo_kg ?? 0) <= 0;
 }
 
-const STATUTS = ['ground', 'in_flight', 'maintenance', 'bloque'] as const;
+const STATUTS = ['ground', 'in_flight', 'maintenance', 'bloque', 'en_reparation', 'en_transit'] as const;
 
 export default function AdminAvionsClient({ profiles }: { profiles: Profile[] }) {
   const router = useRouter();
@@ -294,10 +294,31 @@ export default function AdminAvionsClient({ profiles }: { profiles: Profile[] })
     }
     switch (statut) {
       case 'ground': return { text: 'Au sol', className: 'bg-emerald-500/20 text-emerald-400' };
+      case 'disponible': return { text: 'Au sol', className: 'bg-emerald-500/20 text-emerald-400' };
       case 'in_flight': return { text: 'En vol', className: 'bg-sky-500/20 text-sky-400' };
       case 'maintenance': return { text: 'Maintenance', className: 'bg-amber-500/20 text-amber-400' };
       case 'bloque': return { text: 'Bloqué', className: 'bg-red-500/20 text-red-400' };
+      case 'en_reparation': return { text: 'En réparation', className: 'bg-orange-500/20 text-orange-400' };
+      case 'en_transit': return { text: 'Transit réparation', className: 'bg-sky-500/20 text-sky-300' };
       default: return { text: statut, className: 'bg-slate-500/20 text-slate-400' };
+    }
+  }
+
+  async function forceReparer100(avionId: string, immat: string) {
+    if (!confirm(`Forcer la réparation de ${immat} à 100 % et le libérer (annule toute demande de réparation active) ?`)) return;
+    try {
+      const res = await fetch('/api/admin/avions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: avionId, force_reparer: true, usure_percent: 100 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur');
+      toast.success(`${immat} réparé à 100 % et libéré${data.demandes_annulees ? ` (${data.demandes_annulees} demande(s) annulée(s))` : ''}`);
+      loadAvions();
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     }
   }
 
@@ -728,6 +749,16 @@ export default function AdminAvionsClient({ profiles }: { profiles: Profile[] })
                               >
                                 <Edit2 className="h-4 w-4" />
                               </button>
+                              {!isPerso && (
+                                <button
+                                  type="button"
+                                  onClick={() => forceReparer100(avion.id, avion.immatriculation)}
+                                  className="text-orange-400 hover:text-orange-300"
+                                  title="Forcer réparation à 100 % et libérer"
+                                >
+                                  <Wrench className="h-4 w-4" />
+                                </button>
+                              )}
                               {avion.detruit ? (
                                 <button
                                   type="button"

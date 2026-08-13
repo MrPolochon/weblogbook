@@ -62,7 +62,7 @@ export async function completeReparationReturnFerry(
     .eq('id', d.id);
   await admin
     .from('compagnie_avions')
-    .update({ statut: 'disponible' })
+    .update({ statut: 'ground' })
     .eq('id', avionId);
 }
 

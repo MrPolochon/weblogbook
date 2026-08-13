@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
+import { forceLibererAvionReparation } from '@/lib/reparation-transit';
 
 async function genererImmatriculation(admin: ReturnType<typeof createAdminClient>): Promise<string> {
   const { data: immatData } = await admin.rpc('generer_immatriculation', { prefixe: 'F-' });
@@ -233,13 +234,30 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json();
-    const { id, aeroport_actuel, statut, usure_percent, immatriculation, nom_bapteme, detruit, detruit_raison, source } = body;
+    const { id, aeroport_actuel, statut, usure_percent, immatriculation, nom_bapteme, detruit, detruit_raison, source, force_reparer } = body;
 
     if (!id) {
       return NextResponse.json({ error: 'id requis' }, { status: 400 });
     }
 
     const admin = createAdminClient();
+
+    // Admin : forcer réparation à 100 % + libérer (annule demandes actives)
+    if (force_reparer === true) {
+      if (source === 'personnel' || source === 'armee') {
+        return NextResponse.json({ error: 'force_reparer réservé aux avions de compagnie.' }, { status: 400 });
+      }
+      const result = await forceLibererAvionReparation(admin, id, {
+        usurePercent: typeof usure_percent === 'number' ? usure_percent : 100,
+      });
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+      const { data } = await admin.from('compagnie_avions').select('*').eq('id', id).single();
+      return NextResponse.json({
+        ...data,
+        force_reparer: true,
+        demandes_annulees: result.demandesAnnulees,
+      });
+    }
 
     if (source === 'armee') {
       const updates: Record<string, unknown> = {};

@@ -3,7 +3,11 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { isCoPdg } from '@/lib/co-pdg-utils';
-import { processDueRetourTransits, processDueEntrepriseTransits } from '@/lib/reparation-transit';
+import {
+  processDueRetourTransits,
+  processDueEntrepriseTransits,
+  healCompagnieAvionsReparationStatuts,
+} from '@/lib/reparation-transit';
 
 export async function GET(request: Request) {
   try {
@@ -17,32 +21,16 @@ export async function GET(request: Request) {
 
     const admin = createAdminClient();
 
-    // Auto-heal : si des reparation_demandes sont en transit avec une eta
-    // depassee (cron non execute, etc.), on les traite avant de renvoyer la
-    // flotte. Les fonctions sont idempotentes (UPDATE conditionnel sur le
-    // statut) et bornees a 50 lignes a chaque appel ; couts negligeables.
+    // Auto-heal : ETA transit dépassées + orphelins (demande cascade-supprimée,
+    // hangar effacé, etc.). Idempotent, borné.
     try {
       await Promise.all([
         processDueRetourTransits(admin),
         processDueEntrepriseTransits(admin),
       ]);
+      await healCompagnieAvionsReparationStatuts(admin, compagnie_id);
     } catch (e) {
       console.error('[avions] auto-heal transit reparation:', e);
-    }
-
-    // Filet d'affichage / cohérence : une demande de réparation en transit
-    // doit toujours verrouiller l'avion en "en_transit" côté flotte.
-    const { data: demandesTransit } = await admin
-      .from('reparation_demandes')
-      .select('avion_id')
-      .eq('compagnie_id', compagnie_id)
-      .in('statut', ['en_transit', 'retour_transit']);
-    const transitAvionIds = Array.from(new Set((demandesTransit || []).map((d) => d.avion_id).filter(Boolean)));
-    if (transitAvionIds.length > 0) {
-      await admin
-        .from('compagnie_avions')
-        .update({ statut: 'en_transit' })
-        .in('id', transitAvionIds);
     }
 
     const nowIso = new Date().toISOString();
