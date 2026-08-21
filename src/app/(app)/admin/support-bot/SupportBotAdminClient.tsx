@@ -244,8 +244,9 @@ export default function SupportBotAdminClient() {
         L’instructeur a accès et est pingé seulement sur les motifs cochés (CAT, instruction…).
       </p>
       <p className="text-xs text-amber-200/90 bg-amber-950/40 border border-amber-800/50 rounded-md px-3 py-2">
-        Dans le portail Discord (General Information), coller l’URL d’interactions&nbsp;:{' '}
-        <code className="text-[11px] break-all">https://mixouairlinesptfsweblogbook.com/api/support/discord/interactions</code>
+        Dans le portail Discord (General Information), coller l’URL d’interactions (avec www, Discord refuse la redirection)&nbsp;:{' '}
+        <code className="text-[11px] break-all">https://www.mixouairlinesptfsweblogbook.com/api/support/discord/interactions</code>
+        . Public Key hex → variable Vercel <code className="text-[11px]">DISCORD_PUBLIC_KEY</code> (pas le token bot).
       </p>
       <div>
         <label className="label">Serveur Discord</label>

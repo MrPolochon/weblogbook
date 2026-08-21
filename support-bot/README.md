@@ -12,11 +12,12 @@ Le process Railway reste nécessaire pour **lire et répondre dans les tickets**
 1. https://discord.com/developers/applications → l’application du **bot assistance**.
 2. **General Information** → **Interactions Endpoint URL** :
 
-   `https://mixouairlinesptfsweblogbook.com/api/support/discord/interactions`
+   `https://www.mixouairlinesptfsweblogbook.com/api/support/discord/interactions`
 
-   Enregistrer. Discord envoie un PING ; Vercel doit répondre `{ type: 1 }`.
-3. Copier la **Public Key** (même page) et la mettre dans Vercel en `DISCORD_PUBLIC_KEY`
-   (Production + Preview). Sans cette variable, le site tente `verify_key` via `SUPPORT_BOT_TOKEN`.
+   (URL **avec www** : le domaine sans www redirige en 307 et Discord refuse.)
+   Enregistrer **après** que `DISCORD_PUBLIC_KEY` soit déployé. Discord envoie un PING ; Vercel doit répondre `{ type: 1 }`.
+3. Copier la **Public Key** (même page, hex 64 caractères — **pas** le token bot ni le client secret)
+   et la mettre dans Vercel en `DISCORD_PUBLIC_KEY` (Production + Preview), puis redéployer.
 4. Bot → Privileged Gateway Intents : **Message Content** recommandé (chat tickets).
    **Server Members** est optionnel.
 

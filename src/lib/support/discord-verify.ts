@@ -4,8 +4,14 @@ import { discordFetch, discordGetMe } from '@/lib/support/discord-api';
 /** SPKI prefix for a raw 32-byte Ed25519 public key */
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 
-let cachedPublicKey: string | null = null;
 let cachedApplicationId: string | null = null;
+
+/** Discord Ed25519 public key: 32 bytes = 64 hex chars. Never a bot token. */
+export function getDiscordPublicKey(): string | null {
+  const fromEnv = (process.env.DISCORD_PUBLIC_KEY || '').trim();
+  if (!/^[0-9a-fA-F]{64}$/.test(fromEnv)) return null;
+  return fromEnv;
+}
 
 export function verifyDiscordSignature(
   publicKeyHex: string,
@@ -26,24 +32,6 @@ export function verifyDiscordSignature(
   } catch {
     return false;
   }
-}
-
-export async function getDiscordPublicKey(): Promise<string | null> {
-  const fromEnv = (process.env.DISCORD_PUBLIC_KEY || '').trim();
-  if (fromEnv) return fromEnv;
-  if (cachedPublicKey) return cachedPublicKey;
-  try {
-    const app = await discordFetch('/oauth2/applications/@me');
-    const key = String(app.verify_key || '').trim();
-    if (key) {
-      cachedPublicKey = key;
-      if (app.id) cachedApplicationId = String(app.id);
-      return key;
-    }
-  } catch (e) {
-    console.error('[support-interactions] verify_key Discord illisible', e);
-  }
-  return null;
 }
 
 export async function getDiscordApplicationId(fallback?: string): Promise<string> {

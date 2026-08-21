@@ -61,7 +61,7 @@ export async function middleware(request: NextRequest) {
     pathname === '/api/maintenance-status';
   const isApiDiscord = pathname.startsWith('/api/discord/');
   const isApiSupportBot = pathname.startsWith('/api/support/bot');
-  const isApiDiscordInteractions = pathname === '/api/support/discord/interactions';
+  const isApiDiscordInteractions = pathname.startsWith('/api/support/discord/interactions');
   const isApiAeroSchoolPublic = pathname.startsWith('/api/aeroschool/') && request.method !== 'PUT' && request.method !== 'DELETE';
   const isDiscordRequiredPage = pathname === '/discord-obligatoire';
   const isApiAuth = pathname.startsWith('/api/auth/');
@@ -284,5 +284,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|downloads/|docs/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|exe|pdf)$).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|downloads/|docs/|api/support/discord/interactions|.*\\.(?:svg|png|jpg|jpeg|gif|webp|exe|pdf)$).*)',
+  ],
 };

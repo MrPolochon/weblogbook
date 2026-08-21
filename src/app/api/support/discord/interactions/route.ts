@@ -237,15 +237,23 @@ async function finishTicketAction(interaction: DiscordInteraction, customId: str
   }
 }
 
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    service: 'discord-interactions',
+    configured: Boolean(getDiscordPublicKey()),
+  });
+}
+
 export async function POST(req: Request) {
   const signature = req.headers.get('x-signature-ed25519') || '';
   const timestamp = req.headers.get('x-signature-timestamp') || '';
   const rawBody = await req.text();
 
-  const publicKey = await getDiscordPublicKey();
+  const publicKey = getDiscordPublicKey();
   if (!publicKey) {
     console.error(
-      '[support-interactions] DISCORD_PUBLIC_KEY manquant. Collez la Public Key du portail Discord (General Information) dans Vercel, ou vérifiez SUPPORT_BOT_TOKEN.'
+      '[support-interactions] DISCORD_PUBLIC_KEY manquant ou invalide. Collez la Public Key hex (General Information), pas le token bot.'
     );
     return invalidSignature();
   }
