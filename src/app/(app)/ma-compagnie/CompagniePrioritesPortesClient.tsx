@@ -32,6 +32,7 @@ export default function CompagniePrioritesPortesClient({ compagnieId, isPdg }: P
   const [availableGates, setAvailableGates] = useState<GateWithStatus[]>([]);
   const [selectedGate, setSelectedGate] = useState<GateWithStatus | null>(null);
   const [prixInfo, setPrixInfo] = useState<{ prix: number; estHub: boolean } | null>(null);
+  const [buyLoading, setBuyLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
