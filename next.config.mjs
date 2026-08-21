@@ -4,7 +4,7 @@ const isDev = process.env.NODE_ENV !== 'production';
 const csp = [
   "default-src 'self'",
   "connect-src 'self' wss://*.livekit.cloud https://*.livekit.cloud https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://api.elevenlabs.io",
-  "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in",
+  "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in https://cdn.project-flight.com",
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",

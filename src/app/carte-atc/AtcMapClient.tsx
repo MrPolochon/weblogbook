@@ -3,6 +3,8 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { RefreshCw, Radio, Layers, ArrowLeft, Info, X, ZoomIn, ZoomOut, RotateCcw, Plane, RotateCw } from 'lucide-react';
+import PfTesterOdwMap from './PfTesterOdwMap';
+import { PF_DEFAULT_SERVER_ID } from '@/lib/pftester-odw';
 import {
   AIRPORT_TO_FIR,
   DEFAULT_FIR_ZONES,
@@ -193,6 +195,9 @@ export default function AtcMapClient() {
   const [showAirports, setShowAirports] = useState(true);
   const [showWaypoints, setShowWaypoints] = useState(true);
   const [showVors, setShowVors] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [pfMode, setPfMode] = useState(false);
+  const [pfServerId, setPfServerId] = useState(PF_DEFAULT_SERVER_ID);
 
   const fetchMapData = useCallback(async () => {
     try {
@@ -215,11 +220,29 @@ export default function AtcMapClient() {
   useEffect(() => { fetchMapData(); }, [fetchMapData]);
 
   useEffect(() => {
+    let cancelled = false;
+    fetch('/api/pftester-odw/access', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        setIsAdmin(Boolean(data?.isAdmin));
+        if (typeof data?.defaultServerId === 'string' && data.defaultServerId) {
+          setPfServerId(data.defaultServerId);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setIsAdmin(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (pfMode) return;
     const interval = setInterval(() => {
       fetchMapData();
     }, 10000);
     return () => clearInterval(interval);
-  }, [fetchMapData]);
+  }, [fetchMapData, pfMode]);
 
   useEffect(() => {
     function handleVisibilityOrFocus() {
@@ -423,30 +446,63 @@ export default function AtcMapClient() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
             <Radio className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-400 shrink-0" />
-            <h1 className="text-base sm:text-xl font-bold text-slate-100 truncate">Carte œil du web</h1>
-            <span className="hidden sm:inline text-[10px] font-mono px-1.5 py-0.5 rounded border border-sky-500/40 text-sky-300/90" title="Œil du web">
-              ODW
+            <h1 className="text-base sm:text-xl font-bold text-slate-100 truncate">
+              {pfMode ? 'PFtesterODW' : 'Carte œil du web'}
+            </h1>
+            <span className={`hidden sm:inline text-[10px] font-mono px-1.5 py-0.5 rounded border ${pfMode ? 'border-cyan-500/40 text-cyan-300/90' : 'border-sky-500/40 text-sky-300/90'}`} title={pfMode ? 'Bêta Project Flight' : 'Œil du web'}>
+              {pfMode ? 'PF' : 'ODW'}
             </span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 whitespace-nowrap">
-              {sessions.length} <span className="hidden sm:inline">contrôleur{sessions.length > 1 ? 's' : ''} </span>en ligne
-            </span>
+            {!pfMode && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 whitespace-nowrap">
+                {sessions.length} <span className="hidden sm:inline">contrôleur{sessions.length > 1 ? 's' : ''} </span>en ligne
+              </span>
+            )}
+            {pfMode && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-600/20 text-cyan-300 border border-cyan-600/30 whitespace-nowrap">
+                Bêta · serveur privé
+              </span>
+            )}
           </div>
-          <button onClick={() => { setLoading(true); fetchMapData(); }} className="shrink-0 p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700" title="Actualiser">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setPfMode((v) => !v)}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition ${
+                  pfMode
+                    ? 'bg-cyan-600/25 text-cyan-200 border-cyan-500/40 hover:bg-cyan-600/35'
+                    : 'bg-slate-800 text-slate-300 border-slate-600/60 hover:bg-slate-700'
+                }`}
+                title="Basculer vers le tracker Project Flight (admins)"
+              >
+                {pfMode ? 'ODW PTFS' : 'PFtesterODW'}
+              </button>
+            )}
+            {!pfMode && (
+              <button onClick={() => { setLoading(true); fetchMapData(); }} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700" title="Actualiser">
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+          </div>
         </div>
         {/* Disclaimer positions simulées */}
         <div className="border-t border-slate-700/40 bg-slate-900/50">
           <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-1.5 flex items-center gap-2">
             <Info className="h-3 w-3 text-slate-500 shrink-0" />
             <p className="text-[11px] text-slate-500 leading-none">
-              Les positions affichées sont <span className="text-slate-400">simulées</span> à partir des plans de vol — PTFS ne nous autorise pas à exploiter les données en temps réel du jeu.
+              {pfMode
+                ? <>PFtesterODW — positions live du serveur privé Project Flight <span className="font-mono text-slate-400">{pfServerId}</span>, réservé aux admins.</>
+                : <>Les positions affichées sont <span className="text-slate-400">simulées</span> à partir des plans de vol — PTFS ne nous autorise pas à exploiter les données en temps réel du jeu.</>}
             </p>
           </div>
         </div>
       </header>
 
       <div className="max-w-[1600px] mx-auto p-2 sm:p-4 flex flex-col md:flex-row gap-3 md:gap-4" style={{ height: 'calc(100dvh - 60px)' }}>
+        {pfMode && isAdmin ? (
+          <PfTesterOdwMap defaultServerId={pfServerId} />
+        ) : null}
+        <div className={pfMode && isAdmin ? 'hidden' : 'contents'}>
         {/* Carte */}
         <div className="flex-1 min-h-0 relative rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden touch-none"
           ref={mapContainerRef}
@@ -1129,6 +1185,7 @@ export default function AtcMapClient() {
               </div>
             )}
           </div>
+        </div>
         </div>
       </div>
     </div>
