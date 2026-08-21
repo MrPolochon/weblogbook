@@ -93,6 +93,9 @@ export async function POST(req: NextRequest) {
         statut: 'staff',
         conversation: nextTurns,
         memory_notes: memory,
+        last_human_at: new Date().toISOString(),
+        last_nudge_at: null,
+        inactivity_nudge: 0,
         updated_at: new Date().toISOString(),
       })
       .eq('id', ticket.id);
@@ -131,6 +134,9 @@ export async function POST(req: NextRequest) {
       statut,
       conversation: nextTurns,
       memory_notes: memory,
+      last_human_at: new Date().toISOString(),
+      last_nudge_at: null,
+      inactivity_nudge: 0,
       updated_at: new Date().toISOString(),
     })
     .eq('id', ticket.id);

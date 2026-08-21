@@ -98,6 +98,8 @@ export async function POST(req: NextRequest) {
         { role: 'assistant', content: intro },
       ],
       memory_notes: extractFacts(reason).join('\n') || null,
+      last_human_at: new Date().toISOString(),
+      inactivity_nudge: 0,
     });
 
     await discordSendMessage(ch.id, `<@${discordUserId}>\n${intro}`);

@@ -30,7 +30,10 @@ CREATE TABLE IF NOT EXISTS public.support_tickets (
   closed_at TIMESTAMPTZ,
   closed_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_human_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_nudge_at TIMESTAMPTZ,
+  inactivity_nudge integer NOT NULL DEFAULT 0
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_support_tickets_open_user
