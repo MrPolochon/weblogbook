@@ -32,6 +32,7 @@ def _site_base() -> str:
 WEBLOGBOOK_URL = _site_base()
 
 _runtime: dict[str, Any] = {
+    "guild_id": None,
     "staff_role_id": None,
     "instructor_role_id": None,
     "category_ids": set(),
@@ -44,6 +45,8 @@ _runtime: dict[str, Any] = {
 _ack_ids: set[int] = set()
 _is_ticket_cache: dict[str, tuple[bool, float]] = {}
 _empty_content_warned: set[int] = set()
+_slash_client: discord.Client | None = None
+_ticketdel_guild: str | None = None
 _TICKETISH_PREFIX = ("🤖", "🔴", "🟠", "🟢", "tkt-")
 _TICKETISH_RE = re.compile(r"^(🤖|🔴|🟠|🟢|tkt-)|-\w{4}$")
 
@@ -87,6 +90,7 @@ async def api_get(path: str) -> tuple[int, dict]:
 async def refresh_runtime() -> None:
     status, data = await api_get("/api/support/bot/runtime")
     if status < 400 and data:
+        _runtime["guild_id"] = data.get("guild_id")
         _runtime["staff_role_id"] = data.get("staff_role_id")
         _runtime["instructor_role_id"] = data.get("instructor_role_id")
         cats = data.get("category_ids") or {}
@@ -96,7 +100,8 @@ async def refresh_runtime() -> None:
         _runtime["panel_message_id"] = data.get("panel_message_id")
         _runtime["bot_user_id"] = data.get("bot_user_id")
         log.info(
-            "Config site: %s sections, %s tickets ouverts, staff_role=%s instructor_role=%s panel=%s/%s bot_user=%s",
+            "Config site: guild=%s %s sections, %s tickets ouverts, staff_role=%s instructor_role=%s panel=%s/%s bot_user=%s",
+            _runtime["guild_id"],
             len(_runtime["category_ids"]),
             len(_runtime["open_channel_ids"]),
             _runtime["staff_role_id"],
@@ -162,6 +167,93 @@ def is_staff_member(member: discord.Member) -> bool:
     if rids and any(str(r.id) in {str(x) for x in rids} for r in member.roles):
         return True
     return member.guild_permissions.manage_channels
+
+
+def _command_name(interaction: discord.Interaction) -> str | None:
+    if interaction.type is not discord.InteractionType.application_command:
+        return None
+    data = interaction.data
+    if data is None:
+        return None
+    name = data.get("name") if isinstance(data, dict) else getattr(data, "name", None)
+    return str(name) if name else None
+
+
+async def register_ticketdel_command(client: discord.Client) -> None:
+    """Commande de guilde /ticketdel — le handling HTTP Vercel est prioritaire si l'endpoint est configuré."""
+    global _ticketdel_guild
+    guild_id = str(_runtime.get("guild_id") or "").strip()
+    if not guild_id or not client.user:
+        return
+    if _ticketdel_guild == guild_id:
+        return
+    app_id = client.user.id
+    url = f"https://discord.com/api/v10/applications/{app_id}/guilds/{guild_id}/commands"
+    headers = {"Authorization": f"Bot {TOKEN}", "Content-Type": "application/json"}
+    payload = {"name": "ticketdel", "description": "Fermer et supprimer ce ticket", "type": 1}
+    timeout = aiohttp.ClientTimeout(total=20)
+    try:
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url, headers=headers) as resp:
+                existing = await resp.json(content_type=None) if resp.status < 400 else []
+            names = {c.get("name") for c in existing} if isinstance(existing, list) else set()
+            if "ticketdel" in names:
+                _ticketdel_guild = guild_id
+                log.info("Slash /ticketdel déjà enregistré guild=%s", guild_id)
+                return
+            async with session.post(url, headers=headers, json=payload) as resp:
+                body = await resp.text()
+                if resp.status >= 400:
+                    log.warning("Enregistrement /ticketdel HTTP %s %s", resp.status, body[:240])
+                    return
+            _ticketdel_guild = guild_id
+            log.info("Slash /ticketdel enregistré guild=%s", guild_id)
+    except Exception:
+        log.exception("Impossible d'enregistrer /ticketdel")
+
+
+async def handle_ticketdel(interaction: discord.Interaction) -> None:
+    if not interaction.response.is_done():
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except discord.HTTPException:
+            log.exception("defer /ticketdel a échoué")
+            return
+    user = interaction.user
+    staff = isinstance(user, discord.Member) and is_staff_member(user)
+    if not staff:
+        try:
+            await interaction.followup.send("Staff uniquement.", ephemeral=True)
+        except discord.HTTPException:
+            pass
+        return
+    try:
+        status, data = await api_post(
+            "/api/support/bot/close",
+            {
+                "channel_id": str(interaction.channel_id),
+                "closed_by": f"staff:{interaction.user.id}",
+            },
+        )
+    except Exception:
+        log.exception("API /api/support/bot/close a échoué")
+        try:
+            await interaction.followup.send("Impossible de fermer le ticket (erreur serveur).", ephemeral=True)
+        except discord.HTTPException:
+            pass
+        return
+    if status == 404:
+        msg = "Cette commande ne fonctionne que dans un salon ticket."
+    elif status >= 400:
+        msg = data.get("error") or "Impossible de fermer le ticket."
+    elif data.get("already"):
+        msg = "Ticket déjà fermé."
+    else:
+        msg = "Ticket fermé."
+    try:
+        await interaction.followup.send(msg, ephemeral=True)
+    except discord.HTTPException:
+        pass
 
 
 async def send_open_ticket_modal(interaction: discord.Interaction) -> None:
@@ -284,6 +376,8 @@ class TicketActions(discord.ui.View):
 @tasks.loop(minutes=1)
 async def runtime_loop() -> None:
     await refresh_runtime()
+    if _slash_client is not None and _slash_client.is_ready():
+        await register_ticketdel_command(_slash_client)
 
 
 async def _notify_channel(channel: discord.abc.Messageable, text: str) -> None:
@@ -297,6 +391,9 @@ def attach_handlers(client: discord.Client) -> None:
     @client.event
     async def on_interaction(interaction: discord.Interaction) -> None:
         # Si l'endpoint HTTP Interactions est configuré, Discord n'envoie plus ces events au gateway.
+        if _command_name(interaction) == "ticketdel":
+            await handle_ticketdel(interaction)
+            return
         cid = _component_custom_id(interaction)
         if cid != "support_open_ticket":
             return
@@ -304,6 +401,8 @@ def attach_handlers(client: discord.Client) -> None:
 
     @client.event
     async def on_ready() -> None:
+        global _slash_client
+        _slash_client = client
         client.add_view(PanelView())
         client.add_view(TicketActions())
         me = str(client.user.id) if client.user else ""
@@ -317,6 +416,7 @@ def attach_handlers(client: discord.Client) -> None:
             WEBLOGBOOK_URL,
         )
         await refresh_runtime()
+        await register_ticketdel_command(client)
         expected = str(_runtime.get("bot_user_id") or "")
         if expected and me and expected != me:
             log.error(

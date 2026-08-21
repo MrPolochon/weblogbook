@@ -131,3 +131,34 @@ export async function discordDeleteChannel(channelId: string) {
 export async function discordGetMessages(channelId: string, limit = 100) {
   return discordFetch(`/channels/${channelId}/messages?limit=${Math.min(limit, 100)}`);
 }
+
+const TICKETDEL_COMMAND = {
+  name: 'ticketdel',
+  description: 'Fermer et supprimer ce ticket',
+  type: 1,
+};
+
+let lastTicketDelEnsure = 0;
+
+/** Enregistre `/ticketdel` en commande de guilde (idempotent, throttlé). */
+export async function ensureTicketDelGuildCommand(guildId: string | null | undefined) {
+  const gid = String(guildId || '').trim();
+  if (!gid) return;
+  const now = Date.now();
+  if (now - lastTicketDelEnsure < 10 * 60 * 1000) return;
+  lastTicketDelEnsure = now;
+  try {
+    const me = await discordGetMe();
+    const appId = String(me.id || '').trim();
+    if (!appId) return;
+    const existing = await discordFetch(`/applications/${appId}/guilds/${gid}/commands`);
+    const list = Array.isArray(existing) ? existing : [];
+    if (list.some((c: { name?: string }) => c.name === 'ticketdel')) return;
+    await discordFetch(`/applications/${appId}/guilds/${gid}/commands`, {
+      method: 'POST',
+      body: JSON.stringify(TICKETDEL_COMMAND),
+    });
+  } catch (e) {
+    console.error('[discord] ensureTicketDelGuildCommand', e);
+  }
+}

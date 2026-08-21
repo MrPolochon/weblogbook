@@ -20,6 +20,7 @@ import { openSupportTicket } from '@/lib/support/open-ticket';
 import { withResolutionOfferedNote } from '@/lib/support/ticket-actions';
 
 const PING = 1;
+const APPLICATION_COMMAND = 2;
 const MESSAGE_COMPONENT = 3;
 const MODAL_SUBMIT = 5;
 const PONG = 1;
@@ -27,6 +28,7 @@ const DEFERRED_CHANNEL_MESSAGE = 5;
 const DEFERRED_UPDATE = 6;
 const MODAL = 9;
 const EPHEMERAL = 64;
+const TICKETDEL_COMMAND = 'ticketdel';
 
 const OPEN_TICKET_BUTTON = 'support_open_ticket';
 const REASON_MODAL = 'support_ticket_reason';
@@ -43,6 +45,7 @@ type DiscordInteraction = {
   user?: DiscordUser;
   member?: DiscordMember;
   data?: {
+    name?: string;
     custom_id?: string;
     component_type?: number;
     components?: Array<{ components?: Array<{ custom_id?: string; value?: string }> }>;
@@ -209,6 +212,37 @@ async function pingStaff(channelId: string) {
   );
 }
 
+async function finishTicketDel(interaction: DiscordInteraction) {
+  try {
+    const channelId = String(interaction.channel_id || '');
+    const user = interactionUser(interaction);
+    const cfg = await getSupportConfig();
+    const staffIds = [cfg?.staff_role_id, cfg?.instructor_role_id].filter(Boolean).map(String);
+    if (!memberIsStaff(interaction.member, staffIds)) {
+      await patchOriginal(interaction, 'Staff uniquement.');
+      return;
+    }
+    if (!channelId) {
+      await patchOriginal(interaction, 'Salon introuvable.');
+      return;
+    }
+    const result = await closeSupportTicket({
+      channelId,
+      closedBy: `staff:${user?.id || 'unknown'}`,
+    });
+    if (!result.ok) {
+      await patchOriginal(interaction, 'Cette commande ne fonctionne que dans un salon ticket.');
+      return;
+    }
+    await patchOriginal(interaction, result.already ? 'Ticket déjà fermé.' : 'Ticket fermé.');
+  } catch (e) {
+    console.error('[support-interactions] ticketdel', e);
+    try {
+      await patchOriginal(interaction, 'Impossible de fermer le ticket (erreur serveur).');
+    } catch { /* ignore */ }
+  }
+}
+
 async function finishTicketAction(interaction: DiscordInteraction, customId: string) {
   try {
     const channelId = String(interaction.channel_id || '');
@@ -287,6 +321,12 @@ export async function POST(req: Request) {
   }
 
   const customId = String(interaction.data?.custom_id || '');
+  const commandName = String(interaction.data?.name || '');
+
+  if (interaction.type === APPLICATION_COMMAND && commandName === TICKETDEL_COMMAND) {
+    waitUntil(finishTicketDel(interaction));
+    return json({ type: DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } });
+  }
 
   if (interaction.type === MESSAGE_COMPONENT && customId === OPEN_TICKET_BUTTON) {
     return json(reasonModal());

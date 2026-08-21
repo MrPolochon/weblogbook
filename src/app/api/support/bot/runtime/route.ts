@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { assertSupportBotSecret, getSupportConfig } from '@/lib/support/bot-auth';
-import { discordGetMe } from '@/lib/support/discord-api';
+import { discordGetMe, ensureTicketDelGuildCommand } from '@/lib/support/discord-api';
 
 export async function GET(req: NextRequest) {
   const denied = assertSupportBotSecret(req);
@@ -21,6 +21,8 @@ export async function GET(req: NextRequest) {
     const me = await discordGetMe();
     bot_user_id = String(me.id || '') || null;
   } catch { /* ignore */ }
+
+  await ensureTicketDelGuildCommand(cfg?.guild_id);
 
   return NextResponse.json({
     ok: true,
