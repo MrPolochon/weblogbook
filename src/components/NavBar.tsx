@@ -174,6 +174,7 @@ export default function NavBar({
         { href: '/code-de-conduite', label: 'Code de conduite', icon: ScrollText, badge: 0 },
         { href: '/notams', label: 'NOTAMs', icon: ScrollText, badge: 0 },
         { href: '/aeroschool', label: 'AeroSchool', icon: GraduationCap, badge: 0 },
+        { href: '/livret-progression', label: 'Livret CAT', icon: BookOpen, badge: 0 },
         { href: '/signalement', label: 'Signalement IFSA', icon: AlertTriangle, badge: 0 },
         { href: '/classement', label: 'Classement', icon: Trophy, badge: 0 },
       ],

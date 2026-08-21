@@ -63,7 +63,9 @@ export default function AeroSchoolPage() {
               <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.26em] text-sky-200/80">Centre d&apos;évaluation</p>
               <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-white">AeroSchool</h1>
               <p className="mx-auto mt-3 max-w-2xl text-sm sm:text-base text-slate-300">
-                Questionnaires et évaluations aéronautiques. Certains tests sont publics, d&apos;autres nécessitent un compte connecté.
+                Questionnaires (QCM) : c’est la <strong className="text-amber-100">première partie</strong> de chaque catégorie CAT 1 à 5.
+                La partie pratique se fait ensuite dans <Link href="/instruction" className="text-sky-300 underline hover:text-sky-200">Instruction</Link>.
+                {' '}<Link href="/livret-progression" className="text-amber-200 underline hover:text-amber-100">Livret de progression</Link>.
               </p>
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-sky-300/15 bg-sky-400/10 px-4 py-3 text-left">

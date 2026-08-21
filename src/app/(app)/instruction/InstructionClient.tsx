@@ -223,7 +223,10 @@ export default function InstructionClient({
             </div>
             <div className="flex-1">
               <h1 className="text-2xl font-bold text-slate-50 tracking-tight">Centre d&apos;Instruction</h1>
-              <p className="text-sm text-slate-400 mt-0.5">Suivi de formation, examens et gestion pédagogique</p>
+              <p className="text-sm text-slate-400 mt-0.5">
+                Partie <strong className="text-slate-300">pratique</strong> des CAT 1–5 (après le QCM AeroSchool).{' '}
+                <a href="/livret-progression" className="text-sky-400 hover:text-sky-300 underline">Livret de progression</a>
+              </p>
             </div>
           </div>
           <div className="flex flex-wrap gap-3 text-xs">
