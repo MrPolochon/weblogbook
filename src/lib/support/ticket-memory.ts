@@ -1,9 +1,13 @@
 export type TicketTurn = { role: 'user' | 'assistant' | 'staff'; content: string };
 
-/** Derniers tours envoyés au LLM — assez pour le fil, assez court pour 50 tickets parallèles. */
-const MAX_TURNS = 24;
-const MAX_TURN_CHARS = 1200;
-const MAX_MEMORY_CHARS = 2500;
+/**
+ * Derniers tours envoyés au LLM. Le quota Groq est de 8K tokens/minute pour
+ * l’ensemble prompt système + contexte + historique + réponse : au-delà de ces
+ * bornes, deux tickets simultanés suffisent à déclencher des 429.
+ */
+const MAX_TURNS = 10;
+const MAX_TURN_CHARS = 600;
+const MAX_MEMORY_CHARS = 1200;
 
 export function clipTurn(content: string): string {
   const t = content.trim();
@@ -53,7 +57,7 @@ export function ticketContextBlock(ticket: {
   return [
     `Ticket #${ticket.short_id || '?'} (ce salon uniquement — n'utilise aucun autre ticket).`,
     `Motif: ${ticket.motif || 'assistance'}`,
-    `Raison d'ouverture: ${(ticket.reason_text || '').slice(0, 800)}`,
+    `Raison d'ouverture: ${(ticket.reason_text || '').slice(0, 400)}`,
     ticket.discord_username ? `Membre Discord: ${ticket.discord_username}` : '',
     ticket.memory_notes ? `Faits déjà établis dans CE ticket:\n${ticket.memory_notes}` : '',
     'Tu dois te souvenir de ces faits et des messages ci-dessous. Ne les redis pas tous : utilise-les.',
