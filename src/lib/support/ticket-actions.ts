@@ -27,12 +27,66 @@ export function stripResoluMarker(text: string): string {
 }
 
 /**
- * Seul le marqueur machine décide. L'IA ne doit plus poser la question en toutes
- * lettres : c'est le système qui la pose, et toujours avec les boutons.
+ * Nombre de messages du membre avant lequel on ne propose jamais de fermer : sur
+ * les tout premiers échanges, la demande vient à peine d'être exposée.
+ */
+const MIN_MEMBER_MESSAGES_BEFORE_OFFER = 3;
+
+/**
+ * Une réponse qui renvoie vers quelqu'un d'autre ou vers une étape à accomplir
+ * plus tard ne peut pas être « réglée » à la seconde où elle est envoyée.
+ */
+const PENDING_STEP_PATTERNS =
+  /\b(staff|instructeur|examinateur|une fois (que |validee?|valide|termine|confirme)|des que|apres (validation|avoir|que)|il faudra|tu devras|tu pourras|il ne reste|en attendant|reviens (me |vers )|previens[- ]moi|tiens[- ]moi au courant|tape la commande|passe le (test|questionnaire|qcm)|remplis le formulaire)\b/;
+
+export interface ResolutionOfferContext {
+  /** Le ticket part déjà au staff : on ne propose évidemment pas de fermer. */
+  escalate: boolean;
+  /** Messages du membre dans ce ticket, celui en cours compris. */
+  memberMessages: number;
+  /** Le dernier message du membre est une question. */
+  memberAsked: boolean;
+  /** Une proposition de clôture a déjà été faite dans ce ticket. */
+  alreadyOffered: boolean;
+}
+
+export function replyLeavesStepPending(reply: string): boolean {
+  return PENDING_STEP_PATTERNS.test(normalizeAnswer(reply));
+}
+
+/**
+ * Seul le marqueur machine peut déclencher la proposition, et encore : elle est
+ * refusée tant que la conversation montre qu'elle est en cours. Le membre s'était
+ * plaint de la voir arriver à chaque message ; l'objectif est qu'elle soit rare.
+ */
+export function shouldOfferResolution(rawReply: string, ctx: ResolutionOfferContext): boolean {
+  if (ctx.escalate) return false;
+  if (!hasResoluMarker(rawReply)) return false;
+  // Les premiers échanges servent à comprendre la demande, pas à la clore.
+  if (ctx.memberMessages < MIN_MEMBER_MESSAGES_BEFORE_OFFER) return false;
+  // La réponse vient de donner une étape à faire ou renvoie au staff.
+  if (replyLeavesStepPending(rawReply)) return false;
+  // Le membre a enchaîné sur une nouvelle question après une première
+  // proposition : c'est le signal le plus net que rien n'est réglé.
+  if (ctx.alreadyOffered && ctx.memberAsked) return false;
+  return true;
+}
+
+/**
+ * Ancienne porte d'entrée, conservée le temps que l'appelant bascule sur
+ * `shouldOfferResolution` : elle ignore le contexte de la conversation.
  */
 export function iaOffersResolution(rawReply: string, escalate: boolean): boolean {
   if (escalate) return false;
-  return hasResoluMarker(rawReply);
+  return hasResoluMarker(rawReply) && !replyLeavesStepPending(rawReply);
+}
+
+/** Question du membre : point d'interrogation ou tournure interrogative. */
+export function messageIsQuestion(text: string): boolean {
+  if (text.includes('?')) return true;
+  return /^\s*(comment|pourquoi|quand|ou\b|qui\b|quoi|quel|quelle|est-ce|c.est quoi|combien|peux-tu|peut-on|je fais comment)/i.test(
+    normalizeAnswer(text),
+  );
 }
 
 /** Retire une question « c'est résolu ? » écrite par le modèle malgré la consigne. */

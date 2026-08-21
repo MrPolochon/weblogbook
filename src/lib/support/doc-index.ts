@@ -3,6 +3,7 @@ import { CODE_DE_CONDUITE_IA, CODE_DE_CONDUITE_URL } from '@/lib/support/code-de
 import { LIVRET_PROGRESSION_IA, LIVRET_PROGRESSION_URL } from '@/lib/support/livret-progression';
 import { MANUEL_CONTROLEUR_IA, MANUEL_CONTROLEUR_URL } from '@/lib/support/manuel-controleur';
 import { SITE_PROCEDURES_IA } from '@/lib/support/site-procedures';
+import { GROUND_CREW_IA, IFSA_IA } from '@/lib/support/espaces-site';
 
 /**
  * Index documentaire de l’IA tickets : les documents de référence du site,
@@ -28,7 +29,7 @@ export interface DocChunk {
   text: string;
 }
 
-export type DocSourceId = 'conduite' | 'pilote' | 'atc' | 'manuel' | 'site';
+export type DocSourceId = 'conduite' | 'pilote' | 'atc' | 'manuel' | 'site' | 'ground' | 'ifsa';
 
 /**
  * Seuil de regroupement : au-dessus, une ligne forme un extrait à elle seule.
@@ -137,6 +138,20 @@ export const DOC_CHUNKS: DocChunk[] = [
     link: '/aeroschool',
     body: SITE_PROCEDURES_IA,
   }),
+  ...chunksFromDocument({
+    prefix: 'gc',
+    source: 'ground',
+    sourceLabel: 'Espace Ground Crew (personnel de piste)',
+    link: '/ground',
+    body: GROUND_CREW_IA,
+  }),
+  ...chunksFromDocument({
+    prefix: 'ifsa',
+    source: 'ifsa',
+    sourceLabel: 'Espace IFSA',
+    link: '/ifsa',
+    body: IFSA_IA,
+  }),
 ];
 
 const SOURCE_BY_PREFIX: Record<string, DocSourceId> = {
@@ -145,6 +160,8 @@ const SOURCE_BY_PREFIX: Record<string, DocSourceId> = {
   moq: 'manuel',
   atc: 'atc',
   site: 'site',
+  gc: 'ground',
+  ifsa: 'ifsa',
 };
 
 /** Extraits d’une source, pour les cas où le sujet est certain (création de compte). */
@@ -216,6 +233,8 @@ function weight(token: string): number {
 const MIN_SCORE = 3;
 /** Un seul mot en commun ne suffit que s’il est rare (présent dans ≲ 4 extraits). */
 const RARE_TOKEN_WEIGHT = 2;
+/** Bonus accordé à une source que le sujet du ticket désigne déjà. */
+const PREFER_BONUS = 1.5;
 
 export interface DocSearchOptions {
   limit?: number;
@@ -257,8 +276,12 @@ export function searchDocs(query: string, options: DocSearchOptions = {}): DocCh
         bestWeight = Math.max(bestWeight, w);
         matched += 1;
       }
-      if (matched > 0 && prefer.has(entry.source)) points += 1;
-      const relevant = matched >= 2 || bestWeight >= RARE_TOKEN_WEIGHT;
+      const preferred = prefer.has(entry.source);
+      if (matched > 0 && preferred) points += PREFER_BONUS;
+      // Sur une source déjà identifiée comme la bonne (ticket ATC → doc ATC), un
+      // seul mot en commun suffit : « comment devenir contrôleur » ne croise que
+      // « contrôleur », et repartait sans aucun extrait.
+      const relevant = matched >= 2 || bestWeight >= RARE_TOKEN_WEIGHT || (matched >= 1 && preferred);
       return { chunk: entry.chunk, points: relevant ? points : 0 };
     })
     .filter((entry) => entry.points >= MIN_SCORE)

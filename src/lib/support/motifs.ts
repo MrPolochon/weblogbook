@@ -57,8 +57,51 @@ const ATC_VOCAB =
 const ATC_POSITION_VOCAB =
   /\btwr\b|\btower\b|\bground\b|\bgnd\b|\bdelivery\b|\bclairance\b|\bapproach\b|\bapproche\b|\bapp\b|\bctr\b|\bcenter\b|\blatc\b|\bafis\b/;
 
+/** Mots qui ne peuvent désigner QUE le contrôle aérien, sans contexte supplémentaire. */
+const ATC_STRONG_VOCAB =
+  /\batc\b|\bcontroleur\b|\bcontroleuse\b|\bcontrole aerien\b|\baiguilleur\b|\btour de controle\b|\blatc\b|\bafis\b|\bp?cal-?(atc|afis)\b|\blpafis\b|\batc ?f[ie]\b/;
+
 const TRAINING_VOCAB =
   /\btraining\b|\bformation\b|\bformer\b|\binstruction\b|\binstructeur\b|\bcours\b|\bstage\b|\bpasser (mon|ma|le|la|un|une)\b|\bapprendre\b|\bentrainement\b|\bs.entrainer\b|\bsession\b|\bexamen\b|\bqualification\b|\bdemande de (training|formation)\b/;
+
+/**
+ * Personnel de piste (bagages, repoussage, marshalling…). Le mot « ground » est
+ * piégeux : il désigne aussi une position de contrôle aérien. Seul ce vocabulaire
+ * de handling tranche sans ambiguïté.
+ */
+const GROUND_CREW_VOCAB =
+  /\bground ?crew\b|\bgroundcrew\b|\bpersonnel (de piste|au sol|de piste)\b|\bagent de piste\b|\bagents de piste\b|\bhandling\b|\bmarshall?ing\b|\brepoussage\b|\bpush ?back\b|\bbagagiste\b|\bavitaillement\b|\bdegivrage\b|\bhandleur\b|\bplacement (des |d.)?avions? (a|aux) (la )?portes?\b/;
+
+/** Le membre parle du handling au sol, pas du contrôle aérien. */
+export function isGroundCrewTopic(text: string): boolean {
+  return GROUND_CREW_VOCAB.test(normalize(text));
+}
+
+/**
+ * « Je veux faire du ground » : impossible de trancher entre le handling et la
+ * position de contrôle sol. Le bot doit poser UNE question avant de répondre.
+ */
+export function isAmbiguousGroundTopic(text: string): boolean {
+  const t = normalize(text);
+  if (isGroundCrewTopic(t)) return false;
+  if (!/\bground\b|\bgnd\b/.test(t)) return false;
+  // Un mot du contrôle aérien à côté de « ground » lève déjà le doute.
+  return !/\batc\b|\bcontroleur\b|\bcontrole\b|\bcontroler\b|\btwr\b|\btower\b|\bdelivery\b|\bclairance\b|\bfrequence\b|\bradio\b|\bapproach\b|\bcenter\b|\bctr\b/.test(t);
+}
+
+/**
+ * Le ticket parle de contrôle aérien, quel que soit l’angle (accès à l’espace
+ * ATC, grade, position, formation). Sert à choisir la documentation injectée.
+ */
+export function isAtcTopic(text: string): boolean {
+  const t = normalize(text);
+  // « ground crew » contient « ground » sans rien avoir à voir avec le contrôle.
+  if (isGroundCrewTopic(t)) return false;
+  return ATC_STRONG_VOCAB.test(t) || ATC_POSITION_VOCAB.test(t);
+}
+
+/** « Comment devenir contrôleur ? » — une demande de parcours sans le mot « training ». */
+const BECOME_VOCAB = /\bdevenir\b|\bdevient\b|\bdeviens\b|\bje veux etre\b|\bcomment (etre|faire pour|on fait)\b|\bpour etre\b/;
 
 /**
  * « Je veux passer mon training Approach », « je demande un training center » :
@@ -66,9 +109,11 @@ const TRAINING_VOCAB =
  */
 export function isAtcTrainingTopic(text: string): boolean {
   const t = normalize(text);
+  if (isGroundCrewTopic(t)) return false;
   if (!ATC_VOCAB.test(t)) return false;
-  if (!TRAINING_VOCAB.test(t)) return ATC_POSITION_VOCAB.test(t);
-  return true;
+  if (TRAINING_VOCAB.test(t)) return true;
+  if (ATC_STRONG_VOCAB.test(t) && BECOME_VOCAB.test(t)) return true;
+  return ATC_POSITION_VOCAB.test(t);
 }
 
 /**
@@ -106,6 +151,9 @@ export function classifyMotifFromText(text: string): SupportMotifId {
   if (/\bnouveau|\bnew player|\bje (suis|commence)|debutant|débutant|bienvenue|comment (commencer|jouer|s.inscrire)/.test(t)) {
     return 'nouveau';
   }
+  // Le handling au sol n'est ni de l'instruction ni de l'ATC : l'accès est
+  // attribué par le staff, aucun instructeur à déranger.
+  if (isGroundCrewTopic(t)) return 'assistance';
   // Avant AeroSchool / CAT : un training ATC part chez les instructeurs, pas sur
   // le parcours CAT pilote. Un QCM ATC explicite reste un sujet AeroSchool.
   if (isAtcTrainingTopic(t) && !/\bqcm\b|\bquestionnaire\b|\bformulaire\b/.test(t)) {
