@@ -71,7 +71,7 @@ SELECT
       "Via /admin/pilotes → bouton 'Créer un pilote'",
       "Directement dans la base Supabase",
       "En envoyant une invitation par email via Discord",
-      "Via la commande /webregister du bot Discord"
+      "Via la commande /register du bot Discord"
     ],
     "correct_answers": ["Via /admin/pilotes → bouton 'Créer un pilote'"]
   },
@@ -791,7 +791,7 @@ SELECT
   },
   {
     "id": "adm-079",
-    "title": "Que fait la commande /webregister du bot Discord ?",
+    "title": "Que fait la commande /register du bot Discord ?",
     "options": [
       "Elle enregistre le site sur Discord",
       "Elle crée un compte site lié au compte Discord de l'utilisateur",
@@ -802,7 +802,7 @@ SELECT
   },
   {
     "id": "adm-080",
-    "title": "Si la commande /webregister ne fonctionne pas, quelle est la première cause à vérifier ?",
+    "title": "Si la commande /register ne fonctionne pas, quelle est la première cause à vérifier ?",
     "options": [
       "Le bot Discord est peut-être down sur Railway",
       "Le serveur Discord est en maintenance",
