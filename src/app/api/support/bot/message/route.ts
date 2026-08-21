@@ -4,7 +4,15 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { assertSupportBotSecret, getSupportConfig } from '@/lib/support/bot-auth';
 import { SUPPORT_IA_SYSTEM_PROMPT } from '@/lib/support/knowledge';
 import { aeroschoolBlock, findAeroschoolForms } from '@/lib/support/aeroschool-catalog';
-import { directoryBlock, findDirectoryMatches } from '@/lib/support/annuaire';
+import {
+  directoryBlock,
+  findDirectoryMatches,
+  pickIfsaAgentMention,
+  stripIfsaPingMarker,
+  ticketAlreadyPingedIfsa,
+  wantsIfsaPing,
+  withIfsaPingNote,
+} from '@/lib/support/annuaire';
 import {
   chunksFromSource,
   docsBlock,
@@ -536,20 +544,35 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // Appel d'un agent IFSA : le modèle a seulement posé un marqueur, c'est le
+  // serveur qui choisit la personne et écrit la mention. Une seule fois par
+  // ticket, et retour au ping staff s'il n'y a aucun agent joignable.
+  let ifsaMention = '';
+  if (llm.ok && wantsIfsaPing(rawReply)) {
+    if (ticketAlreadyPingedIfsa(memory)) {
+      console.info('[support-message] agent IFSA déjà appelé sur ce ticket', { shortId: ticket.short_id });
+    } else {
+      ifsaMention = await pickIfsaAgentMention(admin, { excludeUserId: ticket.user_id as string | null });
+      if (ifsaMention) memory = withIfsaPingNote(memory);
+      else escalate = true;
+    }
+  }
+
   // Le marqueur seul déclenche la proposition, et elle part TOUJOURS avec les
   // boutons — mais elle est refusée tant que la conversation est manifestement
   // en cours (premiers échanges, étape à accomplir, nouvelle question).
   const offerPanel =
     llm.ok &&
     shouldOfferResolution(rawReply, {
-      escalate,
+      // On vient d'appeler quelqu'un : le ticket attend une réponse humaine.
+      escalate: escalate || Boolean(ifsaMention),
       memberMessages: turns.filter((t) => t.role === 'user').length + 1,
       memberAsked: messageIsQuestion(content),
       alreadyOffered: offerPending,
     });
   const userSaysNotResolved = /pas r[eé]solu|n['’]est pas r[eé]solu|appeler un staff/i.test(content);
   const clearOffer = (escalate || userSaysNotResolved) && !offerPanel;
-  const reply = stripResolutionQuestion(stripDocMarker(stripResoluMarker(rawReply)));
+  const reply = stripResolutionQuestion(stripIfsaPingMarker(stripDocMarker(stripResoluMarker(rawReply))));
 
   const statut: SupportStatus = escalate ? 'staff_needed' : 'waiting';
   const nextTurns = trimConversation([
@@ -591,7 +614,12 @@ export async function POST(req: NextRequest) {
   // Un seul message Discord, assemblé dans cet ordre : reprise éventuelle,
   // contenu utile, puis SOIT le ping staff SOIT la proposition de clôture avec
   // ses boutons — jamais les deux, et jamais de texte après les boutons.
-  const blocks = [resumed ? IA_RESUMED_NOTICE : '', reply, escalate ? ping : offerPanel ? RESOLUTION_PANEL_TEXT : ''];
+  const blocks = [
+    resumed ? IA_RESUMED_NOTICE : '',
+    reply,
+    ifsaMention,
+    escalate ? ping : offerPanel ? RESOLUTION_PANEL_TEXT : '',
+  ];
   const out = blocks.filter(Boolean).join('\n\n').trim();
 
   try {
