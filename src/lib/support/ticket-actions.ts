@@ -48,6 +48,8 @@ export interface ResolutionOfferContext {
   memberAsked: boolean;
   /** Une proposition de clôture a déjà été faite dans ce ticket. */
   alreadyOffered: boolean;
+  /** Code e-mail, passkey, connexion ou reset encore en échec. */
+  unresolvedAuthIssue?: boolean;
 }
 
 export function replyLeavesStepPending(reply: string): boolean {
@@ -62,6 +64,7 @@ export function replyLeavesStepPending(reply: string): boolean {
 export function shouldOfferResolution(rawReply: string, ctx: ResolutionOfferContext): boolean {
   if (ctx.escalate) return false;
   if (!hasResoluMarker(rawReply)) return false;
+  if (ctx.unresolvedAuthIssue) return false;
   // Les premiers échanges servent à comprendre la demande, pas à la clore.
   if (ctx.memberMessages < MIN_MEMBER_MESSAGES_BEFORE_OFFER) return false;
   // La réponse vient de donner une étape à faire ou renvoie au staff.

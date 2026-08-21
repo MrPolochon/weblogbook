@@ -13,6 +13,34 @@ type Admin = ReturnType<typeof createAdminClient>;
 
 const MAX_ITEMS = 3;
 
+const ATC_QUALIFICATIONS = new Set([
+  'LATC',
+  'CAL-ATC',
+  'PCAL-ATC',
+  'CAL-AFIS',
+  'PCAL-AFIS',
+  'LPAFIS',
+  'ATC FI',
+  'ATC FE',
+]);
+
+export function atcDossierGuidance(
+  profile: { atc?: boolean | null; role?: string | null; atc_grade_id?: string | null },
+  licences: string[],
+): string | null {
+  const held = Array.from(new Set(licences.filter((licence) => ATC_QUALIFICATIONS.has(licence))));
+  if (held.length === 0) return null;
+  const hasAccess = profile.atc === true || profile.role === 'atc';
+  if (hasAccess && profile.atc_grade_id) return null;
+  const missing = [!hasAccess ? 'accès à l’espace ATC' : '', !profile.atc_grade_id ? 'grade ATC' : ''].filter(
+    Boolean,
+  );
+  return (
+    `situation ATC: qualifications déjà détenues (${held.join(', ')}) ; ${missing.join(' et ')} manquant(s). ` +
+    'Ne propose pas un parcours débutant et ne prétends pas qu’une licence active automatiquement l’accès ou le grade : seul le staff ATC peut les attribuer.'
+  );
+}
+
 export const NO_LINKED_ACCOUNT_CONTEXT = [
   'Dossier du membre : ce compte Discord n’est PAS lié à un compte du site.',
   'Tu n’as donc aucune donnée sur lui : n’invente rien sur ses licences, formations ou compagnie.',
@@ -182,6 +210,11 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
         ? `licences détenues: ${Array.from(new Set(licences)).join(', ')}`
         : 'licences détenues: aucune',
     );
+    const atcGuidance = atcDossierGuidance(
+      profile,
+      (licencesRes.data || []).map((licence) => String(licence.type)),
+    );
+    if (atcGuidance) lines.push(atcGuidance);
 
     if (formationLicence) {
       const program = getProgramByLicence(formationLicence);

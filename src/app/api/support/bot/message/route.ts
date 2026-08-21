@@ -50,6 +50,15 @@ import {
 import { closeSupportTicket } from '@/lib/support/close-ticket';
 import { escalateTicketToStaff, staffPingLine } from '@/lib/support/escalate';
 import { isChatter } from '@/lib/support/message-intent';
+import {
+  authoritativeSupportReply,
+  CLARIFICATION_ONBOARDING,
+  hasUnresolvedAuthIssue,
+  isIfsaSubject,
+  sanitizeOfficialSiteUrl,
+  shouldHonorIfsaPing,
+  updateClarificationMemory,
+} from '@/lib/support/guardrails';
 import { detectMentionIntent } from '@/lib/support/mention-actions';
 import { runMentionCommand } from '@/lib/support/mention-commands';
 import { IA_RESUME_PATCH } from '@/lib/support/resume-ia';
@@ -223,6 +232,10 @@ export async function POST(req: NextRequest) {
 
   const turns = parseTurns(ticket.conversation);
   let memory = mergeMemory(ticket.memory_notes || '', extractFacts(content));
+  const clarification = requesterSpeaking
+    ? updateClarificationMemory(memory, content)
+    : { memory, count: 0, showOnboarding: false };
+  memory = clarification.memory;
 
   /** Le message est archivé dans le fil, mais le bot ne répond pas. */
   const recordSilently = async (role: 'user' | 'staff', patch: Record<string, unknown> = {}) => {
@@ -336,6 +349,33 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Deux réponses vagues consécutives suffisent : le serveur fournit des choix
+  // concrets sans redemander au modèle de reformuler la même clarification.
+  if (requesterSpeaking && clarification.showOnboarding) {
+    const nextTurns = trimConversation([
+      ...turns,
+      { role: 'user', content },
+      { role: 'assistant', content: CLARIFICATION_ONBOARDING },
+    ]);
+    await updateTicketRow(admin, ticket.id, {
+      statut: 'waiting',
+      conversation: nextTurns,
+      memory_notes: memory,
+      last_human_at: nowIso,
+      last_nudge_at: null,
+      inactivity_nudge: 0,
+      updated_at: nowIso,
+      resolution_offered: false,
+    });
+    try {
+      await discordSendMessage(channelId, CLARIFICATION_ONBOARDING);
+    } catch (e) {
+      console.error('[support-message] onboarding clarification', e);
+      return NextResponse.json({ error: 'discord_send_failed', statut: 'waiting' }, { status: 502 });
+    }
+    return NextResponse.json({ ok: true, statut: 'waiting', onboarding: true });
+  }
+
   // Une proposition de clôture est en attente : « oui » écrit doit suffire à
   // fermer, « non » doit appeler le staff. Personne n'est obligé de cliquer.
   const offerPending = ticketAlreadyOfferedResolution(ticket);
@@ -404,7 +444,7 @@ export async function POST(req: NextRequest) {
   const focusText = `${ticket.reason_text || ''} ${content}`;
   const isGroundCrewTopicHere = isGroundCrewTopic(focusText);
   const isAtcSubject = isAtcTopic(focusText);
-  const isIfsaTopic = /\bifsa\b/i.test(focusText);
+  const isIfsaTopic = isIfsaSubject(focusText);
   const groundAmbiguous = isAmbiguousGroundTopic(content);
 
   const hints = [
@@ -412,7 +452,7 @@ export async function POST(req: NextRequest) {
       ? 'Sujet détecté : CONTRÔLE AÉRIEN (ATC). Réponds avec la documentation ATC, jamais avec le parcours CAT pilote.'
       : '',
     isAtcTrainingTopic(focusText)
-      ? 'Il veut progresser côté ATC : un débutant commence par « Test ATC Delivery », jamais par le grand test confirmé.'
+      ? 'Il veut progresser côté ATC : utilise son dossier puis le parcours humain « Instruction → Mon Espace → Session de training (ATC) ». Un QCM ne donne jamais automatiquement un grade.'
       : '',
     isGroundCrewTopicHere
       ? 'Sujet détecté : GROUND CREW (personnel de piste). Ce n’est PAS le contrôle Ground ATC : ne parle ni de test ATC, ni de grade, ni de fréquence.'
@@ -525,7 +565,7 @@ export async function POST(req: NextRequest) {
   let rawReply: string;
   let escalate: boolean;
   if (llm.ok) {
-    rawReply = llm.text;
+    rawReply = authoritativeSupportReply(content) || llm.text;
     // Une demande de training se planifie avec un humain : l'IA donne la marche
     // à suivre, l'instructeur prend le relais pour poser le créneau.
     const needsInstructor = isTrainingRequest(content) && String(ticket.statut || '') !== 'staff_needed';
@@ -549,7 +589,13 @@ export async function POST(req: NextRequest) {
   // ticket, et retour au ping staff s'il n'y a aucun agent joignable.
   let ifsaMention = '';
   if (llm.ok && wantsIfsaPing(rawReply)) {
-    if (ticketAlreadyPingedIfsa(memory)) {
+    const ticketIfsaTopic = `${ticket.motif || ''} ${ticket.reason_text || ''}`;
+    if (!shouldHonorIfsaPing(content, ticketIfsaTopic)) {
+      console.warn('[support-message] marqueur IFSA rejeté hors sujet', {
+        shortId: ticket.short_id,
+        motif: ticket.motif,
+      });
+    } else if (ticketAlreadyPingedIfsa(memory)) {
       console.info('[support-message] agent IFSA déjà appelé sur ce ticket', { shortId: ticket.short_id });
     } else {
       ifsaMention = await pickIfsaAgentMention(admin, { excludeUserId: ticket.user_id as string | null });
@@ -569,10 +615,13 @@ export async function POST(req: NextRequest) {
       memberMessages: turns.filter((t) => t.role === 'user').length + 1,
       memberAsked: messageIsQuestion(content),
       alreadyOffered: offerPending,
+      unresolvedAuthIssue: hasUnresolvedAuthIssue(content, turns),
     });
   const userSaysNotResolved = /pas r[eé]solu|n['’]est pas r[eé]solu|appeler un staff/i.test(content);
   const clearOffer = (escalate || userSaysNotResolved) && !offerPanel;
-  const reply = stripResolutionQuestion(stripIfsaPingMarker(stripDocMarker(stripResoluMarker(rawReply))));
+  const reply = sanitizeOfficialSiteUrl(
+    stripResolutionQuestion(stripIfsaPingMarker(stripDocMarker(stripResoluMarker(rawReply)))),
+  );
 
   const statut: SupportStatus = escalate ? 'staff_needed' : 'waiting';
   const nextTurns = trimConversation([

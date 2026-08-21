@@ -68,7 +68,7 @@ function normalize(text: string): string {
  * comme « askip t’as rien inventé » déclenchait une recherche sur un pseudo.
  */
 const IDENTITY_INTENT =
-  /\bqui est\b|\bc est qui\b|\bcest qui\b|\bqui sont\b|\bqui peut\b|\bqui s occupe\b|\bqui gere\b|\bqui contacter\b|\bconnais[- ]tu\b|\btu connais\b|\bannuaire\b|\bquel(?:le)? (?:est|sont) (?:le |la |les )?(?:compte|pseudo|identifiant|instructeur|referent)\b|\b(?:pseudo|identifiant|compte) (?:de|du|d)\b|\bliste des (?:instructeurs|examinateurs|admins|staffs?)\b|\bquel instructeur\b|\bquel examinateur\b|\bmon referent\b/;
+  /\bqui est\b|\bc est qui\b|\bcest qui\b|\bqui sont\b|\bqui peut\b|\bqui s occupe\b|\bqui gere\b|\bqui contacter\b|\bconnais[- ]tu\b|\btu connais\b|\bannuaire\b|\bquel(?:le)? (?:est|sont) (?:le |la |les )?(?:compte|pseudo|identifiant|instructeur|referent)\b|\b(?:pseudo|identifiant|compte) (?:de|du|d)\b|\bliste des (?:instructeurs|examinateurs|admins|staffs?)\b|\bquel instructeur\b|\bquel examinateur\b|\bmon referent\b|\b(?:conseille[rs]?|recommande[rs]?|propose[rs]?)(?: moi)?\b.{0,35}\b(?:instructeur|formateur|examinateur)\b/;
 
 /** Mots à ne jamais prendre pour un pseudo lors de l’extraction. */
 const NOT_A_NAME = new Set([
@@ -83,7 +83,17 @@ const NOT_A_NAME = new Set([
 
 /** « Qui sont les instructeurs ? » — une demande de liste, pas de personne précise. */
 const LIST_INTENT =
-  /\b(?:qui sont|liste des|donne(?:-moi)? les|c est qui) (?:les )?(instructeurs?|formateurs?|examinateurs?|admins?|administrateurs?)\b|\bqui peut (?:me )?(?:former|examiner|instruire)\b|\bquel instructeur\b|\bquel examinateur\b/;
+  /\b(?:qui sont|liste des|donne(?:-moi)? les|c est qui) (?:les )?(instructeurs?|formateurs?|examinateurs?|admins?|administrateurs?)\b|\bqui peut (?:me )?(?:former|examiner|instruire)\b|\bquel instructeur\b|\bquel examinateur\b|\b(?:conseille[rs]?|recommande[rs]?|propose[rs]?)(?: moi)?\b.{0,35}\b(?:instructeur|formateur|examinateur)\b/;
+
+const ATC_INSTRUCTOR_INTENT =
+  /\b(?:instructeur|formateur|former|formation|training)\b.{0,25}\batc\b|\batc\b.{0,25}\b(?:instructeur|formateur|former|formation|training)\b/;
+
+export function detectDirectoryIntent(text: string): 'atc-instructors' | 'directory' | null {
+  const normalized = normalize(text);
+  if (!IDENTITY_INTENT.test(normalized)) return null;
+  if (LIST_INTENT.test(normalized) && ATC_INSTRUCTOR_INTENT.test(normalized)) return 'atc-instructors';
+  return 'directory';
+}
 
 /**
  * Pseudo recherché : une mention Discord `@Pseudo`, un nom entre guillemets, ou
@@ -195,14 +205,20 @@ function accessLabels(profile: ProfileRow): string[] {
  * Encadrants disponibles — exactement ce que la page /annuaire montre déjà à
  * tout membre connecté. Les indisponibles passent en dernier.
  */
-async function listInstructionStaff(admin: Admin, staff: boolean): Promise<DirectoryLookup> {
+async function listInstructionStaff(
+  admin: Admin,
+  staff: boolean,
+  titleFilter: readonly string[] = INSTRUCTION_TITRE_TYPES,
+): Promise<DirectoryLookup> {
   const { data: titreRows } = await admin
     .from('licences_qualifications')
     .select('user_id, type')
     .in('type', [...INSTRUCTION_TITRE_TYPES]);
 
+  const allowedTitles = new Set<string>(titleFilter);
   const titresById = new Map<string, string[]>();
   for (const row of titreRows || []) {
+    if (!allowedTitles.has(String(row.type))) continue;
     const uid = String(row.user_id);
     if (!titresById.has(uid)) titresById.set(uid, []);
     titresById.get(uid)!.push(String(row.type));
@@ -252,14 +268,18 @@ export async function findDirectoryMatches(
   // site : le bot ne lui ouvre pas une porte dérobée.
   if (!opts.requesterId) return null;
   const normalized = normalize(text);
-  if (!IDENTITY_INTENT.test(normalized)) return null;
+  const directoryIntent = detectDirectoryIntent(text);
+  if (!directoryIntent) return null;
   const wantsList = LIST_INTENT.test(normalized);
+  const wantsAtcInstructor = directoryIntent === 'atc-instructors';
   const query = extractDirectoryQuery(text);
   if (!wantsList && (!query || query.length < MIN_QUERY_LENGTH)) return null;
 
   try {
     const staff = await requesterIsStaff(admin, opts.requesterId);
-    if (wantsList) return listInstructionStaff(admin, staff);
+    if (wantsList) {
+      return listInstructionStaff(admin, staff, wantsAtcInstructor ? ['ATC FI'] : INSTRUCTION_TITRE_TYPES);
+    }
     if (!query) return null;
     const like = `%${query.replace(/[%_]/g, '')}%`;
 

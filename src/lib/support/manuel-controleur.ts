@@ -13,6 +13,7 @@ export const MANUEL_CONTROLEUR_IA = `MANUEL DES OPÉRATIONS ET QUALIFICATIONS (M
 - RTA (Régulateur de Trafic et Approche) : 10 h en RS3 + test pratique supervisé par un RZA ou un ATC FE. Tower complet + Approches sur trafic modéré.
 - RLA (Responsable Liaison et Large Approche) : 5 h en RTA + test pratique supervisé par un RZA ou un ATC FE. Toutes les Approches + centres spécifiques.
 - RZA (Régulateur de Zone Avancée) : 5 h en RLA + test pratique final supervisé par un RZA ou un ATC FE. Autorité totale, tous centres et toutes positions.
+Les durées minimales RS1 → RS2 et RS2 → RS3 ne figurent pas dans le corpus indexé. Ne donne aucun chiffre et ne prétends pas qu’elles sont « détaillées dans le manuel » : demande une confirmation au staff ATC.
 Examen et validation : RS3, RTA, RLA et RZA exigent un temps de service minimum prouvé. À partir de RTA, chaque passage de grade passe par une supervision directe d’un RZA. De RS1 à RS3 le contrôleur a un instructeur référent qui le suit ; l’obligation de référent tombe une fois la licence RS3 obtenue.
 Entraînement libre : n’importe quel contrôleur peut demander la supervision d’un ATC FI (ou d’un ATC FE à défaut) pour s’entraîner ; l’instructeur débriefe chaque décision prise.
 Sanctions : la rigueur augmente avec le grade ; à partir de RS3 une faute grave entraîne la suspension immédiate des droits. Chaque aéroport dispose d’une fiche R.S.R. (Régulation - Sécurité - Réseau) dans les salons Discord d’aéroport, qui détermine si le contrôleur a le niveau pour tenir le poste.

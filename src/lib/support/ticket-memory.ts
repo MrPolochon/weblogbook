@@ -5,7 +5,10 @@ export type TicketTurn = { role: 'user' | 'assistant' | 'staff'; content: string
  * l’ensemble prompt système + contexte + historique + réponse : au-delà de ces
  * bornes, deux tickets simultanés suffisent à déclencher des 429.
  */
-const MAX_TURNS = 10;
+/** Transcript conservé en base : distinct du petit contexte envoyé au modèle. */
+const MAX_PERSISTED_TURNS = 100;
+/** Contexte LLM volontairement court pour respecter le quota Groq. */
+const MAX_LLM_TURNS = 10;
 const MAX_TURN_CHARS = 600;
 const MAX_MEMORY_CHARS = 1200;
 
@@ -16,8 +19,13 @@ export function clipTurn(content: string): string {
 }
 
 export function trimConversation(turns: TicketTurn[]): TicketTurn[] {
-  if (turns.length <= MAX_TURNS) return turns;
-  return turns.slice(-MAX_TURNS);
+  if (turns.length <= MAX_PERSISTED_TURNS) return turns;
+  return turns.slice(-MAX_PERSISTED_TURNS);
+}
+
+export function trimLlmConversation(turns: TicketTurn[]): TicketTurn[] {
+  if (turns.length <= MAX_LLM_TURNS) return turns;
+  return turns.slice(-MAX_LLM_TURNS);
 }
 
 /** Faits stables extraits du texte (immat, identifiant, montants) — survivent à la coupe de l’historique. */
@@ -76,7 +84,7 @@ export function toLlmMessages(
     { role: 'system', content: system },
     { role: 'system', content: context },
   ];
-  for (const t of trimConversation(turns)) {
+  for (const t of trimLlmConversation(turns)) {
     if (t.role === 'staff') {
       messages.push({ role: 'user', content: `[Message staff] ${clipTurn(t.content)}` });
     } else if (t.role === 'assistant') {

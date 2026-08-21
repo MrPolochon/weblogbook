@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { sendPasswordResetLinkEmail } from '@/lib/email';
 import { rateLimit } from '@/lib/rate-limit';
+import { OFFICIAL_SITE_URL } from '@/lib/site-url';
 
 const TOKEN_EXPIRY_HOURS = 24;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -106,7 +107,7 @@ export async function POST(req: NextRequest) {
 
     const baseUrl = req.headers.get('x-forwarded-proto') && req.headers.get('x-forwarded-host')
       ? `${req.headers.get('x-forwarded-proto')}://${req.headers.get('x-forwarded-host')}`
-      : req.nextUrl?.origin || process.env.NEXT_PUBLIC_APP_URL || 'https://logbook.ptfs.fr';
+      : req.nextUrl?.origin || process.env.NEXT_PUBLIC_APP_URL || OFFICIAL_SITE_URL.replace(/\/$/, '');
     const resetUrl = `${baseUrl}/login?reset=${token}`;
 
     const { ok, error } = await sendPasswordResetLinkEmail(profileEmail, resetUrl);
