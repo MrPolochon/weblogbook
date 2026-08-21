@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { PLAN_VOL_SOL_SELECT, mapPlanVolSol, type PlanVolSolRow } from '@/lib/ground/plans-vol';
 
 const STATUTS_ACTIFS = ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture', 'automonitoring'];
 
@@ -17,30 +18,18 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
 
-  // Essaie d'abord avec la colonne porte (migration peut être absente)
-  let { data, error } = await admin
+  const { data, error } = await admin
     .from('plans_vol')
-    .select('id, callsign, immatriculation, porte, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
+    .select(PLAN_VOL_SOL_SELECT)
     .or(`aeroport_depart.ilike.${aeroport},aeroport_arrivee.ilike.${aeroport}`)
     .in('statut', STATUTS_ACTIFS)
     .order('created_at', { ascending: false });
-
-  if (error?.message?.includes('porte')) {
-    const res = await admin
-      .from('plans_vol')
-      .select('id, callsign, immatriculation, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
-      .or(`aeroport_depart.ilike.${aeroport},aeroport_arrivee.ilike.${aeroport}`)
-      .in('statut', STATUTS_ACTIFS)
-      .order('created_at', { ascending: false });
-    data = res.data as unknown as typeof data;
-    error = res.error;
-  }
 
   if (error) {
     console.error('[/api/ground/avions] error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const plans = (data ?? []).map(p => ({ ...p, porte: p.porte ?? null }));
+  const plans = ((data ?? []) as unknown as PlanVolSolRow[]).map(mapPlanVolSol);
   return NextResponse.json({ plans });
 }

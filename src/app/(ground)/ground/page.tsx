@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import GroundDashboard from './GroundDashboard';
 import GroundConnexion from './GroundConnexion';
 import type { PlanVol, ServiceRequest, Gate, Profile } from './GroundDashboard';
+import { PLAN_VOL_SOL_SELECT, mapPlanVolSol, type PlanVolSolRow } from '@/lib/ground/plans-vol';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,22 +33,13 @@ export default async function GroundPage() {
   try {
     const { data, error } = await admin
       .from('plans_vol')
-      .select('id, callsign, immatriculation, porte, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
+      .select(PLAN_VOL_SOL_SELECT)
       .or(`aeroport_depart.ilike.${aeroport},aeroport_arrivee.ilike.${aeroport}`)
       .in('statut', STATUTS_ACTIFS)
       .order('created_at', { ascending: false });
 
-    if (error?.message?.includes('porte')) {
-      const { data: data2 } = await admin
-        .from('plans_vol')
-        .select('id, callsign, immatriculation, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
-        .or(`aeroport_depart.ilike.${aeroport},aeroport_arrivee.ilike.${aeroport}`)
-        .in('statut', STATUTS_ACTIFS)
-        .order('created_at', { ascending: false });
-      plans = (data2 ?? []) as PlanVol[];
-    } else {
-      plans = (data ?? []) as PlanVol[];
-    }
+    if (error) console.error('[GC page] plans_vol error:', error.message);
+    else plans = ((data ?? []) as unknown as PlanVolSolRow[]).map(mapPlanVolSol);
   } catch (e) {
     console.error('[GC page] plans_vol exception:', e);
   }

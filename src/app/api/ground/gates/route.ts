@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { PLAN_VOL_SOL_SELECT, mapPlanVolSol, type PlanVolSol, type PlanVolSolRow } from '@/lib/ground/plans-vol';
 
 /**
  * Normalise un code de porte pour comparaison robuste.
@@ -55,7 +56,7 @@ export async function GET(request: Request) {
   // La table gate_assignments peut rester pour des extensions futures (arrivées).
   const { data: plansAvecPorte, error: plansError } = await admin
     .from('plans_vol')
-    .select('id, callsign, immatriculation, numero_vol, porte, statut, aeroport_depart, aeroport_arrivee, type_avion')
+    .select(PLAN_VOL_SOL_SELECT)
     .eq('aeroport_depart', aeroport)
     .not('porte', 'is', null)
     .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
@@ -70,12 +71,12 @@ export async function GET(request: Request) {
   //   - espaces insécables Unicode
   //   - format legacy purement numérique ("9" ↔ "Gate 9")
   //   - format sans espace ("gate9" ↔ "Gate 9")
-  const planMap = new Map<string, unknown>();
+  const planMap = new Map<string, PlanVolSol>();
 
-  for (const plan of plansAvecPorte ?? []) {
-    const raw = (plan as { porte: string | null }).porte;
-    if (!raw) continue;
-    const norm = normalizeGateCode(raw);
+  for (const row of (plansAvecPorte ?? []) as unknown as PlanVolSolRow[]) {
+    const plan = mapPlanVolSol(row);
+    if (!plan.porte) continue;
+    const norm = normalizeGateCode(plan.porte);
     if (!norm) continue;
 
     // Clé normalisée principale : "gate 9"

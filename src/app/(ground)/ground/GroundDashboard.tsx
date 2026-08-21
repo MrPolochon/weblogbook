@@ -9,21 +9,11 @@ import {
 import EquipeTab from './EquipeTab';
 import ModalAvion from './ModalAvion';
 import type { ServiceType } from '@/lib/types';
+import { PLAN_VOL_SOL_SELECT, mapPlanVolSol, type PlanVolSol, type PlanVolSolRow } from '@/lib/ground/plans-vol';
 
 // ── Types exportés ────────────────────────────────────────────────────────────
 
-export type PlanVol = {
-  id: string;
-  callsign: string | null;
-  immatriculation: string | null;
-  porte: string | null;
-  statut: string;
-  aeroport_depart: string;
-  aeroport_arrivee: string;
-  type_avion: string | null;
-  pilote_id: string;
-  created_at: string;
-};
+export type PlanVol = PlanVolSol;
 
 export type ServiceRequest = {
   id: string;
@@ -141,13 +131,14 @@ export default function GroundDashboard({
     const supabase = createClient();
     const { data } = await supabase
       .from('plans_vol')
-      .select('id, callsign, immatriculation, porte, statut, aeroport_depart, aeroport_arrivee, type_avion, pilote_id, created_at')
+      .select(PLAN_VOL_SOL_SELECT)
       .eq('id', planVolId)
       .single();
     if (data) {
+      const plan = mapPlanVolSol(data as unknown as PlanVolSolRow);
       setPlans(prev => {
         if (prev.find(p => p.id === planVolId)) return prev;
-        return [...prev, data as PlanVol];
+        return [...prev, plan];
       });
     }
   }, []);
