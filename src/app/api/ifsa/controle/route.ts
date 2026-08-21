@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 
+import { canAccessIfsaSpace } from '@/lib/ifsa-access';
+
 export const dynamic = 'force-dynamic';
 
 async function checkIfsa(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
@@ -10,7 +12,7 @@ async function checkIfsa(supabase: Awaited<ReturnType<typeof createClient>>, use
     .select('role, ifsa')
     .eq('id', userId)
     .single();
-  return profile?.ifsa || profile?.role === 'admin';
+  return canAccessIfsaSpace(profile);
 }
 
 export async function GET(req: NextRequest) {

@@ -3,8 +3,8 @@ import {
   Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark,
   Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap, Lock,
   Package, KeyRound, Wrench, Handshake, LayoutDashboard, Activity,
-  Settings, Route, Flame, ImageIcon, HardDrive, ScrollText, Radio,
-  TrendingUp, CheckCircle2,
+  Settings, Route, Flame, ImageIcon, HardDrive, ScrollText,   Radio,
+  TrendingUp, CheckCircle2, Bot,
 } from 'lucide-react';
 import { createAdminClient } from '@/lib/supabase/admin';
 
@@ -94,6 +94,7 @@ const sections: Section[] = [
       { href: '/admin/storage-overview', label: 'Espace disque', desc: 'Vue d\'ensemble du stockage', icon: HardDrive },
       { href: '/admin/logs', label: 'Journal d\'activité', desc: 'Toutes les actions du site', icon: ScrollText },
       { href: '/admin/atis-bots', label: 'Bots ATIS', desc: 'Diagnostic & déploiement multi-bot', icon: Radio },
+      { href: '/admin/support-bot', label: 'Bot assistance Discord', desc: 'Tickets IA, panel et sections', icon: Bot },
     ],
   },
 ];

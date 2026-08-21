@@ -7,12 +7,14 @@ export const dynamic = 'force-dynamic';
 const STATUTS_VALIDES = ['nouveau', 'en_examen', 'enquete_ouverte', 'classe', 'rejete'] as const;
 type StatutSignalement = typeof STATUTS_VALIDES[number];
 
+import { canAccessIfsaSpace } from '@/lib/ifsa-access';
+
 async function checkIfsa(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data: profile } = await supabase.from('profiles')
     .select('role, ifsa')
     .eq('id', userId)
     .single();
-  return profile?.ifsa || profile?.role === 'admin';
+  return canAccessIfsaSpace(profile);
 }
 
 // GET - Récupérer les signalements

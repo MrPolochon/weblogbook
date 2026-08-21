@@ -197,7 +197,7 @@ export default function NavBar({
     + messagesNonLusCount + invitationsCount
     + allianceInvitationsCount
     + (isAdmin ? totalAdminBadge : 0)
-    + ((isIfsa || isAdmin) ? signalementsNouveauxCount : 0);
+    + (isIfsa ? signalementsNouveauxCount : 0);
 
   return (
     <>
@@ -306,7 +306,7 @@ export default function NavBar({
               </NavLink>
             )}
 
-            {(isIfsa || isAdmin) && (
+            {isIfsa && (
               <NavLink href="/ifsa" active={pathname.startsWith('/ifsa')} accent="indigo">
                 <Shield className="h-3.5 w-3.5 shrink-0" />
                 IFSA
@@ -541,7 +541,7 @@ export default function NavBar({
               )}
 
               {/* IFSA */}
-              {(isIfsa || isAdmin) && (
+              {isIfsa && (
                 <MobileItem
                   href="/ifsa"
                   icon={Shield}

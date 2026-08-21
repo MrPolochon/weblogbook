@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 
+import { canAccessIfsaSpace } from '@/lib/ifsa-access';
+
 export const dynamic = 'force-dynamic';
 
 const STATUTS_VALIDES = ['ouverte', 'en_cours', 'cloturee', 'classee'] as const;
@@ -15,7 +17,7 @@ async function checkIfsa(supabase: Awaited<ReturnType<typeof createClient>>, use
     .select('role, ifsa')
     .eq('id', userId)
     .single();
-  return profile?.ifsa || profile?.role === 'admin';
+  return canAccessIfsaSpace(profile);
 }
 
 // GET - Récupérer les enquêtes (IFSA uniquement)

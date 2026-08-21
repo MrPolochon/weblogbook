@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { NextResponse, NextRequest } from 'next/server';
+import { canAccessIfsaSpace } from '@/lib/ifsa-access';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
-    if (!profile?.ifsa && profile?.role !== 'admin') {
+    if (!canAccessIfsaSpace(profile)) {
       return NextResponse.json({ error: 'Accès réservé à l\'IFSA' }, { status: 403 });
     }
 

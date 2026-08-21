@@ -32,7 +32,7 @@ export default function CompagniePrioritesPortesClient({ compagnieId, isPdg }: P
   const [availableGates, setAvailableGates] = useState<GateWithStatus[]>([]);
   const [selectedGate, setSelectedGate] = useState<GateWithStatus | null>(null);
   const [prixInfo, setPrixInfo] = useState<{ prix: number; estHub: boolean } | null>(null);
-  const [buyLoading, setBuyLoading] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -55,15 +55,23 @@ export default function CompagniePrioritesPortesClient({ compagnieId, isPdg }: P
   async function selectGateAndGetPrice(gate: GateWithStatus) {
     setSelectedGate(gate);
     setBuyStep('confirm');
+    setPrixInfo(null);
     const res = await fetch('/api/ground/priority', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ compagnie_id: compagnieId, aeroport: selectedAeroport, gate_id: gate.id, preview: true }),
+      body: JSON.stringify({
+        compagnie_id: compagnieId,
+        aeroport: selectedAeroport,
+        gate_id: gate.id,
+        preview: true,
+      }),
     });
-    // Pour le calcul de prix sans acheter, on simule la logique pricing
-    // En attendant, on affiche une estimation
-    const estimated = 50000 * Math.pow(2, priorities.filter((p) => p.aeroport === selectedAeroport).length);
-    setPrixInfo({ prix: estimated, estHub: false });
+    const d = await res.json().catch(() => ({})) as { prix?: number; estHub?: boolean; error?: string };
+    if (!res.ok) {
+      setError(d.error || 'Impossible de calculer le prix.');
+      return;
+    }
+    setPrixInfo({ prix: d.prix ?? 50000, estHub: Boolean(d.estHub) });
   }
 
   async function confirmPurchase() {
@@ -88,6 +96,28 @@ export default function CompagniePrioritesPortesClient({ compagnieId, isPdg }: P
       await loadPriorities();
     } finally {
       setBuyLoading(false);
+    }
+  }
+
+  async function cancelPriority(id: string) {
+    if (!confirm('Annuler cet abonnement et rembourser le montant payé ?')) return;
+    setCancellingId(id);
+    setError(null);
+    try {
+      const res = await fetch('/api/ground/priority', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, compagnie_id: compagnieId }),
+      });
+      const d = await res.json().catch(() => ({})) as { error?: string; refund?: number };
+      if (!res.ok) {
+        setError(d.error || 'Impossible d’annuler.');
+        return;
+      }
+      setSuccess(`Abonnement annulé. Remboursement ${(d.refund ?? 0).toLocaleString('fr-FR')} F$.`);
+      await loadPriorities();
+    } finally {
+      setCancellingId(null);
     }
   }
 
@@ -155,7 +185,17 @@ export default function CompagniePrioritesPortesClient({ compagnieId, isPdg }: P
         <div className="rounded-2xl border border-indigo-700/40 bg-indigo-900/10 p-4 space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-bold text-indigo-200">Nouvel abonnement priorité</h4>
-            <button type="button" onClick={resetBuy} className="text-xs text-slate-400 hover:text-slate-200">Annuler</button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                resetBuy();
+              }}
+              className="text-xs font-semibold text-slate-300 hover:text-white px-2 py-1 rounded-lg hover:bg-slate-700/50"
+            >
+              Annuler
+            </button>
           </div>
 
           {/* Étape 1 : Aéroport */}
@@ -231,7 +271,7 @@ export default function CompagniePrioritesPortesClient({ compagnieId, isPdg }: P
               <button
                 type="button"
                 onClick={confirmPurchase}
-                disabled={buyLoading}
+                disabled={buyLoading || !prixInfo}
                 className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 py-3 text-sm font-bold text-white transition-colors disabled:opacity-50"
               >
                 {buyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
@@ -268,6 +308,16 @@ export default function CompagniePrioritesPortesClient({ compagnieId, isPdg }: P
                     </div>
                   </div>
                 </div>
+                {isPdg && (
+                  <button
+                    type="button"
+                    onClick={() => cancelPriority(p.id)}
+                    disabled={cancellingId === p.id}
+                    className="text-xs font-semibold text-red-300 hover:text-red-200 px-2 py-1 rounded-lg hover:bg-red-500/10 disabled:opacity-50"
+                  >
+                    {cancellingId === p.id ? 'Annulation…' : 'Annuler'}
+                  </button>
+                )}
                 <span className="flex items-center gap-1 text-xs text-emerald-400 font-medium">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   Actif

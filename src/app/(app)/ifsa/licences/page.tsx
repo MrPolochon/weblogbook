@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import AdminLicences from '@/app/(app)/admin/licences/AdminLicences';
+import IfsaAdminUnlock from '../IfsaAdminUnlock';
+import { ifsaPageGate } from '@/lib/ifsa-access';
 
 export default async function IfsaLicencesPage() {
   const supabase = await createClient();
@@ -11,7 +13,9 @@ export default async function IfsaLicencesPage() {
   if (!user) redirect('/login');
 
   const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
-  if (!profile?.ifsa && profile?.role !== 'admin') redirect('/logbook');
+  const gate = ifsaPageGate(profile);
+  if (gate === 'deny') redirect('/logbook');
+  if (gate === 'admin_password') return <IfsaAdminUnlock />;
 
   const admin = createAdminClient();
   const [{ data: pilotes }, { data: typesAvion }] = await Promise.all([
