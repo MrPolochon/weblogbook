@@ -1,7 +1,8 @@
 # Bot assistance Discord (tickets)
 
-Les **salons, le rôle staff et le serveur** se règlent **uniquement sur le site**
-(Admin → Bot assistance Discord). Railway ne reçoit **aucun** ID Discord.
+Les **salons, rôles staff / instructeur** se règlent **uniquement sur le site**
+(Admin → Bot assistance Discord), via des menus (pas d’IDs à coller).
+Le serveur est `DISCORD_GUILD_ID` déjà présent sur Vercel. Railway ne reçoit **aucun** ID Discord.
 
 ## Railway
 
@@ -25,12 +26,13 @@ Pas de `GROQ_API_KEY` ici : l’IA tourne sur Vercel.
 | `SUPPORT_BOT_TOKEN` | **le même** token (créer salons / panel / transcripts) |
 | `SUPPORT_BOT_SECRET` | **le même** secret |
 | `GROQ_API_KEY` | Groq (volume) |
+| `DISCORD_GUILD_ID` | serveur (déjà en place, pas à retaper) |
 
 ## Créer le bot Discord (une fois)
 
 1. https://discord.com/developers/applications → New Application.
 2. Bot → token + intents **Server Members** et **Message Content**.
 3. Inviter : scopes `bot` + `applications.commands` ; perms Voir / Envoyer / Embeds / Fichiers / Historique / Gérer les salons / Mention everyone.
-4. Sur le site : coller serveur, salon panel, salon logs, rôle staff → **Créer panel + sections**.
+4. Sur le site : choisir salon panel, salon logs, rôle staff, rôle instructeur (CAT / instruction) → **Créer panel + sections**.
 
 Le process Railway relit la config du site toutes les 5 minutes.

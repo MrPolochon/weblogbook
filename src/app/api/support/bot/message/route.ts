@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { assertSupportBotSecret, getSupportConfig } from '@/lib/support/bot-auth';
 import { SUPPORT_IA_SYSTEM_PROMPT } from '@/lib/support/knowledge';
-import { ticketChannelName, type SupportStatus } from '@/lib/support/motifs';
+import { motifUsesInstructor, ticketChannelName, type SupportStatus } from '@/lib/support/motifs';
 import { discordRenameChannel, discordSendMessage } from '@/lib/support/discord-api';
 import {
   extractFacts,
@@ -151,8 +151,21 @@ export async function POST(req: NextRequest) {
 
   const cfg = await getSupportConfig();
   let out = reply;
-  if (escalate && cfg?.staff_role_id) {
-    out = `${reply}\n\n<@&${cfg.staff_role_id}> **Un staff est requis.**`;
+  if (escalate) {
+    const pings: string[] = [];
+    if (cfg?.staff_role_id) pings.push(`<@&${cfg.staff_role_id}>`);
+    if (
+      cfg?.instructor_role_id &&
+      motifUsesInstructor(String(ticket.motif), cfg.instructor_motifs as string[] | null)
+    ) {
+      pings.push(`<@&${cfg.instructor_role_id}>`);
+    }
+    if (pings.length) {
+      const who = cfg?.instructor_role_id && motifUsesInstructor(String(ticket.motif), cfg.instructor_motifs as string[] | null)
+        ? 'Un staff / instructeur est requis.'
+        : 'Un staff est requis.';
+      out = `${reply}\n\n${[...new Set(pings)].join(' ')} **${who}**`;
+    }
   }
 
   await discordSendMessage(channelId, out);

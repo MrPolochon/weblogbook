@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     ok: true,
     guild_id: cfg?.guild_id || null,
     staff_role_id: cfg?.staff_role_id || null,
+    instructor_role_id: cfg?.instructor_role_id || null,
     category_ids: cfg?.category_ids || {},
     panel_channel_id: cfg?.panel_channel_id || null,
     logs_channel_id: cfg?.logs_channel_id || null,

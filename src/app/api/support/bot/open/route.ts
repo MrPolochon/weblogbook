@@ -2,12 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { assertSupportBotSecret, getSupportConfig } from '@/lib/support/bot-auth';
-import {
-  classifyMotifFromText,
-  SUPPORT_MOTIFS,
-  ticketChannelName,
-  type SupportMotifId,
-} from '@/lib/support/motifs';
+import { classifyMotifFromText, motifUsesInstructor, SUPPORT_MOTIFS, ticketChannelName, type SupportMotifId } from '@/lib/support/motifs';
 import { discordCreateTextChannel, discordGetMe, discordSendMessage, DISCORD_TICKET_ALLOW } from '@/lib/support/discord-api';
 import { extractFacts } from '@/lib/support/ticket-memory';
 
@@ -65,6 +60,11 @@ export async function POST(req: NextRequest) {
     { id: everyone, type: 0, deny: '1024' },
     { id: discordUserId, type: 1, allow: DISCORD_TICKET_ALLOW },
     { id: cfg.staff_role_id, type: 0, allow: DISCORD_TICKET_ALLOW },
+    ...(cfg.instructor_role_id &&
+    String(cfg.instructor_role_id) !== String(cfg.staff_role_id) &&
+    motifUsesInstructor(motif, cfg.instructor_motifs as string[] | null)
+      ? [{ id: String(cfg.instructor_role_id), type: 0, allow: DISCORD_TICKET_ALLOW }]
+      : []),
     ...(botId ? [{ id: botId, type: 1, allow: DISCORD_TICKET_ALLOW }] : []),
   ];
 

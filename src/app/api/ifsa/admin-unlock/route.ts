@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash, timingSafeEqual } from 'crypto';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { IFSA_ADMIN_COOKIE } from '@/lib/ifsa-access';
 
 export async function POST(request: NextRequest) {
@@ -18,20 +18,28 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const password = typeof body.password === 'string' ? body.password : '';
-    const expected = process.env.SUPERADMIN_PASSWORD;
-    if (!expected) {
-      return NextResponse.json({ error: 'Mot de passe superadmin non configuré.' }, { status: 500 });
-    }
-    if (!password) {
-      return NextResponse.json({ error: 'Mot de passe incorrect.' }, { status: 401 });
+    const code = typeof body.code === 'string' ? body.code.trim().replace(/\s/g, '') : '';
+    if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+      return NextResponse.json({ error: 'Code superadmin invalide (6 chiffres).' }, { status: 401 });
     }
 
-    const hashInput = createHash('sha256').update(password).digest();
-    const hashExpected = createHash('sha256').update(expected).digest();
-    if (!timingSafeEqual(hashInput, hashExpected)) {
-      return NextResponse.json({ error: 'Mot de passe incorrect.' }, { status: 401 });
+    const admin = createAdminClient();
+    const { data: codeRow } = await admin
+      .from('superadmin_access_codes')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .eq('code', code)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+
+    if (!codeRow) {
+      return NextResponse.json(
+        { error: 'Code superadmin incorrect ou expiré. Demandez un nouveau code par email.' },
+        { status: 401 }
+      );
     }
+
+    await admin.from('superadmin_access_codes').delete().eq('user_id', user.id);
 
     const res = NextResponse.json({ ok: true });
     res.cookies.set(IFSA_ADMIN_COOKIE, '1', {

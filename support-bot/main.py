@@ -23,7 +23,7 @@ intents.members = True
 
 bot = discord.Client(intents=intents)
 
-_runtime: dict[str, Any] = {"staff_role_id": None, "category_ids": {}}
+_runtime: dict[str, Any] = {"staff_role_id": None, "instructor_role_id": None, "category_ids": {}}
 
 
 async def api_post(path: str, payload: dict) -> tuple[int, dict]:
@@ -54,9 +54,15 @@ async def refresh_runtime() -> None:
     status, data = await api_get("/api/support/bot/runtime")
     if status < 400 and data:
         _runtime["staff_role_id"] = data.get("staff_role_id")
+        _runtime["instructor_role_id"] = data.get("instructor_role_id")
         cats = data.get("category_ids") or {}
         _runtime["category_ids"] = set(str(v) for v in cats.values() if v)
-        log.info("Config site: %s sections, staff_role=%s", len(_runtime["category_ids"]), _runtime["staff_role_id"])
+        log.info(
+            "Config site: %s sections, staff_role=%s instructor_role=%s",
+            len(_runtime["category_ids"]),
+            _runtime["staff_role_id"],
+            _runtime["instructor_role_id"],
+        )
 
 
 def is_ticket_channel(channel: discord.abc.GuildChannel) -> bool:
@@ -70,8 +76,8 @@ def is_ticket_channel(channel: discord.abc.GuildChannel) -> bool:
 
 
 def is_staff_member(member: discord.Member) -> bool:
-    rid = _runtime.get("staff_role_id")
-    if rid and any(str(r.id) == str(rid) for r in member.roles):
+    rids = [rid for rid in (_runtime.get("staff_role_id"), _runtime.get("instructor_role_id")) if rid]
+    if rids and any(str(r.id) in {str(x) for x in rids} for r in member.roles):
         return True
     return member.guild_permissions.manage_channels
 

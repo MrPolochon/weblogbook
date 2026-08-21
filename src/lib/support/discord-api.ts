@@ -27,6 +27,52 @@ export async function discordGetMe() {
   return discordFetch('/users/@me');
 }
 
+export type DiscordGuildChannel = {
+  id: string;
+  name: string;
+  type: number;
+  parent_id: string | null;
+  position: number;
+};
+
+export type DiscordGuildRole = {
+  id: string;
+  name: string;
+  position: number;
+  managed: boolean;
+};
+
+export async function discordGetGuild(guildId: string): Promise<{ id: string; name: string }> {
+  const g = await discordFetch(`/guilds/${guildId}`);
+  return { id: String(g.id), name: String(g.name || guildId) };
+}
+
+export async function discordListGuildChannels(guildId: string): Promise<DiscordGuildChannel[]> {
+  const raw = await discordFetch(`/guilds/${guildId}/channels`);
+  if (!Array.isArray(raw)) return [];
+  return raw.map((c: Record<string, unknown>) => ({
+    id: String(c.id),
+    name: String(c.name || ''),
+    type: Number(c.type || 0),
+    parent_id: c.parent_id ? String(c.parent_id) : null,
+    position: Number(c.position || 0),
+  }));
+}
+
+export async function discordListGuildRoles(guildId: string): Promise<DiscordGuildRole[]> {
+  const raw = await discordFetch(`/guilds/${guildId}/roles`);
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((r: Record<string, unknown>) => ({
+      id: String(r.id),
+      name: String(r.name || ''),
+      position: Number(r.position || 0),
+      managed: Boolean(r.managed),
+    }))
+    .filter((r) => r.id !== guildId)
+    .sort((a, b) => b.position - a.position);
+}
+
 /** Voir + écrire + historique + embeds + fichiers */
 export const DISCORD_TICKET_ALLOW = '117760';
 

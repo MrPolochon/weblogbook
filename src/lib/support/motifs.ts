@@ -14,6 +14,21 @@ export const SUPPORT_MOTIFS = [
 
 export type SupportMotifId = (typeof SUPPORT_MOTIFS)[number]['id'];
 
+export const DEFAULT_INSTRUCTOR_MOTIFS: SupportMotifId[] = [
+  'cat1',
+  'cat2',
+  'cat3',
+  'cat4',
+  'cat5',
+  'instruction',
+  'aeroschool',
+];
+
+export function motifUsesInstructor(motif: string, selected?: string[] | null): boolean {
+  const list = selected && selected.length > 0 ? selected : DEFAULT_INSTRUCTOR_MOTIFS;
+  return list.includes(motif as SupportMotifId);
+}
+
 export const SUPPORT_STATUSES = {
   ia: { emoji: '🤖', label: "Géré par l'IA" },
   staff_needed: { emoji: '🔴', label: 'Requiert un staff' },

@@ -4,11 +4,38 @@ import { useState } from 'react';
 import { Shield, Lock } from 'lucide-react';
 
 export default function IfsaAdminUnlock() {
+  const [step, setStep] = useState<'password' | 'code'>('password');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [emailMasked, setEmailMasked] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function onSubmit(e: React.FormEvent) {
+  async function sendCode(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/superadmin/request-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || 'Mot de passe superadmin incorrect.');
+        return;
+      }
+      setEmailMasked(typeof data.emailMasked === 'string' ? data.emailMasked : null);
+      setStep('code');
+    } catch {
+      setError('Erreur réseau.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function unlock(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -16,11 +43,11 @@ export default function IfsaAdminUnlock() {
       const res = await fetch('/api/ifsa/admin-unlock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ code: code.replace(/\s/g, '') }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || 'Mot de passe incorrect.');
+        setError(data.error || 'Code incorrect.');
         return;
       }
       window.location.reload();
@@ -43,25 +70,62 @@ export default function IfsaAdminUnlock() {
             Accès IFSA
           </h1>
           <p className="text-sm text-slate-400 mt-0.5">
-            Espace réservé aux agents IFSA. Un administrateur doit confirmer avec le mot de passe superadmin.
+            Espace agents IFSA. Un administrateur doit confirmer avec le mot de passe puis le code superadmin reçu par email.
           </p>
         </div>
       </div>
-      <form onSubmit={onSubmit} className="space-y-3">
-        <label className="label">Mot de passe superadmin</label>
-        <input
-          type="password"
-          className="input"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="current-password"
-          required
-        />
-        {error && <p className="text-sm text-red-400">{error}</p>}
-        <button type="submit" className="btn-primary w-full" disabled={loading || !password.trim()}>
-          {loading ? 'Vérification…' : 'Déverrouiller'}
-        </button>
-      </form>
+
+      {step === 'password' ? (
+        <form onSubmit={sendCode} className="space-y-3">
+          <label className="label">Mot de passe superadmin</label>
+          <input
+            type="password"
+            className="input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+          {error && <p className="text-sm text-red-400">{error}</p>}
+          <button type="submit" className="btn-primary w-full" disabled={loading || !password.trim()}>
+            {loading ? 'Envoi…' : 'Envoyer le code par email'}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={unlock} className="space-y-3">
+          <label className="label">Code superadmin (6 chiffres)</label>
+          {emailMasked && (
+            <p className="text-xs text-slate-400">Envoyé à {emailMasked}</p>
+          )}
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            className="input text-center font-mono text-lg tracking-widest"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="••••••"
+            autoComplete="one-time-code"
+            required
+          />
+          {error && <p className="text-sm text-red-400">{error}</p>}
+          <button type="submit" className="btn-primary w-full" disabled={loading || code.length !== 6}>
+            {loading ? 'Vérification…' : 'Déverrouiller'}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary w-full text-sm"
+            disabled={loading}
+            onClick={() => {
+              setStep('password');
+              setCode('');
+              setError(null);
+            }}
+          >
+            Renvoyer un code
+          </button>
+        </form>
+      )}
     </div>
   );
 }

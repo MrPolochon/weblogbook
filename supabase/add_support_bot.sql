@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS public.support_bot_config (
   panel_message_id TEXT,
   logs_channel_id TEXT,
   staff_role_id TEXT,
+  instructor_role_id TEXT,
+  instructor_motifs JSONB NOT NULL DEFAULT '["cat1","cat2","cat3","cat4","cat5","instruction","aeroschool"]'::jsonb,
   category_ids JSONB NOT NULL DEFAULT '{}'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

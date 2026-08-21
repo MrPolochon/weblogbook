@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { SUPPORT_MOTIFS } from '@/lib/support/motifs';
+import { getDiscordGuildId } from '@/lib/discord-link';
+import { DEFAULT_INSTRUCTOR_MOTIFS, SUPPORT_MOTIFS } from '@/lib/support/motifs';
 import {
   discordCreateCategory,
   discordFetch,
@@ -24,7 +25,12 @@ export async function GET() {
   if ('error' in gate && gate.error) return gate.error;
   const admin = createAdminClient();
   const { data } = await admin.from('support_bot_config').select('*').eq('id', 'default').maybeSingle();
-  return NextResponse.json({ config: data, motifs: SUPPORT_MOTIFS });
+  const guildId = getDiscordGuildId() || data?.guild_id || null;
+  return NextResponse.json({
+    config: data ? { ...data, guild_id: guildId } : { guild_id: guildId },
+    motifs: SUPPORT_MOTIFS,
+    env_guild_id: guildId,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -32,15 +38,26 @@ export async function POST(req: NextRequest) {
   if ('error' in gate && gate.error) return gate.error;
 
   const body = await req.json().catch(() => ({}));
-  const guild_id = String(body.guild_id || '').trim();
+  const guild_id = getDiscordGuildId() || String(body.guild_id || '').trim();
   const panel_channel_id = String(body.panel_channel_id || '').trim();
   const logs_channel_id = String(body.logs_channel_id || '').trim();
   const staff_role_id = String(body.staff_role_id || '').trim();
+  const instructor_role_id = String(body.instructor_role_id || '').trim() || null;
+  const rawMotifs = Array.isArray(body.instructor_motifs) ? body.instructor_motifs : [];
+  const allowedMotifIds = new Set(SUPPORT_MOTIFS.map((m) => m.id));
+  const instructor_motifs = rawMotifs
+    .map((id: unknown) => String(id))
+    .filter((id: string) => allowedMotifIds.has(id as (typeof SUPPORT_MOTIFS)[number]['id']));
+  const instructorMotifsStored =
+    instructor_motifs.length > 0 ? instructor_motifs : [...DEFAULT_INSTRUCTOR_MOTIFS];
   const provision = body.provision === true;
 
-  if (!guild_id || !panel_channel_id || !staff_role_id) {
+  if (!guild_id) {
+    return NextResponse.json({ error: 'DISCORD_GUILD_ID manquant sur Vercel.' }, { status: 400 });
+  }
+  if (!panel_channel_id || !staff_role_id) {
     return NextResponse.json(
-      { error: 'guild_id, panel_channel_id et staff_role_id requis' },
+      { error: 'Salon du panel et rôle staff requis' },
       { status: 400 }
     );
   }
@@ -115,6 +132,8 @@ export async function POST(req: NextRequest) {
             panel_message_id,
             logs_channel_id: logs_channel_id || null,
             staff_role_id,
+            instructor_role_id,
+            instructor_motifs: instructorMotifsStored,
             category_ids,
             updated_at: new Date().toISOString(),
           },
@@ -141,6 +160,8 @@ export async function POST(req: NextRequest) {
         panel_channel_id,
         logs_channel_id: logs_channel_id || null,
         staff_role_id,
+        instructor_role_id,
+        instructor_motifs: instructorMotifsStored,
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'id' }

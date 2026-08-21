@@ -308,7 +308,7 @@ export default function NavBar({
               </NavLink>
             )}
 
-            {isIfsa && (
+            {(isIfsa || isAdmin) && (
               <NavLink href="/ifsa" active={pathname.startsWith('/ifsa')} accent="indigo">
                 <Shield className="h-3.5 w-3.5 shrink-0" />
                 IFSA
@@ -543,7 +543,7 @@ export default function NavBar({
               )}
 
               {/* IFSA */}
-              {isIfsa && (
+              {(isIfsa || isAdmin) && (
                 <MobileItem
                   href="/ifsa"
                   icon={Shield}
