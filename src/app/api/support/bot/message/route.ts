@@ -22,7 +22,7 @@ import {
   type SupportStatus,
 } from '@/lib/support/motifs';
 import { discordRenameChannel, discordSendMessage } from '@/lib/support/discord-api';
-import { finalizeReply } from '@/lib/support/reply-format';
+import { llmReply, type LlmResult } from '@/lib/support/llm';
 import { buildRequesterContext } from '@/lib/support/requester-context';
 import {
   iaOffersResolution,
@@ -98,121 +98,6 @@ function parseTurns(raw: unknown): TicketTurn[] {
     }
   }
   return out;
-}
-
-/** Modèle Groq de production courant (llama-3.3-70b-versatile a été retiré le 16/08/2026). */
-const GROQ_DEFAULT_MODEL = 'openai/gpt-oss-120b';
-/** Repli si le modèle principal disparaît à son tour ou sature son quota (limites par modèle). */
-const GROQ_BACKUP_MODEL = 'openai/gpt-oss-20b';
-
-type LlmResult = { ok: true; text: string } | { ok: false; reason: string };
-
-/**
- * Erreurs qui disparaissent en changeant de modèle : modèle retiré du catalogue,
- * ou quota atteint (Groq compte le débit par modèle, pas par compte).
- */
-function worthRetryingOnAnotherModel(status: number, data: unknown): boolean {
-  if (status === 429) return true;
-  if (status !== 404 && status !== 400) return false;
-  const blob = JSON.stringify(data ?? {});
-  return /model_not_found|model_decommissioned|does not exist|decommissioned/i.test(blob);
-}
-
-function isBadParamError(status: number, data: unknown): boolean {
-  if (status !== 400) return false;
-  return /unsupported|unrecognized|not supported|invalid.*(parameter|argument)|reasoning_effort/i.test(
-    JSON.stringify(data ?? {})
-  );
-}
-
-async function callLlm(
-  base: string,
-  key: string,
-  model: string,
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-  withExtras = true,
-  budget?: number
-): Promise<{ text: string | null; status: number; data: unknown }> {
-  const reasoning = /gpt-oss|qwen3/i.test(model);
-  const res = await fetch(`${base}/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      temperature: 0.2,
-      // Plafond partagé avec les tokens de raisonnement. Le style imposé par le
-      // prompt garde la réponse courte ; ce plafond n'est qu'un garde-fou, et
-      // `finalizeReply` recoupe proprement si le modèle le touche quand même.
-      max_tokens: budget ?? (reasoning ? 1100 : 500),
-      ...(reasoning && withExtras ? { reasoning_effort: 'low' } : {}),
-      messages,
-    }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    console.error('[support-message] LLM HTTP', res.status, model, JSON.stringify(data).slice(0, 600));
-    if (withExtras && isBadParamError(res.status, data)) {
-      console.warn('[support-message] paramètre refusé, nouvel essai sans options', model);
-      return callLlm(base, key, model, messages, false, budget);
-    }
-    return { text: null, status: res.status, data };
-  }
-  const choice = (data as { choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }> })
-    ?.choices?.[0];
-  const content = choice?.message?.content;
-  if (typeof content === 'string' && content.trim()) {
-    const truncated = choice?.finish_reason === 'length';
-    if (truncated) {
-      console.warn('[support-message] réponse plafonnée par max_tokens, recoupe propre', model);
-    }
-    return { text: finalizeReply(content, truncated), status: res.status, data };
-  }
-  console.error(
-    '[support-message] LLM 200 sans contenu',
-    model,
-    'finish_reason=',
-    choice?.finish_reason,
-    JSON.stringify(data).slice(0, 600)
-  );
-  return { text: null, status: res.status, data };
-}
-
-async function llmReply(
-  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
-  budget?: number
-): Promise<LlmResult> {
-  const groqKey = process.env.GROQ_API_KEY || process.env.SUPPORT_LLM_API_KEY;
-  const key = groqKey || process.env.OPENAI_API_KEY;
-  const useGroq = Boolean(process.env.SUPPORT_LLM_BASE_URL?.includes('groq') || (!process.env.SUPPORT_LLM_BASE_URL && groqKey));
-  const base = (process.env.SUPPORT_LLM_BASE_URL || (useGroq ? 'https://api.groq.com/openai/v1' : 'https://api.openai.com/v1')).replace(/\/$/, '');
-  const configured = process.env.SUPPORT_LLM_MODEL || (useGroq ? GROQ_DEFAULT_MODEL : 'gpt-4o-mini');
-  const candidates = useGroq
-    ? Array.from(new Set([configured, GROQ_DEFAULT_MODEL, GROQ_BACKUP_MODEL]))
-    : [configured];
-  if (!key) {
-    console.error('[support-message] aucune clé LLM (GROQ_API_KEY / OPENAI_API_KEY)');
-    return { ok: false, reason: 'no_api_key' };
-  }
-  let reason = 'unknown';
-  for (const model of candidates) {
-    try {
-      const { text, status, data } = await callLlm(base, key, model, messages, true, budget);
-      if (text) {
-        if (model !== configured) {
-          console.warn('[support-message] modèle de secours utilisé', model, '(configuré:', configured, ')');
-        }
-        return { ok: true, text };
-      }
-      reason = `http_${status}`;
-      // Un 401 ou un 500 se reproduira à l'identique sur les autres candidats.
-      if (!worthRetryingOnAnotherModel(status, data)) break;
-    } catch (e) {
-      console.error('[support-message] LLM fetch', model, e);
-      reason = 'fetch_error';
-      break;
-    }
-  }
-  return { ok: false, reason };
 }
 
 async function updateTicketRow(

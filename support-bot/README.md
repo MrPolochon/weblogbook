@@ -50,6 +50,29 @@ Pas de `GROQ_API_KEY` ici : l’IA tourne sur Vercel. Redémarrer le service apr
 | `GROQ_API_KEY` | Groq (volume) |
 | `DISCORD_GUILD_ID` | serveur (déjà en place, pas à retaper) |
 
+## Choix du modèle IA (`src/lib/support/llm.ts`)
+
+Tout passe par des variables : changer de modèle ou de fournisseur ne demande
+aucune modification de code, seulement un redéploiement.
+
+| Variable | Rôle | Valeur actuelle |
+|---|---|---|
+| `SUPPORT_LLM_BASE_URL` | endpoint compatible OpenAI | `https://api.groq.com/openai/v1` |
+| `SUPPORT_LLM_API_KEY` | clé du fournisseur (à défaut `GROQ_API_KEY`) | — |
+| `SUPPORT_LLM_MODEL` | modèle principal | `openai/gpt-oss-120b` |
+| `SUPPORT_LLM_FALLBACK_MODEL` | replis, séparés par des virgules | `groq/compound-mini,openai/gpt-oss-20b` |
+| `SUPPORT_LLM_BASE_URL_2` / `SUPPORT_LLM_API_KEY_2` / `SUPPORT_LLM_MODEL_2` | second fournisseur, essayé si le premier est totalement HS | non défini |
+
+Les quotas Groq sont comptés **par modèle** : le plan gratuit donne 8K tokens/minute
+et 1000 requêtes/jour à `gpt-oss-120b` (≈ 3 à 4 messages de ticket par minute) mais
+70K tokens/minute et 250 requêtes/jour à `groq/compound-mini`. Enchaîner les trois
+modèles additionne des seaux indépendants : ≈ 22 messages/minute et 2250/jour.
+
+`groq/compound` est un système agentique : l’appel est bridé au seul interpréteur
+de code (`compound_custom.tools.enabled_tools`) pour lui interdire la recherche web,
+hors sujet pour un support qui ne cite que la documentation du site — et facturée à
+part dès qu’on quitte le plan gratuit.
+
 ## Créer le bot Discord (une fois)
 
 1. https://discord.com/developers/applications → New Application.
