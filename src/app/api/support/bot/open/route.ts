@@ -100,12 +100,6 @@ export async function POST(req: NextRequest) {
       memory_notes: extractFacts(reason).join('\n') || null,
     });
 
-    const motifLabel = SUPPORT_MOTIFS.find((m) => m.id === motif)?.label || motif;
-    const intro =
-      motif === 'nouveau'
-        ? `Bienvenue ! Je t’accompagne pour démarrer (compte, Discord lié, logbook). Raison indiquée : *${reason.slice(0, 300)}*`
-        : `Ticket classé **${motifLabel}**. Raison : *${reason.slice(0, 400)}*\nJe m’en occupe. Si je ne peux pas conclure, j’appellerai un staff.`;
-
     await discordSendMessage(ch.id, `<@${discordUserId}>\n${intro}`);
 
     return NextResponse.json({ ok: true, channel_id: ch.id, motif, short_id: sid });
