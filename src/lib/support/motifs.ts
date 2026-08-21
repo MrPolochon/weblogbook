@@ -91,6 +91,8 @@ export function isTrainingRequest(text: string): boolean {
  */
 export function isAccountCreationTopic(text: string): boolean {
   const t = normalize(text);
+  // La commande s'appelle /register. « webregister » n'est reconnu que parce que
+  // des membres l'écrivent ainsi : l'IA, elle, ne doit jamais proposer ce nom.
   if (/\bwebregister\b|\/register\b/.test(t)) return true;
   if (/\b(creer|cree|creation|ouvrir|avoir|faire)\b.{0,20}\bcompte\b/.test(t)) return true;
   if (/\b(m|s)['. ]?inscrire\b|\binscription\b/.test(t)) return true;
