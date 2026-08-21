@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
+import { getDiscordGuildId } from '@/lib/discord-link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { assertSupportBotSecret, getSupportConfig } from '@/lib/support/bot-auth';
 import { discordGetMe, ensureTicketDelGuildCommand } from '@/lib/support/discord-api';
@@ -22,11 +24,12 @@ export async function GET(req: NextRequest) {
     bot_user_id = String(me.id || '') || null;
   } catch { /* ignore */ }
 
-  await ensureTicketDelGuildCommand(cfg?.guild_id);
+  const guildId = getDiscordGuildId() || cfg?.guild_id || null;
+  waitUntil(ensureTicketDelGuildCommand(guildId));
 
   return NextResponse.json({
     ok: true,
-    guild_id: cfg?.guild_id || null,
+    guild_id: guildId,
     staff_role_id: cfg?.staff_role_id || null,
     instructor_role_id: cfg?.instructor_role_id || null,
     category_ids: cfg?.category_ids || {},

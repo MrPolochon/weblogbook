@@ -1,3 +1,5 @@
+import { getDiscordGuildId } from '@/lib/discord-link';
+
 const DISCORD_API = 'https://discord.com/api/v10';
 
 function botToken(): string {
@@ -140,12 +142,18 @@ const TICKETDEL_COMMAND = {
 
 let lastTicketDelEnsure = 0;
 
-/** Enregistre `/ticketdel` en commande de guilde (idempotent, throttlé). */
-export async function ensureTicketDelGuildCommand(guildId: string | null | undefined) {
-  const gid = String(guildId || '').trim();
+/**
+ * Enregistre `/ticketdel` en commande de guilde (idempotent).
+ * Application id = GET /users/@me (token bot). Guilde = DISCORD_GUILD_ID.
+ */
+export async function ensureTicketDelGuildCommand(
+  guildId?: string | null,
+  opts?: { force?: boolean }
+) {
+  const gid = String(getDiscordGuildId() || guildId || '').trim();
   if (!gid) return;
   const now = Date.now();
-  if (now - lastTicketDelEnsure < 10 * 60 * 1000) return;
+  if (!opts?.force && now - lastTicketDelEnsure < 10 * 60 * 1000) return;
   lastTicketDelEnsure = now;
   try {
     const me = await discordGetMe();

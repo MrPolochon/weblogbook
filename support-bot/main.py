@@ -179,27 +179,32 @@ def _command_name(interaction: discord.Interaction) -> str | None:
     return str(name) if name else None
 
 
-async def register_ticketdel_command(client: discord.Client) -> None:
-    """Commande de guilde /ticketdel — le handling HTTP Vercel est prioritaire si l'endpoint est configuré."""
+async def register_ticketdel_command(_client: discord.Client | None = None) -> None:
+    """Commande de guilde /ticketdel via REST. L'endpoint HTTP Vercel gère l'interaction."""
     global _ticketdel_guild
-    guild_id = str(_runtime.get("guild_id") or "").strip()
-    if not guild_id or not client.user:
+    guild_id = str(_runtime.get("guild_id") or os.getenv("DISCORD_GUILD_ID") or "").strip()
+    if not guild_id:
         return
     if _ticketdel_guild == guild_id:
         return
-    app_id = client.user.id
-    url = f"https://discord.com/api/v10/applications/{app_id}/guilds/{guild_id}/commands"
     headers = {"Authorization": f"Bot {TOKEN}", "Content-Type": "application/json"}
     payload = {"name": "ticketdel", "description": "Fermer et supprimer ce ticket", "type": 1}
     timeout = aiohttp.ClientTimeout(total=20)
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get("https://discord.com/api/v10/users/@me", headers=headers) as resp:
+                me = await resp.json(content_type=None) if resp.status < 400 else {}
+            app_id = str((me or {}).get("id") or "").strip()
+            if not app_id:
+                log.warning("GET /users/@me sans id — /ticketdel non enregistré")
+                return
+            url = f"https://discord.com/api/v10/applications/{app_id}/guilds/{guild_id}/commands"
             async with session.get(url, headers=headers) as resp:
                 existing = await resp.json(content_type=None) if resp.status < 400 else []
             names = {c.get("name") for c in existing} if isinstance(existing, list) else set()
             if "ticketdel" in names:
                 _ticketdel_guild = guild_id
-                log.info("Slash /ticketdel déjà enregistré guild=%s", guild_id)
+                log.info("Slash /ticketdel déjà enregistré guild=%s app=%s", guild_id, app_id)
                 return
             async with session.post(url, headers=headers, json=payload) as resp:
                 body = await resp.text()
@@ -207,7 +212,7 @@ async def register_ticketdel_command(client: discord.Client) -> None:
                     log.warning("Enregistrement /ticketdel HTTP %s %s", resp.status, body[:240])
                     return
             _ticketdel_guild = guild_id
-            log.info("Slash /ticketdel enregistré guild=%s", guild_id)
+            log.info("Slash /ticketdel enregistré guild=%s app=%s", guild_id, app_id)
     except Exception:
         log.exception("Impossible d'enregistrer /ticketdel")
 

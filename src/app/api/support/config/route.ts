@@ -7,6 +7,7 @@ import { DEFAULT_INSTRUCTOR_MOTIFS, SUPPORT_MOTIFS } from '@/lib/support/motifs'
 import {
   discordCreateCategory,
   discordFetch,
+  ensureTicketDelGuildCommand,
 } from '@/lib/support/discord-api';
 
 async function requireAdmin() {
@@ -142,6 +143,7 @@ export async function POST(req: NextRequest) {
         .select()
         .single();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      await ensureTicketDelGuildCommand(guild_id, { force: true });
       return NextResponse.json({ ok: true, config: data, provisioned: true });
     } catch (e) {
       return NextResponse.json(
@@ -169,5 +171,6 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await ensureTicketDelGuildCommand(guild_id, { force: true });
   return NextResponse.json({ ok: true, config: data, provisioned: false });
 }
