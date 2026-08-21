@@ -16,13 +16,6 @@ WEBLOGBOOK_URL = os.getenv("WEBLOGBOOK_URL", "https://mixouairlinesptfsweblogboo
 SECRET = (os.getenv("SUPPORT_BOT_SECRET") or os.getenv("ATIS_WEBHOOK_SECRET") or "").strip()
 TOKEN = (os.getenv("SUPPORT_BOT_TOKEN") or "").strip()
 
-intents = discord.Intents.default()
-intents.message_content = True
-intents.guilds = True
-intents.members = True
-
-bot = discord.Client(intents=intents)
-
 _runtime: dict[str, Any] = {
     "staff_role_id": None,
     "instructor_role_id": None,
@@ -30,6 +23,8 @@ _runtime: dict[str, Any] = {
     "panel_channel_id": None,
     "panel_message_id": None,
 }
+
+_ack_ids: set[int] = set()
 
 
 async def api_post(path: str, payload: dict) -> tuple[int, dict]:
@@ -95,7 +90,13 @@ def is_staff_member(member: discord.Member) -> bool:
 
 
 async def send_open_ticket_modal(interaction: discord.Interaction) -> None:
-    """ACK immédiat (< 3s). Ne parle pas au site — uniquement le modal."""
+    """ACK immédiat (< 3s). Filet gateway si l'endpoint HTTP n'est pas configuré."""
+    iid = interaction.id
+    if iid in _ack_ids:
+        return
+    _ack_ids.add(iid)
+    if len(_ack_ids) > 500:
+        _ack_ids.clear()
     if interaction.response.is_done():
         return
     try:
@@ -119,45 +120,13 @@ def _component_custom_id(interaction: discord.Interaction) -> str | None:
     return str(cid) if cid else None
 
 
-async def rebind_panel_view() -> None:
-    """Ré-associe le message REST du panel à PanelView (gateway)."""
-    channel_id = _runtime.get("panel_channel_id")
-    if not channel_id or not bot.user:
-        return
-    try:
-        channel = bot.get_channel(int(channel_id))
-        if channel is None:
-            channel = await bot.fetch_channel(int(channel_id))
-        if not isinstance(channel, discord.TextChannel):
-            log.warning("panel_channel_id n'est pas un salon texte: %s", channel_id)
-            return
-        view = PanelView()
-        message_id = _runtime.get("panel_message_id")
-        if message_id:
-            msg = await channel.fetch_message(int(message_id))
-            await msg.edit(view=view)
-            log.info("Panel re-lié (message %s)", message_id)
-            return
-        async for msg in channel.history(limit=30):
-            if msg.author.id != bot.user.id:
-                continue
-            for row in msg.components:
-                for child in getattr(row, "children", []) or []:
-                    if getattr(child, "custom_id", None) == "support_open_ticket":
-                        await msg.edit(view=view)
-                        log.info("Panel re-lié via historique (message %s)", msg.id)
-                        return
-        log.warning("Message panel introuvable — bouton géré via on_interaction")
-    except Exception:
-        log.exception("Rebind panel échoué — bouton géré via on_interaction")
-
-
 class ReasonModal(discord.ui.Modal, title="Ouvrir un ticket"):
     reason = discord.ui.TextInput(
-        label="Quelle est la raison de l'ouverture de votre ticket ?",
+        label="Quelle est la raison de votre ticket ?",
         style=discord.TextStyle.paragraph,
         max_length=1000,
         required=True,
+        custom_id="reason",
     )
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
@@ -188,15 +157,6 @@ class ReasonModal(discord.ui.Modal, title="Ouvrir un ticket"):
             return
         ch = data.get("channel_id")
         await interaction.followup.send(f"Ticket créé : <#{ch}>", ephemeral=True)
-        if ch and interaction.guild:
-            channel = interaction.guild.get_channel(int(ch))
-            if channel is None:
-                try:
-                    channel = await interaction.guild.fetch_channel(int(ch))
-                except discord.HTTPException:
-                    channel = None
-            if isinstance(channel, discord.TextChannel):
-                await channel.send(view=TicketActions())
 
 
 class PanelView(discord.ui.View):
@@ -214,7 +174,7 @@ class TicketActions(discord.ui.View):
 
     @discord.ui.button(label="C'est résolu", style=discord.ButtonStyle.success, custom_id="support_resolved")
     async def resolved(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         await api_post("/api/support/bot/close", {"channel_id": str(interaction.channel_id), "closed_by": f"user:{interaction.user.id}"})
         try:
             await interaction.followup.send("Ticket fermé. Merci !", ephemeral=True)
@@ -223,7 +183,7 @@ class TicketActions(discord.ui.View):
 
     @discord.ui.button(label="Pas résolu — staff", style=discord.ButtonStyle.danger, custom_id="support_need_staff")
     async def need_staff(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         await api_post(
             "/api/support/bot/message",
             {
@@ -235,10 +195,12 @@ class TicketActions(discord.ui.View):
 
     @discord.ui.button(label="Fermer (staff)", style=discord.ButtonStyle.secondary, custom_id="support_staff_close")
     async def staff_close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not isinstance(interaction.user, discord.Member) or not is_staff_member(interaction.user):
+        user = interaction.user
+        staff = isinstance(user, discord.Member) and is_staff_member(user)
+        if not staff:
             await interaction.response.send_message("Staff uniquement.", ephemeral=True)
             return
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
         await api_post("/api/support/bot/close", {"channel_id": str(interaction.channel_id), "closed_by": f"staff:{interaction.user.id}"})
 
 
@@ -247,53 +209,70 @@ async def runtime_loop() -> None:
     await refresh_runtime()
 
 
-@bot.event
-async def on_interaction(interaction: discord.Interaction) -> None:
-    """Filet de sécurité : ACK même si PanelView n'est pas liée au message REST."""
-    if _component_custom_id(interaction) != "support_open_ticket":
-        return
-    await send_open_ticket_modal(interaction)
+def attach_handlers(client: discord.Client) -> None:
+    @client.event
+    async def on_interaction(interaction: discord.Interaction) -> None:
+        # Si l'endpoint HTTP Interactions est configuré, Discord n'envoie plus ces events au gateway.
+        cid = _component_custom_id(interaction)
+        if cid != "support_open_ticket":
+            return
+        await send_open_ticket_modal(interaction)
+
+    @client.event
+    async def on_ready() -> None:
+        client.add_view(PanelView())
+        client.add_view(TicketActions())
+        log.info(
+            "Support bot connecté: %s (gateway %.0f ms) WEBLOGBOOK_URL=%s — "
+            "boutons panel gérés par l'endpoint HTTP Vercel si configuré : "
+            "%s/api/support/discord/interactions",
+            client.user,
+            client.latency * 1000,
+            WEBLOGBOOK_URL,
+            WEBLOGBOOK_URL,
+        )
+        await refresh_runtime()
+        if not runtime_loop.is_running():
+            runtime_loop.start()
+
+    @client.event
+    async def on_message(message: discord.Message) -> None:
+        if message.author.bot or not message.guild:
+            return
+        if not is_ticket_channel(message.channel):
+            return
+        content = (message.content or "").strip()
+        if not content:
+            return
+
+        author = message.author
+        if not isinstance(author, discord.Member):
+            try:
+                author = await message.guild.fetch_member(message.author.id)
+            except discord.HTTPException:
+                pass
+        from_staff = isinstance(author, discord.Member) and is_staff_member(author)
+        try:
+            await message.channel.typing()
+        except discord.HTTPException:
+            pass
+
+        status, _data = await api_post(
+            "/api/support/bot/message",
+            {"channel_id": str(message.channel.id), "content": content, "from_staff": from_staff},
+        )
+        if status >= 400:
+            log.warning("API message %s: %s", status, _data)
 
 
-@bot.event
-async def on_ready() -> None:
-    bot.add_view(PanelView())
-    bot.add_view(TicketActions())
-    log.info(
-        "Support bot connecté: %s (gateway %.0f ms) WEBLOGBOOK_URL=%s — "
-        "Interactions Endpoint URL du portail Discord doit rester VIDE.",
-        bot.user,
-        bot.latency * 1000,
-        WEBLOGBOOK_URL,
-    )
-    await refresh_runtime()
-    await rebind_panel_view()
-    if not runtime_loop.is_running():
-        runtime_loop.start()
-
-
-@bot.event
-async def on_message(message: discord.Message) -> None:
-    if message.author.bot or not message.guild:
-        return
-    if not is_ticket_channel(message.channel):
-        return
-    content = (message.content or "").strip()
-    if not content:
-        return
-
-    from_staff = isinstance(message.author, discord.Member) and is_staff_member(message.author)
-    try:
-        await message.channel.typing()
-    except discord.HTTPException:
-        pass
-
-    status, _data = await api_post(
-        "/api/support/bot/message",
-        {"channel_id": str(message.channel.id), "content": content, "from_staff": from_staff},
-    )
-    if status >= 400:
-        log.warning("API message %s: %s", status, _data)
+def _intents(*, members: bool, message_content: bool) -> discord.Intents:
+    if not members and not message_content:
+        return discord.Intents.default()
+    intents = discord.Intents.default()
+    intents.guilds = True
+    intents.message_content = message_content
+    intents.members = members
+    return intents
 
 
 def main() -> None:
@@ -302,14 +281,41 @@ def main() -> None:
     if not SECRET:
         raise SystemExit("SUPPORT_BOT_SECRET manquant")
     log.info("Démarrage bot assistance — site=%s", WEBLOGBOOK_URL)
-    try:
-        bot.run(TOKEN)
-    except discord.PrivilegedIntentsRequired:
-        log.error(
-            "Intents privilégiés refusés : activer Server Members et Message Content "
-            "sur https://discord.com/developers/applications → Bot."
-        )
-        raise
+
+    plans = [
+        {"members": True, "message_content": True, "label": "guilds+message_content+members"},
+        {"members": False, "message_content": True, "label": "guilds+message_content (sans members)"},
+        {"members": False, "message_content": False, "label": "intents.default() (pas de lecture tickets)"},
+    ]
+
+    last_exc: BaseException | None = None
+    for i, plan in enumerate(plans):
+        if not plan["message_content"]:
+            log.error(
+                "Message Content Intent refusé ou désactivé. Activez-le sur "
+                "https://discord.com/developers/applications → Bot → Privileged Gateway Intents "
+                "pour que le bot lise les messages des tickets. "
+                "Tentative intents.default() pour rester connecté au gateway "
+                "(les boutons du panel sont gérés par l'endpoint HTTP Vercel)."
+            )
+        log.info("Gateway: essai intents %s", plan["label"])
+        client = discord.Client(intents=_intents(members=plan["members"], message_content=plan["message_content"]))
+        attach_handlers(client)
+        try:
+            client.run(TOKEN)
+            return
+        except discord.PrivilegedIntentsRequired as exc:
+            last_exc = exc
+            log.warning(
+                "PrivilegedIntentsRequired (%s). Nouvel essai avec moins d'intents — pas de crash-loop.",
+                plan["label"],
+            )
+            if i == len(plans) - 1:
+                log.error("Échec même avec intents.default(). Vérifiez le token bot.")
+                raise
+
+    if last_exc:
+        raise last_exc
 
 
 if __name__ == "__main__":

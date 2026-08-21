@@ -243,6 +243,10 @@ export default function SupportBotAdminClient() {
         Le serveur vient de <code className="text-xs">DISCORD_GUILD_ID</code> (Vercel). Choisis les salons et rôles ci-dessous.
         L’instructeur a accès et est pingé seulement sur les motifs cochés (CAT, instruction…).
       </p>
+      <p className="text-xs text-amber-200/90 bg-amber-950/40 border border-amber-800/50 rounded-md px-3 py-2">
+        Dans le portail Discord (General Information), coller l’URL d’interactions&nbsp;:{' '}
+        <code className="text-[11px] break-all">https://mixouairlinesptfsweblogbook.com/api/support/discord/interactions</code>
+      </p>
       <div>
         <label className="label">Serveur Discord</label>
         <p className="input bg-slate-900/50 text-slate-200 cursor-default">
