@@ -1,11 +1,17 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSupportConfig } from '@/lib/support/bot-auth';
-import { classifyMotifFromText, motifUsesInstructor, SUPPORT_MOTIFS, ticketChannelName, type SupportMotifId } from '@/lib/support/motifs';
+import { classifyMotifFromText, motifUsesInstructor, ticketChannelName, type SupportMotifId } from '@/lib/support/motifs';
 import { discordCreateTextChannel, discordGetMe, discordSendMessage, DISCORD_TICKET_ALLOW } from '@/lib/support/discord-api';
 import { extractFacts } from '@/lib/support/ticket-memory';
 
 function shortId(): string {
   return Math.random().toString(36).slice(2, 6);
+}
+
+/** Premier message IA : accueil + « comment je peux t’aider ? » — le motif reste interne (catégorie). */
+function ticketGreeting(discordUserId: string, reason: string): string {
+  const snippet = reason.slice(0, 300);
+  return `Salut <@${discordUserId}> ! Je suis l’assistance PTFR. Tu as indiqué : *${snippet}* — dis-moi comment je peux t’aider.`;
 }
 
 export type OpenTicketOk = { ok: true; channel_id: string; motif: string; short_id: string };
@@ -94,11 +100,7 @@ export async function openSupportTicket(args: {
       .eq('status', 'active')
       .maybeSingle();
 
-    const motifLabel = SUPPORT_MOTIFS.find((m) => m.id === motif)?.label || motif;
-    const intro =
-      motif === 'nouveau'
-        ? `Bienvenue ! Je t’accompagne pour démarrer (compte, Discord lié, logbook). Raison indiquée : *${reason.slice(0, 300)}*`
-        : `Ticket classé **${motifLabel}**. Raison : *${reason.slice(0, 400)}*\nJe m’en occupe. Si je ne peux pas conclure, j’appellerai un staff.`;
+    const greeting = ticketGreeting(discordUserId, reason);
 
     await admin.from('support_tickets').insert({
       short_id: sid,
@@ -111,7 +113,7 @@ export async function openSupportTicket(args: {
       user_id: link?.user_id ?? null,
       conversation: [
         { role: 'user', content: reason },
-        { role: 'assistant', content: intro },
+        { role: 'assistant', content: greeting },
       ],
       memory_notes: extractFacts(reason).join('\n') || null,
       last_human_at: new Date().toISOString(),
@@ -119,7 +121,7 @@ export async function openSupportTicket(args: {
     });
 
     // Pas de boutons ici : le panneau n'apparaît que lorsque l'IA croit avoir résolu.
-    await discordSendMessage(ch.id, `<@${discordUserId}>\n${intro}`);
+    await discordSendMessage(ch.id, greeting);
 
     return { ok: true, channel_id: ch.id, motif, short_id: sid };
   } catch (e) {
