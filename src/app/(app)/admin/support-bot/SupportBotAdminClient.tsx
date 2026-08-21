@@ -24,6 +24,7 @@ export default function SupportBotAdminClient() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tickets, setTickets] = useState<Array<{ short_id: string; motif: string; closed_at: string | null; transcript: string | null; created_at: string }>>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetch('/api/support/config', { credentials: 'include' })
@@ -75,11 +76,11 @@ export default function SupportBotAdminClient() {
   return (
     <div className="card space-y-4 max-w-xl">
       <p className="text-sm text-slate-400">
-        Renseigne les IDs Discord, puis <strong className="text-slate-200">Créer le décor</strong> :
-        11 sections, message panel (bouton Ouvrir un ticket), salon logs.
-        Variables Vercel : <code className="text-xs">SUPPORT_BOT_TOKEN</code>, <code className="text-xs">SUPPORT_BOT_SECRET</code>, <code className="text-xs">GROQ_API_KEY</code>.
-        Le process Python tourne à part (Render / VPS), pas sur Vercel.
-        Inactivité : 6 h sans message humain → 1re relance, +6 h 2e, +6 h 3e (dernière), +6 h fermeture et suppression du salon (transcript conservé). Un message du membre ou du staff remet le compteur à zéro.
+        Tout se configure ici : serveur, salon du bouton, salon des logs, rôle staff.
+        Ensuite <strong className="text-slate-200">Créer panel + sections</strong> (11 catégories Discord).
+        Railway n’a besoin que du token + secret — pas des IDs.
+        Vercel : <code className="text-xs">SUPPORT_BOT_TOKEN</code>, <code className="text-xs">SUPPORT_BOT_SECRET</code>, <code className="text-xs">GROQ_API_KEY</code>.
+        Inactivité : 6 h → relance ×3, puis suppression du salon (transcript conservé). Un message membre/staff remet le compteur à zéro.
       </p>
       {(
         [

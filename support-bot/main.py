@@ -7,6 +7,7 @@ from typing import Any
 
 import aiohttp
 import discord
+from discord.ext import tasks
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("support-bot")
@@ -159,11 +160,18 @@ class TicketActions(discord.ui.View):
         await api_post("/api/support/bot/close", {"channel_id": str(interaction.channel_id), "closed_by": f"staff:{interaction.user.id}"})
 
 
+@tasks.loop(minutes=5)
+async def runtime_loop() -> None:
+    await refresh_runtime()
+
+
 @bot.event
 async def on_ready() -> None:
     bot.add_view(PanelView())
     bot.add_view(TicketActions())
     await refresh_runtime()
+    if not runtime_loop.is_running():
+        runtime_loop.start()
     log.info("Support bot connecté: %s", bot.user)
 
 
