@@ -60,25 +60,42 @@ export async function getDiscordApplicationId(fallback?: string): Promise<string
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
+async function interactionWebhook(
+  method: 'PATCH' | 'POST',
+  url: string,
+  payload: Record<string, unknown>
+) {
+  const body = JSON.stringify(payload);
+  const bot = process.env.SUPPORT_BOT_TOKEN || process.env.DISCORD_SUPPORT_BOT_TOKEN || '';
+  const jsonHeaders = { 'Content-Type': 'application/json' };
+  let res = await fetch(url, {
+    method,
+    headers: bot ? { ...jsonHeaders, Authorization: `Bot ${bot}` } : jsonHeaders,
+    body,
+  });
+  if ((res.status === 401 || res.status === 403) && bot) {
+    res = await fetch(url, { method, headers: jsonHeaders, body });
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Interaction follow-up HTTP ${res.status}: ${text.slice(0, 240)}`);
+  }
+}
+
 export async function discordEditOriginalInteraction(
   applicationId: string,
   interactionToken: string,
   payload: Record<string, unknown>
 ) {
   const url = `${DISCORD_API}/webhooks/${applicationId}/${interactionToken}/messages/@original`;
-  const body = JSON.stringify(payload);
-  const bot = process.env.SUPPORT_BOT_TOKEN || process.env.DISCORD_SUPPORT_BOT_TOKEN || '';
-  const jsonHeaders = { 'Content-Type': 'application/json' };
-  let res = await fetch(url, {
-    method: 'PATCH',
-    headers: bot ? { ...jsonHeaders, Authorization: `Bot ${bot}` } : jsonHeaders,
-    body,
-  });
-  if ((res.status === 401 || res.status === 403) && bot) {
-    res = await fetch(url, { method: 'PATCH', headers: jsonHeaders, body });
-  }
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Interaction follow-up HTTP ${res.status}: ${text.slice(0, 240)}`);
-  }
+  await interactionWebhook('PATCH', url, payload);
+}
+
+export async function discordCreateInteractionFollowup(
+  applicationId: string,
+  interactionToken: string,
+  payload: Record<string, unknown>
+) {
+  const url = `${DISCORD_API}/webhooks/${applicationId}/${interactionToken}`;
+  await interactionWebhook('POST', url, payload);
 }

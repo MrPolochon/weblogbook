@@ -116,6 +116,7 @@ export async function discordMoveChannel(channelId: string, parentId: string) {
   });
 }
 
+/** Envoie un message. `extras.components` = Action Rows Discord (type 1 + boutons type 2). */
 export async function discordSendMessage(channelId: string, content: string, extras?: Record<string, unknown>) {
   return discordFetch(`/channels/${channelId}/messages`, {
     method: 'POST',

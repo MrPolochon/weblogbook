@@ -9,6 +9,7 @@ import { getSupportConfig } from '@/lib/support/bot-auth';
 import { closeSupportTicket } from '@/lib/support/close-ticket';
 import { discordRenameChannel, discordSendMessage } from '@/lib/support/discord-api';
 import {
+  discordCreateInteractionFollowup,
   discordEditOriginalInteraction,
   getDiscordApplicationId,
   getDiscordPublicKey,
@@ -16,12 +17,14 @@ import {
 } from '@/lib/support/discord-verify';
 import { motifUsesInstructor, ticketChannelName } from '@/lib/support/motifs';
 import { openSupportTicket } from '@/lib/support/open-ticket';
+import { withResolutionOfferedNote } from '@/lib/support/ticket-actions';
 
 const PING = 1;
 const MESSAGE_COMPONENT = 3;
 const MODAL_SUBMIT = 5;
 const PONG = 1;
 const DEFERRED_CHANNEL_MESSAGE = 5;
+const DEFERRED_UPDATE = 6;
 const MODAL = 9;
 const EPHEMERAL = 64;
 
@@ -123,6 +126,12 @@ async function patchOriginal(interaction: DiscordInteraction, content: string) {
   await discordEditOriginalInteraction(appId, interaction.token, { content });
 }
 
+async function followupEphemeral(interaction: DiscordInteraction, content: string) {
+  const appId = await getDiscordApplicationId(interaction.application_id);
+  if (!appId) throw new Error('application id manquant');
+  await discordCreateInteractionFollowup(appId, interaction.token, { content, flags: EPHEMERAL });
+}
+
 async function finishOpenTicket(interaction: DiscordInteraction) {
   try {
     const user = interactionUser(interaction);
@@ -170,7 +179,12 @@ async function pingStaff(channelId: string) {
   if (ticket) {
     await admin
       .from('support_tickets')
-      .update({ statut: 'staff_needed', updated_at: new Date().toISOString() })
+      .update({
+        statut: 'staff_needed',
+        resolution_offered: false,
+        memory_notes: withResolutionOfferedNote(String(ticket.memory_notes || ''), false),
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', ticket.id);
     try {
       await discordRenameChannel(channelId, ticketChannelName('staff_needed', ticket.short_id));
@@ -200,7 +214,7 @@ async function finishTicketAction(interaction: DiscordInteraction, customId: str
     const channelId = String(interaction.channel_id || '');
     const user = interactionUser(interaction);
     if (!channelId) {
-      await patchOriginal(interaction, 'Salon introuvable.');
+      await followupEphemeral(interaction, 'Salon introuvable.');
       return;
     }
     if (customId === 'support_resolved') {
@@ -208,31 +222,31 @@ async function finishTicketAction(interaction: DiscordInteraction, customId: str
         channelId,
         closedBy: `user:${user?.id || 'unknown'}`,
       });
-      await patchOriginal(interaction, result.ok ? 'Ticket fermé. Merci !' : 'Ticket introuvable.');
+      await followupEphemeral(interaction, result.ok ? 'Ticket fermé. Merci !' : 'Ticket introuvable.');
       return;
     }
     if (customId === 'support_need_staff') {
       await pingStaff(channelId);
-      await patchOriginal(interaction, 'Un staff a été appelé.');
+      await followupEphemeral(interaction, 'Un staff a été appelé.');
       return;
     }
     if (customId === 'support_staff_close') {
       const cfg = await getSupportConfig();
       const staffIds = [cfg?.staff_role_id, cfg?.instructor_role_id].filter(Boolean).map(String);
       if (!memberIsStaff(interaction.member, staffIds)) {
-        await patchOriginal(interaction, 'Staff uniquement.');
+        await followupEphemeral(interaction, 'Staff uniquement.');
         return;
       }
       const result = await closeSupportTicket({
         channelId,
         closedBy: `staff:${user?.id || 'unknown'}`,
       });
-      await patchOriginal(interaction, result.ok ? 'Ticket fermé.' : 'Ticket introuvable.');
+      await followupEphemeral(interaction, result.ok ? 'Ticket fermé.' : 'Ticket introuvable.');
     }
   } catch (e) {
     console.error('[support-interactions] ticket action', customId, e);
     try {
-      await patchOriginal(interaction, 'Action impossible (erreur serveur).');
+      await followupEphemeral(interaction, 'Action impossible (erreur serveur).');
     } catch { /* ignore */ }
   }
 }
@@ -288,7 +302,10 @@ export async function POST(req: Request) {
     (customId === 'support_resolved' || customId === 'support_need_staff' || customId === 'support_staff_close')
   ) {
     waitUntil(finishTicketAction(interaction, customId));
-    return json({ type: DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } });
+    // Type 6 = ACK du bouton (< 3 s) sans toucher au message. Follow-up éphémère ensuite.
+    // Si l’Interactions Endpoint URL est configuré, Discord envoie ces clics ici ;
+    // sinon le View Python persistant (TicketActions) les gère sur le gateway.
+    return json({ type: DEFERRED_UPDATE });
   }
 
   return json({

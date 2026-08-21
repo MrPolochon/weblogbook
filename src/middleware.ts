@@ -285,6 +285,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|downloads/|docs/|api/support/discord/interactions|.*\\.(?:svg|png|jpg|jpeg|gif|webp|exe|pdf)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|downloads/|docs/|api/support/discord/interactions|api/support/bot|.*\\.(?:svg|png|jpg|jpeg|gif|webp|exe|pdf)$).*)',
   ],
 };

@@ -8,17 +8,6 @@ function shortId(): string {
   return Math.random().toString(36).slice(2, 6);
 }
 
-export const TICKET_ACTION_COMPONENTS = [
-  {
-    type: 1,
-    components: [
-      { type: 2, style: 3, custom_id: 'support_resolved', label: "C'est résolu" },
-      { type: 2, style: 4, custom_id: 'support_need_staff', label: 'Pas résolu — staff' },
-      { type: 2, style: 2, custom_id: 'support_staff_close', label: 'Fermer (staff)' },
-    ],
-  },
-];
-
 export type OpenTicketOk = { ok: true; channel_id: string; motif: string; short_id: string };
 export type OpenTicketErr = {
   ok: false;
@@ -129,9 +118,8 @@ export async function openSupportTicket(args: {
       inactivity_nudge: 0,
     });
 
-    await discordSendMessage(ch.id, `<@${discordUserId}>\n${intro}`, {
-      components: TICKET_ACTION_COMPONENTS,
-    });
+    // Pas de boutons ici : le panneau n'apparaît que lorsque l'IA croit avoir résolu.
+    await discordSendMessage(ch.id, `<@${discordUserId}>\n${intro}`);
 
     return { ok: true, channel_id: ch.id, motif, short_id: sid };
   } catch (e) {

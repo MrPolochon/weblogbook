@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+import time
 from typing import Any
+from urllib.parse import urljoin
 
 import aiohttp
 import discord
@@ -12,43 +15,73 @@ from discord.ext import tasks
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("support-bot")
 
-WEBLOGBOOK_URL = os.getenv("WEBLOGBOOK_URL", "https://mixouairlinesptfsweblogbook.com").rstrip("/")
 SECRET = (os.getenv("SUPPORT_BOT_SECRET") or os.getenv("ATIS_WEBHOOK_SECRET") or "").strip()
 TOKEN = (os.getenv("SUPPORT_BOT_TOKEN") or "").strip()
+
+
+def _site_base() -> str:
+    raw = (os.getenv("WEBLOGBOOK_URL") or "https://www.mixouairlinesptfsweblogbook.com").rstrip("/")
+    # L'apex 307/308 vers www ; un POST suivi en GET cassait /api/support/bot/message.
+    if "://" in raw:
+        host = raw.split("://", 1)[1].split("/", 1)[0]
+        if host == "mixouairlinesptfsweblogbook.com":
+            return raw.replace("://mixouairlinesptfsweblogbook.com", "://www.mixouairlinesptfsweblogbook.com", 1)
+    return raw
+
+
+WEBLOGBOOK_URL = _site_base()
 
 _runtime: dict[str, Any] = {
     "staff_role_id": None,
     "instructor_role_id": None,
-    "category_ids": {},
+    "category_ids": set(),
+    "open_channel_ids": set(),
     "panel_channel_id": None,
     "panel_message_id": None,
+    "bot_user_id": None,
 }
 
 _ack_ids: set[int] = set()
+_is_ticket_cache: dict[str, tuple[bool, float]] = {}
+_empty_content_warned: set[int] = set()
+_TICKETISH_PREFIX = ("🤖", "🔴", "🟠", "🟢", "tkt-")
+_TICKETISH_RE = re.compile(r"^(🤖|🔴|🟠|🟢|tkt-)|-\w{4}$")
+
+
+async def api_request(method: str, path: str, payload: dict | None = None) -> tuple[int, dict]:
+    headers = {"Content-Type": "application/json", "x-support-bot-secret": SECRET}
+    timeout = aiohttp.ClientTimeout(total=90)
+    url = f"{WEBLOGBOOK_URL}{path}"
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for attempt in range(2):
+            kwargs: dict[str, Any] = {"headers": headers, "allow_redirects": False}
+            if payload is not None:
+                kwargs["json"] = payload
+            async with session.request(method, url, **kwargs) as resp:
+                if resp.status in (301, 302, 307, 308) and attempt == 0:
+                    loc = resp.headers.get("Location") or ""
+                    log.warning("Redirect %s %s -> %s — corrigez WEBLOGBOOK_URL (www)", resp.status, url, loc)
+                    if loc:
+                        url = loc if loc.startswith("http") else urljoin(url, loc)
+                        continue
+                try:
+                    data = await resp.json(content_type=None)
+                except Exception:
+                    text = await resp.text()
+                    log.warning("API %s %s HTTP %s body=%s", method, path, resp.status, (text or "")[:240])
+                    data = {}
+                if resp.status >= 400:
+                    log.warning("API %s %s HTTP %s data=%s", method, path, resp.status, str(data)[:240])
+                return resp.status, data if isinstance(data, dict) else {}
+    return 0, {}
 
 
 async def api_post(path: str, payload: dict) -> tuple[int, dict]:
-    headers = {"Content-Type": "application/json", "x-support-bot-secret": SECRET}
-    timeout = aiohttp.ClientTimeout(total=90)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(f"{WEBLOGBOOK_URL}{path}", json=payload, headers=headers) as resp:
-            try:
-                data = await resp.json(content_type=None)
-            except Exception:
-                data = {}
-            return resp.status, data if isinstance(data, dict) else {}
+    return await api_request("POST", path, payload)
 
 
 async def api_get(path: str) -> tuple[int, dict]:
-    headers = {"x-support-bot-secret": SECRET}
-    timeout = aiohttp.ClientTimeout(total=30)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(f"{WEBLOGBOOK_URL}{path}", headers=headers) as resp:
-            try:
-                data = await resp.json(content_type=None)
-            except Exception:
-                data = {}
-            return resp.status, data if isinstance(data, dict) else {}
+    return await api_request("GET", path)
 
 
 async def refresh_runtime() -> None:
@@ -58,28 +91,70 @@ async def refresh_runtime() -> None:
         _runtime["instructor_role_id"] = data.get("instructor_role_id")
         cats = data.get("category_ids") or {}
         _runtime["category_ids"] = set(str(v) for v in cats.values() if v)
+        _runtime["open_channel_ids"] = set(str(v) for v in (data.get("open_channel_ids") or []) if v)
         _runtime["panel_channel_id"] = data.get("panel_channel_id")
         _runtime["panel_message_id"] = data.get("panel_message_id")
+        _runtime["bot_user_id"] = data.get("bot_user_id")
         log.info(
-            "Config site: %s sections, staff_role=%s instructor_role=%s panel=%s/%s",
+            "Config site: %s sections, %s tickets ouverts, staff_role=%s instructor_role=%s panel=%s/%s bot_user=%s",
             len(_runtime["category_ids"]),
+            len(_runtime["open_channel_ids"]),
             _runtime["staff_role_id"],
             _runtime["instructor_role_id"],
             _runtime["panel_channel_id"],
             _runtime["panel_message_id"],
+            _runtime["bot_user_id"],
         )
     else:
         log.warning("Runtime API indisponible (%s) url=%s/api/support/bot/runtime", status, WEBLOGBOOK_URL)
 
 
+def looks_ticketish(name: str) -> bool:
+    n = name or ""
+    if n.startswith(_TICKETISH_PREFIX):
+        return True
+    return bool(_TICKETISH_RE.search(n))
+
+
 def is_ticket_channel(channel: discord.abc.GuildChannel) -> bool:
+    cid = str(getattr(channel, "id", "") or "")
+    open_ids = _runtime.get("open_channel_ids") or set()
+    if cid and cid in open_ids:
+        return True
     if not isinstance(channel, discord.TextChannel):
         return False
     cats = _runtime.get("category_ids") or set()
     if channel.category_id and str(channel.category_id) in cats:
         return True
-    name = channel.name or ""
-    return name.startswith("🤖") or name.startswith("🔴") or name.startswith("🟠") or name.startswith("🟢") or name.startswith("tkt-")
+    return looks_ticketish(channel.name or "")
+
+
+async def api_is_ticket(channel_id: str) -> bool:
+    now = time.monotonic()
+    cached = _is_ticket_cache.get(channel_id)
+    if cached and now - cached[1] < 60:
+        return cached[0]
+    status, data = await api_get(f"/api/support/bot/is-ticket?channel_id={channel_id}")
+    ok = status < 400 and bool(data.get("is_ticket"))
+    _is_ticket_cache[channel_id] = (ok, now)
+    if ok:
+        ids = _runtime.setdefault("open_channel_ids", set())
+        if isinstance(ids, set):
+            ids.add(channel_id)
+    return ok
+
+
+async def should_handle_ticket_message(channel: discord.abc.Messageable) -> bool:
+    if not isinstance(channel, discord.abc.GuildChannel):
+        return False
+    if is_ticket_channel(channel):
+        return True
+    name = getattr(channel, "name", "") or ""
+    cats = _runtime.get("category_ids") or set()
+    # Config absente, ou nom de salon ticket : demander au site (évite d'ignorer un ticket).
+    if cats and not looks_ticketish(name):
+        return False
+    return await api_is_ticket(str(channel.id))
 
 
 def is_staff_member(member: discord.Member) -> bool:
@@ -169,6 +244,8 @@ class PanelView(discord.ui.View):
 
 
 class TicketActions(discord.ui.View):
+    """Vue persistante : les boutons postés en REST (Vercel) fonctionnent sur le gateway si pas d'endpoint HTTP."""
+
     def __init__(self) -> None:
         super().__init__(timeout=None)
 
@@ -204,9 +281,16 @@ class TicketActions(discord.ui.View):
         await api_post("/api/support/bot/close", {"channel_id": str(interaction.channel_id), "closed_by": f"staff:{interaction.user.id}"})
 
 
-@tasks.loop(minutes=5)
+@tasks.loop(minutes=1)
 async def runtime_loop() -> None:
     await refresh_runtime()
+
+
+async def _notify_channel(channel: discord.abc.Messageable, text: str) -> None:
+    try:
+        await channel.send(text)
+    except discord.HTTPException:
+        log.exception("Impossible d'envoyer le message de repli dans %s", getattr(channel, "id", "?"))
 
 
 def attach_handlers(client: discord.Client) -> None:
@@ -222,6 +306,7 @@ def attach_handlers(client: discord.Client) -> None:
     async def on_ready() -> None:
         client.add_view(PanelView())
         client.add_view(TicketActions())
+        me = str(client.user.id) if client.user else ""
         log.info(
             "Support bot connecté: %s (gateway %.0f ms) WEBLOGBOOK_URL=%s — "
             "boutons panel gérés par l'endpoint HTTP Vercel si configuré : "
@@ -232,6 +317,14 @@ def attach_handlers(client: discord.Client) -> None:
             WEBLOGBOOK_URL,
         )
         await refresh_runtime()
+        expected = str(_runtime.get("bot_user_id") or "")
+        if expected and me and expected != me:
+            log.error(
+                "Token mismatch: le bot gateway est %s mais le site (SUPPORT_BOT_TOKEN Vercel) est %s. "
+                "Les salons tickets sont créés pour l'autre bot — le chat IA sera silencieux.",
+                me,
+                expected,
+            )
         if not runtime_loop.is_running():
             runtime_loop.start()
 
@@ -239,10 +332,29 @@ def attach_handlers(client: discord.Client) -> None:
     async def on_message(message: discord.Message) -> None:
         if message.author.bot or not message.guild:
             return
-        if not is_ticket_channel(message.channel):
+        if not await should_handle_ticket_message(message.channel):
             return
+
         content = (message.content or "").strip()
         if not content:
+            try:
+                fetched = await message.channel.fetch_message(message.id)
+                content = (fetched.content or "").strip()
+            except discord.HTTPException:
+                log.exception("fetch_message vide channel=%s id=%s", message.channel.id, message.id)
+        if not content:
+            log.warning(
+                "Message vide dans ticket channel=%s id=%s — intent Message Content probablement off",
+                message.channel.id,
+                message.id,
+            )
+            if message.channel.id not in _empty_content_warned:
+                _empty_content_warned.add(message.channel.id)
+                await _notify_channel(
+                    message.channel,
+                    "Je n'ai pas pu lire le texte de ton message (intent **Message Content** du bot). "
+                    "Un admin doit l'activer sur le portail Discord, ou un staff peut t'aider ici.",
+                )
             return
 
         author = message.author
@@ -252,17 +364,37 @@ def attach_handlers(client: discord.Client) -> None:
             except discord.HTTPException:
                 pass
         from_staff = isinstance(author, discord.Member) and is_staff_member(author)
+        log.info(
+            "Ticket message channel=%s staff=%s len=%s",
+            message.channel.id,
+            from_staff,
+            len(content),
+        )
         try:
             await message.channel.typing()
         except discord.HTTPException:
             pass
 
-        status, _data = await api_post(
-            "/api/support/bot/message",
-            {"channel_id": str(message.channel.id), "content": content, "from_staff": from_staff},
-        )
+        try:
+            status, _data = await api_post(
+                "/api/support/bot/message",
+                {"channel_id": str(message.channel.id), "content": content, "from_staff": from_staff},
+            )
+        except Exception:
+            log.exception("API /api/support/bot/message a échoué")
+            if not from_staff:
+                await _notify_channel(
+                    message.channel,
+                    "Je n'ai pas pu répondre (erreur serveur). Réessaie dans un instant, ou un staff va t'aider.",
+                )
+            return
         if status >= 400:
             log.warning("API message %s: %s", status, _data)
+            if not from_staff:
+                await _notify_channel(
+                    message.channel,
+                    "Je n'ai pas pu répondre pour le moment. Réessaie, ou un staff va t'aider.",
+                )
 
 
 def _intents(*, members: bool, message_content: bool) -> discord.Intents:

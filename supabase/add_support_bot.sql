@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS public.support_tickets (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_human_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_nudge_at TIMESTAMPTZ,
-  inactivity_nudge integer NOT NULL DEFAULT 0
+  inactivity_nudge integer NOT NULL DEFAULT 0,
+  resolution_offered boolean NOT NULL DEFAULT false
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_support_tickets_open_user
