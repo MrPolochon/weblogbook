@@ -363,10 +363,14 @@ def attach_handlers(client: discord.Client) -> None:
                 author = await message.guild.fetch_member(message.author.id)
             except discord.HTTPException:
                 pass
+        # from_staff = rôle staff/instructeur. L’API décide le relais
+        # (staff autre que le demandeur du ticket) via discord_user_id.
         from_staff = isinstance(author, discord.Member) and is_staff_member(author)
+        author_id = str(message.author.id)
         log.info(
-            "Ticket message channel=%s staff=%s len=%s",
+            "Ticket message channel=%s author=%s staff_role=%s len=%s",
             message.channel.id,
+            author_id,
             from_staff,
             len(content),
         )
@@ -375,14 +379,20 @@ def attach_handlers(client: discord.Client) -> None:
         except discord.HTTPException:
             pass
 
+        _data: dict = {}
         try:
             status, _data = await api_post(
                 "/api/support/bot/message",
-                {"channel_id": str(message.channel.id), "content": content, "from_staff": from_staff},
+                {
+                    "channel_id": str(message.channel.id),
+                    "content": content,
+                    "from_staff": from_staff,
+                    "discord_user_id": author_id,
+                },
             )
         except Exception:
             log.exception("API /api/support/bot/message a échoué")
-            if not from_staff:
+            if not _data.get("handed_over"):
                 await _notify_channel(
                     message.channel,
                     "Je n'ai pas pu répondre (erreur serveur). Réessaie dans un instant, ou un staff va t'aider.",
@@ -390,7 +400,7 @@ def attach_handlers(client: discord.Client) -> None:
             return
         if status >= 400:
             log.warning("API message %s: %s", status, _data)
-            if not from_staff:
+            if not _data.get("handed_over"):
                 await _notify_channel(
                     message.channel,
                     "Je n'ai pas pu répondre pour le moment. Réessaie, ou un staff va t'aider.",

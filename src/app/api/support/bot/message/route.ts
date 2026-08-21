@@ -13,6 +13,7 @@ import {
   ticketAlreadyOfferedResolution,
   withResolutionOfferedNote,
 } from '@/lib/support/ticket-actions';
+import { isOtherStaffTakeover, STAFF_TAKEOVER_NOTICE } from '@/lib/support/staff-takeover';
 import {
   extractFacts,
   mergeMemory,
@@ -104,7 +105,8 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const channelId = String(body.channel_id || '');
   const content = String(body.content || '').trim();
-  const fromStaff = Boolean(body.from_staff);
+  const fromStaffRole = Boolean(body.from_staff);
+  const authorDiscordId = String(body.discord_user_id || '').trim();
   if (!channelId || !content) {
     return NextResponse.json({ error: 'channel_id et content requis' }, { status: 400 });
   }
@@ -118,17 +120,27 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (!ticket) return NextResponse.json({ error: 'Ticket introuvable' }, { status: 404 });
 
+  const openerDiscordId = String(ticket.discord_user_id || '').trim();
+  const staffTakeover = isOtherStaffTakeover(fromStaffRole, authorDiscordId, openerDiscordId);
+  const requesterSpeaking =
+    Boolean(authorDiscordId) && Boolean(openerDiscordId) && authorDiscordId === openerDiscordId;
+
   console.info('[support-message]', {
     channelId,
     shortId: ticket.short_id,
-    fromStaff,
+    fromStaffRole,
+    staffTakeover,
+    requesterSpeaking,
+    authorDiscordId,
+    statut: ticket.statut,
     contentLen: content.length,
   });
 
   const turns = parseTurns(ticket.conversation);
   let memory = mergeMemory(ticket.memory_notes || '', extractFacts(content));
 
-  if (fromStaff) {
+  if (staffTakeover) {
+    const alreadyHandedOver = String(ticket.statut || '') === 'staff';
     const nextTurns = trimConversation([...turns, { role: 'staff', content }]);
     await updateTicketRow(admin, ticket.id, {
       statut: 'staff',
@@ -142,7 +154,23 @@ export async function POST(req: NextRequest) {
     try {
       await discordRenameChannel(channelId, ticketChannelName('staff', ticket.short_id));
     } catch { /* ignore */ }
-    return NextResponse.json({ ok: true, statut: 'staff', reply: null });
+    if (!alreadyHandedOver) {
+      try {
+        await discordSendMessage(channelId, STAFF_TAKEOVER_NOTICE);
+      } catch (e) {
+        console.error('[support-message] takeover notice', e);
+      }
+    }
+    return NextResponse.json({ ok: true, statut: 'staff', reply: null, handed_over: true });
+  }
+
+  // Demandeur (même staff/owner) : l’IA répond toujours, y compris si un faux
+  // relais a déjà mis statut=staff / salon 🟢 (ticket déjà cassé).
+  if (String(ticket.statut || '') === 'staff' && (requesterSpeaking || !staffTakeover)) {
+    console.info('[support-message] reprise IA malgré statut staff (demandeur, pas un autre staff)', {
+      shortId: ticket.short_id,
+      requesterSpeaking,
+    });
   }
 
   const messages = toLlmMessages(
