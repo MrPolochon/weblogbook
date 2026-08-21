@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
     instructor_role_id: cfg?.instructor_role_id || null,
     category_ids: cfg?.category_ids || {},
     panel_channel_id: cfg?.panel_channel_id || null,
+    panel_message_id: cfg?.panel_message_id || null,
     logs_channel_id: cfg?.logs_channel_id || null,
   });
 }

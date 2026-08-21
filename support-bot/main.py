@@ -23,7 +23,13 @@ intents.members = True
 
 bot = discord.Client(intents=intents)
 
-_runtime: dict[str, Any] = {"staff_role_id": None, "instructor_role_id": None, "category_ids": {}}
+_runtime: dict[str, Any] = {
+    "staff_role_id": None,
+    "instructor_role_id": None,
+    "category_ids": {},
+    "panel_channel_id": None,
+    "panel_message_id": None,
+}
 
 
 async def api_post(path: str, payload: dict) -> tuple[int, dict]:
@@ -57,12 +63,18 @@ async def refresh_runtime() -> None:
         _runtime["instructor_role_id"] = data.get("instructor_role_id")
         cats = data.get("category_ids") or {}
         _runtime["category_ids"] = set(str(v) for v in cats.values() if v)
+        _runtime["panel_channel_id"] = data.get("panel_channel_id")
+        _runtime["panel_message_id"] = data.get("panel_message_id")
         log.info(
-            "Config site: %s sections, staff_role=%s instructor_role=%s",
+            "Config site: %s sections, staff_role=%s instructor_role=%s panel=%s/%s",
             len(_runtime["category_ids"]),
             _runtime["staff_role_id"],
             _runtime["instructor_role_id"],
+            _runtime["panel_channel_id"],
+            _runtime["panel_message_id"],
         )
+    else:
+        log.warning("Runtime API indisponible (%s) url=%s/api/support/bot/runtime", status, WEBLOGBOOK_URL)
 
 
 def is_ticket_channel(channel: discord.abc.GuildChannel) -> bool:
@@ -82,6 +94,64 @@ def is_staff_member(member: discord.Member) -> bool:
     return member.guild_permissions.manage_channels
 
 
+async def send_open_ticket_modal(interaction: discord.Interaction) -> None:
+    """ACK immédiat (< 3s). Ne parle pas au site — uniquement le modal."""
+    if interaction.response.is_done():
+        return
+    try:
+        await interaction.response.send_modal(ReasonModal())
+        log.info("ACK modal support_open_ticket user=%s", interaction.user.id)
+    except discord.InteractionResponded:
+        return
+    except discord.HTTPException:
+        log.exception("send_modal support_open_ticket a échoué")
+
+
+def _component_custom_id(interaction: discord.Interaction) -> str | None:
+    if interaction.type is not discord.InteractionType.component:
+        return None
+    data = interaction.data
+    if data is None:
+        return None
+    cid = data.get("custom_id") if isinstance(data, dict) else None
+    if not cid:
+        cid = getattr(data, "custom_id", None)
+    return str(cid) if cid else None
+
+
+async def rebind_panel_view() -> None:
+    """Ré-associe le message REST du panel à PanelView (gateway)."""
+    channel_id = _runtime.get("panel_channel_id")
+    if not channel_id or not bot.user:
+        return
+    try:
+        channel = bot.get_channel(int(channel_id))
+        if channel is None:
+            channel = await bot.fetch_channel(int(channel_id))
+        if not isinstance(channel, discord.TextChannel):
+            log.warning("panel_channel_id n'est pas un salon texte: %s", channel_id)
+            return
+        view = PanelView()
+        message_id = _runtime.get("panel_message_id")
+        if message_id:
+            msg = await channel.fetch_message(int(message_id))
+            await msg.edit(view=view)
+            log.info("Panel re-lié (message %s)", message_id)
+            return
+        async for msg in channel.history(limit=30):
+            if msg.author.id != bot.user.id:
+                continue
+            for row in msg.components:
+                for child in getattr(row, "children", []) or []:
+                    if getattr(child, "custom_id", None) == "support_open_ticket":
+                        await msg.edit(view=view)
+                        log.info("Panel re-lié via historique (message %s)", msg.id)
+                        return
+        log.warning("Message panel introuvable — bouton géré via on_interaction")
+    except Exception:
+        log.exception("Rebind panel échoué — bouton géré via on_interaction")
+
+
 class ReasonModal(discord.ui.Modal, title="Ouvrir un ticket"):
     reason = discord.ui.TextInput(
         label="Quelle est la raison de l'ouverture de votre ticket ?",
@@ -91,15 +161,21 @@ class ReasonModal(discord.ui.Modal, title="Ouvrir un ticket"):
     )
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
-        status, data = await api_post(
-            "/api/support/bot/open",
-            {
-                "discord_user_id": str(interaction.user.id),
-                "discord_username": str(interaction.user),
-                "reason": str(self.reason.value),
-            },
-        )
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+        try:
+            status, data = await api_post(
+                "/api/support/bot/open",
+                {
+                    "discord_user_id": str(interaction.user.id),
+                    "discord_username": str(interaction.user),
+                    "reason": str(self.reason.value),
+                },
+            )
+        except Exception:
+            log.exception("API /api/support/bot/open a échoué")
+            await interaction.followup.send("Impossible d'ouvrir le ticket (erreur serveur).", ephemeral=True)
+            return
         if status == 409:
             ch = data.get("channel_id")
             await interaction.followup.send(
@@ -129,7 +205,7 @@ class PanelView(discord.ui.View):
 
     @discord.ui.button(label="Ouvrir un ticket", style=discord.ButtonStyle.primary, custom_id="support_open_ticket", emoji="🎫")
     async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_modal(ReasonModal())
+        await send_open_ticket_modal(interaction)
 
 
 class TicketActions(discord.ui.View):
@@ -172,13 +248,28 @@ async def runtime_loop() -> None:
 
 
 @bot.event
+async def on_interaction(interaction: discord.Interaction) -> None:
+    """Filet de sécurité : ACK même si PanelView n'est pas liée au message REST."""
+    if _component_custom_id(interaction) != "support_open_ticket":
+        return
+    await send_open_ticket_modal(interaction)
+
+
+@bot.event
 async def on_ready() -> None:
     bot.add_view(PanelView())
     bot.add_view(TicketActions())
+    log.info(
+        "Support bot connecté: %s (gateway %.0f ms) WEBLOGBOOK_URL=%s — "
+        "Interactions Endpoint URL du portail Discord doit rester VIDE.",
+        bot.user,
+        bot.latency * 1000,
+        WEBLOGBOOK_URL,
+    )
     await refresh_runtime()
+    await rebind_panel_view()
     if not runtime_loop.is_running():
         runtime_loop.start()
-    log.info("Support bot connecté: %s", bot.user)
 
 
 @bot.event
@@ -210,7 +301,15 @@ def main() -> None:
         raise SystemExit("SUPPORT_BOT_TOKEN manquant")
     if not SECRET:
         raise SystemExit("SUPPORT_BOT_SECRET manquant")
-    bot.run(TOKEN)
+    log.info("Démarrage bot assistance — site=%s", WEBLOGBOOK_URL)
+    try:
+        bot.run(TOKEN)
+    except discord.PrivilegedIntentsRequired:
+        log.error(
+            "Intents privilégiés refusés : activer Server Members et Message Content "
+            "sur https://discord.com/developers/applications → Bot."
+        )
+        raise
 
 
 if __name__ == "__main__":
