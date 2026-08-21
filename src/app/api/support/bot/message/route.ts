@@ -39,9 +39,13 @@ function parseTurns(raw: unknown): TicketTurn[] {
 }
 
 async function llmReply(messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>): Promise<string> {
-  const key = process.env.SUPPORT_LLM_API_KEY || process.env.OPENAI_API_KEY;
-  const base = (process.env.SUPPORT_LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-  const model = process.env.SUPPORT_LLM_MODEL || 'gpt-4o-mini';
+  const groqKey = process.env.GROQ_API_KEY || process.env.SUPPORT_LLM_API_KEY;
+  const key = groqKey || process.env.OPENAI_API_KEY;
+  const useGroq = Boolean(process.env.SUPPORT_LLM_BASE_URL?.includes('groq') || (!process.env.SUPPORT_LLM_BASE_URL && groqKey));
+  const base = (process.env.SUPPORT_LLM_BASE_URL || (useGroq ? 'https://api.groq.com/openai/v1' : 'https://api.openai.com/v1')).replace(/\/$/, '');
+  const model =
+    process.env.SUPPORT_LLM_MODEL ||
+    (useGroq ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini');
   if (!key) {
     return 'Je prends en compte ta demande. Peux-tu préciser ce que tu as déjà essayé sur le site (menu, page) ? Si je ne peux pas conclure, j’appellerai un staff.\n\nC’est résolu ?';
   }

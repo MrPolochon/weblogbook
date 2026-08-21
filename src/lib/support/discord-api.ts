@@ -23,6 +23,13 @@ export async function discordFetch(path: string, init?: RequestInit) {
   return json;
 }
 
+export async function discordGetMe() {
+  return discordFetch('/users/@me');
+}
+
+/** Voir + écrire + historique + embeds + fichiers */
+export const DISCORD_TICKET_ALLOW = '117760';
+
 export async function discordCreateCategory(guildId: string, name: string) {
   return discordFetch(`/guilds/${guildId}/channels`, {
     method: 'POST',

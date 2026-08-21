@@ -8,7 +8,7 @@ import {
   ticketChannelName,
   type SupportMotifId,
 } from '@/lib/support/motifs';
-import { discordCreateTextChannel, discordSendMessage } from '@/lib/support/discord-api';
+import { discordCreateTextChannel, discordGetMe, discordSendMessage, DISCORD_TICKET_ALLOW } from '@/lib/support/discord-api';
 import { extractFacts } from '@/lib/support/ticket-memory';
 
 function shortId(): string {
@@ -56,10 +56,16 @@ export async function POST(req: NextRequest) {
 
   const sid = shortId();
   const everyone = cfg.guild_id;
+  let botId = '';
+  try {
+    const me = await discordGetMe();
+    botId = String(me.id || '');
+  } catch { /* ignore */ }
   const overwrites = [
     { id: everyone, type: 0, deny: '1024' },
-    { id: discordUserId, type: 1, allow: '3072' },
-    { id: cfg.staff_role_id, type: 0, allow: '3072' },
+    { id: discordUserId, type: 1, allow: DISCORD_TICKET_ALLOW },
+    { id: cfg.staff_role_id, type: 0, allow: DISCORD_TICKET_ALLOW },
+    ...(botId ? [{ id: botId, type: 1, allow: DISCORD_TICKET_ALLOW }] : []),
   ];
 
   try {

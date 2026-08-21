@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Any
 
 import aiohttp
 import discord
@@ -21,10 +22,12 @@ intents.members = True
 
 bot = discord.Client(intents=intents)
 
+_runtime: dict[str, Any] = {"staff_role_id": None, "category_ids": {}}
+
 
 async def api_post(path: str, payload: dict) -> tuple[int, dict]:
     headers = {"Content-Type": "application/json", "x-support-bot-secret": SECRET}
-    timeout = aiohttp.ClientTimeout(total=60)
+    timeout = aiohttp.ClientTimeout(total=90)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.post(f"{WEBLOGBOOK_URL}{path}", json=payload, headers=headers) as resp:
             try:
@@ -32,6 +35,44 @@ async def api_post(path: str, payload: dict) -> tuple[int, dict]:
             except Exception:
                 data = {}
             return resp.status, data if isinstance(data, dict) else {}
+
+
+async def api_get(path: str) -> tuple[int, dict]:
+    headers = {"x-support-bot-secret": SECRET}
+    timeout = aiohttp.ClientTimeout(total=30)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(f"{WEBLOGBOOK_URL}{path}", headers=headers) as resp:
+            try:
+                data = await resp.json(content_type=None)
+            except Exception:
+                data = {}
+            return resp.status, data if isinstance(data, dict) else {}
+
+
+async def refresh_runtime() -> None:
+    status, data = await api_get("/api/support/bot/runtime")
+    if status < 400 and data:
+        _runtime["staff_role_id"] = data.get("staff_role_id")
+        cats = data.get("category_ids") or {}
+        _runtime["category_ids"] = set(str(v) for v in cats.values() if v)
+        log.info("Config site: %s sections, staff_role=%s", len(_runtime["category_ids"]), _runtime["staff_role_id"])
+
+
+def is_ticket_channel(channel: discord.abc.GuildChannel) -> bool:
+    if not isinstance(channel, discord.TextChannel):
+        return False
+    cats = _runtime.get("category_ids") or set()
+    if channel.category_id and str(channel.category_id) in cats:
+        return True
+    name = channel.name or ""
+    return name.startswith("🤖") or name.startswith("🔴") or name.startswith("🟠") or name.startswith("🟢") or name.startswith("tkt-")
+
+
+def is_staff_member(member: discord.Member) -> bool:
+    rid = _runtime.get("staff_role_id")
+    if rid and any(str(r.id) == str(rid) for r in member.roles):
+        return True
+    return member.guild_permissions.manage_channels
 
 
 class ReasonModal(discord.ui.Modal, title="Ouvrir un ticket"):
@@ -66,8 +107,22 @@ class ReasonModal(discord.ui.Modal, title="Ouvrir un ticket"):
         await interaction.followup.send(f"Ticket créé : <#{ch}>", ephemeral=True)
         if ch and interaction.guild:
             channel = interaction.guild.get_channel(int(ch))
-            if channel:
+            if channel is None:
+                try:
+                    channel = await interaction.guild.fetch_channel(int(ch))
+                except discord.HTTPException:
+                    channel = None
+            if isinstance(channel, discord.TextChannel):
                 await channel.send(view=TicketActions())
+
+
+class PanelView(discord.ui.View):
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Ouvrir un ticket", style=discord.ButtonStyle.primary, custom_id="support_open_ticket", emoji="🎫")
+    async def open_ticket(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_modal(ReasonModal())
 
 
 class TicketActions(discord.ui.View):
@@ -97,7 +152,7 @@ class TicketActions(discord.ui.View):
 
     @discord.ui.button(label="Fermer (staff)", style=discord.ButtonStyle.secondary, custom_id="support_staff_close")
     async def staff_close(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        if not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.manage_channels:
+        if not isinstance(interaction.user, discord.Member) or not is_staff_member(interaction.user):
             await interaction.response.send_message("Staff uniquement.", ephemeral=True)
             return
         await interaction.response.defer()
@@ -106,51 +161,34 @@ class TicketActions(discord.ui.View):
 
 @bot.event
 async def on_ready() -> None:
+    bot.add_view(PanelView())
     bot.add_view(TicketActions())
+    await refresh_runtime()
     log.info("Support bot connecté: %s", bot.user)
-
-
-@bot.event
-async def on_interaction(interaction: discord.Interaction) -> None:
-    if interaction.type != discord.InteractionType.component:
-        return
-    cid = interaction.data.get("custom_id") if interaction.data else None
-    if cid == "support_open_ticket":
-        await interaction.response.send_modal(ReasonModal())
-        return
 
 
 @bot.event
 async def on_message(message: discord.Message) -> None:
     if message.author.bot or not message.guild:
         return
-    if not isinstance(message.channel, discord.TextChannel):
+    if not is_ticket_channel(message.channel):
         return
-    if not message.channel.category:
-        return
-    # Un salon ticket a un nom commençant par un emoji statut
-    name = message.channel.name or ""
-    if not (name.startswith("🤖") or name.startswith("🔴") or name.startswith("🟠") or name.startswith("🟢")):
+    content = (message.content or "").strip()
+    if not content:
         return
 
-    is_staff = False
-    if isinstance(message.author, discord.Member):
-        is_staff = message.author.guild_permissions.manage_channels
+    from_staff = isinstance(message.author, discord.Member) and is_staff_member(message.author)
+    try:
+        await message.channel.typing()
+    except discord.HTTPException:
+        pass
 
-    if is_staff:
-        await api_post(
-            "/api/support/bot/message",
-            {"channel_id": str(message.channel.id), "content": message.content, "from_staff": True},
-        )
-        return
-
-    status, data = await api_post(
+    status, _data = await api_post(
         "/api/support/bot/message",
-        {"channel_id": str(message.channel.id), "content": message.content, "from_staff": False},
+        {"channel_id": str(message.channel.id), "content": content, "from_staff": from_staff},
     )
-    if status == 404:
-        return
-    # L'API poste déjà la réponse IA dans le salon
+    if status >= 400:
+        log.warning("API message %s: %s", status, _data)
 
 
 def main() -> None:

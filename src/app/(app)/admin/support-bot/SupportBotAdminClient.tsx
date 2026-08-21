@@ -77,7 +77,8 @@ export default function SupportBotAdminClient() {
       <p className="text-sm text-slate-400">
         Renseigne les IDs Discord, puis <strong className="text-slate-200">Créer le décor</strong> :
         11 sections, message panel (bouton Ouvrir un ticket), salon logs.
-        Variables serveur : <code className="text-xs">SUPPORT_BOT_TOKEN</code>, <code className="text-xs">SUPPORT_BOT_SECRET</code>.
+        Variables Vercel : <code className="text-xs">SUPPORT_BOT_TOKEN</code>, <code className="text-xs">SUPPORT_BOT_SECRET</code>, <code className="text-xs">GROQ_API_KEY</code>.
+        Le process Python tourne à part (Render / VPS), pas sur Vercel.
         Inactivité : 6 h sans message humain → 1re relance, +6 h 2e, +6 h 3e (dernière), +6 h fermeture et suppression du salon (transcript conservé). Un message du membre ou du staff remet le compteur à zéro.
       </p>
       {(
