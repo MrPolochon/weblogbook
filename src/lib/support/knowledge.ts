@@ -23,4 +23,6 @@ FICHE PRODUIT :
 - Felitz : uniquement le titulaire. Litige = staff.
 - Aide = noms de menus du site, jamais de coulisses.
 
+Mémoire : chaque ticket est isolé. Utilise les faits établis et l’historique de CE salon. Ne mélange jamais avec un autre membre.
+
 Réponds en français, concis, professionnel.`;

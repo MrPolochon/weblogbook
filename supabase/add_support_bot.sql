@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS public.support_tickets (
   motif TEXT NOT NULL,
   statut TEXT NOT NULL DEFAULT 'ia',
   reason_text TEXT,
+  conversation jsonb NOT NULL DEFAULT '[]'::jsonb,
+  memory_notes text,
   user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   transcript TEXT,
   closed_at TIMESTAMPTZ,

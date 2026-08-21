@@ -5,6 +5,16 @@ import { assertSupportBotSecret, getSupportConfig } from '@/lib/support/bot-auth
 import { SUPPORT_IA_SYSTEM_PROMPT } from '@/lib/support/knowledge';
 import { ticketChannelName, type SupportStatus } from '@/lib/support/motifs';
 import { discordRenameChannel, discordSendMessage } from '@/lib/support/discord-api';
+import {
+  extractFacts,
+  mergeMemory,
+  ticketContextBlock,
+  toLlmMessages,
+  trimConversation,
+  type TicketTurn,
+} from '@/lib/support/ticket-memory';
+
+export const maxDuration = 60;
 
 function needsStaff(text: string, iaText: string): boolean {
   const blob = `${text}\n${iaText}`.toLowerCase();
@@ -13,7 +23,22 @@ function needsStaff(text: string, iaText: string): boolean {
   return false;
 }
 
-async function llmReply(userMsg: string, history: string): Promise<string> {
+function parseTurns(raw: unknown): TicketTurn[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TicketTurn[] = [];
+  for (const t of raw) {
+    if (!t || typeof t !== 'object') continue;
+    const role = (t as TicketTurn).role;
+    const content = String((t as TicketTurn).content || '').trim();
+    if (!content) continue;
+    if (role === 'user' || role === 'assistant' || role === 'staff') {
+      out.push({ role, content });
+    }
+  }
+  return out;
+}
+
+async function llmReply(messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>): Promise<string> {
   const key = process.env.SUPPORT_LLM_API_KEY || process.env.OPENAI_API_KEY;
   const base = (process.env.SUPPORT_LLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
   const model = process.env.SUPPORT_LLM_MODEL || 'gpt-4o-mini';
@@ -25,12 +50,9 @@ async function llmReply(userMsg: string, history: string): Promise<string> {
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
-      temperature: 0.3,
-      max_tokens: 500,
-      messages: [
-        { role: 'system', content: SUPPORT_IA_SYSTEM_PROMPT },
-        { role: 'user', content: `${history}\n\nMessage du membre : ${userMsg}` },
-      ],
+      temperature: 0.2,
+      max_tokens: 450,
+      messages,
     }),
   });
   const data = await res.json().catch(() => ({}));
@@ -60,20 +82,59 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (!ticket) return NextResponse.json({ error: 'Ticket introuvable' }, { status: 404 });
 
+  const turns = parseTurns(ticket.conversation);
+  const memory = mergeMemory(ticket.memory_notes || '', extractFacts(content));
+
   if (fromStaff) {
-    await admin.from('support_tickets').update({ statut: 'staff', updated_at: new Date().toISOString() }).eq('id', ticket.id);
+    const nextTurns = trimConversation([...turns, { role: 'staff', content }]);
+    await admin
+      .from('support_tickets')
+      .update({
+        statut: 'staff',
+        conversation: nextTurns,
+        memory_notes: memory,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', ticket.id);
     try {
       await discordRenameChannel(channelId, ticketChannelName('staff', ticket.short_id));
     } catch { /* ignore */ }
     return NextResponse.json({ ok: true, statut: 'staff', reply: null });
   }
 
-  const history = `Motif: ${ticket.motif}\nRaison ouverture: ${ticket.reason_text || ''}`;
-  const reply = await llmReply(content, history);
+  const messages = toLlmMessages(
+    SUPPORT_IA_SYSTEM_PROMPT,
+    ticketContextBlock({
+      short_id: ticket.short_id,
+      motif: ticket.motif,
+      reason_text: ticket.reason_text,
+      discord_username: ticket.discord_username,
+      memory_notes: memory,
+    }),
+    turns,
+    content
+  );
+
+  const reply = await llmReply(messages);
   const escalate = needsStaff(content, reply) || /j’appelle un staff|j'appelle un staff/i.test(reply);
 
   const statut: SupportStatus = escalate ? 'staff_needed' : 'waiting';
-  await admin.from('support_tickets').update({ statut, updated_at: new Date().toISOString() }).eq('id', ticket.id);
+  const nextTurns = trimConversation([
+    ...turns,
+    { role: 'user', content },
+    { role: 'assistant', content: reply },
+  ]);
+
+  await admin
+    .from('support_tickets')
+    .update({
+      statut,
+      conversation: nextTurns,
+      memory_notes: memory,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', ticket.id);
+
   try {
     await discordRenameChannel(channelId, ticketChannelName(statut, ticket.short_id));
   } catch { /* ignore */ }

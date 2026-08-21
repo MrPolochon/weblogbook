@@ -9,6 +9,7 @@ import {
   type SupportMotifId,
 } from '@/lib/support/motifs';
 import { discordCreateTextChannel, discordSendMessage } from '@/lib/support/discord-api';
+import { extractFacts } from '@/lib/support/ticket-memory';
 
 function shortId(): string {
   return Math.random().toString(36).slice(2, 6);
@@ -77,6 +78,12 @@ export async function POST(req: NextRequest) {
       .eq('status', 'active')
       .maybeSingle();
 
+    const motifLabel = SUPPORT_MOTIFS.find((m) => m.id === motif)?.label || motif;
+    const intro =
+      motif === 'nouveau'
+        ? `Bienvenue ! Je t’accompagne pour démarrer (compte, Discord lié, logbook). Raison indiquée : *${reason.slice(0, 300)}*`
+        : `Ticket classé **${motifLabel}**. Raison : *${reason.slice(0, 400)}*\nJe m’en occupe. Si je ne peux pas conclure, j’appellerai un staff.`;
+
     await admin.from('support_tickets').insert({
       short_id: sid,
       discord_user_id: discordUserId,
@@ -86,6 +93,11 @@ export async function POST(req: NextRequest) {
       statut: 'ia',
       reason_text: reason,
       user_id: link?.user_id ?? null,
+      conversation: [
+        { role: 'user', content: reason },
+        { role: 'assistant', content: intro },
+      ],
+      memory_notes: extractFacts(reason).join('\n') || null,
     });
 
     const motifLabel = SUPPORT_MOTIFS.find((m) => m.id === motif)?.label || motif;
