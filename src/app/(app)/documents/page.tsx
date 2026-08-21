@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { FolderOpen } from 'lucide-react';
+import Link from 'next/link';
 import DocumentTree from '@/components/DocumentTree';
 
 export default async function DocumentsPage() {
@@ -23,6 +24,14 @@ export default async function DocumentsPage() {
           {totalFiles} document(s) disponible(s) au téléchargement
         </p>
       </div>
+
+      <Link
+        href="/code-de-conduite"
+        className="flex items-center justify-between gap-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 hover:bg-indigo-500/15"
+      >
+        <span className="text-sm font-semibold text-indigo-200">Code de conduite MIXOU AIRLINES PTFS — V5.0.0.4</span>
+        <span className="text-xs text-indigo-300">Lire / PDF</span>
+      </Link>
 
       {!sections || sections.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed border-slate-700/50 rounded-xl">

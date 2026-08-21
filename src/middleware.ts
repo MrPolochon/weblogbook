@@ -49,6 +49,7 @@ export async function middleware(request: NextRequest) {
   const isSetup = pathname === '/setup';
   const isLogin = pathname === '/login';
   const isDownload = pathname === '/download';
+  const isCodeConduite = pathname === '/code-de-conduite' || pathname.startsWith('/docs/');
   const isAeroSchool = pathname.startsWith('/aeroschool');
   const isAuthCallback = pathname.startsWith('/auth/');
   const isApiPublic =
@@ -92,7 +93,7 @@ export async function middleware(request: NextRequest) {
 
   if (
     isAuthCallback || isApiPublic || isApiDiscord || isApiAeroSchoolPublic || isApiAuth ||
-    isSetup || isLogin || isDownload || isAeroSchool || isCarteAtc || isApiAtcOnline ||
+    isSetup || isLogin || isDownload || isCodeConduite || isAeroSchool || isCarteAtc || isApiAtcOnline ||
     isMaintenance
   ) {
     return NextResponse.next({ request });
@@ -280,5 +281,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|downloads/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|exe)$).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|downloads/|docs/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|exe|pdf)$).*)'],
 };

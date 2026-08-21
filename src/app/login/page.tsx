@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind, Clock, User, Lock, Wrench, Fingerprint } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind, Clock, User, Lock, Wrench, Fingerprint, ScrollText } from 'lucide-react';
 import { authenticateWithPasskey, registerPasskeyOnDevice } from '@/components/PasskeysSection';
 
 const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
@@ -1279,6 +1279,13 @@ function LoginPageContent() {
           >
             <Download className="h-4 w-4 text-sky-400 group-hover:scale-110 transition-transform shrink-0" />
             <span className="font-semibold text-sm">Téléchargements</span>
+          </Link>
+          <Link
+            href="/code-de-conduite"
+            className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 hover:text-indigo-200 hover:bg-indigo-500/20 hover:border-indigo-500/50 transition-all backdrop-blur-sm group cursor-pointer"
+          >
+            <ScrollText className="h-4 w-4 text-indigo-400 group-hover:scale-110 transition-transform shrink-0" />
+            <span className="font-semibold text-sm">Code de conduite</span>
           </Link>
         </div>
       </div>

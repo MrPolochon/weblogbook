@@ -171,6 +171,7 @@ export default function NavBar({
       label: 'Infos',
       items: [
         { href: '/documents', label: 'Documents', icon: FileText, badge: 0 },
+        { href: '/code-de-conduite', label: 'Code de conduite', icon: ScrollText, badge: 0 },
         { href: '/notams', label: 'NOTAMs', icon: ScrollText, badge: 0 },
         { href: '/aeroschool', label: 'AeroSchool', icon: GraduationCap, badge: 0 },
         { href: '/signalement', label: 'Signalement IFSA', icon: AlertTriangle, badge: 0 },
@@ -186,7 +187,7 @@ export default function NavBar({
     '/logbook', '/militaire', '/felitz-bank', '/ma-compagnie', '/marketplace',
     '/hangar-market', '/inventaire', '/messagerie', '/marche-passagers',
     '/marche-cargo', '/perf-ptfs', '/alliance', '/signalement', '/reparation',
-    '/documents', '/notams', '/classement', '/aeroschool',
+    '/documents', '/notams', '/classement', '/aeroschool', '/code-de-conduite',
   ].some(p => pathname.startsWith(p));
 
   const totalAdminBadge = pendingVolsCount + adminPlansEnAttenteCount + adminPasswordResetCount + adminAeroschoolCount;
