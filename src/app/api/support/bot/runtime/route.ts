@@ -4,7 +4,7 @@ import { waitUntil } from '@vercel/functions';
 import { getDiscordGuildId } from '@/lib/discord-link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { assertSupportBotSecret, getSupportConfig } from '@/lib/support/bot-auth';
-import { discordGetMe, ensureTicketDelGuildCommand } from '@/lib/support/discord-api';
+import { discordGetMe, ensureSupportGuildCommands } from '@/lib/support/discord-api';
 
 export async function GET(req: NextRequest) {
   const denied = assertSupportBotSecret(req);
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   } catch { /* ignore */ }
 
   const guildId = getDiscordGuildId() || cfg?.guild_id || null;
-  waitUntil(ensureTicketDelGuildCommand(guildId));
+  waitUntil(ensureSupportGuildCommands(guildId));
 
   return NextResponse.json({
     ok: true,

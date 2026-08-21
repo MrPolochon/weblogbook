@@ -45,8 +45,11 @@ _runtime: dict[str, Any] = {
 _ack_ids: set[int] = set()
 _is_ticket_cache: dict[str, tuple[bool, float]] = {}
 _empty_content_warned: set[int] = set()
+# Idempotence locale : un même message Discord (reconnexion gateway, event
+# rejoué) ne doit pas partir deux fois vers l'API. Le site déduplique aussi.
+_handled_message_ids: set[int] = set()
 _slash_client: discord.Client | None = None
-_ticketdel_guild: str | None = None
+_commands_guild: str | None = None
 _TICKETISH_PREFIX = ("🤖", "🔴", "🟠", "🟢", "tkt-")
 _TICKETISH_RE = re.compile(r"^(🤖|🔴|🟠|🟢|tkt-)|-\w{4}$")
 
@@ -114,6 +117,11 @@ async def refresh_runtime() -> None:
         log.warning("Runtime API indisponible (%s) url=%s/api/support/bot/runtime", status, WEBLOGBOOK_URL)
 
 
+def _strip_bot_mention(text: str, bot_user_id: int) -> str:
+    """Retire la mention du bot : il reste la demande (« ferme le ticket »)."""
+    return re.sub(rf"<@!?{bot_user_id}>", " ", text).strip()
+
+
 def looks_ticketish(name: str) -> bool:
     n = name or ""
     if n.startswith(_TICKETISH_PREFIX):
@@ -179,16 +187,21 @@ def _command_name(interaction: discord.Interaction) -> str | None:
     return str(name) if name else None
 
 
-async def register_ticketdel_command(_client: discord.Client | None = None) -> None:
-    """Commande de guilde /ticketdel via REST. L'endpoint HTTP Vercel gère l'interaction."""
-    global _ticketdel_guild
+GUILD_COMMANDS = [
+    {"name": "ticketdel", "description": "Fermer et supprimer ce ticket", "type": 1},
+    {"name": "ticketia", "description": "Rendre la main à l'IA sur ce ticket", "type": 1},
+]
+
+
+async def register_guild_commands(_client: discord.Client | None = None) -> None:
+    """Commandes de guilde via REST. L'endpoint HTTP Vercel gère les interactions."""
+    global _commands_guild
     guild_id = str(_runtime.get("guild_id") or os.getenv("DISCORD_GUILD_ID") or "").strip()
     if not guild_id:
         return
-    if _ticketdel_guild == guild_id:
+    if _commands_guild == guild_id:
         return
     headers = {"Authorization": f"Bot {TOKEN}", "Content-Type": "application/json"}
-    payload = {"name": "ticketdel", "description": "Fermer et supprimer ce ticket", "type": 1}
     timeout = aiohttp.ClientTimeout(total=20)
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -196,25 +209,25 @@ async def register_ticketdel_command(_client: discord.Client | None = None) -> N
                 me = await resp.json(content_type=None) if resp.status < 400 else {}
             app_id = str((me or {}).get("id") or "").strip()
             if not app_id:
-                log.warning("GET /users/@me sans id — /ticketdel non enregistré")
+                log.warning("GET /users/@me sans id — commandes slash non enregistrées")
                 return
             url = f"https://discord.com/api/v10/applications/{app_id}/guilds/{guild_id}/commands"
             async with session.get(url, headers=headers) as resp:
                 existing = await resp.json(content_type=None) if resp.status < 400 else []
             names = {c.get("name") for c in existing} if isinstance(existing, list) else set()
-            if "ticketdel" in names:
-                _ticketdel_guild = guild_id
-                log.info("Slash /ticketdel déjà enregistré guild=%s app=%s", guild_id, app_id)
-                return
-            async with session.post(url, headers=headers, json=payload) as resp:
-                body = await resp.text()
-                if resp.status >= 400:
-                    log.warning("Enregistrement /ticketdel HTTP %s %s", resp.status, body[:240])
-                    return
-            _ticketdel_guild = guild_id
-            log.info("Slash /ticketdel enregistré guild=%s app=%s", guild_id, app_id)
+            for payload in GUILD_COMMANDS:
+                if payload["name"] in names:
+                    log.info("Slash /%s déjà enregistré guild=%s", payload["name"], guild_id)
+                    continue
+                async with session.post(url, headers=headers, json=payload) as resp:
+                    body = await resp.text()
+                    if resp.status >= 400:
+                        log.warning("Enregistrement /%s HTTP %s %s", payload["name"], resp.status, body[:240])
+                        return
+                log.info("Slash /%s enregistré guild=%s app=%s", payload["name"], guild_id, app_id)
+            _commands_guild = guild_id
     except Exception:
-        log.exception("Impossible d'enregistrer /ticketdel")
+        log.exception("Impossible d'enregistrer les commandes slash")
 
 
 async def handle_ticketdel(interaction: discord.Interaction) -> None:
@@ -255,6 +268,43 @@ async def handle_ticketdel(interaction: discord.Interaction) -> None:
         msg = "Ticket déjà fermé."
     else:
         msg = "Ticket fermé."
+    try:
+        await interaction.followup.send(msg, ephemeral=True)
+    except discord.HTTPException:
+        pass
+
+
+async def handle_ticketia(interaction: discord.Interaction) -> None:
+    """Filet gateway pour /ticketia — l'endpoint HTTP Vercel gère le cas normal."""
+    if not interaction.response.is_done():
+        try:
+            await interaction.response.defer(ephemeral=True)
+        except discord.HTTPException:
+            log.exception("defer /ticketia a échoué")
+            return
+    user = interaction.user
+    if not (isinstance(user, discord.Member) and is_staff_member(user)):
+        try:
+            await interaction.followup.send("Staff uniquement.", ephemeral=True)
+        except discord.HTTPException:
+            pass
+        return
+    try:
+        status, data = await api_post(
+            "/api/support/bot/resume-ia",
+            {"channel_id": str(interaction.channel_id), "resumed_by": f"staff:{interaction.user.id}"},
+        )
+    except Exception:
+        log.exception("API /api/support/bot/resume-ia a échoué")
+        status, data = 500, {}
+    if status == 404:
+        msg = "Cette commande ne fonctionne que dans un salon ticket."
+    elif status >= 400:
+        msg = data.get("error") or "Impossible de rendre la main à l'IA."
+    elif data.get("already"):
+        msg = "L'IA était déjà active sur ce ticket."
+    else:
+        msg = "L'IA reprend la main sur ce ticket."
     try:
         await interaction.followup.send(msg, ephemeral=True)
     except discord.HTTPException:
@@ -382,7 +432,7 @@ class TicketActions(discord.ui.View):
 async def runtime_loop() -> None:
     await refresh_runtime()
     if _slash_client is not None and _slash_client.is_ready():
-        await register_ticketdel_command(_slash_client)
+        await register_guild_commands(_slash_client)
 
 
 async def _notify_channel(channel: discord.abc.Messageable, text: str) -> None:
@@ -396,8 +446,12 @@ def attach_handlers(client: discord.Client) -> None:
     @client.event
     async def on_interaction(interaction: discord.Interaction) -> None:
         # Si l'endpoint HTTP Interactions est configuré, Discord n'envoie plus ces events au gateway.
-        if _command_name(interaction) == "ticketdel":
+        command = _command_name(interaction)
+        if command == "ticketdel":
             await handle_ticketdel(interaction)
+            return
+        if command == "ticketia":
+            await handle_ticketia(interaction)
             return
         cid = _component_custom_id(interaction)
         if cid != "support_open_ticket":
@@ -421,7 +475,7 @@ def attach_handlers(client: discord.Client) -> None:
             WEBLOGBOOK_URL,
         )
         await refresh_runtime()
-        await register_ticketdel_command(client)
+        await register_guild_commands(client)
         expected = str(_runtime.get("bot_user_id") or "")
         if expected and me and expected != me:
             log.error(
@@ -437,6 +491,13 @@ def attach_handlers(client: discord.Client) -> None:
     async def on_message(message: discord.Message) -> None:
         if message.author.bot or not message.guild:
             return
+        # Idempotence : une reconnexion gateway peut rejouer un event déjà traité.
+        if message.id in _handled_message_ids:
+            log.info("Message Discord déjà traité localement id=%s", message.id)
+            return
+        _handled_message_ids.add(message.id)
+        if len(_handled_message_ids) > 2000:
+            _handled_message_ids.clear()
         if not await should_handle_ticket_message(message.channel):
             return
 
@@ -472,11 +533,20 @@ def attach_handlers(client: discord.Client) -> None:
         # (staff autre que le demandeur du ticket) via discord_user_id.
         from_staff = isinstance(author, discord.Member) and is_staff_member(author)
         author_id = str(message.author.id)
+        # Protocole de commande du serveur : [mention du bot] + [demande].
+        # La mention réveille l'IA quand un staff a pris le relais, et le reste
+        # du message est traité comme l'instruction — on la retire du texte.
+        mentions_bot = bool(client.user and client.user in message.mentions)
+        if mentions_bot and client.user:
+            content = _strip_bot_mention(content, client.user.id)
+            if not content:
+                content = "reprends la main sur ce ticket"
         log.info(
-            "Ticket message channel=%s author=%s staff_role=%s len=%s",
+            "Ticket message channel=%s author=%s staff_role=%s mention_bot=%s len=%s",
             message.channel.id,
             author_id,
             from_staff,
+            mentions_bot,
             len(content),
         )
         try:
@@ -493,6 +563,8 @@ def attach_handlers(client: discord.Client) -> None:
                     "content": content,
                     "from_staff": from_staff,
                     "discord_user_id": author_id,
+                    "message_id": str(message.id),
+                    "mentions_bot": mentions_bot,
                 },
             )
         except Exception:

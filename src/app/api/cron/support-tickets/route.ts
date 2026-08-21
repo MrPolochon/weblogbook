@@ -57,7 +57,7 @@ async function run() {
 
   const { data: tickets, error } = await admin
     .from('support_tickets')
-    .select('id, short_id, channel_id, discord_user_id, statut, conversation, last_human_at, last_nudge_at, inactivity_nudge')
+    .select('id, short_id, channel_id, discord_user_id, statut, conversation, last_human_at, last_nudge_at, inactivity_nudge, staff_takeover_at')
     .is('closed_at', null)
     .limit(200);
 
@@ -66,8 +66,16 @@ async function run() {
   const nudged: string[] = [];
   const handedOver: string[] = [];
   const closed: string[] = [];
+  const staffDriven: string[] = [];
 
   for (const t of tickets || []) {
+    // Un staff pilote ce ticket : ni relance du demandeur, ni fermeture
+    // automatique. L'IA n'a plus rien à décider tant qu'on ne lui rend pas la
+    // main (mention du bot ou /ticketia).
+    if (t.staff_takeover_at) {
+      staffDriven.push(t.short_id);
+      continue;
+    }
     const step = Number(t.inactivity_nudge || 0);
     const lastHuman = new Date(t.last_human_at || 0).getTime();
     const lastNudge = t.last_nudge_at ? new Date(t.last_nudge_at).getTime() : 0;
@@ -135,7 +143,14 @@ async function run() {
     }
   }
 
-  return { ok: true, scanned: tickets?.length ?? 0, nudged, handed_over: handedOver, closed };
+  return {
+    ok: true,
+    scanned: tickets?.length ?? 0,
+    nudged,
+    handed_over: handedOver,
+    closed,
+    staff_driven: staffDriven,
+  };
 }
 
 export async function GET(request: NextRequest) {

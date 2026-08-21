@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { assertSupportBotSecret, getSupportConfig } from '@/lib/support/bot-auth';
 import { SUPPORT_IA_SYSTEM_PROMPT } from '@/lib/support/knowledge';
 import { aeroschoolBlock, findAeroschoolForms } from '@/lib/support/aeroschool-catalog';
+import { directoryBlock, findDirectoryMatches } from '@/lib/support/annuaire';
 import {
   chunksFromSource,
   docsBlock,
@@ -15,9 +16,11 @@ import {
 } from '@/lib/support/doc-index';
 import {
   isAccountCreationTopic,
+  isAmbiguousGroundTopic,
+  isAtcTopic,
   isAtcTrainingTopic,
+  isGroundCrewTopic,
   isTrainingRequest,
-  motifUsesInstructor,
   ticketChannelName,
   type SupportStatus,
 } from '@/lib/support/motifs';
@@ -25,10 +28,11 @@ import { discordRenameChannel, discordSendMessage } from '@/lib/support/discord-
 import { llmReply, type LlmResult } from '@/lib/support/llm';
 import { buildRequesterContext } from '@/lib/support/requester-context';
 import {
-  iaOffersResolution,
   isAffirmativeResolutionAnswer,
   isNegativeResolutionAnswer,
+  messageIsQuestion,
   RESOLUTION_PANEL_TEXT,
+  shouldOfferResolution,
   stripResoluMarker,
   stripResolutionQuestion,
   TICKET_ACTION_COMPONENTS,
@@ -36,8 +40,18 @@ import {
   withResolutionOfferedNote,
 } from '@/lib/support/ticket-actions';
 import { closeSupportTicket } from '@/lib/support/close-ticket';
-import { escalateTicketToStaff } from '@/lib/support/escalate';
-import { isOtherStaffTakeover, STAFF_TAKEOVER_NOTICE } from '@/lib/support/staff-takeover';
+import { escalateTicketToStaff, staffPingLine } from '@/lib/support/escalate';
+import { isChatter } from '@/lib/support/message-intent';
+import { detectMentionIntent } from '@/lib/support/mention-actions';
+import { runMentionCommand } from '@/lib/support/mention-commands';
+import { IA_RESUME_PATCH } from '@/lib/support/resume-ia';
+import {
+  iaIsMuted,
+  IA_RESUMED_NOTICE,
+  isOtherStaffTakeover,
+  isRealStaffIntervention,
+  STAFF_TAKEOVER_NOTICE,
+} from '@/lib/support/staff-takeover';
 import {
   extractFacts,
   mergeMemory,
@@ -100,6 +114,29 @@ function parseTurns(raw: unknown): TicketTurn[] {
   return out;
 }
 
+/**
+ * Idempotence : un même message Discord ne doit produire qu'une seule réponse.
+ * L'UPDATE conditionnel sert de verrou atomique — deux appels concurrents pour
+ * le même `message_id` ne peuvent pas gagner tous les deux la course.
+ */
+async function claimDiscordMessage(
+  admin: ReturnType<typeof createAdminClient>,
+  ticketId: string,
+  messageId: string
+): Promise<boolean> {
+  const id = messageId.replace(/\D/g, '');
+  if (!id) return true;
+  const { data, error } = await admin
+    .from('support_tickets')
+    .update({ last_discord_message_id: id })
+    .eq('id', ticketId)
+    .or(`last_discord_message_id.is.null,last_discord_message_id.neq.${id}`)
+    .select('id');
+  // Colonne absente (migration pas encore passée) : on ne bloque pas le bot.
+  if (error) return true;
+  return (data?.length ?? 0) > 0;
+}
+
 async function updateTicketRow(
   admin: ReturnType<typeof createAdminClient>,
   ticketId: string,
@@ -125,6 +162,8 @@ export async function POST(req: NextRequest) {
   const content = String(body.content || '').trim();
   const fromStaffRole = Boolean(body.from_staff);
   const authorDiscordId = String(body.discord_user_id || '').trim();
+  const messageId = String(body.message_id || '').trim();
+  const mentionsBot = Boolean(body.mentions_bot);
   if (!channelId || !content) {
     return NextResponse.json({ error: 'channel_id et content requis' }, { status: 400 });
   }
@@ -138,48 +177,155 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (!ticket) return NextResponse.json({ error: 'Ticket introuvable' }, { status: 404 });
 
+  if (messageId && !(await claimDiscordMessage(admin, ticket.id, messageId))) {
+    console.info('[support-message] message Discord déjà traité', {
+      shortId: ticket.short_id,
+      messageId,
+    });
+    return NextResponse.json({ ok: true, duplicate: true, reply: null });
+  }
+
   const openerDiscordId = String(ticket.discord_user_id || '').trim();
-  const staffTakeover = isOtherStaffTakeover(fromStaffRole, authorDiscordId, openerDiscordId);
   const requesterSpeaking =
     Boolean(authorDiscordId) && Boolean(openerDiscordId) && authorDiscordId === openerDiscordId;
+  const staffSpeaking = isOtherStaffTakeover(fromStaffRole, authorDiscordId, openerDiscordId);
+  // Ni le demandeur, ni un staff : un curieux de passage. Il ne pilote rien et
+  // ses messages ne comptent pas comme activité du ticket (délais d'inactivité).
+  const thirdParty = Boolean(authorDiscordId) && !requesterSpeaking && !fromStaffRole;
+  const muted = iaIsMuted(ticket);
+  const nowIso = new Date().toISOString();
 
   console.info('[support-message]', {
     channelId,
     shortId: ticket.short_id,
     fromStaffRole,
-    staffTakeover,
+    staffSpeaking,
     requesterSpeaking,
+    thirdParty,
+    muted,
+    mentionsBot,
     authorDiscordId,
     statut: ticket.statut,
     contentLen: content.length,
   });
 
+  if (thirdParty) {
+    return NextResponse.json({ ok: true, ignored: 'membre_tiers', reply: null });
+  }
+
   const turns = parseTurns(ticket.conversation);
   let memory = mergeMemory(ticket.memory_notes || '', extractFacts(content));
 
-  if (staffTakeover) {
-    const alreadyHandedOver = String(ticket.statut || '') === 'staff';
-    const nextTurns = trimConversation([...turns, { role: 'staff', content }]);
+  /** Le message est archivé dans le fil, mais le bot ne répond pas. */
+  const recordSilently = async (role: 'user' | 'staff', patch: Record<string, unknown> = {}) => {
     await updateTicketRow(admin, ticket.id, {
-      statut: 'staff',
-      conversation: nextTurns,
+      conversation: trimConversation([...turns, { role, content }]),
       memory_notes: memory,
-      last_human_at: new Date().toISOString(),
+      last_human_at: nowIso,
       last_nudge_at: null,
       inactivity_nudge: 0,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
+      ...patch,
     });
-    try {
-      await discordRenameChannel(channelId, ticketChannelName('staff', ticket.short_id));
-    } catch { /* ignore */ }
-    if (!alreadyHandedOver) {
+  };
+
+  // ---------------------------------------------------------------------
+  // Relais staff : état PERSISTANT du ticket, pas une décision par message.
+  // Un staff qui plaisante (« trop styleee ») ne coupe plus l'IA ; un staff qui
+  // intervient vraiment la coupe une fois pour toutes, avec une seule annonce.
+  // ---------------------------------------------------------------------
+  if (staffSpeaking && !mentionsBot) {
+    const startsTakeover = !muted && isRealStaffIntervention(content);
+    const announce = startsTakeover && !ticket.staff_takeover_notified;
+    await recordSilently(
+      'staff',
+      startsTakeover
+        ? {
+            statut: 'staff',
+            staff_takeover_at: nowIso,
+            staff_takeover_notified: true,
+            staff_pinged_at: null,
+          }
+        : {},
+    );
+    if (startsTakeover) {
+      try {
+        await discordRenameChannel(channelId, ticketChannelName('staff', ticket.short_id));
+      } catch { /* ignore */ }
+    }
+    if (announce) {
       try {
         await discordSendMessage(channelId, STAFF_TAKEOVER_NOTICE);
       } catch (e) {
         console.error('[support-message] takeover notice', e);
       }
     }
-    return NextResponse.json({ ok: true, statut: 'staff', reply: null, handed_over: true });
+    return NextResponse.json({
+      ok: true,
+      statut: startsTakeover || muted ? 'staff' : String(ticket.statut || ''),
+      reply: null,
+      handed_over: startsTakeover || muted,
+    });
+  }
+
+  // Silence persistant : tant que le staff tient le ticket, l'IA ne répond à
+  // personne, pas même au demandeur. Aucun appel LLM, aucun token dépensé.
+  if (muted && !mentionsBot) {
+    await recordSilently('user');
+    return NextResponse.json({ ok: true, statut: 'staff', muted: true, reply: null });
+  }
+
+  // Protocole de commande : [mention du bot] + [demande]. La mention réactive
+  // l'IA ET porte l'instruction. Sans mention, aucune action n'est exécutée.
+  const mentionIntent = mentionsBot ? detectMentionIntent(content) : null;
+  // Un staff qui donne un ordre d'administration (renommer, déplacer) continue
+  // de gérer le ticket : on exécute sans relancer l'IA par-dessus lui.
+  const adminOrder =
+    fromStaffRole &&
+    (mentionIntent?.id === 'rename' ||
+      mentionIntent?.id === 'move' ||
+      (mentionIntent?.id === 'unsure' && mentionIntent.about !== 'close'));
+  const resumed = muted && mentionsBot && !adminOrder;
+  if (mentionsBot) {
+    const intent = mentionIntent;
+    if (intent) {
+      const result = await runMentionCommand({
+        intent,
+        actor: fromStaffRole ? 'staff' : 'requester',
+        channelId,
+        ticket: {
+          id: String(ticket.id),
+          short_id: String(ticket.short_id),
+          statut: ticket.statut,
+          motif: ticket.motif,
+          discord_username: ticket.discord_username,
+          discord_user_id: ticket.discord_user_id,
+        },
+        authorDiscordId,
+      });
+      console.info('[support-message] commande par mention', {
+        shortId: ticket.short_id,
+        action: result.action,
+        closed: Boolean(result.closed),
+      });
+      if (result.closed) {
+        return NextResponse.json({ ok: true, statut: 'ferme', closed: true, reply: null });
+      }
+      await recordSilently(fromStaffRole && !requesterSpeaking ? 'staff' : 'user', {
+        ...(adminOrder ? {} : IA_RESUME_PATCH),
+        ...(result.escalated || adminOrder || muted ? {} : { statut: 'waiting' }),
+        ...(result.offeredResolution
+          ? { memory_notes: withResolutionOfferedNote(memory, true), resolution_offered: true }
+          : {}),
+      });
+      return NextResponse.json({
+        ok: true,
+        action: result.action,
+        escalate: Boolean(result.escalated),
+        resolution_offered: Boolean(result.offeredResolution),
+        reply: null,
+      });
+    }
   }
 
   // Une proposition de clôture est en attente : « oui » écrit doit suffire à
@@ -216,13 +362,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Demandeur (même staff/owner) : l’IA répond toujours, y compris si un faux
-  // relais a déjà mis statut=staff / salon 🟢 (ticket déjà cassé).
-  if (String(ticket.statut || '') === 'staff' && (requesterSpeaking || !staffTakeover)) {
-    console.info('[support-message] reprise IA malgré statut staff (demandeur, pas un autre staff)', {
+  // Bavardage : « MDR », « XD », « merci », une vanne entre membres. Le bot
+  // répondait par une phrase creuse suivie d'une proposition de clôture ; il se
+  // tait désormais. Une mention explicite du bot passe outre : on l'a appelé.
+  if (!mentionsBot && isChatter(content)) {
+    console.info('[support-message] message sans demande — silence', {
       shortId: ticket.short_id,
-      requesterSpeaking,
+      contentLen: content.length,
     });
+    await recordSilently('user');
+    return NextResponse.json({ ok: true, ignored: 'hors_demande', reply: null });
   }
 
   // Sujet du ticket = motif + demande initiale + message courant. Il pilote à la
@@ -232,32 +381,66 @@ export async function POST(req: NextRequest) {
 
   // Le dossier vient de la base à chaque message : les licences, QCM et
   // demandes d'instruction bougent pendant la vie du ticket.
-  const [requesterContext, aeroschoolMatches] = await Promise.all([
+  const [requesterContext, aeroschoolMatches, directoryLookup] = await Promise.all([
     buildRequesterContext(admin, ticket.user_id as string | null),
     findAeroschoolForms(admin, topicText, { hasAccount }).catch((e) => {
       console.error('[support-message] recherche AeroSchool', e);
       return [];
     }),
+    // Annuaire : n'interroge la base que si le message cherche vraiment à
+    // identifier quelqu'un, et ne rend que ce que le demandeur a le droit de voir.
+    findDirectoryMatches(admin, content, { requesterId: ticket.user_id as string | null }),
   ]);
 
-  // Filet supplémentaire contre la confusion « training Approach » → CAT pilote.
-  const isAtcTopic = isAtcTrainingTopic(`${ticket.reason_text || ''} ${content}`);
-  const atcHint = isAtcTopic
-    ? 'Sujet détecté : formation ou position de CONTRÔLE AÉRIEN (ATC). Réponds avec la documentation ATC, jamais avec le parcours CAT pilote.'
-    : '';
+  // Filets contre les confusions de vocabulaire observées en production.
+  const focusText = `${ticket.reason_text || ''} ${content}`;
+  const isGroundCrewTopicHere = isGroundCrewTopic(focusText);
+  const isAtcSubject = isAtcTopic(focusText);
+  const isIfsaTopic = /\bifsa\b/i.test(focusText);
+  const groundAmbiguous = isAmbiguousGroundTopic(content);
+
+  const hints = [
+    isAtcSubject
+      ? 'Sujet détecté : CONTRÔLE AÉRIEN (ATC). Réponds avec la documentation ATC, jamais avec le parcours CAT pilote.'
+      : '',
+    isAtcTrainingTopic(focusText)
+      ? 'Il veut progresser côté ATC : un débutant commence par « Test ATC Delivery », jamais par le grand test confirmé.'
+      : '',
+    isGroundCrewTopicHere
+      ? 'Sujet détecté : GROUND CREW (personnel de piste). Ce n’est PAS le contrôle Ground ATC : ne parle ni de test ATC, ni de grade, ni de fréquence.'
+      : '',
+    groundAmbiguous
+      ? 'Le mot « ground » est ambigu ici : pose UNE question pour savoir s’il parle du personnel de piste (ground crew) ou de la position de contrôle sol (ATC), et n’explique aucune procédure avant sa réponse.'
+      : '',
+  ].filter(Boolean);
 
   // Recherche documentaire : seuls les extraits utiles partent au modèle.
-  const isPilotCatTopic = !isAtcTopic && /\bcat ?[1-5]\b|categorie|catégorie/i.test(topicText);
-  const prefer: DocSourceId[] = isAtcTopic ? ['atc', 'manuel'] : isPilotCatTopic ? ['pilote'] : [];
+  const isPilotCatTopic =
+    !isAtcSubject && !isGroundCrewTopicHere && /\bcat ?[1-5]\b|categorie|catégorie/i.test(topicText);
+  let prefer: DocSourceId[] = [];
   // Le bug d'origine : « training Approach » ramenait le livret CAT pilote.
-  const penalize: DocSourceId[] = isAtcTopic
-    ? ['pilote', 'site']
-    : isPilotCatTopic
-      ? ['atc', 'manuel', 'site']
-      : [];
+  let penalize: DocSourceId[] = [];
+  if (isGroundCrewTopicHere || groundAmbiguous) {
+    prefer = ['ground'];
+    penalize = groundAmbiguous ? ['pilote', 'ifsa'] : ['pilote', 'manuel', 'atc', 'ifsa'];
+  } else if (isIfsaTopic) {
+    prefer = ['ifsa'];
+    penalize = ['pilote', 'manuel', 'ground'];
+  } else if (isAtcSubject) {
+    prefer = ['atc', 'manuel'];
+    penalize = ['pilote', 'site', 'ground', 'ifsa'];
+  } else if (isPilotCatTopic) {
+    prefer = ['pilote'];
+    penalize = ['atc', 'manuel', 'site', 'ground', 'ifsa'];
+  }
+
   const docChunks = isAccountCreationTopic(content)
     ? chunksFromSource('site', 2)
-    : searchDocs(topicText, { limit: 3, prefer, penalize });
+    : isGroundCrewTopicHere || groundAmbiguous
+      ? chunksFromSource('ground', 3)
+      : isIfsaTopic
+        ? chunksFromSource('ifsa', 3)
+        : searchDocs(topicText, { limit: 3, prefer, penalize });
 
   const buildMessages = (chunks: DocChunk[], history: TicketTurn[] = turns) =>
     toLlmMessages(
@@ -271,8 +454,9 @@ export async function POST(req: NextRequest) {
         }),
         requesterContext,
         aeroschoolBlock(aeroschoolMatches, { hasAccount }),
+        directoryBlock(directoryLookup),
         docsBlock(chunks),
-        atcHint,
+        ...hints,
       ]
         .filter(Boolean)
         .join('\n\n'),
@@ -353,8 +537,16 @@ export async function POST(req: NextRequest) {
   }
 
   // Le marqueur seul déclenche la proposition, et elle part TOUJOURS avec les
-  // boutons — y compris si une proposition avait déjà été faite plus tôt.
-  const offerPanel = llm.ok && iaOffersResolution(rawReply, escalate);
+  // boutons — mais elle est refusée tant que la conversation est manifestement
+  // en cours (premiers échanges, étape à accomplir, nouvelle question).
+  const offerPanel =
+    llm.ok &&
+    shouldOfferResolution(rawReply, {
+      escalate,
+      memberMessages: turns.filter((t) => t.role === 'user').length + 1,
+      memberAsked: messageIsQuestion(content),
+      alreadyOffered: offerPending,
+    });
   const userSaysNotResolved = /pas r[eé]solu|n['’]est pas r[eé]solu|appeler un staff/i.test(content);
   const clearOffer = (escalate || userSaysNotResolved) && !offerPanel;
   const reply = stripResolutionQuestion(stripDocMarker(stripResoluMarker(rawReply)));
@@ -363,7 +555,8 @@ export async function POST(req: NextRequest) {
   const nextTurns = trimConversation([
     ...turns,
     { role: 'user', content },
-    { role: 'assistant', content: reply },
+    // Une réponse vide ne rentre pas dans l'historique : elle n'a jamais existé.
+    ...(reply ? [{ role: 'assistant' as const, content: reply }] : []),
   ]);
 
   if (offerPanel) {
@@ -371,6 +564,12 @@ export async function POST(req: NextRequest) {
   } else if (clearOffer) {
     memory = withResolutionOfferedNote(memory, false);
   }
+
+  // Le ping staff ne part qu'une fois par situation : tant que le ticket reste
+  // en attente d'un humain, on ne le réveille pas à chaque message.
+  const cfg = await getSupportConfig();
+  const alreadyPinged = Boolean(ticket.staff_pinged_at);
+  const ping = escalate && !alreadyPinged ? staffPingLine(cfg, String(ticket.motif)) : '';
 
   await updateTicketRow(admin, ticket.id, {
     statut,
@@ -380,6 +579,8 @@ export async function POST(req: NextRequest) {
     last_nudge_at: null,
     inactivity_nudge: 0,
     updated_at: new Date().toISOString(),
+    staff_pinged_at: escalate ? ticket.staff_pinged_at || new Date().toISOString() : null,
+    ...(resumed ? IA_RESUME_PATCH : {}),
     ...(offerPanel ? { resolution_offered: true } : clearOffer ? { resolution_offered: false } : {}),
   });
 
@@ -387,31 +588,20 @@ export async function POST(req: NextRequest) {
     await discordRenameChannel(channelId, ticketChannelName(statut, ticket.short_id));
   } catch { /* ignore */ }
 
-  const cfg = await getSupportConfig();
-  let out = reply;
-  if (escalate) {
-    const pings: string[] = [];
-    if (cfg?.staff_role_id) pings.push(`<@&${cfg.staff_role_id}>`);
-    if (
-      cfg?.instructor_role_id &&
-      motifUsesInstructor(String(ticket.motif), cfg.instructor_motifs as string[] | null)
-    ) {
-      pings.push(`<@&${cfg.instructor_role_id}>`);
-    }
-    if (pings.length) {
-      const who = cfg?.instructor_role_id && motifUsesInstructor(String(ticket.motif), cfg.instructor_motifs as string[] | null)
-        ? 'Un staff / instructeur est requis.'
-        : 'Un staff est requis.';
-      out = `${reply}\n\n${[...new Set(pings)].join(' ')} **${who}**`;
-    }
-  }
+  // Un seul message Discord, assemblé dans cet ordre : reprise éventuelle,
+  // contenu utile, puis SOIT le ping staff SOIT la proposition de clôture avec
+  // ses boutons — jamais les deux, et jamais de texte après les boutons.
+  const blocks = [resumed ? IA_RESUMED_NOTICE : '', reply, escalate ? ping : offerPanel ? RESOLUTION_PANEL_TEXT : ''];
+  const out = blocks.filter(Boolean).join('\n\n').trim();
 
   try {
-    await discordSendMessage(channelId, out || '…');
-    if (offerPanel) {
-      await discordSendMessage(channelId, RESOLUTION_PANEL_TEXT, {
-        components: TICKET_ACTION_COMPONENTS,
-      });
+    // Rien d'utile à dire : on n'envoie rien. Le « … » d'avant était pire que le silence.
+    if (out) {
+      await discordSendMessage(
+        channelId,
+        out,
+        offerPanel && !escalate ? { components: TICKET_ACTION_COMPONENTS } : undefined,
+      );
     }
   } catch (e) {
     console.error('[support-message] discordSendMessage', e);
@@ -422,6 +612,7 @@ export async function POST(req: NextRequest) {
     ok: true,
     statut,
     escalate,
+    sent: Boolean(out),
     resolution_offered: offerPanel || (offerPending && !clearOffer),
   });
 }

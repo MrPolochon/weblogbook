@@ -15,6 +15,9 @@ import {
   verifyDiscordSignature,
 } from '@/lib/support/discord-verify';
 import { openSupportTicket } from '@/lib/support/open-ticket';
+import { resumeIaOnTicket } from '@/lib/support/resume-ia';
+import { discordSendMessage } from '@/lib/support/discord-api';
+import { IA_RESUMED_NOTICE } from '@/lib/support/staff-takeover';
 
 const PING = 1;
 const APPLICATION_COMMAND = 2;
@@ -26,6 +29,7 @@ const DEFERRED_UPDATE = 6;
 const MODAL = 9;
 const EPHEMERAL = 64;
 const TICKETDEL_COMMAND = 'ticketdel';
+const TICKETIA_COMMAND = 'ticketia';
 
 const OPEN_TICKET_BUTTON = 'support_open_ticket';
 const REASON_MODAL = 'support_ticket_reason';
@@ -198,6 +202,41 @@ async function finishTicketDel(interaction: DiscordInteraction) {
   }
 }
 
+/** `/ticketia` : le staff rend la main à l'IA après un relais. */
+async function finishTicketIa(interaction: DiscordInteraction) {
+  try {
+    const channelId = String(interaction.channel_id || '');
+    const cfg = await getSupportConfig();
+    const staffIds = [cfg?.staff_role_id, cfg?.instructor_role_id].filter(Boolean).map(String);
+    if (!memberIsStaff(interaction.member, staffIds)) {
+      await patchOriginal(interaction, 'Staff uniquement.');
+      return;
+    }
+    if (!channelId) {
+      await patchOriginal(interaction, 'Salon introuvable.');
+      return;
+    }
+    const result = await resumeIaOnTicket(channelId);
+    if (!result.ok) {
+      await patchOriginal(interaction, 'Cette commande ne fonctionne que dans un salon ticket.');
+      return;
+    }
+    if (result.already) {
+      await patchOriginal(interaction, "L'IA était déjà active sur ce ticket.");
+      return;
+    }
+    await patchOriginal(interaction, "L'IA reprend la main sur ce ticket.");
+    try {
+      await discordSendMessage(channelId, IA_RESUMED_NOTICE);
+    } catch { /* ignore */ }
+  } catch (e) {
+    console.error('[support-interactions] ticketia', e);
+    try {
+      await patchOriginal(interaction, "Impossible de rendre la main à l'IA (erreur serveur).");
+    } catch { /* ignore */ }
+  }
+}
+
 async function finishTicketAction(interaction: DiscordInteraction, customId: string) {
   try {
     const channelId = String(interaction.channel_id || '');
@@ -280,6 +319,11 @@ export async function POST(req: Request) {
 
   if (interaction.type === APPLICATION_COMMAND && commandName === TICKETDEL_COMMAND) {
     waitUntil(finishTicketDel(interaction));
+    return json({ type: DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } });
+  }
+
+  if (interaction.type === APPLICATION_COMMAND && commandName === TICKETIA_COMMAND) {
+    waitUntil(finishTicketIa(interaction));
     return json({ type: DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } });
   }
 
