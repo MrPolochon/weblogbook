@@ -14,4 +14,5 @@ CAT 3 (~2 h) — approfondir le VFR et décider seul : préparation et anticipat
 CAT 4 (~2 h) — bases serveur/site et aéronautique surtout IFR : préparation du vol, lecture des cartes, procédures de départ et d’arrivée, création du plan de vol, clairance de départ, briefing, communication et navigation IFR, réglementation IFR, ILS / RNP / visuel.
 CAT 5 (~2 h) — approfondir pour rejoindre une compagnie : préparation du vol, turbopropulseur et turbine, briefing, attente en vol, finale (axe/plan/vitesse), déroutement, tenue de route, pilotage IMC, communication.
 
-Ticket CAT / AeroSchool / Instruction : oriente d’abord vers le QCM AeroSchool de la catégorie, puis vers Instruction pour le vol pratique.`;
+Ce parcours ne concerne QUE les pilotes : une demande de formation ou de position ATC (Center, Approach, Tower, Ground, Delivery…) relève du bloc FORMATIONS ATC, jamais des CAT.
+Ticket CAT / AeroSchool / Instruction côté pilote : oriente d’abord vers le QCM AeroSchool de la catégorie, puis vers Instruction pour le vol pratique.`;

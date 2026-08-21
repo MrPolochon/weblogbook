@@ -51,14 +51,14 @@ export function ticketContextBlock(ticket: {
   short_id?: string;
   motif?: string;
   reason_text?: string | null;
-  discord_username?: string | null;
   memory_notes?: string | null;
 }): string {
   return [
     `Ticket #${ticket.short_id || '?'} (ce salon uniquement — n'utilise aucun autre ticket).`,
     `Motif: ${ticket.motif || 'assistance'}`,
     `Raison d'ouverture: ${(ticket.reason_text || '').slice(0, 400)}`,
-    ticket.discord_username ? `Membre Discord: ${ticket.discord_username}` : '',
+    // Volontairement pas de pseudo Discord : l'IA s'en servait comme prénom
+    // (« Bonjour Frank ») alors qu'il ne correspond pas toujours à la personne.
     ticket.memory_notes ? `Faits déjà établis dans CE ticket:\n${ticket.memory_notes}` : '',
     'Tu dois te souvenir de ces faits et des messages ci-dessous. Ne les redis pas tous : utilise-les.',
   ]

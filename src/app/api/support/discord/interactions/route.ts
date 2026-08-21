@@ -4,10 +4,9 @@ export const maxDuration = 30;
 
 import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { getSupportConfig } from '@/lib/support/bot-auth';
 import { closeSupportTicket } from '@/lib/support/close-ticket';
-import { discordRenameChannel, discordSendMessage } from '@/lib/support/discord-api';
+import { escalateTicketToStaff } from '@/lib/support/escalate';
 import {
   discordCreateInteractionFollowup,
   discordEditOriginalInteraction,
@@ -15,9 +14,7 @@ import {
   getDiscordPublicKey,
   verifyDiscordSignature,
 } from '@/lib/support/discord-verify';
-import { motifUsesInstructor, ticketChannelName } from '@/lib/support/motifs';
 import { openSupportTicket } from '@/lib/support/open-ticket';
-import { withResolutionOfferedNote } from '@/lib/support/ticket-actions';
 
 const PING = 1;
 const APPLICATION_COMMAND = 2;
@@ -170,48 +167,6 @@ async function finishOpenTicket(interaction: DiscordInteraction) {
   }
 }
 
-async function pingStaff(channelId: string) {
-  const cfg = await getSupportConfig();
-  const admin = createAdminClient();
-  const { data: ticket } = await admin
-    .from('support_tickets')
-    .select('*')
-    .eq('channel_id', channelId)
-    .is('closed_at', null)
-    .maybeSingle();
-  if (ticket) {
-    await admin
-      .from('support_tickets')
-      .update({
-        statut: 'staff_needed',
-        resolution_offered: false,
-        memory_notes: withResolutionOfferedNote(String(ticket.memory_notes || ''), false),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', ticket.id);
-    try {
-      await discordRenameChannel(channelId, ticketChannelName('staff_needed', ticket.short_id));
-    } catch { /* ignore */ }
-  }
-  const pings: string[] = [];
-  if (cfg?.staff_role_id) pings.push(`<@&${cfg.staff_role_id}>`);
-  if (
-    ticket &&
-    cfg?.instructor_role_id &&
-    motifUsesInstructor(String(ticket.motif), cfg.instructor_motifs as string[] | null)
-  ) {
-    pings.push(`<@&${cfg.instructor_role_id}>`);
-  }
-  const who =
-    ticket && cfg?.instructor_role_id && motifUsesInstructor(String(ticket.motif), cfg.instructor_motifs as string[] | null)
-      ? 'Un staff / instructeur est requis.'
-      : 'Un staff est requis.';
-  await discordSendMessage(
-    channelId,
-    `${[...new Set(pings)].join(' ')} **${who}** L'utilisateur indique que ce n'est pas résolu.`.trim()
-  );
-}
-
 async function finishTicketDel(interaction: DiscordInteraction) {
   try {
     const channelId = String(interaction.channel_id || '');
@@ -260,7 +215,7 @@ async function finishTicketAction(interaction: DiscordInteraction, customId: str
       return;
     }
     if (customId === 'support_need_staff') {
-      await pingStaff(channelId);
+      await escalateTicketToStaff(channelId, "L'utilisateur indique que ce n'est pas résolu.");
       await followupEphemeral(interaction, 'Un staff a été appelé.');
       return;
     }

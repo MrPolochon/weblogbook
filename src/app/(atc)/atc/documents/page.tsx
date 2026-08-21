@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { FolderOpen } from 'lucide-react';
+import Link from 'next/link';
 import DocumentTree from '@/components/DocumentTree';
 
 export default async function AtcDocumentsPage() {
@@ -21,6 +22,14 @@ export default async function AtcDocumentsPage() {
         <h1 className="text-2xl font-semibold text-slate-900">Documents</h1>
         <p className="text-sm text-slate-500 mt-1">{totalFiles} document(s) disponible(s)</p>
       </div>
+
+      <Link
+        href="/manuel-controleur"
+        className="flex items-center justify-between gap-3 rounded-xl border border-sky-300 bg-sky-50 px-4 py-3 hover:bg-sky-100"
+      >
+        <span className="text-sm font-semibold text-sky-900">Manuel des opérations et qualifications du contrôleur (MOQ)</span>
+        <span className="text-xs text-sky-700">Lire / PDF</span>
+      </Link>
 
       {!sections || sections.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed border-slate-300 rounded-xl">

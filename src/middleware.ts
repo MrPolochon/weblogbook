@@ -51,6 +51,7 @@ export async function middleware(request: NextRequest) {
   const isDownload = pathname === '/download';
   const isCodeConduite = pathname === '/code-de-conduite' || pathname.startsWith('/docs/');
   const isLivretProgression = pathname === '/livret-progression';
+  const isManuelControleur = pathname === '/manuel-controleur';
   const isAeroSchool = pathname.startsWith('/aeroschool');
   const isAuthCallback = pathname.startsWith('/auth/');
   const isApiPublic =
@@ -96,7 +97,7 @@ export async function middleware(request: NextRequest) {
 
   if (
     isAuthCallback || isApiPublic || isApiDiscord || isApiSupportBot || isApiDiscordInteractions || isApiAeroSchoolPublic || isApiAuth ||
-    isSetup || isLogin || isDownload || isCodeConduite || isLivretProgression || isAeroSchool || isCarteAtc || isApiAtcOnline ||
+    isSetup || isLogin || isDownload || isCodeConduite || isLivretProgression || isManuelControleur || isAeroSchool || isCarteAtc || isApiAtcOnline ||
     isMaintenance
   ) {
     return NextResponse.next({ request });

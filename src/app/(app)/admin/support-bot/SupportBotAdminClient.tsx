@@ -243,6 +243,20 @@ export default function SupportBotAdminClient() {
         Le serveur vient de <code className="text-xs">DISCORD_GUILD_ID</code> (Vercel). Choisis les salons et rôles ci-dessous.
         L’instructeur a accès et est pingé seulement sur les motifs cochés (CAT, instruction…).
       </p>
+      <div className="text-xs text-slate-400 bg-slate-900/50 border border-slate-700/60 rounded-md px-3 py-2 space-y-1">
+        <p className="text-slate-300 font-medium">Inactivité d’un ticket (délais comptés sur le dernier message humain)</p>
+        <ul className="list-disc list-inside space-y-0.5">
+          <li><strong className="text-slate-300">3 h</strong> sans réponse : le bot ping l’auteur du ticket.</li>
+          <li><strong className="text-slate-300">24 h</strong> : second rappel, avec l’échéance de 72 h.</li>
+          <li>
+            <strong className="text-slate-300">72 h</strong> : si personne n’a jamais répondu après l’accueil, le
+            ticket est fermé et le salon supprimé (transcript conservé). Si le membre avait engagé la discussion,
+            le ticket passe en 🔴 et le staff est appelé pour terminer la demande.
+          </li>
+          <li>Après cette remise au staff, fermeture seulement si rien ne bouge pendant 72 h de plus.</li>
+        </ul>
+        <p>Les messages du bot ne remettent jamais le compteur à zéro ; un message du membre ou d’un staff, si.</p>
+      </div>
       <p className="text-xs text-amber-200/90 bg-amber-950/40 border border-amber-800/50 rounded-md px-3 py-2">
         Dans le portail Discord (General Information), coller l’URL d’interactions (avec www, Discord refuse la redirection)&nbsp;:{' '}
         <code className="text-[11px] break-all">https://www.mixouairlinesptfsweblogbook.com/api/support/discord/interactions</code>

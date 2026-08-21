@@ -57,3 +57,6 @@ CREATE POLICY "support_tickets_no_client" ON public.support_tickets
   FOR ALL TO anon, authenticated USING (false) WITH CHECK (false);
 
 COMMENT ON TABLE public.support_tickets IS 'Tickets Discord assistance — transcripts conservés après suppression du salon.';
+COMMENT ON COLUMN public.support_tickets.last_human_at IS 'Dernier message humain (membre ou staff). Les messages du bot ne le touchent jamais : c''est la seule base des délais d''inactivité.';
+COMMENT ON COLUMN public.support_tickets.last_nudge_at IS 'Dernier rappel automatique envoyé, ou date de remise au staff pour l''étape 3.';
+COMMENT ON COLUMN public.support_tickets.inactivity_nudge IS 'Étape d''inactivité : 0 = rien, 1 = rappel 3 h, 2 = rappel 24 h, 3 = remis au staff à 72 h (fermeture 72 h plus tard si personne ne réagit).';
