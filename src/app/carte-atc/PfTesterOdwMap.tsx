@@ -8,7 +8,6 @@ import {
   PF_MAP_H,
   PF_MAP_W,
   PF_SERVER_ID_RE,
-  PF_TILE_BASE,
   PF_TILE_TREE,
 } from '@/lib/pftester-odw';
 
@@ -26,8 +25,32 @@ type PfAircraft = {
   mapY: number;
 };
 
+type TrailPt = { x: number; y: number };
+
 function tileUrl(z: number, x: number, y: number): string {
-  return `${PF_TILE_BASE}/${z}/${x}/${y}.webp?v=1`;
+  return `/api/pftester-odw/tiles/${z}/${x}/${y}`;
+}
+
+function tilesForZoom(tileZoom: number) {
+  const n = 2 ** tileZoom;
+  const unit = PF_TILE_TREE / n;
+  const list: { key: string; z: number; x: number; y: number; left: number; top: number; size: number }[] = [];
+  const maxTx = Math.min(n - 1, Math.ceil(PF_MAP_W / unit) - 1);
+  const maxTy = Math.min(n - 1, Math.ceil(PF_MAP_H / unit) - 1);
+  for (let y = 0; y <= maxTy; y++) {
+    for (let x = 0; x <= maxTx; x++) {
+      list.push({
+        key: `${tileZoom}-${x}-${y}`,
+        z: tileZoom,
+        x,
+        y,
+        left: x * unit,
+        top: y * unit,
+        size: unit,
+      });
+    }
+  }
+  return list;
 }
 
 export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: string }) {
@@ -42,6 +65,7 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
   const panStartRef = useRef<{ x: number; y: number; mouseX: number; mouseY: number } | null>(null);
   const pinchStartRef = useRef<{ distance: number; zoom: number } | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const [trails, setTrails] = useState<Record<string, TrailPt[]>>({});
 
   const fetchFlights = useCallback(async () => {
     try {
@@ -60,10 +84,36 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
 
   useEffect(() => {
     setLoading(true);
+    setTrails({});
     fetchFlights();
     const t = setInterval(fetchFlights, 4000);
     return () => clearInterval(t);
   }, [fetchFlights]);
+
+  useEffect(() => {
+    setTrails((prev) => {
+      const next: Record<string, TrailPt[]> = {};
+      let changed = false;
+      for (const a of aircraft) {
+        const y = PF_MAP_H - a.mapY;
+        const pts = prev[a.id] ? prev[a.id].slice() : [];
+        const last = pts[pts.length - 1];
+        const dx = last ? a.mapX - last.x : 99;
+        const dy = last ? y - last.y : 99;
+        if (!last || dx * dx + dy * dy >= 0.03) {
+          pts.push({ x: a.mapX, y });
+          if (pts.length > 90) pts.splice(0, pts.length - 90);
+          changed = true;
+        }
+        next[a.id] = pts;
+      }
+      if (!changed && Object.keys(prev).length === Object.keys(next).length) {
+        const sameIds = Object.keys(next).every((id) => prev[id]);
+        if (sameIds) return prev;
+      }
+      return next;
+    });
+  }, [aircraft]);
 
   const updateZoom = useCallback((next: number) => {
     setZoom(Math.max(1, Math.min(8, next)));
@@ -92,25 +142,9 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
 
   const tileZoom = Math.max(1, Math.min(5, Math.round(zoom + 1)));
   const tiles = useMemo(() => {
-    const n = 2 ** tileZoom;
-    const unit = PF_TILE_TREE / n;
-    const list: { key: string; z: number; x: number; y: number; left: number; top: number; size: number }[] = [];
-    const maxTx = Math.min(n - 1, Math.ceil(PF_MAP_W / unit) - 1);
-    const maxTy = Math.min(n - 1, Math.ceil(PF_MAP_H / unit) - 1);
-    for (let y = 0; y <= maxTy; y++) {
-      for (let x = 0; x <= maxTx; x++) {
-        list.push({
-          key: `${tileZoom}-${x}-${y}`,
-          z: tileZoom,
-          x,
-          y,
-          left: x * unit,
-          top: y * unit,
-          size: unit,
-        });
-      }
-    }
-    return list;
+    const base = tilesForZoom(1);
+    if (tileZoom <= 1) return base;
+    return [...base, ...tilesForZoom(tileZoom)];
   }, [tileZoom]);
 
   const selected = aircraft.find((a) => a.id === selectedId) ?? null;
@@ -177,12 +211,6 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
                       width: `${(t.size / PF_MAP_W) * 100}%`,
                       height: `${(t.size / PF_MAP_H) * 100}%`,
                     }}
-                    onError={(e) => {
-                      const img = e.currentTarget;
-                      if (img.src.endsWith('.webp?v=1')) {
-                        img.src = `${PF_TILE_BASE}/${t.z}/${t.x}/${t.y}.png`;
-                      }
-                    }}
                   />
                 ))}
               </div>
@@ -191,6 +219,10 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
                   const isSelected = selectedId === a.id;
                   const htmlY = PF_MAP_H - a.mapY;
                   const color = isSelected ? '#fbbf24' : '#22d3ee';
+                  const trail = trails[a.id];
+                  const trailPoints = trail && trail.length > 1
+                    ? trail.map((p) => `${p.x},${p.y}`).join(' ')
+                    : '';
                   return (
                     <g
                       key={a.id}
@@ -198,6 +230,17 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
                       style={{ cursor: 'pointer' }}
                       onClick={() => setSelectedId((prev) => (prev === a.id ? null : a.id))}
                     >
+                      {trailPoints ? (
+                        <polyline
+                          points={trailPoints}
+                          fill="none"
+                          stroke={color}
+                          strokeWidth={isSelected ? 0.55 : 0.35}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          opacity={isSelected ? 0.95 : 0.7}
+                        />
+                      ) : null}
                       <circle cx={a.mapX} cy={htmlY} r="4" fill="transparent" />
                       <g transform={`translate(${a.mapX},${htmlY}) rotate(${a.heading}) scale(0.55)`}>
                         <path
