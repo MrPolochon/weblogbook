@@ -27,7 +27,7 @@ type PfAircraft = {
   mapY: number;
 };
 
-type TrailPt = { x: number; y: number; alt: number };
+type TrailPt = { x: number; y: number; alt: number; at: number };
 type MapTile = { key: string; z: number; x: number; y: number; left: number; top: number; width: number; height: number };
 type MapBounds = { minX: number; minY: number; maxX: number; maxY: number };
 type ViewState = { zoom: number; pan: { x: number; y: number } };
@@ -39,8 +39,13 @@ const FIT_ZOOM = 1;
 const FOCUS_ZOOM = 8;
 const KEEP_MAP_PX = 96;
 const TRAIL_MIN_STEP = 0.015;
-const TRAIL_MAX_STEP = 0.9;
+const TRAIL_MAX_STEP = 0.75;
 const TRAIL_MAX_LEN = 90;
+const TRAIL_MAX_AGE_MS = 180_000;
+
+function trailKey(a: { id: string; callsign?: string }): string {
+  return `${a.id}::${a.callsign || ''}`;
+}
 
 function readGameXY(x?: number, y?: number): { x: number; y: number } | null {
   if (typeof x !== 'number' || typeof y !== 'number') return null;
@@ -50,15 +55,14 @@ function readGameXY(x?: number, y?: number): { x: number; y: number } | null {
 
 function pushTrailPoint(pts: TrailPt[], x: number, y: number, alt: number): TrailPt[] {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return pts;
-  const last = pts[pts.length - 1];
-  if (!last) return [{ x, y, alt }];
+  const now = Date.now();
+  const fresh = pts.filter((p) => now - p.at < TRAIL_MAX_AGE_MS);
+  const last = fresh[fresh.length - 1];
+  if (!last) return [{ x, y, alt, at: now }];
   const dist = Math.hypot(x - last.x, y - last.y);
-  if (dist < TRAIL_MIN_STEP) return pts;
-  if (dist > TRAIL_MAX_STEP) {
-    if (pts.length >= 3) return pts;
-    return [{ x, y, alt }];
-  }
-  const next = pts.concat({ x, y, alt });
+  if (dist < TRAIL_MIN_STEP) return fresh;
+  if (dist > TRAIL_MAX_STEP) return [{ x, y, alt, at: now }];
+  const next = fresh.concat({ x, y, alt, at: now });
   if (next.length > TRAIL_MAX_LEN) next.splice(0, next.length - TRAIL_MAX_LEN);
   return next;
 }
@@ -299,11 +303,10 @@ export default function PfTesterOdwMap() {
       const next: Record<string, TrailPt[]> = {};
       let changed = false;
       for (const a of plotted) {
-        let pts: TrailPt[] = [];
-        for (const p of prev[a.id] ?? []) pts = pushTrailPoint(pts, p.x, p.y, p.alt);
-        pts = pushTrailPoint(pts, a.mapX, a.mapY, a.altitude);
-        if (pts !== prev[a.id]) changed = true;
-        next[a.id] = pts;
+        const key = trailKey(a);
+        const pts = pushTrailPoint(prev[key] ?? [], a.mapX, a.mapY, a.altitude);
+        if (pts !== prev[key]) changed = true;
+        next[key] = pts;
       }
       if (!changed && Object.keys(prev).length === Object.keys(next).length) {
         const sameIds = Object.keys(next).every((id) => prev[id]);
@@ -598,7 +601,7 @@ export default function PfTesterOdwMap() {
 
         <svg className="absolute inset-0 w-full h-full pointer-events-none z-[1]" aria-hidden>
           {plotted.map((a) => {
-            const trail = trails[a.id];
+            const trail = trails[trailKey(a)];
             if (!trail || trail.length < 2) return null;
             const isSelected = selectedId === a.id;
             const pts = trail.map((p) =>
