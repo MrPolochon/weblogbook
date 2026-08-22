@@ -4,10 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plane, RefreshCw, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { PLANE_BLIP_D } from '@/lib/radar-utils';
 import {
-  PF_DEFAULT_SERVER_ID,
   PF_MAP_H,
   PF_MAP_W,
-  PF_SERVER_ID_RE,
   pfTileUnit,
   altitudeToTrailColor,
 } from '@/lib/pftester-odw';
@@ -92,8 +90,7 @@ function tilesInBounds(tileZoom: number, bounds: MapBounds): MapTile[] {
   return list;
 }
 
-export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: string }) {
-  const [serverId, setServerId] = useState(defaultServerId || PF_DEFAULT_SERVER_ID);
+export default function PfTesterOdwMap() {
   const [aircraft, setAircraft] = useState<PfAircraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,9 +114,7 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
 
   const fetchFlights = useCallback(async () => {
     try {
-      const res = await fetch(`/api/pftester-odw/flights?serverId=${encodeURIComponent(serverId)}`, {
-        cache: 'no-store',
-      });
+      const res = await fetch('/api/pftester-odw/flights', { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur trafic');
       setAircraft(Array.isArray(data.aircraft) ? data.aircraft : []);
@@ -128,7 +123,7 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
       setError(e instanceof Error ? e.message : 'Erreur trafic');
     }
     setLoading(false);
-  }, [serverId]);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -413,23 +408,12 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
       <div className="w-full md:w-[320px] shrink-0 rounded-xl border border-cyan-700/40 bg-slate-900/70 flex flex-col min-h-[220px] md:min-h-0">
         <div className="p-3 border-b border-slate-700/50 space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-slate-200 text-sm font-semibold">Trafic serveur privé</p>
+            <p className="text-slate-200 text-sm font-semibold">Trafic Mixou Airlines</p>
             <button type="button" onClick={() => { setLoading(true); fetchFlights(); }} className="p-1.5 rounded-md bg-slate-800 text-slate-300 hover:bg-slate-700" title="Actualiser">
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
-          <label className="block text-[11px] text-slate-500">
-            ID serveur
-            <input
-              className="mt-1 w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1.5 text-xs font-mono text-cyan-200"
-              value={serverId}
-              onChange={(e) => setServerId(e.target.value)}
-              onBlur={() => {
-                const v = serverId.trim();
-                setServerId(PF_SERVER_ID_RE.test(v) ? v : PF_DEFAULT_SERVER_ID);
-              }}
-            />
-          </label>
+          <p className="text-[11px] text-slate-500">Serveur privé Mixou Airlines uniquement.</p>
           <p className="text-[11px] text-cyan-300/80 font-mono">{aircraft.length} avion{aircraft.length > 1 ? 's' : ''}</p>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
@@ -438,9 +422,9 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
           {!loading && !error && aircraft.length === 0 && (
             <div className="text-center py-10 space-y-2">
               <Plane className="h-8 w-8 text-slate-600 mx-auto" />
-              <p className="text-slate-500 text-sm">Aucun avion sur ce serveur pour le moment.</p>
+              <p className="text-slate-500 text-sm">Aucun avion sur le serveur Mixou Airlines pour le moment.</p>
               <p className="text-slate-600 text-[11px] px-2">
-                Le tracker n’affiche un appareil que s’il est actif in-game et reporté sur cet ID.
+                Le tracker n’affiche un appareil que s’il est actif in-game sur ce serveur.
               </p>
             </div>
           )}

@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { Lock } from 'lucide-react';
-import { configuredServerId } from '@/lib/pftester-odw';
 import { hasRadarUnlockCookie } from '@/lib/radar-access';
 import PfRadarClient from './PfRadarClient';
 import RadarUnlock from './RadarUnlock';
@@ -38,7 +37,6 @@ export default async function RadarPage() {
 
   return (
     <PfRadarClient
-      defaultServerId={configuredServerId()}
       sessionAirport={session?.aeroport ?? null}
       sessionPosition={session?.position ?? null}
     />

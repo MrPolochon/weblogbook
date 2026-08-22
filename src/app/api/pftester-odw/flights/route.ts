@@ -1,20 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { requirePfTesterAdmin } from '@/lib/pftester-odw-auth';
-import {
-  configuredServerId,
-  fetchLiveTraffic,
-  filterByServer,
-  normalizeServerId,
-} from '@/lib/pftester-odw';
+import { configuredServerId, fetchLiveTraffic, filterByServer } from '@/lib/pftester-odw';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const auth = await requirePfTesterAdmin();
   if (!auth.ok) return auth.response;
 
-  const requested = request.nextUrl.searchParams.get('serverId');
-  const serverId = requested ? normalizeServerId(requested) : configuredServerId();
+  const serverId = configuredServerId();
 
   try {
     const all = await fetchLiveTraffic();

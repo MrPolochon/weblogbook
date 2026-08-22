@@ -4,7 +4,6 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { RefreshCw, Radio, Layers, ArrowLeft, Info, X, ZoomIn, ZoomOut, RotateCcw, Plane, RotateCw } from 'lucide-react';
 import PfTesterOdwMap from './PfTesterOdwMap';
-import { PF_DEFAULT_SERVER_ID } from '@/lib/pftester-odw';
 import {
   AIRPORT_TO_FIR,
   DEFAULT_FIR_ZONES,
@@ -197,7 +196,6 @@ export default function AtcMapClient() {
   const [showVors, setShowVors] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [pfMode, setPfMode] = useState(false);
-  const [pfServerId, setPfServerId] = useState(PF_DEFAULT_SERVER_ID);
 
   const fetchMapData = useCallback(async () => {
     try {
@@ -226,9 +224,6 @@ export default function AtcMapClient() {
       .then((data) => {
         if (cancelled) return;
         setIsAdmin(Boolean(data?.isAdmin));
-        if (typeof data?.defaultServerId === 'string' && data.defaultServerId) {
-          setPfServerId(data.defaultServerId);
-        }
       })
       .catch(() => {
         if (!cancelled) setIsAdmin(false);
@@ -491,7 +486,7 @@ export default function AtcMapClient() {
             <Info className="h-3 w-3 text-slate-500 shrink-0" />
             <p className="text-[11px] text-slate-500 leading-none">
               {pfMode
-                ? <>PFtesterODW — positions live du serveur privé Project Flight <span className="font-mono text-slate-400">{pfServerId}</span>, réservé aux admins.</>
+                ? <>PFtesterODW — positions live du serveur privé Mixou Airlines, réservé aux admins.</>
                 : <>Les positions affichées sont <span className="text-slate-400">simulées</span> à partir des plans de vol — PTFS ne nous autorise pas à exploiter les données en temps réel du jeu.</>}
             </p>
           </div>
@@ -500,7 +495,7 @@ export default function AtcMapClient() {
 
       <div className="max-w-[1600px] mx-auto p-2 sm:p-4 flex flex-col md:flex-row gap-3 md:gap-4" style={{ height: 'calc(100dvh - 60px)' }}>
         {pfMode && isAdmin ? (
-          <PfTesterOdwMap defaultServerId={pfServerId} />
+          <PfTesterOdwMap />
         ) : null}
         <div className={pfMode && isAdmin ? 'hidden' : 'contents'}>
         {/* Carte */}

@@ -6,10 +6,8 @@ import { PLANE_BLIP_D } from '@/lib/radar-utils';
 import { PF_AIRPORTS } from '@/lib/pf-airports';
 import { PF_NM_TO_MAP, PF_RADAR_POSITIONS, scopeForPosition } from '@/lib/pf-radar';
 import {
-  PF_DEFAULT_SERVER_ID,
   PF_MAP_H,
   PF_MAP_W,
-  PF_SERVER_ID_RE,
   pfTileUnit,
   altitudeToTrailColor,
 } from '@/lib/pftester-odw';
@@ -119,16 +117,13 @@ function viewForAirport(
 }
 
 export default function PfRadarClient({
-  defaultServerId,
   sessionAirport,
   sessionPosition,
 }: {
-  defaultServerId: string;
   sessionAirport: string | null;
   sessionPosition: string | null;
 }) {
   const sessionIsPf = Boolean(sessionAirport && PF_AIRPORTS.some((a) => a.code === sessionAirport));
-  const [serverId, setServerId] = useState(defaultServerId || PF_DEFAULT_SERVER_ID);
   const [airportCode, setAirportCode] = useState(sessionIsPf ? sessionAirport! : 'MDPC');
   const [position, setPosition] = useState(sessionPosition || 'Tower');
   const [aircraft, setAircraft] = useState<PfAircraft[]>([]);
@@ -153,7 +148,6 @@ export default function PfRadarClient({
   const fetchTraffic = useCallback(async () => {
     try {
       const q = new URLSearchParams({
-        serverId,
         airport: airportCode,
         position,
       });
@@ -168,7 +162,7 @@ export default function PfRadarClient({
       setError(e instanceof Error ? e.message : 'Erreur trafic');
     }
     setLoading(false);
-  }, [serverId, airportCode, position]);
+  }, [airportCode, position]);
 
   useEffect(() => {
     setLoading(true);
@@ -488,18 +482,7 @@ export default function PfRadarClient({
               ))}
             </select>
           </label>
-          <label className="block text-[11px] text-slate-500">
-            ID serveur
-            <input
-              className="mt-1 w-full rounded-md bg-slate-800 border border-slate-600 px-2 py-1.5 text-xs font-mono text-cyan-200"
-              value={serverId}
-              onChange={(e) => setServerId(e.target.value)}
-              onBlur={() => {
-                const v = serverId.trim();
-                setServerId(PF_SERVER_ID_RE.test(v) ? v : PF_DEFAULT_SERVER_ID);
-              }}
-            />
-          </label>
+          <p className="text-[11px] text-slate-500">Serveur Mixou Airlines uniquement.</p>
           <p className="text-[11px] text-emerald-300/80 font-mono">
             {aircraft.length} avion{aircraft.length > 1 ? 's' : ''} · {rangeNm} NM
           </p>

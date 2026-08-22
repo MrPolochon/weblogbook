@@ -4,12 +4,7 @@ import { ATC_POSITIONS } from '@/lib/atc-positions';
 import { getPfAirport } from '@/lib/pf-airports';
 import { aircraftInScope, scopeForPosition } from '@/lib/pf-radar';
 import { requireRadarUnlock } from '@/lib/radar-access';
-import {
-  configuredServerId,
-  fetchLiveTraffic,
-  filterByServer,
-  normalizeServerId,
-} from '@/lib/pftester-odw';
+import { configuredServerId, fetchLiveTraffic, filterByServer } from '@/lib/pftester-odw';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,9 +21,7 @@ export async function GET(request: NextRequest) {
 
   const requestedAirport = (request.nextUrl.searchParams.get('airport') || '').toUpperCase();
   const requestedPosition = request.nextUrl.searchParams.get('position') || '';
-  const serverId = request.nextUrl.searchParams.get('serverId')
-    ? normalizeServerId(request.nextUrl.searchParams.get('serverId'))
-    : configuredServerId();
+  const serverId = configuredServerId();
 
   const sessionAirport = getPfAirport(session?.aeroport);
   const airport = getPfAirport(requestedAirport) ?? sessionAirport ?? getPfAirport('MDPC')!;
