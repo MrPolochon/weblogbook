@@ -4,12 +4,12 @@ export const PF_DEFAULT_SERVER_ID = '2uMXjU8T5V';
 export const PF_TRAFFIC_URL = 'https://api.project-flight.com/v3/traffic/fetch';
 export const PF_TILE_BASE = 'https://cdn.project-flight.com/tiles';
 
-/** Espace carte officielle PF (même calage que PFTracker). */
+/** Espace carte officielle PFTracker (OrthographicView, target [120, 67.5]). */
 export const PF_MAP_W = 240;
 export const PF_MAP_H = 135;
 export const PF_MAP_CX = 120;
 export const PF_MAP_CY = 67.5;
-/** Conversion coordonnées jeu → carte (unités tuiles, Y vers le bas comme la carte officielle). */
+/** Même conversion que PFTracker : map = 120 + 0.00072 * gameX, 67.5 + 0.00072 * gameY. */
 export const PF_COORD_SCALE = 0.00072;
 /**
  * Arbre de tuiles CDN : 2^z × 2^z sur 256 unités.

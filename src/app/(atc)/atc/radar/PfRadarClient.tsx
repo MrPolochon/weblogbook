@@ -283,7 +283,7 @@ export default function PfRadarClient({
     setIsPanning(false);
   }
 
-  const { dispW } = fittedMapSize(viewport.w, viewport.h);
+  const { dispW, dispH } = fittedMapSize(viewport.w, viewport.h);
   const tileZ = Math.max(
     1,
     Math.min(MAX_TILE_Z, Math.round(Math.log2(Math.max(2, (dispW * zoom) / PF_MAP_W)) + 0.25)),
@@ -327,7 +327,7 @@ export default function PfRadarClient({
           }}
         >
           <div className="absolute inset-0 flex items-center justify-center p-2">
-            <div className="relative w-full h-full max-h-full" style={{ aspectRatio: `${PF_MAP_W} / ${PF_MAP_H}` }}>
+            <div className="relative shrink-0" style={{ width: dispW, height: dispH }}>
               <div className="absolute inset-0 overflow-hidden bg-[#0b1c2c]">
                 {tiles.map((t) => (
                   // eslint-disable-next-line @next/next/no-img-element
