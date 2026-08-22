@@ -40,8 +40,7 @@ const FOCUS_ZOOM = 8;
 const KEEP_MAP_PX = 96;
 const TRAIL_MIN_STEP = 0.015;
 const TRAIL_MAX_STEP = 0.75;
-const TRAIL_MAX_LEN = 90;
-const TRAIL_MAX_AGE_MS = 180_000;
+const TRAIL_MAX_LEN = 3600;
 
 function trailKey(a: { id: string; callsign?: string }): string {
   return `${a.id}::${a.callsign || ''}`;
@@ -56,13 +55,12 @@ function readGameXY(x?: number, y?: number): { x: number; y: number } | null {
 function pushTrailPoint(pts: TrailPt[], x: number, y: number, alt: number): TrailPt[] {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return pts;
   const now = Date.now();
-  const fresh = pts.filter((p) => now - p.at < TRAIL_MAX_AGE_MS);
-  const last = fresh[fresh.length - 1];
+  const last = pts[pts.length - 1];
   if (!last) return [{ x, y, alt, at: now }];
   const dist = Math.hypot(x - last.x, y - last.y);
-  if (dist < TRAIL_MIN_STEP) return fresh;
+  if (dist < TRAIL_MIN_STEP) return pts;
   if (dist > TRAIL_MAX_STEP) return [{ x, y, alt, at: now }];
-  const next = fresh.concat({ x, y, alt, at: now });
+  const next = pts.concat({ x, y, alt, at: now });
   if (next.length > TRAIL_MAX_LEN) next.splice(0, next.length - TRAIL_MAX_LEN);
   return next;
 }
@@ -601,9 +599,10 @@ export default function PfTesterOdwMap() {
 
         <svg className="absolute inset-0 w-full h-full pointer-events-none z-[1]" aria-hidden>
           {plotted.map((a) => {
+            const showTrail = selectedId === a.id || followId === a.id;
+            if (!showTrail) return null;
             const trail = trails[trailKey(a)];
             if (!trail || trail.length < 2) return null;
-            const isSelected = selectedId === a.id;
             const pts = trail.map((p) =>
               mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH),
             );
@@ -617,10 +616,10 @@ export default function PfTesterOdwMap() {
                     x2={p.x}
                     y2={p.y}
                     stroke={altitudeToTrailColor((trail[i]!.alt + trail[i + 1]!.alt) / 2)}
-                    strokeWidth={isSelected ? 2.6 : 2}
+                    strokeWidth={2.4}
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    opacity={isSelected ? 0.95 : 0.88}
+                    opacity={0.92}
                   />
                 ))}
               </g>

@@ -196,7 +196,7 @@ export default function PfRadarClient({
         const dy = last ? a.mapY - last.y : 99;
         if (!last || dx * dx + dy * dy >= 0.03) {
           pts.push({ x: a.mapX, y: a.mapY, alt: a.altitude });
-          if (pts.length > 90) pts.splice(0, pts.length - 90);
+          if (pts.length > 16) pts.splice(0, pts.length - 16);
           changed = true;
         }
         next[a.id] = pts;
@@ -300,7 +300,6 @@ export default function PfRadarClient({
   }, [tileZ, bounds]);
   const iconScale = 0.55 / zoom;
   const labelSize = 2.6 / zoom;
-  const trailW = 0.55 / zoom;
   const ringR = rangeNm * PF_NM_TO_MAP;
   const selected = aircraft.find((a) => a.id === selectedId) ?? null;
 
@@ -379,19 +378,19 @@ export default function PfRadarClient({
                       onClick={() => setSelectedId((prev) => (prev === a.id ? null : a.id))}
                     >
                       {trail && trail.length > 1
-                        ? trail.slice(1).map((p, i) => (
-                            <line
-                              key={`${a.id}-t${i}`}
-                              x1={trail[i].x}
-                              y1={trail[i].y}
-                              x2={p.x}
-                              y2={p.y}
-                              stroke={altitudeToTrailColor((trail[i].alt + p.alt) / 2)}
-                              strokeWidth={isSelected ? trailW * 1.4 : trailW}
-                              strokeLinecap="round"
-                              opacity={isSelected ? 0.95 : 0.85}
-                            />
-                          ))
+                        ? trail.slice(0, -1).map((p, i) => {
+                            const fade = (i + 1) / Math.max(1, trail.length - 1);
+                            return (
+                              <circle
+                                key={`${a.id}-d${i}`}
+                                cx={p.x}
+                                cy={p.y}
+                                r={Math.max(0.12, 0.28 / zoom)}
+                                fill={altitudeToTrailColor(p.alt)}
+                                opacity={0.25 + fade * 0.55}
+                              />
+                            );
+                          })
                         : null}
                       <circle cx={a.mapX} cy={a.mapY} r={Math.max(1.2, 10 / zoom)} fill="transparent" />
                       <g transform={`translate(${a.mapX},${a.mapY}) rotate(${a.heading}) scale(${iconScale})`}>
