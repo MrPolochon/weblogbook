@@ -148,7 +148,7 @@ export function configuredServerId(): string {
 }
 
 let trafficCache: { at: number; planes: PfLiveAircraft[] } | null = null;
-const TRAFFIC_TTL_MS = 2500;
+const TRAFFIC_TTL_MS = 800;
 
 export async function fetchLiveTraffic(): Promise<PfLiveAircraft[]> {
   const now = Date.now();
