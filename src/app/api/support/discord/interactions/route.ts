@@ -18,6 +18,8 @@ import { openSupportTicket } from '@/lib/support/open-ticket';
 import { resumeIaOnTicket } from '@/lib/support/resume-ia';
 import { discordSendMessage } from '@/lib/support/discord-api';
 import { IA_RESUMED_NOTICE } from '@/lib/support/staff-takeover';
+import { createSiteAccountFromDiscord, memberHasVerifiedRole } from '@/lib/auth/create-discord-account';
+import { OFFICIAL_SITE_URL } from '@/lib/site-url';
 
 const PING = 1;
 const APPLICATION_COMMAND = 2;
@@ -30,6 +32,10 @@ const MODAL = 9;
 const EPHEMERAL = 64;
 const TICKETDEL_COMMAND = 'ticketdel';
 const TICKETIA_COMMAND = 'ticketia';
+const REGISTER_COMMAND = 'register';
+const REGISTER_MODAL = 'support_register';
+const REGISTER_IDENTIFIANT = 'register_identifiant';
+const REGISTER_PASSWORD = 'register_password';
 
 const OPEN_TICKET_BUTTON = 'support_open_ticket';
 const REASON_MODAL = 'support_ticket_reason';
@@ -97,6 +103,46 @@ function usernameOf(user: DiscordUser | undefined): string {
   if (user.global_name) return String(user.global_name);
   const disc = user.discriminator && user.discriminator !== '0' ? `#${user.discriminator}` : '';
   return `${user.username || user.id || ''}${disc}`;
+}
+
+function registerModal() {
+  return {
+    type: MODAL,
+    data: {
+      custom_id: REGISTER_MODAL,
+      title: 'Créer un compte site',
+      components: [
+        {
+          type: 1,
+          components: [
+            {
+              type: 4,
+              custom_id: REGISTER_IDENTIFIANT,
+              label: 'Identifiant (2-30, lettres / chiffres / _)',
+              style: 1,
+              required: true,
+              min_length: 2,
+              max_length: 30,
+            },
+          ],
+        },
+        {
+          type: 1,
+          components: [
+            {
+              type: 4,
+              custom_id: REGISTER_PASSWORD,
+              label: 'Mot de passe (8 caractères minimum)',
+              style: 1,
+              required: true,
+              min_length: 8,
+              max_length: 72,
+            },
+          ],
+        },
+      ],
+    },
+  };
 }
 
 function reasonModal() {
@@ -167,6 +213,44 @@ async function finishOpenTicket(interaction: DiscordInteraction) {
     console.error('[support-interactions] open ticket', e);
     try {
       await patchOriginal(interaction, "Impossible d'ouvrir le ticket (erreur serveur).");
+    } catch { /* ignore */ }
+  }
+}
+
+async function finishRegister(interaction: DiscordInteraction) {
+  try {
+    const user = interactionUser(interaction);
+    if (!user?.id) {
+      await patchOriginal(interaction, 'Identité Discord introuvable.');
+      return;
+    }
+    const verified = memberHasVerifiedRole(interaction.member?.roles);
+    if (!verified.ok) {
+      await patchOriginal(
+        interaction,
+        'Il te faut le rôle Vérifié du serveur pour créer un compte. Demande la vérification Discord, puis relance /register.'
+      );
+      return;
+    }
+    const result = await createSiteAccountFromDiscord({
+      identifiant: modalValue(interaction, REGISTER_IDENTIFIANT),
+      password: modalValue(interaction, REGISTER_PASSWORD),
+      discordId: String(user.id),
+      discordUsername: usernameOf(user),
+    });
+    if (!result.ok) {
+      const extra = result.extra?.message ? String(result.extra.message) : result.error;
+      await patchOriginal(interaction, extra);
+      return;
+    }
+    await patchOriginal(
+      interaction,
+      `${result.message}\nSite : ${OFFICIAL_SITE_URL}`
+    );
+  } catch (e) {
+    console.error('[support-interactions] register', e);
+    try {
+      await patchOriginal(interaction, 'Impossible de créer le compte (erreur serveur).');
     } catch { /* ignore */ }
   }
 }
@@ -327,8 +411,28 @@ export async function POST(req: Request) {
     return json({ type: DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } });
   }
 
+  if (interaction.type === APPLICATION_COMMAND && commandName === REGISTER_COMMAND) {
+    const verified = memberHasVerifiedRole(interaction.member?.roles);
+    if (!verified.ok) {
+      return json({
+        type: 4,
+        data: {
+          content:
+            'Il te faut le rôle Vérifié du serveur pour créer un compte. Demande la vérification Discord, puis relance /register.',
+          flags: EPHEMERAL,
+        },
+      });
+    }
+    return json(registerModal());
+  }
+
   if (interaction.type === MESSAGE_COMPONENT && customId === OPEN_TICKET_BUTTON) {
     return json(reasonModal());
+  }
+
+  if (interaction.type === MODAL_SUBMIT && customId === REGISTER_MODAL) {
+    waitUntil(finishRegister(interaction));
+    return json({ type: DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } });
   }
 
   if (interaction.type === MODAL_SUBMIT && customId === REASON_MODAL) {

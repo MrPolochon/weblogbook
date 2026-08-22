@@ -11,6 +11,7 @@ import {
 import { LIVRET_PROGRESSION_IA } from '../src/lib/support/livret-progression';
 import { searchDocs } from '../src/lib/support/doc-index';
 import { ATC_FORMATIONS_IA } from '../src/lib/support/atc-formations';
+import { memberHasVerifiedRole } from '../src/lib/auth/create-discord-account';
 import { atcDossierGuidance } from '../src/lib/support/requester-context';
 import { shouldOfferResolution } from '../src/lib/support/ticket-actions';
 import {
@@ -101,4 +102,13 @@ assert.match(
   /Session de training \(ATC\)/,
 );
 
-console.log('Support guardrails: 9 groupes de tests réussis.');
+const previousRequiredRole = process.env.DISCORD_REQUIRED_ROLE_ID;
+process.env.DISCORD_REQUIRED_ROLE_ID = '111222333';
+assert.equal(memberHasVerifiedRole(['111222333']).ok, true);
+assert.equal(memberHasVerifiedRole(['999']).ok, false);
+process.env.DISCORD_REQUIRED_ROLE_ID = '';
+assert.equal(memberHasVerifiedRole([]).ok, true);
+if (previousRequiredRole === undefined) delete process.env.DISCORD_REQUIRED_ROLE_ID;
+else process.env.DISCORD_REQUIRED_ROLE_ID = previousRequiredRole;
+
+console.log('Support guardrails: 10 groupes de tests réussis.');

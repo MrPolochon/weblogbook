@@ -35,6 +35,7 @@ _runtime: dict[str, Any] = {
     "guild_id": None,
     "staff_role_id": None,
     "instructor_role_id": None,
+    "required_role_id": None,
     "category_ids": set(),
     "open_channel_ids": set(),
     "panel_channel_id": None,
@@ -96,6 +97,7 @@ async def refresh_runtime() -> None:
         _runtime["guild_id"] = data.get("guild_id")
         _runtime["staff_role_id"] = data.get("staff_role_id")
         _runtime["instructor_role_id"] = data.get("instructor_role_id")
+        _runtime["required_role_id"] = data.get("required_role_id")
         cats = data.get("category_ids") or {}
         _runtime["category_ids"] = set(str(v) for v in cats.values() if v)
         _runtime["open_channel_ids"] = set(str(v) for v in (data.get("open_channel_ids") or []) if v)
@@ -170,6 +172,13 @@ async def should_handle_ticket_message(channel: discord.abc.Messageable) -> bool
     return await api_is_ticket(str(channel.id))
 
 
+def has_verified_role(member: discord.Member) -> bool:
+    required = str(_runtime.get("required_role_id") or "").strip()
+    if not required:
+        return True
+    return any(str(role.id) == required for role in member.roles)
+
+
 def is_staff_member(member: discord.Member) -> bool:
     rids = [rid for rid in (_runtime.get("staff_role_id"), _runtime.get("instructor_role_id")) if rid]
     if rids and any(str(r.id) in {str(x) for x in rids} for r in member.roles):
@@ -188,8 +197,15 @@ def _command_name(interaction: discord.Interaction) -> str | None:
 
 
 GUILD_COMMANDS = [
-    {"name": "ticketdel", "description": "Fermer et supprimer ce ticket", "type": 1},
-    {"name": "ticketia", "description": "Rendre la main à l'IA sur ce ticket", "type": 1},
+    {"name": "ticketdel", "description": "Fermer et supprimer ce ticket", "type": 1, "default_member_permissions": None},
+    {"name": "ticketia", "description": "Rendre la main à l'IA sur ce ticket", "type": 1, "default_member_permissions": None},
+    {
+        "name": "register",
+        "description": "Créer un compte site lié à ton Discord",
+        "type": 1,
+        "dm_permission": False,
+        "default_member_permissions": None,
+    },
 ]
 
 
@@ -212,19 +228,12 @@ async def register_guild_commands(_client: discord.Client | None = None) -> None
                 log.warning("GET /users/@me sans id — commandes slash non enregistrées")
                 return
             url = f"https://discord.com/api/v10/applications/{app_id}/guilds/{guild_id}/commands"
-            async with session.get(url, headers=headers) as resp:
-                existing = await resp.json(content_type=None) if resp.status < 400 else []
-            names = {c.get("name") for c in existing} if isinstance(existing, list) else set()
-            for payload in GUILD_COMMANDS:
-                if payload["name"] in names:
-                    log.info("Slash /%s déjà enregistré guild=%s", payload["name"], guild_id)
-                    continue
-                async with session.post(url, headers=headers, json=payload) as resp:
-                    body = await resp.text()
-                    if resp.status >= 400:
-                        log.warning("Enregistrement /%s HTTP %s %s", payload["name"], resp.status, body[:240])
-                        return
-                log.info("Slash /%s enregistré guild=%s app=%s", payload["name"], guild_id, app_id)
+            async with session.put(url, headers=headers, json=GUILD_COMMANDS) as resp:
+                body = await resp.text()
+                if resp.status >= 400:
+                    log.warning("Enregistrement slash HTTP %s %s", resp.status, body[:240])
+                    return
+            log.info("Slash /ticketdel /ticketia /register enregistrés guild=%s app=%s", guild_id, app_id)
             _commands_guild = guild_id
     except Exception:
         log.exception("Impossible d'enregistrer les commandes slash")
@@ -309,6 +318,67 @@ async def handle_ticketia(interaction: discord.Interaction) -> None:
         await interaction.followup.send(msg, ephemeral=True)
     except discord.HTTPException:
         pass
+
+
+class RegisterModal(discord.ui.Modal, title="Créer un compte site"):
+    identifiant = discord.ui.TextInput(
+        label="Identifiant (2-30, lettres / chiffres / _)",
+        style=discord.TextStyle.short,
+        min_length=2,
+        max_length=30,
+        required=True,
+        custom_id="register_identifiant",
+    )
+    mot_de_passe = discord.ui.TextInput(
+        label="Mot de passe (8 caractères minimum)",
+        style=discord.TextStyle.short,
+        min_length=8,
+        max_length=72,
+        required=True,
+        custom_id="register_password",
+    )
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+        user = interaction.user
+        roles = [str(role.id) for role in user.roles] if isinstance(user, discord.Member) else []
+        try:
+            status, data = await api_post(
+                "/api/support/bot/register",
+                {
+                    "identifiant": str(self.identifiant.value),
+                    "mot_de_passe": str(self.mot_de_passe.value),
+                    "discord_id": str(user.id),
+                    "discord_username": str(user),
+                    "member_roles": roles,
+                },
+            )
+        except Exception:
+            log.exception("API /api/support/bot/register a échoué")
+            await interaction.followup.send("Impossible de créer le compte (erreur serveur).", ephemeral=True)
+            return
+        if status >= 400:
+            await interaction.followup.send(data.get("error") or data.get("message") or "Impossible de créer le compte.", ephemeral=True)
+            return
+        await interaction.followup.send(data.get("message") or "Compte créé.", ephemeral=True)
+
+
+async def handle_register(interaction: discord.Interaction) -> None:
+    user = interaction.user
+    if not isinstance(user, discord.Member) or not has_verified_role(user):
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                "Il te faut le rôle Vérifié du serveur pour créer un compte. Demande la vérification Discord, puis relance /register.",
+                ephemeral=True,
+            )
+        return
+    if interaction.response.is_done():
+        return
+    try:
+        await interaction.response.send_modal(RegisterModal())
+    except discord.HTTPException:
+        log.exception("send_modal /register a échoué")
 
 
 async def send_open_ticket_modal(interaction: discord.Interaction) -> None:
@@ -452,6 +522,9 @@ def attach_handlers(client: discord.Client) -> None:
             return
         if command == "ticketia":
             await handle_ticketia(interaction)
+            return
+        if command == "register":
+            await handle_register(interaction)
             return
         cid = _component_custom_id(interaction)
         if cid != "support_open_ticket":

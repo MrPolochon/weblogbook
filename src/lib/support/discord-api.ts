@@ -152,10 +152,17 @@ export async function discordGetMessages(channelId: string, limit = 100) {
   return discordFetch(`/channels/${channelId}/messages?limit=${Math.min(limit, 100)}`);
 }
 
-/** Commandes de guilde du bot assistance. */
-const SUPPORT_GUILD_COMMANDS = [
-  { name: 'ticketdel', description: 'Fermer et supprimer ce ticket', type: 1 },
-  { name: 'ticketia', description: "Rendre la main à l'IA sur ce ticket", type: 1 },
+/** Commandes de guilde du bot assistance. `/register` est ouverte à tous (@everyone). */
+export const SUPPORT_GUILD_COMMANDS = [
+  { name: 'ticketdel', description: 'Fermer et supprimer ce ticket', type: 1, default_member_permissions: null },
+  { name: 'ticketia', description: "Rendre la main à l'IA sur ce ticket", type: 1, default_member_permissions: null },
+  {
+    name: 'register',
+    description: 'Créer un compte site lié à ton Discord',
+    type: 1,
+    dm_permission: false,
+    default_member_permissions: null,
+  },
 ];
 
 let lastCommandsEnsure = 0;
@@ -177,16 +184,10 @@ export async function ensureSupportGuildCommands(
     const me = await discordGetMe();
     const appId = String(me.id || '').trim();
     if (!appId) return;
-    const existing = await discordFetch(`/applications/${appId}/guilds/${gid}/commands`);
-    const list = Array.isArray(existing) ? existing : [];
-    const names = new Set(list.map((c: { name?: string }) => String(c.name || '')));
-    for (const command of SUPPORT_GUILD_COMMANDS) {
-      if (names.has(command.name)) continue;
-      await discordFetch(`/applications/${appId}/guilds/${gid}/commands`, {
-        method: 'POST',
-        body: JSON.stringify(command),
-      });
-    }
+    await discordFetch(`/applications/${appId}/guilds/${gid}/commands`, {
+      method: 'PUT',
+      body: JSON.stringify(SUPPORT_GUILD_COMMANDS),
+    });
   } catch (e) {
     console.error('[discord] ensureSupportGuildCommands', e);
   }

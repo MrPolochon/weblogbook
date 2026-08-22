@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
-import { getDiscordGuildId } from '@/lib/discord-link';
+import { getDiscordGuildId, getDiscordRequiredRoleId } from '@/lib/discord-link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { assertSupportBotSecret, getSupportConfig } from '@/lib/support/bot-auth';
 import { discordGetMe, ensureSupportGuildCommands } from '@/lib/support/discord-api';
@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
     guild_id: guildId,
     staff_role_id: cfg?.staff_role_id || null,
     instructor_role_id: cfg?.instructor_role_id || null,
+    required_role_id: getDiscordRequiredRoleId() || null,
     category_ids: cfg?.category_ids || {},
     panel_channel_id: cfg?.panel_channel_id || null,
     panel_message_id: cfg?.panel_message_id || null,
