@@ -199,10 +199,12 @@ export default function AtcNavBar({
             <ScrollText className="h-4 w-4 flex-shrink-0" />
             NOTAMs
           </Link>
-          <Link href="/atc/radar" className={cn(linkBase, 'gap-1.5', pathname.startsWith('/atc/radar') ? linkActive : (isDark ? 'text-emerald-300 hover:bg-emerald-900/30' : 'text-emerald-700 hover:bg-emerald-100'))}>
-            <Radar className="h-4 w-4 flex-shrink-0" />
-            <span className="hidden sm:inline">Radar</span>
-          </Link>
+          {isAdmin && (
+            <Link href="/atc/radar" className={cn(linkBase, 'gap-1.5', pathname.startsWith('/atc/radar') ? linkActive : (isDark ? 'text-emerald-300 hover:bg-emerald-900/30' : 'text-emerald-700 hover:bg-emerald-100'))}>
+              <Radar className="h-4 w-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Radar</span>
+            </Link>
+          )}
           {isAdmin && (
             <Link href="/atc/admin" className={cn(linkBase, pathname.startsWith('/atc/admin') ? linkActive : linkInactive)}>
               <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
