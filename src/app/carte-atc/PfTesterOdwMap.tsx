@@ -38,6 +38,30 @@ const MAX_TILE_Z = 8;
 const FIT_ZOOM = 1;
 const FOCUS_ZOOM = 8;
 const KEEP_MAP_PX = 96;
+const TRAIL_MIN_STEP = 0.015;
+const TRAIL_MAX_STEP = 0.9;
+const TRAIL_MAX_LEN = 90;
+
+function usableGameXY(x?: number, y?: number): boolean {
+  return typeof x === 'number' && typeof y === 'number'
+    && Number.isFinite(x) && Number.isFinite(y)
+    && !(x === 0 && y === 0);
+}
+
+function pushTrailPoint(pts: TrailPt[], x: number, y: number, alt: number): TrailPt[] {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return pts;
+  const last = pts[pts.length - 1];
+  if (!last) return [{ x, y, alt }];
+  const dist = Math.hypot(x - last.x, y - last.y);
+  if (dist < TRAIL_MIN_STEP) return pts;
+  if (dist > TRAIL_MAX_STEP) {
+    if (pts.length >= 3) return pts;
+    return [{ x, y, alt }];
+  }
+  const next = pts.concat({ x, y, alt });
+  if (next.length > TRAIL_MAX_LEN) next.splice(0, next.length - TRAIL_MAX_LEN);
+  return next;
+}
 
 function tileUrl(z: number, x: number, y: number): string {
   return `/api/pftester-odw/tiles/${z}/${x}/${y}`;
@@ -84,6 +108,22 @@ function panToMapPoint(
   return {
     x: -((mapX / PF_MAP_W) - 0.5) * dispW * zoom,
     y: -((mapY / PF_MAP_H) - 0.5) * dispH * zoom,
+  };
+}
+
+function mapToScreen(
+  mapX: number,
+  mapY: number,
+  zoom: number,
+  pan: { x: number; y: number },
+  containerW: number,
+  containerH: number,
+  dispW: number,
+  dispH: number,
+): { x: number; y: number } {
+  return {
+    x: containerW / 2 + pan.x + ((mapX / PF_MAP_W) - 0.5) * dispW * zoom,
+    y: containerH / 2 + pan.y + ((mapY / PF_MAP_H) - 0.5) * dispH * zoom,
   };
 }
 
@@ -246,7 +286,7 @@ export default function PfTesterOdwMap() {
   const plotted = useMemo(
     () =>
       aircraft.map((a) => {
-        if (typeof a.x !== 'number' || typeof a.y !== 'number') return a;
+        if (!usableGameXY(a.x, a.y)) return a;
         const m = gameToMap(a.x, a.y);
         return { ...a, mapX: m.mapX, mapY: m.mapY };
       }),
@@ -258,16 +298,10 @@ export default function PfTesterOdwMap() {
       const next: Record<string, TrailPt[]> = {};
       let changed = false;
       for (const a of plotted) {
-        const y = a.mapY;
-        const pts = prev[a.id] ? prev[a.id].slice() : [];
-        const last = pts[pts.length - 1];
-        const dx = last ? a.mapX - last.x : 99;
-        const dy = last ? y - last.y : 99;
-        if (!last || dx * dx + dy * dy >= 0.03) {
-          pts.push({ x: a.mapX, y, alt: a.altitude });
-          if (pts.length > 90) pts.splice(0, pts.length - 90);
-          changed = true;
-        }
+        let pts: TrailPt[] = [];
+        for (const p of prev[a.id] ?? []) pts = pushTrailPoint(pts, p.x, p.y, p.alt);
+        pts = pushTrailPoint(pts, a.mapX, a.mapY, a.altitude);
+        if (pts !== prev[a.id]) changed = true;
         next[a.id] = pts;
       }
       if (!changed && Object.keys(prev).length === Object.keys(next).length) {
@@ -422,7 +456,6 @@ export default function PfTesterOdwMap() {
     [tileZ, bounds],
   );
   const markerScale = 1 / zoom;
-  const trailW = 0.55 / zoom;
   const selected = plotted.find((a) => a.id === selectedId) ?? null;
 
   function selectAircraft(id: string, fromList = false) {
@@ -509,7 +542,6 @@ export default function PfTesterOdwMap() {
                 {plotted.map((a) => {
                   const isSelected = selectedId === a.id;
                   const color = isSelected ? '#fbbf24' : '#22d3ee';
-                  const trail = trails[a.id];
                   return (
                     <g
                       key={a.id}
@@ -521,21 +553,6 @@ export default function PfTesterOdwMap() {
                         selectAircraft(a.id);
                       }}
                     >
-                      {trail && trail.length > 1
-                        ? trail.slice(1).map((p, i) => (
-                            <line
-                              key={`${a.id}-t${i}`}
-                              x1={trail[i]!.x}
-                              y1={trail[i]!.y}
-                              x2={p.x}
-                              y2={p.y}
-                              stroke={altitudeToTrailColor((trail[i]!.alt + p.alt) / 2)}
-                              strokeWidth={isSelected ? trailW * 1.4 : trailW}
-                              strokeLinecap="round"
-                              opacity={isSelected ? 0.95 : 0.85}
-                            />
-                          ))
-                        : null}
                       <g transform={`translate(${a.mapX},${a.mapY}) scale(${markerScale})`}>
                         <circle r={14} fill="transparent" />
                         <g transform={`rotate(${a.heading}) scale(0.55)`}>
@@ -577,6 +594,35 @@ export default function PfTesterOdwMap() {
             </div>
           </div>
         </div>
+
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-[1]" aria-hidden>
+          {plotted.map((a) => {
+            const trail = trails[a.id];
+            if (!trail || trail.length < 2) return null;
+            const isSelected = selectedId === a.id;
+            const pts = trail.map((p) =>
+              mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH),
+            );
+            return (
+              <g key={`${a.id}-trail`}>
+                {pts.slice(1).map((p, i) => (
+                  <line
+                    key={`${a.id}-t${i}`}
+                    x1={pts[i]!.x}
+                    y1={pts[i]!.y}
+                    x2={p.x}
+                    y2={p.y}
+                    stroke={altitudeToTrailColor((trail[i]!.alt + p.alt) / 2)}
+                    strokeWidth={isSelected ? 2.6 : 2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity={isSelected ? 0.95 : 0.88}
+                  />
+                ))}
+              </g>
+            );
+          })}
+        </svg>
 
         <div
           className="absolute bottom-3 right-3 flex flex-col items-center gap-1.5 z-10"

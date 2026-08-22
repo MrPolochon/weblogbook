@@ -25,20 +25,25 @@ export function pfTileUnit(tileZoom: number): number {
 
 export const PF_SERVER_ID_RE = /^[A-Za-z0-9_-]{4,64}$/;
 
+/** Paliers FL : la couleur change en continu entre chaque borne. */
 const TRAIL_COLOR_STOPS: [number, [number, number, number]][] = [
   [0, [220, 38, 38]],
-  [60, [234, 88, 12]],
-  [120, [250, 204, 21]],
-  [180, [34, 197, 94]],
-  [250, [6, 182, 212]],
-  [320, [37, 99, 235]],
-  [360, [59, 7, 100]],
+  [5, [249, 115, 22]],
+  [10, [34, 197, 94]],
+  [30, [56, 189, 248]],
+  [70, [14, 165, 233]],
+  [120, [59, 130, 246]],
+  [180, [37, 99, 235]],
+  [250, [99, 102, 241]],
+  [320, [139, 92, 246]],
+  [400, [59, 7, 100]],
 ];
 
-/** Trace : rouge au sol → violet sombre à partir du FL360. */
+/** Trace : rouge sous le FL005 → orange → vert → bleu clair, puis plus sombre en haute. */
 export function altitudeToTrailColor(altitudeFt: number): string {
   const fl = Math.max(0, altitudeFt / 100);
-  if (fl >= 360) return 'rgb(59,7,100)';
+  const last = TRAIL_COLOR_STOPS[TRAIL_COLOR_STOPS.length - 1]!;
+  if (fl >= last[0]) return `rgb(${last[1].join(',')})`;
   let i = 0;
   while (i < TRAIL_COLOR_STOPS.length - 1 && fl > TRAIL_COLOR_STOPS[i + 1]![0]) i++;
   const [f0, c0] = TRAIL_COLOR_STOPS[i]!;
