@@ -4,9 +4,8 @@ Les **salons, rôles staff / instructeur** se règlent **uniquement sur le site*
 (Admin → Bot assistance Discord), via des menus (pas d’IDs à coller).
 Le serveur est `DISCORD_GUILD_ID` déjà présent sur Vercel. Railway ne reçoit **aucun** ID Discord.
 
-`/register` est une commande **ouverte à tout le serveur** (PTFR Assistance).
-Le site vérifie ensuite le rôle Vérifié (`DISCORD_REQUIRED_ROLE_ID`).
-Ne pas utiliser la `/register` du bot ATIS : ses permissions Discord peuvent la cacher.
+`/register` est ouverte à **tous les membres** du serveur (PTFR Assistance et ATC ROBOT).
+Pas besoin du rôle Vérifié pour créer un compte.
 
 Les **boutons / modals du panel** sont acquittés par Vercel (endpoint HTTP Discord, &lt; 3 s).
 Le process Railway reste nécessaire pour **lire et répondre dans les tickets**

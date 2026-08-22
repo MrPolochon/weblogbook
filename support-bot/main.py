@@ -172,13 +172,6 @@ async def should_handle_ticket_message(channel: discord.abc.Messageable) -> bool
     return await api_is_ticket(str(channel.id))
 
 
-def has_verified_role(member: discord.Member) -> bool:
-    required = str(_runtime.get("required_role_id") or "").strip()
-    if not required:
-        return True
-    return any(str(role.id) == required for role in member.roles)
-
-
 def is_staff_member(member: discord.Member) -> bool:
     rids = [rid for rid in (_runtime.get("staff_role_id"), _runtime.get("instructor_role_id")) if rid]
     if rids and any(str(r.id) in {str(x) for x in rids} for r in member.roles):
@@ -365,14 +358,6 @@ class RegisterModal(discord.ui.Modal, title="Créer un compte site"):
 
 
 async def handle_register(interaction: discord.Interaction) -> None:
-    user = interaction.user
-    if not isinstance(user, discord.Member) or not has_verified_role(user):
-        if not interaction.response.is_done():
-            await interaction.response.send_message(
-                "Il te faut le rôle Vérifié du serveur pour créer un compte. Demande la vérification Discord, puis relance /register.",
-                ephemeral=True,
-            )
-        return
     if interaction.response.is_done():
         return
     try:

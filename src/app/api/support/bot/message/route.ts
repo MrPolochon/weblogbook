@@ -34,12 +34,10 @@ import {
 } from '@/lib/support/motifs';
 import {
   discordDeleteMessage,
-  discordGetGuildMember,
   discordRenameChannel,
   discordSendMessage,
 } from '@/lib/support/discord-api';
-import { createSiteAccountFromDiscord, memberHasVerifiedRole } from '@/lib/auth/create-discord-account';
-import { getDiscordGuildId } from '@/lib/discord-link';
+import { createSiteAccountFromDiscord } from '@/lib/auth/create-discord-account';
 import { OFFICIAL_SITE_URL } from '@/lib/site-url';
 import {
   extractRegisterIdentifiant,
@@ -435,36 +433,6 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'discord_send_failed', statut: 'waiting' }, { status: 502 });
         }
         return NextResponse.json({ ok: true, statut: 'waiting', register: 'already_linked' });
-      }
-
-      const guildId = getDiscordGuildId();
-      const member = openerDiscordId && guildId
-        ? await discordGetGuildMember(guildId, openerDiscordId)
-        : null;
-      const verified = memberHasVerifiedRole(member?.roles);
-      if (!verified.ok) {
-        memory = writeRegisterState(memory, 'idle');
-        const missing =
-          'Il te faut le rôle Vérifié du serveur avant de créer un compte. Fais-toi vérifier, puis redis-le moi ou tape `/register`.';
-        const nextTurns = trimConversation([
-          ...turns,
-          { role: 'user', content },
-          { role: 'assistant', content: missing },
-        ]);
-        await updateTicketRow(admin, ticket.id, {
-          statut: 'waiting',
-          conversation: nextTurns,
-          memory_notes: memory,
-          last_human_at: nowIso,
-          updated_at: nowIso,
-        });
-        try {
-          await discordSendMessage(channelId, missing);
-        } catch (e) {
-          console.error('[support-message] register missing role', e);
-          return NextResponse.json({ error: 'discord_send_failed', statut: 'waiting' }, { status: 502 });
-        }
-        return NextResponse.json({ ok: true, statut: 'waiting', register: 'missing_role' });
       }
 
       const pair = extractRegisterPair(content);

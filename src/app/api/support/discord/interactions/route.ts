@@ -18,7 +18,7 @@ import { openSupportTicket } from '@/lib/support/open-ticket';
 import { resumeIaOnTicket } from '@/lib/support/resume-ia';
 import { discordSendMessage } from '@/lib/support/discord-api';
 import { IA_RESUMED_NOTICE } from '@/lib/support/staff-takeover';
-import { createSiteAccountFromDiscord, memberHasVerifiedRole } from '@/lib/auth/create-discord-account';
+import { createSiteAccountFromDiscord } from '@/lib/auth/create-discord-account';
 import { OFFICIAL_SITE_URL } from '@/lib/site-url';
 
 const PING = 1;
@@ -224,14 +224,6 @@ async function finishRegister(interaction: DiscordInteraction) {
       await patchOriginal(interaction, 'Identité Discord introuvable.');
       return;
     }
-    const verified = memberHasVerifiedRole(interaction.member?.roles);
-    if (!verified.ok) {
-      await patchOriginal(
-        interaction,
-        'Il te faut le rôle Vérifié du serveur pour créer un compte. Demande la vérification Discord, puis relance /register.'
-      );
-      return;
-    }
     const result = await createSiteAccountFromDiscord({
       identifiant: modalValue(interaction, REGISTER_IDENTIFIANT),
       password: modalValue(interaction, REGISTER_PASSWORD),
@@ -412,17 +404,6 @@ export async function POST(req: Request) {
   }
 
   if (interaction.type === APPLICATION_COMMAND && commandName === REGISTER_COMMAND) {
-    const verified = memberHasVerifiedRole(interaction.member?.roles);
-    if (!verified.ok) {
-      return json({
-        type: 4,
-        data: {
-          content:
-            'Il te faut le rôle Vérifié du serveur pour créer un compte. Demande la vérification Discord, puis relance /register.',
-          flags: EPHEMERAL,
-        },
-      });
-    }
     return json(registerModal());
   }
 
