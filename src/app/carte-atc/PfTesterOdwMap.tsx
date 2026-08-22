@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Plane, RefreshCw, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { Plane, RefreshCw, ZoomIn, ZoomOut, RotateCcw, Crosshair } from 'lucide-react';
 import { PLANE_BLIP_D } from '@/lib/radar-utils';
 import {
   PF_MAP_H,
@@ -9,6 +9,9 @@ import {
   pfTileUnit,
   altitudeToTrailColor,
 } from '@/lib/pftester-odw';
+import { PF_CALIB_MAX_POINTS, PF_CALIB_MIN_POINTS, type PfCalibPoint } from '@/lib/pf-calibration';
+import { usePfCalibration } from '@/lib/use-pf-calibration';
+import PfCalibrationPanel from './PfCalibrationPanel';
 
 type PfAircraft = {
   id: string;
@@ -20,6 +23,8 @@ type PfAircraft = {
   speed: number;
   model: string;
   livery: string;
+  x?: number;
+  y?: number;
   mapX: number;
   mapY: number;
 };
@@ -62,6 +67,24 @@ function visibleMapBounds(
   const minY = PF_MAP_H * (0.5 + (-containerH / 2 - pan.y) / (zoom * dispH)) - pad;
   const maxY = PF_MAP_H * (0.5 + (containerH / 2 - pan.y) / (zoom * dispH)) + pad;
   return { minX, minY, maxX, maxY };
+}
+
+function screenToMap(
+  containerW: number,
+  containerH: number,
+  zoom: number,
+  pan: { x: number; y: number },
+  clientX: number,
+  clientY: number,
+  rect: DOMRect,
+): { mapX: number; mapY: number } {
+  const { dispW, dispH } = fittedMapSize(containerW, containerH);
+  const relX = clientX - rect.left - containerW / 2;
+  const relY = clientY - rect.top - containerH / 2;
+  return {
+    mapX: PF_MAP_W * (0.5 + (relX - pan.x) / (zoom * dispW)),
+    mapY: PF_MAP_H * (0.5 + (relY - pan.y) / (zoom * dispH)),
+  };
 }
 
 function tilesInBounds(tileZoom: number, bounds: MapBounds): MapTile[] {
@@ -111,6 +134,10 @@ export default function PfTesterOdwMap() {
   const [viewport, setViewport] = useState({ w: 900, h: 560 });
   const viewRef = useRef({ zoom: 1.15, pan: { x: 0, y: 0 } });
   viewRef.current = { zoom, pan };
+  const dragRef = useRef({ x: 0, y: 0, moved: false, onMap: false });
+  const [calibMode, setCalibMode] = useState(false);
+  const [calibError, setCalibError] = useState<string | null>(null);
+  const { points, setPoints, fit, active, apply, reset, toMap } = usePfCalibration();
 
   const fetchFlights = useCallback(async () => {
     try {
@@ -146,11 +173,25 @@ export default function PfTesterOdwMap() {
     return () => ro.disconnect();
   }, []);
 
+  const plotted = useMemo(
+    () =>
+      aircraft.map((a) => {
+        if (typeof a.x !== 'number' || typeof a.y !== 'number') return a;
+        const m = toMap(a.x, a.y);
+        return { ...a, mapX: m.mapX, mapY: m.mapY };
+      }),
+    [aircraft, toMap],
+  );
+
+  useEffect(() => {
+    setTrails({});
+  }, [fit.sx, fit.sy, fit.ox, fit.oy, active]);
+
   useEffect(() => {
     setTrails((prev) => {
       const next: Record<string, TrailPt[]> = {};
       let changed = false;
-      for (const a of aircraft) {
+      for (const a of plotted) {
         const y = a.mapY;
         const pts = prev[a.id] ? prev[a.id].slice() : [];
         const last = pts[pts.length - 1];
@@ -169,7 +210,7 @@ export default function PfTesterOdwMap() {
       }
       return next;
     });
-  }, [aircraft]);
+  }, [plotted]);
 
   const applyZoomAt = useCallback((clientX: number, clientY: number, nextZoom: number) => {
     const z = clampViewZoom(nextZoom);
@@ -210,11 +251,15 @@ export default function PfTesterOdwMap() {
   }, [applyZoomAt]);
 
   function startPan(clientX: number, clientY: number) {
+    dragRef.current = { x: clientX, y: clientY, moved: false, onMap: true };
     panStartRef.current = { x: pan.x, y: pan.y, mouseX: clientX, mouseY: clientY };
     setIsPanning(true);
   }
   function movePan(clientX: number, clientY: number) {
     if (!panStartRef.current) return;
+    if (Math.hypot(clientX - dragRef.current.x, clientY - dragRef.current.y) > 6) {
+      dragRef.current.moved = true;
+    }
     setPan({
       x: panStartRef.current.x + (clientX - panStartRef.current.mouseX),
       y: panStartRef.current.y + (clientY - panStartRef.current.mouseY),
@@ -223,6 +268,24 @@ export default function PfTesterOdwMap() {
   function endPan() {
     panStartRef.current = null;
     setIsPanning(false);
+  }
+
+  function addCalibPoint(clientX: number, clientY: number) {
+    const el = mapContainerRef.current;
+    if (!el || points.length >= PF_CALIB_MAX_POINTS) return;
+    const rect = el.getBoundingClientRect();
+    const { mapX, mapY } = screenToMap(viewport.w, viewport.h, zoom, pan, clientX, clientY, rect);
+    const selectedPlane = aircraft.find((a) => a.id === selectedId);
+    const next: PfCalibPoint = {
+      id: `${Date.now()}-${points.length}`,
+      label: `Point ${points.length + 1}`,
+      gameX: typeof selectedPlane?.x === 'number' ? selectedPlane.x : null,
+      gameY: typeof selectedPlane?.y === 'number' ? selectedPlane.y : null,
+      mapX,
+      mapY,
+    };
+    setCalibError(null);
+    setPoints([...points, next]);
   }
   function touchDistance(touches: React.TouchList) {
     const dx = touches[0].clientX - touches[1].clientX;
@@ -249,7 +312,20 @@ export default function PfTesterOdwMap() {
   const labelSize = 2.6 / zoom;
   const trailW = 0.55 / zoom;
 
-  const selected = aircraft.find((a) => a.id === selectedId) ?? null;
+  const selected = plotted.find((a) => a.id === selectedId) ?? null;
+
+  function changeCalibPoint(id: string, patch: Partial<PfCalibPoint>) {
+    setPoints(points.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  }
+  function removeCalibPoint(id: string) {
+    setPoints(points.filter((p) => p.id !== id));
+  }
+  function useSelectedForCalib() {
+    if (!selected || typeof selected.x !== 'number' || typeof selected.y !== 'number') return;
+    const target = [...points].reverse().find((p) => p.gameX == null || p.gameY == null) ?? points[points.length - 1];
+    if (!target) return;
+    setPoints(points.map((p) => (p.id === target.id ? { ...p, gameX: selected.x!, gameY: selected.y!, label: p.label || selected.callsign } : p)));
+  }
 
   return (
     <div className="flex-1 min-h-0 w-full flex flex-col md:flex-row gap-3 md:gap-4">
@@ -262,7 +338,12 @@ export default function PfTesterOdwMap() {
         }}
         onMouseDown={(e) => startPan(e.clientX, e.clientY)}
         onMouseMove={(e) => movePan(e.clientX, e.clientY)}
-        onMouseUp={endPan}
+        onMouseUp={(e) => {
+          const wasClick = dragRef.current.onMap && !dragRef.current.moved;
+          dragRef.current.onMap = false;
+          endPan();
+          if (calibMode && wasClick && e.detail === 1) addCalibPoint(e.clientX, e.clientY);
+        }}
         onMouseLeave={endPan}
         onTouchStart={(e) => {
           if (e.touches.length === 2) {
@@ -300,7 +381,7 @@ export default function PfTesterOdwMap() {
           pinchStartRef.current = null;
           endPan();
         }}
-        style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+        style={{ cursor: calibMode ? 'crosshair' : isPanning ? 'grabbing' : 'grab' }}
       >
         <div
           className="absolute inset-0"
@@ -333,7 +414,22 @@ export default function PfTesterOdwMap() {
                 ))}
               </div>
               <svg viewBox={`0 0 ${PF_MAP_W} ${PF_MAP_H}`} className="absolute inset-0 w-full h-full pointer-events-none">
-                {aircraft.map((a) => {
+                {points.map((p, i) => (
+                  <g key={p.id}>
+                    <circle cx={p.mapX} cy={p.mapY} r={1.4 / zoom} fill="#f59e0b" stroke="#0f172a" strokeWidth={0.2} />
+                    <text
+                      x={p.mapX + 1.6 / zoom}
+                      y={p.mapY - 1.4 / zoom}
+                      fill="#fbbf24"
+                      fontSize={2.2 / zoom}
+                      fontFamily="monospace"
+                      fontWeight="bold"
+                    >
+                      {i + 1}
+                    </text>
+                  </g>
+                ))}
+                {plotted.map((a) => {
                   const isSelected = selectedId === a.id;
                   const htmlY = a.mapY;
                   const color = isSelected ? '#fbbf24' : '#22d3ee';
@@ -343,6 +439,7 @@ export default function PfTesterOdwMap() {
                       key={a.id}
                       className="pointer-events-auto"
                       style={{ cursor: 'pointer' }}
+                      onMouseDown={(e) => e.stopPropagation()}
                       onClick={() => setSelectedId((prev) => (prev === a.id ? null : a.id))}
                     >
                       {trail && trail.length > 1
@@ -389,7 +486,7 @@ export default function PfTesterOdwMap() {
           </div>
         </div>
 
-        <div className="absolute bottom-3 right-3 flex flex-col items-center gap-1.5 z-10">
+        <div className="absolute bottom-3 right-3 flex flex-col items-center gap-1.5 z-10" onMouseDown={(e) => e.stopPropagation()}>
           <span className="px-1.5 py-0.5 rounded-md bg-slate-900/90 border border-slate-600 text-[10px] font-mono text-cyan-200 tabular-nums">
             ×{zoom >= 10 ? Math.round(zoom) : zoom.toFixed(1)}
           </span>
@@ -401,6 +498,14 @@ export default function PfTesterOdwMap() {
           </button>
           <button type="button" onClick={() => { setZoom(1.15); setPan({ x: 0, y: 0 }); }} className="p-2 rounded-lg bg-slate-900/90 border border-slate-600 text-slate-200" title="Recentrer">
             <RotateCcw className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCalibMode((v) => !v)}
+            className={`p-2 rounded-lg border ${calibMode ? 'bg-amber-700/80 border-amber-400 text-amber-100' : 'bg-slate-900/90 border-slate-600 text-slate-200'}`}
+            title="Mode calibration"
+          >
+            <Crosshair className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -415,6 +520,36 @@ export default function PfTesterOdwMap() {
           </div>
           <p className="text-[11px] text-slate-500">Serveur privé Mixou Airlines uniquement.</p>
           <p className="text-[11px] text-cyan-300/80 font-mono">{aircraft.length} avion{aircraft.length > 1 ? 's' : ''}</p>
+          <PfCalibrationPanel
+            calibMode={calibMode}
+            onToggleMode={() => setCalibMode((v) => !v)}
+            points={points}
+            onChangePoint={changeCalibPoint}
+            onRemovePoint={removeCalibPoint}
+            onApply={() => {
+              const solved = apply(points);
+              if (!solved) {
+                setCalibError(`Il faut au moins ${PF_CALIB_MIN_POINTS} points avec X/Y jeu, bien écartés.`);
+                return;
+              }
+              setCalibError(null);
+              setCalibMode(false);
+            }}
+            onReset={() => {
+              reset();
+              setCalibError(null);
+              setCalibMode(false);
+            }}
+            onUseAircraft={useSelectedForCalib}
+            selectedAircraft={
+              selected && typeof selected.x === 'number' && typeof selected.y === 'number'
+                ? { id: selected.id, callsign: selected.callsign, x: selected.x, y: selected.y }
+                : null
+            }
+            fit={fit}
+            active={active}
+            applyError={calibError}
+          />
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {error && <p className="text-red-400 text-xs">{error}</p>}
@@ -458,6 +593,9 @@ export default function PfTesterOdwMap() {
               <p>{selected.callsign} — {selected.robloxUsername}</p>
               <p>{selected.model} · {selected.livery.replace(/_/g, ' ')}</p>
               <p>Alt {Math.round(selected.altitude)} ft · {selected.speed} kt</p>
+              {typeof selected.x === 'number' && typeof selected.y === 'number' && (
+                <p className="font-mono text-slate-400">Jeu X {selected.x.toFixed(1)} · Y {selected.y.toFixed(1)}</p>
+              )}
             </div>
           )}
         </div>

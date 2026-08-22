@@ -22,6 +22,8 @@ export async function GET() {
       speed: Math.round(p.speed),
       model: p.model,
       livery: p.livery,
+      x: p.x,
+      y: p.y,
       mapX: p.mapX,
       mapY: p.mapY,
     }));
