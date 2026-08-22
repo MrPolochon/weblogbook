@@ -494,7 +494,7 @@ export async function POST(req: NextRequest) {
           identifiant,
           password,
           discordId: openerDiscordId,
-          discordUsername: String(ticket.discord_username || member?.username || openerDiscordId),
+          discordUsername: String(ticket.discord_username || openerDiscordId),
         });
         memory = writeRegisterState(memory, 'idle');
         redactedUser = '[mot de passe reçu — masqué]';
