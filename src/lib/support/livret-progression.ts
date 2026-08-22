@@ -12,7 +12,8 @@ CAT 1 (~2 h) — bases serveur, site et aéronautique, surtout VFR : utilisation
 CAT 2 (~1 h 30) — bases de navigation VFR : lecture des cartes VFR, documents du site, IMC/VMC, préparation du vol, calcul des performances, briefing, montée initiale, tenue de route, intégration.
 CAT 3 (~2 h) — approfondir le VFR et décider seul : préparation et anticipation, gestion des pannes, communication avancée, navigation ON TOP, récupération de position inhabituelle, déroutement, interruption volontaire du vol, VFR spécial, gestion de la charge de travail.
 CAT 4 (~2 h) — bases serveur/site et aéronautique surtout IFR : préparation du vol, lecture des cartes, procédures de départ et d’arrivée, création du plan de vol, clairance de départ, briefing, communication et navigation IFR, réglementation IFR, ILS / RNP / visuel.
-CAT 5 (~2 h) — approfondir pour rejoindre une compagnie : préparation du vol, turbopropulseur et turbine, briefing, attente en vol, finale (axe/plan/vitesse), déroutement, tenue de route, pilotage IMC, communication.
+CAT 5 (~2 h) — approfondir : préparation du vol, turbopropulseur et turbine, briefing, attente en vol, finale (axe/plan/vitesse), déroutement, tenue de route, pilotage IMC, communication.
+Pour voler EN COMPAGNIE il faut au moins CAT 4 (les CAT 1 à 3 restent personnelles). Recrutement / création de compagnie : serveur Discord dédié, pas le logbook.
 
 Ce parcours ne concerne QUE les pilotes : une demande de formation ou de position ATC (Center, Approach, Tower, Ground, Delivery…) relève du bloc FORMATIONS ATC, jamais des CAT.
 Ticket CAT / AeroSchool / Instruction côté pilote : oriente d’abord vers le QCM AeroSchool de la catégorie, puis vers Instruction pour le vol pratique.`;

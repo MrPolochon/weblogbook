@@ -34,7 +34,14 @@ function normalize(text: string): string {
 
 /** Prise en charge dite en toutes lettres : ça suffit toujours, quelle que soit la longueur. */
 const TAKEOVER_PHRASES =
-  /\bje (m en occupe|men occupe|prends? (le )?(relais|ticket|la main)|gere|regarde ca|traite|verifie|check)\b|\bje vais (regarder|voir|verifier|te repondre|m en occuper|gerer)\b|\bje te reponds\b|\bje reprends\b|\bon s en occupe\b|\blaisse moi (voir|regarder|faire)\b|\bc est moi qui\b/;
+  /\bje (m en occupe|men occupe|prends? (le |ce |cet |e )?(relais|ticket|la main)|gere|regarde ca|traite|verifie|check)\b|\bje prends?\b.{0,16}\bticket\b|\bje vais (regarder|voir|verifier|te repondre|m en occuper|gerer)\b|\bje te reponds\b|\bon s en occupe\b|\blaisse moi (voir|regarder|faire)\b|\bc est moi qui\b/;
+
+/** Le staff demande à l’IA de continuer, pas de se taire. */
+export function isStaffAskingIaToContinue(text: string): boolean {
+  const t = normalize(text);
+  if (TAKEOVER_PHRASES.test(t) && /\bje prends?\b/.test(t)) return false;
+  return /\b(relance|relancer|reprend|reprendre|gere|gerer)\b.{0,16}\b(le|ce|la|ticket|bot|ia)?/.test(t);
+}
 
 /**
  * Réactions de couloir : le message n’est qu’un enchaînement d’interjections,

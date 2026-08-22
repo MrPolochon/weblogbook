@@ -1,8 +1,9 @@
 import { normalizeIdentifiant } from '@/lib/auth/create-discord-account';
+import { OFFICIAL_SITE_URL } from '@/lib/site-url';
 
-export type RegisterStep = 'idle' | 'identifiant' | 'password';
+export type RegisterStep = 'idle' | 'identifiant' | 'confirm' | 'password';
 
-const STEP_LINE = /^register_step=(identifiant|password)$/;
+const STEP_LINE = /^register_step=(identifiant|confirm|password)$/;
 const ID_LINE = /^register_identifiant=([a-z0-9_]{2,30})$/;
 
 const CANCEL =
@@ -22,10 +23,24 @@ const RESERVED = new Set([
   'mdp',
   'aide',
   'staff',
+  'quoi',
+  'quel',
+  'quelle',
+  'quels',
+  'quelles',
+  'comment',
+  'pourquoi',
+  'donnez',
+  'donne',
+  'lien',
+  'site',
+  'connexion',
+  'demain',
+  'daccord',
 ]);
 
 export const REGISTER_ASK_IDENTIFIANT =
-  'Pour créer ton compte, j’ai besoin de deux infos. Envoie d’abord **l’identifiant** que tu veux (2 à 30 caractères : lettres, chiffres ou `_`).';
+  'Pour créer ton compte, choisis **toi-même** un identifiant (ce n’est pas un code déjà existant) : 2 à 30 caractères, lettres, chiffres ou `_`. Envoie-le seul, par exemple `mathys_67`.';
 
 export const REGISTER_ASK_PASSWORD =
   'Identifiant noté. Envoie maintenant **uniquement le mot de passe** (8 caractères minimum).\n' +
@@ -63,6 +78,32 @@ export function isRegisterCancel(text: string): boolean {
   return CANCEL.test(normalizeLoose(text));
 }
 
+export function isRegisterHelpQuestion(text: string): boolean {
+  const t = normalizeLoose(text);
+  if (/\?/.test(String(text || ''))) return true;
+  return /^(quel|quelle|quels|quelles|comment|pourquoi|c est quoi|ou est|est ce|peux tu|peut on|donnez|donne moi|le lien|cest quoi)\b/.test(
+    t,
+  );
+}
+
+export function registerHelpReply(step: RegisterStep, identifiant?: string | null): string {
+  const again =
+    step === 'password'
+      ? REGISTER_ASK_PASSWORD
+      : step === 'confirm' && identifiant
+        ? registerConfirmPrompt(identifiant)
+        : REGISTER_ASK_IDENTIFIANT;
+  return (
+    'L’identifiant, c’est le **nom de connexion que tu inventes** (pas une liste à choisir). ' +
+    `Le site officiel est ${OFFICIAL_SITE_URL}\n\n` +
+    again
+  );
+}
+
+export function registerConfirmPrompt(identifiant: string): string {
+  return `Je vais créer le compte **${identifiant}**. Réponds **oui** pour confirmer, envoie un autre identifiant, ou dis **annule**.`;
+}
+
 export function wantsAccountCreation(text: string, alreadyInFlow: boolean): boolean {
   if (alreadyInFlow) return true;
   const t = normalizeLoose(text);
@@ -75,14 +116,24 @@ export function wantsAccountCreation(text: string, alreadyInFlow: boolean): bool
 }
 
 export function extractRegisterIdentifiant(text: string): string | null {
-  const labeled = text.match(/(?:identifiant|pseudo|username|login)\s*[:\s]+([A-Za-z0-9_]{2,30})/i);
+  if (isRegisterHelpQuestion(text)) return null;
+  const labeled = text.match(
+    /(?:identifiant|identifent|identifient|pseudo|username|login)\s*(?:est|:|=)\s*([A-Za-z0-9_]{2,30})/i,
+  );
   if (labeled) return acceptIdentifiant(labeled[1]);
-  const compact = normalizeLoose(text).replace(/['’]/g, '');
+  const compact = normalizeLoose(text)
+    .replace(/['’]/g, '')
+    .replace(/[?!.,;:]+/g, '');
   if (!/\s/.test(compact)) return acceptIdentifiant(compact);
   return null;
 }
 
+export function isRegisterConfirmYes(text: string): boolean {
+  return /^(oui|ouais|ok|okay|yes|confirme|vas.y|go)$/i.test(normalizeLoose(text).replace(/[.!]+$/g, ''));
+}
+
 export function extractRegisterPassword(text: string): string | null {
+  if (isRegisterHelpQuestion(text)) return null;
   const labeled = text.match(/(?:mot de passe|password|mdp)\s*[:\s]+(\S{8,72})/i);
   if (labeled) return labeled[1];
   const trimmed = text.trim();

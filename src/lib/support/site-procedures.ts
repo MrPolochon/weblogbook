@@ -1,4 +1,4 @@
-import { OFFICIAL_SITE_URL } from '@/lib/site-url';
+import { COMPANIES_DISCORD_INVITE, OFFICIAL_SITE_URL } from '@/lib/site-url';
 
 /**
  * Démarches du site trop longues pour tenir dans le prompt système à chaque
@@ -21,4 +21,6 @@ MENUS ET ROUTES : « Déposer un plan » (/logbook/depot-plan-vol) et « Mes pla
 NOTAMS : lecture accessible aux pilotes et aux ATC. Création, modification et suppression réservées aux admins ou aux agents IFSA (permission canManageNotams) ; le simple fait d’être personnel ATC ne donne aucun droit de gestion.
 DEMANDEUR ADMIN : ne le renvoie pas vaguement « au support ». Pour un compte ou un accès, il peut ouvrir « Admin » → « Pilotes » → fiche du pilote. Pour les comptes, grades et règles d’accès ATC, il peut utiliser « Admin ATC » (/atc/admin). Pour une demande de mot de passe oubliée, il peut consulter « Admin » → « Demandes MDP ». Si la décision exige une seconde validation ou dépasse ces écrans, dis précisément qu’un autre admin doit intervenir.
 AEROSCHOOL, PARTIE PUBLIQUE ET PARTIE MEMBRE : le menu AeroSchool est aussi accessible depuis la page de connexion, sans compte. Les questionnaires publics sont jouables par tout le monde ; les questionnaires « membre » affichent un cadenas et renvoient vers la connexion. Quelqu’un sans compte lié ne doit jamais être envoyé vers un questionnaire membre : oriente-le vers un questionnaire public ou vers la création de compte.
-DÉMARCHES QUI PASSENT PAR UN QUESTIONNAIRE AEROSCHOOL : recrutement staff, création de compagnie aérienne, entrée à l’IFSA ou au SIAIV, recrutement instructeur de vol, licences et positions ATC, catégories pilote. Avant de répondre à ce type de demande, appuie-toi sur le bloc « Questionnaires AeroSchool » du contexte, qui liste les questionnaires réellement publiés — n’invente jamais un titre.`;
+DÉMARCHES QUI PASSENT PAR UN QUESTIONNAIRE AEROSCHOOL : recrutement staff, entrée à l’IFSA ou au SIAIV, recrutement instructeur de vol, licences et positions ATC, catégories pilote. Avant de répondre à ce type de demande, appuie-toi sur le bloc « Questionnaires AeroSchool » du contexte, qui liste les questionnaires réellement publiés — n’invente jamais un titre.
+COMPAGNIES : les publicités, candidatures, recrutements, adhésions et créations de compagnie se font sur le serveur Discord ${COMPANIES_DISCORD_INVITE}, pas sur le logbook. Pour voler en compagnie il faut au moins CAT 4 (CAT 1 à 3 = licences personnelles).
+IDENTIFIANT : un membre ne peut pas le changer lui-même (pas de champ dans Mon compte). Un staff le change via Admin → Pilotes → fiche du pilote.`;

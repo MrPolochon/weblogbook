@@ -46,10 +46,14 @@ import {
   extractRegisterPair,
   extractRegisterPassword,
   isRegisterCancel,
+  isRegisterConfirmYes,
+  isRegisterHelpQuestion,
   readRegisterState,
   REGISTER_ASK_IDENTIFIANT,
   REGISTER_ASK_PASSWORD,
   REGISTER_CANCELLED,
+  registerConfirmPrompt,
+  registerHelpReply,
   wantsAccountCreation,
   writeRegisterState,
 } from '@/lib/support/register-conversation';
@@ -87,6 +91,7 @@ import {
   IA_RESUMED_NOTICE,
   isOtherStaffTakeover,
   isRealStaffIntervention,
+  isStaffAskingIaToContinue,
   STAFF_TAKEOVER_NOTICE,
 } from '@/lib/support/staff-takeover';
 import {
@@ -275,7 +280,10 @@ export async function POST(req: NextRequest) {
   // Un staff qui plaisante (« trop styleee ») ne coupe plus l'IA ; un staff qui
   // intervient vraiment la coupe une fois pour toutes, avec une seule annonce.
   // ---------------------------------------------------------------------
-  if (staffSpeaking && !mentionsBot) {
+  const staffClaimsTicket =
+    staffSpeaking && isRealStaffIntervention(content) && !isStaffAskingIaToContinue(content);
+  const mentionIntentEarly = mentionsBot ? detectMentionIntent(content) : null;
+  if (staffClaimsTicket && (!mentionsBot || !mentionIntentEarly)) {
     const startsTakeover = !muted && isRealStaffIntervention(content);
     const announce = startsTakeover && !ticket.staff_takeover_notified;
     await recordSilently(
@@ -311,6 +319,11 @@ export async function POST(req: NextRequest) {
 
   // Silence persistant : tant que le staff tient le ticket, l'IA ne répond à
   // personne, pas même au demandeur. Aucun appel LLM, aucun token dépensé.
+  if (muted && mentionsBot && staffClaimsTicket) {
+    await recordSilently('staff');
+    return NextResponse.json({ ok: true, statut: 'staff', muted: true, reply: null });
+  }
+
   if (muted && !mentionsBot) {
     await recordSilently('user');
     return NextResponse.json({ ok: true, statut: 'staff', muted: true, reply: null });
@@ -461,27 +474,47 @@ export async function POST(req: NextRequest) {
       let redactedUser = content;
       let created = false;
 
-      if (pair.identifiant && pair.password && /mot de passe|password|mdp/i.test(content)) {
+      if (inRegisterFlow && isRegisterHelpQuestion(content) && !extractRegisterIdentifiant(content)) {
+        reply = registerHelpReply(registerState.step, identifiant);
+      } else if (pair.identifiant && pair.password && /mot de passe|password|mdp/i.test(content)) {
         identifiant = pair.identifiant;
+        memory = writeRegisterState(memory, 'confirm', identifiant);
         password = pair.password;
       } else if (registerState.step === 'password') {
         password = extractRegisterPassword(content);
-        if (!password) {
+        const maybeId = extractRegisterIdentifiant(content);
+        if (!password && maybeId) {
+          identifiant = maybeId;
+          memory = writeRegisterState(memory, 'confirm', maybeId);
+          reply = registerConfirmPrompt(maybeId);
+        } else if (!password) {
           reply = 'Je n’ai pas reconnu un mot de passe. Envoie-le seul, avec au moins 8 caractères, ou dis **annule**.';
+        }
+      } else if (registerState.step === 'confirm') {
+        const otherId = extractRegisterIdentifiant(content);
+        if (otherId && otherId !== identifiant) {
+          memory = writeRegisterState(memory, 'confirm', otherId);
+          identifiant = otherId;
+          reply = registerConfirmPrompt(otherId);
+        } else if (isRegisterConfirmYes(content) && identifiant) {
+          memory = writeRegisterState(memory, 'password', identifiant);
+          reply = REGISTER_ASK_PASSWORD;
+        } else {
+          reply = registerConfirmPrompt(identifiant || 'ton identifiant');
         }
       } else if (registerState.step === 'identifiant') {
         identifiant = extractRegisterIdentifiant(content);
         if (!identifiant) {
-          reply = 'Identifiant invalide. 2 à 30 caractères, lettres, chiffres ou `_` uniquement.';
+          reply = registerHelpReply('identifiant');
         } else {
-          memory = writeRegisterState(memory, 'password', identifiant);
-          reply = REGISTER_ASK_PASSWORD;
+          memory = writeRegisterState(memory, 'confirm', identifiant);
+          reply = registerConfirmPrompt(identifiant);
         }
       } else {
         identifiant = extractRegisterIdentifiant(content);
         if (identifiant) {
-          memory = writeRegisterState(memory, 'password', identifiant);
-          reply = REGISTER_ASK_PASSWORD;
+          memory = writeRegisterState(memory, 'confirm', identifiant);
+          reply = registerConfirmPrompt(identifiant);
         } else {
           memory = writeRegisterState(memory, 'identifiant');
           reply = REGISTER_ASK_IDENTIFIANT;
@@ -525,7 +558,7 @@ export async function POST(req: NextRequest) {
         updated_at: nowIso,
       });
       try {
-        await discordSendMessage(channelId, reply);
+        await discordSendMessage(channelId, sanitizeOfficialSiteUrl(reply));
       } catch (e) {
         console.error('[support-message] register reply', e);
         return NextResponse.json({ error: 'discord_send_failed', statut: 'waiting' }, { status: 502 });

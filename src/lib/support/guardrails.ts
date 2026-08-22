@@ -68,6 +68,7 @@ export function authoritativeSupportReply(message: string): string | null {
 export function sanitizeOfficialSiteUrl(reply: string): string {
   return reply
     .replace(/https?:\/\/(?:www\.)?ptfs\.logbook\/?/gi, OFFICIAL_SITE_URL)
+    .replace(/\b(?:www\.)?ptfs\.logbook\b/gi, OFFICIAL_SITE_URL.replace(/\/$/, ''))
     .replace(/https?:\/\/www\.mixouairlinesptfsweblogbook\.com\/?/gi, OFFICIAL_SITE_URL);
 }
 
