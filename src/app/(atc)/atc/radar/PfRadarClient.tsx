@@ -10,7 +10,8 @@ import {
   PF_MAP_H,
   PF_MAP_W,
   PF_SERVER_ID_RE,
-  PF_TILE_TREE,
+  pfTileUnit,
+  altitudeToTrailColor,
 } from '@/lib/pftester-odw';
 
 type PfAircraft = {
@@ -28,8 +29,8 @@ type PfAircraft = {
   onGround?: boolean;
 };
 
-type TrailPt = { x: number; y: number };
-type MapTile = { key: string; z: number; x: number; y: number; left: number; top: number; size: number };
+type TrailPt = { x: number; y: number; alt: number };
+type MapTile = { key: string; z: number; x: number; y: number; left: number; top: number; width: number; height: number };
 type MapBounds = { minX: number; minY: number; maxX: number; maxY: number };
 
 const MIN_VIEW_ZOOM = 1;
@@ -71,7 +72,7 @@ function visibleMapBounds(
 
 function tilesInBounds(tileZoom: number, bounds: MapBounds): MapTile[] {
   const n = 2 ** tileZoom;
-  const unit = PF_TILE_TREE / n;
+  const unit = pfTileUnit(tileZoom);
   const x0 = Math.max(0, Math.floor(bounds.minX / unit) - 1);
   const y0 = Math.max(0, Math.floor(bounds.minY / unit) - 1);
   const x1 = Math.min(n - 1, Math.ceil(Math.min(PF_MAP_W, bounds.maxX) / unit) + 1);
@@ -87,7 +88,8 @@ function tilesInBounds(tileZoom: number, bounds: MapBounds): MapTile[] {
         y,
         left: x * unit,
         top: y * unit,
-        size: unit,
+        width: unit,
+        height: unit,
       });
     }
   }
@@ -199,7 +201,7 @@ export default function PfRadarClient({
         const dx = last ? a.mapX - last.x : 99;
         const dy = last ? a.mapY - last.y : 99;
         if (!last || dx * dx + dy * dy >= 0.03) {
-          pts.push({ x: a.mapX, y: a.mapY });
+          pts.push({ x: a.mapX, y: a.mapY, alt: a.altitude });
           if (pts.length > 90) pts.splice(0, pts.length - 90);
           changed = true;
         }
@@ -343,8 +345,8 @@ export default function PfRadarClient({
                     style={{
                       left: `${(t.left / PF_MAP_W) * 100}%`,
                       top: `${(t.top / PF_MAP_H) * 100}%`,
-                      width: `${(t.size / PF_MAP_W) * 100}%`,
-                      height: `${(t.size / PF_MAP_H) * 100}%`,
+                      width: `${(t.width / PF_MAP_W) * 100}%`,
+                      height: `${(t.height / PF_MAP_H) * 100}%`,
                     }}
                   />
                 ))}
@@ -374,7 +376,6 @@ export default function PfRadarClient({
                   const isSelected = selectedId === a.id;
                   const color = isSelected ? '#fbbf24' : a.onGround ? '#a3e635' : '#22d3ee';
                   const trail = trails[a.id];
-                  const trailPoints = trail && trail.length > 1 ? trail.map((p) => `${p.x},${p.y}`).join(' ') : '';
                   return (
                     <g
                       key={a.id}
@@ -382,17 +383,21 @@ export default function PfRadarClient({
                       style={{ cursor: 'pointer' }}
                       onClick={() => setSelectedId((prev) => (prev === a.id ? null : a.id))}
                     >
-                      {trailPoints ? (
-                        <polyline
-                          points={trailPoints}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth={isSelected ? trailW * 1.4 : trailW}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          opacity={isSelected ? 0.95 : 0.7}
-                        />
-                      ) : null}
+                      {trail && trail.length > 1
+                        ? trail.slice(1).map((p, i) => (
+                            <line
+                              key={`${a.id}-t${i}`}
+                              x1={trail[i].x}
+                              y1={trail[i].y}
+                              x2={p.x}
+                              y2={p.y}
+                              stroke={altitudeToTrailColor((trail[i].alt + p.alt) / 2)}
+                              strokeWidth={isSelected ? trailW * 1.4 : trailW}
+                              strokeLinecap="round"
+                              opacity={isSelected ? 0.95 : 0.85}
+                            />
+                          ))
+                        : null}
                       <circle cx={a.mapX} cy={a.mapY} r={Math.max(1.2, 10 / zoom)} fill="transparent" />
                       <g transform={`translate(${a.mapX},${a.mapY}) rotate(${a.heading}) scale(${iconScale})`}>
                         <path

@@ -11,9 +11,44 @@ export const PF_MAP_CX = 120;
 export const PF_MAP_CY = 67.5;
 /** Conversion coordonnées jeu → carte (unités tuiles, Y vers le bas comme la carte officielle). */
 export const PF_COORD_SCALE = 0.00072;
+/**
+ * Arbre de tuiles CDN : 2^z × 2^z sur 256 unités.
+ * L’espace avion / viewport reste 240×135 (fenêtre utile de cet arbre).
+ * Ne pas placer les tuiles avec 240/2^z — ça décale tout vers l’est.
+ */
 export const PF_TILE_TREE = 256;
 
+/** Côté d’une tuile à ce zoom, dans les mêmes unités que gameToMap. */
+export function pfTileUnit(tileZoom: number): number {
+  return PF_TILE_TREE / 2 ** tileZoom;
+}
+
 export const PF_SERVER_ID_RE = /^[A-Za-z0-9_-]{4,64}$/;
+
+const TRAIL_COLOR_STOPS: [number, [number, number, number]][] = [
+  [0, [220, 38, 38]],
+  [60, [234, 88, 12]],
+  [120, [250, 204, 21]],
+  [180, [34, 197, 94]],
+  [250, [6, 182, 212]],
+  [320, [37, 99, 235]],
+  [360, [59, 7, 100]],
+];
+
+/** Trace : rouge au sol → violet sombre à partir du FL360. */
+export function altitudeToTrailColor(altitudeFt: number): string {
+  const fl = Math.max(0, altitudeFt / 100);
+  if (fl >= 360) return 'rgb(59,7,100)';
+  let i = 0;
+  while (i < TRAIL_COLOR_STOPS.length - 1 && fl > TRAIL_COLOR_STOPS[i + 1]![0]) i++;
+  const [f0, c0] = TRAIL_COLOR_STOPS[i]!;
+  const [f1, c1] = TRAIL_COLOR_STOPS[i + 1]!;
+  const t = (fl - f0) / Math.max(0.001, f1 - f0);
+  const r = Math.round(c0[0] + (c1[0] - c0[0]) * t);
+  const g = Math.round(c0[1] + (c1[1] - c0[1]) * t);
+  const b = Math.round(c0[2] + (c1[2] - c0[2]) * t);
+  return `rgb(${r},${g},${b})`;
+}
 
 export type PfLiveAircraft = {
   id: string;
