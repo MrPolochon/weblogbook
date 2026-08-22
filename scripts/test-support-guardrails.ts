@@ -12,6 +12,14 @@ import { LIVRET_PROGRESSION_IA } from '../src/lib/support/livret-progression';
 import { searchDocs } from '../src/lib/support/doc-index';
 import { ATC_FORMATIONS_IA } from '../src/lib/support/atc-formations';
 import { memberHasVerifiedRole } from '../src/lib/auth/create-discord-account';
+import {
+  extractRegisterIdentifiant,
+  extractRegisterPassword,
+  isRegisterCancel,
+  readRegisterState,
+  wantsAccountCreation,
+  writeRegisterState,
+} from '../src/lib/support/register-conversation';
 import { atcDossierGuidance } from '../src/lib/support/requester-context';
 import { shouldOfferResolution } from '../src/lib/support/ticket-actions';
 import {
@@ -111,4 +119,13 @@ assert.equal(memberHasVerifiedRole([]).ok, true);
 if (previousRequiredRole === undefined) delete process.env.DISCORD_REQUIRED_ROLE_ID;
 else process.env.DISCORD_REQUIRED_ROLE_ID = previousRequiredRole;
 
-console.log('Support guardrails: 10 groupes de tests réussis.');
+assert.equal(wantsAccountCreation("j'ai pas de compte", false), true);
+assert.equal(extractRegisterIdentifiant('mr_polo'), 'mr_polo');
+assert.equal(extractRegisterIdentifiant('identifiant: Mixou_1'), 'mixou_1');
+assert.equal(extractRegisterIdentifiant('tout'), null);
+assert.equal(extractRegisterPassword('abcdefgh'), 'abcdefgh');
+assert.equal(extractRegisterPassword('comment je fais ?'), null);
+assert.equal(isRegisterCancel('annule'), true);
+assert.equal(readRegisterState(writeRegisterState('', 'password', 'mixou')).identifiant, 'mixou');
+
+console.log('Support guardrails: 11 groupes de tests réussis.');

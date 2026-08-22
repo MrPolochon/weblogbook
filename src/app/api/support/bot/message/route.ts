@@ -32,7 +32,27 @@ import {
   ticketChannelName,
   type SupportStatus,
 } from '@/lib/support/motifs';
-import { discordRenameChannel, discordSendMessage } from '@/lib/support/discord-api';
+import {
+  discordDeleteMessage,
+  discordGetGuildMember,
+  discordRenameChannel,
+  discordSendMessage,
+} from '@/lib/support/discord-api';
+import { createSiteAccountFromDiscord, memberHasVerifiedRole } from '@/lib/auth/create-discord-account';
+import { getDiscordGuildId } from '@/lib/discord-link';
+import { OFFICIAL_SITE_URL } from '@/lib/site-url';
+import {
+  extractRegisterIdentifiant,
+  extractRegisterPair,
+  extractRegisterPassword,
+  isRegisterCancel,
+  readRegisterState,
+  REGISTER_ASK_IDENTIFIANT,
+  REGISTER_ASK_PASSWORD,
+  REGISTER_CANCELLED,
+  wantsAccountCreation,
+  writeRegisterState,
+} from '@/lib/support/register-conversation';
 import { llmReply, type LlmResult } from '@/lib/support/llm';
 import { buildRequesterContext } from '@/lib/support/requester-context';
 import {
@@ -345,6 +365,175 @@ export async function POST(req: NextRequest) {
         escalate: Boolean(result.escalated),
         resolution_offered: Boolean(result.offeredResolution),
         reply: null,
+      });
+    }
+  }
+
+  // Création de compte dans le ticket : le serveur collecte identifiant puis
+  // mot de passe, puis appelle la même logique que /register. Le modèle ne crée rien.
+  if (requesterSpeaking) {
+    const registerState = readRegisterState(memory);
+    const inRegisterFlow = registerState.step !== 'idle';
+    const wantsRegister = wantsAccountCreation(content, inRegisterFlow);
+    if (inRegisterFlow && isRegisterCancel(content)) {
+      memory = writeRegisterState(memory, 'idle');
+      const nextTurns = trimConversation([
+        ...turns,
+        { role: 'user', content },
+        { role: 'assistant', content: REGISTER_CANCELLED },
+      ]);
+      await updateTicketRow(admin, ticket.id, {
+        statut: 'waiting',
+        conversation: nextTurns,
+        memory_notes: memory,
+        last_human_at: nowIso,
+        last_nudge_at: null,
+        inactivity_nudge: 0,
+        updated_at: nowIso,
+      });
+      try {
+        await discordSendMessage(channelId, REGISTER_CANCELLED);
+      } catch (e) {
+        console.error('[support-message] register cancel', e);
+        return NextResponse.json({ error: 'discord_send_failed', statut: 'waiting' }, { status: 502 });
+      }
+      return NextResponse.json({ ok: true, statut: 'waiting', register: 'cancelled' });
+    }
+    if (wantsRegister || inRegisterFlow) {
+      if (ticket.user_id && !inRegisterFlow) {
+        const already =
+          'Ton Discord est déjà lié à un compte site. Connecte-toi avec cet identifiant, ou passe par Mot de passe oublié — ne crée pas un second compte.';
+        const nextTurns = trimConversation([
+          ...turns,
+          { role: 'user', content },
+          { role: 'assistant', content: already },
+        ]);
+        await updateTicketRow(admin, ticket.id, {
+          statut: 'waiting',
+          conversation: nextTurns,
+          memory_notes: memory,
+          last_human_at: nowIso,
+          updated_at: nowIso,
+        });
+        try {
+          await discordSendMessage(channelId, already);
+        } catch (e) {
+          console.error('[support-message] register already linked', e);
+          return NextResponse.json({ error: 'discord_send_failed', statut: 'waiting' }, { status: 502 });
+        }
+        return NextResponse.json({ ok: true, statut: 'waiting', register: 'already_linked' });
+      }
+
+      const guildId = getDiscordGuildId();
+      const member = openerDiscordId && guildId
+        ? await discordGetGuildMember(guildId, openerDiscordId)
+        : null;
+      const verified = memberHasVerifiedRole(member?.roles);
+      if (!verified.ok) {
+        memory = writeRegisterState(memory, 'idle');
+        const missing =
+          'Il te faut le rôle Vérifié du serveur avant de créer un compte. Fais-toi vérifier, puis redis-le moi ou tape `/register`.';
+        const nextTurns = trimConversation([
+          ...turns,
+          { role: 'user', content },
+          { role: 'assistant', content: missing },
+        ]);
+        await updateTicketRow(admin, ticket.id, {
+          statut: 'waiting',
+          conversation: nextTurns,
+          memory_notes: memory,
+          last_human_at: nowIso,
+          updated_at: nowIso,
+        });
+        try {
+          await discordSendMessage(channelId, missing);
+        } catch (e) {
+          console.error('[support-message] register missing role', e);
+          return NextResponse.json({ error: 'discord_send_failed', statut: 'waiting' }, { status: 502 });
+        }
+        return NextResponse.json({ ok: true, statut: 'waiting', register: 'missing_role' });
+      }
+
+      const pair = extractRegisterPair(content);
+      let identifiant = registerState.identifiant;
+      let password: string | null = null;
+      let reply = '';
+      let redactedUser = content;
+      let created = false;
+
+      if (pair.identifiant && pair.password && /mot de passe|password|mdp/i.test(content)) {
+        identifiant = pair.identifiant;
+        password = pair.password;
+      } else if (registerState.step === 'password') {
+        password = extractRegisterPassword(content);
+        if (!password) {
+          reply = 'Je n’ai pas reconnu un mot de passe. Envoie-le seul, avec au moins 8 caractères, ou dis **annule**.';
+        }
+      } else if (registerState.step === 'identifiant') {
+        identifiant = extractRegisterIdentifiant(content);
+        if (!identifiant) {
+          reply = 'Identifiant invalide. 2 à 30 caractères, lettres, chiffres ou `_` uniquement.';
+        } else {
+          memory = writeRegisterState(memory, 'password', identifiant);
+          reply = REGISTER_ASK_PASSWORD;
+        }
+      } else {
+        identifiant = extractRegisterIdentifiant(content);
+        if (identifiant) {
+          memory = writeRegisterState(memory, 'password', identifiant);
+          reply = REGISTER_ASK_PASSWORD;
+        } else {
+          memory = writeRegisterState(memory, 'identifiant');
+          reply = REGISTER_ASK_IDENTIFIANT;
+        }
+      }
+
+      if (password && identifiant) {
+        const result = await createSiteAccountFromDiscord({
+          identifiant,
+          password,
+          discordId: openerDiscordId,
+          discordUsername: String(ticket.discord_username || member?.username || openerDiscordId),
+        });
+        memory = writeRegisterState(memory, 'idle');
+        redactedUser = '[mot de passe reçu — masqué]';
+        if (messageId) {
+          try {
+            await discordDeleteMessage(channelId, messageId);
+          } catch { /* le salon garde le message si le bot ne peut pas le supprimer */ }
+        }
+        reply = result.ok
+          ? `${result.message}\nSite : ${OFFICIAL_SITE_URL}`
+          : result.extra?.message
+            ? String(result.extra.message)
+            : result.error;
+        created = result.ok;
+      }
+
+      const nextTurns = trimConversation([
+        ...turns,
+        { role: 'user', content: redactedUser },
+        { role: 'assistant', content: reply },
+      ]);
+      await updateTicketRow(admin, ticket.id, {
+        statut: 'waiting',
+        conversation: nextTurns,
+        memory_notes: memory,
+        last_human_at: nowIso,
+        last_nudge_at: null,
+        inactivity_nudge: 0,
+        updated_at: nowIso,
+      });
+      try {
+        await discordSendMessage(channelId, reply);
+      } catch (e) {
+        console.error('[support-message] register reply', e);
+        return NextResponse.json({ error: 'discord_send_failed', statut: 'waiting' }, { status: 502 });
+      }
+      return NextResponse.json({
+        ok: true,
+        statut: 'waiting',
+        register: created ? 'created' : registerState.step === 'idle' ? 'started' : 'collecting',
       });
     }
   }

@@ -148,6 +148,26 @@ export async function discordDeleteChannel(channelId: string) {
   return discordFetch(`/channels/${channelId}`, { method: 'DELETE' });
 }
 
+export async function discordDeleteMessage(channelId: string, messageId: string) {
+  return discordFetch(`/channels/${channelId}/messages/${messageId}`, { method: 'DELETE' });
+}
+
+export async function discordGetGuildMember(
+  guildId: string,
+  userId: string
+): Promise<{ roles: string[]; username: string } | null> {
+  try {
+    const member = await discordFetch(`/guilds/${guildId}/members/${userId}`);
+    const user = (member?.user || {}) as { username?: string; global_name?: string };
+    return {
+      roles: Array.isArray(member?.roles) ? member.roles.map(String) : [],
+      username: String(user.global_name || user.username || userId),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function discordGetMessages(channelId: string, limit = 100) {
   return discordFetch(`/channels/${channelId}/messages?limit=${Math.min(limit, 100)}`);
 }
