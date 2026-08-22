@@ -9,7 +9,7 @@ export const PF_MAP_W = 240;
 export const PF_MAP_H = 135;
 export const PF_MAP_CX = 120;
 export const PF_MAP_CY = 67.5;
-/** Conversion coordonnées jeu → carte (unités tuiles). */
+/** Conversion coordonnées jeu → carte (unités tuiles, Y vers le bas comme la carte officielle). */
 export const PF_COORD_SCALE = 0.00072;
 export const PF_TILE_TREE = 256;
 

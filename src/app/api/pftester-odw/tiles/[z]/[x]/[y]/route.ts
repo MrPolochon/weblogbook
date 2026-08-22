@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic';
 const PF_TILE_ORIGIN = 'https://cdn.project-flight.com/tiles';
 const PF_TILE_REFERER = 'https://tracker.project-flight.com/';
 
-function parseIndex(raw: string): number | null {
-  if (!/^\d{1,2}$/.test(raw)) return null;
+function parseIndex(raw: string, maxDigits: number): number | null {
+  if (!new RegExp(`^\\d{1,${maxDigits}}$`).test(raw)) return null;
   return Number(raw);
 }
 
@@ -14,9 +14,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: { z: string; x: string; y: string } },
 ) {
-  const z = parseIndex(params.z);
-  const x = parseIndex(params.x);
-  const y = parseIndex(params.y);
+  const z = parseIndex(params.z, 1);
+  const x = parseIndex(params.x, 3);
+  const y = parseIndex(params.y, 3);
   if (z === null || x === null || y === null || z < 1 || z > 8) {
     return new NextResponse('Tuile invalide', { status: 400 });
   }

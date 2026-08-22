@@ -26,19 +26,56 @@ type PfAircraft = {
 };
 
 type TrailPt = { x: number; y: number };
+type MapTile = { key: string; z: number; x: number; y: number; left: number; top: number; size: number };
+type MapBounds = { minX: number; minY: number; maxX: number; maxY: number };
+
+const MIN_VIEW_ZOOM = 1;
+const MAX_VIEW_ZOOM = 64;
+const MAX_TILE_Z = 8;
 
 function tileUrl(z: number, x: number, y: number): string {
   return `/api/pftester-odw/tiles/${z}/${x}/${y}`;
 }
 
-function tilesForZoom(tileZoom: number) {
+function clampViewZoom(z: number): number {
+  return Math.max(MIN_VIEW_ZOOM, Math.min(MAX_VIEW_ZOOM, z));
+}
+
+function fittedMapSize(containerW: number, containerH: number): { dispW: number; dispH: number } {
+  const availW = Math.max(80, containerW - 16);
+  const availH = Math.max(80, containerH - 16);
+  if (availW / availH > PF_MAP_W / PF_MAP_H) {
+    return { dispW: availH * (PF_MAP_W / PF_MAP_H), dispH: availH };
+  }
+  return { dispW: availW, dispH: availW * (PF_MAP_H / PF_MAP_W) };
+}
+
+function visibleMapBounds(
+  containerW: number,
+  containerH: number,
+  zoom: number,
+  pan: { x: number; y: number },
+): MapBounds {
+  const { dispW, dispH } = fittedMapSize(containerW, containerH);
+  const pad = 8;
+  const minX = PF_MAP_W * (0.5 + (-containerW / 2 - pan.x) / (zoom * dispW)) - pad;
+  const maxX = PF_MAP_W * (0.5 + (containerW / 2 - pan.x) / (zoom * dispW)) + pad;
+  const minY = PF_MAP_H * (0.5 + (-containerH / 2 - pan.y) / (zoom * dispH)) - pad;
+  const maxY = PF_MAP_H * (0.5 + (containerH / 2 - pan.y) / (zoom * dispH)) + pad;
+  return { minX, minY, maxX, maxY };
+}
+
+function tilesInBounds(tileZoom: number, bounds: MapBounds): MapTile[] {
   const n = 2 ** tileZoom;
   const unit = PF_TILE_TREE / n;
-  const list: { key: string; z: number; x: number; y: number; left: number; top: number; size: number }[] = [];
-  const maxTx = Math.min(n - 1, Math.ceil(PF_MAP_W / unit) - 1);
-  const maxTy = Math.min(n - 1, Math.ceil(PF_MAP_H / unit) - 1);
-  for (let y = 0; y <= maxTy; y++) {
-    for (let x = 0; x <= maxTx; x++) {
+  const x0 = Math.max(0, Math.floor(bounds.minX / unit) - 1);
+  const y0 = Math.max(0, Math.floor(bounds.minY / unit) - 1);
+  const x1 = Math.min(n - 1, Math.ceil(Math.min(PF_MAP_W, bounds.maxX) / unit) + 1);
+  const y1 = Math.min(n - 1, Math.ceil(Math.min(PF_MAP_H, bounds.maxY) / unit) + 1);
+  const list: MapTile[] = [];
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      if (x * unit >= PF_MAP_W || y * unit >= PF_MAP_H) continue;
       list.push({
         key: `${tileZoom}-${x}-${y}`,
         z: tileZoom,
@@ -63,9 +100,18 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef<{ x: number; y: number; mouseX: number; mouseY: number } | null>(null);
-  const pinchStartRef = useRef<{ distance: number; zoom: number } | null>(null);
+  const pinchStartRef = useRef<{
+    distance: number;
+    zoom: number;
+    pan: { x: number; y: number };
+    midX: number;
+    midY: number;
+  } | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [trails, setTrails] = useState<Record<string, TrailPt[]>>({});
+  const [viewport, setViewport] = useState({ w: 900, h: 560 });
+  const viewRef = useRef({ zoom: 1.15, pan: { x: 0, y: 0 } });
+  viewRef.current = { zoom, pan };
 
   const fetchFlights = useCallback(async () => {
     try {
@@ -91,11 +137,24 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
   }, [fetchFlights]);
 
   useEffect(() => {
+    const el = mapContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) setViewport({ w: r.width, h: r.height });
+    });
+    ro.observe(el);
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) setViewport({ w: r.width, h: r.height });
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
     setTrails((prev) => {
       const next: Record<string, TrailPt[]> = {};
       let changed = false;
       for (const a of aircraft) {
-        const y = PF_MAP_H - a.mapY;
+        const y = a.mapY;
         const pts = prev[a.id] ? prev[a.id].slice() : [];
         const last = pts[pts.length - 1];
         const dx = last ? a.mapX - last.x : 99;
@@ -115,9 +174,43 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
     });
   }, [aircraft]);
 
-  const updateZoom = useCallback((next: number) => {
-    setZoom(Math.max(1, Math.min(8, next)));
+  const applyZoomAt = useCallback((clientX: number, clientY: number, nextZoom: number) => {
+    const z = clampViewZoom(nextZoom);
+    const el = mapContainerRef.current;
+    const cur = viewRef.current;
+    if (!el || cur.zoom === z) {
+      setZoom(z);
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const cx = clientX - rect.left - rect.width / 2;
+    const cy = clientY - rect.top - rect.height / 2;
+    const k = z / cur.zoom;
+    setPan({ x: cx * (1 - k) + cur.pan.x * k, y: cy * (1 - k) + cur.pan.y * k });
+    setZoom(z);
   }, []);
+
+  const updateZoom = useCallback((next: number) => {
+    const el = mapContainerRef.current;
+    if (!el) {
+      setZoom(clampViewZoom(next));
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    applyZoomAt(r.left + r.width / 2, r.top + r.height / 2, next);
+  }, [applyZoomAt]);
+
+  useEffect(() => {
+    const el = mapContainerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = Math.exp(-e.deltaY * 0.0018);
+      applyZoomAt(e.clientX, e.clientY, viewRef.current.zoom * factor);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [applyZoomAt]);
 
   function startPan(clientX: number, clientY: number) {
     panStartRef.current = { x: pan.x, y: pan.y, mouseX: clientX, mouseY: clientY };
@@ -140,12 +233,23 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
     return Math.hypot(dx, dy);
   }
 
-  const tileZoom = Math.max(1, Math.min(5, Math.round(zoom + 1)));
+  const { dispW } = fittedMapSize(viewport.w, viewport.h);
+  const tileZ = Math.max(
+    1,
+    Math.min(MAX_TILE_Z, Math.round(Math.log2(Math.max(2, (dispW * zoom) / PF_MAP_W)) + 0.25)),
+  );
+  const bounds = useMemo(
+    () => visibleMapBounds(viewport.w, viewport.h, zoom, pan),
+    [viewport.w, viewport.h, zoom, pan],
+  );
   const tiles = useMemo(() => {
-    const base = tilesForZoom(1);
-    if (tileZoom <= 1) return base;
-    return [...base, ...tilesForZoom(tileZoom)];
-  }, [tileZoom]);
+    const base = tilesInBounds(1, { minX: 0, minY: 0, maxX: PF_MAP_W, maxY: PF_MAP_H });
+    if (tileZ <= 1) return base;
+    return [...base, ...tilesInBounds(tileZ, bounds)];
+  }, [tileZ, bounds]);
+  const iconScale = 0.55 / zoom;
+  const labelSize = 2.6 / zoom;
+  const trailW = 0.55 / zoom;
 
   const selected = aircraft.find((a) => a.id === selectedId) ?? null;
 
@@ -154,9 +258,9 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
       <div
         className="flex-1 min-h-0 relative rounded-xl border border-cyan-700/40 bg-slate-950 overflow-hidden touch-none"
         ref={mapContainerRef}
-        onWheel={(e) => {
+        onDoubleClick={(e) => {
           e.preventDefault();
-          updateZoom(zoom + (e.deltaY < 0 ? 0.18 : -0.18));
+          applyZoomAt(e.clientX, e.clientY, viewRef.current.zoom * 2);
         }}
         onMouseDown={(e) => startPan(e.clientX, e.clientY)}
         onMouseMove={(e) => movePan(e.clientX, e.clientY)}
@@ -164,7 +268,13 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
         onMouseLeave={endPan}
         onTouchStart={(e) => {
           if (e.touches.length === 2) {
-            pinchStartRef.current = { distance: touchDistance(e.touches), zoom };
+            pinchStartRef.current = {
+              distance: touchDistance(e.touches),
+              zoom,
+              pan: { ...pan },
+              midX: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+              midY: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+            };
           } else if (e.touches.length === 1) {
             startPan(e.touches[0].clientX, e.touches[0].clientY);
           }
@@ -172,7 +282,18 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
         onTouchMove={(e) => {
           if (e.touches.length === 2 && pinchStartRef.current) {
             e.preventDefault();
-            updateZoom(pinchStartRef.current.zoom * (touchDistance(e.touches) / pinchStartRef.current.distance));
+            const start = pinchStartRef.current;
+            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            const z = clampViewZoom(start.zoom * (touchDistance(e.touches) / start.distance));
+            const el = mapContainerRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            const cx = midX - rect.left - rect.width / 2;
+            const cy = midY - rect.top - rect.height / 2;
+            const k = z / start.zoom;
+            setPan({ x: cx * (1 - k) + start.pan.x * k, y: cy * (1 - k) + start.pan.y * k });
+            setZoom(z);
           } else if (e.touches.length === 1) {
             movePan(e.touches[0].clientX, e.touches[0].clientY);
           }
@@ -181,14 +302,13 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
           pinchStartRef.current = null;
           endPan();
         }}
-        style={{ cursor: zoom > 1 ? (isPanning ? 'grabbing' : 'grab') : 'default' }}
+        style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
       >
         <div
           className="absolute inset-0"
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             transformOrigin: 'center center',
-            transition: isPanning ? 'none' : 'transform 0.12s ease-out',
           }}
         >
           <div className="absolute inset-0 flex items-center justify-center p-2">
@@ -217,7 +337,7 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
               <svg viewBox={`0 0 ${PF_MAP_W} ${PF_MAP_H}`} className="absolute inset-0 w-full h-full pointer-events-none">
                 {aircraft.map((a) => {
                   const isSelected = selectedId === a.id;
-                  const htmlY = PF_MAP_H - a.mapY;
+                  const htmlY = a.mapY;
                   const color = isSelected ? '#fbbf24' : '#22d3ee';
                   const trail = trails[a.id];
                   const trailPoints = trail && trail.length > 1
@@ -235,14 +355,14 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
                           points={trailPoints}
                           fill="none"
                           stroke={color}
-                          strokeWidth={isSelected ? 0.55 : 0.35}
+                          strokeWidth={isSelected ? trailW * 1.4 : trailW}
                           strokeLinecap="round"
                           strokeLinejoin="round"
                           opacity={isSelected ? 0.95 : 0.7}
                         />
                       ) : null}
-                      <circle cx={a.mapX} cy={htmlY} r="4" fill="transparent" />
-                      <g transform={`translate(${a.mapX},${htmlY}) rotate(${a.heading}) scale(0.55)`}>
+                      <circle cx={a.mapX} cy={htmlY} r={Math.max(1.2, 10 / zoom)} fill="transparent" />
+                      <g transform={`translate(${a.mapX},${htmlY}) rotate(${a.heading}) scale(${iconScale})`}>
                         <path
                           d={PLANE_BLIP_D}
                           fill={color}
@@ -252,10 +372,10 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
                         />
                       </g>
                       <text
-                        x={a.mapX + 2.2}
-                        y={htmlY - 2.4}
+                        x={a.mapX + 2.2 / zoom}
+                        y={htmlY - 2.4 / zoom}
                         fill={color}
-                        fontSize="2.6"
+                        fontSize={labelSize}
                         fontFamily="monospace"
                         fontWeight="bold"
                         style={{ textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}
@@ -270,11 +390,14 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
           </div>
         </div>
 
-        <div className="absolute bottom-3 right-3 flex flex-col gap-1.5 z-10">
-          <button type="button" onClick={() => updateZoom(zoom + 0.35)} className="p-2 rounded-lg bg-slate-900/90 border border-slate-600 text-slate-200" title="Zoom +">
+        <div className="absolute bottom-3 right-3 flex flex-col items-center gap-1.5 z-10">
+          <span className="px-1.5 py-0.5 rounded-md bg-slate-900/90 border border-slate-600 text-[10px] font-mono text-cyan-200 tabular-nums">
+            ×{zoom >= 10 ? Math.round(zoom) : zoom.toFixed(1)}
+          </span>
+          <button type="button" onClick={() => updateZoom(zoom * 1.6)} className="p-2 rounded-lg bg-slate-900/90 border border-slate-600 text-slate-200" title="Zoom +">
             <ZoomIn className="h-4 w-4" />
           </button>
-          <button type="button" onClick={() => updateZoom(zoom - 0.35)} className="p-2 rounded-lg bg-slate-900/90 border border-slate-600 text-slate-200" title="Zoom −">
+          <button type="button" onClick={() => updateZoom(zoom / 1.6)} className="p-2 rounded-lg bg-slate-900/90 border border-slate-600 text-slate-200" title="Zoom −">
             <ZoomOut className="h-4 w-4" />
           </button>
           <button type="button" onClick={() => { setZoom(1.15); setPan({ x: 0, y: 0 }); }} className="p-2 rounded-lg bg-slate-900/90 border border-slate-600 text-slate-200" title="Recentrer">
