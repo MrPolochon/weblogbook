@@ -132,7 +132,7 @@ export default function PfTesterOdwMap({ defaultServerId }: { defaultServerId: s
     setLoading(true);
     setTrails({});
     fetchFlights();
-    const t = setInterval(fetchFlights, 4000);
+    const t = setInterval(fetchFlights, 5_000);
     return () => clearInterval(t);
   }, [fetchFlights]);
 

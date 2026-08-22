@@ -172,7 +172,7 @@ export default function PfRadarClient({
     setLoading(true);
     setTrails({});
     fetchTraffic();
-    const t = setInterval(fetchTraffic, 4000);
+    const t = setInterval(fetchTraffic, 5_000);
     return () => clearInterval(t);
   }, [fetchTraffic]);
 
