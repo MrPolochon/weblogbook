@@ -613,7 +613,7 @@ export default function PfTesterOdwMap() {
                     y1={pts[i]!.y}
                     x2={p.x}
                     y2={p.y}
-                    stroke={altitudeToTrailColor((trail[i]!.alt + p.alt) / 2)}
+                    stroke={altitudeToTrailColor((trail[i]!.alt + trail[i + 1]!.alt) / 2)}
                     strokeWidth={isSelected ? 2.6 : 2}
                     strokeLinecap="round"
                     strokeLinejoin="round"
