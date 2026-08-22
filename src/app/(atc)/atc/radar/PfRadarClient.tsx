@@ -299,9 +299,10 @@ export default function PfRadarClient({
     [viewport.w, viewport.h, zoom, pan],
   );
   const tiles = useMemo(() => {
-    const base = tilesInBounds(1, { minX: 0, minY: 0, maxX: PF_MAP_W, maxY: PF_MAP_H });
-    if (tileZ <= 1) return base;
-    return [...base, ...tilesInBounds(tileZ, bounds)];
+    if (tileZ <= 1) {
+      return tilesInBounds(1, { minX: 0, minY: 0, maxX: PF_MAP_W, maxY: PF_MAP_H });
+    }
+    return tilesInBounds(tileZ, bounds);
   }, [tileZ, bounds]);
   const iconScale = 0.55 / zoom;
   const labelSize = 2.6 / zoom;
