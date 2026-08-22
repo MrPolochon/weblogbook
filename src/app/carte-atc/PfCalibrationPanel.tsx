@@ -62,8 +62,8 @@ export default function PfCalibrationPanel({
         </button>
       </div>
       <p className="text-[10px] text-slate-500 leading-snug">
-        Clique le fond à l’endroit réel (seuil, parking…), puis entre les coordonnées jeu X/Y.
-        Minimum {PF_CALIB_MIN_POINTS} points, {PF_CALIB_MAX_POINTS} pour un calage solide — écarte-les (plusieurs aéroports).
+        Clique l’endroit réel sur le fond : les X/Y jeu de l’avion sélectionné (ou le plus proche) sont pris pour ce point.
+        1 point décale la carte, 2 et plus règlent l’échelle, {PF_CALIB_MAX_POINTS} pour un calage solide.
       </p>
       <p className="text-[11px] font-mono text-cyan-300/90">
         {ready} / {PF_CALIB_MAX_POINTS} points prêts

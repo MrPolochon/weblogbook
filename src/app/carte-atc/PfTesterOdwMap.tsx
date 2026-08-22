@@ -9,7 +9,7 @@ import {
   pfTileUnit,
   altitudeToTrailColor,
 } from '@/lib/pftester-odw';
-import { PF_CALIB_MAX_POINTS, PF_CALIB_MIN_POINTS, type PfCalibPoint } from '@/lib/pf-calibration';
+import { PF_CALIB_MAX_POINTS, type PfCalibPoint } from '@/lib/pf-calibration';
 import { usePfCalibration } from '@/lib/use-pf-calibration';
 import PfCalibrationPanel from './PfCalibrationPanel';
 
@@ -270,17 +270,30 @@ export default function PfTesterOdwMap() {
     setIsPanning(false);
   }
 
-  function addCalibPoint(clientX: number, clientY: number) {
+  function addCalibPoint(clientX: number, clientY: number, plane?: PfAircraft) {
     const el = mapContainerRef.current;
     if (!el || points.length >= PF_CALIB_MAX_POINTS) return;
     const rect = el.getBoundingClientRect();
     const { mapX, mapY } = screenToMap(viewport.w, viewport.h, zoom, pan, clientX, clientY, rect);
-    const selectedPlane = aircraft.find((a) => a.id === selectedId);
+    const selectedPlane = plane ?? aircraft.find((a) => a.id === selectedId);
+    let source = selectedPlane && typeof selectedPlane.x === 'number' ? selectedPlane : undefined;
+    if (!source) {
+      let bestD = Infinity;
+      for (const a of aircraft) {
+        if (typeof a.x !== 'number' || typeof a.y !== 'number') continue;
+        const pos = toMap(a.x, a.y);
+        const d = (pos.mapX - mapX) ** 2 + (pos.mapY - mapY) ** 2;
+        if (d < bestD) {
+          bestD = d;
+          source = a;
+        }
+      }
+    }
     const next: PfCalibPoint = {
       id: `${Date.now()}-${points.length}`,
-      label: `Point ${points.length + 1}`,
-      gameX: typeof selectedPlane?.x === 'number' ? selectedPlane.x : null,
-      gameY: typeof selectedPlane?.y === 'number' ? selectedPlane.y : null,
+      label: source?.callsign || `Point ${points.length + 1}`,
+      gameX: typeof source?.x === 'number' ? source.x : null,
+      gameY: typeof source?.y === 'number' ? source.y : null,
       mapX,
       mapY,
     };
@@ -439,7 +452,10 @@ export default function PfTesterOdwMap() {
                       key={a.id}
                       className="pointer-events-auto"
                       style={{ cursor: 'pointer' }}
-                      onMouseDown={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        if (calibMode) addCalibPoint(e.clientX, e.clientY, a);
+                      }}
                       onClick={() => setSelectedId((prev) => (prev === a.id ? null : a.id))}
                     >
                       {trail && trail.length > 1
@@ -529,7 +545,7 @@ export default function PfTesterOdwMap() {
             onApply={() => {
               const solved = apply(points);
               if (!solved) {
-                setCalibError(`Il faut au moins ${PF_CALIB_MIN_POINTS} points avec X/Y jeu, bien écartés.`);
+                setCalibError('Ajoute au moins un point avec les X/Y jeu de l’avion.');
                 return;
               }
               setCalibError(null);

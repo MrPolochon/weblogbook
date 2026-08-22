@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   PF_CALIB_EVENT,
+  PF_CALIB_MIN_POINTS,
   PF_OFFICIAL_FIT,
   applyCalibFit,
   clearStoredCalibration,
@@ -21,14 +22,14 @@ export function usePfCalibration() {
   useEffect(() => {
     const stored = loadStoredCalibration();
     setPoints(stored.points);
-    if (stored.fit && stored.fit.pointCount >= 2) {
+    if (stored.fit && stored.fit.pointCount >= PF_CALIB_MIN_POINTS) {
       setFit(stored.fit);
       setActive(true);
     }
     const sync = () => {
       const next = loadStoredCalibration();
       setPoints(next.points);
-      if (next.fit && next.fit.pointCount >= 2) {
+      if (next.fit && next.fit.pointCount >= PF_CALIB_MIN_POINTS) {
         setFit(next.fit);
         setActive(true);
       } else {

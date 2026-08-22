@@ -1,6 +1,6 @@
 import { PF_COORD_SCALE, PF_MAP_CX, PF_MAP_CY } from '@/lib/pftester-odw';
 
-export const PF_CALIB_MIN_POINTS = 2;
+export const PF_CALIB_MIN_POINTS = 1;
 export const PF_CALIB_MAX_POINTS = 10;
 export const PF_CALIB_STORAGE_KEY = 'pf-odw-calibration-v1';
 export const PF_CALIB_EVENT = 'pf-calib-updated';
