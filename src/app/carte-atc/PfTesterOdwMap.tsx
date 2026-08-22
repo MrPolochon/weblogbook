@@ -42,10 +42,10 @@ const TRAIL_MIN_STEP = 0.015;
 const TRAIL_MAX_STEP = 0.9;
 const TRAIL_MAX_LEN = 90;
 
-function usableGameXY(x?: number, y?: number): boolean {
-  return typeof x === 'number' && typeof y === 'number'
-    && Number.isFinite(x) && Number.isFinite(y)
-    && !(x === 0 && y === 0);
+function readGameXY(x?: number, y?: number): { x: number; y: number } | null {
+  if (typeof x !== 'number' || typeof y !== 'number') return null;
+  if (!Number.isFinite(x) || !Number.isFinite(y) || (x === 0 && y === 0)) return null;
+  return { x, y };
 }
 
 function pushTrailPoint(pts: TrailPt[], x: number, y: number, alt: number): TrailPt[] {
@@ -286,8 +286,9 @@ export default function PfTesterOdwMap() {
   const plotted = useMemo(
     () =>
       aircraft.map((a) => {
-        if (!usableGameXY(a.x, a.y)) return a;
-        const m = gameToMap(a.x, a.y);
+        const xy = readGameXY(a.x, a.y);
+        if (!xy) return a;
+        const m = gameToMap(xy.x, xy.y);
         return { ...a, mapX: m.mapX, mapY: m.mapY };
       }),
     [aircraft],
