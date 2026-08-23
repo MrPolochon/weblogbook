@@ -46,6 +46,11 @@ const MAX_TILE_PX = 520;
 const TRAIL_MIN_STEP = 0.015;
 const TRAIL_MAX_STEP = 0.75;
 const TRAIL_MAX_LEN = 3600;
+/** La trace survit à un rechargement : sinon elle repart de zéro et reste invisible. */
+const TRAIL_STORE_KEY = 'pf-odw-trails-v1';
+const TRAIL_TTL_MS = 20 * 60_000;
+const TRAIL_STORE_MAX = 900;
+const TRAIL_SAVE_MS = 5_000;
 const REFRESH_MS = 1000;
 /** Aligné sur REFRESH_MS : l'interpolation doit couvrir l'intervalle sans le devancer. */
 const MOTION_MS = REFRESH_MS;
@@ -80,6 +85,56 @@ function readGameXY(x?: number, y?: number): { x: number; y: number } | null {
   if (typeof x !== 'number' || typeof y !== 'number') return null;
   if (!Number.isFinite(x) || !Number.isFinite(y) || (x === 0 && y === 0)) return null;
   return { x, y };
+}
+
+function loadStoredTrails(): Record<string, TrailPt[]> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(TRAIL_STORE_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    const cutoff = Date.now() - TRAIL_TTL_MS;
+    const out: Record<string, TrailPt[]> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (!Array.isArray(value)) continue;
+      const kept = (value as TrailPt[]).filter(
+        (p) =>
+          p &&
+          Number.isFinite(p.x) &&
+          Number.isFinite(p.y) &&
+          Number.isFinite(p.alt) &&
+          Number.isFinite(p.at) &&
+          p.at > cutoff,
+      );
+      if (kept.length > 1) out[key] = kept.slice(-TRAIL_MAX_LEN);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function saveStoredTrails(trails: Record<string, TrailPt[]>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const cutoff = Date.now() - TRAIL_TTL_MS;
+    const out: Record<string, TrailPt[]> = {};
+    for (const [key, pts] of Object.entries(trails)) {
+      const kept = pts.filter((p) => p.at > cutoff).slice(-TRAIL_STORE_MAX);
+      if (kept.length > 1) {
+        out[key] = kept.map((p) => ({
+          x: Math.round(p.x * 1e4) / 1e4,
+          y: Math.round(p.y * 1e4) / 1e4,
+          alt: Math.round(p.alt),
+          at: p.at,
+        }));
+      }
+    }
+    window.localStorage.setItem(TRAIL_STORE_KEY, JSON.stringify(out));
+  } catch {
+    // Quota dépassé ou stockage indisponible : la trace en mémoire reste valide.
+  }
 }
 
 function pushTrailPoint(pts: TrailPt[], x: number, y: number, alt: number): TrailPt[] {
@@ -292,6 +347,8 @@ export default function PfTesterOdwMap() {
   } | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [trails, setTrails] = useState<Record<string, TrailPt[]>>({});
+  const trailsRef = useRef(trails);
+  trailsRef.current = trails;
   const [query, setQuery] = useState('');
   const [display, setDisplay] = useState<Record<string, { x: number; y: number; hdg: number }>>({});
   const [viewport, setViewport] = useState({ w: 900, h: 560 });
@@ -371,7 +428,7 @@ export default function PfTesterOdwMap() {
 
   useEffect(() => {
     setLoading(true);
-    setTrails({});
+    setTrails(loadStoredTrails());
     fetchFlights();
     const t = setInterval(fetchFlights, REFRESH_MS);
     return () => clearInterval(t);
@@ -406,22 +463,37 @@ export default function PfTesterOdwMap() {
   );
 
   useEffect(() => {
+    if (!plotted.length) return;
     setTrails((prev) => {
       const next: Record<string, TrailPt[]> = {};
+      const cutoff = Date.now() - TRAIL_TTL_MS;
       let changed = false;
+      // Un avion absent d'un relevé ne perd pas sa trace : elle expire par ancienneté.
+      for (const [key, pts] of Object.entries(prev)) {
+        if (pts.length > 1 && pts[pts.length - 1]!.at > cutoff) next[key] = pts;
+        else changed = true;
+      }
       for (const a of plotted) {
         const key = trailKey(a);
         const pts = pushTrailPoint(prev[key] ?? [], a.mapX, a.mapY, a.altitude);
         if (pts !== prev[key]) changed = true;
         next[key] = pts;
       }
-      if (!changed && Object.keys(prev).length === Object.keys(next).length) {
-        const sameIds = Object.keys(next).every((id) => prev[id]);
-        if (sameIds) return prev;
-      }
+      if (!changed && Object.keys(prev).length === Object.keys(next).length) return prev;
       return next;
     });
   }, [plotted]);
+
+  useEffect(() => {
+    const t = setInterval(() => saveStoredTrails(trailsRef.current), TRAIL_SAVE_MS);
+    const onHide = () => saveStoredTrails(trailsRef.current);
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('pagehide', onHide);
+      saveStoredTrails(trailsRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const now = performance.now();
