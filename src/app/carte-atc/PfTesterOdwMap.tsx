@@ -9,6 +9,7 @@ import {
   PF_DEFAULT_SERVER_ID,
   PF_MAP_H,
   PF_MAP_W,
+  pfFlightKey,
   pfTileUnit,
   altitudeToTrailColor,
   gameToMap,
@@ -82,8 +83,9 @@ function niceNm(raw: number): number {
   return steps.find((s) => s >= raw) ?? 400;
 }
 
-function trailKey(a: { id: string; callsign?: string }): string {
-  return `${a.id}::${a.callsign || ''}`;
+/** Même identité que celle enregistrée par le worker, sinon les traces ne se raccrochent pas. */
+function trailKey(a: { robloxUsername?: string; callsign?: string }): string {
+  return pfFlightKey(a.robloxUsername || '', a.callsign || '');
 }
 
 function readGameXY(x?: number, y?: number): { x: number; y: number } | null {
@@ -474,11 +476,40 @@ export default function PfTesterOdwMap() {
 
   useEffect(() => {
     setLoading(true);
+    // Repli immédiat sur l'historique local, le temps que le serveur réponde.
     setTrails(loadStoredTrails());
     fetchFlights();
     const t = setInterval(fetchFlights, REFRESH_MS);
     return () => clearInterval(t);
   }, [fetchFlights]);
+
+  useEffect(() => {
+    let cancelled = false;
+    // Traces enregistrées par le worker : elles existent même si personne n'a
+    // gardé la carte ouverte, et font autorité sur l'historique du navigateur.
+    (async () => {
+      try {
+        const res = await fetch(`/api/pftester-odw/tracks?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (cancelled || !data || !data.tracks) return;
+        const server = data.tracks as Record<string, TrailPt[]>;
+        if (!Object.keys(server).length) return;
+        setTrails((prev) => {
+          const next = { ...prev };
+          for (const [key, pts] of Object.entries(server)) {
+            if (Array.isArray(pts) && pts.length > 1) next[key] = pts;
+          }
+          return next;
+        });
+      } catch {
+        // Worker absent ou route indisponible : l'historique local suffit.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const el = mapContainerRef.current;

@@ -11,6 +11,10 @@ export const PF_MAP_CX = 120;
 export const PF_MAP_CY = 67.5;
 /** Même conversion que PFTracker : map = 120 + 0.00072 * gameX, 67.5 + 0.00072 * gameY. */
 export const PF_COORD_SCALE = 0.00072;
+/** Déplacement minimum, en unités carte, pour retenir un nouveau point de trace. */
+export const PF_TRAIL_MIN_STEP = 0.015;
+/** Au-delà, le déplacement est une rupture (respawn, téléportation) et coupe le tracé. */
+export const PF_TRAIL_MAX_STEP = 0.75;
 /**
  * Arbre de tuiles CDN : 2^z × 2^z sur 256 unités.
  * L’espace avion / viewport reste 240×135 (fenêtre utile de cet arbre).
@@ -181,6 +185,11 @@ export function decodeMultiPlanes(buf: Uint8Array): PfLiveAircraft[] {
     pos = skipField(buf, pos, wt);
   }
   return planes;
+}
+
+/** Identité d'un vol, partagée par le worker d'enregistrement et la carte. */
+export function pfFlightKey(robloxUsername: string, callsign: string): string {
+  return `${(robloxUsername || '').trim()}::${(callsign || '').trim()}`;
 }
 
 export function normalizeServerId(raw: string | null | undefined): string {
