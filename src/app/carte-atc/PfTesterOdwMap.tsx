@@ -123,10 +123,10 @@ function loadStoredTrails(): Record<string, TrailPt[]> {
 function saveStoredTrails(trails: Record<string, TrailPt[]>): void {
   if (typeof window === 'undefined') return;
   try {
-    const cutoff = Date.now() - TRAIL_GONE_MS;
     const out: Record<string, TrailPt[]> = {};
     for (const [key, pts] of Object.entries(trails)) {
-      if (pts.length < 2 || pts[pts.length - 1]!.at <= cutoff) continue;
+      // Aucune expiration à l'écriture : seule la relecture décide si le vol est fini.
+      if (pts.length < 2) continue;
       let kept = pts;
       while (kept.length > TRAIL_STORE_MAX) kept = thinOldest(kept);
       out[key] = kept.map((p) => ({
@@ -513,10 +513,12 @@ export default function PfTesterOdwMap() {
     setTrails((prev) => {
       const next: Record<string, TrailPt[]> = {};
       const cutoff = Date.now() - TRAIL_GONE_MS;
+      const airborne = new Set(plotted.map((a) => trailKey(a)));
       let changed = false;
-      // Un avion absent d'un relevé ne perd pas sa trace : elle expire à la fin du vol.
+      // Tant que l'avion est dans le flux, sa trace est gardée : l'onglet en
+      // arrière-plan espace les relevés sans que le vol soit pour autant terminé.
       for (const [key, pts] of Object.entries(prev)) {
-        if (pts.length > 1 && pts[pts.length - 1]!.at > cutoff) next[key] = pts;
+        if (pts.length > 1 && (airborne.has(key) || pts[pts.length - 1]!.at > cutoff)) next[key] = pts;
         else changed = true;
       }
       for (const a of plotted) {
@@ -532,11 +534,14 @@ export default function PfTesterOdwMap() {
 
   useEffect(() => {
     const t = setInterval(() => saveStoredTrails(trailsRef.current), TRAIL_SAVE_MS);
+    // L'onglet masqué voit ses minuteurs bridés : on écrit avant de perdre la main.
     const onHide = () => saveStoredTrails(trailsRef.current);
     window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onHide);
     return () => {
       clearInterval(t);
       window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onHide);
       saveStoredTrails(trailsRef.current);
     };
   }, []);
