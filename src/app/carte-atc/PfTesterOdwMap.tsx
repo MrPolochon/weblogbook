@@ -41,6 +41,7 @@ const FIT_ZOOM = 1;
 const FOCUS_ZOOM = 8;
 const KEEP_MAP_PX = 48;
 const ZOOM_STEP = 1.28;
+const ZERO_PAN = { x: 0, y: 0 };
 const TRAIL_MIN_STEP = 0.015;
 const TRAIL_MAX_STEP = 0.75;
 const TRAIL_MAX_LEN = 3600;
@@ -226,31 +227,61 @@ type Motion = {
   t0: number;
 };
 
-function TileLayer({ tiles }: { tiles: MapTile[] }) {
+function TileLayer({
+  tiles,
+  zoom,
+  pan,
+  containerW,
+  containerH,
+  dispW,
+  dispH,
+}: {
+  tiles: MapTile[];
+  zoom: number;
+  pan: { x: number; y: number };
+  containerW: number;
+  containerH: number;
+  dispW: number;
+  dispH: number;
+}) {
+  const origin = mapToScreen(0, 0, zoom, ZERO_PAN, containerW, containerH, dispW, dispH);
+  const end = mapToScreen(PF_MAP_W, PF_MAP_H, zoom, ZERO_PAN, containerW, containerH, dispW, dispH);
   return (
-    <div className="absolute inset-0 overflow-hidden bg-[#0b1c2c] pointer-events-none">
-      {tiles.map((t) => {
-        const bleed = t.width / 256;
-        return (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={t.key}
-            alt=""
-            draggable={false}
-            src={tileUrl(t.z, t.x, t.y)}
-            className="absolute max-w-none select-none"
-            style={{
-              left: `${(t.left / PF_MAP_W) * 100}%`,
-              top: `${(t.top / PF_MAP_H) * 100}%`,
-              width: `${((t.width + bleed) / PF_MAP_W) * 100}%`,
-              height: `${((t.height + bleed) / PF_MAP_H) * 100}%`,
-            }}
-            onError={(e) => {
-              e.currentTarget.style.visibility = 'hidden';
-            }}
-          />
-        );
-      })}
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <div
+        className="absolute overflow-hidden bg-[#0b1c2c] will-change-transform"
+        style={{
+          left: origin.x,
+          top: origin.y,
+          width: end.x - origin.x,
+          height: end.y - origin.y,
+          transform: `translate(${pan.x}px, ${pan.y}px)`,
+        }}
+      >
+        {tiles.map((t) => {
+          const tl = mapToScreen(t.left, t.top, zoom, ZERO_PAN, containerW, containerH, dispW, dispH);
+          const br = mapToScreen(t.left + t.width, t.top + t.height, zoom, ZERO_PAN, containerW, containerH, dispW, dispH);
+          return (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={t.key}
+              alt=""
+              draggable={false}
+              src={tileUrl(t.z, t.x, t.y)}
+              className="absolute max-w-none select-none"
+              style={{
+                left: tl.x - origin.x,
+                top: tl.y - origin.y,
+                width: Math.max(1, br.x - tl.x) + 1,
+                height: Math.max(1, br.y - tl.y) + 1,
+              }}
+              onError={(e) => {
+                e.currentTarget.style.visibility = 'hidden';
+              }}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -559,9 +590,10 @@ export default function PfTesterOdwMap() {
     };
   }
 
+  const dpr = typeof window === 'undefined' ? 1 : Math.min(2, window.devicePixelRatio || 1);
   const tileZ = Math.max(
     1,
-    Math.min(MAX_TILE_Z, Math.round(Math.log2(Math.max(2, (dispW * zoom) / PF_MAP_W)))),
+    Math.min(MAX_TILE_Z, Math.ceil(Math.log2(Math.max(2, (dispW * zoom * dpr) / PF_MAP_W)))),
   );
   const midZ = tileZ >= 3 ? tileZ - 1 : 0;
   const bounds = useMemo(
@@ -682,6 +714,15 @@ export default function PfTesterOdwMap() {
         }}
         style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
       >
+        <TileLayer
+          tiles={mapTiles}
+          zoom={zoom}
+          pan={pan}
+          containerW={viewport.w}
+          containerH={viewport.h}
+          dispW={dispW}
+          dispH={dispH}
+        />
         <div
           className="absolute inset-0 will-change-transform"
           style={{
@@ -691,7 +732,6 @@ export default function PfTesterOdwMap() {
         >
           <div className="absolute inset-0 flex items-center justify-center p-2">
             <div className="relative shrink-0" style={{ width: dispW, height: dispH }}>
-              <TileLayer tiles={mapTiles} />
               <svg viewBox={`0 0 ${PF_MAP_W} ${PF_MAP_H}`} className="absolute inset-0 w-full h-full pointer-events-none">
                 {zoom >= AIRPORT_ZOOM && PF_AIRPORTS.map((ap) => (
                   <g
