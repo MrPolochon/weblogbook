@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Crosshair, LocateFixed, Plane, RefreshCw, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { Crosshair, LocateFixed, Plane, RefreshCw, RotateCcw, Search, ZoomIn, ZoomOut } from 'lucide-react';
 import { PLANE_BLIP_D } from '@/lib/radar-utils';
+import { PF_AIRPORTS } from '@/lib/pf-airports';
+import { PF_NM_TO_MAP } from '@/lib/pf-radar';
 import {
   PF_MAP_H,
   PF_MAP_W,
@@ -41,6 +43,39 @@ const KEEP_MAP_PX = 96;
 const TRAIL_MIN_STEP = 0.015;
 const TRAIL_MAX_STEP = 0.75;
 const TRAIL_MAX_LEN = 3600;
+const MOTION_MS = 1000;
+const AIRPORT_ZOOM = 1.7;
+const LABEL_ZOOM = 1.8;
+const PREDICT_MIN = 1;
+const PLANE_IDLE = '#f97316';
+const PLANE_ACTIVE = '#38bdf8';
+
+function flLabel(alt: number): string {
+  return `FL${Math.max(0, Math.round(alt / 100)).toString().padStart(3, '0')}`;
+}
+
+function isOnGround(alt: number, speed: number): boolean {
+  return alt <= 80 || (alt < 200 && speed < 40);
+}
+
+function lerpAngle(from: number, to: number, t: number): number {
+  const d = ((to - from + 540) % 360) - 180;
+  return from + d * t;
+}
+
+function headingOffset(mapX: number, mapY: number, heading: number, nm: number): { x: number; y: number } {
+  const rad = (heading * Math.PI) / 180;
+  const len = nm * PF_NM_TO_MAP;
+  return {
+    x: mapX + Math.sin(rad) * len,
+    y: mapY - Math.cos(rad) * len,
+  };
+}
+
+function niceNm(raw: number): number {
+  const steps = [1, 2, 5, 10, 20, 50, 100, 200, 400];
+  return steps.find((s) => s >= raw) ?? 400;
+}
 
 function trailKey(a: { id: string; callsign?: string }): string {
   return `${a.id}::${a.callsign || ''}`;
@@ -179,29 +214,69 @@ function wheelZoomFactor(e: WheelEvent): number {
   return Math.exp(-dy * sensitivity);
 }
 
-function TileLayer({ tiles }: { tiles: MapTile[] }) {
+type Motion = {
+  fromX: number;
+  fromY: number;
+  fromHdg: number;
+  toX: number;
+  toY: number;
+  toHdg: number;
+  t0: number;
+};
+
+function TileLayer({
+  tiles,
+  zoom,
+  pan,
+  containerW,
+  containerH,
+  dispW,
+  dispH,
+}: {
+  tiles: MapTile[];
+  zoom: number;
+  pan: { x: number; y: number };
+  containerW: number;
+  containerH: number;
+  dispW: number;
+  dispH: number;
+}) {
+  const origin = mapToScreen(0, 0, zoom, pan, containerW, containerH, dispW, dispH);
+  const end = mapToScreen(PF_MAP_W, PF_MAP_H, zoom, pan, containerW, containerH, dispW, dispH);
   return (
-    <>
-      {tiles.map((t) => (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          key={t.key}
-          alt=""
-          draggable={false}
-          src={tileUrl(t.z, t.x, t.y)}
-          className="absolute max-w-none select-none pointer-events-none"
-          style={{
-            left: `${(t.left / PF_MAP_W) * 100}%`,
-            top: `${(t.top / PF_MAP_H) * 100}%`,
-            width: `${(t.width / PF_MAP_W) * 100 + 0.08}%`,
-            height: `${(t.height / PF_MAP_H) * 100 + 0.12}%`,
-          }}
-          onError={(e) => {
-            e.currentTarget.style.visibility = 'hidden';
-          }}
-        />
-      ))}
-    </>
+    <div
+      className="absolute overflow-hidden pointer-events-none bg-[#0b1c2c]"
+      style={{
+        left: origin.x,
+        top: origin.y,
+        width: end.x - origin.x,
+        height: end.y - origin.y,
+      }}
+    >
+      {tiles.map((t) => {
+        const tl = mapToScreen(t.left, t.top, zoom, pan, containerW, containerH, dispW, dispH);
+        const br = mapToScreen(t.left + t.width, t.top + t.height, zoom, pan, containerW, containerH, dispW, dispH);
+        return (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={t.key}
+            alt=""
+            draggable={false}
+            src={tileUrl(t.z, t.x, t.y)}
+            className="absolute max-w-none select-none"
+            style={{
+              left: tl.x - origin.x,
+              top: tl.y - origin.y,
+              width: Math.max(1, br.x - tl.x) + 1,
+              height: Math.max(1, br.y - tl.y) + 1,
+            }}
+            onError={(e) => {
+              e.currentTarget.style.visibility = 'hidden';
+            }}
+          />
+        );
+      })}
+    </div>
   );
 }
 
@@ -223,12 +298,17 @@ export default function PfTesterOdwMap() {
   } | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [trails, setTrails] = useState<Record<string, TrailPt[]>>({});
+  const [query, setQuery] = useState('');
+  const [display, setDisplay] = useState<Record<string, { x: number; y: number; hdg: number }>>({});
   const [viewport, setViewport] = useState({ w: 900, h: 560 });
   const viewRef = useRef<ViewState>({ zoom: FIT_ZOOM, pan: { x: 0, y: 0 } });
   viewRef.current = { zoom, pan };
   const dragRef = useRef({ x: 0, y: 0, moved: false });
   const rafRef = useRef(0);
   const pendingViewRef = useRef<ViewState | null>(null);
+  const motionRef = useRef<Record<string, Motion>>({});
+  const shownRef = useRef<Record<string, { x: number; y: number; hdg: number }>>({});
+  const lastPaintRef = useRef(0);
 
   const { dispW, dispH } = fittedMapSize(viewport.w, viewport.h);
 
@@ -314,6 +394,48 @@ export default function PfTesterOdwMap() {
     });
   }, [plotted]);
 
+  useEffect(() => {
+    const now = performance.now();
+    const nextMotion: Record<string, Motion> = {};
+    for (const a of plotted) {
+      const shown = shownRef.current[a.id];
+      nextMotion[a.id] = {
+        fromX: shown?.x ?? a.mapX,
+        fromY: shown?.y ?? a.mapY,
+        fromHdg: shown?.hdg ?? a.heading,
+        toX: a.mapX,
+        toY: a.mapY,
+        toHdg: a.heading,
+        t0: now,
+      };
+    }
+    motionRef.current = nextMotion;
+  }, [plotted]);
+
+  useEffect(() => {
+    let frame = 0;
+    const loop = (now: number) => {
+      if (now - lastPaintRef.current >= 50) {
+        lastPaintRef.current = now;
+        const next: Record<string, { x: number; y: number; hdg: number }> = {};
+        for (const [id, m] of Object.entries(motionRef.current)) {
+          const t = Math.min(1, (now - m.t0) / MOTION_MS);
+          const ease = t * t * (3 - 2 * t);
+          next[id] = {
+            x: m.fromX + (m.toX - m.fromX) * ease,
+            y: m.fromY + (m.toY - m.fromY) * ease,
+            hdg: lerpAngle(m.fromHdg, m.toHdg, ease),
+          };
+        }
+        shownRef.current = next;
+        setDisplay(next);
+      }
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   const applyZoomAt = useCallback((clientX: number, clientY: number, nextZoom: number) => {
     const z = clampViewZoom(nextZoom);
     const el = mapContainerRef.current;
@@ -342,10 +464,16 @@ export default function PfTesterOdwMap() {
     applyZoomAt(r.left + r.width / 2, r.top + r.height / 2, next);
   }, [applyView, applyZoomAt]);
 
+  const posOf = useCallback((a: PfAircraft) => {
+    const d = display[a.id];
+    return { x: d?.x ?? a.mapX, y: d?.y ?? a.mapY, hdg: d?.hdg ?? a.heading };
+  }, [display]);
+
   const focusAircraft = useCallback((a: PfAircraft, nextZoom = Math.max(viewRef.current.zoom, FOCUS_ZOOM)) => {
     const z = clampViewZoom(nextZoom);
-    applyView({ zoom: z, pan: panToMapPoint(a.mapX, a.mapY, z, dispW, dispH) });
-  }, [applyView, dispW, dispH]);
+    const p = posOf(a);
+    applyView({ zoom: z, pan: panToMapPoint(p.x, p.y, z, dispW, dispH) });
+  }, [applyView, dispW, dispH, posOf]);
 
   const resetView = useCallback(() => {
     setFollowId(null);
@@ -359,11 +487,12 @@ export default function PfTesterOdwMap() {
       setFollowId(null);
       return;
     }
+    const p = posOf(a);
     applyView({
       zoom: viewRef.current.zoom,
-      pan: panToMapPoint(a.mapX, a.mapY, viewRef.current.zoom, dispW, dispH),
+      pan: panToMapPoint(p.x, p.y, viewRef.current.zoom, dispW, dispH),
     });
-  }, [followId, plotted, applyView, dispW, dispH]);
+  }, [followId, plotted, applyView, dispW, dispH, posOf]);
 
   useEffect(() => {
     const el = mapContainerRef.current;
@@ -443,22 +572,50 @@ export default function PfTesterOdwMap() {
 
   const tileZ = Math.max(
     1,
-    Math.min(MAX_TILE_Z, Math.floor(Math.log2(Math.max(2, (dispW * zoom) / PF_MAP_W)))),
+    Math.min(MAX_TILE_Z, Math.round(Math.log2(Math.max(2, (dispW * zoom) / PF_MAP_W)))),
   );
+  const midZ = tileZ >= 3 ? tileZ - 1 : 0;
   const bounds = useMemo(
     () => visibleMapBounds(viewport.w, viewport.h, zoom, pan),
     [viewport.w, viewport.h, zoom, pan],
   );
-  const baseTiles = useMemo(
-    () => tilesInBounds(1, { minX: 0, minY: 0, maxX: PF_MAP_W, maxY: PF_MAP_H }),
-    [],
-  );
-  const detailTiles = useMemo(
-    () => (tileZ <= 1 ? [] : tilesInBounds(tileZ, bounds)),
-    [tileZ, bounds],
-  );
+  const mapTiles = useMemo(() => {
+    const seen = new Set<string>();
+    const out: MapTile[] = [];
+    const layers = [
+      tilesInBounds(1, { minX: 0, minY: 0, maxX: PF_MAP_W, maxY: PF_MAP_H }),
+      midZ ? tilesInBounds(midZ, bounds) : [],
+      tileZ > 1 ? tilesInBounds(tileZ, bounds) : [],
+    ];
+    for (const layer of layers) {
+      for (const t of layer) {
+        if (seen.has(t.key)) continue;
+        seen.add(t.key);
+        out.push(t);
+      }
+    }
+    return out;
+  }, [tileZ, midZ, bounds]);
   const markerScale = 1 / zoom;
   const selected = plotted.find((a) => a.id === selectedId) ?? null;
+  const selectedPos = selected ? posOf(selected) : null;
+  const predict = selected && selectedPos && selected.speed > 40
+    ? headingOffset(selectedPos.x, selectedPos.y, selectedPos.hdg, (selected.speed / 60) * PREDICT_MIN)
+    : null;
+  const q = query.trim().toLowerCase();
+  const listed = useMemo(() => {
+    const rows = q
+      ? plotted.filter((a) =>
+          `${a.callsign} ${a.robloxUsername} ${a.model} ${a.livery}`.toLowerCase().includes(q),
+        )
+      : plotted.slice();
+    rows.sort((a, b) => b.altitude - a.altitude || (a.callsign || '').localeCompare(b.callsign || ''));
+    return rows;
+  }, [plotted, q]);
+  const showAllLabels = zoom >= LABEL_ZOOM || plotted.length <= 10;
+  const mapNm = (viewport.w / Math.max(1, dispW * zoom)) * PF_MAP_W / PF_NM_TO_MAP;
+  const scaleNm = niceNm(mapNm * 0.18);
+  const scalePx = (scaleNm * PF_NM_TO_MAP / PF_MAP_W) * dispW * zoom;
 
   function selectAircraft(id: string, fromList = false) {
     setSelectedId((prev) => {
@@ -527,6 +684,15 @@ export default function PfTesterOdwMap() {
         }}
         style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
       >
+        <TileLayer
+          tiles={mapTiles}
+          zoom={zoom}
+          pan={pan}
+          containerW={viewport.w}
+          containerH={viewport.h}
+          dispW={dispW}
+          dispH={dispH}
+        />
         <div
           className="absolute inset-0"
           style={{
@@ -536,14 +702,25 @@ export default function PfTesterOdwMap() {
         >
           <div className="absolute inset-0 flex items-center justify-center p-2">
             <div className="relative shrink-0" style={{ width: dispW, height: dispH }}>
-              <div className="absolute inset-0 overflow-hidden bg-[#0b1c2c]">
-                <TileLayer tiles={baseTiles} />
-                <TileLayer tiles={detailTiles} />
-              </div>
               <svg viewBox={`0 0 ${PF_MAP_W} ${PF_MAP_H}`} className="absolute inset-0 w-full h-full pointer-events-none">
+                {zoom >= AIRPORT_ZOOM && PF_AIRPORTS.map((ap) => (
+                  <g
+                    key={ap.code}
+                    className="pointer-events-auto"
+                    style={{ cursor: 'pointer' }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => {
+                      if (dragRef.current.moved) return;
+                      applyView({ zoom: Math.max(viewRef.current.zoom, 6), pan: panToMapPoint(ap.mapX, ap.mapY, Math.max(viewRef.current.zoom, 6), dispW, dispH) });
+                    }}
+                  >
+                    <rect x={ap.mapX - 0.45} y={ap.mapY - 0.45} width={0.9} height={0.9} fill="#e2e8f0" stroke="#0f172a" strokeWidth={0.12} />
+                  </g>
+                ))}
                 {plotted.map((a) => {
                   const isSelected = selectedId === a.id;
-                  const color = isSelected ? '#fbbf24' : '#22d3ee';
+                  const p = posOf(a);
+                  const color = isSelected || followId === a.id ? PLANE_ACTIVE : PLANE_IDLE;
                   return (
                     <g
                       key={a.id}
@@ -555,9 +732,9 @@ export default function PfTesterOdwMap() {
                         selectAircraft(a.id);
                       }}
                     >
-                      <g transform={`translate(${a.mapX},${a.mapY}) scale(${markerScale})`}>
+                      <g transform={`translate(${p.x},${p.y}) scale(${markerScale})`}>
                         <circle r={14} fill="transparent" />
-                        <g transform={`rotate(${a.heading}) scale(0.55)`}>
+                        <g transform={`rotate(${p.hdg}) scale(${isOnGround(a.altitude, a.speed) ? 0.42 : 0.55})`}>
                           <path
                             d={PLANE_BLIP_D}
                             fill={color}
@@ -571,25 +748,50 @@ export default function PfTesterOdwMap() {
                   );
                 })}
               </svg>
+              {zoom >= AIRPORT_ZOOM && PF_AIRPORTS.map((ap) => (
+                <div
+                  key={`ap-${ap.code}`}
+                  className="absolute pointer-events-none font-mono font-bold text-slate-100"
+                  style={{
+                    left: `${(ap.mapX / PF_MAP_W) * 100}%`,
+                    top: `${(ap.mapY / PF_MAP_H) * 100}%`,
+                    fontSize: 10,
+                    lineHeight: 1.15,
+                    textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                    transform: `translate(8px, -12px) scale(${markerScale})`,
+                    transformOrigin: 'left bottom',
+                  }}
+                >
+                  {ap.code}
+                  {zoom >= 4 && <span className="block text-slate-300 font-normal">{ap.name}</span>}
+                </div>
+              ))}
               {plotted.map((a) => {
                 const isSelected = selectedId === a.id;
-                const color = isSelected ? '#fbbf24' : '#22d3ee';
+                if (!isSelected && !showAllLabels && followId !== a.id) return null;
+                const p = posOf(a);
+                const color = isSelected || followId === a.id ? PLANE_ACTIVE : PLANE_IDLE;
                 return (
                   <div
                     key={`${a.id}-label`}
                     className="absolute pointer-events-none whitespace-nowrap font-mono font-bold"
                     style={{
-                      left: `${(a.mapX / PF_MAP_W) * 100}%`,
-                      top: `${(a.mapY / PF_MAP_H) * 100}%`,
+                      left: `${(p.x / PF_MAP_W) * 100}%`,
+                      top: `${(p.y / PF_MAP_H) * 100}%`,
                       color,
-                      fontSize: 11,
-                      lineHeight: 1,
+                      fontSize: isSelected ? 11 : 10,
+                      lineHeight: 1.15,
                       textShadow: '0 1px 2px rgba(0,0,0,0.9)',
                       transform: `translate(10px, -14px) scale(${markerScale})`,
                       transformOrigin: 'left bottom',
                     }}
                   >
                     {a.callsign || a.robloxUsername}
+                    {isSelected && (
+                      <span className="block font-semibold">
+                        {flLabel(a.altitude)} · {a.speed} kt
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -603,18 +805,21 @@ export default function PfTesterOdwMap() {
             if (!showTrail) return null;
             const trail = trails[trailKey(a)];
             if (!trail || trail.length < 2) return null;
-            const pts = trail.map((p) =>
-              mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH),
+            const p = posOf(a);
+            const pts = trail.map((pt) =>
+              mapToScreen(pt.x, pt.y, zoom, pan, viewport.w, viewport.h, dispW, dispH),
             );
+            const now = mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH);
+            const last = pts[pts.length - 1]!;
             return (
               <g key={`${a.id}-trail`}>
-                {pts.slice(1).map((p, i) => (
+                {pts.slice(1).map((pt, i) => (
                   <line
                     key={`${a.id}-t${i}`}
                     x1={pts[i]!.x}
                     y1={pts[i]!.y}
-                    x2={p.x}
-                    y2={p.y}
+                    x2={pt.x}
+                    y2={pt.y}
                     stroke={altitudeToTrailColor((trail[i]!.alt + trail[i + 1]!.alt) / 2)}
                     strokeWidth={2.4}
                     strokeLinecap="round"
@@ -622,10 +827,51 @@ export default function PfTesterOdwMap() {
                     opacity={0.92}
                   />
                 ))}
+                <line
+                  x1={last.x}
+                  y1={last.y}
+                  x2={now.x}
+                  y2={now.y}
+                  stroke={altitudeToTrailColor(a.altitude)}
+                  strokeWidth={2.4}
+                  strokeLinecap="round"
+                  opacity={0.92}
+                />
               </g>
             );
           })}
+          {predict && selectedPos && (
+            <line
+              x1={mapToScreen(selectedPos.x, selectedPos.y, zoom, pan, viewport.w, viewport.h, dispW, dispH).x}
+              y1={mapToScreen(selectedPos.x, selectedPos.y, zoom, pan, viewport.w, viewport.h, dispW, dispH).y}
+              x2={mapToScreen(predict.x, predict.y, zoom, pan, viewport.w, viewport.h, dispW, dispH).x}
+              y2={mapToScreen(predict.x, predict.y, zoom, pan, viewport.w, viewport.h, dispW, dispH).y}
+              stroke={PLANE_ACTIVE}
+              strokeWidth={1.4}
+              strokeDasharray="5 4"
+              opacity={0.75}
+            />
+          )}
         </svg>
+
+        <div className="absolute bottom-3 left-3 z-10 rounded-lg bg-slate-900/90 border border-slate-600 px-2 py-1.5 space-y-1" onPointerDown={(e) => e.stopPropagation()}>
+          <div
+            className="h-1.5 w-36 rounded-full"
+            style={{
+              background: 'linear-gradient(90deg,#dc2626 0%,#f97316 12%,#22c55e 25%,#38bdf8 45%,#3b82f6 65%,#8b5cf6 85%,#3b0764 100%)',
+            }}
+          />
+          <div className="flex justify-between text-[9px] font-mono text-slate-400 w-36">
+            <span>SFC</span>
+            <span>FL030</span>
+            <span>FL120</span>
+            <span>FL360</span>
+          </div>
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <span className="block h-0.5 bg-slate-200" style={{ width: Math.max(18, Math.min(140, scalePx)) }} />
+            <span className="text-[9px] font-mono text-slate-300">{scaleNm} NM</span>
+          </div>
+        </div>
 
         <div
           className="absolute bottom-3 right-3 flex flex-col items-center gap-1.5 z-10"
@@ -690,9 +936,22 @@ export default function PfTesterOdwMap() {
             </button>
           </div>
           <p className="text-[11px] text-slate-500">
-            Molette ou pincement pour zoomer, glisser pour déplacer. Clic liste pour centrer, F pour suivre.
+            Trace classique sur le vol sélectionné. Clic aéroport pour zoomer, F pour suivre.
           </p>
-          <p className="text-[11px] text-cyan-300/80 font-mono">{aircraft.length} avion{aircraft.length > 1 ? 's' : ''}</p>
+          <label className="relative block">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-500" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Callsign, pilote, type…"
+              className="w-full rounded-md bg-slate-800 border border-slate-600 pl-7 pr-2 py-1.5 text-[11px] text-slate-200 placeholder:text-slate-500"
+            />
+          </label>
+          <p className="text-[11px] text-cyan-300/80 font-mono">
+            {listed.length} avion{listed.length > 1 ? 's' : ''}
+            {q ? ` · filtre` : ''}
+          </p>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {error && <p className="text-red-400 text-xs">{error}</p>}
@@ -706,7 +965,7 @@ export default function PfTesterOdwMap() {
               </p>
             </div>
           )}
-          {aircraft.map((a) => (
+          {listed.map((a) => (
             <button
               key={a.id}
               type="button"
@@ -717,7 +976,8 @@ export default function PfTesterOdwMap() {
                   : 'border-slate-700/50 bg-slate-800/50 text-slate-300 hover:border-cyan-700/50'
               }`}
             >
-              <span className="font-mono font-bold text-cyan-300">{a.callsign || '—'}</span>
+              <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style={{ background: selectedId === a.id || followId === a.id ? PLANE_ACTIVE : PLANE_IDLE }} />
+              <span className="font-mono font-bold" style={{ color: selectedId === a.id || followId === a.id ? PLANE_ACTIVE : PLANE_IDLE }}>{a.callsign || '—'}</span>
               <span className="text-slate-500 mx-1">·</span>
               <span className="text-slate-400">{a.robloxUsername}</span>
               {followId === a.id ? <span className="ml-1 text-amber-300">suivi</span> : null}
@@ -727,7 +987,8 @@ export default function PfTesterOdwMap() {
               </span>
               <br />
               <span className="text-slate-500">
-                FL{Math.max(0, Math.round(a.altitude / 100)).toString().padStart(3, '0')} · {a.speed} kt · {a.heading.toString().padStart(3, '0')}°
+                {flLabel(a.altitude)} · {a.speed} kt · {a.heading.toString().padStart(3, '0')}°
+                {isOnGround(a.altitude, a.speed) ? ' · SOL' : ''}
               </span>
             </button>
           ))}
