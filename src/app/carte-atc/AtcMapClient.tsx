@@ -433,8 +433,8 @@ export default function AtcMapClient() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
-      <header className="border-b border-slate-700/50 bg-slate-900/80 backdrop-blur-sm">
+    <div className="h-dvh overflow-hidden flex flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+      <header className="shrink-0 border-b border-slate-700/50 bg-slate-900/80 backdrop-blur-sm">
         <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <Link href="/logbook" className="shrink-0 p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700" title="Retour">
@@ -493,7 +493,7 @@ export default function AtcMapClient() {
         </div>
       </header>
 
-      <div className="max-w-[1600px] mx-auto p-2 sm:p-4 flex flex-col md:flex-row gap-3 md:gap-4" style={{ height: 'calc(100dvh - 60px)' }}>
+      <div className="flex-1 min-h-0 max-w-[1600px] w-full mx-auto p-2 sm:p-4 flex flex-col md:flex-row gap-3 md:gap-4">
         {pfMode && isAdmin ? (
           <PfTesterOdwMap />
         ) : null}

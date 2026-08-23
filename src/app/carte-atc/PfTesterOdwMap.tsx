@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Crosshair, LocateFixed, Plane, RefreshCw, RotateCcw, Search, ZoomIn, ZoomOut } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, LocateFixed, Plane, RefreshCw, RotateCcw, Search, ZoomIn, ZoomOut } from 'lucide-react';
 import { PLANE_BLIP_D } from '@/lib/radar-utils';
 import { PF_AIRPORTS } from '@/lib/pf-airports';
 import { PF_NM_TO_MAP } from '@/lib/pf-radar';
@@ -34,12 +34,13 @@ type MapTile = { key: string; z: number; x: number; y: number; left: number; top
 type MapBounds = { minX: number; minY: number; maxX: number; maxY: number };
 type ViewState = { zoom: number; pan: { x: number; y: number } };
 
-const MIN_VIEW_ZOOM = 1;
+const MIN_VIEW_ZOOM = 0.85;
 const MAX_VIEW_ZOOM = 48;
 const MAX_TILE_Z = 8;
 const FIT_ZOOM = 1;
 const FOCUS_ZOOM = 8;
-const KEEP_MAP_PX = 96;
+const KEEP_MAP_PX = 48;
+const ZOOM_STEP = 1.28;
 const TRAIL_MIN_STEP = 0.015;
 const TRAIL_MAX_STEP = 0.75;
 const TRAIL_MAX_LEN = 3600;
@@ -210,8 +211,9 @@ function wheelZoomFactor(e: WheelEvent): number {
   let dy = e.deltaY;
   if (e.deltaMode === 1) dy *= 16;
   if (e.deltaMode === 2) dy *= 120;
-  const sensitivity = e.ctrlKey ? 0.01 : Math.abs(dy) > 50 ? 0.0026 : 0.0018;
-  return Math.exp(-dy * sensitivity);
+  if (e.ctrlKey) return Math.exp(-dy * 0.014);
+  if (Math.abs(dy) >= 40) return dy < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+  return Math.exp(-dy * 0.004);
 }
 
 type Motion = {
@@ -224,38 +226,11 @@ type Motion = {
   t0: number;
 };
 
-function TileLayer({
-  tiles,
-  zoom,
-  pan,
-  containerW,
-  containerH,
-  dispW,
-  dispH,
-}: {
-  tiles: MapTile[];
-  zoom: number;
-  pan: { x: number; y: number };
-  containerW: number;
-  containerH: number;
-  dispW: number;
-  dispH: number;
-}) {
-  const origin = mapToScreen(0, 0, zoom, pan, containerW, containerH, dispW, dispH);
-  const end = mapToScreen(PF_MAP_W, PF_MAP_H, zoom, pan, containerW, containerH, dispW, dispH);
+function TileLayer({ tiles }: { tiles: MapTile[] }) {
   return (
-    <div
-      className="absolute overflow-hidden pointer-events-none bg-[#0b1c2c]"
-      style={{
-        left: origin.x,
-        top: origin.y,
-        width: end.x - origin.x,
-        height: end.y - origin.y,
-      }}
-    >
+    <div className="absolute inset-0 overflow-hidden bg-[#0b1c2c] pointer-events-none">
       {tiles.map((t) => {
-        const tl = mapToScreen(t.left, t.top, zoom, pan, containerW, containerH, dispW, dispH);
-        const br = mapToScreen(t.left + t.width, t.top + t.height, zoom, pan, containerW, containerH, dispW, dispH);
+        const bleed = t.width / 256;
         return (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -265,10 +240,10 @@ function TileLayer({
             src={tileUrl(t.z, t.x, t.y)}
             className="absolute max-w-none select-none"
             style={{
-              left: tl.x - origin.x,
-              top: tl.y - origin.y,
-              width: Math.max(1, br.x - tl.x) + 1,
-              height: Math.max(1, br.y - tl.y) + 1,
+              left: `${(t.left / PF_MAP_W) * 100}%`,
+              top: `${(t.top / PF_MAP_H) * 100}%`,
+              width: `${((t.width + bleed) / PF_MAP_W) * 100}%`,
+              height: `${((t.height + bleed) / PF_MAP_H) * 100}%`,
             }}
             onError={(e) => {
               e.currentTarget.style.visibility = 'hidden';
@@ -309,6 +284,7 @@ export default function PfTesterOdwMap() {
   const motionRef = useRef<Record<string, Motion>>({});
   const shownRef = useRef<Record<string, { x: number; y: number; hdg: number }>>({});
   const lastPaintRef = useRef(0);
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
 
   const { dispW, dispH } = fittedMapSize(viewport.w, viewport.h);
 
@@ -456,6 +432,11 @@ export default function PfTesterOdwMap() {
 
   const updateZoom = useCallback((next: number) => {
     const el = mapContainerRef.current;
+    const pointer = lastPointerRef.current;
+    if (el && pointer) {
+      applyZoomAt(pointer.x, pointer.y, next);
+      return;
+    }
     if (!el) {
       applyView({ zoom: next, pan: viewRef.current.pan });
       return;
@@ -463,6 +444,12 @@ export default function PfTesterOdwMap() {
     const r = el.getBoundingClientRect();
     applyZoomAt(r.left + r.width / 2, r.top + r.height / 2, next);
   }, [applyView, applyZoomAt]);
+
+  const nudgePan = useCallback((dx: number, dy: number) => {
+    const cur = viewRef.current;
+    setFollowId(null);
+    applyView({ zoom: cur.zoom, pan: { x: cur.pan.x + dx, y: cur.pan.y + dy } });
+  }, [applyView]);
 
   const posOf = useCallback((a: PfAircraft) => {
     const d = display[a.id];
@@ -499,6 +486,7 @@ export default function PfTesterOdwMap() {
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      lastPointerRef.current = { x: e.clientX, y: e.clientY };
       applyZoomAt(e.clientX, e.clientY, viewRef.current.zoom * wheelZoomFactor(e));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
@@ -513,28 +501,29 @@ export default function PfTesterOdwMap() {
       const cur = viewRef.current;
       if (e.key === '+' || e.key === '=') {
         e.preventDefault();
-        updateZoom(cur.zoom * 1.35);
+        updateZoom(cur.zoom * ZOOM_STEP);
       } else if (e.key === '-' || e.key === '_') {
         e.preventDefault();
-        updateZoom(cur.zoom / 1.35);
+        updateZoom(cur.zoom / ZOOM_STEP);
       } else if (e.key === '0' || e.key === 'Home') {
         e.preventDefault();
         resetView();
       } else if (e.key === 'f' || e.key === 'F') {
         e.preventDefault();
         if (selectedId) setFollowId((prev) => (prev === selectedId ? null : selectedId));
-      } else if (e.key.startsWith('Arrow')) {
+      } else if (e.key.startsWith('Arrow') || ['w', 'a', 's', 'd', 'W', 'A', 'S', 'D'].includes(e.key)) {
         e.preventDefault();
-        const step = (e.shiftKey ? 120 : 48);
-        const dx = e.key === 'ArrowLeft' ? step : e.key === 'ArrowRight' ? -step : 0;
-        const dy = e.key === 'ArrowUp' ? step : e.key === 'ArrowDown' ? -step : 0;
-        setFollowId(null);
-        applyView({ zoom: cur.zoom, pan: { x: cur.pan.x + dx, y: cur.pan.y + dy } });
+        const step = e.shiftKey ? 140 : 70;
+        const left = e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A';
+        const right = e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D';
+        const up = e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W';
+        const down = e.key === 'ArrowDown' || e.key === 's' || e.key === 'S';
+        nudgePan(left ? step : right ? -step : 0, up ? step : down ? -step : 0);
       }
     };
     el.addEventListener('keydown', onKey);
     return () => el.removeEventListener('keydown', onKey);
-  }, [applyView, resetView, selectedId, updateZoom]);
+  }, [nudgePan, resetView, selectedId, updateZoom]);
 
   function startPan(clientX: number, clientY: number) {
     dragRef.current = { x: clientX, y: clientY, moved: false };
@@ -635,15 +624,23 @@ export default function PfTesterOdwMap() {
   return (
     <div className="flex-1 min-h-0 w-full flex flex-col md:flex-row gap-3 md:gap-4">
       <div
-        className="flex-1 min-h-0 relative rounded-xl border border-cyan-700/40 bg-slate-950 overflow-hidden touch-none outline-none"
+        className="flex-1 min-h-0 relative rounded-xl border border-cyan-700/40 bg-slate-950 overflow-hidden touch-none outline-none overscroll-none"
         ref={mapContainerRef}
         tabIndex={0}
         onDoubleClick={(e) => {
           e.preventDefault();
-          applyZoomAt(e.clientX, e.clientY, viewRef.current.zoom * (e.shiftKey ? 0.5 : 2));
+          lastPointerRef.current = { x: e.clientX, y: e.clientY };
+          applyZoomAt(e.clientX, e.clientY, viewRef.current.zoom * (e.shiftKey ? 1 / ZOOM_STEP : ZOOM_STEP * 1.2));
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          lastPointerRef.current = { x: e.clientX, y: e.clientY };
+          applyZoomAt(e.clientX, e.clientY, viewRef.current.zoom / ZOOM_STEP);
         }}
         onPointerDown={(e) => {
           if (e.button !== 0 && e.button !== 1) return;
+          lastPointerRef.current = { x: e.clientX, y: e.clientY };
+          e.currentTarget.focus();
           e.currentTarget.setPointerCapture(e.pointerId);
           pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
           if (pointersRef.current.size === 2) {
@@ -661,6 +658,7 @@ export default function PfTesterOdwMap() {
           }
         }}
         onPointerMove={(e) => {
+          lastPointerRef.current = { x: e.clientX, y: e.clientY };
           if (!pointersRef.current.has(e.pointerId)) return;
           pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
           if (pointersRef.current.size >= 2 && pinchStartRef.current) {
@@ -684,17 +682,8 @@ export default function PfTesterOdwMap() {
         }}
         style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
       >
-        <TileLayer
-          tiles={mapTiles}
-          zoom={zoom}
-          pan={pan}
-          containerW={viewport.w}
-          containerH={viewport.h}
-          dispW={dispW}
-          dispH={dispH}
-        />
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 will-change-transform"
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             transformOrigin: 'center center',
@@ -702,13 +691,13 @@ export default function PfTesterOdwMap() {
         >
           <div className="absolute inset-0 flex items-center justify-center p-2">
             <div className="relative shrink-0" style={{ width: dispW, height: dispH }}>
+              <TileLayer tiles={mapTiles} />
               <svg viewBox={`0 0 ${PF_MAP_W} ${PF_MAP_H}`} className="absolute inset-0 w-full h-full pointer-events-none">
                 {zoom >= AIRPORT_ZOOM && PF_AIRPORTS.map((ap) => (
                   <g
                     key={ap.code}
                     className="pointer-events-auto"
                     style={{ cursor: 'pointer' }}
-                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={() => {
                       if (dragRef.current.moved) return;
                       applyView({ zoom: Math.max(viewRef.current.zoom, 6), pan: panToMapPoint(ap.mapX, ap.mapY, Math.max(viewRef.current.zoom, 6), dispW, dispH) });
@@ -726,7 +715,6 @@ export default function PfTesterOdwMap() {
                       key={a.id}
                       className="pointer-events-auto"
                       style={{ cursor: 'pointer' }}
-                      onPointerDown={(e) => e.stopPropagation()}
                       onClick={() => {
                         if (dragRef.current.moved) return;
                         selectAircraft(a.id);
@@ -887,16 +875,36 @@ export default function PfTesterOdwMap() {
             step={0.002}
             value={Math.log(zoom / MIN_VIEW_ZOOM) / Math.log(MAX_VIEW_ZOOM / MIN_VIEW_ZOOM)}
             onChange={(e) => updateZoom(MIN_VIEW_ZOOM * (MAX_VIEW_ZOOM / MIN_VIEW_ZOOM) ** Number(e.target.value))}
-            className="w-16 accent-cyan-400 cursor-pointer"
+            className="w-24 accent-cyan-400 cursor-pointer"
             title="Niveau de zoom"
             aria-label="Niveau de zoom"
           />
-          <button type="button" onClick={() => updateZoom(zoom * 1.35)} className="p-2 rounded-lg bg-slate-900/90 border border-slate-600 text-slate-200 hover:bg-slate-800" title="Zoom +">
+          <button type="button" onClick={() => updateZoom(viewRef.current.zoom * ZOOM_STEP)} className="p-2 rounded-lg bg-slate-900/90 border border-slate-600 text-slate-200 hover:bg-slate-800" title="Zoom +">
             <ZoomIn className="h-4 w-4" />
           </button>
-          <button type="button" onClick={() => updateZoom(zoom / 1.35)} className="p-2 rounded-lg bg-slate-900/90 border border-slate-600 text-slate-200 hover:bg-slate-800" title="Zoom −">
+          <button type="button" onClick={() => updateZoom(viewRef.current.zoom / ZOOM_STEP)} className="p-2 rounded-lg bg-slate-900/90 border border-slate-600 text-slate-200 hover:bg-slate-800" title="Zoom −">
             <ZoomOut className="h-4 w-4" />
           </button>
+          <div className="grid grid-cols-3 gap-0.5">
+            <span />
+            <button type="button" onClick={() => nudgePan(0, 90)} className="p-1.5 rounded-md bg-slate-900/90 border border-slate-600 text-slate-200 hover:bg-slate-800" title="Haut">
+              <ChevronUp className="h-3.5 w-3.5" />
+            </button>
+            <span />
+            <button type="button" onClick={() => nudgePan(90, 0)} className="p-1.5 rounded-md bg-slate-900/90 border border-slate-600 text-slate-200 hover:bg-slate-800" title="Gauche">
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" onClick={resetView} className="p-1.5 rounded-md bg-slate-900/90 border border-slate-600 text-slate-200 hover:bg-slate-800" title="Recentrer">
+              <RotateCcw className="h-3 w-3" />
+            </button>
+            <button type="button" onClick={() => nudgePan(-90, 0)} className="p-1.5 rounded-md bg-slate-900/90 border border-slate-600 text-slate-200 hover:bg-slate-800" title="Droite">
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+            <span />
+            <button type="button" onClick={() => nudgePan(0, -90)} className="p-1.5 rounded-md bg-slate-900/90 border border-slate-600 text-slate-200 hover:bg-slate-800" title="Bas">
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+          </div>
           {selected && (
             <>
               <button
@@ -921,9 +929,6 @@ export default function PfTesterOdwMap() {
               </button>
             </>
           )}
-          <button type="button" onClick={resetView} className="p-2 rounded-lg bg-slate-900/90 border border-slate-600 text-slate-200 hover:bg-slate-800" title="Vue d’ensemble">
-            <RotateCcw className="h-4 w-4" />
-          </button>
         </div>
       </div>
 
@@ -936,7 +941,7 @@ export default function PfTesterOdwMap() {
             </button>
           </div>
           <p className="text-[11px] text-slate-500">
-            Trace classique sur le vol sélectionné. Clic aéroport pour zoomer, F pour suivre.
+            Glisser pour déplacer, molette pour zoomer sous le curseur. Clic aéroport, F pour suivre.
           </p>
           <label className="relative block">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-500" />
