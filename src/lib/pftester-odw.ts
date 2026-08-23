@@ -91,6 +91,7 @@ function readString(buf: Uint8Array, pos: number): [string, number] {
 }
 
 function readDoubleLE(buf: Uint8Array, pos: number): number {
+  if (pos + 8 > buf.byteLength) return 0;
   return new DataView(buf.buffer, buf.byteOffset + pos, 8).getFloat64(0, true);
 }
 
@@ -165,14 +166,19 @@ export function decodeMultiPlanes(buf: Uint8Array): PfLiveAircraft[] {
     pos = p2;
     const field = tag >>> 3;
     const wt = tag & 7;
-    if (wt !== 2 || field !== 1) break;
-    const [len, p3] = readVarint(buf, pos);
-    pos = p3;
-    const raw = decodePlane(buf, pos, pos + len);
-    pos += len;
-    const { mapX, mapY } = gameToMap(raw.x, raw.y);
-    const id = raw.robloxUsername || `${raw.serverId}-${raw.callsign}-${planes.length}`;
-    planes.push({ ...raw, id, mapX, mapY });
+    if (wt === 2 && field === 1) {
+      const [len, p3] = readVarint(buf, pos);
+      pos = p3;
+      const raw = decodePlane(buf, pos, pos + len);
+      pos += len;
+      const { mapX, mapY } = gameToMap(raw.x, raw.y);
+      const id = raw.robloxUsername
+        ? `${raw.robloxUsername}:${raw.callsign || planes.length}`
+        : `${raw.serverId}-${raw.callsign}-${planes.length}`;
+      planes.push({ ...raw, id, mapX, mapY });
+      continue;
+    }
+    pos = skipField(buf, pos, wt);
   }
   return planes;
 }
@@ -188,23 +194,114 @@ export function configuredServerId(): string {
 }
 
 let trafficCache: { at: number; planes: PfLiveAircraft[] } | null = null;
-const TRAFFIC_TTL_MS = 800;
+let lastGoodTraffic: { at: number; planes: PfLiveAircraft[] } | null = null;
+const TRAFFIC_TTL_MS = 2_000;
+const LAST_GOOD_MS = 45_000;
+const SHARED_CACHE_KEY = 'pf-live-traffic-v2';
+const SHARED_CACHE_TTL_SEC = 2;
 
-export async function fetchLiveTraffic(): Promise<PfLiveAircraft[]> {
+const PF_TRAFFIC_HEADERS = {
+  Accept: 'application/x-protobuf, application/octet-stream, */*',
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+  Referer: 'https://tracker.project-flight.com/',
+  Origin: 'https://tracker.project-flight.com',
+};
+
+function looksLikeProtobuf(buf: Uint8Array): boolean {
+  if (buf.length < 8) return false;
+  const first = buf[0]!;
+  if (first === 0x7b || first === 0x3c) return false;
+  return (first & 7) === 2;
+}
+
+async function readSharedTraffic(): Promise<PfLiveAircraft[] | null> {
+  try {
+    const { getCache } = await import('@vercel/functions');
+    const cached = await getCache().get(SHARED_CACHE_KEY);
+    return Array.isArray(cached) ? (cached as PfLiveAircraft[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeSharedTraffic(planes: PfLiveAircraft[]): Promise<void> {
+  try {
+    const { getCache } = await import('@vercel/functions');
+    await getCache().set(SHARED_CACHE_KEY, planes, {
+      ttl: SHARED_CACHE_TTL_SEC,
+      tags: ['pf-live-traffic'],
+      name: 'pf-live-traffic',
+    });
+  } catch {
+    /* local / cache indisponible */
+  }
+}
+
+function rememberTraffic(planes: PfLiveAircraft[]): void {
+  const now = Date.now();
+  trafficCache = { at: now, planes };
+  if (planes.length > 0) lastGoodTraffic = { at: now, planes };
+}
+
+async function pullLiveTrafficBytes(): Promise<Uint8Array> {
+  let lastStatus = 0;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(PF_TRAFFIC_URL, {
+      cache: 'no-store',
+      headers: PF_TRAFFIC_HEADERS,
+    });
+    lastStatus = res.status;
+    if (res.ok) {
+      const buf = new Uint8Array(await res.arrayBuffer());
+      if (!looksLikeProtobuf(buf)) {
+        throw new Error('Flux trafic illisible');
+      }
+      return buf;
+    }
+    if (res.status !== 429 && res.status !== 502 && res.status !== 503) {
+      throw new Error(`Flux trafic indisponible (${res.status})`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 180 * (attempt + 1)));
+  }
+  throw new Error(`Flux trafic indisponible (${lastStatus})`);
+}
+
+export async function fetchLiveTrafficResult(): Promise<{
+  planes: PfLiveAircraft[];
+  stale: boolean;
+  decoded: number;
+}> {
   const now = Date.now();
   if (trafficCache && now - trafficCache.at < TRAFFIC_TTL_MS) {
-    return trafficCache.planes;
+    return { planes: trafficCache.planes, stale: false, decoded: trafficCache.planes.length };
   }
-  const res = await fetch(PF_TRAFFIC_URL, {
-    cache: 'no-store',
-    headers: { Accept: 'application/x-protobuf, application/octet-stream, */*' },
-  });
-  if (!res.ok) {
-    throw new Error(`Flux trafic indisponible (${res.status})`);
+
+  const shared = await readSharedTraffic();
+  if (shared && shared.length > 0) {
+    rememberTraffic(shared);
+    return { planes: shared, stale: false, decoded: shared.length };
   }
-  const buf = new Uint8Array(await res.arrayBuffer());
-  const planes = decodeMultiPlanes(buf);
-  trafficCache = { at: now, planes };
+
+  try {
+    const buf = await pullLiveTrafficBytes();
+    const planes = decodeMultiPlanes(buf);
+    if (planes.length === 0 && buf.length > 64) {
+      throw new Error('Décodeur trafic vide');
+    }
+    rememberTraffic(planes);
+    void writeSharedTraffic(planes);
+    return { planes, stale: false, decoded: planes.length };
+  } catch (err) {
+    if (lastGoodTraffic && now - lastGoodTraffic.at < LAST_GOOD_MS) {
+      return { planes: lastGoodTraffic.planes, stale: true, decoded: lastGoodTraffic.planes.length };
+    }
+    throw err;
+  }
+}
+
+export async function fetchLiveTraffic(): Promise<PfLiveAircraft[]> {
+  const { planes } = await fetchLiveTrafficResult();
   return planes;
 }
 
@@ -214,15 +311,17 @@ function planeFreshness(p: PfLiveAircraft): number {
   return moving * 1000 + airborne * 100 + p.speed + p.altitude / 50;
 }
 
-/** Un pilote peut laisser un ancien spawn fantôme : on garde le vol le plus actif. */
+/** Doublon exact (même pilote + même callsign). Deux vols distincts du même compte restent visibles. */
 export function dedupeByPilot(planes: PfLiveAircraft[]): PfLiveAircraft[] {
-  const byUser = new Map<string, PfLiveAircraft>();
+  const byKey = new Map<string, PfLiveAircraft>();
   for (const p of planes) {
-    const key = (p.robloxUsername || `${p.serverId}-${p.callsign}`).toLowerCase();
-    const prev = byUser.get(key);
-    if (!prev || planeFreshness(p) > planeFreshness(prev)) byUser.set(key, p);
+    const user = (p.robloxUsername || `${p.serverId}`).toLowerCase();
+    const cs = (p.callsign || '').toLowerCase();
+    const key = `${user}::${cs}`;
+    const prev = byKey.get(key);
+    if (!prev || planeFreshness(p) > planeFreshness(prev)) byKey.set(key, p);
   }
-  return [...byUser.values()];
+  return [...byKey.values()];
 }
 
 export function filterByServer(planes: PfLiveAircraft[], serverId: string): PfLiveAircraft[] {

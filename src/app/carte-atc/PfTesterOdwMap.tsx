@@ -283,6 +283,8 @@ export default function PfTesterOdwMap() {
   const [aircraft, setAircraft] = useState<PfAircraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
+  const [feedServerId, setFeedServerId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [followId, setFollowId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(FIT_ZOOM);
@@ -332,20 +334,28 @@ export default function PfTesterOdwMap() {
     try {
       const res = await fetch(`/api/pftester-odw/flights?t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Erreur trafic');
+      if (!res.ok) {
+        setStale(true);
+        setError(data.error || 'Erreur trafic');
+        return;
+      }
       setAircraft(Array.isArray(data.aircraft) ? data.aircraft : []);
+      setFeedServerId(typeof data.serverId === 'string' ? data.serverId : null);
+      setStale(Boolean(data.stale));
       setError(null);
     } catch (e) {
+      setStale(true);
       setError(e instanceof Error ? e.message : 'Erreur trafic');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
     setLoading(true);
     setTrails({});
     fetchFlights();
-    const t = setInterval(fetchFlights, 1_000);
+    const t = setInterval(fetchFlights, 2_000);
     return () => clearInterval(t);
   }, [fetchFlights]);
 
@@ -988,8 +998,12 @@ export default function PfTesterOdwMap() {
           </label>
           <p className="text-[11px] text-cyan-300/80 font-mono">
             {listed.length} avion{listed.length > 1 ? 's' : ''}
-            {q ? ` · filtre` : ''}
+            {q ? ' · filtre' : ''}
+            {feedServerId ? ` · ${feedServerId}` : ''}
           </p>
+          {stale && (
+            <p className="text-[11px] text-amber-300">Flux PF coupé — dernière position connue.</p>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {error && <p className="text-red-400 text-xs">{error}</p>}

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requirePfTesterAdmin } from '@/lib/pftester-odw-auth';
-import { configuredServerId, fetchLiveTraffic, filterByServer } from '@/lib/pftester-odw';
+import { configuredServerId, fetchLiveTrafficResult, filterByServer } from '@/lib/pftester-odw';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +11,7 @@ export async function GET() {
   const serverId = configuredServerId();
 
   try {
-    const all = await fetchLiveTraffic();
+    const { planes: all, stale, decoded } = await fetchLiveTrafficResult();
     const aircraft = filterByServer(all, serverId).map((p) => ({
       id: p.id,
       serverId: p.serverId,
@@ -28,10 +28,19 @@ export async function GET() {
       mapY: p.mapY,
     }));
 
+    console.info('[pftester-odw/flights]', {
+      serverId,
+      decoded,
+      count: aircraft.length,
+      stale,
+    });
+
     return NextResponse.json(
       {
         serverId,
         count: aircraft.length,
+        decoded,
+        stale,
         updatedAt: new Date().toISOString(),
         aircraft,
       },
