@@ -46,7 +46,9 @@ const MAX_TILE_PX = 520;
 const TRAIL_MIN_STEP = 0.015;
 const TRAIL_MAX_STEP = 0.75;
 const TRAIL_MAX_LEN = 3600;
-const MOTION_MS = 1000;
+const REFRESH_MS = 1000;
+/** Aligné sur REFRESH_MS : l'interpolation doit couvrir l'intervalle sans le devancer. */
+const MOTION_MS = REFRESH_MS;
 const AIRPORT_ZOOM = 1.7;
 const LABEL_ZOOM = 1.8;
 const PLANE_IDLE = '#f97316';
@@ -328,7 +330,12 @@ export default function PfTesterOdwMap() {
     setError(null);
   }, []);
 
+  const inFlightRef = useRef(false);
+
   const fetchFlights = useCallback(async () => {
+    // Au rythme d'une seconde, une réponse lente ne doit pas empiler les suivantes.
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
       const live = await fetch(`/api/pftester-odw/live?t=${Date.now()}`, { cache: 'no-store' });
       if (live.ok) {
@@ -357,6 +364,7 @@ export default function PfTesterOdwMap() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur trafic');
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   }, [applyAircraft]);
@@ -365,7 +373,7 @@ export default function PfTesterOdwMap() {
     setLoading(true);
     setTrails({});
     fetchFlights();
-    const t = setInterval(fetchFlights, 2_000);
+    const t = setInterval(fetchFlights, REFRESH_MS);
     return () => clearInterval(t);
   }, [fetchFlights]);
 
