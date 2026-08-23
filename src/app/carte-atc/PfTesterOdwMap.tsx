@@ -30,7 +30,8 @@ type PfAircraft = {
   mapY: number;
 };
 
-type TrailPt = { x: number; y: number; alt: number; at: number };
+/** `gap` marque une rupture (respawn, téléportation) : on coupe le tracé sans perdre l'historique. */
+type TrailPt = { x: number; y: number; alt: number; at: number; gap?: boolean };
 type MapTile = { key: string; z: number; x: number; y: number; left: number; top: number; width: number; height: number };
 type MapBounds = { minX: number; minY: number; maxX: number; maxY: number };
 type ViewState = { zoom: number; pan: { x: number; y: number } };
@@ -45,12 +46,16 @@ const ZOOM_STEP = 1.28;
 const MAX_TILE_PX = 520;
 const TRAIL_MIN_STEP = 0.015;
 const TRAIL_MAX_STEP = 0.75;
-const TRAIL_MAX_LEN = 3600;
+/** Assez pour un vol entier ; au-delà, les points anciens sont décimés, pas supprimés. */
+const TRAIL_MAX_LEN = 7200;
 /** La trace survit à un rechargement : sinon elle repart de zéro et reste invisible. */
-const TRAIL_STORE_KEY = 'pf-odw-trails-v1';
-const TRAIL_TTL_MS = 20 * 60_000;
-const TRAIL_STORE_MAX = 900;
+const TRAIL_STORE_KEY = 'pf-odw-trails-v2';
+/** Délai sans position avant d'oublier une trace : le vol est alors terminé. */
+const TRAIL_GONE_MS = 15 * 60_000;
+const TRAIL_STORE_MAX = 4000;
 const TRAIL_SAVE_MS = 5_000;
+/** Paliers de couleur : regroupe la trace en polylignes au lieu d'un segment par point. */
+const TRAIL_ALT_STEP = 500;
 const REFRESH_MS = 1000;
 /** Aligné sur REFRESH_MS : l'interpolation doit couvrir l'intervalle sans le devancer. */
 const MOTION_MS = REFRESH_MS;
@@ -94,7 +99,7 @@ function loadStoredTrails(): Record<string, TrailPt[]> {
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return {};
-    const cutoff = Date.now() - TRAIL_TTL_MS;
+    const cutoff = Date.now() - TRAIL_GONE_MS;
     const out: Record<string, TrailPt[]> = {};
     for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
       if (!Array.isArray(value)) continue;
@@ -104,10 +109,10 @@ function loadStoredTrails(): Record<string, TrailPt[]> {
           Number.isFinite(p.x) &&
           Number.isFinite(p.y) &&
           Number.isFinite(p.alt) &&
-          Number.isFinite(p.at) &&
-          p.at > cutoff,
+          Number.isFinite(p.at),
       );
-      if (kept.length > 1) out[key] = kept.slice(-TRAIL_MAX_LEN);
+      // On juge la trace entière sur sa dernière position, jamais point par point.
+      if (kept.length > 1 && kept[kept.length - 1]!.at > cutoff) out[key] = kept.slice(-TRAIL_MAX_LEN);
     }
     return out;
   } catch {
@@ -118,18 +123,19 @@ function loadStoredTrails(): Record<string, TrailPt[]> {
 function saveStoredTrails(trails: Record<string, TrailPt[]>): void {
   if (typeof window === 'undefined') return;
   try {
-    const cutoff = Date.now() - TRAIL_TTL_MS;
+    const cutoff = Date.now() - TRAIL_GONE_MS;
     const out: Record<string, TrailPt[]> = {};
     for (const [key, pts] of Object.entries(trails)) {
-      const kept = pts.filter((p) => p.at > cutoff).slice(-TRAIL_STORE_MAX);
-      if (kept.length > 1) {
-        out[key] = kept.map((p) => ({
-          x: Math.round(p.x * 1e4) / 1e4,
-          y: Math.round(p.y * 1e4) / 1e4,
-          alt: Math.round(p.alt),
-          at: p.at,
-        }));
-      }
+      if (pts.length < 2 || pts[pts.length - 1]!.at <= cutoff) continue;
+      let kept = pts;
+      while (kept.length > TRAIL_STORE_MAX) kept = thinOldest(kept);
+      out[key] = kept.map((p) => ({
+        x: Math.round(p.x * 1e4) / 1e4,
+        y: Math.round(p.y * 1e4) / 1e4,
+        alt: Math.round(p.alt),
+        at: p.at,
+        ...(p.gap ? { gap: true as const } : {}),
+      }));
     }
     window.localStorage.setItem(TRAIL_STORE_KEY, JSON.stringify(out));
   } catch {
@@ -144,10 +150,50 @@ function pushTrailPoint(pts: TrailPt[], x: number, y: number, alt: number): Trai
   if (!last) return [{ x, y, alt, at: now }];
   const dist = Math.hypot(x - last.x, y - last.y);
   if (dist < TRAIL_MIN_STEP) return pts;
-  if (dist > TRAIL_MAX_STEP) return [{ x, y, alt, at: now }];
-  const next = pts.concat({ x, y, alt, at: now });
-  if (next.length > TRAIL_MAX_LEN) next.splice(0, next.length - TRAIL_MAX_LEN);
-  return next;
+  // Un saut trop grand coupe le tracé, mais l'historique du vol est conservé.
+  const next = pts.concat({ x, y, alt, at: now, gap: dist > TRAIL_MAX_STEP });
+  return next.length > TRAIL_MAX_LEN ? thinOldest(next) : next;
+}
+
+type TrailRun = { color: string; points: { x: number; y: number }[] };
+
+/**
+ * Regroupe la trace en polylignes de même palier d'altitude. Un segment SVG par
+ * point deviendrait ingérable sur un vol entier échantillonné à la seconde.
+ */
+function buildTrailRuns(
+  trail: TrailPt[],
+  project: (pt: TrailPt) => { x: number; y: number },
+  head: { x: number; y: number },
+  headAlt: number,
+): TrailRun[] {
+  const runs: TrailRun[] = [];
+  let current: TrailRun | null = null;
+  for (const pt of trail) {
+    const color = altitudeToTrailColor(Math.round(pt.alt / TRAIL_ALT_STEP) * TRAIL_ALT_STEP);
+    const xy = project(pt);
+    if (!current || pt.gap || color !== current.color) {
+      // Sans rupture, le point de bascule appartient aux deux runs pour éviter un trou.
+      if (current && !pt.gap) current.points.push(xy);
+      current = { color, points: [xy] };
+      runs.push(current);
+    } else {
+      current.points.push(xy);
+    }
+  }
+  const headColor = altitudeToTrailColor(Math.round(headAlt / TRAIL_ALT_STEP) * TRAIL_ALT_STEP);
+  if (current && current.color === headColor) current.points.push(head);
+  else if (current) {
+    runs.push({ color: headColor, points: [current.points[current.points.length - 1]!, head] });
+  }
+  return runs;
+}
+
+/** Garde la seconde moitié intacte et n'échantillonne qu'un point sur deux dans la plus ancienne. */
+function thinOldest(pts: TrailPt[]): TrailPt[] {
+  const split = Math.floor(pts.length / 2);
+  const old = pts.slice(0, split).filter((p, i) => i % 2 === 0 || p.gap);
+  return old.concat(pts.slice(split));
 }
 
 function tileUrl(z: number, x: number, y: number): string {
@@ -466,9 +512,9 @@ export default function PfTesterOdwMap() {
     if (!plotted.length) return;
     setTrails((prev) => {
       const next: Record<string, TrailPt[]> = {};
-      const cutoff = Date.now() - TRAIL_TTL_MS;
+      const cutoff = Date.now() - TRAIL_GONE_MS;
       let changed = false;
-      // Un avion absent d'un relevé ne perd pas sa trace : elle expire par ancienneté.
+      // Un avion absent d'un relevé ne perd pas sa trace : elle expire à la fin du vol.
       for (const [key, pts] of Object.entries(prev)) {
         if (pts.length > 1 && pts[pts.length - 1]!.at > cutoff) next[key] = pts;
         else changed = true;
@@ -922,37 +968,27 @@ export default function PfTesterOdwMap() {
             const trail = trails[trailKey(a)];
             if (!trail || trail.length < 2) return null;
             const p = posOf(a);
-            const pts = trail.map((pt) =>
-              mapToScreen(pt.x, pt.y, zoom, pan, viewport.w, viewport.h, dispW, dispH),
-            );
             const now = mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH);
-            const last = pts[pts.length - 1]!;
+            const runs = buildTrailRuns(
+              trail,
+              (pt) => mapToScreen(pt.x, pt.y, zoom, pan, viewport.w, viewport.h, dispW, dispH),
+              now,
+              a.altitude,
+            );
             return (
               <g key={`${a.id}-trail`}>
-                {pts.slice(1).map((pt, i) => (
-                  <line
+                {runs.map((run, i) => (
+                  <polyline
                     key={`${a.id}-t${i}`}
-                    x1={pts[i]!.x}
-                    y1={pts[i]!.y}
-                    x2={pt.x}
-                    y2={pt.y}
-                    stroke={altitudeToTrailColor((trail[i]!.alt + trail[i + 1]!.alt) / 2)}
+                    points={run.points.map((pt) => `${pt.x},${pt.y}`).join(' ')}
+                    fill="none"
+                    stroke={run.color}
                     strokeWidth={2.4}
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     opacity={0.92}
                   />
                 ))}
-                <line
-                  x1={last.x}
-                  y1={last.y}
-                  x2={now.x}
-                  y2={now.y}
-                  stroke={altitudeToTrailColor(a.altitude)}
-                  strokeWidth={2.4}
-                  strokeLinecap="round"
-                  opacity={0.92}
-                />
               </g>
             );
           })}
