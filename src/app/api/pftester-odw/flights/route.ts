@@ -28,12 +28,19 @@ export async function GET() {
       mapY: p.mapY,
     }));
 
-    return NextResponse.json({
-      serverId,
-      count: aircraft.length,
-      updatedAt: new Date().toISOString(),
-      aircraft,
-    });
+    return NextResponse.json(
+      {
+        serverId,
+        count: aircraft.length,
+        updatedAt: new Date().toISOString(),
+        aircraft,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        },
+      },
+    );
   } catch (err) {
     console.error('[pftester-odw/flights]', err);
     return NextResponse.json(

@@ -208,7 +208,24 @@ export async function fetchLiveTraffic(): Promise<PfLiveAircraft[]> {
   return planes;
 }
 
+function planeFreshness(p: PfLiveAircraft): number {
+  const moving = p.speed >= 40 ? 2 : p.speed >= 12 ? 1 : 0;
+  const airborne = p.altitude >= 200 ? 1 : 0;
+  return moving * 1000 + airborne * 100 + p.speed + p.altitude / 50;
+}
+
+/** Un pilote peut laisser un ancien spawn fantôme : on garde le vol le plus actif. */
+export function dedupeByPilot(planes: PfLiveAircraft[]): PfLiveAircraft[] {
+  const byUser = new Map<string, PfLiveAircraft>();
+  for (const p of planes) {
+    const key = (p.robloxUsername || `${p.serverId}-${p.callsign}`).toLowerCase();
+    const prev = byUser.get(key);
+    if (!prev || planeFreshness(p) > planeFreshness(prev)) byUser.set(key, p);
+  }
+  return [...byUser.values()];
+}
+
 export function filterByServer(planes: PfLiveAircraft[], serverId: string): PfLiveAircraft[] {
   const wanted = serverId.toLowerCase();
-  return planes.filter((p) => p.serverId.toLowerCase() === wanted);
+  return dedupeByPilot(planes.filter((p) => p.serverId.toLowerCase() === wanted));
 }

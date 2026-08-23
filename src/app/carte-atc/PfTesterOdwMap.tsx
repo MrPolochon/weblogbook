@@ -309,6 +309,7 @@ export default function PfTesterOdwMap() {
   const shownRef = useRef<Record<string, { x: number; y: number; hdg: number }>>({});
   const lastPaintRef = useRef(0);
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const lastCallsignRef = useRef<Record<string, string>>({});
 
   const { dispW, dispH } = fittedMapSize(viewport.w, viewport.h);
 
@@ -329,7 +330,7 @@ export default function PfTesterOdwMap() {
 
   const fetchFlights = useCallback(async () => {
     try {
-      const res = await fetch('/api/pftester-odw/flights', { cache: 'no-store' });
+      const res = await fetch(`/api/pftester-odw/flights?t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur trafic');
       setAircraft(Array.isArray(data.aircraft) ? data.aircraft : []);
@@ -397,18 +398,24 @@ export default function PfTesterOdwMap() {
   useEffect(() => {
     const now = performance.now();
     const nextMotion: Record<string, Motion> = {};
+    const nextSigns = { ...lastCallsignRef.current };
     for (const a of plotted) {
       const shown = shownRef.current[a.id];
+      const jump = !!shown && Math.hypot(shown.x - a.mapX, shown.y - a.mapY) > TRAIL_MAX_STEP;
+      const respawn = nextSigns[a.id] !== undefined && nextSigns[a.id] !== a.callsign;
+      nextSigns[a.id] = a.callsign;
+      const snap = !shown || jump || respawn;
       nextMotion[a.id] = {
-        fromX: shown?.x ?? a.mapX,
-        fromY: shown?.y ?? a.mapY,
-        fromHdg: shown?.hdg ?? a.heading,
+        fromX: snap ? a.mapX : shown.x,
+        fromY: snap ? a.mapY : shown.y,
+        fromHdg: snap ? a.heading : shown.hdg,
         toX: a.mapX,
         toY: a.mapY,
         toHdg: a.heading,
         t0: now,
       };
     }
+    lastCallsignRef.current = nextSigns;
     motionRef.current = nextMotion;
   }, [plotted]);
 
