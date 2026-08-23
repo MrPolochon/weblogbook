@@ -76,11 +76,21 @@ async function primeFromDatabase(): Promise<void> {
 async function recordOnce(): Promise<void> {
   const planes = await fetchPlanes();
   const rows: Record<string, unknown>[] = [];
+  const presence: Record<string, unknown>[] = [];
   const seen = new Set<string>();
 
   for (const p of planes) {
     const key = flightKey(p);
     seen.add(key);
+    // La présence est notée à chaque relevé, même sans mouvement : un appareil
+    // immobile est toujours en vol, et sa trace ne doit pas être purgée.
+    presence.push({
+      flight_key: key,
+      server_id: p.serverId,
+      roblox_username: p.robloxUsername || '',
+      callsign: p.callsign || '',
+      last_seen_at: new Date().toISOString(),
+    });
     const last = lastByFlight.get(key);
     const moved = last ? Math.hypot(p.mapX - last.x, p.mapY - last.y) : Infinity;
     // Un appareil immobile au parking n'a pas besoin d'un point par seconde.
@@ -102,6 +112,13 @@ async function recordOnce(): Promise<void> {
 
   for (const key of lastByFlight.keys()) {
     if (!seen.has(key)) lastByFlight.delete(key);
+  }
+
+  if (presence.length) {
+    const { error } = await db
+      .from('pf_odw_flights')
+      .upsert(presence, { onConflict: 'flight_key', ignoreDuplicates: false });
+    if (error) throw new Error(`presence: ${error.message}`);
   }
 
   if (rows.length) {

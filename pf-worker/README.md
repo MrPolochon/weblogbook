@@ -41,10 +41,18 @@ racine du dépôt (`npm run pf-worker`, redémarrage systématique).
 
 ## Lancement local
 
+Récupérer les variables depuis Vercel dans un fichier ignoré par git, puis lancer :
+
 ```bash
-npm install
-npm run pf-worker
+npx vercel env pull .env.development.local --environment=production
+npx tsx --env-file=.env.development.local pf-worker/index.ts
 ```
 
-Les variables peuvent être placées dans `.env.local` puis exportées, ou passées
-directement dans l'environnement du shell.
+Ce fichier contient la clé de service : le supprimer après usage.
+
+## Tables
+
+- `pf_odw_positions` — les points de trace.
+- `pf_odw_flights` — dernière fois que chaque vol a été vu. Indispensable :
+  un avion immobile n'ajoute aucun point, mais il est toujours en vol. Sans
+  cette table, la purge effacerait sa trace au bout de deux minutes.
