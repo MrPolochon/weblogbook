@@ -49,7 +49,6 @@ const TRAIL_MAX_LEN = 3600;
 const MOTION_MS = 1000;
 const AIRPORT_ZOOM = 1.7;
 const LABEL_ZOOM = 1.8;
-const PREDICT_MIN = 1;
 const PLANE_IDLE = '#f97316';
 const PLANE_ACTIVE = '#38bdf8';
 
@@ -64,15 +63,6 @@ function isOnGround(alt: number, speed: number): boolean {
 function lerpAngle(from: number, to: number, t: number): number {
   const d = ((to - from + 540) % 360) - 180;
   return from + d * t;
-}
-
-function headingOffset(mapX: number, mapY: number, heading: number, nm: number): { x: number; y: number } {
-  const rad = (heading * Math.PI) / 180;
-  const len = nm * PF_NM_TO_MAP;
-  return {
-    x: mapX + Math.sin(rad) * len,
-    y: mapY - Math.cos(rad) * len,
-  };
 }
 
 function niceNm(raw: number): number {
@@ -651,10 +641,6 @@ export default function PfTesterOdwMap() {
     return out;
   }, [tileZ, midZ, bounds, dispW, zoom]);
   const selected = plotted.find((a) => a.id === selectedId) ?? null;
-  const selectedPos = selected ? posOf(selected) : null;
-  const predict = selected && selectedPos && selected.speed > 40
-    ? headingOffset(selectedPos.x, selectedPos.y, selectedPos.hdg, (selected.speed / 60) * PREDICT_MIN)
-    : null;
   const q = query.trim().toLowerCase();
   const listed = useMemo(() => {
     const rows = q
@@ -853,8 +839,6 @@ export default function PfTesterOdwMap() {
             );
           })}
           {plotted.map((a) => {
-            const showTrail = selectedId === a.id || followId === a.id;
-            if (!showTrail) return null;
             const trail = trails[trailKey(a)];
             if (!trail || trail.length < 2) return null;
             const p = posOf(a);
@@ -892,18 +876,6 @@ export default function PfTesterOdwMap() {
               </g>
             );
           })}
-          {predict && selectedPos && (
-            <line
-              x1={mapToScreen(selectedPos.x, selectedPos.y, zoom, pan, viewport.w, viewport.h, dispW, dispH).x}
-              y1={mapToScreen(selectedPos.x, selectedPos.y, zoom, pan, viewport.w, viewport.h, dispW, dispH).y}
-              x2={mapToScreen(predict.x, predict.y, zoom, pan, viewport.w, viewport.h, dispW, dispH).x}
-              y2={mapToScreen(predict.x, predict.y, zoom, pan, viewport.w, viewport.h, dispW, dispH).y}
-              stroke={PLANE_ACTIVE}
-              strokeWidth={1.4}
-              strokeDasharray="5 4"
-              opacity={0.75}
-            />
-          )}
         </svg>
 
         <div className="absolute bottom-3 left-3 z-10 rounded-lg bg-slate-900/90 border border-slate-600 px-2 py-1.5 space-y-1" onPointerDown={(e) => e.stopPropagation()}>
