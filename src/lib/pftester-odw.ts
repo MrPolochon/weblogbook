@@ -205,7 +205,7 @@ export const PF_TRAFFIC_HEADERS = {
   Origin: 'https://tracker.project-flight.com',
 };
 
-function looksLikeProtobuf(buf: Uint8Array): boolean {
+export function looksLikeProtobuf(buf: Uint8Array): boolean {
   if (buf.length < 8) return false;
   const first = buf[0]!;
   if (first === 0x7b || first === 0x3c) return false;

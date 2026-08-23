@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requirePfTesterAdmin } from '@/lib/pftester-odw-auth';
-import { PF_TRAFFIC_HEADERS, PF_TRAFFIC_URL } from '@/lib/pftester-odw';
+import { PF_TRAFFIC_HEADERS, PF_TRAFFIC_URL, looksLikeProtobuf } from '@/lib/pftester-odw';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -18,6 +18,7 @@ export async function GET() {
   if (!auth.ok) return auth.response;
 
   let lastStatus = 0;
+  let lastBodyHint = '';
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const upstream = await fetch(PF_TRAFFIC_URL, {
@@ -27,7 +28,10 @@ export async function GET() {
       lastStatus = upstream.status;
       if (upstream.ok) {
         const body = await upstream.arrayBuffer();
-        if (body.byteLength >= 8) {
+        const bytes = new Uint8Array(body);
+        // Un 200 ne garantit rien : l'amont peut répondre une page anti-bot ou une
+        // erreur JSON. Relayer ces octets ferait décoder « 0 avion » sans erreur.
+        if (looksLikeProtobuf(bytes)) {
           return new NextResponse(body, {
             headers: {
               ...NO_STORE,
@@ -36,16 +40,36 @@ export async function GET() {
             },
           });
         }
+        lastBodyHint = new TextDecoder().decode(bytes.subarray(0, 180)).replace(/\s+/g, ' ').trim();
+        console.error('[pftester-odw/live] reponse amont non-protobuf', {
+          status: upstream.status,
+          bytes: bytes.byteLength,
+          contentType: upstream.headers.get('content-type'),
+          cfRay: upstream.headers.get('cf-ray'),
+          server: upstream.headers.get('server'),
+          hint: lastBodyHint,
+        });
+      } else {
+        console.error('[pftester-odw/live] amont en erreur', {
+          status: upstream.status,
+          server: upstream.headers.get('server'),
+          cfRay: upstream.headers.get('cf-ray'),
+        });
+        if (!RETRY_STATUS.has(upstream.status)) break;
       }
-      if (!RETRY_STATUS.has(upstream.status)) break;
-    } catch {
+    } catch (e) {
       lastStatus = 0;
+      lastBodyHint = e instanceof Error ? e.message : 'fetch echoue';
+      console.error('[pftester-odw/live] fetch amont impossible', lastBodyHint);
     }
     await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
   }
 
-  return new NextResponse(`Flux trafic indisponible (${lastStatus})`, {
-    status: 502,
-    headers: NO_STORE,
-  });
+  return NextResponse.json(
+    {
+      error: `Flux trafic indisponible (${lastStatus})`,
+      detail: lastBodyHint || null,
+    },
+    { status: 502, headers: NO_STORE },
+  );
 }
