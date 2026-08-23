@@ -11,7 +11,7 @@ export async function GET() {
   const serverId = configuredServerId();
 
   try {
-    const { planes: all, stale, decoded } = await fetchLiveTrafficResult();
+    const { planes: all, fetchedAt, decoded } = await fetchLiveTrafficResult();
     const aircraft = filterByServer(all, serverId).map((p) => ({
       id: p.id,
       serverId: p.serverId,
@@ -28,25 +28,20 @@ export async function GET() {
       mapY: p.mapY,
     }));
 
-    console.info('[pftester-odw/flights]', {
-      serverId,
-      decoded,
-      count: aircraft.length,
-      stale,
-    });
-
     return NextResponse.json(
       {
         serverId,
         count: aircraft.length,
         decoded,
-        stale,
+        fetchedAt,
         updatedAt: new Date().toISOString(),
         aircraft,
       },
       {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'CDN-Cache-Control': 'no-store',
+          'Vercel-CDN-Cache-Control': 'no-store',
         },
       },
     );

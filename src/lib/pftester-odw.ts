@@ -194,11 +194,8 @@ export function configuredServerId(): string {
 }
 
 let trafficCache: { at: number; planes: PfLiveAircraft[] } | null = null;
-let lastGoodTraffic: { at: number; planes: PfLiveAircraft[] } | null = null;
-const TRAFFIC_TTL_MS = 2_000;
-const LAST_GOOD_MS = 8_000;
-const SHARED_CACHE_KEY = 'pf-live-traffic-v2';
-const SHARED_CACHE_TTL_SEC = 2;
+/** Micro-cache par instance : absorbe plusieurs onglets sans jamais figer une position. */
+const TRAFFIC_TTL_MS = 900;
 
 export const PF_TRAFFIC_HEADERS = {
   Accept: 'application/x-protobuf, application/octet-stream, */*',
@@ -213,35 +210,6 @@ function looksLikeProtobuf(buf: Uint8Array): boolean {
   const first = buf[0]!;
   if (first === 0x7b || first === 0x3c) return false;
   return (first & 7) === 2;
-}
-
-async function readSharedTraffic(): Promise<PfLiveAircraft[] | null> {
-  try {
-    const { getCache } = await import('@vercel/functions');
-    const cached = await getCache().get(SHARED_CACHE_KEY);
-    return Array.isArray(cached) ? (cached as PfLiveAircraft[]) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function writeSharedTraffic(planes: PfLiveAircraft[]): Promise<void> {
-  try {
-    const { getCache } = await import('@vercel/functions');
-    await getCache().set(SHARED_CACHE_KEY, planes, {
-      ttl: SHARED_CACHE_TTL_SEC,
-      tags: ['pf-live-traffic'],
-      name: 'pf-live-traffic',
-    });
-  } catch {
-    /* local / cache indisponible */
-  }
-}
-
-function rememberTraffic(planes: PfLiveAircraft[]): void {
-  const now = Date.now();
-  trafficCache = { at: now, planes };
-  if (planes.length > 0) lastGoodTraffic = { at: now, planes };
 }
 
 async function pullLiveTrafficBytes(): Promise<Uint8Array> {
@@ -262,42 +230,32 @@ async function pullLiveTrafficBytes(): Promise<Uint8Array> {
     if (res.status !== 429 && res.status !== 502 && res.status !== 503) {
       throw new Error(`Flux trafic indisponible (${res.status})`);
     }
-    await new Promise((resolve) => setTimeout(resolve, 180 * (attempt + 1)));
+    await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
   }
   throw new Error(`Flux trafic indisponible (${lastStatus})`);
 }
 
 export async function fetchLiveTrafficResult(): Promise<{
   planes: PfLiveAircraft[];
-  stale: boolean;
+  fetchedAt: number;
   decoded: number;
 }> {
   const now = Date.now();
   if (trafficCache && now - trafficCache.at < TRAFFIC_TTL_MS) {
-    return { planes: trafficCache.planes, stale: false, decoded: trafficCache.planes.length };
+    return {
+      planes: trafficCache.planes,
+      fetchedAt: trafficCache.at,
+      decoded: trafficCache.planes.length,
+    };
   }
 
-  const shared = await readSharedTraffic();
-  if (shared && shared.length > 0) {
-    rememberTraffic(shared);
-    return { planes: shared, stale: false, decoded: shared.length };
+  const buf = await pullLiveTrafficBytes();
+  const planes = decodeMultiPlanes(buf);
+  if (planes.length === 0 && buf.length > 64) {
+    throw new Error('Décodeur trafic vide');
   }
-
-  try {
-    const buf = await pullLiveTrafficBytes();
-    const planes = decodeMultiPlanes(buf);
-    if (planes.length === 0 && buf.length > 64) {
-      throw new Error('Décodeur trafic vide');
-    }
-    rememberTraffic(planes);
-    void writeSharedTraffic(planes);
-    return { planes, stale: false, decoded: planes.length };
-  } catch (err) {
-    if (lastGoodTraffic && now - lastGoodTraffic.at < LAST_GOOD_MS) {
-      return { planes: lastGoodTraffic.planes, stale: true, decoded: lastGoodTraffic.planes.length };
-    }
-    throw err;
-  }
+  trafficCache = { at: Date.now(), planes };
+  return { planes, fetchedAt: trafficCache.at, decoded: planes.length };
 }
 
 export async function fetchLiveTraffic(): Promise<PfLiveAircraft[]> {

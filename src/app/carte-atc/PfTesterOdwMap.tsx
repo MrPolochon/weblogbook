@@ -286,7 +286,7 @@ export default function PfTesterOdwMap() {
   const [aircraft, setAircraft] = useState<PfAircraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [stale, setStale] = useState(false);
+  const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [feedServerId, setFeedServerId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [followId, setFollowId] = useState<string | null>(null);
@@ -333,19 +333,20 @@ export default function PfTesterOdwMap() {
     });
   }, [viewport.w, viewport.h, dispW, dispH]);
 
-  const applyAircraft = useCallback((next: PfAircraft[], serverId: string, nextStale = false) => {
+  const applyAircraft = useCallback((next: PfAircraft[], serverId: string, at: number) => {
     setAircraft(next);
     setFeedServerId(serverId);
-    setStale(nextStale);
+    setFetchedAt(at);
     setError(null);
   }, []);
 
   const fetchFlights = useCallback(async () => {
     try {
-      const live = await fetch('/api/pftester-odw/live');
+      const live = await fetch(`/api/pftester-odw/live?t=${Date.now()}`, { cache: 'no-store' });
       if (live.ok) {
         const buf = new Uint8Array(await live.arrayBuffer());
         const mine = filterByServer(decodeMultiPlanes(buf), PF_DEFAULT_SERVER_ID);
+        const upstreamAt = Number(live.headers.get('X-Pf-Fetched-At'));
         applyAircraft(
           mine.map((p) => ({
             id: p.id,
@@ -363,6 +364,7 @@ export default function PfTesterOdwMap() {
             mapY: p.mapY,
           })),
           PF_DEFAULT_SERVER_ID,
+          Number.isFinite(upstreamAt) && upstreamAt > 0 ? upstreamAt : Date.now(),
         );
         return;
       }
@@ -370,17 +372,15 @@ export default function PfTesterOdwMap() {
       const res = await fetch(`/api/pftester-odw/flights?t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setStale(true);
         setError(data.error || 'Erreur trafic');
         return;
       }
       applyAircraft(
         Array.isArray(data.aircraft) ? data.aircraft : [],
         typeof data.serverId === 'string' ? data.serverId : PF_DEFAULT_SERVER_ID,
-        Boolean(data.stale),
+        typeof data.fetchedAt === 'number' ? data.fetchedAt : Date.now(),
       );
     } catch (e) {
-      setStale(true);
       setError(e instanceof Error ? e.message : 'Erreur trafic');
     } finally {
       setLoading(false);
@@ -682,6 +682,7 @@ export default function PfTesterOdwMap() {
     return rows;
   }, [plotted, q]);
   const showAllLabels = zoom >= LABEL_ZOOM || plotted.length <= 10;
+  const feedAgeSec = fetchedAt === null ? null : Math.max(0, Math.round((Date.now() - fetchedAt) / 1000));
   const mapNm = (viewport.w / Math.max(1, dispW * zoom)) * PF_MAP_W / PF_NM_TO_MAP;
   const scaleNm = niceNm(mapNm * 0.18);
   const scalePx = (scaleNm * PF_NM_TO_MAP / PF_MAP_W) * dispW * zoom;
@@ -1037,8 +1038,10 @@ export default function PfTesterOdwMap() {
             {q ? ' · filtre' : ''}
             {feedServerId ? ` · ${feedServerId}` : ''}
           </p>
-          {stale && (
-            <p className="text-[11px] text-amber-300">Flux PF coupé — dernière position connue.</p>
+          {feedAgeSec !== null && (
+            <p className={`text-[11px] font-mono ${feedAgeSec > 10 ? 'text-amber-300' : 'text-slate-500'}`}>
+              position reçue il y a {feedAgeSec} s
+            </p>
           )}
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
