@@ -266,7 +266,6 @@ function TileLayer({
               top: tl.y,
               width: Math.max(1, br.x - tl.x) + 1,
               height: Math.max(1, br.y - tl.y) + 1,
-              WebkitUserDrag: 'none',
               userSelect: 'none',
             }}
             onDragStart={(e) => e.preventDefault()}
