@@ -41,7 +41,7 @@ const FIT_ZOOM = 1;
 const FOCUS_ZOOM = 8;
 const KEEP_MAP_PX = 48;
 const ZOOM_STEP = 1.28;
-const ZERO_PAN = { x: 0, y: 0 };
+const MAX_TILE_PX = 520;
 const TRAIL_MIN_STEP = 0.015;
 const TRAIL_MAX_STEP = 0.75;
 const TRAIL_MAX_LEN = 3600;
@@ -227,6 +227,10 @@ type Motion = {
   t0: number;
 };
 
+function tileScreenPx(tileZoom: number, dispW: number, viewZoom: number): number {
+  return (pfTileUnit(tileZoom) / PF_MAP_W) * dispW * viewZoom;
+}
+
 function TileLayer({
   tiles,
   zoom,
@@ -244,44 +248,34 @@ function TileLayer({
   dispW: number;
   dispH: number;
 }) {
-  const origin = mapToScreen(0, 0, zoom, ZERO_PAN, containerW, containerH, dispW, dispH);
-  const end = mapToScreen(PF_MAP_W, PF_MAP_H, zoom, ZERO_PAN, containerW, containerH, dispW, dispH);
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      <div
-        className="absolute overflow-hidden bg-[#0b1c2c] will-change-transform"
-        style={{
-          left: origin.x,
-          top: origin.y,
-          width: end.x - origin.x,
-          height: end.y - origin.y,
-          transform: `translate(${pan.x}px, ${pan.y}px)`,
-        }}
-      >
-        {tiles.map((t) => {
-          const tl = mapToScreen(t.left, t.top, zoom, ZERO_PAN, containerW, containerH, dispW, dispH);
-          const br = mapToScreen(t.left + t.width, t.top + t.height, zoom, ZERO_PAN, containerW, containerH, dispW, dispH);
-          return (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={t.key}
-              alt=""
-              draggable={false}
-              src={tileUrl(t.z, t.x, t.y)}
-              className="absolute max-w-none select-none"
-              style={{
-                left: tl.x - origin.x,
-                top: tl.y - origin.y,
-                width: Math.max(1, br.x - tl.x) + 1,
-                height: Math.max(1, br.y - tl.y) + 1,
-              }}
-              onError={(e) => {
-                e.currentTarget.style.visibility = 'hidden';
-              }}
-            />
-          );
-        })}
-      </div>
+    <div className="absolute inset-0 overflow-hidden pointer-events-none bg-[#0b1c2c]">
+      {tiles.map((t) => {
+        const tl = mapToScreen(t.left, t.top, zoom, pan, containerW, containerH, dispW, dispH);
+        const br = mapToScreen(t.left + t.width, t.top + t.height, zoom, pan, containerW, containerH, dispW, dispH);
+        return (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            key={t.key}
+            alt=""
+            draggable={false}
+            src={tileUrl(t.z, t.x, t.y)}
+            className="absolute max-w-none select-none pointer-events-none"
+            style={{
+              left: tl.x,
+              top: tl.y,
+              width: Math.max(1, br.x - tl.x) + 1,
+              height: Math.max(1, br.y - tl.y) + 1,
+              WebkitUserDrag: 'none',
+              userSelect: 'none',
+            }}
+            onDragStart={(e) => e.preventDefault()}
+            onError={(e) => {
+              e.currentTarget.style.visibility = 'hidden';
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -603,11 +597,14 @@ export default function PfTesterOdwMap() {
   const mapTiles = useMemo(() => {
     const seen = new Set<string>();
     const out: MapTile[] = [];
-    const layers = [
-      tilesInBounds(1, { minX: 0, minY: 0, maxX: PF_MAP_W, maxY: PF_MAP_H }),
-      midZ ? tilesInBounds(midZ, bounds) : [],
-      tileZ > 1 ? tilesInBounds(tileZ, bounds) : [],
-    ];
+    const layers: MapTile[][] = [];
+    if (tileScreenPx(1, dispW, zoom) <= MAX_TILE_PX) {
+      layers.push(tilesInBounds(1, { minX: 0, minY: 0, maxX: PF_MAP_W, maxY: PF_MAP_H }));
+    }
+    if (midZ && tileScreenPx(midZ, dispW, zoom) <= MAX_TILE_PX) {
+      layers.push(tilesInBounds(midZ, bounds));
+    }
+    layers.push(tilesInBounds(tileZ, bounds));
     for (const layer of layers) {
       for (const t of layer) {
         if (seen.has(t.key)) continue;
@@ -616,8 +613,7 @@ export default function PfTesterOdwMap() {
       }
     }
     return out;
-  }, [tileZ, midZ, bounds]);
-  const markerScale = 1 / zoom;
+  }, [tileZ, midZ, bounds, dispW, zoom]);
   const selected = plotted.find((a) => a.id === selectedId) ?? null;
   const selectedPos = selected ? posOf(selected) : null;
   const predict = selected && selectedPos && selected.speed > 40
@@ -656,7 +652,7 @@ export default function PfTesterOdwMap() {
   return (
     <div className="flex-1 min-h-0 w-full flex flex-col md:flex-row gap-3 md:gap-4">
       <div
-        className="flex-1 min-h-0 relative rounded-xl border border-cyan-700/40 bg-slate-950 overflow-hidden touch-none outline-none overscroll-none"
+        className="flex-1 min-h-0 relative rounded-xl border border-cyan-700/40 bg-slate-950 overflow-hidden isolate touch-none outline-none overscroll-none select-none"
         ref={mapContainerRef}
         tabIndex={0}
         onDoubleClick={(e) => {
@@ -669,6 +665,7 @@ export default function PfTesterOdwMap() {
           lastPointerRef.current = { x: e.clientX, y: e.clientY };
           applyZoomAt(e.clientX, e.clientY, viewRef.current.zoom / ZOOM_STEP);
         }}
+        onDragStart={(e) => e.preventDefault()}
         onPointerDown={(e) => {
           if (e.button !== 0 && e.button !== 1) return;
           lastPointerRef.current = { x: e.clientX, y: e.clientY };
@@ -712,7 +709,7 @@ export default function PfTesterOdwMap() {
           pinchStartRef.current = null;
           endPan();
         }}
-        style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+        style={{ cursor: isPanning ? 'grabbing' : 'grab', clipPath: 'inset(0)' }}
       >
         <TileLayer
           tiles={mapTiles}
@@ -723,111 +720,101 @@ export default function PfTesterOdwMap() {
           dispW={dispW}
           dispH={dispH}
         />
-        <div
-          className="absolute inset-0 will-change-transform"
-          style={{
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: 'center center',
-          }}
-        >
-          <div className="absolute inset-0 flex items-center justify-center p-2">
-            <div className="relative shrink-0" style={{ width: dispW, height: dispH }}>
-              <svg viewBox={`0 0 ${PF_MAP_W} ${PF_MAP_H}`} className="absolute inset-0 w-full h-full pointer-events-none">
-                {zoom >= AIRPORT_ZOOM && PF_AIRPORTS.map((ap) => (
-                  <g
-                    key={ap.code}
-                    className="pointer-events-auto"
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      if (dragRef.current.moved) return;
-                      applyView({ zoom: Math.max(viewRef.current.zoom, 6), pan: panToMapPoint(ap.mapX, ap.mapY, Math.max(viewRef.current.zoom, 6), dispW, dispH) });
-                    }}
-                  >
-                    <rect x={ap.mapX - 0.45} y={ap.mapY - 0.45} width={0.9} height={0.9} fill="#e2e8f0" stroke="#0f172a" strokeWidth={0.12} />
-                  </g>
-                ))}
-                {plotted.map((a) => {
-                  const isSelected = selectedId === a.id;
-                  const p = posOf(a);
-                  const color = isSelected || followId === a.id ? PLANE_ACTIVE : PLANE_IDLE;
-                  return (
-                    <g
-                      key={a.id}
-                      className="pointer-events-auto"
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => {
-                        if (dragRef.current.moved) return;
-                        selectAircraft(a.id);
-                      }}
-                    >
-                      <g transform={`translate(${p.x},${p.y}) scale(${markerScale})`}>
-                        <circle r={14} fill="transparent" />
-                        <g transform={`rotate(${p.hdg}) scale(${isOnGround(a.altitude, a.speed) ? 0.42 : 0.55})`}>
-                          <path
-                            d={PLANE_BLIP_D}
-                            fill={color}
-                            stroke="rgba(15,23,42,0.9)"
-                            strokeWidth={0.35}
-                            paintOrder="stroke fill"
-                          />
-                        </g>
-                      </g>
-                    </g>
-                  );
-                })}
-              </svg>
-              {zoom >= AIRPORT_ZOOM && PF_AIRPORTS.map((ap) => (
-                <div
-                  key={`ap-${ap.code}`}
-                  className="absolute pointer-events-none font-mono font-bold text-slate-100"
-                  style={{
-                    left: `${(ap.mapX / PF_MAP_W) * 100}%`,
-                    top: `${(ap.mapY / PF_MAP_H) * 100}%`,
-                    fontSize: 10,
-                    lineHeight: 1.15,
-                    textShadow: '0 1px 2px rgba(0,0,0,0.9)',
-                    transform: `translate(8px, -12px) scale(${markerScale})`,
-                    transformOrigin: 'left bottom',
-                  }}
-                >
-                  {ap.code}
-                  {zoom >= 4 && <span className="block text-slate-300 font-normal">{ap.name}</span>}
-                </div>
-              ))}
-              {plotted.map((a) => {
-                const isSelected = selectedId === a.id;
-                if (!isSelected && !showAllLabels && followId !== a.id) return null;
-                const p = posOf(a);
-                const color = isSelected || followId === a.id ? PLANE_ACTIVE : PLANE_IDLE;
-                return (
-                  <div
-                    key={`${a.id}-label`}
-                    className="absolute pointer-events-none whitespace-nowrap font-mono font-bold"
-                    style={{
-                      left: `${(p.x / PF_MAP_W) * 100}%`,
-                      top: `${(p.y / PF_MAP_H) * 100}%`,
-                      color,
-                      fontSize: isSelected ? 11 : 10,
-                      lineHeight: 1.15,
-                      textShadow: '0 1px 2px rgba(0,0,0,0.9)',
-                      transform: `translate(10px, -14px) scale(${markerScale})`,
-                      transformOrigin: 'left bottom',
-                    }}
-                  >
-                    {a.callsign || a.robloxUsername}
-                    {isSelected && (
-                      <span className="block font-semibold">
-                        {flLabel(a.altitude)} · {a.speed} kt
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
+        {zoom >= AIRPORT_ZOOM && PF_AIRPORTS.map((ap) => {
+          const s = mapToScreen(ap.mapX, ap.mapY, zoom, pan, viewport.w, viewport.h, dispW, dispH);
+          return (
+            <div
+              key={`ap-${ap.code}`}
+              className="absolute pointer-events-none font-mono font-bold text-slate-100 z-[1]"
+              style={{
+                left: s.x,
+                top: s.y,
+                fontSize: 10,
+                lineHeight: 1.15,
+                textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                transform: 'translate(8px, -12px)',
+              }}
+            >
+              {ap.code}
+              {zoom >= 4 && <span className="block text-slate-300 font-normal">{ap.name}</span>}
             </div>
-          </div>
-        </div>
+          );
+        })}
+        {plotted.map((a) => {
+          const isSelected = selectedId === a.id;
+          if (!isSelected && !showAllLabels && followId !== a.id) return null;
+          const p = posOf(a);
+          const s = mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH);
+          const color = isSelected || followId === a.id ? PLANE_ACTIVE : PLANE_IDLE;
+          return (
+            <div
+              key={`${a.id}-label`}
+              className="absolute pointer-events-none whitespace-nowrap font-mono font-bold z-[1]"
+              style={{
+                left: s.x,
+                top: s.y,
+                color,
+                fontSize: isSelected ? 11 : 10,
+                lineHeight: 1.15,
+                textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                transform: 'translate(10px, -14px)',
+              }}
+            >
+              {a.callsign || a.robloxUsername}
+              {isSelected && (
+                <span className="block font-semibold">
+                  {flLabel(a.altitude)} · {a.speed} kt
+                </span>
+              )}
+            </div>
+          );
+        })}
 
-        <svg className="absolute inset-0 w-full h-full pointer-events-none z-[1]" aria-hidden>
+        <svg className="absolute inset-0 w-full h-full z-[1] overflow-hidden pointer-events-none">
+          {zoom >= AIRPORT_ZOOM && PF_AIRPORTS.map((ap) => {
+            const s = mapToScreen(ap.mapX, ap.mapY, zoom, pan, viewport.w, viewport.h, dispW, dispH);
+            return (
+              <g
+                key={ap.code}
+                className="pointer-events-auto"
+                style={{ cursor: 'pointer' }}
+                onClick={() => {
+                  if (dragRef.current.moved) return;
+                  applyView({ zoom: Math.max(viewRef.current.zoom, 6), pan: panToMapPoint(ap.mapX, ap.mapY, Math.max(viewRef.current.zoom, 6), dispW, dispH) });
+                }}
+              >
+                <rect x={s.x - 4} y={s.y - 4} width={8} height={8} fill="#e2e8f0" stroke="#0f172a" strokeWidth={1} />
+              </g>
+            );
+          })}
+          {plotted.map((a) => {
+            const isSelected = selectedId === a.id;
+            const p = posOf(a);
+            const s = mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH);
+            const color = isSelected || followId === a.id ? PLANE_ACTIVE : PLANE_IDLE;
+            return (
+              <g
+                key={a.id}
+                className="pointer-events-auto"
+                style={{ cursor: 'pointer' }}
+                onClick={() => {
+                  if (dragRef.current.moved) return;
+                  selectAircraft(a.id);
+                }}
+              >
+                <g transform={`translate(${s.x},${s.y}) rotate(${p.hdg}) scale(${isOnGround(a.altitude, a.speed) ? 0.7 : 0.9})`}>
+                  <circle r={16} fill="transparent" />
+                  <path
+                    d={PLANE_BLIP_D}
+                    fill={color}
+                    stroke="rgba(15,23,42,0.9)"
+                    strokeWidth={0.35}
+                    paintOrder="stroke fill"
+                  />
+                </g>
+              </g>
+            );
+          })}
           {plotted.map((a) => {
             const showTrail = selectedId === a.id || followId === a.id;
             if (!showTrail) return null;
