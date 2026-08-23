@@ -9,8 +9,6 @@ import {
   PF_DEFAULT_SERVER_ID,
   PF_MAP_H,
   PF_MAP_W,
-  decodeMultiPlanes,
-  filterByServer,
   pfTileUnit,
   altitudeToTrailColor,
   gameToMap,
@@ -343,35 +341,16 @@ export default function PfTesterOdwMap() {
   const fetchFlights = useCallback(async () => {
     try {
       const live = await fetch(`/api/pftester-odw/live?t=${Date.now()}`, { cache: 'no-store' });
-      const upstreamAt = Number(live.headers.get('X-Pf-Fetched-At'));
-      const isTraffic =
-        live.ok &&
-        live.headers.get('Content-Type')?.includes('application/octet-stream') === true &&
-        Number.isFinite(upstreamAt) &&
-        upstreamAt > 0;
-      if (isTraffic) {
-        const buf = new Uint8Array(await live.arrayBuffer());
-        const mine = filterByServer(decodeMultiPlanes(buf), PF_DEFAULT_SERVER_ID);
-        applyAircraft(
-          mine.map((p) => ({
-            id: p.id,
-            serverId: p.serverId,
-            callsign: p.callsign,
-            robloxUsername: p.robloxUsername,
-            heading: Math.round(p.heading),
-            altitude: Math.round(p.altitude),
-            speed: Math.round(p.speed),
-            model: p.model,
-            livery: p.livery,
-            x: p.x,
-            y: p.y,
-            mapX: p.mapX,
-            mapY: p.mapY,
-          })),
-          PF_DEFAULT_SERVER_ID,
-          Number.isFinite(upstreamAt) && upstreamAt > 0 ? upstreamAt : Date.now(),
-        );
-        return;
+      if (live.ok) {
+        const data = await live.json().catch(() => null);
+        if (data && Array.isArray(data.aircraft)) {
+          applyAircraft(
+            data.aircraft,
+            typeof data.serverId === 'string' ? data.serverId : PF_DEFAULT_SERVER_ID,
+            typeof data.fetchedAt === 'number' ? data.fetchedAt : Date.now(),
+          );
+          return;
+        }
       }
 
       const res = await fetch(`/api/pftester-odw/flights?t=${Date.now()}`, { cache: 'no-store' });

@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { requirePfTesterAdmin } from '@/lib/pftester-odw-auth';
-import { PF_TRAFFIC_HEADERS, PF_TRAFFIC_URL, looksLikeProtobuf } from '@/lib/pftester-odw';
+import {
+  PF_TRAFFIC_HEADERS,
+  PF_TRAFFIC_URL,
+  configuredServerId,
+  decodeMultiPlanes,
+  filterByServer,
+  looksLikeProtobuf,
+} from '@/lib/pftester-odw';
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
@@ -32,13 +39,40 @@ export async function GET() {
         // Un 200 ne garantit rien : l'amont peut répondre une page anti-bot ou une
         // erreur JSON. Relayer ces octets ferait décoder « 0 avion » sans erreur.
         if (looksLikeProtobuf(bytes)) {
-          return new NextResponse(body, {
-            headers: {
-              ...NO_STORE,
-              'Content-Type': 'application/octet-stream',
-              'X-Pf-Fetched-At': String(Date.now()),
-            },
+          const serverId = configuredServerId();
+          const all = decodeMultiPlanes(bytes);
+          const mine = filterByServer(all, serverId);
+          console.log('[pftester-odw/live]', {
+            serverId,
+            bytes: bytes.byteLength,
+            decoded: all.length,
+            onServer: mine.length,
+            callsigns: mine.map((p) => `${p.callsign}/${p.robloxUsername}`),
           });
+          return NextResponse.json(
+            {
+              serverId,
+              count: mine.length,
+              decoded: all.length,
+              fetchedAt: Date.now(),
+              aircraft: mine.map((p) => ({
+                id: p.id,
+                serverId: p.serverId,
+                callsign: p.callsign,
+                robloxUsername: p.robloxUsername,
+                heading: Math.round(p.heading),
+                altitude: Math.round(p.altitude),
+                speed: Math.round(p.speed),
+                model: p.model,
+                livery: p.livery,
+                x: p.x,
+                y: p.y,
+                mapX: p.mapX,
+                mapY: p.mapY,
+              })),
+            },
+            { headers: NO_STORE },
+          );
         }
         lastBodyHint = new TextDecoder().decode(bytes.subarray(0, 180)).replace(/\s+/g, ' ').trim();
         console.error('[pftester-odw/live] reponse amont non-protobuf', {
