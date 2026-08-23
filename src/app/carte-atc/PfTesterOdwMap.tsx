@@ -343,10 +343,15 @@ export default function PfTesterOdwMap() {
   const fetchFlights = useCallback(async () => {
     try {
       const live = await fetch(`/api/pftester-odw/live?t=${Date.now()}`, { cache: 'no-store' });
-      if (live.ok) {
+      const upstreamAt = Number(live.headers.get('X-Pf-Fetched-At'));
+      const isTraffic =
+        live.ok &&
+        live.headers.get('Content-Type')?.includes('application/octet-stream') === true &&
+        Number.isFinite(upstreamAt) &&
+        upstreamAt > 0;
+      if (isTraffic) {
         const buf = new Uint8Array(await live.arrayBuffer());
         const mine = filterByServer(decodeMultiPlanes(buf), PF_DEFAULT_SERVER_ID);
-        const upstreamAt = Number(live.headers.get('X-Pf-Fetched-At'));
         applyAircraft(
           mine.map((p) => ({
             id: p.id,
