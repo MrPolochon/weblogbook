@@ -196,11 +196,11 @@ export function configuredServerId(): string {
 let trafficCache: { at: number; planes: PfLiveAircraft[] } | null = null;
 let lastGoodTraffic: { at: number; planes: PfLiveAircraft[] } | null = null;
 const TRAFFIC_TTL_MS = 2_000;
-const LAST_GOOD_MS = 45_000;
+const LAST_GOOD_MS = 8_000;
 const SHARED_CACHE_KEY = 'pf-live-traffic-v2';
 const SHARED_CACHE_TTL_SEC = 2;
 
-const PF_TRAFFIC_HEADERS = {
+export const PF_TRAFFIC_HEADERS = {
   Accept: 'application/x-protobuf, application/octet-stream, */*',
   'User-Agent':
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -324,7 +324,27 @@ export function dedupeByPilot(planes: PfLiveAircraft[]): PfLiveAircraft[] {
   return [...byKey.values()];
 }
 
+function dropInactiveClones(planes: PfLiveAircraft[]): PfLiveAircraft[] {
+  const byUser = new Map<string, PfLiveAircraft[]>();
+  for (const p of planes) {
+    const key = (p.robloxUsername || p.id).toLowerCase();
+    const list = byUser.get(key) ?? [];
+    list.push(p);
+    byUser.set(key, list);
+  }
+  const out: PfLiveAircraft[] = [];
+  for (const list of byUser.values()) {
+    if (list.length === 1) {
+      out.push(list[0]!);
+      continue;
+    }
+    const live = list.filter((p) => p.speed >= 30 || p.altitude >= 400);
+    out.push(...(live.length ? live : list));
+  }
+  return out;
+}
+
 export function filterByServer(planes: PfLiveAircraft[], serverId: string): PfLiveAircraft[] {
   const wanted = serverId.toLowerCase();
-  return dedupeByPilot(planes.filter((p) => p.serverId.toLowerCase() === wanted));
+  return dropInactiveClones(dedupeByPilot(planes.filter((p) => p.serverId.toLowerCase() === wanted)));
 }

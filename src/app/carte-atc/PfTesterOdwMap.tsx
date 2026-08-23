@@ -6,8 +6,11 @@ import { PLANE_BLIP_D } from '@/lib/radar-utils';
 import { PF_AIRPORTS } from '@/lib/pf-airports';
 import { PF_NM_TO_MAP } from '@/lib/pf-radar';
 import {
+  PF_DEFAULT_SERVER_ID,
   PF_MAP_H,
   PF_MAP_W,
+  decodeMultiPlanes,
+  filterByServer,
   pfTileUnit,
   altitudeToTrailColor,
   gameToMap,
@@ -330,8 +333,40 @@ export default function PfTesterOdwMap() {
     });
   }, [viewport.w, viewport.h, dispW, dispH]);
 
+  const applyAircraft = useCallback((next: PfAircraft[], serverId: string, nextStale = false) => {
+    setAircraft(next);
+    setFeedServerId(serverId);
+    setStale(nextStale);
+    setError(null);
+  }, []);
+
   const fetchFlights = useCallback(async () => {
     try {
+      const live = await fetch('/api/pftester-odw/live');
+      if (live.ok) {
+        const buf = new Uint8Array(await live.arrayBuffer());
+        const mine = filterByServer(decodeMultiPlanes(buf), PF_DEFAULT_SERVER_ID);
+        applyAircraft(
+          mine.map((p) => ({
+            id: p.id,
+            serverId: p.serverId,
+            callsign: p.callsign,
+            robloxUsername: p.robloxUsername,
+            heading: Math.round(p.heading),
+            altitude: Math.round(p.altitude),
+            speed: Math.round(p.speed),
+            model: p.model,
+            livery: p.livery,
+            x: p.x,
+            y: p.y,
+            mapX: p.mapX,
+            mapY: p.mapY,
+          })),
+          PF_DEFAULT_SERVER_ID,
+        );
+        return;
+      }
+
       const res = await fetch(`/api/pftester-odw/flights?t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -339,17 +374,18 @@ export default function PfTesterOdwMap() {
         setError(data.error || 'Erreur trafic');
         return;
       }
-      setAircraft(Array.isArray(data.aircraft) ? data.aircraft : []);
-      setFeedServerId(typeof data.serverId === 'string' ? data.serverId : null);
-      setStale(Boolean(data.stale));
-      setError(null);
+      applyAircraft(
+        Array.isArray(data.aircraft) ? data.aircraft : [],
+        typeof data.serverId === 'string' ? data.serverId : PF_DEFAULT_SERVER_ID,
+        Boolean(data.stale),
+      );
     } catch (e) {
       setStale(true);
       setError(e instanceof Error ? e.message : 'Erreur trafic');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyAircraft]);
 
   useEffect(() => {
     setLoading(true);
