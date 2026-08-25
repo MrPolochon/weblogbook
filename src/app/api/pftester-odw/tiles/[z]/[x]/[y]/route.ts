@@ -1,9 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export const dynamic = 'force-dynamic';
+/** Tuiles immuables (CDN PF `?v=1`) : cache navigateur + CDN, pas de force-dynamic. */
+export const revalidate = 86400;
+export const fetchCache = 'force-cache';
 
 const PF_TILE_ORIGIN = 'https://cdn.project-flight.com/tiles';
 const PF_TILE_REFERER = 'https://tracker.project-flight.com/';
+const TILE_CACHE =
+  'public, max-age=86400, s-maxage=2592000, stale-while-revalidate=2592000, immutable';
 
 function parseIndex(raw: string, maxDigits: number): number | null {
   if (!new RegExp(`^\\d{1,${maxDigits}}$`).test(raw)) return null;
@@ -11,7 +15,7 @@ function parseIndex(raw: string, maxDigits: number): number | null {
 }
 
 export async function GET(
-  _request: NextRequest,
+  _request: Request,
   { params }: { params: { z: string; x: string; y: string } },
 ) {
   const z = parseIndex(params.z, 1);
@@ -33,6 +37,7 @@ export async function GET(
         'User-Agent': 'Mozilla/5.0',
       },
       cache: 'force-cache',
+      next: { revalidate: 86400 },
     });
     if (!upstream.ok) {
       return new NextResponse('Tuile introuvable', { status: 404 });
@@ -41,7 +46,9 @@ export async function GET(
     return new NextResponse(body, {
       headers: {
         'Content-Type': upstream.headers.get('Content-Type') || 'image/webp',
-        'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+        'Cache-Control': TILE_CACHE,
+        'CDN-Cache-Control': TILE_CACHE,
+        'Vercel-CDN-Cache-Control': TILE_CACHE,
       },
     });
   } catch {

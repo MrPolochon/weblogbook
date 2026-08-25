@@ -46,6 +46,15 @@ const nextConfig = {
   async headers() {
     return [
       {
+        source: '/api/pftester-odw/tiles/:z/:x/:y',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=86400, s-maxage=2592000, stale-while-revalidate=2592000, immutable',
+          },
+        ],
+      },
+      {
         source: '/(.*)',
         headers: securityHeaders,
       },

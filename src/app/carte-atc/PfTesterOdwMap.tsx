@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, LocateFixed, Plane, RefreshCw, RotateCcw, Search, ZoomIn, ZoomOut } from 'lucide-react';
 import { PLANE_BLIP_D } from '@/lib/radar-utils';
 import { PF_AIRPORTS } from '@/lib/pf-airports';
@@ -38,6 +38,7 @@ type TrailPt = { x: number; y: number; alt: number; at: number; gap?: boolean };
 type MapTile = { key: string; z: number; x: number; y: number; left: number; top: number; width: number; height: number };
 type MapBounds = { minX: number; minY: number; maxX: number; maxY: number };
 type ViewState = { zoom: number; pan: { x: number; y: number } };
+type Layout = { w: number; h: number; dispW: number; dispH: number };
 
 const MIN_VIEW_ZOOM = 0.85;
 const MAX_VIEW_ZOOM = 48;
@@ -46,7 +47,9 @@ const FIT_ZOOM = 1;
 const FOCUS_ZOOM = 8;
 const KEEP_MAP_PX = 48;
 const ZOOM_STEP = 1.28;
-const MAX_TILE_PX = 520;
+const TILE_HOLD_MAX = 256;
+const TILE_Z_KEEP = 2;
+const VIEW_COMMIT_MS = 120;
 /** Seuil d'animation seulement : un saut plus grand snappe l'icône, sans couper la trace. */
 const MOTION_SNAP_STEP = 0.75;
 /** Assez pour un vol entier ; au-delà, les points anciens sont décimés, pas supprimés. */
@@ -63,12 +66,15 @@ const TRAIL_TRACKS_MS = 15_000;
 const TRAIL_ALT_STEP = 500;
 const REFRESH_MS = 1000;
 const LIVE_BACKUP_MS = 10_000;
+const BOOT_TIMEOUT_MS = 10_000;
+const BOOT_FADE_MS = 280;
 /** Aligné sur REFRESH_MS : l'interpolation doit couvrir l'intervalle sans le devancer. */
 const MOTION_MS = REFRESH_MS;
 const AIRPORT_ZOOM = 1.7;
 const LABEL_ZOOM = 1.8;
 const PLANE_IDLE = '#f97316';
 const PLANE_ACTIVE = '#38bdf8';
+const FULL_BOUNDS: MapBounds = { minX: 0, minY: 0, maxX: PF_MAP_W, maxY: PF_MAP_H };
 
 function flLabel(alt: number): string {
   return `FL${Math.max(0, Math.round(alt / 100)).toString().padStart(3, '0')}`;
@@ -162,50 +168,59 @@ function pushTrailPoint(pts: TrailPt[], x: number, y: number, alt: number): Trai
   return next.length > TRAIL_MAX_LEN ? thinOldest(next) : next;
 }
 
-type TrailRun = { color: string; points: { x: number; y: number }[] };
+type TrailRun = { color: string; points: string };
 
 /**
  * Regroupe la trace en polylignes de même palier d'altitude. Un segment SVG par
  * point deviendrait ingérable sur un vol entier échantillonné à la seconde.
  */
-function buildTrailRuns(
-  trail: TrailPt[],
-  project: (pt: TrailPt) => { x: number; y: number },
-  head: { x: number; y: number },
-  headAlt: number,
-  headMap: { x: number; y: number },
-): TrailRun[] {
+function buildTrailRuns(trail: TrailPt[]): TrailRun[] {
   const runs: TrailRun[] = [];
   let current: TrailRun | null = null;
+  let currentPts: { x: number; y: number }[] = [];
   let prev: TrailPt | null = null;
+  const flush = () => {
+    if (current && currentPts.length >= 2) {
+      current.points = currentPts.map((pt) => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`).join(' ');
+      runs.push(current);
+    }
+  };
   for (const pt of trail) {
     const color = altitudeToTrailColor(Math.round(pt.alt / TRAIL_ALT_STEP) * TRAIL_ALT_STEP);
-    const xy = project(pt);
     const dist = prev ? Math.hypot(pt.x - prev.x, pt.y - prev.y) : 0;
     const dt = prev ? (pt.at - prev.at) / 1000 : 1;
     // Recalcul : les anciens points (page fermée, cron 60 s) n'ont pas le flag gap.
     const broken = !!(prev && (pt.gap || isTrailGap(dist, dt)));
     if (!current || broken || color !== current.color) {
-      if (current && !broken) current.points.push(xy);
-      current = { color, points: [xy] };
-      runs.push(current);
+      if (current && !broken) currentPts.push(pt);
+      flush();
+      current = { color, points: '' };
+      currentPts = [{ x: pt.x, y: pt.y }];
     } else {
-      current.points.push(xy);
+      currentPts.push(pt);
     }
     prev = pt;
   }
-  const last = trail[trail.length - 1];
-  const headBroken = !!(
-    last &&
-    isTrailGap(Math.hypot(headMap.x - last.x, headMap.y - last.y), (Date.now() - last.at) / 1000)
-  );
-  if (headBroken) return runs;
-  const headColor = altitudeToTrailColor(Math.round(headAlt / TRAIL_ALT_STEP) * TRAIL_ALT_STEP);
-  if (current && current.color === headColor) current.points.push(head);
-  else if (current) {
-    runs.push({ color: headColor, points: [current.points[current.points.length - 1]!, head] });
-  }
+  flush();
   return runs;
+}
+
+function decimateTrail(pts: TrailPt[], step: number): TrailPt[] {
+  if (step <= 1 || pts.length <= 24) return pts;
+  const last = pts.length - 1;
+  const out: TrailPt[] = [];
+  for (let i = 0; i <= last; i++) {
+    const p = pts[i]!;
+    if (i === 0 || i === last || p.gap || i % step === 0) out.push(p);
+  }
+  return out;
+}
+
+function trailDecimateStep(zoom: number): number {
+  if (zoom >= 8) return 1;
+  if (zoom >= 4) return 2;
+  if (zoom >= 2) return 3;
+  return 6;
 }
 
 /** Garde la seconde moitié intacte et n'échantillonne qu'un point sur deux dans la plus ancienne. */
@@ -278,22 +293,6 @@ function panToMapPoint(
   };
 }
 
-function mapToScreen(
-  mapX: number,
-  mapY: number,
-  zoom: number,
-  pan: { x: number; y: number },
-  containerW: number,
-  containerH: number,
-  dispW: number,
-  dispH: number,
-): { x: number; y: number } {
-  return {
-    x: containerW / 2 + pan.x + ((mapX / PF_MAP_W) - 0.5) * dispW * zoom,
-    y: containerH / 2 + pan.y + ((mapY / PF_MAP_H) - 0.5) * dispH * zoom,
-  };
-}
-
 function visibleMapBounds(
   containerW: number,
   containerH: number,
@@ -301,7 +300,7 @@ function visibleMapBounds(
   pan: { x: number; y: number },
 ): MapBounds {
   const { dispW, dispH } = fittedMapSize(containerW, containerH);
-  const pad = 16;
+  const pad = 48;
   return {
     minX: PF_MAP_W * (0.5 + (-containerW / 2 - pan.x) / (zoom * dispW)) - pad,
     maxX: PF_MAP_W * (0.5 + (containerW / 2 - pan.x) / (zoom * dispW)) + pad,
@@ -310,13 +309,18 @@ function visibleMapBounds(
   };
 }
 
-function tilesInBounds(tileZoom: number, bounds: MapBounds): MapTile[] {
+function tilesInBounds(
+  tileZoom: number,
+  bounds: MapBounds,
+  opts?: { pad?: number; cx?: number; cy?: number },
+): MapTile[] {
   const n = 2 ** tileZoom;
   const unit = pfTileUnit(tileZoom);
-  const x0 = Math.max(0, Math.floor(bounds.minX / unit) - 1);
-  const y0 = Math.max(0, Math.floor(bounds.minY / unit) - 1);
-  const x1 = Math.min(n - 1, Math.ceil(Math.min(PF_MAP_W, bounds.maxX) / unit) + 1);
-  const y1 = Math.min(n - 1, Math.ceil(Math.min(PF_MAP_H, bounds.maxY) / unit) + 1);
+  const pad = opts?.pad ?? (tileZoom >= 6 ? 1 : 2);
+  const x0 = Math.max(0, Math.floor(bounds.minX / unit) - pad);
+  const y0 = Math.max(0, Math.floor(bounds.minY / unit) - pad);
+  const x1 = Math.min(n - 1, Math.ceil(Math.min(PF_MAP_W, bounds.maxX) / unit) + pad);
+  const y1 = Math.min(n - 1, Math.ceil(Math.min(PF_MAP_H, bounds.maxY) / unit) + pad);
   const list: MapTile[] = [];
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
@@ -333,7 +337,34 @@ function tilesInBounds(tileZoom: number, bounds: MapBounds): MapTile[] {
       });
     }
   }
+  if (opts?.cx != null && opts?.cy != null) {
+    const { cx, cy } = opts;
+    list.sort((a, b) => tileCenterDist(a, cx, cy) - tileCenterDist(b, cx, cy));
+  }
   return list;
+}
+
+function tileCenterDist(t: MapTile, cx: number, cy: number): number {
+  return Math.hypot(t.left + t.width / 2 - cx, t.top + t.height / 2 - cy);
+}
+
+function stickyTileZ(prev: number, dispW: number, viewZoom: number, dpr: number): number {
+  const raw = Math.log2(Math.max(2, (dispW * viewZoom * dpr) / PF_MAP_W));
+  if (raw >= prev + 0.2) return Math.max(1, Math.min(MAX_TILE_Z, Math.ceil(raw)));
+  if (raw <= prev - 0.55) return Math.max(1, Math.min(MAX_TILE_Z, Math.ceil(raw)));
+  return prev;
+}
+
+function preloadTileLayer(z: number, bounds: MapBounds, cx: number, cy: number, cap: number, highCount: number) {
+  const extra = tilesInBounds(z, bounds, { cx, cy, pad: 0 });
+  const n = Math.min(extra.length, cap);
+  for (let i = 0; i < n; i++) {
+    const t = extra[i]!;
+    const img = new Image();
+    img.decoding = 'async';
+    img.fetchPriority = i < highCount ? 'high' : 'low';
+    img.src = tileUrl(t.z, t.x, t.y);
+  }
 }
 
 function wheelZoomFactor(e: WheelEvent): number {
@@ -343,6 +374,14 @@ function wheelZoomFactor(e: WheelEvent): number {
   if (e.ctrlKey) return Math.exp(-dy * 0.014);
   if (Math.abs(dy) >= 40) return dy < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
   return Math.exp(-dy * 0.004);
+}
+
+function worldTransform(pan: { x: number; y: number }, zoom: number): string {
+  return `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom})`;
+}
+
+function zoomSliderValue(zoom: number): string {
+  return String(Math.log(zoom / MIN_VIEW_ZOOM) / Math.log(MAX_VIEW_ZOOM / MIN_VIEW_ZOOM));
 }
 
 type Motion = {
@@ -355,32 +394,131 @@ type Motion = {
   t0: number;
 };
 
-function tileScreenPx(tileZoom: number, dispW: number, viewZoom: number): number {
-  return (pfTileUnit(tileZoom) / PF_MAP_W) * dispW * viewZoom;
+const BASE_TILES = tilesInBounds(1, FULL_BOUNDS);
+
+function revealTile(img: HTMLImageElement, key: string, loaded: Set<string>) {
+  loaded.add(key);
+  img.style.opacity = '1';
 }
 
-function TileLayer({
+function tileHasPixels(img: HTMLImageElement): boolean {
+  return img.complete && img.naturalWidth > 0;
+}
+
+function BootOverlay({ percent, leaving }: { percent: number; leaving: boolean }) {
+  const clamped = Math.max(0, Math.min(100, percent));
+  return (
+    <div
+      className={`absolute inset-0 z-30 flex items-center justify-center bg-slate-950/92 backdrop-blur-[2px] transition-opacity duration-300 ${
+        leaving ? 'opacity-0 pointer-events-none' : 'opacity-100'
+      }`}
+      role="status"
+      aria-live="polite"
+      aria-busy={!leaving}
+    >
+      <div className="w-[min(22rem,calc(100%-2rem))] rounded-xl border border-cyan-700/40 bg-slate-900/90 px-5 py-4 shadow-xl shadow-black/40">
+        <p className="text-sm font-semibold text-slate-100">Chargement de la carte…</p>
+        <p className="mt-1 text-[11px] text-slate-400">Tuiles et trafic Mixou Airlines</p>
+        <div
+          className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-800"
+          role="progressbar"
+          aria-label="Chargement de la carte"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={clamped}
+          aria-valuetext={`${clamped} pour cent`}
+        >
+          <div
+            className="h-full rounded-full bg-cyan-400 transition-[width] duration-200 ease-out"
+            style={{ width: `${clamped}%` }}
+          />
+        </div>
+        <p className="mt-1.5 text-right font-mono text-[11px] tabular-nums text-cyan-200">{clamped} %</p>
+      </div>
+    </div>
+  );
+}
+
+const TileLayer = memo(function TileLayer({
   tiles,
-  zoom,
-  pan,
-  containerW,
-  containerH,
-  dispW,
-  dispH,
+  focusX,
+  focusY,
+  targetZ,
+  onTileSettled,
 }: {
   tiles: MapTile[];
-  zoom: number;
-  pan: { x: number; y: number };
-  containerW: number;
-  containerH: number;
-  dispW: number;
-  dispH: number;
+  focusX: number;
+  focusY: number;
+  targetZ: number;
+  onTileSettled?: (key: string) => void;
 }) {
+  const heldRef = useRef<Map<string, MapTile>>(new Map(BASE_TILES.map((t) => [t.key, t])));
+  const loadedRef = useRef(new Set<string>(BASE_TILES.map((t) => t.key)));
+  const recentZsRef = useRef<number[]>([1]);
+  const [held, setHeld] = useState<MapTile[]>(() => {
+    const map = new Map(BASE_TILES.map((t) => [t.key, t]));
+    for (const t of tiles) map.set(t.key, t);
+    return [...map.values()].sort((a, b) => a.z - b.z);
+  });
+
+  useEffect(() => {
+    const cache = heldRef.current;
+    for (const t of tiles) cache.set(t.key, t);
+    const live = new Set(tiles.map((t) => t.key));
+    const liveZs = [...new Set(tiles.map((t) => t.z))];
+    const maxZ = Math.max(1, targetZ, ...liveZs);
+    const hist = recentZsRef.current;
+    if (hist[hist.length - 1] !== maxZ) {
+      recentZsRef.current = [...hist, maxZ].slice(-6);
+    }
+    const prevZ = recentZsRef.current.length >= 2
+      ? recentZsRef.current[recentZsRef.current.length - 2]!
+      : 1;
+    const targetReady = tiles.some((t) => t.z === targetZ && loadedRef.current.has(t.key));
+
+    for (const [k, t] of cache) {
+      if (live.has(k) || t.z === 1) continue;
+      if (Math.abs(t.z - maxZ) <= TILE_Z_KEEP) continue;
+      if (!targetReady && Math.abs(t.z - prevZ) <= 1) continue;
+      cache.delete(k);
+    }
+    if (cache.size > TILE_HOLD_MAX) {
+      const ranked = [...cache.values()]
+        .filter((t) => t.z !== 1)
+        .map((t) => ({
+          key: t.key,
+          live: live.has(t.key),
+          target: t.z === targetZ,
+          hold: !targetReady && Math.abs(t.z - prevZ) <= 1,
+          zGap: Math.abs(t.z - maxZ),
+          dist: tileCenterDist(t, focusX, focusY),
+        }))
+        .sort((a, b) => {
+          if (a.live !== b.live) return a.live ? 1 : -1;
+          if (a.target !== b.target) return a.target ? 1 : -1;
+          if (a.hold !== b.hold) return a.hold ? 1 : -1;
+          if (a.zGap !== b.zGap) return b.zGap - a.zGap;
+          return b.dist - a.dist;
+        });
+      for (const row of ranked) {
+        if (cache.size <= TILE_HOLD_MAX) break;
+        if (row.live && row.target) continue;
+        if (row.hold) continue;
+        cache.delete(row.key);
+      }
+    }
+    const next = [...cache.values()].sort(
+      (a, b) => a.z - b.z || tileCenterDist(a, focusX, focusY) - tileCenterDist(b, focusX, focusY),
+    );
+    setHeld(next);
+  }, [tiles, focusX, focusY, targetZ]);
+
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none bg-[#0b1c2c]">
-      {tiles.map((t) => {
-        const tl = mapToScreen(t.left, t.top, zoom, pan, containerW, containerH, dispW, dispH);
-        const br = mapToScreen(t.left + t.width, t.top + t.height, zoom, pan, containerW, containerH, dispW, dispH);
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {held.map((t) => {
+        const near = tileCenterDist(t, focusX, focusY) < t.width * 1.8;
+        const high = t.z <= 2 || (t.z === targetZ && near);
+        const ready = t.z === 1 || loadedRef.current.has(t.key);
         return (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -388,31 +526,79 @@ function TileLayer({
             alt=""
             draggable={false}
             src={tileUrl(t.z, t.x, t.y)}
+            decoding={t.z === 1 ? 'sync' : 'async'}
+            fetchPriority={high ? 'high' : 'low'}
             className="absolute max-w-none select-none pointer-events-none"
             style={{
-              left: tl.x,
-              top: tl.y,
-              width: Math.max(1, br.x - tl.x) + 1,
-              height: Math.max(1, br.y - tl.y) + 1,
+              left: `${(t.left / PF_MAP_W) * 100}%`,
+              top: `${(t.top / PF_MAP_H) * 100}%`,
+              width: `calc(${(t.width / PF_MAP_W) * 100}% + 1px)`,
+              height: `calc(${(t.height / PF_MAP_H) * 100}% + 1px)`,
+              zIndex: t.z,
+              opacity: ready ? 1 : 0,
+              transition: 'opacity 90ms linear',
               userSelect: 'none',
+            }}
+            ref={(el) => {
+              if (!el) return;
+              if (tileHasPixels(el)) {
+                revealTile(el, t.key, loadedRef.current);
+                onTileSettled?.(t.key);
+              } else if (t.z === 1 || loadedRef.current.has(t.key)) {
+                revealTile(el, t.key, loadedRef.current);
+              }
+            }}
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              const show = () => {
+                revealTile(img, t.key, loadedRef.current);
+                onTileSettled?.(t.key);
+              };
+              if (typeof img.decode === 'function') img.decode().then(show).catch(show);
+              else show();
             }}
             onDragStart={(e) => e.preventDefault()}
             onError={(e) => {
               e.currentTarget.style.visibility = 'hidden';
+              onTileSettled?.(t.key);
             }}
           />
         );
       })}
     </div>
   );
+});
+
+function FeedAge({ fetchedAt }: { fetchedAt: number | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (fetchedAt === null) return null;
+  const sec = Math.max(0, Math.round((now - fetchedAt) / 1000));
+  return (
+    <p className={`text-[11px] font-mono ${sec > 10 ? 'text-amber-300' : 'text-slate-500'}`}>
+      position reçue il y a {sec} s
+    </p>
+  );
 }
 
 export default function PfTesterOdwMap() {
   const [aircraft, setAircraft] = useState<PfAircraft[]>([]);
   const [loading, setLoading] = useState(true);
+  const [bootPhase, setBootPhase] = useState<'loading' | 'leaving' | 'done'>('loading');
+  const [bootPercent, setBootPercent] = useState(0);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const bootRef = useRef({
+    done: false,
+    traffic: false,
+    expected: null as Set<string> | null,
+    settled: new Set<string>(),
+  });
+  const bootFadeRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
-  const [nowTick, setNowTick] = useState(() => Date.now());
   const [feedServerId, setFeedServerId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [followId, setFollowId] = useState<string | null>(null);
@@ -427,39 +613,71 @@ export default function PfTesterOdwMap() {
     pan: { x: number; y: number };
   } | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const worldRef = useRef<HTMLDivElement>(null);
+  const zoomLabelRef = useRef<HTMLSpanElement>(null);
+  const zoomSliderRef = useRef<HTMLInputElement>(null);
+  const scaleBarRef = useRef<HTMLSpanElement>(null);
+  const scaleLabelRef = useRef<HTMLSpanElement>(null);
   const [trails, setTrails] = useState<Record<string, TrailPt[]>>({});
   const trailsRef = useRef(trails);
   trailsRef.current = trails;
   const [query, setQuery] = useState('');
-  const [display, setDisplay] = useState<Record<string, { x: number; y: number; hdg: number }>>({});
   const [viewport, setViewport] = useState({ w: 900, h: 560 });
   const viewRef = useRef<ViewState>({ zoom: FIT_ZOOM, pan: { x: 0, y: 0 } });
-  viewRef.current = { zoom, pan };
+  const layoutRef = useRef<Layout>({ w: 900, h: 560, dispW: 900, dispH: 560 * (PF_MAP_H / PF_MAP_W) });
   const dragRef = useRef({ x: 0, y: 0, moved: false });
-  const rafRef = useRef(0);
-  const pendingViewRef = useRef<ViewState | null>(null);
+  const commitTimerRef = useRef(0);
+  const wheelIdleRef = useRef(0);
+  const gesturingRef = useRef(false);
+  const followIdRef = useRef<string | null>(null);
+  followIdRef.current = followId;
   const motionRef = useRef<Record<string, Motion>>({});
   const shownRef = useRef<Record<string, { x: number; y: number; hdg: number }>>({});
-  const lastPaintRef = useRef(0);
+  const lastDomViewRef = useRef({ zoom: NaN, panX: NaN, panY: NaN });
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
   const lastCallsignRef = useRef<Record<string, string>>({});
+  const tileZRef = useRef(1);
+  const planeElsRef = useRef(new Map<string, { g: SVGGElement; ground: boolean; alt: number }>());
+  const labelElsRef = useRef(new Map<string, HTMLDivElement>());
+  const trailHeadElsRef = useRef(new Map<string, SVGPolylineElement>());
+  const trailTailRef = useRef(new Map<string, TrailPt>());
 
   const { dispW, dispH } = fittedMapSize(viewport.w, viewport.h);
+  layoutRef.current = { w: viewport.w, h: viewport.h, dispW, dispH };
 
-  const applyView = useCallback((next: ViewState) => {
+  const flushCommit = useCallback((urgent = false) => {
+    if (commitTimerRef.current) {
+      window.clearTimeout(commitTimerRef.current);
+      commitTimerRef.current = 0;
+    }
+    const v = viewRef.current;
+    const apply = () => {
+      setZoom((z) => (z === v.zoom ? z : v.zoom));
+      setPan((p) => (p.x === v.pan.x && p.y === v.pan.y ? p : { x: v.pan.x, y: v.pan.y }));
+    };
+    if (urgent) apply();
+    else startTransition(apply);
+  }, []);
+
+  const scheduleCommit = useCallback(() => {
+    if (commitTimerRef.current) return;
+    commitTimerRef.current = window.setTimeout(() => {
+      commitTimerRef.current = 0;
+      flushCommit(false);
+      if (gesturingRef.current || followIdRef.current) scheduleCommit();
+    }, VIEW_COMMIT_MS);
+  }, [flushCommit]);
+  const scheduleCommitRef = useRef(scheduleCommit);
+  scheduleCommitRef.current = scheduleCommit;
+
+  const applyView = useCallback((next: ViewState, mode: 'live' | 'commit' = 'commit') => {
+    const layout = layoutRef.current;
     const z = clampViewZoom(next.zoom);
-    const p = clampPan(next.pan, z, viewport.w, viewport.h, dispW, dispH);
-    pendingViewRef.current = { zoom: z, pan: p };
-    if (rafRef.current) return;
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = 0;
-      const v = pendingViewRef.current;
-      if (!v) return;
-      viewRef.current = v;
-      setZoom(v.zoom);
-      setPan(v.pan);
-    });
-  }, [viewport.w, viewport.h, dispW, dispH]);
+    const p = clampPan(next.pan, z, layout.w, layout.h, layout.dispW, layout.dispH);
+    viewRef.current = { zoom: z, pan: p };
+    if (mode === 'commit') flushCommit(true);
+    else scheduleCommit();
+  }, [flushCommit, scheduleCommit]);
 
   const lastAppliedAtRef = useRef(0);
   const applyAircraft = useCallback((next: PfAircraft[], serverId: string, at: number) => {
@@ -468,6 +686,36 @@ export default function PfTesterOdwMap() {
     setFeedServerId(serverId);
     setFetchedAt(at);
     setError(null);
+  }, []);
+
+  const finishBoot = useCallback(() => {
+    const b = bootRef.current;
+    if (b.done) return;
+    b.done = true;
+    setBootPercent(100);
+    setBootPhase('leaving');
+    if (bootFadeRef.current) window.clearTimeout(bootFadeRef.current);
+    bootFadeRef.current = window.setTimeout(() => setBootPhase('done'), BOOT_FADE_MS);
+  }, []);
+
+  const tryFinishBoot = useCallback(() => {
+    const b = bootRef.current;
+    if (b.done) return;
+    const exp = b.expected;
+    const tilePart = !exp ? 0 : exp.size === 0 ? 1 : Math.min(1, b.settled.size / exp.size);
+    const pct = Math.min(100, Math.round(tilePart * 80 + (b.traffic ? 20 : 0)));
+    setBootPercent((prev) => (prev >= pct ? prev : pct));
+    if (exp && b.settled.size >= exp.size && b.traffic) finishBoot();
+  }, [finishBoot]);
+
+  const tryFinishBootRef = useRef(tryFinishBoot);
+  tryFinishBootRef.current = tryFinishBoot;
+
+  const onTileSettled = useCallback((key: string) => {
+    const b = bootRef.current;
+    if (b.done || !b.expected?.has(key) || b.settled.has(key)) return;
+    b.settled.add(key);
+    tryFinishBootRef.current();
   }, []);
 
   const inFlightRef = useRef(false);
@@ -530,6 +778,10 @@ export default function PfTesterOdwMap() {
     } finally {
       inFlightRef.current = false;
       setLoading(false);
+      if (!bootRef.current.traffic) {
+        bootRef.current.traffic = true;
+        tryFinishBootRef.current();
+      }
     }
   }, [applyAircraft, fetchLiveFallback]);
 
@@ -558,11 +810,6 @@ export default function PfTesterOdwMap() {
     } catch {
       // Worker absent ou route indisponible : l'historique local suffit.
     }
-  }, []);
-
-  useEffect(() => {
-    const id = setInterval(() => setNowTick(Date.now()), 1000);
-    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -608,19 +855,29 @@ export default function PfTesterOdwMap() {
   useEffect(() => {
     const el = mapContainerRef.current;
     if (!el) return;
+    const applySize = (width: number, height: number) => {
+      if (width <= 0 || height <= 0) return;
+      setViewport((prev) => (
+        Math.abs(prev.w - width) < 0.5 && Math.abs(prev.h - height) < 0.5
+          ? prev
+          : { w: width, h: height }
+      ));
+      setLayoutReady(true);
+    };
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) setViewport({ w: r.width, h: r.height });
+      applySize(r.width, r.height);
     });
     ro.observe(el);
     const r = el.getBoundingClientRect();
-    if (r.width > 0 && r.height > 0) setViewport({ w: r.width, h: r.height });
+    applySize(r.width, r.height);
     return () => ro.disconnect();
   }, []);
 
-  useEffect(() => () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-  }, []);
+  useEffect(() => {
+    const v = viewRef.current;
+    applyView({ zoom: v.zoom, pan: v.pan }, 'commit');
+  }, [viewport.w, viewport.h, dispW, dispH, applyView]);
 
   const plotted = useMemo(
     () =>
@@ -695,36 +952,94 @@ export default function PfTesterOdwMap() {
     motionRef.current = nextMotion;
   }, [plotted]);
 
+  const syncWorldDom = useCallback((v: ViewState) => {
+    const world = worldRef.current;
+    const layout = layoutRef.current;
+    const prev = lastDomViewRef.current;
+    if (prev.zoom === v.zoom && prev.panX === v.pan.x && prev.panY === v.pan.y && world) {
+      // HUD échelle peut quand même changer si le viewport a bougé ; ignoré ici.
+    } else {
+      lastDomViewRef.current = { zoom: v.zoom, panX: v.pan.x, panY: v.pan.y };
+      if (world) {
+        world.style.transform = worldTransform(v.pan, v.zoom);
+        world.style.setProperty('--map-inv-z', String(1 / v.zoom));
+      }
+      if (zoomLabelRef.current) {
+        zoomLabelRef.current.textContent = `×${v.zoom >= 10 ? Math.round(v.zoom) : v.zoom.toFixed(1)}`;
+      }
+      if (zoomSliderRef.current) zoomSliderRef.current.value = zoomSliderValue(v.zoom);
+    }
+    const mapNm = (layout.w / Math.max(1, layout.dispW * v.zoom)) * PF_MAP_W / PF_NM_TO_MAP;
+    const nm = niceNm(mapNm * 0.18);
+    const px = (nm * PF_NM_TO_MAP / PF_MAP_W) * layout.dispW * v.zoom;
+    if (scaleBarRef.current) scaleBarRef.current.style.width = `${Math.max(18, Math.min(140, px))}px`;
+    if (scaleLabelRef.current) scaleLabelRef.current.textContent = `${nm} NM`;
+  }, []);
+
+  useLayoutEffect(() => {
+    syncWorldDom(viewRef.current);
+  }, [dispW, dispH, syncWorldDom]);
+
   useEffect(() => {
     let frame = 0;
     const loop = (now: number) => {
-      if (now - lastPaintRef.current >= 50) {
-        lastPaintRef.current = now;
-        const next: Record<string, { x: number; y: number; hdg: number }> = {};
-        for (const [id, m] of Object.entries(motionRef.current)) {
-          const t = Math.min(1, (now - m.t0) / MOTION_MS);
-          const ease = t * t * (3 - 2 * t);
-          next[id] = {
-            x: m.fromX + (m.toX - m.fromX) * ease,
-            y: m.fromY + (m.toY - m.fromY) * ease,
-            hdg: lerpAngle(m.fromHdg, m.toHdg, ease),
-          };
+      const layout = layoutRef.current;
+      const v = viewRef.current;
+      const iconS = PF_MAP_W / Math.max(1, layout.dispW * v.zoom);
+      const follow = followIdRef.current;
+      let followPos: { x: number; y: number } | null = null;
+
+      for (const [id, m] of Object.entries(motionRef.current)) {
+        const t = Math.min(1, (now - m.t0) / MOTION_MS);
+        const ease = t * t * (3 - 2 * t);
+        const x = m.fromX + (m.toX - m.fromX) * ease;
+        const y = m.fromY + (m.toY - m.fromY) * ease;
+        const hdg = lerpAngle(m.fromHdg, m.toHdg, ease);
+        shownRef.current[id] = { x, y, hdg };
+        const plane = planeElsRef.current.get(id);
+        if (plane) {
+          const s = iconS * (plane.ground ? 0.7 : 0.9);
+          plane.g.setAttribute('transform', `translate(${x} ${y}) scale(${s}) rotate(${hdg})`);
         }
-        shownRef.current = next;
-        setDisplay(next);
+        const label = labelElsRef.current.get(id);
+        if (label) {
+          label.style.left = `${(x / PF_MAP_W) * 100}%`;
+          label.style.top = `${(y / PF_MAP_H) * 100}%`;
+        }
+        const head = trailHeadElsRef.current.get(id);
+        const tail = trailTailRef.current.get(id);
+        if (head && tail) {
+          const dist = Math.hypot(x - tail.x, y - tail.y);
+          if (isTrailGap(dist, (Date.now() - tail.at) / 1000)) {
+            head.setAttribute('points', '');
+          } else {
+            head.setAttribute('points', `${tail.x.toFixed(2)},${tail.y.toFixed(2)} ${x.toFixed(2)},${y.toFixed(2)}`);
+            if (plane) head.setAttribute('stroke', altitudeToTrailColor(Math.round(plane.alt / TRAIL_ALT_STEP) * TRAIL_ALT_STEP));
+          }
+        }
+        if (follow === id) followPos = { x, y };
       }
+
+      if (followPos && !panStartRef.current && !pinchStartRef.current) {
+        viewRef.current = {
+          zoom: v.zoom,
+          pan: clampPan(panToMapPoint(followPos.x, followPos.y, v.zoom, layout.dispW, layout.dispH), v.zoom, layout.w, layout.h, layout.dispW, layout.dispH),
+        };
+        scheduleCommitRef.current();
+      }
+      syncWorldDom(viewRef.current);
       frame = requestAnimationFrame(loop);
     };
     frame = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [syncWorldDom]);
 
   const applyZoomAt = useCallback((clientX: number, clientY: number, nextZoom: number) => {
     const z = clampViewZoom(nextZoom);
     const el = mapContainerRef.current;
     const cur = viewRef.current;
     if (!el || cur.zoom === z) {
-      applyView({ zoom: z, pan: cur.pan });
+      applyView({ zoom: z, pan: cur.pan }, 'live');
       return;
     }
     const rect = el.getBoundingClientRect();
@@ -734,7 +1049,7 @@ export default function PfTesterOdwMap() {
     applyView({
       zoom: z,
       pan: { x: cx * (1 - k) + cur.pan.x * k, y: cy * (1 - k) + cur.pan.y * k },
-    });
+    }, 'live');
   }, [applyView]);
 
   const updateZoom = useCallback((next: number) => {
@@ -745,7 +1060,7 @@ export default function PfTesterOdwMap() {
       return;
     }
     if (!el) {
-      applyView({ zoom: next, pan: viewRef.current.pan });
+      applyView({ zoom: next, pan: viewRef.current.pan }, 'commit');
       return;
     }
     const r = el.getBoundingClientRect();
@@ -755,38 +1070,24 @@ export default function PfTesterOdwMap() {
   const nudgePan = useCallback((dx: number, dy: number) => {
     const cur = viewRef.current;
     setFollowId(null);
-    applyView({ zoom: cur.zoom, pan: { x: cur.pan.x + dx, y: cur.pan.y + dy } });
+    applyView({ zoom: cur.zoom, pan: { x: cur.pan.x + dx, y: cur.pan.y + dy } }, 'commit');
   }, [applyView]);
 
   const posOf = useCallback((a: PfAircraft) => {
-    const d = display[a.id];
+    const d = shownRef.current[a.id];
     return { x: d?.x ?? a.mapX, y: d?.y ?? a.mapY, hdg: d?.hdg ?? a.heading };
-  }, [display]);
+  }, []);
 
   const focusAircraft = useCallback((a: PfAircraft, nextZoom = Math.max(viewRef.current.zoom, FOCUS_ZOOM)) => {
     const z = clampViewZoom(nextZoom);
     const p = posOf(a);
-    applyView({ zoom: z, pan: panToMapPoint(p.x, p.y, z, dispW, dispH) });
+    applyView({ zoom: z, pan: panToMapPoint(p.x, p.y, z, dispW, dispH) }, 'commit');
   }, [applyView, dispW, dispH, posOf]);
 
   const resetView = useCallback(() => {
     setFollowId(null);
-    applyView({ zoom: FIT_ZOOM, pan: { x: 0, y: 0 } });
+    applyView({ zoom: FIT_ZOOM, pan: { x: 0, y: 0 } }, 'commit');
   }, [applyView]);
-
-  useEffect(() => {
-    if (!followId) return;
-    const a = plotted.find((p) => p.id === followId);
-    if (!a) {
-      setFollowId(null);
-      return;
-    }
-    const p = posOf(a);
-    applyView({
-      zoom: viewRef.current.zoom,
-      pan: panToMapPoint(p.x, p.y, viewRef.current.zoom, dispW, dispH),
-    });
-  }, [followId, plotted, applyView, dispW, dispH, posOf]);
 
   useEffect(() => {
     const el = mapContainerRef.current;
@@ -794,11 +1095,17 @@ export default function PfTesterOdwMap() {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       lastPointerRef.current = { x: e.clientX, y: e.clientY };
+      gesturingRef.current = true;
       applyZoomAt(e.clientX, e.clientY, viewRef.current.zoom * wheelZoomFactor(e));
+      if (wheelIdleRef.current) window.clearTimeout(wheelIdleRef.current);
+      wheelIdleRef.current = window.setTimeout(() => {
+        gesturingRef.current = false;
+        flushCommit(true);
+      }, 140);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [applyZoomAt]);
+  }, [applyZoomAt, flushCommit]);
 
   useEffect(() => {
     const el = mapContainerRef.current;
@@ -824,7 +1131,7 @@ export default function PfTesterOdwMap() {
         const left = e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A';
         const right = e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D';
         const up = e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W';
-        const down = e.key === 'ArrowDown' || e.key === 's' || e.key === 'S';
+        const down = e.key === 'ArrowDown' || e.key === 's' || e.key === 'D';
         nudgePan(left ? step : right ? -step : 0, up ? step : down ? -step : 0);
       }
     };
@@ -835,11 +1142,12 @@ export default function PfTesterOdwMap() {
   function startPan(clientX: number, clientY: number) {
     dragRef.current = { x: clientX, y: clientY, moved: false };
     panStartRef.current = { x: viewRef.current.pan.x, y: viewRef.current.pan.y, mouseX: clientX, mouseY: clientY };
+    gesturingRef.current = true;
     setIsPanning(true);
   }
   function movePan(clientX: number, clientY: number) {
     if (!panStartRef.current) return;
-    if (Math.hypot(clientX - dragRef.current.x, clientY - dragRef.current.y) > 5) {
+    if (!dragRef.current.moved && Math.hypot(clientX - dragRef.current.x, clientY - dragRef.current.y) > 5) {
       dragRef.current.moved = true;
       setFollowId(null);
     }
@@ -849,11 +1157,13 @@ export default function PfTesterOdwMap() {
         x: panStartRef.current.x + (clientX - panStartRef.current.mouseX),
         y: panStartRef.current.y + (clientY - panStartRef.current.mouseY),
       },
-    });
+    }, 'live');
   }
   function endPan() {
     panStartRef.current = null;
+    gesturingRef.current = pointersRef.current.size > 0;
     setIsPanning(false);
+    flushCommit(true);
   }
 
   function pointerMid(): { x: number; y: number; distance: number } | null {
@@ -867,27 +1177,24 @@ export default function PfTesterOdwMap() {
   }
 
   const dpr = typeof window === 'undefined' ? 1 : Math.min(2, window.devicePixelRatio || 1);
-  const tileZ = Math.max(
-    1,
-    Math.min(MAX_TILE_Z, Math.ceil(Math.log2(Math.max(2, (dispW * zoom * dpr) / PF_MAP_W)))),
-  );
+  const tileZ = stickyTileZ(tileZRef.current, dispW, zoom, dpr);
+  tileZRef.current = tileZ;
   const midZ = tileZ >= 3 ? tileZ - 1 : 0;
+  const coarseZ = tileZ >= 4 ? tileZ - 2 : 0;
   const bounds = useMemo(
     () => visibleMapBounds(viewport.w, viewport.h, zoom, pan),
     [viewport.w, viewport.h, zoom, pan],
   );
+  const focusX = (bounds.minX + bounds.maxX) / 2;
+  const focusY = (bounds.minY + bounds.maxY) / 2;
   const mapTiles = useMemo(() => {
     const seen = new Set<string>();
     const out: MapTile[] = [];
-    const layers: MapTile[][] = [];
-    if (tileScreenPx(1, dispW, zoom) <= MAX_TILE_PX) {
-      layers.push(tilesInBounds(1, { minX: 0, minY: 0, maxX: PF_MAP_W, maxY: PF_MAP_H }));
-    }
-    if (midZ && tileScreenPx(midZ, dispW, zoom) <= MAX_TILE_PX) {
-      layers.push(tilesInBounds(midZ, bounds));
-    }
-    layers.push(tilesInBounds(tileZ, bounds));
-    for (const layer of layers) {
+    const zs = [...new Set([1, coarseZ, midZ, tileZ].filter((z) => z >= 1))].sort((a, b) => a - b);
+    for (const z of zs) {
+      const layer = z === 1
+        ? BASE_TILES
+        : tilesInBounds(z, bounds, { cx: focusX, cy: focusY, pad: z === tileZ ? undefined : 1 });
       for (const t of layer) {
         if (seen.has(t.key)) continue;
         seen.add(t.key);
@@ -895,7 +1202,46 @@ export default function PfTesterOdwMap() {
       }
     }
     return out;
-  }, [tileZ, midZ, bounds, dispW, zoom]);
+  }, [tileZ, midZ, coarseZ, bounds, focusX, focusY]);
+
+  useEffect(() => {
+    const b = bootRef.current;
+    if (b.done || b.expected || !layoutReady) return;
+    const expected = new Set(mapTiles.map((t) => t.key));
+    b.expected = expected;
+    if (expected.size === 0) {
+      tryFinishBootRef.current();
+      return;
+    }
+    for (const t of mapTiles) {
+      const img = new Image();
+      img.decoding = 'async';
+      img.fetchPriority = 'high';
+      const settle = () => onTileSettled(t.key);
+      img.onload = settle;
+      img.onerror = settle;
+      img.src = tileUrl(t.z, t.x, t.y);
+      if (img.complete) settle();
+    }
+    tryFinishBootRef.current();
+  }, [layoutReady, mapTiles, onTileSettled]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => finishBoot(), BOOT_TIMEOUT_MS);
+    return () => {
+      window.clearTimeout(id);
+      if (bootFadeRef.current) window.clearTimeout(bootFadeRef.current);
+    };
+  }, [finishBoot]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const nextZ = Math.min(MAX_TILE_Z, tileZ + 1);
+    if (nextZ > tileZ) preloadTileLayer(nextZ, bounds, focusX, focusY, 12, 4);
+    const underZ = Math.max(1, tileZ - 2);
+    if (underZ < tileZ && underZ > 1) preloadTileLayer(underZ, bounds, focusX, focusY, 8, 2);
+  }, [tileZ, bounds, focusX, focusY]);
+
   const selected = plotted.find((a) => a.id === selectedId) ?? null;
   const q = query.trim().toLowerCase();
   const listed = useMemo(() => {
@@ -908,10 +1254,20 @@ export default function PfTesterOdwMap() {
     return rows;
   }, [plotted, q]);
   const showAllLabels = zoom >= LABEL_ZOOM || plotted.length <= 10;
-  const feedAgeSec = fetchedAt === null ? null : Math.max(0, Math.round((nowTick - fetchedAt) / 1000));
-  const mapNm = (viewport.w / Math.max(1, dispW * zoom)) * PF_MAP_W / PF_NM_TO_MAP;
-  const scaleNm = niceNm(mapNm * 0.18);
-  const scalePx = (scaleNm * PF_NM_TO_MAP / PF_MAP_W) * dispW * zoom;
+  const trailStep = trailDecimateStep(zoom);
+  const trailShapes = useMemo(() => {
+    const tails = trailTailRef.current;
+    tails.clear();
+    return plotted.flatMap((a) => {
+      const trail = trails[trailKey(a)];
+      if (!trail || trail.length < 2) return [];
+      const pts = decimateTrail(trail, trailStep);
+      const last = pts[pts.length - 1]!;
+      tails.set(a.id, last);
+      return [{ id: a.id, alt: a.altitude, runs: buildTrailRuns(pts).filter((run) => run.points.includes(' ')) }];
+    });
+  }, [plotted, trails, trailStep]);
+  const iconS = PF_MAP_W / Math.max(1, dispW * zoom);
 
   function selectAircraft(id: string, fromList = false) {
     setSelectedId((prev) => {
@@ -929,7 +1285,7 @@ export default function PfTesterOdwMap() {
   }
 
   return (
-    <div className="flex-1 min-h-0 w-full flex flex-col md:flex-row gap-3 md:gap-4">
+    <div className="flex-1 min-h-0 w-full flex flex-col md:flex-row gap-3 md:gap-4 relative">
       <div
         className="flex-1 min-h-0 relative rounded-xl border border-cyan-700/40 bg-slate-950 overflow-hidden isolate touch-none outline-none overscroll-none select-none"
         ref={mapContainerRef}
@@ -960,6 +1316,7 @@ export default function PfTesterOdwMap() {
                 pan: { ...viewRef.current.pan },
               };
               panStartRef.current = null;
+              gesturingRef.current = true;
             }
           } else {
             startPan(e.clientX, e.clientY);
@@ -990,127 +1347,146 @@ export default function PfTesterOdwMap() {
         }}
         style={{ cursor: isPanning ? 'grabbing' : 'grab', clipPath: 'inset(0)' }}
       >
-        <TileLayer
-          tiles={mapTiles}
-          zoom={zoom}
-          pan={pan}
-          containerW={viewport.w}
-          containerH={viewport.h}
-          dispW={dispW}
-          dispH={dispH}
-        />
-        {zoom >= AIRPORT_ZOOM && PF_AIRPORTS.map((ap) => {
-          const s = mapToScreen(ap.mapX, ap.mapY, zoom, pan, viewport.w, viewport.h, dispW, dispH);
-          return (
+        <div
+          ref={worldRef}
+          className="absolute pointer-events-none bg-[#0b1c2c]"
+          style={{
+            left: '50%',
+            top: '50%',
+            width: dispW,
+            height: dispH,
+            marginLeft: -dispW / 2,
+            marginTop: -dispH / 2,
+            transformOrigin: 'center center',
+            willChange: 'transform',
+            backfaceVisibility: 'hidden',
+            ['--map-inv-z' as string]: String(1 / FIT_ZOOM),
+          }}
+        >
+          <TileLayer tiles={mapTiles} focusX={focusX} focusY={focusY} targetZ={tileZ} onTileSettled={onTileSettled} />
+          {zoom >= AIRPORT_ZOOM && PF_AIRPORTS.map((ap) => (
             <div
               key={`ap-${ap.code}`}
-              className="absolute pointer-events-none font-mono font-bold text-slate-100 z-[1]"
+              className="absolute pointer-events-none font-mono font-bold text-slate-100 z-[1] origin-top-left"
               style={{
-                left: s.x,
-                top: s.y,
+                left: `${(ap.mapX / PF_MAP_W) * 100}%`,
+                top: `${(ap.mapY / PF_MAP_H) * 100}%`,
                 fontSize: 10,
                 lineHeight: 1.15,
                 textShadow: '0 1px 2px rgba(0,0,0,0.9)',
-                transform: 'translate(8px, -12px)',
+                transform: 'scale(var(--map-inv-z, 1)) translate(8px, -12px)',
               }}
             >
               {ap.code}
               {zoom >= 4 && <span className="block text-slate-300 font-normal">{ap.name}</span>}
             </div>
-          );
-        })}
-        {plotted.map((a) => {
-          const isSelected = selectedId === a.id;
-          if (!isSelected && !showAllLabels && followId !== a.id) return null;
-          const p = posOf(a);
-          const s = mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH);
-          const color = isSelected || followId === a.id ? PLANE_ACTIVE : PLANE_IDLE;
-          return (
-            <div
-              key={`${a.id}-label`}
-              className="absolute pointer-events-none whitespace-nowrap font-mono font-bold z-[1]"
-              style={{
-                left: s.x,
-                top: s.y,
-                color,
-                fontSize: isSelected ? 11 : 10,
-                lineHeight: 1.15,
-                textShadow: '0 1px 2px rgba(0,0,0,0.9)',
-                transform: 'translate(10px, -14px)',
-              }}
-            >
-              {a.callsign || a.robloxUsername}
-              {isSelected && (
-                <span className="block font-semibold">
-                  {flLabel(a.altitude)} · {a.speed} kt
-                </span>
-              )}
-            </div>
-          );
-        })}
-
-        <svg className="absolute inset-0 w-full h-full z-[1] overflow-hidden pointer-events-none">
-          {zoom >= AIRPORT_ZOOM && PF_AIRPORTS.map((ap) => {
-            const s = mapToScreen(ap.mapX, ap.mapY, zoom, pan, viewport.w, viewport.h, dispW, dispH);
+          ))}
+          {plotted.map((a) => {
+            const isSelected = selectedId === a.id;
+            if (!isSelected && !showAllLabels && followId !== a.id) return null;
+            const p = posOf(a);
+            const color = isSelected || followId === a.id ? PLANE_ACTIVE : PLANE_IDLE;
             return (
+              <div
+                key={`${a.id}-label`}
+                ref={(el) => {
+                  if (el) labelElsRef.current.set(a.id, el);
+                  else labelElsRef.current.delete(a.id);
+                }}
+                className="absolute pointer-events-none whitespace-nowrap font-mono font-bold z-[1] origin-top-left"
+                style={{
+                  left: `${(p.x / PF_MAP_W) * 100}%`,
+                  top: `${(p.y / PF_MAP_H) * 100}%`,
+                  color,
+                  fontSize: isSelected ? 11 : 10,
+                  lineHeight: 1.15,
+                  textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+                  transform: 'scale(var(--map-inv-z, 1)) translate(10px, -14px)',
+                }}
+              >
+                {a.callsign || a.robloxUsername}
+                {isSelected && (
+                  <span className="block font-semibold">
+                    {flLabel(a.altitude)} · {a.speed} kt
+                  </span>
+                )}
+              </div>
+            );
+          })}
+
+          <svg
+            className="absolute inset-0 z-[1] overflow-visible pointer-events-none"
+            viewBox={`0 0 ${PF_MAP_W} ${PF_MAP_H}`}
+            width={dispW}
+            height={dispH}
+            preserveAspectRatio="none"
+          >
+            {zoom >= AIRPORT_ZOOM && PF_AIRPORTS.map((ap) => (
               <g
                 key={ap.code}
                 className="pointer-events-auto"
                 style={{ cursor: 'pointer' }}
+                transform={`translate(${ap.mapX} ${ap.mapY}) scale(${iconS})`}
                 onClick={() => {
                   if (dragRef.current.moved) return;
-                  applyView({ zoom: Math.max(viewRef.current.zoom, 6), pan: panToMapPoint(ap.mapX, ap.mapY, Math.max(viewRef.current.zoom, 6), dispW, dispH) });
+                  applyView({
+                    zoom: Math.max(viewRef.current.zoom, 6),
+                    pan: panToMapPoint(ap.mapX, ap.mapY, Math.max(viewRef.current.zoom, 6), dispW, dispH),
+                  }, 'commit');
                 }}
               >
-                <rect x={s.x - 4} y={s.y - 4} width={8} height={8} fill="#e2e8f0" stroke="#0f172a" strokeWidth={1} />
+                <rect x={-4} y={-4} width={8} height={8} fill="#e2e8f0" stroke="#0f172a" strokeWidth={1} />
               </g>
-            );
-          })}
-          {plotted.map((a) => {
-            const trail = trails[trailKey(a)];
-            if (!trail || trail.length < 2) return null;
-            const p = posOf(a);
-            const now = mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH);
-            const runs = buildTrailRuns(
-              trail,
-              (pt) => mapToScreen(pt.x, pt.y, zoom, pan, viewport.w, viewport.h, dispW, dispH),
-              now,
-              a.altitude,
-              p,
-            );
-            return (
-              <g key={`${a.id}-trail`}>
-                {runs.filter((run) => run.points.length >= 2).map((run, i) => (
+            ))}
+            {trailShapes.map((shape) => (
+              <g key={`${shape.id}-trail`}>
+                {shape.runs.map((run, i) => (
                   <polyline
-                    key={`${a.id}-t${i}`}
-                    points={run.points.map((pt) => `${pt.x},${pt.y}`).join(' ')}
+                    key={`${shape.id}-t${i}`}
+                    points={run.points}
                     fill="none"
                     stroke={run.color}
-                    strokeWidth={3}
+                    strokeWidth={3 * iconS}
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     opacity={0.95}
                   />
                 ))}
+                <polyline
+                  ref={(el) => {
+                    if (el) trailHeadElsRef.current.set(shape.id, el);
+                    else trailHeadElsRef.current.delete(shape.id);
+                  }}
+                  points=""
+                  fill="none"
+                  stroke={altitudeToTrailColor(Math.round(shape.alt / TRAIL_ALT_STEP) * TRAIL_ALT_STEP)}
+                  strokeWidth={3 * iconS}
+                  strokeLinecap="round"
+                  opacity={0.95}
+                />
               </g>
-            );
-          })}
-          {plotted.map((a) => {
-            const isSelected = selectedId === a.id;
-            const p = posOf(a);
-            const s = mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH);
-            const color = isSelected || followId === a.id ? PLANE_ACTIVE : PLANE_IDLE;
-            return (
-              <g
-                key={a.id}
-                className="pointer-events-auto"
-                style={{ cursor: 'pointer' }}
-                onClick={() => {
-                  if (dragRef.current.moved) return;
-                  selectAircraft(a.id);
-                }}
-              >
-                <g transform={`translate(${s.x},${s.y}) rotate(${p.hdg}) scale(${isOnGround(a.altitude, a.speed) ? 0.7 : 0.9})`}>
+            ))}
+            {plotted.map((a) => {
+              const isSelected = selectedId === a.id;
+              const p = posOf(a);
+              const color = isSelected || followId === a.id ? PLANE_ACTIVE : PLANE_IDLE;
+              const ground = isOnGround(a.altitude, a.speed);
+              const s = iconS * (ground ? 0.7 : 0.9);
+              return (
+                <g
+                  key={a.id}
+                  className="pointer-events-auto"
+                  style={{ cursor: 'pointer' }}
+                  ref={(el) => {
+                    if (el) planeElsRef.current.set(a.id, { g: el, ground, alt: a.altitude });
+                    else planeElsRef.current.delete(a.id);
+                  }}
+                  transform={`translate(${p.x} ${p.y}) scale(${s}) rotate(${p.hdg})`}
+                  onClick={() => {
+                    if (dragRef.current.moved) return;
+                    selectAircraft(a.id);
+                  }}
+                >
                   <circle r={16} fill="transparent" />
                   <path
                     d={PLANE_BLIP_D}
@@ -1120,10 +1496,10 @@ export default function PfTesterOdwMap() {
                     paintOrder="stroke fill"
                   />
                 </g>
-              </g>
-            );
-          })}
-        </svg>
+              );
+            })}
+          </svg>
+        </div>
 
         <div className="absolute bottom-3 left-3 z-10 rounded-lg bg-slate-900/90 border border-slate-600 px-2 py-1.5 space-y-1" onPointerDown={(e) => e.stopPropagation()}>
           <div
@@ -1139,8 +1515,8 @@ export default function PfTesterOdwMap() {
             <span>FL360</span>
           </div>
           <div className="flex items-center gap-1.5 pt-0.5">
-            <span className="block h-0.5 bg-slate-200" style={{ width: Math.max(18, Math.min(140, scalePx)) }} />
-            <span className="text-[9px] font-mono text-slate-300">{scaleNm} NM</span>
+            <span ref={scaleBarRef} className="block h-0.5 bg-slate-200" style={{ width: 36 }} />
+            <span ref={scaleLabelRef} className="text-[9px] font-mono text-slate-300">20 NM</span>
           </div>
         </div>
 
@@ -1148,15 +1524,19 @@ export default function PfTesterOdwMap() {
           className="absolute bottom-3 right-3 flex flex-col items-center gap-1.5 z-10"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <span className="px-1.5 py-0.5 rounded-md bg-slate-900/90 border border-slate-600 text-[10px] font-mono text-cyan-200 tabular-nums">
-            ×{zoom >= 10 ? Math.round(zoom) : zoom.toFixed(1)}
+          <span
+            ref={zoomLabelRef}
+            className="px-1.5 py-0.5 rounded-md bg-slate-900/90 border border-slate-600 text-[10px] font-mono text-cyan-200 tabular-nums"
+          >
+            ×{FIT_ZOOM.toFixed(1)}
           </span>
           <input
+            ref={zoomSliderRef}
             type="range"
             min={0}
             max={1}
             step={0.002}
-            value={Math.log(zoom / MIN_VIEW_ZOOM) / Math.log(MAX_VIEW_ZOOM / MIN_VIEW_ZOOM)}
+            defaultValue={zoomSliderValue(FIT_ZOOM)}
             onChange={(e) => updateZoom(MIN_VIEW_ZOOM * (MAX_VIEW_ZOOM / MIN_VIEW_ZOOM) ** Number(e.target.value))}
             className="w-24 accent-cyan-400 cursor-pointer"
             title="Niveau de zoom"
@@ -1241,11 +1621,7 @@ export default function PfTesterOdwMap() {
             {q ? ' · filtre' : ''}
             {feedServerId ? ` · ${feedServerId}` : ''}
           </p>
-          {feedAgeSec !== null && (
-            <p className={`text-[11px] font-mono ${feedAgeSec > 10 ? 'text-amber-300' : 'text-slate-500'}`}>
-              position reçue il y a {feedAgeSec} s
-            </p>
-          )}
+          <FeedAge fetchedAt={fetchedAt} />
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {error && <p className="text-red-400 text-xs">{error}</p>}
@@ -1299,6 +1675,7 @@ export default function PfTesterOdwMap() {
           )}
         </div>
       </div>
+      {bootPhase !== 'done' ? <BootOverlay percent={bootPercent} leaving={bootPhase === 'leaving'} /> : null}
     </div>
   );
 }
