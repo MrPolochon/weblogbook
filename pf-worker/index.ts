@@ -7,6 +7,7 @@
  * ne fait que lire : aucun onglet n'a besoin d'être ouvert.
  */
 import { createClient } from '@supabase/supabase-js';
+import WebSocket from 'ws';
 import { writeIngest, type PfTrailCursor } from '../src/lib/pf-odw-ingest';
 import {
   PF_TRAFFIC_HEADERS,
@@ -47,16 +48,9 @@ let ticks = 0;
 let hits = 0;
 
 function openMixouWs(): WebSocket {
-  const url = pfTrafficServerWsUrl(serverId);
-  const WS = WebSocket as unknown as new (
-    u: string,
-    opts?: { headers?: Record<string, string> },
-  ) => WebSocket;
-  try {
-    return new WS(url, { headers: PF_TRAFFIC_HEADERS });
-  } catch {
-    return new WebSocket(url);
-  }
+  return new WebSocket(pfTrafficServerWsUrl(serverId), {
+    headers: PF_TRAFFIC_HEADERS,
+  });
 }
 
 async function messageBytes(data: unknown): Promise<Uint8Array> {
