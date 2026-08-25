@@ -18,16 +18,21 @@ export const PF_COORD_SCALE = 0.00072;
 /** Déplacement minimum, en unités carte, pour retenir un nouveau point de trace. */
 export const PF_TRAIL_MIN_STEP = 0.015;
 /**
- * Distingue un vol d'un respawn. Un plafond fixe est indispensable : sans lui,
- * un onglet laissé en arrière-plan (dt de plusieurs minutes) relie n'importe
- * quel saut, d'où une droite à travers la carte au lieu du trajet réel.
+ * Distingue un vol d'un trou d'enregistrement (page fermée, worker down).
+ * Sans plafond temporel, un dt de 1 min relie deux vrais points par une
+ * corde — d'où les angles droits au lieu du virage réel.
  */
 const TRAIL_GAP_FLOOR = 2.5;
 const TRAIL_GAP_CEILING = 16;
 const TRAIL_GAP_MAX_KT = 900;
+/** Au-delà, ce n'est plus du live ~1 Hz. */
+const TRAIL_GAP_MAX_DT_SEC = 12;
+/** Un trou ne casse le trait que s'il dessinerait un vrai segment (pas un avion à l'arrêt). */
+const TRAIL_HOLE_MIN_DIST = 0.25;
 
 export function isTrailGap(distMap: number, dtSec: number): boolean {
   const dt = Math.max(0.5, dtSec);
+  if (dt > TRAIL_GAP_MAX_DT_SEC && distMap > TRAIL_HOLE_MIN_DIST) return true;
   const maxBySpeed = (TRAIL_GAP_MAX_KT / 3600) * dt * 1852 * PF_COORD_SCALE * 1.5;
   return distMap > Math.min(TRAIL_GAP_CEILING, Math.max(TRAIL_GAP_FLOOR, maxBySpeed));
 }

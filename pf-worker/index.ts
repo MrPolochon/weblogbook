@@ -1,10 +1,10 @@
 /**
- * PFtesterODW — enregistreur de positions.
+ * PFtesterODW — enregistreur 24/7.
  *
- * PFTracker ne construit pas la trace dans l'onglet : il s'abonne au WebSocket
- * du serveur (`/v3/traffic/server/ws/{id}`) et complète par un snapshot HTTP
- * toutes les 10 s. On fait la même chose ici, en écrivant dans Supabase, pour
- * que la carte ait le trajet même si personne n'a /carte-atc d'ouvert.
+ * Mixou n'envoie le protobuf qu'à l'ouverture du WebSocket, puis des
+ * heartbeats vides. Un socket long n'avance donc plus. On se reconnecte
+ * chaque seconde, on prend le snapshot, on écrit dans Supabase. La carte
+ * ne fait que lire : aucun onglet n'a besoin d'être ouvert.
  */
 import { createClient } from '@supabase/supabase-js';
 import { writeIngest, type PfTrailCursor } from '../src/lib/pf-odw-ingest';
@@ -19,8 +19,10 @@ import {
   type PfLiveAircraft,
 } from '../src/lib/pftester-odw';
 
-const FETCH_MS = 10_000;
+const TICK_MS = Number(process.env.PF_WORKER_POLL_MS || 1000);
+const SNAPSHOT_MS = 10_000;
 const PURGE_EVERY_MS = 60_000;
+const WS_WAIT_MS = 2_500;
 const FLIGHT_IDLE_SEC = Number(process.env.PF_WORKER_IDLE_SEC || 120);
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -37,38 +39,106 @@ const db = createClient(SUPABASE_URL, SERVICE_KEY, {
 const serverId = configuredServerId();
 const cursors = new Map<string, PfTrailCursor>();
 let running = true;
-let ingestChain = Promise.resolve();
+let pending: { planes: PfLiveAircraft[]; source: string } | null = null;
+let ingestBusy = false;
+let lastWsAt = 0;
 let lastWroteAt = 0;
+let ticks = 0;
+let hits = 0;
 
-function messageBytes(data: unknown): Uint8Array {
+function openMixouWs(): WebSocket {
+  const url = pfTrafficServerWsUrl(serverId);
+  const WS = WebSocket as unknown as new (
+    u: string,
+    opts?: { headers?: Record<string, string> },
+  ) => WebSocket;
+  try {
+    return new WS(url, { headers: PF_TRAFFIC_HEADERS });
+  } catch {
+    return new WebSocket(url);
+  }
+}
+
+async function messageBytes(data: unknown): Promise<Uint8Array> {
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
   if (ArrayBuffer.isView(data)) {
     return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   }
   if (typeof Buffer !== 'undefined' && Buffer.isBuffer(data)) return new Uint8Array(data);
+  if (typeof Blob !== 'undefined' && data instanceof Blob) {
+    return new Uint8Array(await data.arrayBuffer());
+  }
   return new Uint8Array();
 }
 
 function planesFromBytes(bytes: Uint8Array): PfLiveAircraft[] | null {
-  if (!looksLikeProtobuf(bytes)) return null;
-  return filterByServer(decodeMultiPlanes(bytes), serverId);
+  if (bytes.byteLength < 8) return null;
+  const all = decodeMultiPlanes(bytes);
+  if (!all.length && !looksLikeProtobuf(bytes)) return null;
+  return filterByServer(all, serverId);
 }
 
 function enqueueIngest(planes: PfLiveAircraft[], source: string): void {
-  ingestChain = ingestChain
-    .then(async () => {
-      const wrote = await writeIngest(db, planes, cursors);
-      if (wrote > 0) {
-        lastWroteAt = Date.now();
-        console.log(`[pf-worker] ${source} · ${planes.length} avion(s) · ${wrote} point(s)`);
-      }
-    })
-    .catch((e) => {
-      console.error('[pf-worker] ingest', e instanceof Error ? e.message : e);
-    });
+  if (!planes.length) return;
+  pending = { planes, source };
+  void flushIngest();
 }
 
-async function fetchSnapshot(): Promise<PfLiveAircraft[]> {
+async function flushIngest(): Promise<void> {
+  if (ingestBusy) return;
+  ingestBusy = true;
+  try {
+    while (pending && running) {
+      const job = pending;
+      pending = null;
+      try {
+        const wrote = await writeIngest(db, job.planes, cursors);
+        lastWroteAt = Date.now();
+        if (wrote > 0) {
+          console.log(`[pf-worker] ${job.source} · ${job.planes.length} avion(s) · ${wrote} point(s)`);
+        }
+      } catch (e) {
+        console.error('[pf-worker] ingest', e instanceof Error ? e.message : e);
+      }
+    }
+  } finally {
+    ingestBusy = false;
+    if (pending) void flushIngest();
+  }
+}
+
+function snapshotFromWs(): Promise<PfLiveAircraft[] | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const ws = openMixouWs();
+    ws.binaryType = 'arraybuffer';
+    const done = (planes: PfLiveAircraft[] | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+      resolve(planes);
+    };
+    const timer = setTimeout(() => done(null), WS_WAIT_MS);
+    ws.addEventListener('message', (ev) => {
+      void messageBytes(ev.data).then((bytes) => {
+        if (bytes.byteLength < 8) return;
+        const planes = planesFromBytes(bytes);
+        if (planes?.length) done(planes);
+      });
+    });
+    ws.addEventListener('error', () => done(null));
+    ws.addEventListener('close', () => {
+      if (!settled) done(null);
+    });
+  });
+}
+
+async function fetchHttpSnapshot(): Promise<PfLiveAircraft[]> {
   const res = await fetch(PF_TRAFFIC_URL, { headers: PF_TRAFFIC_HEADERS, cache: 'no-store' });
   if (!res.ok) throw new Error(`amont ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
@@ -112,61 +182,43 @@ async function purge(): Promise<void> {
   }
 }
 
-function connectWs(): Promise<void> {
-  return new Promise((resolve) => {
-    const url = pfTrafficServerWsUrl(serverId);
-    const ws = new WebSocket(url);
-    ws.binaryType = 'arraybuffer';
-    let opened = false;
-    const timer = setInterval(() => {
-      if (!running) ws.close();
-    }, 2000);
-
-    ws.addEventListener('open', () => {
-      opened = true;
-      console.log('[pf-worker] websocket connecte', url);
-    });
-    ws.addEventListener('message', (ev) => {
-      const bytes = messageBytes(ev.data);
-      // Les frames vides sont des heartbeats, pas « 0 avion ».
-      if (bytes.byteLength < 8) return;
-      const planes = planesFromBytes(bytes);
-      if (!planes) return;
-      enqueueIngest(planes, 'ws');
-    });
-    ws.addEventListener('error', () => {
-      /* close suivra */
-    });
-    ws.addEventListener('close', () => {
-      clearInterval(timer);
-      console.log('[pf-worker] websocket ferme', opened ? 'apres session' : 'avant handshake');
-      resolve();
-    });
-  });
-}
-
 async function wsLoop(): Promise<void> {
-  let delay = 1000;
+  let misses = 0;
   while (running) {
     const started = Date.now();
-    await connectWs();
-    if (!running) break;
-    if (Date.now() - started > 15_000) delay = 1000;
-    console.log(`[pf-worker] reconnexion websocket dans ${delay} ms`);
-    await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(15_000, delay * 2);
+    ticks += 1;
+    const planes = await snapshotFromWs();
+    if (planes?.length) {
+      misses = 0;
+      hits += 1;
+      lastWsAt = Date.now();
+      enqueueIngest(planes, 'ws');
+    } else {
+      misses += 1;
+      if (misses === 1 || misses % 15 === 0) {
+        console.log(`[pf-worker] websocket sans trafic (${misses})`);
+      }
+    }
+    if (ticks % 30 === 0) {
+      console.log(`[pf-worker] 30 s · ${hits} snapshot(s) Mixou · dernier point ${lastWroteAt ? `${Math.round((Date.now() - lastWroteAt) / 1000)} s` : 'aucun'}`);
+      hits = 0;
+    }
+    const wait = Math.max(0, TICK_MS - (Date.now() - started));
+    if (wait) await new Promise((r) => setTimeout(r, wait));
   }
 }
 
 async function snapshotLoop(): Promise<void> {
   while (running) {
+    await new Promise((r) => setTimeout(r, SNAPSHOT_MS));
+    if (!running) break;
+    if (Date.now() - lastWsAt < 4_000) continue;
     try {
-      const planes = await fetchSnapshot();
-      enqueueIngest(planes, 'http');
+      const planes = await fetchHttpSnapshot();
+      if (planes.length) enqueueIngest(planes, 'http');
     } catch (e) {
       console.error('[pf-worker] snapshot', e instanceof Error ? e.message : e);
     }
-    await new Promise((r) => setTimeout(r, FETCH_MS));
   }
 }
 
@@ -178,7 +230,7 @@ async function purgeLoop(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  console.log(`[pf-worker] demarrage · serveur ${serverId}`);
+  console.log(`[pf-worker] demarrage · serveur ${serverId} · tick ${TICK_MS} ms`);
   await primeFromDatabase();
 
   const stop = (signal: string) => {
@@ -189,7 +241,7 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => stop('SIGINT'));
 
   await Promise.all([wsLoop(), snapshotLoop(), purgeLoop()]);
-  await ingestChain;
+  await flushIngest();
   console.log('[pf-worker] arrete · dernier point', lastWroteAt ? new Date(lastWroteAt).toISOString() : 'aucun');
   process.exit(0);
 }

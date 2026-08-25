@@ -32,7 +32,16 @@ create table if not exists pf_odw_flights (
   roblox_username text not null default '',
   callsign text not null default '',
   first_seen_at timestamptz not null default now(),
-  last_seen_at timestamptz not null default now()
+  last_seen_at timestamptz not null default now(),
+  map_x double precision,
+  map_y double precision,
+  game_x double precision,
+  game_y double precision,
+  altitude double precision not null default 0,
+  speed double precision not null default 0,
+  heading double precision not null default 0,
+  model text not null default '',
+  livery text not null default ''
 );
 
 create index if not exists pf_odw_flights_last_seen_idx on pf_odw_flights (last_seen_at);

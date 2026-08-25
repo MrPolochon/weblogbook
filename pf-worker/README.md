@@ -9,11 +9,12 @@ trajet est enregistré en continu et retrouvé par n'importe quel admin.
 
 ## Fonctionnement
 
-- PFTracker s'abonne au WebSocket `wss://api.project-flight.com/v3/traffic/server/ws/{serverId}`
-  (un protobuf à chaque mise à jour) et relit le snapshot HTTP toutes les 10 s.
-  Le worker fait exactement la même chose, puis écrit dans Supabase.
-- Le site enregistre aussi en arrière-plan dès qu'un admin ouvre la carte, et
-  un cron Vercel fait une passe par minute si Railway est à l'arrêt.
+- Mixou n'envoie le protobuf **qu'à l'ouverture** du WebSocket
+  `wss://api.project-flight.com/v3/traffic/server/ws/{serverId}`, puis des
+  heartbeats vides. Le worker se reconnecte donc **chaque seconde**, écrit le
+  snapshot dans Supabase, et tourne 24/7 même si `/carte-atc` est fermé.
+- Un snapshot HTTP toutes les 10 s sert de secours si le WebSocket lâche.
+- Un cron Vercel fait une passe par minute si Railway est à l'arrêt.
 - Un déplacement anormalement grand est marqué `gap` : la carte coupe le tracé
   au lieu de dessiner une ligne droite à travers la carte.
 - Les traces ne sont **pas** archivées. Deux minutes après la dernière position

@@ -29,6 +29,15 @@ export function collectIngestRows(
       roblox_username: p.robloxUsername || '',
       callsign: p.callsign || '',
       last_seen_at: new Date(now).toISOString(),
+      map_x: p.mapX,
+      map_y: p.mapY,
+      game_x: p.x,
+      game_y: p.y,
+      altitude: p.altitude,
+      speed: p.speed,
+      heading: p.heading,
+      model: p.model || '',
+      livery: p.livery || '',
     });
 
     const last = cursors.get(key);

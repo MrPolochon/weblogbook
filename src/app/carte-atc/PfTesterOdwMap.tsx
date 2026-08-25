@@ -62,6 +62,7 @@ const TRAIL_TRACKS_MS = 15_000;
 /** Paliers de couleur : regroupe la trace en polylignes au lieu d'un segment par point. */
 const TRAIL_ALT_STEP = 500;
 const REFRESH_MS = 1000;
+const LIVE_BACKUP_MS = 10_000;
 /** Aligné sur REFRESH_MS : l'interpolation doit couvrir l'intervalle sans le devancer. */
 const MOTION_MS = REFRESH_MS;
 const AIRPORT_ZOOM = 1.7;
@@ -172,6 +173,7 @@ function buildTrailRuns(
   project: (pt: TrailPt) => { x: number; y: number },
   head: { x: number; y: number },
   headAlt: number,
+  headMap: { x: number; y: number },
 ): TrailRun[] {
   const runs: TrailRun[] = [];
   let current: TrailRun | null = null;
@@ -181,9 +183,8 @@ function buildTrailRuns(
     const xy = project(pt);
     const dist = prev ? Math.hypot(pt.x - prev.x, pt.y - prev.y) : 0;
     const dt = prev ? (pt.at - prev.at) / 1000 : 1;
-    // On recalcule la rupture ici : les points déjà stockés avec l'ancien seuil
-    // (0,75) resteraient sinon une poussière de segments invisibles.
-    const broken = !!(prev && isTrailGap(dist, dt));
+    // Recalcul : les anciens points (page fermée, cron 60 s) n'ont pas le flag gap.
+    const broken = !!(prev && (pt.gap || isTrailGap(dist, dt)));
     if (!current || broken || color !== current.color) {
       if (current && !broken) current.points.push(xy);
       current = { color, points: [xy] };
@@ -193,6 +194,12 @@ function buildTrailRuns(
     }
     prev = pt;
   }
+  const last = trail[trail.length - 1];
+  const headBroken = !!(
+    last &&
+    isTrailGap(Math.hypot(headMap.x - last.x, headMap.y - last.y), (Date.now() - last.at) / 1000)
+  );
+  if (headBroken) return runs;
   const headColor = altitudeToTrailColor(Math.round(headAlt / TRAIL_ALT_STEP) * TRAIL_ALT_STEP);
   if (current && current.color === headColor) current.points.push(head);
   else if (current) {
@@ -405,6 +412,7 @@ export default function PfTesterOdwMap() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const [feedServerId, setFeedServerId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [followId, setFollowId] = useState<string | null>(null);
@@ -453,7 +461,9 @@ export default function PfTesterOdwMap() {
     });
   }, [viewport.w, viewport.h, dispW, dispH]);
 
+  const lastAppliedAtRef = useRef(0);
   const applyAircraft = useCallback((next: PfAircraft[], serverId: string, at: number) => {
+    lastAppliedAtRef.current = at;
     setAircraft(next);
     setFeedServerId(serverId);
     setFetchedAt(at);
@@ -462,10 +472,12 @@ export default function PfTesterOdwMap() {
 
   const inFlightRef = useRef(false);
 
-  const fetchFlights = useCallback(async () => {
-    // Au rythme d'une seconde, une réponse lente ne doit pas empiler les suivantes.
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
+  const liveInFlightRef = useRef(false);
+
+  const fetchLiveFallback = useCallback(async () => {
+    if (Date.now() - lastAppliedAtRef.current < 4_000) return;
+    if (liveInFlightRef.current) return;
+    liveInFlightRef.current = true;
     try {
       const live = await fetch(`/api/pftester-odw/live?t=${Date.now()}`, { cache: 'no-store' });
       if (live.ok) {
@@ -479,7 +491,6 @@ export default function PfTesterOdwMap() {
           return;
         }
       }
-
       const res = await fetch(`/api/pftester-odw/flights?t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -494,10 +505,33 @@ export default function PfTesterOdwMap() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur trafic');
     } finally {
+      liveInFlightRef.current = false;
+    }
+  }, [applyAircraft]);
+
+  const fetchFlights = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    try {
+      const snap = await fetch(`/api/pftester-odw/now?t=${Date.now()}`, { cache: 'no-store' });
+      if (snap.ok) {
+        const data = await snap.json().catch(() => null);
+        const at = typeof data?.fetchedAt === 'number' ? data.fetchedAt : 0;
+        const age = at ? Date.now() - at : Infinity;
+        if (data && Array.isArray(data.aircraft) && data.aircraft.length && age < 20_000) {
+          applyAircraft(data.aircraft, data.serverId || PF_DEFAULT_SERVER_ID, at);
+          if (age > 4_000) void fetchLiveFallback();
+          return;
+        }
+      }
+      await fetchLiveFallback();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur trafic');
+    } finally {
       inFlightRef.current = false;
       setLoading(false);
     }
-  }, [applyAircraft]);
+  }, [applyAircraft, fetchLiveFallback]);
 
   const fetchTracks = useCallback(async () => {
     try {
@@ -527,15 +561,33 @@ export default function PfTesterOdwMap() {
   }, []);
 
   useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
     setLoading(true);
     setTrails(loadStoredTrails());
     fetchFlights();
     fetchTracks();
-    const liveTimer = setInterval(fetchFlights, REFRESH_MS);
+    let worker: Worker | null = null;
+    let workerUrl = '';
+    try {
+      workerUrl = URL.createObjectURL(
+        new Blob([`setInterval(() => postMessage('tick'), ${REFRESH_MS});`], { type: 'text/javascript' }),
+      );
+      worker = new Worker(workerUrl);
+      worker.onmessage = () => {
+        fetchFlights();
+      };
+    } catch {
+      worker = null;
+    }
+    const liveTimer = worker ? null : setInterval(fetchFlights, REFRESH_MS);
+    const backupTimer = setInterval(() => void fetchLiveFallback(), LIVE_BACKUP_MS);
     const tracksTimer = setInterval(fetchTracks, TRAIL_TRACKS_MS);
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return;
-      // L'onglet masqué bride les minuteurs : on rattrape dès le retour.
       inFlightRef.current = false;
       fetchFlights();
       fetchTracks();
@@ -543,12 +595,15 @@ export default function PfTesterOdwMap() {
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
     return () => {
-      clearInterval(liveTimer);
+      if (liveTimer) clearInterval(liveTimer);
+      clearInterval(backupTimer);
       clearInterval(tracksTimer);
+      worker?.terminate();
+      if (workerUrl) URL.revokeObjectURL(workerUrl);
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
     };
-  }, [fetchFlights, fetchTracks]);
+  }, [fetchFlights, fetchLiveFallback, fetchTracks]);
 
   useEffect(() => {
     const el = mapContainerRef.current;
@@ -853,7 +908,7 @@ export default function PfTesterOdwMap() {
     return rows;
   }, [plotted, q]);
   const showAllLabels = zoom >= LABEL_ZOOM || plotted.length <= 10;
-  const feedAgeSec = fetchedAt === null ? null : Math.max(0, Math.round((Date.now() - fetchedAt) / 1000));
+  const feedAgeSec = fetchedAt === null ? null : Math.max(0, Math.round((nowTick - fetchedAt) / 1000));
   const mapNm = (viewport.w / Math.max(1, dispW * zoom)) * PF_MAP_W / PF_NM_TO_MAP;
   const scaleNm = niceNm(mapNm * 0.18);
   const scalePx = (scaleNm * PF_NM_TO_MAP / PF_MAP_W) * dispW * zoom;
@@ -1021,6 +1076,7 @@ export default function PfTesterOdwMap() {
               (pt) => mapToScreen(pt.x, pt.y, zoom, pan, viewport.w, viewport.h, dispW, dispH),
               now,
               a.altitude,
+              p,
             );
             return (
               <g key={`${a.id}-trail`}>
