@@ -11,11 +11,11 @@ import { createClient } from '@supabase/supabase-js';
 import {
   PF_TRAFFIC_HEADERS,
   PF_TRAFFIC_URL,
-  PF_TRAIL_MAX_STEP,
   PF_TRAIL_MIN_STEP,
   configuredServerId,
   decodeMultiPlanes,
   filterByServer,
+  isTrailGap,
   looksLikeProtobuf,
   pfFlightKey,
   type PfLiveAircraft,
@@ -39,7 +39,7 @@ const db = createClient(SUPABASE_URL, SERVICE_KEY, {
 
 const serverId = configuredServerId();
 
-type LastPoint = { x: number; y: number };
+type LastPoint = { x: number; y: number; at: number };
 const lastByFlight = new Map<string, LastPoint>();
 
 function flightKey(p: PfLiveAircraft): string {
@@ -67,7 +67,11 @@ async function primeFromDatabase(): Promise<void> {
   }
   for (const row of data ?? []) {
     if (!lastByFlight.has(row.flight_key)) {
-      lastByFlight.set(row.flight_key, { x: row.map_x, y: row.map_y });
+      lastByFlight.set(row.flight_key, {
+        x: row.map_x,
+        y: row.map_y,
+        at: new Date(row.recorded_at).getTime(),
+      });
     }
   }
   console.log(`[pf-worker] reprise de ${lastByFlight.size} vol(s) en cours`);
@@ -95,6 +99,8 @@ async function recordOnce(): Promise<void> {
     const moved = last ? Math.hypot(p.mapX - last.x, p.mapY - last.y) : Infinity;
     // Un appareil immobile au parking n'a pas besoin d'un point par seconde.
     if (last && moved < PF_TRAIL_MIN_STEP) continue;
+    const now = Date.now();
+    const dt = last ? (now - last.at) / 1000 : 1;
     rows.push({
       flight_key: key,
       server_id: p.serverId,
@@ -105,9 +111,9 @@ async function recordOnce(): Promise<void> {
       altitude: p.altitude,
       speed: p.speed,
       heading: p.heading,
-      gap: Number.isFinite(moved) && moved > PF_TRAIL_MAX_STEP,
+      gap: Number.isFinite(moved) && isTrailGap(moved, dt),
     });
-    lastByFlight.set(key, { x: p.mapX, y: p.mapY });
+    lastByFlight.set(key, { x: p.mapX, y: p.mapY, at: now });
   }
 
   for (const key of lastByFlight.keys()) {

@@ -13,8 +13,21 @@ export const PF_MAP_CY = 67.5;
 export const PF_COORD_SCALE = 0.00072;
 /** Déplacement minimum, en unités carte, pour retenir un nouveau point de trace. */
 export const PF_TRAIL_MIN_STEP = 0.015;
-/** Au-delà, le déplacement est une rupture (respawn, téléportation) et coupe le tracé. */
-export const PF_TRAIL_MAX_STEP = 0.75;
+/**
+ * Distingue un vol d'un respawn. L'ancien plancher (0,75 ≈ 0,5 NM) coupait
+ * chaque palier de croisière : un relevé PF saute souvent 2–10 s, soit plus
+ * que 0,5 NM à 250 kt. La trace en l'air devenait une série de points isolés
+ * (invisibles), alors qu'au taxi elle restait continue.
+ */
+const TRAIL_GAP_FLOOR = 8;
+const TRAIL_GAP_MAX_KT = 900;
+
+export function isTrailGap(distMap: number, dtSec: number): boolean {
+  const dt = Math.max(1, dtSec);
+  const nmPerSec = TRAIL_GAP_MAX_KT / 3600;
+  const maxPlausible = nmPerSec * dt * 1852 * PF_COORD_SCALE * 2;
+  return distMap > Math.max(TRAIL_GAP_FLOOR, maxPlausible);
+}
 /**
  * Arbre de tuiles CDN : 2^z × 2^z sur 256 unités.
  * L’espace avion / viewport reste 240×135 (fenêtre utile de cet arbre).

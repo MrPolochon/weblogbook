@@ -13,6 +13,8 @@ import {
   pfTileUnit,
   altitudeToTrailColor,
   gameToMap,
+  isTrailGap,
+  PF_TRAIL_MIN_STEP,
 } from '@/lib/pftester-odw';
 
 type PfAircraft = {
@@ -45,8 +47,8 @@ const FOCUS_ZOOM = 8;
 const KEEP_MAP_PX = 48;
 const ZOOM_STEP = 1.28;
 const MAX_TILE_PX = 520;
-const TRAIL_MIN_STEP = 0.015;
-const TRAIL_MAX_STEP = 0.75;
+/** Seuil d'animation seulement : un saut plus grand snappe l'icône, sans couper la trace. */
+const MOTION_SNAP_STEP = 0.75;
 /** Assez pour un vol entier ; au-delà, les points anciens sont décimés, pas supprimés. */
 const TRAIL_MAX_LEN = 7200;
 /** La trace survit à un rechargement : sinon elle repart de zéro et reste invisible. */
@@ -151,9 +153,9 @@ function pushTrailPoint(pts: TrailPt[], x: number, y: number, alt: number): Trai
   const last = pts[pts.length - 1];
   if (!last) return [{ x, y, alt, at: now }];
   const dist = Math.hypot(x - last.x, y - last.y);
-  if (dist < TRAIL_MIN_STEP) return pts;
-  // Un saut trop grand coupe le tracé, mais l'historique du vol est conservé.
-  const next = pts.concat({ x, y, alt, at: now, gap: dist > TRAIL_MAX_STEP });
+  if (dist < PF_TRAIL_MIN_STEP) return pts;
+  const dt = (now - last.at) / 1000;
+  const next = pts.concat({ x, y, alt, at: now, gap: isTrailGap(dist, dt) });
   return next.length > TRAIL_MAX_LEN ? thinOldest(next) : next;
 }
 
@@ -171,17 +173,23 @@ function buildTrailRuns(
 ): TrailRun[] {
   const runs: TrailRun[] = [];
   let current: TrailRun | null = null;
+  let prev: TrailPt | null = null;
   for (const pt of trail) {
     const color = altitudeToTrailColor(Math.round(pt.alt / TRAIL_ALT_STEP) * TRAIL_ALT_STEP);
     const xy = project(pt);
-    if (!current || pt.gap || color !== current.color) {
-      // Sans rupture, le point de bascule appartient aux deux runs pour éviter un trou.
-      if (current && !pt.gap) current.points.push(xy);
+    const dist = prev ? Math.hypot(pt.x - prev.x, pt.y - prev.y) : 0;
+    const dt = prev ? (pt.at - prev.at) / 1000 : 1;
+    // On recalcule la rupture ici : les points déjà stockés avec l'ancien seuil
+    // (0,75) resteraient sinon une poussière de segments invisibles.
+    const broken = !!(prev && isTrailGap(dist, dt));
+    if (!current || broken || color !== current.color) {
+      if (current && !broken) current.points.push(xy);
       current = { color, points: [xy] };
       runs.push(current);
     } else {
       current.points.push(xy);
     }
+    prev = pt;
   }
   const headColor = altitudeToTrailColor(Math.round(headAlt / TRAIL_ALT_STEP) * TRAIL_ALT_STEP);
   if (current && current.color === headColor) current.points.push(head);
@@ -583,7 +591,7 @@ export default function PfTesterOdwMap() {
     const nextSigns = { ...lastCallsignRef.current };
     for (const a of plotted) {
       const shown = shownRef.current[a.id];
-      const jump = !!shown && Math.hypot(shown.x - a.mapX, shown.y - a.mapY) > TRAIL_MAX_STEP;
+      const jump = !!shown && Math.hypot(shown.x - a.mapX, shown.y - a.mapY) > MOTION_SNAP_STEP;
       const respawn = nextSigns[a.id] !== undefined && nextSigns[a.id] !== a.callsign;
       nextSigns[a.id] = a.callsign;
       const snap = !shown || jump || respawn;
@@ -973,6 +981,34 @@ export default function PfTesterOdwMap() {
             );
           })}
           {plotted.map((a) => {
+            const trail = trails[trailKey(a)];
+            if (!trail || trail.length < 2) return null;
+            const p = posOf(a);
+            const now = mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH);
+            const runs = buildTrailRuns(
+              trail,
+              (pt) => mapToScreen(pt.x, pt.y, zoom, pan, viewport.w, viewport.h, dispW, dispH),
+              now,
+              a.altitude,
+            );
+            return (
+              <g key={`${a.id}-trail`}>
+                {runs.filter((run) => run.points.length >= 2).map((run, i) => (
+                  <polyline
+                    key={`${a.id}-t${i}`}
+                    points={run.points.map((pt) => `${pt.x},${pt.y}`).join(' ')}
+                    fill="none"
+                    stroke={run.color}
+                    strokeWidth={3}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    opacity={0.95}
+                  />
+                ))}
+              </g>
+            );
+          })}
+          {plotted.map((a) => {
             const isSelected = selectedId === a.id;
             const p = posOf(a);
             const s = mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH);
@@ -997,34 +1033,6 @@ export default function PfTesterOdwMap() {
                     paintOrder="stroke fill"
                   />
                 </g>
-              </g>
-            );
-          })}
-          {plotted.map((a) => {
-            const trail = trails[trailKey(a)];
-            if (!trail || trail.length < 2) return null;
-            const p = posOf(a);
-            const now = mapToScreen(p.x, p.y, zoom, pan, viewport.w, viewport.h, dispW, dispH);
-            const runs = buildTrailRuns(
-              trail,
-              (pt) => mapToScreen(pt.x, pt.y, zoom, pan, viewport.w, viewport.h, dispW, dispH),
-              now,
-              a.altitude,
-            );
-            return (
-              <g key={`${a.id}-trail`}>
-                {runs.map((run, i) => (
-                  <polyline
-                    key={`${a.id}-t${i}`}
-                    points={run.points.map((pt) => `${pt.x},${pt.y}`).join(' ')}
-                    fill="none"
-                    stroke={run.color}
-                    strokeWidth={2.4}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    opacity={0.92}
-                  />
-                ))}
               </g>
             );
           })}
