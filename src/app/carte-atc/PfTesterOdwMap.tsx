@@ -57,6 +57,8 @@ const TRAIL_STORE_KEY = 'pf-odw-trails-v2';
 const TRAIL_GONE_MS = 15 * 60_000;
 const TRAIL_STORE_MAX = 4000;
 const TRAIL_SAVE_MS = 5_000;
+/** Recharge l'historique worker même si l'onglet n'a pas été rechargé. */
+const TRAIL_TRACKS_MS = 15_000;
 /** Paliers de couleur : regroupe la trace en polylignes au lieu d'un segment par point. */
 const TRAIL_ALT_STEP = 500;
 const REFRESH_MS = 1000;
@@ -204,6 +206,21 @@ function thinOldest(pts: TrailPt[]): TrailPt[] {
   const split = Math.floor(pts.length / 2);
   const old = pts.slice(0, split).filter((p, i) => i % 2 === 0 || p.gap);
   return old.concat(pts.slice(split));
+}
+
+/** Union par horodatage : l'historique worker complète la trace locale, sans l'écraser. */
+function mergeTrailPoints(local: TrailPt[], server: TrailPt[]): TrailPt[] {
+  if (!server.length) return local;
+  if (!local.length) return server;
+  const byBucket = new Map<number, TrailPt>();
+  for (const p of local.concat(server)) {
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y) || !Number.isFinite(p.at)) continue;
+    const bucket = Math.round(p.at / 400);
+    const prev = byBucket.get(bucket);
+    if (!prev) byBucket.set(bucket, p);
+  }
+  const merged = [...byBucket.values()].sort((a, b) => a.at - b.at);
+  return merged.length > TRAIL_MAX_LEN ? thinOldest(merged) : merged;
 }
 
 function tileUrl(z: number, x: number, y: number): string {
@@ -482,42 +499,56 @@ export default function PfTesterOdwMap() {
     }
   }, [applyAircraft]);
 
-  useEffect(() => {
-    setLoading(true);
-    // Repli immédiat sur l'historique local, le temps que le serveur réponde.
-    setTrails(loadStoredTrails());
-    fetchFlights();
-    const t = setInterval(fetchFlights, REFRESH_MS);
-    return () => clearInterval(t);
-  }, [fetchFlights]);
+  const fetchTracks = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/pftester-odw/tracks?t=${Date.now()}`, { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json().catch(() => null);
+      if (!data || !data.tracks) return;
+      const server = data.tracks as Record<string, TrailPt[]>;
+      if (!Object.keys(server).length) return;
+      setTrails((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const [key, pts] of Object.entries(server)) {
+          if (!Array.isArray(pts) || pts.length < 2) continue;
+          const prevPts = prev[key] ?? [];
+          const merged = mergeTrailPoints(prevPts, pts);
+          if (merged.length > prevPts.length) {
+            next[key] = merged;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    } catch {
+      // Worker absent ou route indisponible : l'historique local suffit.
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    // Traces enregistrées par le worker : elles existent même si personne n'a
-    // gardé la carte ouverte, et font autorité sur l'historique du navigateur.
-    (async () => {
-      try {
-        const res = await fetch(`/api/pftester-odw/tracks?t=${Date.now()}`, { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = await res.json().catch(() => null);
-        if (cancelled || !data || !data.tracks) return;
-        const server = data.tracks as Record<string, TrailPt[]>;
-        if (!Object.keys(server).length) return;
-        setTrails((prev) => {
-          const next = { ...prev };
-          for (const [key, pts] of Object.entries(server)) {
-            if (Array.isArray(pts) && pts.length > 1) next[key] = pts;
-          }
-          return next;
-        });
-      } catch {
-        // Worker absent ou route indisponible : l'historique local suffit.
-      }
-    })();
-    return () => {
-      cancelled = true;
+    setLoading(true);
+    setTrails(loadStoredTrails());
+    fetchFlights();
+    fetchTracks();
+    const liveTimer = setInterval(fetchFlights, REFRESH_MS);
+    const tracksTimer = setInterval(fetchTracks, TRAIL_TRACKS_MS);
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      // L'onglet masqué bride les minuteurs : on rattrape dès le retour.
+      inFlightRef.current = false;
+      fetchFlights();
+      fetchTracks();
     };
-  }, []);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      clearInterval(liveTimer);
+      clearInterval(tracksTimer);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [fetchFlights, fetchTracks]);
 
   useEffect(() => {
     const el = mapContainerRef.current;
