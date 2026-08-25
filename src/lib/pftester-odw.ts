@@ -2,6 +2,10 @@
 
 export const PF_DEFAULT_SERVER_ID = '2uMXjU8T5V';
 export const PF_TRAFFIC_URL = 'https://api.project-flight.com/v3/traffic/fetch';
+/** Flux live par serveur, le même que PFTracker : un protobuf à chaque mise à jour. */
+export function pfTrafficServerWsUrl(serverId: string): string {
+  return `wss://api.project-flight.com/v3/traffic/server/ws/${encodeURIComponent(serverId)}`;
+}
 export const PF_TILE_BASE = 'https://cdn.project-flight.com/tiles';
 
 /** Espace carte officielle PFTracker (OrthographicView, target [120, 67.5]). */

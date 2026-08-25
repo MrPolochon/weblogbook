@@ -9,9 +9,9 @@ trajet est enregistré en continu et retrouvé par n'importe quel admin.
 
 ## Fonctionnement
 
-- Une position à chaque changement PF (déplacement ou altitude), environ une
-  fois par seconde quand l'appareil bouge. Un avion figé au parking n'écrit
-  pas une ligne par seconde.
+- PFTracker s'abonne au WebSocket `wss://api.project-flight.com/v3/traffic/server/ws/{serverId}`
+  (un protobuf à chaque mise à jour) et relit le snapshot HTTP toutes les 10 s.
+  Le worker fait exactement la même chose, puis écrit dans Supabase.
 - Le site enregistre aussi en arrière-plan dès qu'un admin ouvre la carte, et
   un cron Vercel fait une passe par minute si Railway est à l'arrêt.
 - Un déplacement anormalement grand est marqué `gap` : la carte coupe le tracé
