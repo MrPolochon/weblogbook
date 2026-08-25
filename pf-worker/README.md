@@ -9,8 +9,11 @@ trajet est enregistré en continu et retrouvé par n'importe quel admin.
 
 ## Fonctionnement
 
-- Une position par seconde et par appareil, uniquement si l'appareil a bougé
-  (un avion au parking n'écrit pas une ligne par seconde).
+- Une position à chaque changement PF (déplacement ou altitude), environ une
+  fois par seconde quand l'appareil bouge. Un avion figé au parking n'écrit
+  pas une ligne par seconde.
+- Le site enregistre aussi en arrière-plan dès qu'un admin ouvre la carte, et
+  un cron Vercel fait une passe par minute si Railway est à l'arrêt.
 - Un déplacement anormalement grand est marqué `gap` : la carte coupe le tracé
   au lieu de dessiner une ligne droite à travers la carte.
 - Les traces ne sont **pas** archivées. Deux minutes après la dernière position

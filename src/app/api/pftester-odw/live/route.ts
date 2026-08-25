@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requirePfTesterAdmin } from '@/lib/pftester-odw-auth';
+import { persistPfTracks } from '@/lib/pf-odw-persist';
 import {
   PF_TRAFFIC_HEADERS,
   PF_TRAFFIC_URL,
@@ -42,6 +43,7 @@ export async function GET() {
           const serverId = configuredServerId();
           const all = decodeMultiPlanes(bytes);
           const mine = filterByServer(all, serverId);
+          persistPfTracks(mine);
           console.log('[pftester-odw/live]', {
             serverId,
             bytes: bytes.byteLength,

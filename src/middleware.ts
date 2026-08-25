@@ -66,7 +66,8 @@ export async function middleware(request: NextRequest) {
     pathname === '/api/pftester-odw/live' ||
     pathname === '/api/pftester-odw/flights' ||
     pathname === '/api/pftester-odw/tracks' ||
-    pathname.startsWith('/api/pftester-odw/tiles/');
+    pathname.startsWith('/api/pftester-odw/tiles/') ||
+    pathname.startsWith('/api/cron/');
   const isApiDiscord = pathname.startsWith('/api/discord/');
   const isApiSupportBot = pathname.startsWith('/api/support/bot');
   const isApiDiscordInteractions = pathname.startsWith('/api/support/discord/interactions');

@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/support-tickets",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/pf-odw-tracks",
+      "schedule": "* * * * *"
     }
   ]
 }

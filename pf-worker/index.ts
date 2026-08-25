@@ -1,29 +1,22 @@
 /**
  * PFtesterODW — enregistreur de positions.
  *
- * Service permanent (Railway) qui interroge Project Flight chaque seconde et
- * écrit les positions du serveur privé dans Supabase. La carte n'a donc plus
- * besoin d'un navigateur ouvert pour construire les traces : elle relit
- * l'historique du vol en cours. Écrit en TypeScript pour réutiliser tel quel le
- * décodeur protobuf du site, seule source de vérité du format PF.
+ * Service permanent (Railway) : interroge Project Flight chaque seconde et
+ * écrit dans Supabase, que quelqu'un ait /carte-atc d'ouvert ou non.
  */
 import { createClient } from '@supabase/supabase-js';
+import { writeIngest, type PfTrailCursor } from '../src/lib/pf-odw-ingest';
 import {
   PF_TRAFFIC_HEADERS,
   PF_TRAFFIC_URL,
-  PF_TRAIL_MIN_STEP,
   configuredServerId,
   decodeMultiPlanes,
   filterByServer,
-  isTrailGap,
   looksLikeProtobuf,
-  pfFlightKey,
-  type PfLiveAircraft,
 } from '../src/lib/pftester-odw';
 
 const POLL_MS = Number(process.env.PF_WORKER_POLL_MS || 1000);
 const PURGE_EVERY_MS = 60_000;
-/** Un vol sans position depuis ce délai est terminé : sa trace est supprimée. */
 const FLIGHT_IDLE_SEC = Number(process.env.PF_WORKER_IDLE_SEC || 120);
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -38,15 +31,9 @@ const db = createClient(SUPABASE_URL, SERVICE_KEY, {
 });
 
 const serverId = configuredServerId();
+const cursors = new Map<string, PfTrailCursor>();
 
-type LastPoint = { x: number; y: number; at: number };
-const lastByFlight = new Map<string, LastPoint>();
-
-function flightKey(p: PfLiveAircraft): string {
-  return pfFlightKey(p.robloxUsername || p.serverId, p.callsign);
-}
-
-async function fetchPlanes(): Promise<PfLiveAircraft[]> {
+async function fetchPlanes() {
   const res = await fetch(PF_TRAFFIC_URL, { headers: PF_TRAFFIC_HEADERS, cache: 'no-store' });
   if (!res.ok) throw new Error(`amont ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
@@ -54,11 +41,10 @@ async function fetchPlanes(): Promise<PfLiveAircraft[]> {
   return filterByServer(decodeMultiPlanes(bytes), serverId);
 }
 
-/** Reprend le dernier point connu de chaque vol pour ne pas dupliquer après un redémarrage. */
 async function primeFromDatabase(): Promise<void> {
   const { data, error } = await db
     .from('pf_odw_positions')
-    .select('flight_key, map_x, map_y, recorded_at')
+    .select('flight_key, map_x, map_y, altitude, recorded_at')
     .order('recorded_at', { ascending: false })
     .limit(2000);
   if (error) {
@@ -66,71 +52,15 @@ async function primeFromDatabase(): Promise<void> {
     return;
   }
   for (const row of data ?? []) {
-    if (!lastByFlight.has(row.flight_key)) {
-      lastByFlight.set(row.flight_key, {
-        x: row.map_x,
-        y: row.map_y,
-        at: new Date(row.recorded_at).getTime(),
-      });
-    }
-  }
-  console.log(`[pf-worker] reprise de ${lastByFlight.size} vol(s) en cours`);
-}
-
-async function recordOnce(): Promise<void> {
-  const planes = await fetchPlanes();
-  const rows: Record<string, unknown>[] = [];
-  const presence: Record<string, unknown>[] = [];
-  const seen = new Set<string>();
-
-  for (const p of planes) {
-    const key = flightKey(p);
-    seen.add(key);
-    // La présence est notée à chaque relevé, même sans mouvement : un appareil
-    // immobile est toujours en vol, et sa trace ne doit pas être purgée.
-    presence.push({
-      flight_key: key,
-      server_id: p.serverId,
-      roblox_username: p.robloxUsername || '',
-      callsign: p.callsign || '',
-      last_seen_at: new Date().toISOString(),
+    if (cursors.has(row.flight_key)) continue;
+    cursors.set(row.flight_key, {
+      x: row.map_x,
+      y: row.map_y,
+      alt: row.altitude,
+      at: new Date(row.recorded_at).getTime(),
     });
-    const last = lastByFlight.get(key);
-    const moved = last ? Math.hypot(p.mapX - last.x, p.mapY - last.y) : Infinity;
-    // Un appareil immobile au parking n'a pas besoin d'un point par seconde.
-    if (last && moved < PF_TRAIL_MIN_STEP) continue;
-    const now = Date.now();
-    const dt = last ? (now - last.at) / 1000 : 1;
-    rows.push({
-      flight_key: key,
-      server_id: p.serverId,
-      roblox_username: p.robloxUsername || '',
-      callsign: p.callsign || '',
-      map_x: p.mapX,
-      map_y: p.mapY,
-      altitude: p.altitude,
-      speed: p.speed,
-      heading: p.heading,
-      gap: Number.isFinite(moved) && isTrailGap(moved, dt),
-    });
-    lastByFlight.set(key, { x: p.mapX, y: p.mapY, at: now });
   }
-
-  for (const key of lastByFlight.keys()) {
-    if (!seen.has(key)) lastByFlight.delete(key);
-  }
-
-  if (presence.length) {
-    const { error } = await db
-      .from('pf_odw_flights')
-      .upsert(presence, { onConflict: 'flight_key', ignoreDuplicates: false });
-    if (error) throw new Error(`presence: ${error.message}`);
-  }
-
-  if (rows.length) {
-    const { error } = await db.from('pf_odw_positions').insert(rows);
-    if (error) throw new Error(`insertion: ${error.message}`);
-  }
+  console.log(`[pf-worker] reprise de ${cursors.size} vol(s) en cours`);
 }
 
 async function purge(): Promise<void> {
@@ -160,17 +90,24 @@ async function main(): Promise<void> {
   process.on('SIGINT', () => stop('SIGINT'));
 
   let lastPurge = 0;
+  let lastLog = 0;
   while (running) {
     const started = Date.now();
     try {
-      await recordOnce();
+      const planes = await fetchPlanes();
+      const wrote = await writeIngest(db, planes, cursors);
       if (consecutiveErrors) {
         console.log('[pf-worker] flux rétabli');
         consecutiveErrors = 0;
       }
+      if (wrote > 0 || started - lastLog > 30_000) {
+        lastLog = started;
+        console.log(
+          `[pf-worker] ${planes.length} avion(s) · ${wrote} point(s) · ${cursors.size} vol(s) suivis`,
+        );
+      }
     } catch (e) {
       consecutiveErrors++;
-      // Un flux amont instable ne doit jamais arrêter le service ni noyer les logs.
       if (consecutiveErrors <= 3 || consecutiveErrors % 60 === 0) {
         console.error(
           `[pf-worker] echec ${consecutiveErrors}`,
@@ -185,8 +122,7 @@ async function main(): Promise<void> {
     }
 
     const elapsed = Date.now() - started;
-    const wait = Math.max(100, POLL_MS - elapsed);
-    await new Promise((resolve) => setTimeout(resolve, wait));
+    await new Promise((resolve) => setTimeout(resolve, Math.max(100, POLL_MS - elapsed)));
   }
 
   console.log('[pf-worker] arrete');

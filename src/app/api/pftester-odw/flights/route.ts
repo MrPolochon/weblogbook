@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requirePfTesterAdmin } from '@/lib/pftester-odw-auth';
+import { persistPfTracks } from '@/lib/pf-odw-persist';
 import { configuredServerId, fetchLiveTrafficResult, filterByServer } from '@/lib/pftester-odw';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,9 @@ export async function GET() {
 
   try {
     const { planes: all, fetchedAt, decoded } = await fetchLiveTrafficResult();
-    const aircraft = filterByServer(all, serverId).map((p) => ({
+    const live = filterByServer(all, serverId);
+    persistPfTracks(live);
+    const aircraft = live.map((p) => ({
       id: p.id,
       serverId: p.serverId,
       callsign: p.callsign,
