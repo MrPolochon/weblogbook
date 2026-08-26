@@ -1,5 +1,7 @@
 export const LIVRET_PROGRESSION_URL = '/livret-progression';
 export const LIVRET_PROGRESSION_PDF = '/docs/livret-progression-akizor.pdf';
+/** Formulaire vierge (lien AeroSchool). Le livret rempli AKIZOR reste sur LIVRET_PROGRESSION_PDF. */
+export const LIVRET_PROGRESSION_VIERGE_PDF = '/docs/livret-progression-vierge.pdf';
 
 /** Condensé : le détail complet des compétences reste sur ${LIVRET_PROGRESSION_URL}. */
 export const LIVRET_PROGRESSION_IA = `PARCOURS CATÉGORIES (licences CAT 1 à 5) — Livret de progression AeroSchool / Instruction (document instructeur AKIZOR, ${LIVRET_PROGRESSION_URL}).

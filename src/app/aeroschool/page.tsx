@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { GraduationCap, ArrowLeft, FileText, Loader2, ClipboardCheck, ShieldCheck, Timer, Lock, LogIn } from 'lucide-react';
+import { LIVRET_PROGRESSION_VIERGE_PDF } from '@/lib/support/livret-progression';
 
 interface FormSummary {
   id: string;
@@ -65,7 +66,7 @@ export default function AeroSchoolPage() {
               <p className="mx-auto mt-3 max-w-2xl text-sm sm:text-base text-slate-300">
                 Questionnaires (QCM) : c’est la <strong className="text-amber-100">première partie</strong> de chaque catégorie CAT 1 à 5.
                 La partie pratique se fait ensuite dans <Link href="/instruction" className="text-sky-300 underline hover:text-sky-200">Instruction</Link>.
-                {' '}<Link href="/livret-progression" className="text-amber-200 underline hover:text-amber-100">Livret de progression</Link>.
+                {' '}<a href={LIVRET_PROGRESSION_VIERGE_PDF} className="text-amber-200 underline hover:text-amber-100">Livret de progression</a>.
               </p>
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-sky-300/15 bg-sky-400/10 px-4 py-3 text-left">
