@@ -1,6 +1,7 @@
 'use client';
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Crosshair, LocateFixed, Plane, RefreshCw, RotateCcw, Search, ZoomIn, ZoomOut } from 'lucide-react';
 import { PLANE_BLIP_D } from '@/lib/radar-utils';
 import { PF_AIRPORTS } from '@/lib/pf-airports';
@@ -51,7 +52,7 @@ const MAX_TILE_PX = 520;
 const TILE_MARGIN = 1;
 /** Filet de sécurité : au-delà, on garde les tuiles les plus proches du centre. */
 const MAX_DOM_TILES = 96;
-/** Recommit React du pan (culling) pendant un geste : ~8 Hz. */
+/** Recommit React du pan (culling) hors drag : suivi avion, ~8 Hz. */
 const VIEW_COMMIT_MS = 125;
 const TILE_Z_THROTTLE_MS = 90;
 /** Seuil d'animation seulement : un saut plus grand snappe l'icône, sans couper la trace. */
@@ -630,9 +631,13 @@ export default function PfTesterOdwMap() {
     el.style.transform = dx === 0 && dy === 0 ? 'none' : `translate3d(${dx}px,${dy}px,0)`;
   }, []);
 
-  const flushCommit = useCallback(() => {
+  const flushCommit = useCallback((sync: boolean) => {
     commitRafRef.current = 0;
     pendingCommitRef.current = false;
+    if (panRafRef.current) {
+      cancelAnimationFrame(panRafRef.current);
+      panRafRef.current = 0;
+    }
     const v = viewRef.current;
     const laid = layoutRef.current;
     if (v.zoom === laid.zoom && v.pan.x === laid.pan.x && v.pan.y === laid.pan.y) {
@@ -640,23 +645,27 @@ export default function PfTesterOdwMap() {
       return;
     }
     lastCommitAtRef.current = performance.now();
-    layoutRef.current = { zoom: v.zoom, pan: { x: v.pan.x, y: v.pan.y } };
-    setZoom(v.zoom);
-    setPan(v.pan);
+    const apply = () => {
+      setZoom(v.zoom);
+      setPan({ x: v.pan.x, y: v.pan.y });
+    };
+    if (sync) flushSync(apply);
+    else apply();
   }, [writeWorldPan]);
 
   const scheduleCommit = useCallback((immediate: boolean) => {
+    if (panStartRef.current && !immediate) return;
     if (immediate) {
       pendingCommitRef.current = true;
       if (commitRafRef.current) return;
-      commitRafRef.current = requestAnimationFrame(flushCommit);
+      commitRafRef.current = requestAnimationFrame(() => flushCommit(true));
       return;
     }
     if (pendingCommitRef.current) return;
     if (performance.now() - lastCommitAtRef.current < VIEW_COMMIT_MS) return;
     pendingCommitRef.current = true;
     if (commitRafRef.current) return;
-    commitRafRef.current = requestAnimationFrame(flushCommit);
+    commitRafRef.current = requestAnimationFrame(() => flushCommit(false));
   }, [flushCommit]);
 
   const applyView = useCallback((next: ViewState, mode: 'now' | 'pan' = 'now') => {
@@ -672,15 +681,15 @@ export default function PfTesterOdwMap() {
       panRafRef.current = requestAnimationFrame(() => {
         panRafRef.current = 0;
         writeWorldPan();
-        scheduleCommit(false);
       });
     }
+    if (!panStartRef.current) scheduleCommit(false);
   }, [viewport.w, viewport.h, dispW, dispH, scheduleCommit, writeWorldPan]);
 
   useLayoutEffect(() => {
     layoutRef.current = { zoom, pan };
     writeWorldPan();
-  }, [zoom, pan, writeWorldPan]);
+  }); // chaque render : réapplique le translate (React ne doit pas laisser un frame à pan stale + transform none)
 
   const lastAppliedAtRef = useRef(0);
   const applyAircraft = useCallback((next: PfAircraft[], serverId: string, at: number) => {
@@ -1148,15 +1157,21 @@ export default function PfTesterOdwMap() {
   function startPan(clientX: number, clientY: number) {
     dragRef.current = { x: clientX, y: clientY, moved: false };
     panStartRef.current = { x: viewRef.current.pan.x, y: viewRef.current.pan.y, mouseX: clientX, mouseY: clientY };
-    lastCommitAtRef.current = performance.now();
+    if (commitRafRef.current) {
+      cancelAnimationFrame(commitRafRef.current);
+      commitRafRef.current = 0;
+    }
+    pendingCommitRef.current = false;
     setIsPanning(true);
   }
   function movePan(clientX: number, clientY: number) {
     if (!panStartRef.current) return;
-    if (Math.hypot(clientX - dragRef.current.x, clientY - dragRef.current.y) > 5) {
+    if (!dragRef.current.moved && Math.hypot(clientX - dragRef.current.x, clientY - dragRef.current.y) > 5) {
       dragRef.current.moved = true;
-      followIdRef.current = null;
-      setFollowId(null);
+      if (followIdRef.current) {
+        followIdRef.current = null;
+        setFollowId(null);
+      }
     }
     applyView(
       {
@@ -1171,7 +1186,12 @@ export default function PfTesterOdwMap() {
   }
   function endPan() {
     panStartRef.current = null;
-    applyView(viewRef.current, 'now');
+    if (commitRafRef.current) {
+      cancelAnimationFrame(commitRafRef.current);
+      commitRafRef.current = 0;
+    }
+    pendingCommitRef.current = false;
+    flushCommit(true);
     setIsPanning(false);
   }
 
@@ -1370,10 +1390,7 @@ export default function PfTesterOdwMap() {
         <div
           ref={worldRef}
           className="absolute inset-0 z-0"
-          style={{
-            pointerEvents: 'none',
-            willChange: isPanning || followId ? 'transform' : undefined,
-          }}
+          style={{ pointerEvents: 'none', willChange: 'transform' }}
         >
         <TileLayer
           tiles={mapTiles}
