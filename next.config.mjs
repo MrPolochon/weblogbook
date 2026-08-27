@@ -1,26 +1,39 @@
 /** @type {import('next').NextConfig} */
 const isDev = process.env.NODE_ENV !== 'production';
 
-const csp = [
-  "default-src 'self'",
-  "connect-src 'self' wss://*.livekit.cloud https://*.livekit.cloud https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://api.elevenlabs.io",
-  "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in https://cdn.project-flight.com",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
-  "style-src 'self' 'unsafe-inline'",
-  "font-src 'self' data:",
-  "media-src 'self' blob: https://*.livekit.cloud https://api.elevenlabs.io",
-  "worker-src 'self' blob:",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join('; ');
+function buildCsp(frameAncestors) {
+  return [
+    "default-src 'self'",
+    "connect-src 'self' wss://*.livekit.cloud https://*.livekit.cloud https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://api.elevenlabs.io",
+    "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in https://cdn.project-flight.com",
+    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data:",
+    "media-src 'self' blob: https://*.livekit.cloud https://api.elevenlabs.io",
+    "worker-src 'self' blob:",
+    "frame-src 'self'",
+    `frame-ancestors ${frameAncestors}`,
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; ');
+}
 
 const securityHeaders = [
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' },
-  { key: 'Content-Security-Policy', value: csp },
+  { key: 'Content-Security-Policy', value: buildCsp("'none'") },
+];
+
+/** PDFs du livret / manuels : iframe same-origin autorisée (sinon frame-ancestors 'none' bloque l’aperçu). */
+const embeddableDocHeaders = [
+  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=()' },
+  { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+  { key: 'Content-Security-Policy', value: buildCsp("'self'") },
 ];
 
 const nextConfig = {
@@ -55,7 +68,11 @@ const nextConfig = {
         ],
       },
       {
-        source: '/(.*)',
+        source: '/docs/:path*',
+        headers: embeddableDocHeaders,
+      },
+      {
+        source: '/((?!docs/).*)',
         headers: securityHeaders,
       },
     ];
