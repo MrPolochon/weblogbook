@@ -151,7 +151,14 @@ export default function SupportBotAdminClient() {
   const [roles, setRoles] = useState<DiscordRole[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [tickets, setTickets] = useState<Array<{ short_id: string; motif: string; closed_at: string | null; transcript: string | null; created_at: string }>>([]);
+  const [tickets, setTickets] = useState<Array<{
+    short_id: string;
+    motif: string;
+    closed_at: string | null;
+    transcript: string | null;
+    transcript_token?: string | null;
+    created_at: string;
+  }>>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -337,6 +344,16 @@ export default function SupportBotAdminClient() {
               <summary className="cursor-pointer text-slate-300">
                 {t.short_id} · {t.motif} · {t.closed_at ? 'fermé' : 'ouvert'} · {new Date(t.created_at).toLocaleString('fr-FR')}
               </summary>
+              {t.transcript_token ? (
+                <a
+                  href={`/support/transcript/${t.transcript_token}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-block text-sky-400 hover:underline"
+                >
+                  Ouvrir la conversation
+                </a>
+              ) : null}
               <pre className="mt-2 whitespace-pre-wrap max-h-48 overflow-auto">{t.transcript || 'Pas encore de transcript'}</pre>
             </details>
           ))}

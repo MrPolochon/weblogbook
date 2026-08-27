@@ -13,7 +13,7 @@ export async function GET() {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from('support_tickets')
-    .select('id, short_id, discord_username, motif, statut, reason_text, closed_at, closed_by, created_at, transcript')
+    .select('id, short_id, discord_username, motif, statut, reason_text, closed_at, closed_by, created_at, transcript, transcript_token')
     .order('created_at', { ascending: false })
     .limit(100);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

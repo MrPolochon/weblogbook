@@ -142,9 +142,12 @@ export async function discordMoveChannel(channelId: string, parentId: string) {
 
 /** Envoie un message. `extras.components` = Action Rows Discord (type 1 + boutons type 2). */
 export async function discordSendMessage(channelId: string, content: string, extras?: Record<string, unknown>) {
+  const body: Record<string, unknown> = { ...extras };
+  const text = content.slice(0, 2000);
+  if (text) body.content = text;
   return discordFetch(`/channels/${channelId}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content: content.slice(0, 2000), ...extras }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -173,7 +176,22 @@ export async function discordGetGuildMember(
 }
 
 export async function discordGetMessages(channelId: string, limit = 100) {
-  return discordFetch(`/channels/${channelId}/messages?limit=${Math.min(limit, 100)}`);
+  const cap = Math.min(Math.max(limit, 1), 500);
+  const all: unknown[] = [];
+  let before: string | undefined;
+  while (all.length < cap) {
+    const batch = Math.min(100, cap - all.length);
+    const q = before
+      ? `?limit=${batch}&before=${before}`
+      : `?limit=${batch}`;
+    const msgs = await discordFetch(`/channels/${channelId}/messages${q}`);
+    if (!Array.isArray(msgs) || msgs.length === 0) break;
+    all.push(...msgs);
+    const last = msgs[msgs.length - 1] as { id?: string };
+    before = last?.id ? String(last.id) : undefined;
+    if (!before || msgs.length < batch) break;
+  }
+  return all;
 }
 
 /** Commandes de guilde du bot assistance. `/register` est ouverte à tous (@everyone). */
