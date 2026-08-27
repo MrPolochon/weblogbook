@@ -4,12 +4,11 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
 import { storeWebAuthnChallenge } from '@/lib/webauthn/challenges';
-import { getWebAuthnRpId } from '@/lib/webauthn/config';
+import { getWebAuthnRpId, needsMonthlyEmailVerification, webauthnCeremonyHints } from '@/lib/webauthn/config';
 import {
   getLastEmailVerificationAt,
   userHasPasskeys,
 } from '@/lib/auth/complete-login-verification';
-import { needsMonthlyEmailVerification } from '@/lib/webauthn/config';
 
 /** Options d'authentification passkey (pendant pending_login_verification). */
 export async function POST(req: NextRequest) {
@@ -43,11 +42,16 @@ export async function POST(req: NextRequest) {
       .select('credential_id')
       .eq('user_id', user.id);
 
-    // internal = biométrie locale ; hybrid = QR → téléphone (caBLE).
+    const { hints, transports } = webauthnCeremonyHints(req);
+
     const allowCredentials = (passkeys ?? []).map((p) => ({
       id: p.credential_id as string,
-      transports: ['internal', 'hybrid'] as ('internal' | 'hybrid')[],
+      transports: [...transports],
     }));
+
+    if (allowCredentials.length === 0) {
+      return NextResponse.json({ error: 'Aucune passkey enregistrée.' }, { status: 404 });
+    }
 
     const options = await generateAuthenticationOptions({
       rpID: getWebAuthnRpId(req),
@@ -59,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ...options,
-      hints: ['client-device', 'hybrid'],
+      hints,
     });
   } catch (e) {
     console.error('[passkeys/authenticate/options]', e);

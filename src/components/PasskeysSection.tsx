@@ -10,14 +10,32 @@ type PasskeyRow = {
   created_at: string;
 };
 
+function isMobileBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
 function defaultDeviceLabel(): string {
   if (typeof navigator === 'undefined') return 'Mon appareil';
   const ua = navigator.userAgent;
   if (/iPhone|iPad/i.test(ua)) return 'iPhone / iPad';
   if (/Android/i.test(ua)) return 'Appareil Android';
+  if (/Windows/i.test(ua) || (/Macintosh/i.test(ua) && !/Mobile/i.test(ua))) return 'Téléphone (QR)';
   if (/Mac/i.test(ua)) return 'Mac (Touch ID)';
-  if (/Windows/i.test(ua)) return 'Windows Hello';
   return 'Mon appareil';
+}
+
+const DESKTOP_PLATFORM_REJECTED =
+  'Sur ordinateur, scannez le QR avec votre téléphone. Les clés d’accès Windows de ce PC ne sont pas acceptées.';
+
+function isDesktopPlatformCredential(cred: {
+  authenticatorAttachment?: string;
+  response?: { transports?: string[] };
+}): boolean {
+  if (isMobileBrowser()) return false;
+  if (cred.authenticatorAttachment === 'platform') return true;
+  const transports = cred.response?.transports;
+  return Array.isArray(transports) && transports.length > 0 && transports.every((t) => t === 'internal');
 }
 
 export async function registerPasskeyOnDevice(deviceName?: string): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -32,6 +50,9 @@ export async function registerPasskeyOnDevice(deviceName?: string): Promise<{ ok
     }
 
     const attestation = await startRegistration({ optionsJSON: optData });
+    if (isDesktopPlatformCredential(attestation)) {
+      return { ok: false, error: DESKTOP_PLATFORM_REJECTED };
+    }
 
     const verifyRes = await fetch('/api/auth/passkeys/register/verify', {
       method: 'POST',
@@ -75,11 +96,19 @@ export async function authenticateWithPasskey(): Promise<{ ok: true } | { ok: fa
       };
     }
 
+    // Pas de cérémonie OS si le compte n'a aucune passkey (évite le sélecteur Windows).
+    if (!Array.isArray(optData.allowCredentials) || optData.allowCredentials.length === 0) {
+      return { ok: false, error: 'Aucune passkey enregistrée sur ce compte.' };
+    }
+
     // Ceremony modale obligatoire (pas d'autofill silencieux) + UV required côté serveur.
     const assertion = await startAuthentication({
       optionsJSON: optData,
       useBrowserAutofill: false,
     });
+    if (isDesktopPlatformCredential(assertion)) {
+      return { ok: false, error: DESKTOP_PLATFORM_REJECTED };
+    }
 
     const verifyRes = await fetch('/api/auth/passkeys/authenticate/verify', {
       method: 'POST',
@@ -189,8 +218,7 @@ export default function PasskeysSection({
       </h2>
       <p className={`${textMuted} text-sm mb-4`}>
         Enregistrez une passkey pour valider la connexion sans code email (sauf une fois par mois).
-        Sur PC/Mac : biométrie locale si disponible, sinon QR à scanner avec le téléphone.
-        Astuce : ajoutez aussi une passkey depuis votre téléphone pour que le QR fonctionne partout.
+        Sur téléphone : Face ID ou empreinte. Sur PC : un QR à scanner avec votre téléphone — pas les clés d’accès déjà enregistrées sur cet ordinateur.
         Seules des clés publiques sont stockées — jamais vos données biométriques.
       </p>
 
@@ -258,7 +286,11 @@ export default function PasskeysSection({
             : 'btn-primary'
         }
       >
-        {registering ? 'Enregistrement…' : 'Ajouter une passkey sur cet appareil'}
+        {registering
+          ? 'Enregistrement…'
+          : isMobileBrowser()
+            ? 'Ajouter une passkey sur cet appareil'
+            : 'Ajouter une passkey (QR téléphone)'}
       </button>
     </div>
   );

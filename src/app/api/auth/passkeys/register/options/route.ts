@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
 import { storeWebAuthnChallenge } from '@/lib/webauthn/challenges';
-import { getWebAuthnOrigin, getWebAuthnRpId, getWebAuthnRpName } from '@/lib/webauthn/config';
+import { getWebAuthnRpId, getWebAuthnRpName, webauthnCeremonyHints } from '@/lib/webauthn/config';
 
 /** Options d'inscription passkey (utilisateur authentifié). */
 export async function POST(req: NextRequest) {
@@ -32,7 +32,11 @@ export async function POST(req: NextRequest) {
       type: 'public-key' as const,
     }));
 
-    // Pas de verrou "platform only" : permet biométrie locale ET passkey téléphone (QR hybride).
+    const { hints, authenticatorAttachment } = webauthnCeremonyHints(req);
+
+    // PC : cross-platform + hint hybrid → QR téléphone, sans le sélecteur
+    // « clé d'accès » Windows (comptes déjà enregistrés sur la machine).
+    // Mobile : platform → Face ID / empreinte de cet appareil.
     const options = await generateRegistrationOptions({
       rpName: getWebAuthnRpName(),
       rpID: getWebAuthnRpId(req),
@@ -42,6 +46,7 @@ export async function POST(req: NextRequest) {
       attestationType: 'none',
       excludeCredentials,
       authenticatorSelection: {
+        authenticatorAttachment,
         residentKey: 'preferred',
         userVerification: 'required',
       },
@@ -49,10 +54,9 @@ export async function POST(req: NextRequest) {
 
     await storeWebAuthnChallenge(admin, user.id, options.challenge, 'registration');
 
-    // client-device d'abord, hybrid (QR téléphone) en secours — le navigateur choisit selon l'appareil.
     return NextResponse.json({
       ...options,
-      hints: ['client-device', 'hybrid'],
+      hints,
     });
   } catch (e) {
     console.error('[passkeys/register/options]', e);

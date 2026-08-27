@@ -36,6 +36,60 @@ export function getWebAuthnRpName(): string {
   return 'PTFS Logbook';
 }
 
+/** Téléphone / tablette : biométrie locale. PC : QR (caBLE), pas le sélecteur Windows Hello. */
+export function isMobileWebAuthnClient(req?: NextRequest): boolean {
+  const ua = req?.headers.get('user-agent') || '';
+  return /iPhone|iPad|iPod|Android/i.test(ua);
+}
+
+export function webauthnCeremonyHints(req?: NextRequest): {
+  hints: Array<'client-device' | 'hybrid'>;
+  authenticatorAttachment: 'platform' | 'cross-platform';
+  transports: Array<'internal' | 'hybrid'>;
+} {
+  if (isMobileWebAuthnClient(req)) {
+    return {
+      hints: ['client-device'],
+      authenticatorAttachment: 'platform',
+      transports: ['internal', 'hybrid'],
+    };
+  }
+  return {
+    hints: ['hybrid'],
+    authenticatorAttachment: 'cross-platform',
+    // Uniquement hybrid : si on met aussi `internal`, Windows propose
+    // les clés d'accès déjà présentes sur le PC (souvent un autre compte).
+    transports: ['hybrid'],
+  };
+}
+
+const DESKTOP_PLATFORM_REJECTED =
+  'Sur ordinateur, scannez le QR avec votre téléphone. Les clés d’accès Windows de ce PC ne sont pas acceptées.';
+
+type WebAuthnClientCredential = {
+  authenticatorAttachment?: string;
+  response?: { transports?: string[] };
+};
+
+/** Windows Hello / biométrie locale du PC — refusée hors téléphone. */
+export function desktopPlatformAuthenticatorError(
+  req: NextRequest | undefined,
+  credential: WebAuthnClientCredential | null | undefined
+): string | null {
+  if (!credential || isMobileWebAuthnClient(req)) return null;
+  if (credential.authenticatorAttachment === 'platform') return DESKTOP_PLATFORM_REJECTED;
+  const transports = credential.response?.transports;
+  if (
+    Array.isArray(transports) &&
+    transports.length > 0 &&
+    transports.every((t) => t === 'internal')
+  ) {
+    return DESKTOP_PLATFORM_REJECTED;
+  }
+  return null;
+}
+
+
 export function needsMonthlyEmailVerification(lastEmailVerificationAt: string | null | undefined): boolean {
   if (!lastEmailVerificationAt) return true;
   const last = new Date(lastEmailVerificationAt);

@@ -589,7 +589,12 @@ function LoginPageContent() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Code invalide.');
-      if (typeof window !== 'undefined' && window.PublicKeyCredential) {
+      // Le code email a déjà validé la connexion. On ne propose la passkey
+      // que sur téléphone (Face ID) — sur PC, Windows affichait sinon une
+      // « clé d'accès » d'un autre compte, puis on entrait quand même.
+      const onPhone =
+        typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (typeof window !== 'undefined' && window.PublicKeyCredential && onPhone) {
         setStep('passkey-offer');
         setError(null);
         return;
@@ -1109,7 +1114,7 @@ function LoginPageContent() {
               )}
             </div>
             <p className="text-slate-500 text-xs mt-4 text-center">
-              Sur cet appareil : Face ID, empreinte ou Windows Hello. Sinon le navigateur peut afficher un QR à scanner avec votre téléphone pour valider là-bas.
+              Sur téléphone : Face ID ou empreinte. Sur PC : scannez le QR avec votre téléphone.
               Le code email reste disponible en secours.
             </p>
           </div>
@@ -1123,9 +1128,9 @@ function LoginPageContent() {
               <h2 className="text-lg font-semibold">Connexion validée</h2>
             </div>
             <p className="text-slate-300 text-sm mb-4">
-              Souhaitez-vous enregistrer une passkey (biométrie locale ou via QR sur téléphone)
-              pour accélérer vos prochaines vérifications ? Une reconnexion par email restera obligatoire
-              une fois par mois.
+              Souhaitez-vous enregistrer une passkey pour accélérer les prochaines connexions ?
+              Sur PC, un QR s’affiche : scannez-le avec votre téléphone. Une reconnexion par email
+              restera obligatoire une fois par mois.
             </p>
             {error && (
               <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 backdrop-blur-sm mb-4">
