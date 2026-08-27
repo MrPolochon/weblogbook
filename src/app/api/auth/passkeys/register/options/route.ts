@@ -34,9 +34,6 @@ export async function POST(req: NextRequest) {
 
     const { hints, authenticatorAttachment } = webauthnCeremonyHints(req);
 
-    // PC : cross-platform + hint hybrid → QR téléphone, sans le sélecteur
-    // « clé d'accès » Windows (comptes déjà enregistrés sur la machine).
-    // Mobile : platform → Face ID / empreinte de cet appareil.
     const options = await generateRegistrationOptions({
       rpName: getWebAuthnRpName(),
       rpID: getWebAuthnRpId(req),
@@ -46,7 +43,7 @@ export async function POST(req: NextRequest) {
       attestationType: 'none',
       excludeCredentials,
       authenticatorSelection: {
-        authenticatorAttachment,
+        ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
         residentKey: 'preferred',
         userVerification: 'required',
       },

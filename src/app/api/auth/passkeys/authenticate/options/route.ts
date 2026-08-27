@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       .select('credential_id')
       .eq('user_id', user.id);
 
-    const { hints, transports } = webauthnCeremonyHints(req, 'authenticate');
+    const { hints, transports } = webauthnCeremonyHints(req);
 
     const allowCredentials = (passkeys ?? []).map((p) => ({
       id: p.credential_id as string,

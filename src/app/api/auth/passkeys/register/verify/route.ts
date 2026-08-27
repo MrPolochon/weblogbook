@@ -5,7 +5,6 @@ import { NextResponse, NextRequest } from 'next/server';
 import { verifyRegistrationResponse } from '@simplewebauthn/server';
 import { consumeWebAuthnChallenge } from '@/lib/webauthn/challenges';
 import {
-  desktopPlatformAuthenticatorError,
   getWebAuthnOrigin,
   getWebAuthnRpId,
   nodeBufferToBase64url,
@@ -29,11 +28,6 @@ export async function POST(req: NextRequest) {
 
     if (!response) {
       return NextResponse.json({ error: 'Réponse WebAuthn manquante.' }, { status: 400 });
-    }
-
-    const platformError = desktopPlatformAuthenticatorError(req, response);
-    if (platformError) {
-      return NextResponse.json({ error: platformError }, { status: 400 });
     }
 
     const admin = createAdminClient();

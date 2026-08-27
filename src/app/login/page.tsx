@@ -1114,7 +1114,7 @@ function LoginPageContent() {
               )}
             </div>
             <p className="text-slate-500 text-xs mt-4 text-center">
-              Sur téléphone : Face ID ou empreinte. Sur PC : scannez le QR avec votre téléphone.
+              Sur téléphone : Face ID ou empreinte. Sur PC : Windows Hello ou QR téléphone.
               Le code email reste disponible en secours.
             </p>
           </div>

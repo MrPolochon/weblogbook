@@ -10,39 +10,18 @@ type PasskeyRow = {
   created_at: string;
 };
 
-function isMobileBrowser(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-}
-
 function defaultDeviceLabel(): string {
   if (typeof navigator === 'undefined') return 'Mon appareil';
   const ua = navigator.userAgent;
   if (/iPhone|iPad/i.test(ua)) return 'iPhone / iPad';
   if (/Android/i.test(ua)) return 'Appareil Android';
-  if (/Windows/i.test(ua) || (/Macintosh/i.test(ua) && !/Mobile/i.test(ua))) return 'Téléphone (QR)';
+  if (/Windows/i.test(ua)) return 'Windows Hello';
   if (/Mac/i.test(ua)) return 'Mac (Touch ID)';
   return 'Mon appareil';
 }
 
-const DESKTOP_PLATFORM_REJECTED =
-  'Sur ordinateur, scannez le QR avec votre téléphone. Les clés d’accès Windows de ce PC ne sont pas acceptées.';
-
-function transportsOf(response: unknown): string[] {
-  if (!response || typeof response !== 'object' || !('transports' in response)) return [];
-  const t = (response as { transports?: unknown }).transports;
-  return Array.isArray(t) ? t.filter((x): x is string => typeof x === 'string') : [];
-}
-
-function isDesktopPlatformCredential(cred: {
-  authenticatorAttachment?: string;
-  response?: unknown;
-}): boolean {
-  if (isMobileBrowser()) return false;
-  if (cred.authenticatorAttachment === 'platform') return true;
-  const transports = transportsOf(cred.response);
-  return transports.length > 0 && transports.every((t) => t === 'internal');
-}
+const NOT_ALLOWED =
+  'Annulé par Windows. Réessayez et validez l’invite (Windows Hello ou QR), sans fermer la fenêtre.';
 
 export async function registerPasskeyOnDevice(deviceName?: string): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
@@ -56,9 +35,6 @@ export async function registerPasskeyOnDevice(deviceName?: string): Promise<{ ok
     }
 
     const attestation = await startRegistration({ optionsJSON: optData });
-    if (isDesktopPlatformCredential(attestation)) {
-      return { ok: false, error: DESKTOP_PLATFORM_REJECTED };
-    }
 
     const verifyRes = await fetch('/api/auth/passkeys/register/verify', {
       method: 'POST',
@@ -78,7 +54,7 @@ export async function registerPasskeyOnDevice(deviceName?: string): Promise<{ ok
   } catch (err) {
     const name = err instanceof Error ? err.name : '';
     if (name === 'NotAllowedError') {
-      return { ok: false, error: 'Opération annulée ou refusée par l’appareil.' };
+      return { ok: false, error: NOT_ALLOWED };
     }
     return {
       ok: false,
@@ -132,7 +108,7 @@ export async function authenticateWithPasskey(): Promise<{ ok: true } | { ok: fa
   } catch (err) {
     const name = err instanceof Error ? err.name : '';
     if (name === 'NotAllowedError') {
-      return { ok: false, error: 'Opération annulée ou refusée par l’appareil.' };
+      return { ok: false, error: NOT_ALLOWED };
     }
     return {
       ok: false,
@@ -221,7 +197,7 @@ export default function PasskeysSection({
       </h2>
       <p className={`${textMuted} text-sm mb-4`}>
         Enregistrez une passkey pour valider la connexion sans code email (sauf une fois par mois).
-        Sur téléphone : Face ID ou empreinte. Sur PC : un QR à scanner avec votre téléphone — pas les clés d’accès déjà enregistrées sur cet ordinateur.
+        Sur téléphone : Face ID ou empreinte. Sur PC : Windows Hello de cette session Windows, ou un QR à scanner avec votre téléphone.
         Seules des clés publiques sont stockées — jamais vos données biométriques.
       </p>
 
@@ -289,11 +265,7 @@ export default function PasskeysSection({
             : 'btn-primary'
         }
       >
-        {registering
-          ? 'Enregistrement…'
-          : isMobileBrowser()
-            ? 'Ajouter une passkey sur cet appareil'
-            : 'Ajouter une passkey (QR téléphone)'}
+        {registering ? 'Enregistrement…' : 'Ajouter une passkey'}
       </button>
     </div>
   );

@@ -36,18 +36,16 @@ export function getWebAuthnRpName(): string {
   return 'PTFS Logbook';
 }
 
-/** Téléphone / tablette : biométrie locale. PC : QR (caBLE), pas le sélecteur Windows Hello. */
+/** Téléphone : biométrie locale. PC : Windows Hello ou QR, sans imposer cross-platform
+ * (sinon Windows répond NotAllowedError s'il n'y a pas de clé USB). */
 export function isMobileWebAuthnClient(req?: NextRequest): boolean {
   const ua = req?.headers.get('user-agent') || '';
   return /iPhone|iPad|iPod|Android/i.test(ua);
 }
 
-export function webauthnCeremonyHints(
-  req?: NextRequest,
-  kind: 'register' | 'authenticate' = 'register'
-): {
+export function webauthnCeremonyHints(req?: NextRequest): {
   hints: Array<'client-device' | 'hybrid'>;
-  authenticatorAttachment: 'platform' | 'cross-platform';
+  authenticatorAttachment?: 'platform' | 'cross-platform';
   transports: Array<'internal' | 'hybrid'>;
 } {
   if (isMobileWebAuthnClient(req)) {
@@ -57,49 +55,10 @@ export function webauthnCeremonyHints(
       transports: ['internal', 'hybrid'],
     };
   }
-  if (kind === 'authenticate') {
-    // Connexion : QR en priorité, mais une passkey déjà liée à CE compte
-    // (y compris Windows Hello) doit pouvoir servir. Les clés d'un autre
-    // utilisateur sont refusées plus tard via allowCredentials + credential_id.
-    return {
-      hints: ['hybrid'],
-      authenticatorAttachment: 'cross-platform',
-      transports: ['hybrid', 'internal'],
-    };
-  }
   return {
-    hints: ['hybrid'],
-    authenticatorAttachment: 'cross-platform',
-    transports: ['hybrid'],
+    hints: ['hybrid', 'client-device'],
+    transports: ['hybrid', 'internal'],
   };
-}
-
-const DESKTOP_PLATFORM_REJECTED =
-  'Sur ordinateur, scannez le QR avec votre téléphone. Les clés d’accès Windows de ce PC ne sont pas acceptées.';
-
-type WebAuthnClientCredential = {
-  authenticatorAttachment?: string;
-  response?: unknown;
-};
-
-function transportsOf(response: unknown): string[] {
-  if (!response || typeof response !== 'object' || !('transports' in response)) return [];
-  const t = (response as { transports?: unknown }).transports;
-  return Array.isArray(t) ? t.filter((x): x is string => typeof x === 'string') : [];
-}
-
-/** Windows Hello / biométrie locale du PC — refusée hors téléphone. */
-export function desktopPlatformAuthenticatorError(
-  req: NextRequest | undefined,
-  credential: WebAuthnClientCredential | null | undefined
-): string | null {
-  if (!credential || isMobileWebAuthnClient(req)) return null;
-  if (credential.authenticatorAttachment === 'platform') return DESKTOP_PLATFORM_REJECTED;
-  const transports = transportsOf(credential.response);
-  if (transports.length > 0 && transports.every((t) => t === 'internal')) {
-    return DESKTOP_PLATFORM_REJECTED;
-  }
-  return null;
 }
 
 
