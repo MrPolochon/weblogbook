@@ -41,6 +41,33 @@ export function atcDossierGuidance(
   );
 }
 
+/** Rappel d’espace : hors pilote, l’IA recitait le logbook / CAT. */
+export function workspaceGuidance(profile: {
+  role?: string | null;
+  atc?: boolean | null;
+  siavi?: boolean | null;
+  ground_crew?: boolean | null;
+  ifsa?: boolean | null;
+}): string | null {
+  const role = String(profile.role || '');
+  if (role === 'admin') {
+    return 'espace de travail: ADMIN. Il peut agir dans le back-office. Ne lui dis pas d’appeler un staff pour une action qu’il peut faire lui-même.';
+  }
+  if (role === 'atc' || profile.atc) {
+    return 'espace de travail: CONTRÔLEUR ATC. Réponds dans l’espace ATC (grades, positions, training, manuel contrôleur). Logbook / CAT pilote seulement s’il le demande clairement.';
+  }
+  if (role === 'siavi' || profile.siavi) {
+    return 'espace de travail: SIAVI (pompiers / sauvetage). Ce n’est pas un pilote CAT ni un contrôleur ATC.';
+  }
+  if (role === 'ground_crew' || profile.ground_crew) {
+    return 'espace de travail: GROUND CREW (piste). Pas de test ATC, pas de CAT pilote, sauf s’il le demande.';
+  }
+  if (profile.ifsa) {
+    return 'espace de travail: agent IFSA. Sûreté aérienne, pas le parcours pilote.';
+  }
+  return null;
+}
+
 export const NO_LINKED_ACCOUNT_CONTEXT = [
   'Dossier du membre : ce compte Discord n’est PAS lié à un compte du site.',
   'Tu n’as donc aucune donnée sur lui : n’invente rien sur ses licences, formations ou compagnie.',
@@ -199,6 +226,8 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
     if (profile.siavi) acces.push('SIAVI');
     if (profile.ground_crew) acces.push('ground crew');
     if (acces.length) lines.push(`accès: ${acces.join(', ')}`);
+    const workspace = workspaceGuidance(profile);
+    if (workspace) lines.push(workspace);
     if (!profile.email) lines.push('e-mail du compte: non renseigné (codes e-mail impossibles)');
     if (profile.sanction_blocage_vol) lines.push('sanction en cours: vol bloqué');
 

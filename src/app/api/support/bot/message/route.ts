@@ -28,6 +28,7 @@ import {
   isAtcTopic,
   isAtcTrainingTopic,
   isGroundCrewTopic,
+  isSiaviTopic,
   isTrainingRequest,
   ticketChannelName,
   type SupportStatus,
@@ -81,7 +82,7 @@ import {
   shouldHonorIfsaPing,
   updateClarificationMemory,
 } from '@/lib/support/guardrails';
-import { detectMentionIntent } from '@/lib/support/mention-actions';
+import { detectBareCloseIntent, detectMentionIntent } from '@/lib/support/mention-actions';
 import { runMentionCommand } from '@/lib/support/mention-commands';
 import { IA_RESUME_PATCH } from '@/lib/support/resume-ia';
 import {
@@ -280,8 +281,8 @@ export async function POST(req: NextRequest) {
   // ---------------------------------------------------------------------
   const staffClaimsTicket =
     staffSpeaking && isRealStaffIntervention(content) && !isStaffAskingIaToContinue(content);
-  const mentionIntentEarly = mentionsBot ? detectMentionIntent(content) : null;
-  if (staffClaimsTicket && (!mentionsBot || !mentionIntentEarly)) {
+  const mentionIntent = mentionsBot ? detectMentionIntent(content) : detectBareCloseIntent(content);
+  if (staffClaimsTicket && !mentionIntent) {
     const startsTakeover = !muted && isRealStaffIntervention(content);
     const announce = startsTakeover && !ticket.staff_takeover_notified;
     await recordSilently(
@@ -322,27 +323,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, statut: 'staff', muted: true, reply: null });
   }
 
-  if (muted && !mentionsBot) {
+  if (muted && !mentionsBot && !mentionIntent) {
     await recordSilently('user');
     return NextResponse.json({ ok: true, statut: 'staff', muted: true, reply: null });
   }
 
-  // Protocole de commande : [mention du bot] + [demande]. La mention réactive
-  // l'IA ET porte l'instruction. Sans mention, aucune action n'est exécutée.
-  const mentionIntent = mentionsBot ? detectMentionIntent(content) : null;
-  // Un staff qui donne un ordre d'administration (renommer, déplacer) continue
-  // de gérer le ticket : on exécute sans relancer l'IA par-dessus lui.
+  // Commande claire (mention, ou « efface le ticket » sans @).
   const adminOrder =
     fromStaffRole &&
     (mentionIntent?.id === 'rename' ||
       mentionIntent?.id === 'move' ||
       (mentionIntent?.id === 'unsure' && mentionIntent.about !== 'close'));
   const resumed = muted && mentionsBot && !adminOrder;
-  if (mentionsBot) {
-    const intent = mentionIntent;
-    if (intent) {
-      const result = await runMentionCommand({
-        intent,
+  if (mentionIntent) {
+    const result = await runMentionCommand({
+      intent: mentionIntent,
         actor: fromStaffRole ? 'staff' : 'requester',
         channelId,
         ticket: {
@@ -377,7 +372,6 @@ export async function POST(req: NextRequest) {
         resolution_offered: Boolean(result.offeredResolution),
         reply: null,
       });
-    }
   }
 
   // Création de compte dans le ticket : le serveur collecte identifiant puis
@@ -635,6 +629,7 @@ export async function POST(req: NextRequest) {
   const isGroundCrewTopicHere = isGroundCrewTopic(focusText);
   const isAtcSubject = isAtcTopic(focusText);
   const isIfsaTopic = isIfsaSubject(focusText);
+  const isSiaviSubject = isSiaviTopic(focusText);
   const groundAmbiguous = isAmbiguousGroundTopic(content);
 
   const hints = [
@@ -643,6 +638,9 @@ export async function POST(req: NextRequest) {
       : '',
     isAtcTrainingTopic(focusText)
       ? 'Il veut progresser côté ATC : utilise son dossier puis le parcours humain « Instruction → Mon Espace → Session de training (ATC) ». Un QCM ne donne jamais automatiquement un grade.'
+      : '',
+    isSiaviSubject
+      ? 'Sujet détecté : SIAVI (pompiers / sauvetage). Ce n’est ni un pilote CAT ni un contrôleur ATC.'
       : '',
     isGroundCrewTopicHere
       ? 'Sujet détecté : GROUND CREW (personnel de piste). Ce n’est PAS le contrôle Ground ATC : ne parle ni de test ATC, ni de grade, ni de fréquence.'
@@ -654,7 +652,10 @@ export async function POST(req: NextRequest) {
 
   // Recherche documentaire : seuls les extraits utiles partent au modèle.
   const isPilotCatTopic =
-    !isAtcSubject && !isGroundCrewTopicHere && /\bcat ?[1-5]\b|categorie|catégorie/i.test(topicText);
+    !isAtcSubject &&
+    !isGroundCrewTopicHere &&
+    !isSiaviSubject &&
+    /\bcat ?[1-5]\b|categorie|catégorie/i.test(topicText);
   let prefer: DocSourceId[] = [];
   // Le bug d'origine : « training Approach » ramenait le livret CAT pilote.
   let penalize: DocSourceId[] = [];
@@ -664,6 +665,9 @@ export async function POST(req: NextRequest) {
   } else if (isIfsaTopic) {
     prefer = ['ifsa'];
     penalize = ['pilote', 'manuel', 'ground'];
+  } else if (isSiaviSubject) {
+    prefer = ['site'];
+    penalize = ['pilote', 'atc', 'manuel', 'ground'];
   } else if (isAtcSubject) {
     prefer = ['atc', 'manuel'];
     penalize = ['pilote', 'site', 'ground', 'ifsa'];

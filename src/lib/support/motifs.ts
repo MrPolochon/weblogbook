@@ -100,6 +100,11 @@ export function isAtcTopic(text: string): boolean {
   return ATC_STRONG_VOCAB.test(t) || ATC_POSITION_VOCAB.test(t);
 }
 
+/** Pompiers / sauvetage — pas le logbook pilote. */
+export function isSiaviTopic(text: string): boolean {
+  return /\bsiavi\b|\bpompiers?\b|\bincendie\b|\bsauvetage\b|\bfire ?rescue\b/.test(normalize(text));
+}
+
 /** « Comment devenir contrôleur ? » — une demande de parcours sans le mot « training ». */
 const BECOME_VOCAB = /\bdevenir\b|\bdevient\b|\bdeviens\b|\bje veux etre\b|\bcomment (etre|faire pour|on fait)\b|\bpour etre\b/;
 

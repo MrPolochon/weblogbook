@@ -49,7 +49,7 @@ const NEGATION = /\b(pas|jamais|sans)\b/;
 
 // --- fermeture ---------------------------------------------------------
 const CLOSE_VERB =
-  /\b(ferme|fermes|fermer|fermez|cloture|cloturer|cloturez|clore|close|closed|supprime|supprimer|delete)\b/;
+  /\b(ferme|fermes|fermer|fermez|cloture|cloturer|cloturez|clore|close|closed|supprime|supprimer|supprimes|delete|efface|effacer|effaces|effacez|vire|enleve|enlever|archive|archiver|ticketdel)\b/;
 const CLOSE_OBJECT = /\b(ticket|salon|channel|conversation|ca|cela|tout)\b/;
 
 // --- renommage ---------------------------------------------------------
@@ -125,7 +125,11 @@ export const MENTION_ACTIONS: ActionSpec[] = [
   {
     id: 'staff',
     allowed: ['staff', 'requester'],
-    detect: (t) => (STAFF_REQUEST.test(t) && STAFF_VERB.test(t) ? { id: 'staff' } : null),
+    detect: (t) => {
+      if (!STAFF_REQUEST.test(t) || !STAFF_VERB.test(t)) return null;
+      if (NEGATION.test(t)) return null;
+      return { id: 'staff' };
+    },
   },
 ];
 
@@ -138,6 +142,19 @@ export function detectMentionIntent(text: string): MentionIntent | null {
     if (hit) return hit;
   }
   return null;
+}
+
+/**
+ * Fermeture claire sans @mention (« efface le ticket », « ferme ça »).
+ * Les autres commandes (staff, rename, move) restent derrière une mention :
+ * trop de faux positifs sinon (« j’ai appelé le staff hier »).
+ */
+export function detectBareCloseIntent(text: string): Extract<MentionIntent, { id: 'close' }> | null {
+  const t = normalizeCommand(text);
+  if (!t) return null;
+  const spec = MENTION_ACTIONS.find((a) => a.id === 'close');
+  const hit = spec?.detect(t);
+  return hit?.id === 'close' ? hit : null;
 }
 
 export function mentionActionAllowed(intent: MentionIntent, actor: MentionActor): boolean {
