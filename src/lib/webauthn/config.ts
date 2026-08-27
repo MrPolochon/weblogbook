@@ -42,7 +42,10 @@ export function isMobileWebAuthnClient(req?: NextRequest): boolean {
   return /iPhone|iPad|iPod|Android/i.test(ua);
 }
 
-export function webauthnCeremonyHints(req?: NextRequest): {
+export function webauthnCeremonyHints(
+  req?: NextRequest,
+  kind: 'register' | 'authenticate' = 'register'
+): {
   hints: Array<'client-device' | 'hybrid'>;
   authenticatorAttachment: 'platform' | 'cross-platform';
   transports: Array<'internal' | 'hybrid'>;
@@ -54,11 +57,19 @@ export function webauthnCeremonyHints(req?: NextRequest): {
       transports: ['internal', 'hybrid'],
     };
   }
+  if (kind === 'authenticate') {
+    // Connexion : QR en priorité, mais une passkey déjà liée à CE compte
+    // (y compris Windows Hello) doit pouvoir servir. Les clés d'un autre
+    // utilisateur sont refusées plus tard via allowCredentials + credential_id.
+    return {
+      hints: ['hybrid'],
+      authenticatorAttachment: 'cross-platform',
+      transports: ['hybrid', 'internal'],
+    };
+  }
   return {
     hints: ['hybrid'],
     authenticatorAttachment: 'cross-platform',
-    // Uniquement hybrid : si on met aussi `internal`, Windows propose
-    // les clés d'accès déjà présentes sur le PC (souvent un autre compte).
     transports: ['hybrid'],
   };
 }

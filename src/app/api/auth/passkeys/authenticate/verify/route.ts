@@ -6,7 +6,6 @@ import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { rateLimit } from '@/lib/rate-limit';
 import { consumeWebAuthnChallenge } from '@/lib/webauthn/challenges';
 import {
-  desktopPlatformAuthenticatorError,
   getWebAuthnOrigin,
   getWebAuthnRpId,
   nodeBase64urlToBuffer,
@@ -48,11 +47,6 @@ export async function POST(req: NextRequest) {
     const response = body.response;
     if (!response?.id) {
       return NextResponse.json({ error: 'Réponse WebAuthn manquante.' }, { status: 400 });
-    }
-
-    const platformError = desktopPlatformAuthenticatorError(req, response);
-    if (platformError) {
-      return NextResponse.json({ error: platformError }, { status: 400 });
     }
 
     const expectedChallenge = await consumeWebAuthnChallenge(admin, user.id, 'authentication');

@@ -112,9 +112,6 @@ export async function authenticateWithPasskey(): Promise<{ ok: true } | { ok: fa
       optionsJSON: optData,
       useBrowserAutofill: false,
     });
-    if (isDesktopPlatformCredential(assertion)) {
-      return { ok: false, error: DESKTOP_PLATFORM_REJECTED };
-    }
 
     const verifyRes = await fetch('/api/auth/passkeys/authenticate/verify', {
       method: 'POST',
