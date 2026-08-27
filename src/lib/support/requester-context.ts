@@ -57,10 +57,10 @@ export function workspaceGuidance(profile: {
     return 'espace de travail: CONTRÔLEUR ATC. Réponds dans l’espace ATC (grades, positions, training, manuel contrôleur). Logbook / CAT pilote seulement s’il le demande clairement.';
   }
   if (role === 'siavi' || profile.siavi) {
-    return 'espace de travail: SIAVI (pompiers / sauvetage). Ce n’est pas un pilote CAT ni un contrôleur ATC.';
+    return 'espace de travail: SIAVI — Service d’Incendie Aéronautique et d’Information en Vol (pompiers AFIS). Pas un pilote CAT ni un contrôleur ATC.';
   }
   if (role === 'ground_crew' || profile.ground_crew) {
-    return 'espace de travail: GROUND CREW (piste). Pas de test ATC, pas de CAT pilote, sauf s’il le demande.';
+    return 'espace de travail: GROUND CREW (piste). Pas de test ATC, pas de CAT pilote, sauf s’il le demande. Il a déjà l’accès : n’envoie pas postuler.';
   }
   if (profile.ifsa) {
     return 'espace de travail: agent IFSA. Sûreté aérienne, pas le parcours pilote.';

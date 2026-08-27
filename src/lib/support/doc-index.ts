@@ -3,7 +3,7 @@ import { CODE_DE_CONDUITE_IA, CODE_DE_CONDUITE_URL } from '@/lib/support/code-de
 import { LIVRET_PROGRESSION_IA, LIVRET_PROGRESSION_URL } from '@/lib/support/livret-progression';
 import { MANUEL_CONTROLEUR_IA, MANUEL_CONTROLEUR_URL } from '@/lib/support/manuel-controleur';
 import { SITE_PROCEDURES_IA } from '@/lib/support/site-procedures';
-import { GROUND_CREW_IA, IFSA_IA } from '@/lib/support/espaces-site';
+import { GROUND_CREW_IA, IFSA_IA, SIAVI_IA } from '@/lib/support/espaces-site';
 
 /**
  * Index documentaire de l’IA tickets : les documents de référence du site,
@@ -29,7 +29,7 @@ export interface DocChunk {
   text: string;
 }
 
-export type DocSourceId = 'conduite' | 'pilote' | 'atc' | 'manuel' | 'site' | 'ground' | 'ifsa';
+export type DocSourceId = 'conduite' | 'pilote' | 'atc' | 'manuel' | 'site' | 'ground' | 'ifsa' | 'siavi';
 
 /**
  * Seuil de regroupement : au-dessus, une ligne forme un extrait à elle seule.
@@ -152,6 +152,13 @@ export const DOC_CHUNKS: DocChunk[] = [
     link: '/ifsa',
     body: IFSA_IA,
   }),
+  ...chunksFromDocument({
+    prefix: 'siavi',
+    source: 'siavi',
+    sourceLabel: 'Espace SIAVI (pompiers AFIS)',
+    link: '/siavi',
+    body: SIAVI_IA,
+  }),
 ];
 
 const SOURCE_BY_PREFIX: Record<string, DocSourceId> = {
@@ -162,6 +169,7 @@ const SOURCE_BY_PREFIX: Record<string, DocSourceId> = {
   site: 'site',
   gc: 'ground',
   ifsa: 'ifsa',
+  siavi: 'siavi',
 };
 
 /** Extraits d’une source, pour les cas où le sujet est certain (création de compte). */

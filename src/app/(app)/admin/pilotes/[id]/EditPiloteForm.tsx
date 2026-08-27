@@ -544,7 +544,7 @@ export default function EditPiloteForm({
           </div>
 
           <p className="text-xs text-slate-500">
-            IFSA = International Flight Safety Authority. SIAVI = Service d&apos;Incendie et d&apos;Assistance aux Victimes d&apos;Incidents.
+            IFSA = International Flight Safety Authority. SIAVI = Service d&apos;Incendie Aéronautique et d&apos;Information en Vol.
           </p>
         </div>
 

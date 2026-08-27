@@ -28,6 +28,7 @@ import {
   isAtcTopic,
   isAtcTrainingTopic,
   isGroundCrewTopic,
+  isSiaviRecruitmentTopic,
   isSiaviTopic,
   isTrainingRequest,
   ticketChannelName,
@@ -610,27 +611,27 @@ export async function POST(req: NextRequest) {
   // fois le choix des documents injectés et la recherche de questionnaires.
   const topicText = `${ticket.motif || ''} ${ticket.reason_text || ''} ${content}`;
   const hasAccount = Boolean(ticket.user_id);
-
-  // Le dossier vient de la base à chaque message : les licences, QCM et
-  // demandes d'instruction bougent pendant la vie du ticket.
-  const [requesterContext, aeroschoolMatches, directoryLookup] = await Promise.all([
-    buildRequesterContext(admin, ticket.user_id as string | null),
-    findAeroschoolForms(admin, topicText, { hasAccount }).catch((e) => {
-      console.error('[support-message] recherche AeroSchool', e);
-      return [];
-    }),
-    // Annuaire : n'interroge la base que si le message cherche vraiment à
-    // identifier quelqu'un, et ne rend que ce que le demandeur a le droit de voir.
-    findDirectoryMatches(admin, content, { requesterId: ticket.user_id as string | null }),
-  ]);
-
-  // Filets contre les confusions de vocabulaire observées en production.
   const focusText = `${ticket.reason_text || ''} ${content}`;
   const isGroundCrewTopicHere = isGroundCrewTopic(focusText);
   const isAtcSubject = isAtcTopic(focusText);
   const isIfsaTopic = isIfsaSubject(focusText);
   const isSiaviSubject = isSiaviTopic(focusText);
   const groundAmbiguous = isAmbiguousGroundTopic(content);
+
+  // Le dossier vient de la base à chaque message : les licences, QCM et
+  // demandes d'instruction bougent pendant la vie du ticket.
+  const [requesterContext, aeroschoolMatches, directoryLookup] = await Promise.all([
+    buildRequesterContext(admin, ticket.user_id as string | null),
+    isSiaviSubject || isGroundCrewTopicHere
+      ? Promise.resolve([])
+      : findAeroschoolForms(admin, topicText, { hasAccount }).catch((e) => {
+          console.error('[support-message] recherche AeroSchool', e);
+          return [];
+        }),
+    // Annuaire : n'interroge la base que si le message cherche vraiment à
+    // identifier quelqu'un, et ne rend que ce que le demandeur a le droit de voir.
+    findDirectoryMatches(admin, content, { requesterId: ticket.user_id as string | null }),
+  ]);
 
   const hints = [
     isAtcSubject
@@ -640,10 +641,13 @@ export async function POST(req: NextRequest) {
       ? 'Il veut progresser côté ATC : utilise son dossier puis le parcours humain « Instruction → Mon Espace → Session de training (ATC) ». Un QCM ne donne jamais automatiquement un grade.'
       : '',
     isSiaviSubject
-      ? 'Sujet détecté : SIAVI (pompiers / sauvetage). Ce n’est ni un pilote CAT ni un contrôleur ATC.'
+      ? 'Sujet détecté : SIAVI (Service d’Incendie Aéronautique et d’Information en Vol — pompiers AFIS). Ce n’est ni un pilote CAT, ni un contrôleur ATC, ni du ground crew.'
+      : '',
+    isSiaviRecruitmentTopic(focusText)
+      ? 'Candidature pompier / SIAVI : formés par le staff (formation ATC très courte). Pas de doc de parcours, pas de serveur d’entreprise. Explique ça puis passe la main à un staff. Jamais [[RESOLU]].'
       : '',
     isGroundCrewTopicHere
-      ? 'Sujet détecté : GROUND CREW (personnel de piste). Ce n’est PAS le contrôle Ground ATC : ne parle ni de test ATC, ni de grade, ni de fréquence.'
+      ? 'Sujet détecté : GROUND CREW (personnel de piste). Ce n’est PAS le contrôle Ground ATC. Candidature : serveur Discord des entreprises / Ground Crew — n’appelle pas le staff pour postuler.'
       : '',
     groundAmbiguous
       ? 'Le mot « ground » est ambigu ici : pose UNE question pour savoir s’il parle du personnel de piste (ground crew) ou de la position de contrôle sol (ATC), et n’explique aucune procédure avant sa réponse.'
@@ -661,19 +665,19 @@ export async function POST(req: NextRequest) {
   let penalize: DocSourceId[] = [];
   if (isGroundCrewTopicHere || groundAmbiguous) {
     prefer = ['ground'];
-    penalize = groundAmbiguous ? ['pilote', 'ifsa'] : ['pilote', 'manuel', 'atc', 'ifsa'];
+    penalize = groundAmbiguous ? ['pilote', 'ifsa', 'siavi'] : ['pilote', 'manuel', 'atc', 'ifsa', 'siavi'];
   } else if (isIfsaTopic) {
     prefer = ['ifsa'];
-    penalize = ['pilote', 'manuel', 'ground'];
+    penalize = ['pilote', 'manuel', 'ground', 'siavi'];
   } else if (isSiaviSubject) {
-    prefer = ['site'];
-    penalize = ['pilote', 'atc', 'manuel', 'ground'];
+    prefer = ['siavi'];
+    penalize = ['pilote', 'atc', 'manuel', 'ground', 'ifsa'];
   } else if (isAtcSubject) {
     prefer = ['atc', 'manuel'];
-    penalize = ['pilote', 'site', 'ground', 'ifsa'];
+    penalize = ['pilote', 'site', 'ground', 'ifsa', 'siavi'];
   } else if (isPilotCatTopic) {
     prefer = ['pilote'];
-    penalize = ['atc', 'manuel', 'site', 'ground', 'ifsa'];
+    penalize = ['atc', 'manuel', 'site', 'ground', 'ifsa', 'siavi'];
   }
 
   const docChunks = isAccountCreationTopic(content)
@@ -682,7 +686,9 @@ export async function POST(req: NextRequest) {
       ? chunksFromSource('ground', 3)
       : isIfsaTopic
         ? chunksFromSource('ifsa', 3)
-        : searchDocs(topicText, { limit: 3, prefer, penalize });
+        : isSiaviSubject
+          ? chunksFromSource('siavi', 3)
+          : searchDocs(topicText, { limit: 3, prefer, penalize });
 
   const buildMessages = (chunks: DocChunk[], history: TicketTurn[] = turns) =>
     toLlmMessages(
@@ -763,7 +769,14 @@ export async function POST(req: NextRequest) {
     // Une demande de training se planifie avec un humain : l'IA donne la marche
     // à suivre, l'instructeur prend le relais pour poser le créneau.
     const needsInstructor = isTrainingRequest(content) && String(ticket.statut || '') !== 'staff_needed';
-    escalate = docLookupFailed || memberNeedsStaff(content) || iaCallsStaff(rawReply) || needsInstructor;
+    const needsSiaviStaff =
+      isSiaviRecruitmentTopic(focusText) && String(ticket.statut || '') !== 'staff_needed';
+    escalate =
+      docLookupFailed ||
+      memberNeedsStaff(content) ||
+      iaCallsStaff(rawReply) ||
+      needsInstructor ||
+      needsSiaviStaff;
   } else {
     // Un échec technique isolé ne justifie pas de réveiller le staff : on le dit
     // honnêtement et on n'escalade qu'au deuxième échec d'affilée.

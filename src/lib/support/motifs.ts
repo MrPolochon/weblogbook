@@ -70,7 +70,7 @@ const TRAINING_VOCAB =
  * de handling tranche sans ambiguïté.
  */
 const GROUND_CREW_VOCAB =
-  /\bground ?crew\b|\bgroundcrew\b|\bpersonnel (de piste|au sol|de piste)\b|\bagent de piste\b|\bagents de piste\b|\bhandling\b|\bmarshall?ing\b|\brepoussage\b|\bpush ?back\b|\bbagagiste\b|\bavitaillement\b|\bdegivrage\b|\bhandleur\b|\bplacement (des |d.)?avions? (a|aux) (la )?portes?\b/;
+  /\bground ?crew\b|\bgroundcrew\b|\bpersonnel (de piste|au sol|de piste)\b|\bagent de piste\b|\bagents de piste\b|\bhandling\b|\bmarshall?ing\b|\brepoussage\b|\bpush ?back\b|\bbagagiste\b|\bavitaillement\b|\bdegivrage\b|\bhandleur\b|\bplacement (des |d.)?avions? (a|aux) (la )?portes?\b|\bserveur ground\b/;
 
 /** Le membre parle du handling au sol, pas du contrôle aérien. */
 export function isGroundCrewTopic(text: string): boolean {
@@ -97,12 +97,26 @@ export function isAtcTopic(text: string): boolean {
   const t = normalize(text);
   // « ground crew » contient « ground » sans rien avoir à voir avec le contrôle.
   if (isGroundCrewTopic(t)) return false;
+  // Pompiers AFIS = SIAVI, pas le parcours contrôleur.
+  if (isSiaviTopic(t)) return false;
   return ATC_STRONG_VOCAB.test(t) || ATC_POSITION_VOCAB.test(t);
 }
 
 /** Pompiers / sauvetage — pas le logbook pilote. */
 export function isSiaviTopic(text: string): boolean {
-  return /\bsiavi\b|\bpompiers?\b|\bincendie\b|\bsauvetage\b|\bfire ?rescue\b/.test(normalize(text));
+  return /\bsiavi\b|\bsiaiv\b|\bpompiers?\b|\bincendie\b|\bsauvetage\b|\bfire ?rescue\b|\binformation en vol\b/.test(
+    normalize(text),
+  );
+}
+
+/** Candidature pompier / SIAVI : formation staff, pas la doc ATC. */
+export function isSiaviRecruitmentTopic(text: string): boolean {
+  const t = normalize(text);
+  if (!isSiaviTopic(t)) return false;
+  return (
+    BECOME_VOCAB.test(t) ||
+    /\b(postul|candidat|recrut|rejoindre|entrer|integrer|former|formation)\b/.test(t)
+  );
 }
 
 /** « Comment devenir contrôleur ? » — une demande de parcours sans le mot « training ». */
@@ -115,6 +129,7 @@ const BECOME_VOCAB = /\bdevenir\b|\bdevient\b|\bdeviens\b|\bje veux etre\b|\bcom
 export function isAtcTrainingTopic(text: string): boolean {
   const t = normalize(text);
   if (isGroundCrewTopic(t)) return false;
+  if (isSiaviTopic(t)) return false;
   if (!ATC_VOCAB.test(t)) return false;
   if (TRAINING_VOCAB.test(t)) return true;
   if (ATC_STRONG_VOCAB.test(t) && BECOME_VOCAB.test(t)) return true;
@@ -156,9 +171,10 @@ export function classifyMotifFromText(text: string): SupportMotifId {
   if (/\bnouveau|\bnew player|\bje (suis|commence)|debutant|débutant|bienvenue|comment (commencer|jouer|s.inscrire)/.test(t)) {
     return 'nouveau';
   }
-  // Le handling au sol n'est ni de l'instruction ni de l'ATC : l'accès est
-  // attribué par le staff, aucun instructeur à déranger.
+  // Handling : candidature sur le serveur entreprises, pas d’instructeur ATC.
   if (isGroundCrewTopic(t)) return 'assistance';
+  // Pompiers SIAVI : formation staff, pas le motif instruction ATC.
+  if (isSiaviTopic(t)) return 'assistance';
   // Avant AeroSchool / CAT : un training ATC part chez les instructeurs, pas sur
   // le parcours CAT pilote. Un QCM ATC explicite reste un sujet AeroSchool.
   if (isAtcTrainingTopic(t) && !/\bqcm\b|\bquestionnaire\b|\bformulaire\b/.test(t)) {
