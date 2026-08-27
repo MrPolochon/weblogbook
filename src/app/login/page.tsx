@@ -1129,7 +1129,7 @@ function LoginPageContent() {
             </div>
             <p className="text-slate-300 text-sm mb-4">
               Souhaitez-vous enregistrer une passkey pour accélérer les prochaines connexions ?
-              Sur PC, un QR s’affiche : scannez-le avec votre téléphone. Une reconnexion par email
+              Sur PC, utilisez Windows Hello ou scannez un QR avec votre téléphone. Une reconnexion par email
               restera obligatoire une fois par mois.
             </p>
             {error && (
