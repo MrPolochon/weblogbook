@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { ArrowLeft, Download, GraduationCap } from 'lucide-react';
-import { LIVRET_PROGRESSION_PDF } from '@/lib/support/livret-progression';
+import { LIVRET_PROGRESSION_VIERGE_PDF } from '@/lib/support/livret-progression';
 
 export const metadata = {
   title: 'Livret de progression — AéroSchool',
@@ -16,7 +16,7 @@ export default function LivretProgressionPage() {
           AeroSchool
         </Link>
         <a
-          href={LIVRET_PROGRESSION_PDF}
+          href={LIVRET_PROGRESSION_VIERGE_PDF}
           download
           className="inline-flex items-center gap-2 rounded-xl bg-amber-600 hover:bg-amber-500 px-4 py-2 text-sm font-semibold text-white"
         >
@@ -38,7 +38,7 @@ export default function LivretProgressionPage() {
           </div>
           <iframe
             title="Livret de progression AéroSchool"
-            src={LIVRET_PROGRESSION_PDF}
+            src={LIVRET_PROGRESSION_VIERGE_PDF}
             className="w-full h-[80vh] rounded-2xl border border-slate-700 bg-slate-950"
           />
         </div>

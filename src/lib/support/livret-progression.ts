@@ -1,10 +1,11 @@
 export const LIVRET_PROGRESSION_URL = '/livret-progression';
+/** Document instructeur rempli (usage interne, pas la page publique). */
 export const LIVRET_PROGRESSION_PDF = '/docs/livret-progression-akizor.pdf';
-/** Formulaire vierge (lien AeroSchool). Le livret rempli AKIZOR reste sur LIVRET_PROGRESSION_PDF. */
+/** Formulaire vierge affiché sur /livret-progression et le lien AeroSchool. */
 export const LIVRET_PROGRESSION_VIERGE_PDF = '/docs/livret-progression-vierge.pdf';
 
 /** Condensé : le détail complet des compétences reste sur ${LIVRET_PROGRESSION_URL}. */
-export const LIVRET_PROGRESSION_IA = `PARCOURS CATÉGORIES (licences CAT 1 à 5) — Livret de progression AeroSchool / Instruction (document instructeur AKIZOR, ${LIVRET_PROGRESSION_URL}).
+export const LIVRET_PROGRESSION_IA = `PARCOURS CATÉGORIES (licences CAT 1 à 5) — Livret de progression AeroSchool / Instruction (${LIVRET_PROGRESSION_URL}).
 Chaque catégorie se fait EN DEUX TEMPS, toujours dans cet ordre :
 1) QCM théorique dans le menu AeroSchool du site ;
 2) partie PRATIQUE ensuite, via le menu Instruction (demande de training, vol instructeur-élève, fiches de compétences).
