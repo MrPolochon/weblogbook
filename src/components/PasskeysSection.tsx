@@ -28,14 +28,20 @@ function defaultDeviceLabel(): string {
 const DESKTOP_PLATFORM_REJECTED =
   'Sur ordinateur, scannez le QR avec votre téléphone. Les clés d’accès Windows de ce PC ne sont pas acceptées.';
 
+function transportsOf(response: unknown): string[] {
+  if (!response || typeof response !== 'object' || !('transports' in response)) return [];
+  const t = (response as { transports?: unknown }).transports;
+  return Array.isArray(t) ? t.filter((x): x is string => typeof x === 'string') : [];
+}
+
 function isDesktopPlatformCredential(cred: {
   authenticatorAttachment?: string;
-  response?: { transports?: string[] };
+  response?: unknown;
 }): boolean {
   if (isMobileBrowser()) return false;
   if (cred.authenticatorAttachment === 'platform') return true;
-  const transports = cred.response?.transports;
-  return Array.isArray(transports) && transports.length > 0 && transports.every((t) => t === 'internal');
+  const transports = transportsOf(cred.response);
+  return transports.length > 0 && transports.every((t) => t === 'internal');
 }
 
 export async function registerPasskeyOnDevice(deviceName?: string): Promise<{ ok: true } | { ok: false; error: string }> {

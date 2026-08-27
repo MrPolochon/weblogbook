@@ -68,8 +68,14 @@ const DESKTOP_PLATFORM_REJECTED =
 
 type WebAuthnClientCredential = {
   authenticatorAttachment?: string;
-  response?: { transports?: string[] };
+  response?: unknown;
 };
+
+function transportsOf(response: unknown): string[] {
+  if (!response || typeof response !== 'object' || !('transports' in response)) return [];
+  const t = (response as { transports?: unknown }).transports;
+  return Array.isArray(t) ? t.filter((x): x is string => typeof x === 'string') : [];
+}
 
 /** Windows Hello / biométrie locale du PC — refusée hors téléphone. */
 export function desktopPlatformAuthenticatorError(
@@ -78,12 +84,8 @@ export function desktopPlatformAuthenticatorError(
 ): string | null {
   if (!credential || isMobileWebAuthnClient(req)) return null;
   if (credential.authenticatorAttachment === 'platform') return DESKTOP_PLATFORM_REJECTED;
-  const transports = credential.response?.transports;
-  if (
-    Array.isArray(transports) &&
-    transports.length > 0 &&
-    transports.every((t) => t === 'internal')
-  ) {
+  const transports = transportsOf(credential.response);
+  if (transports.length > 0 && transports.every((t) => t === 'internal')) {
     return DESKTOP_PLATFORM_REJECTED;
   }
   return null;
