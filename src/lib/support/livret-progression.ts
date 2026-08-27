@@ -1,6 +1,4 @@
 export const LIVRET_PROGRESSION_URL = '/livret-progression';
-/** Document instructeur rempli (usage interne, pas la page publique). */
-export const LIVRET_PROGRESSION_PDF = '/docs/livret-progression-akizor.pdf';
 /** Formulaire vierge affiché sur /livret-progression et le lien AeroSchool. */
 export const LIVRET_PROGRESSION_VIERGE_PDF = '/docs/livret-progression-vierge.pdf';
 
