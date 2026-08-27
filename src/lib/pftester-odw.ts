@@ -242,13 +242,33 @@ export function looksLikeProtobuf(buf: Uint8Array): boolean {
   return (first & 7) === 2;
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const PF_FETCH_TIMEOUT_MS = 8_000;
+
 async function pullLiveTrafficBytes(): Promise<Uint8Array> {
   let lastStatus = 0;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(PF_TRAFFIC_URL, {
-      cache: 'no-store',
-      headers: PF_TRAFFIC_HEADERS,
-    });
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(
+        PF_TRAFFIC_URL,
+        { cache: 'no-store', headers: PF_TRAFFIC_HEADERS },
+        PF_FETCH_TIMEOUT_MS,
+      );
+    } catch (err) {
+      const aborted = err instanceof Error && err.name === 'AbortError';
+      if (aborted) throw new Error('Flux trafic indisponible (timeout)');
+      throw err;
+    }
     lastStatus = res.status;
     if (res.ok) {
       const buf = new Uint8Array(await res.arrayBuffer());

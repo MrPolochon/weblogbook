@@ -1,3 +1,4 @@
+import { Analytics } from '@vercel/analytics/react';
 import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import { Inter } from 'next/font/google';
@@ -47,6 +48,7 @@ export default function RootLayout({
           closeButton
         />
         {children}
+        <Analytics />
       </body>
     </html>
   );

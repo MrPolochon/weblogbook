@@ -9,6 +9,7 @@
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
 import { writeIngest, type PfTrailCursor } from '../src/lib/pf-odw-ingest';
+import { upsertPfOdwHealth } from '../src/lib/pf-odw-health';
 import {
   PF_TRAFFIC_HEADERS,
   PF_TRAFFIC_URL,
@@ -44,8 +45,12 @@ let pending: { planes: PfLiveAircraft[]; source: string } | null = null;
 let ingestBusy = false;
 let lastWsAt = 0;
 let lastWroteAt = 0;
+let lastWroteCount = 0;
+let lastAircraft = 0;
 let ticks = 0;
-let hits = 0;
+let windowHits = 0;
+let windowMiss = 0;
+let wsFailTotal = 0;
 
 function openMixouWs(): WebSocket {
   return new WebSocket(pfTrafficServerWsUrl(serverId), {
@@ -88,6 +93,8 @@ async function flushIngest(): Promise<void> {
       try {
         const wrote = await writeIngest(db, job.planes, cursors);
         lastWroteAt = Date.now();
+        lastWroteCount = wrote;
+        lastAircraft = job.planes.length;
         if (wrote > 0) {
           console.log(`[pf-worker] ${job.source} · ${job.planes.length} avion(s) · ${wrote} point(s)`);
         }
@@ -133,7 +140,18 @@ function snapshotFromWs(): Promise<PfLiveAircraft[] | null> {
 }
 
 async function fetchHttpSnapshot(): Promise<PfLiveAircraft[]> {
-  const res = await fetch(PF_TRAFFIC_URL, { headers: PF_TRAFFIC_HEADERS, cache: 'no-store' });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8_000);
+  let res: Response;
+  try {
+    res = await fetch(PF_TRAFFIC_URL, {
+      headers: PF_TRAFFIC_HEADERS,
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) throw new Error(`amont ${res.status}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
   const planes = planesFromBytes(bytes);
@@ -184,18 +202,45 @@ async function wsLoop(): Promise<void> {
     const planes = await snapshotFromWs();
     if (planes?.length) {
       misses = 0;
-      hits += 1;
+      windowHits += 1;
       lastWsAt = Date.now();
+      lastAircraft = planes.length;
       enqueueIngest(planes, 'ws');
     } else {
       misses += 1;
+      windowMiss += 1;
+      wsFailTotal += 1;
       if (misses === 1 || misses % 15 === 0) {
         console.log(`[pf-worker] websocket sans trafic (${misses})`);
       }
     }
     if (ticks % 30 === 0) {
-      console.log(`[pf-worker] 30 s · ${hits} snapshot(s) Mixou · dernier point ${lastWroteAt ? `${Math.round((Date.now() - lastWroteAt) / 1000)} s` : 'aucun'}`);
-      hits = 0;
+      const tickMs = Date.now() - started;
+      console.log(
+        JSON.stringify({
+          evt: 'pf-odw-worker',
+          tickMs,
+          aircraft: lastAircraft,
+          points: lastWroteCount,
+          wsOk30s: windowHits,
+          wsMiss30s: windowMiss,
+          wsFailTotal,
+          lastPointSec: lastWroteAt ? Math.round((Date.now() - lastWroteAt) / 1000) : null,
+        }),
+      );
+      await upsertPfOdwHealth(db, {
+        last_source: 'ws',
+        last_tick_ms: tickMs,
+        last_aircraft: lastAircraft,
+        last_points: lastWroteCount,
+        last_ws_at: lastWsAt ? new Date(lastWsAt).toISOString() : null,
+        last_write_at: lastWroteAt ? new Date(lastWroteAt).toISOString() : null,
+        ws_ok_30s: windowHits,
+        ws_miss_30s: windowMiss,
+        ws_fail_total: wsFailTotal,
+      }).catch(() => undefined);
+      windowHits = 0;
+      windowMiss = 0;
     }
     const wait = Math.max(0, TICK_MS - (Date.now() - started));
     if (wait) await new Promise((r) => setTimeout(r, wait));

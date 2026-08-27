@@ -1,7 +1,13 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { isStaleRefreshToken } from '@/lib/auth/session-error';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isDiscordLinkRequired, isTemporaryDiscordSanctionActive, type DiscordLinkStatus } from '@/lib/discord-link';
+
+function copyCookies(from: NextResponse, to: NextResponse) {
+  from.cookies.getAll().forEach((cookie) => to.cookies.set(cookie));
+  return to;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cache module-level du statut de maintenance (TTL : 30 s)
@@ -122,6 +128,10 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet: { name: string; value: string; options?: object }[]) {
+          // Propager le nouveau refresh token à la requête en cours (RSC / API)
+          // sinon getUser() rejoue l’ancien token → refresh_token_not_found.
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, { path: '/', ...options })
           );
@@ -129,11 +139,14 @@ export async function middleware(request: NextRequest) {
       },
     }
   );
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (!user) {
+    if (isStaleRefreshToken(authError)) {
+      await supabase.auth.signOut();
+    }
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    return NextResponse.redirect(url);
+    return copyCookies(response, NextResponse.redirect(url));
   }
 
   const pendingVerification = request.cookies.get('pending_login_verification')?.value;
@@ -141,7 +154,7 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('step', 'verify');
-    return NextResponse.redirect(url);
+    return copyCookies(response, NextResponse.redirect(url));
   }
 
   // All DB checks in a single parallel batch instead of sequential
@@ -182,7 +195,7 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('message', securityErr ? 'inactivity' : 'security_logout');
-    return NextResponse.redirect(url);
+    return copyCookies(response, NextResponse.redirect(url));
   }
 
   // Handle admin-only login
@@ -200,7 +213,7 @@ export async function middleware(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = '/login';
       url.searchParams.set('message', 'admin_only');
-      return NextResponse.redirect(url);
+      return copyCookies(response, NextResponse.redirect(url));
     }
   }
 
@@ -216,7 +229,7 @@ export async function middleware(request: NextRequest) {
     if (isAdminPageRoute && roleFromDiscord !== null && roleFromDiscord !== 'admin') {
       const url = request.nextUrl.clone();
       url.pathname = '/';
-      return NextResponse.redirect(url);
+      return copyCookies(response, NextResponse.redirect(url));
     }
   }
 
@@ -250,7 +263,7 @@ export async function middleware(request: NextRequest) {
       if (userRole !== 'admin') {
         const url = request.nextUrl.clone();
         url.pathname = '/maintenance';
-        return NextResponse.redirect(url);
+        return copyCookies(response, NextResponse.redirect(url));
       }
     }
   }
@@ -273,7 +286,7 @@ export async function middleware(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = '/login';
       url.searchParams.set('message', 'discord_removed');
-      return NextResponse.redirect(url);
+      return copyCookies(response, NextResponse.redirect(url));
     }
 
     const isTempBlocked =
@@ -286,7 +299,7 @@ export async function middleware(request: NextRequest) {
     if ((needsDiscordLink || invalidDiscordMembership || isTempBlocked) && !isDiscordRequiredPage) {
       const url = request.nextUrl.clone();
       url.pathname = '/discord-obligatoire';
-      return NextResponse.redirect(url);
+      return copyCookies(response, NextResponse.redirect(url));
     }
   }
 

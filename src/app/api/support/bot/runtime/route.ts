@@ -1,10 +1,12 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { waitUntil } from '@vercel/functions';
 import { getDiscordGuildId, getDiscordRequiredRoleId } from '@/lib/discord-link';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { assertSupportBotSecret, getSupportConfig } from '@/lib/support/bot-auth';
-import { discordGetMe, ensureSupportGuildCommands } from '@/lib/support/discord-api';
+import { discordGetMe } from '@/lib/support/discord-api';
+
+let cachedBotUser: { id: string; at: number } | null = null;
+const BOT_ME_TTL_MS = 5 * 60 * 1000;
 
 export async function GET(req: NextRequest) {
   const denied = assertSupportBotSecret(req);
@@ -18,14 +20,18 @@ export async function GET(req: NextRequest) {
     .limit(500);
   const open_channel_ids = (openRows || []).map((r) => String(r.channel_id)).filter(Boolean);
 
-  let bot_user_id: string | null = null;
-  try {
-    const me = await discordGetMe();
-    bot_user_id = String(me.id || '') || null;
-  } catch { /* ignore */ }
+  let bot_user_id: string | null = cachedBotUser && Date.now() - cachedBotUser.at < BOT_ME_TTL_MS
+    ? cachedBotUser.id
+    : null;
+  if (!bot_user_id) {
+    try {
+      const me = await discordGetMe();
+      bot_user_id = String(me.id || '') || null;
+      if (bot_user_id) cachedBotUser = { id: bot_user_id, at: Date.now() };
+    } catch { /* ignore */ }
+  }
 
   const guildId = getDiscordGuildId() || cfg?.guild_id || null;
-  waitUntil(ensureSupportGuildCommands(guildId));
 
   return NextResponse.json({
     ok: true,

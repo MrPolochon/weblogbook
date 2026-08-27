@@ -19,7 +19,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ userId
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Admin requis.' }, { status: 403 });
 
-    const updatedLink = await refreshDiscordLinkState(userId);
+    const updatedLink = await refreshDiscordLinkState(userId, { force: true });
 
     return NextResponse.json({
       ok: true,

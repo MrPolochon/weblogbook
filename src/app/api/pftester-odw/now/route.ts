@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requirePfTesterAdmin } from '@/lib/pftester-odw-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { PF_DEFAULT_SERVER_ID } from '@/lib/pftester-odw';
+import { readPfOdwHealth, toPublicHealth } from '@/lib/pf-odw-health';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,6 +106,7 @@ export async function GET() {
     });
 
     const newest = rows[0]?.last_seen_at ? new Date(rows[0].last_seen_at).getTime() : Date.now();
+    const health = toPublicHealth(await readPfOdwHealth(db));
 
     return NextResponse.json(
       {
@@ -112,6 +114,7 @@ export async function GET() {
         count: aircraft.length,
         fetchedAt: newest,
         aircraft,
+        health,
       },
       { headers: NO_STORE },
     );

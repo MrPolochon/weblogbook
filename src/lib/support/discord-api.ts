@@ -8,6 +8,8 @@ function botToken(): string {
   return t;
 }
 
+export type DiscordApiError = Error & { status?: number; retryAfterMs?: number };
+
 export async function discordFetch(path: string, init?: RequestInit) {
   const res = await fetch(`${DISCORD_API}${path}`, {
     ...init,
@@ -24,12 +26,14 @@ export async function discordFetch(path: string, init?: RequestInit) {
       typeof json.message === 'string' ? json.message : `Discord HTTP ${res.status}`
     ) as DiscordApiError;
     err.status = res.status;
+    const retryAfter = Number(json.retry_after ?? res.headers.get('retry-after'));
+    if (res.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0) {
+      err.retryAfterMs = retryAfter < 100 ? retryAfter * 1000 : retryAfter;
+    }
     throw err;
   }
   return json;
 }
-
-export type DiscordApiError = Error & { status?: number };
 
 /** 429 : renommer un salon est limité à ~2 fois par 10 minutes. */
 export function isDiscordRateLimit(e: unknown): boolean {
@@ -186,10 +190,12 @@ export const SUPPORT_GUILD_COMMANDS = [
 ];
 
 let lastCommandsEnsure = 0;
+const COMMANDS_ENSURE_TTL_MS = 6 * 60 * 60 * 1000;
 
 /**
  * Enregistre les commandes de guilde du support (idempotent).
  * Application id = GET /users/@me (token bot). Guilde = DISCORD_GUILD_ID.
+ * Ne pas appeler à chaque poll runtime : Discord rate-limite PUT /commands.
  */
 export async function ensureSupportGuildCommands(
   guildId?: string | null,
@@ -198,7 +204,7 @@ export async function ensureSupportGuildCommands(
   const gid = String(getDiscordGuildId() || guildId || '').trim();
   if (!gid) return;
   const now = Date.now();
-  if (!opts?.force && now - lastCommandsEnsure < 10 * 60 * 1000) return;
+  if (!opts?.force && now - lastCommandsEnsure < COMMANDS_ENSURE_TTL_MS) return;
   lastCommandsEnsure = now;
   try {
     const me = await discordGetMe();
@@ -209,6 +215,13 @@ export async function ensureSupportGuildCommands(
       body: JSON.stringify(SUPPORT_GUILD_COMMANDS),
     });
   } catch (e) {
+    const retry = (e as DiscordApiError).retryAfterMs;
+    if (isDiscordRateLimit(e)) {
+      lastCommandsEnsure = Date.now() + Math.max(30 * 60 * 1000, retry || 0);
+      console.warn('[discord] ensureSupportGuildCommands 429, prochaine tentative plus tard');
+      return;
+    }
+    lastCommandsEnsure = 0;
     console.error('[discord] ensureSupportGuildCommands', e);
   }
 }

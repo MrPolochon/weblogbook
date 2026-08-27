@@ -18,6 +18,18 @@ import {
   PF_TRAIL_MIN_STEP,
 } from '@/lib/pftester-odw';
 
+type PfHealth = {
+  source: string | null;
+  tickMs: number;
+  aircraft: number;
+  points: number;
+  wsOk30s: number;
+  wsMiss30s: number;
+  wsFailTotal: number;
+  workerFresh: boolean;
+  cronLastStatus: string | null;
+};
+
 type PfAircraft = {
   id: string;
   serverId: string;
@@ -576,6 +588,7 @@ export default function PfTesterOdwMap() {
   });
   const bootFadeRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
+  const [health, setHealth] = useState<PfHealth | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [feedServerId, setFeedServerId] = useState<string | null>(null);
@@ -798,6 +811,7 @@ export default function PfTesterOdwMap() {
       const snap = await fetch(`/api/pftester-odw/now?t=${Date.now()}`, { cache: 'no-store' });
       if (snap.ok) {
         const data = await snap.json().catch(() => null);
+        if (data?.health && typeof data.health === 'object') setHealth(data.health as PfHealth);
         const at = typeof data?.fetchedAt === 'number' ? data.fetchedAt : 0;
         const age = at ? Date.now() - at : Infinity;
         if (data && Array.isArray(data.aircraft) && data.aircraft.length && age < 20_000) {
@@ -1635,6 +1649,17 @@ export default function PfTesterOdwMap() {
           {feedAgeSec !== null && (
             <p className={`text-[11px] font-mono ${feedAgeSec > 10 ? 'text-amber-300' : 'text-slate-500'}`}>
               position reçue il y a {feedAgeSec} s
+            </p>
+          )}
+          {health && (
+            <p className={`text-[11px] font-mono ${health.workerFresh ? 'text-slate-500' : 'text-amber-300'}`}>
+              {health.workerFresh ? 'worker' : 'worker arrêté'}
+              {` · collecte ${health.tickMs} ms`}
+              {` · ${health.aircraft} av`}
+              {` · +${health.points} pts`}
+              {` · WS ${health.wsOk30s} ok / ${health.wsMiss30s} vides`}
+              {health.wsFailTotal ? ` · ${health.wsFailTotal} échecs` : ''}
+              {!health.workerFresh && health.cronLastStatus ? ` · cron ${health.cronLastStatus}` : ''}
             </p>
           )}
         </div>

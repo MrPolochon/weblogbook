@@ -29,10 +29,18 @@ export async function GET() {
   let lastBodyHint = '';
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const upstream = await fetch(PF_TRAFFIC_URL, {
-        headers: PF_TRAFFIC_HEADERS,
-        cache: 'no-store',
-      });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 8_000);
+      let upstream: Response;
+      try {
+        upstream = await fetch(PF_TRAFFIC_URL, {
+          headers: PF_TRAFFIC_HEADERS,
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
       lastStatus = upstream.status;
       if (upstream.ok) {
         const body = await upstream.arrayBuffer();

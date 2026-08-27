@@ -142,9 +142,14 @@ export async function upsertDiscordLinkState(userId: string, input: DiscordState
   return row;
 }
 
-export async function refreshDiscordLinkState(userId: string) {
+export async function refreshDiscordLinkState(userId: string, opts?: { force?: boolean }) {
   const link = await getDiscordLinkForUser(userId);
   if (!link?.discord_user_id) return link;
+
+  const lastSync = link.last_sync_at ? new Date(link.last_sync_at).getTime() : 0;
+  if (!opts?.force && lastSync && Date.now() - lastSync < 2 * 60 * 1000) {
+    return link;
+  }
 
   const guildId = getDiscordGuildId();
   const requiredRoleId = getDiscordRequiredRoleId();

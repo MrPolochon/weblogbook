@@ -65,7 +65,7 @@ export async function POST() {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    const link = await refreshDiscordLinkState(user.id);
+    const link = await refreshDiscordLinkState(user.id, { force: true });
     return NextResponse.json({ ok: true, link });
   } catch (error) {
     console.error('Discord link POST error:', error);
