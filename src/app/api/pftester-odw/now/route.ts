@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { requirePfTesterAdmin } from '@/lib/pftester-odw-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { PF_DEFAULT_SERVER_ID } from '@/lib/pftester-odw';
 import { readPfOdwHealth, toPublicHealth } from '@/lib/pf-odw-health';
@@ -46,9 +45,6 @@ type PosRow = {
  * rafraîchir la carte chaque seconde, sans retélécharger le protobuf mondial.
  */
 export async function GET() {
-  const auth = await requirePfTesterAdmin();
-  if (!auth.ok) return auth.response;
-
   try {
     const db = createAdminClient();
     const cutoff = new Date(Date.now() - FRESH_MS).toISOString();

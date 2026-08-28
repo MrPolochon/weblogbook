@@ -68,13 +68,14 @@ export async function middleware(request: NextRequest) {
     pathname === '/api/login-logo' ||
     pathname === '/api/maintenance-status' ||
     pathname === '/api/pftester-odw/access' ||
-    // Ces routes vérifient elles-mêmes l'admin : sans exemption, une redirection
-    // du middleware renverrait du HTML en 200 que le client décoderait comme trafic.
+    // Tracker PFtesterODW public (/carte-atc) : sans exemption, le middleware
+    // redirigerait vers /login et le client recevrait du HTML au lieu du JSON.
     pathname === '/api/pftester-odw/live' ||
     pathname === '/api/pftester-odw/flights' ||
     pathname === '/api/pftester-odw/tracks' ||
     pathname === '/api/pftester-odw/now' ||
     pathname.startsWith('/api/pftester-odw/tiles/') ||
+    pathname === '/api/carte-atc/flights' ||
     pathname.startsWith('/api/cron/');
   const isApiDiscord = pathname.startsWith('/api/discord/');
   const isApiSupportBot = pathname.startsWith('/api/support/bot');

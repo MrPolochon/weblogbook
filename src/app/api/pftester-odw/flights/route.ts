@@ -1,14 +1,10 @@
 import { NextResponse } from 'next/server';
-import { requirePfTesterAdmin } from '@/lib/pftester-odw-auth';
 import { persistPfTracks } from '@/lib/pf-odw-persist';
 import { configuredServerId, fetchLiveTrafficResult, filterByServer } from '@/lib/pftester-odw';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-  const auth = await requirePfTesterAdmin();
-  if (!auth.ok) return auth.response;
-
   const serverId = configuredServerId();
 
   try {

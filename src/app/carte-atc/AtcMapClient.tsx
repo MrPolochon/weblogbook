@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { RefreshCw, Radio, Layers, ArrowLeft, Info, X, ZoomIn, ZoomOut, RotateCcw, Plane, RotateCw } from 'lucide-react';
 import PfTesterOdwMap from './PfTesterOdwMap';
+import PfTesterOdwIntroModal, { PF_ODW_INTRO_STORAGE_KEY } from './PfTesterOdwIntroModal';
 import {
   AIRPORT_TO_FIR,
   DEFAULT_FIR_ZONES,
@@ -194,8 +195,8 @@ export default function AtcMapClient() {
   const [showAirports, setShowAirports] = useState(true);
   const [showWaypoints, setShowWaypoints] = useState(true);
   const [showVors, setShowVors] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [pfMode, setPfMode] = useState(false);
+  const [pfMode, setPfMode] = useState(true);
+  const [pfMapAllowed, setPfMapAllowed] = useState(false);
 
   const fetchMapData = useCallback(async () => {
     try {
@@ -218,17 +219,13 @@ export default function AtcMapClient() {
   useEffect(() => { fetchMapData(); }, [fetchMapData]);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch('/api/pftester-odw/access', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((data) => {
-        if (cancelled) return;
-        setIsAdmin(Boolean(data?.isAdmin));
-      })
-      .catch(() => {
-        if (!cancelled) setIsAdmin(false);
-      });
-    return () => { cancelled = true; };
+    try {
+      if (sessionStorage.getItem(PF_ODW_INTRO_STORAGE_KEY) === '1') {
+        setPfMapAllowed(true);
+      }
+    } catch {
+      /* sessionStorage indisponible : le popup reste obligatoire */
+    }
   }, []);
 
   useEffect(() => {
@@ -459,20 +456,18 @@ export default function AtcMapClient() {
             )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => setPfMode((v) => !v)}
-                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition ${
-                  pfMode
-                    ? 'bg-cyan-600/25 text-cyan-200 border-cyan-500/40 hover:bg-cyan-600/35'
-                    : 'bg-slate-800 text-slate-300 border-slate-600/60 hover:bg-slate-700'
-                }`}
-                title="Basculer vers le tracker Project Flight (admins)"
-              >
-                {pfMode ? 'ODW PTFS' : 'PFtesterODW'}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setPfMode((v) => !v)}
+              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition ${
+                pfMode
+                  ? 'bg-cyan-600/25 text-cyan-200 border-cyan-500/40 hover:bg-cyan-600/35'
+                  : 'bg-slate-800 text-slate-300 border-slate-600/60 hover:bg-slate-700'
+              }`}
+              title="Basculer entre le tracker Project Flight et la carte PTFS"
+            >
+              {pfMode ? 'ODW PTFS' : 'PFtesterODW'}
+            </button>
             {!pfMode && (
               <button onClick={() => { setLoading(true); fetchMapData(); }} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700" title="Actualiser">
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -486,7 +481,7 @@ export default function AtcMapClient() {
             <Info className="h-3 w-3 text-slate-500 shrink-0" />
             <p className="text-[11px] text-slate-500 leading-none">
               {pfMode
-                ? <>PFtesterODW — positions live du serveur privé Mixou Airlines, réservé aux admins.</>
+                ? <>PFtesterODW — positions live du serveur privé Mixou Airlines (test Project Flight).</>
                 : <>Les positions affichées sont <span className="text-slate-400">simulées</span> à partir des plans de vol — PTFS ne nous autorise pas à exploiter les données en temps réel du jeu.</>}
             </p>
           </div>
@@ -494,10 +489,20 @@ export default function AtcMapClient() {
       </header>
 
       <div className="flex-1 min-h-0 max-w-[1600px] w-full mx-auto p-2 sm:p-4 flex flex-col md:flex-row gap-3 md:gap-4">
-        {pfMode && isAdmin ? (
-          <PfTesterOdwMap />
+        {pfMode && pfMapAllowed ? <PfTesterOdwMap /> : null}
+        {pfMode && !pfMapAllowed ? (
+          <PfTesterOdwIntroModal
+            onContinue={() => {
+              try {
+                sessionStorage.setItem(PF_ODW_INTRO_STORAGE_KEY, '1');
+              } catch {
+                /* ignore */
+              }
+              setPfMapAllowed(true);
+            }}
+          />
         ) : null}
-        <div className={pfMode && isAdmin ? 'hidden' : 'contents'}>
+        <div className={pfMode ? 'hidden' : 'contents'}>
         {/* Carte */}
         <div className="flex-1 min-h-0 relative rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden touch-none"
           ref={mapContainerRef}

@@ -1,8 +1,8 @@
 import AtcMapClient from './AtcMapClient';
 
 export const metadata = {
-  title: 'Carte œil du web (ODW) — Mixou Airlines PTFS',
-  description: 'Visualisez en temps réel les contrôleurs aériens en service sur la carte PTFS.',
+  title: 'PFtesterODW — Mixou Airlines',
+  description: 'Test public de tracking d’avions sur le serveur Project Flight Mixou Airlines.',
 };
 
 export default function CarteAtcPage() {

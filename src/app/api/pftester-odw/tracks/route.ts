@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { requirePfTesterAdmin } from '@/lib/pftester-odw-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export const dynamic = 'force-dynamic';
@@ -27,9 +26,6 @@ type Row = {
  * carte d'afficher le trajet déjà parcouru sans qu'un navigateur soit resté ouvert.
  */
 export async function GET() {
-  const auth = await requirePfTesterAdmin();
-  if (!auth.ok) return auth.response;
-
   try {
     const db = createAdminClient();
     const { data, error } = await db

@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { requirePfTesterAdmin } from '@/lib/pftester-odw-auth';
 import { persistPfTracks } from '@/lib/pf-odw-persist';
 import {
   PF_TRAFFIC_HEADERS,
@@ -22,9 +21,6 @@ const NO_STORE = {
 const RETRY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 export async function GET() {
-  const auth = await requirePfTesterAdmin();
-  if (!auth.ok) return auth.response;
-
   let lastStatus = 0;
   let lastBodyHint = '';
   for (let attempt = 0; attempt < 3; attempt++) {
