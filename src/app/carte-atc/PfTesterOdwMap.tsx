@@ -517,6 +517,7 @@ const TileLayer = memo(function TileLayer({
 const TrailLayer = memo(function TrailLayer({
   plotted,
   trails,
+  selectedId,
   zoom,
   pan,
   containerW,
@@ -527,6 +528,7 @@ const TrailLayer = memo(function TrailLayer({
 }: {
   plotted: PfAircraft[];
   trails: Record<string, TrailPt[]>;
+  selectedId: string | null;
   zoom: number;
   pan: { x: number; y: number };
   containerW: number;
@@ -535,11 +537,13 @@ const TrailLayer = memo(function TrailLayer({
   dispH: number;
   bounds: MapBounds;
 }) {
+  if (!selectedId) return null;
   const pad = Math.max(0.35, (40 / Math.max(1, dispW * zoom)) * PF_MAP_W);
   const minStep = (2.5 / Math.max(1, dispW * zoom)) * PF_MAP_W;
   return (
     <>
       {plotted.map((a) => {
+        if (a.id !== selectedId) return null;
         const trail = trails[trailKey(a)];
         if (!trail || trail.length < 2) return null;
         const vis = trailVisible(trail, bounds, pad, minStep);
@@ -1486,6 +1490,7 @@ export default function PfTesterOdwMap() {
           <TrailLayer
             plotted={plotted}
             trails={trails}
+            selectedId={selectedId}
             zoom={zoom}
             pan={pan}
             containerW={viewport.w}
