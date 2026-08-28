@@ -1654,8 +1654,8 @@ export default function PfTesterOdwMap() {
           {health && (
             <p className={`text-[11px] font-mono ${health.workerFresh ? 'text-slate-500' : 'text-amber-300'}`}>
               {health.workerFresh ? 'worker' : 'worker arrêté'}
+              {health.workerFresh && health.aircraft === 0 ? ' · aucun trafic Mixou' : ` · ${health.aircraft} av`}
               {` · collecte ${health.tickMs} ms`}
-              {` · ${health.aircraft} av`}
               {` · +${health.points} pts`}
               {` · WS ${health.wsOk30s} ok / ${health.wsMiss30s} vides`}
               {health.wsFailTotal ? ` · ${health.wsFailTotal} échecs` : ''}

@@ -35,13 +35,12 @@ export type PfOdwHealthPublic = {
   cronLastStatus: string | null;
 };
 
-const WORKER_FRESH_MS = 8_000;
+/** Heartbeat worker (health.updated_at), pas le dernier avion vu. */
+const WORKER_FRESH_MS = 45_000;
 
 export function toPublicHealth(row: PfOdwHealthRow | null): PfOdwHealthPublic | null {
   if (!row) return null;
-  const wsAt = row.last_ws_at ? new Date(row.last_ws_at).getTime() : 0;
-  const writeAt = row.last_write_at ? new Date(row.last_write_at).getTime() : 0;
-  const newest = Math.max(wsAt, writeAt);
+  const heartbeat = row.updated_at ? new Date(row.updated_at).getTime() : 0;
   return {
     source: row.last_source,
     tickMs: row.last_tick_ms,
@@ -52,7 +51,7 @@ export function toPublicHealth(row: PfOdwHealthRow | null): PfOdwHealthPublic | 
     wsFailTotal: Number(row.ws_fail_total) || 0,
     lastWsAt: row.last_ws_at,
     lastWriteAt: row.last_write_at,
-    workerFresh: newest > 0 && Date.now() - newest < WORKER_FRESH_MS,
+    workerFresh: heartbeat > 0 && Date.now() - heartbeat < WORKER_FRESH_MS,
     cronLastAt: row.cron_last_at,
     cronLastMs: row.cron_last_ms,
     cronLastStatus: row.cron_last_status,
@@ -71,10 +70,12 @@ export async function readPfOdwHealth(db: SupabaseClient): Promise<PfOdwHealthRo
 export async function upsertPfOdwHealth(
   db: SupabaseClient,
   patch: Partial<Omit<PfOdwHealthRow, 'id'>>,
+  opts?: { heartbeat?: boolean },
 ): Promise<void> {
-  const { error } = await db.from('pf_odw_health').upsert(
-    { id: 1, ...patch, updated_at: new Date().toISOString() },
-    { onConflict: 'id' },
-  );
+  const row: Record<string, unknown> = { id: 1, ...patch };
+  if (opts?.heartbeat !== false) {
+    row.updated_at = new Date().toISOString();
+  }
+  const { error } = await db.from('pf_odw_health').upsert(row, { onConflict: 'id' });
   if (error) console.error('[pf-odw-health] écriture', error.message);
 }

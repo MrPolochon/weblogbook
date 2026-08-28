@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { loadCursors, pfPlaneKey, writeIngest } from '@/lib/pf-odw-ingest';
-import { upsertPfOdwHealth } from '@/lib/pf-odw-health';
+import { readPfOdwHealth, upsertPfOdwHealth } from '@/lib/pf-odw-health';
 import {
   PF_TRAFFIC_HEADERS,
   PF_TRAFFIC_URL,
@@ -32,7 +32,7 @@ function remaining(started: number): number {
 
 /**
  * Filet de sécurité si le worker Railway est à l'arrêt : une passe par minute.
- * La source principale reste le worker à 1 Hz.
+ * Ne pas toucher health.updated_at : c'est le heartbeat du process worker.
  */
 export async function GET(request: NextRequest) {
   if (!cronOk(request)) {
@@ -44,8 +44,12 @@ export async function GET(request: NextRequest) {
   const log = (payload: Record<string, unknown>) => {
     console.log(JSON.stringify({ evt: 'pf-odw-cron', ms: Date.now() - started, ...payload }));
   };
+  const touchCron = (patch: Parameters<typeof upsertPfOdwHealth>[1]) =>
+    upsertPfOdwHealth(db, patch, { heartbeat: false });
 
   try {
+    const health = await readPfOdwHealth(db);
+    const heartbeatAt = health?.updated_at ? new Date(health.updated_at).getTime() : 0;
     const { data: latest } = await db
       .from('pf_odw_flights')
       .select('last_seen_at')
@@ -53,20 +57,23 @@ export async function GET(request: NextRequest) {
       .limit(1)
       .maybeSingle();
     const lastSeen = latest?.last_seen_at ? new Date(latest.last_seen_at).getTime() : 0;
-    if (lastSeen && Date.now() - lastSeen < WORKER_FRESH_MS) {
+    if (
+      (heartbeatAt && Date.now() - heartbeatAt < WORKER_FRESH_MS) ||
+      (lastSeen && Date.now() - lastSeen < WORKER_FRESH_MS)
+    ) {
       const ms = Date.now() - started;
-      await upsertPfOdwHealth(db, {
+      await touchCron({
         cron_last_at: new Date().toISOString(),
         cron_last_ms: ms,
         cron_last_status: 'worker-alive',
       });
-      log({ skipped: 'worker-alive', lastSeenAt: latest?.last_seen_at });
+      log({ skipped: 'worker-alive', lastSeenAt: latest?.last_seen_at, heartbeatAt: health?.updated_at });
       return NextResponse.json({ ok: true, skipped: 'worker-alive', ms, lastSeenAt: latest?.last_seen_at });
     }
 
     if (remaining(started) < UPSTREAM_TIMEOUT_MS + 1_500) {
       const ms = Date.now() - started;
-      await upsertPfOdwHealth(db, {
+      await touchCron({
         cron_last_at: new Date().toISOString(),
         cron_last_ms: ms,
         cron_last_status: 'budget',
@@ -88,7 +95,7 @@ export async function GET(request: NextRequest) {
       const aborted = err instanceof Error && err.name === 'AbortError';
       const ms = Date.now() - started;
       const status = aborted ? 'amont-timeout' : 'amont-injoignable';
-      await upsertPfOdwHealth(db, {
+      await touchCron({
         cron_last_at: new Date().toISOString(),
         cron_last_ms: ms,
         cron_last_status: status,
@@ -101,7 +108,7 @@ export async function GET(request: NextRequest) {
     if (!upstream.ok) {
       const ms = Date.now() - started;
       const status = `amont-${upstream.status}`;
-      await upsertPfOdwHealth(db, {
+      await touchCron({
         cron_last_at: new Date().toISOString(),
         cron_last_ms: ms,
         cron_last_status: status,
@@ -112,7 +119,7 @@ export async function GET(request: NextRequest) {
     const bytes = new Uint8Array(await upstream.arrayBuffer());
     if (!looksLikeProtobuf(bytes)) {
       const ms = Date.now() - started;
-      await upsertPfOdwHealth(db, {
+      await touchCron({
         cron_last_at: new Date().toISOString(),
         cron_last_ms: ms,
         cron_last_status: 'amont-non-protobuf',
@@ -132,7 +139,7 @@ export async function GET(request: NextRequest) {
     }
 
     const ms = Date.now() - started;
-    await upsertPfOdwHealth(db, {
+    await touchCron({
       last_source: 'cron',
       last_tick_ms: ms,
       last_aircraft: planes.length,
@@ -149,7 +156,7 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     const ms = Date.now() - started;
     console.error('[cron/pf-odw-tracks]', err);
-    await upsertPfOdwHealth(db, {
+    await touchCron({
       cron_last_at: new Date().toISOString(),
       cron_last_ms: ms,
       cron_last_status: 'ingest-error',

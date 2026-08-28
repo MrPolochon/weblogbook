@@ -1,10 +1,10 @@
 /**
  * PFtesterODW — enregistreur 24/7.
  *
- * Mixou n'envoie le protobuf qu'à l'ouverture du WebSocket, puis des
- * heartbeats vides. Un socket long n'avance donc plus. On se reconnecte
- * chaque seconde, on prend le snapshot, on écrit dans Supabase. La carte
- * ne fait que lire : aucun onglet n'a besoin d'être ouvert.
+ * Un seul WebSocket Mixou, gardé ouvert. Les frames vides sont des
+ * heartbeats, pas des échecs. Le protobuf n'arrive pas forcément à
+ * l'ouverture : on attend. Le snapshot HTTP (10 s) reste la source
+ * fiable dès que le WS ne livre pas d'avions.
  */
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
@@ -21,10 +21,13 @@ import {
   type PfLiveAircraft,
 } from '../src/lib/pftester-odw';
 
-const TICK_MS = Number(process.env.PF_WORKER_POLL_MS || 1000);
 const SNAPSHOT_MS = 10_000;
+const HEALTH_MS = 10_000;
 const PURGE_EVERY_MS = 60_000;
-const WS_WAIT_MS = 2_500;
+const WS_BACKOFF_MIN_MS = 1_000;
+const WS_BACKOFF_MAX_MS = 30_000;
+const HTTP_IF_WS_STALE_MS = 4_000;
+const SILENCE_LOG_MS = 60_000;
 const FLIGHT_IDLE_SEC = Number(process.env.PF_WORKER_IDLE_SEC || 120);
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -47,26 +50,44 @@ let lastWsAt = 0;
 let lastWroteAt = 0;
 let lastWroteCount = 0;
 let lastAircraft = 0;
-let ticks = 0;
+let lastTickMs = 0;
+let lastSource = 'boot';
 let windowHits = 0;
 let windowMiss = 0;
+let windowStarted = Date.now();
 let wsFailTotal = 0;
+let lastSilenceLog = 0;
+let activeWs: WebSocket | null = null;
+let interruptSleep: (() => void) | null = null;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      if (interruptSleep === wake) interruptSleep = null;
+      resolve();
+    }, ms);
+    const wake = () => {
+      clearTimeout(timer);
+      if (interruptSleep === wake) interruptSleep = null;
+      resolve();
+    };
+    interruptSleep = wake;
+  });
+}
 
 function openMixouWs(): WebSocket {
   return new WebSocket(pfTrafficServerWsUrl(serverId), {
     headers: PF_TRAFFIC_HEADERS,
+    perMessageDeflate: false,
   });
 }
 
-async function messageBytes(data: unknown): Promise<Uint8Array> {
+function messageBytes(data: WebSocket.RawData): Uint8Array {
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
   if (ArrayBuffer.isView(data)) {
     return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   }
-  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(data)) return new Uint8Array(data);
-  if (typeof Blob !== 'undefined' && data instanceof Blob) {
-    return new Uint8Array(await data.arrayBuffer());
-  }
+  if (Buffer.isBuffer(data)) return new Uint8Array(data);
   return new Uint8Array();
 }
 
@@ -78,6 +99,8 @@ function planesFromBytes(bytes: Uint8Array): PfLiveAircraft[] | null {
 }
 
 function enqueueIngest(planes: PfLiveAircraft[], source: string): void {
+  lastAircraft = planes.length;
+  lastSource = source;
   if (!planes.length) return;
   pending = { planes, source };
   void flushIngest();
@@ -106,37 +129,6 @@ async function flushIngest(): Promise<void> {
     ingestBusy = false;
     if (pending) void flushIngest();
   }
-}
-
-function snapshotFromWs(): Promise<PfLiveAircraft[] | null> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const ws = openMixouWs();
-    ws.binaryType = 'arraybuffer';
-    const done = (planes: PfLiveAircraft[] | null) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try {
-        ws.close();
-      } catch {
-        /* ignore */
-      }
-      resolve(planes);
-    };
-    const timer = setTimeout(() => done(null), WS_WAIT_MS);
-    ws.addEventListener('message', (ev) => {
-      void messageBytes(ev.data).then((bytes) => {
-        if (bytes.byteLength < 8) return;
-        const planes = planesFromBytes(bytes);
-        if (planes?.length) done(planes);
-      });
-    });
-    ws.addEventListener('error', () => done(null));
-    ws.addEventListener('close', () => {
-      if (!settled) done(null);
-    });
-  });
 }
 
 async function fetchHttpSnapshot(): Promise<PfLiveAircraft[]> {
@@ -194,93 +186,208 @@ async function purge(): Promise<void> {
   }
 }
 
-async function wsLoop(): Promise<void> {
-  let misses = 0;
-  while (running) {
-    const started = Date.now();
-    ticks += 1;
-    const planes = await snapshotFromWs();
-    if (planes?.length) {
-      misses = 0;
-      windowHits += 1;
-      lastWsAt = Date.now();
-      lastAircraft = planes.length;
-      enqueueIngest(planes, 'ws');
-    } else {
-      misses += 1;
-      windowMiss += 1;
+async function writeHealth(): Promise<void> {
+  try {
+    await upsertPfOdwHealth(db, {
+      last_source: lastSource,
+      last_tick_ms: lastTickMs,
+      last_aircraft: lastAircraft,
+      last_points: lastWroteCount,
+      last_ws_at: lastWsAt ? new Date(lastWsAt).toISOString() : null,
+      last_write_at: lastWroteAt ? new Date(lastWroteAt).toISOString() : null,
+      ws_ok_30s: windowHits,
+      ws_miss_30s: windowMiss,
+      ws_fail_total: wsFailTotal,
+    });
+  } catch (e) {
+    console.error('[pf-worker] health', e instanceof Error ? e.message : e);
+  }
+  if (Date.now() - windowStarted >= 30_000) {
+    windowHits = 0;
+    windowMiss = 0;
+    windowStarted = Date.now();
+  }
+}
+
+function handleWsPayload(bytes: Uint8Array): void {
+  if (bytes.byteLength < 8) return;
+  const planes = planesFromBytes(bytes);
+  if (!planes) return;
+  if (planes.length) {
+    windowHits += 1;
+    lastWsAt = Date.now();
+    enqueueIngest(planes, 'ws');
+    return;
+  }
+  windowMiss += 1;
+  lastAircraft = 0;
+  lastSource = 'ws';
+}
+
+function holdMixouWs(): Promise<void> {
+  return new Promise((resolve) => {
+    const ws = openMixouWs();
+    activeWs = ws;
+    ws.binaryType = 'arraybuffer';
+
+    let settled = false;
+    let sawMessage = false;
+    let countedFail = false;
+    let pingTimer: ReturnType<typeof setInterval> | null = null;
+    const noteFail = (why: string) => {
+      if (countedFail) return;
+      countedFail = true;
       wsFailTotal += 1;
-      if (misses === 1 || misses % 15 === 0) {
-        console.log(`[pf-worker] websocket sans trafic (${misses})`);
+      console.error('[pf-worker] websocket', why);
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (pingTimer) clearInterval(pingTimer);
+      if (activeWs === ws) activeWs = null;
+      try {
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close(1000, 'shutdown');
+        }
+      } catch {
+        /* ignore */
       }
+      resolve();
+    };
+
+    ws.on('open', () => {
+      console.log('[pf-worker] websocket ouvert');
+      pingTimer = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          try {
+            ws.ping();
+          } catch {
+            /* ignore */
+          }
+        }
+      }, 25_000);
+    });
+
+    ws.on('message', (data) => {
+      sawMessage = true;
+      try {
+        handleWsPayload(messageBytes(data));
+      } catch (e) {
+        console.error('[pf-worker] frame', e instanceof Error ? e.message : e);
+      }
+      if (!lastWsAt && Date.now() - lastSilenceLog >= SILENCE_LOG_MS) {
+        lastSilenceLog = Date.now();
+        console.log('[pf-worker] websocket connecte, heartbeat seulement');
+      }
+    });
+
+    ws.on('unexpected-response', (_req, res) => {
+      noteFail(`http ${res.statusCode}`);
+      res.resume();
+      finish();
+    });
+
+    ws.on('error', (err) => {
+      noteFail(err instanceof Error ? err.message : String(err));
+    });
+
+    ws.on('close', (code, reason) => {
+      if (!sawMessage && running) noteFail(`fermeture ${code} sans frame`);
+      const why = reason?.toString?.() || '';
+      if (running) console.log(`[pf-worker] websocket ferme (${code}${why ? ` ${why}` : ''})`);
+      finish();
+    });
+
+    if (!running) finish();
+  });
+}
+
+async function wsLoop(): Promise<void> {
+  let backoff = WS_BACKOFF_MIN_MS;
+  while (running) {
+    const opened = Date.now();
+    try {
+      await holdMixouWs();
+      if (lastWsAt >= opened) backoff = WS_BACKOFF_MIN_MS;
+      else backoff = Math.min(backoff * 2, WS_BACKOFF_MAX_MS);
+    } catch (e) {
+      wsFailTotal += 1;
+      console.error('[pf-worker] websocket', e instanceof Error ? e.message : e);
+      backoff = Math.min(backoff * 2, WS_BACKOFF_MAX_MS);
     }
-    if (ticks % 30 === 0) {
-      const tickMs = Date.now() - started;
-      console.log(
-        JSON.stringify({
-          evt: 'pf-odw-worker',
-          tickMs,
-          aircraft: lastAircraft,
-          points: lastWroteCount,
-          wsOk30s: windowHits,
-          wsMiss30s: windowMiss,
-          wsFailTotal,
-          lastPointSec: lastWroteAt ? Math.round((Date.now() - lastWroteAt) / 1000) : null,
-        }),
-      );
-      await upsertPfOdwHealth(db, {
-        last_source: 'ws',
-        last_tick_ms: tickMs,
-        last_aircraft: lastAircraft,
-        last_points: lastWroteCount,
-        last_ws_at: lastWsAt ? new Date(lastWsAt).toISOString() : null,
-        last_write_at: lastWroteAt ? new Date(lastWroteAt).toISOString() : null,
-        ws_ok_30s: windowHits,
-        ws_miss_30s: windowMiss,
-        ws_fail_total: wsFailTotal,
-      }).catch(() => undefined);
-      windowHits = 0;
-      windowMiss = 0;
-    }
-    const wait = Math.max(0, TICK_MS - (Date.now() - started));
-    if (wait) await new Promise((r) => setTimeout(r, wait));
+    if (!running) break;
+    await sleep(backoff);
   }
 }
 
 async function snapshotLoop(): Promise<void> {
   while (running) {
-    await new Promise((r) => setTimeout(r, SNAPSHOT_MS));
-    if (!running) break;
-    if (Date.now() - lastWsAt < 4_000) continue;
-    try {
-      const planes = await fetchHttpSnapshot();
-      if (planes.length) enqueueIngest(planes, 'http');
-    } catch (e) {
-      console.error('[pf-worker] snapshot', e instanceof Error ? e.message : e);
+    const started = Date.now();
+    if (Date.now() - lastWsAt >= HTTP_IF_WS_STALE_MS) {
+      try {
+        const planes = await fetchHttpSnapshot();
+        lastTickMs = Date.now() - started;
+        lastAircraft = planes.length;
+        lastSource = 'http';
+        if (planes.length) enqueueIngest(planes, 'http');
+        await writeHealth();
+      } catch (e) {
+        lastTickMs = Date.now() - started;
+        console.error('[pf-worker] snapshot', e instanceof Error ? e.message : e);
+      }
     }
+    await sleep(SNAPSHOT_MS);
+  }
+}
+
+async function healthLoop(): Promise<void> {
+  await writeHealth();
+  while (running) {
+    await sleep(HEALTH_MS);
+    if (running) await writeHealth();
   }
 }
 
 async function purgeLoop(): Promise<void> {
   while (running) {
-    await new Promise((r) => setTimeout(r, PURGE_EVERY_MS));
-    if (running) await purge().catch(() => undefined);
+    await sleep(PURGE_EVERY_MS);
+    if (running) await purge().catch((e) => {
+      console.error('[pf-worker] purge', e instanceof Error ? e.message : e);
+    });
   }
 }
 
 async function main(): Promise<void> {
-  console.log(`[pf-worker] demarrage · serveur ${serverId} · tick ${TICK_MS} ms`);
+  console.log(`[pf-worker] demarrage · serveur ${serverId} · ws durable · http ${SNAPSHOT_MS} ms`);
   await primeFromDatabase();
+  wsFailTotal = 0;
+  lastSource = 'boot';
+  await writeHealth();
 
   const stop = (signal: string) => {
+    if (!running) return;
     console.log(`[pf-worker] arret sur ${signal}`);
     running = false;
+    interruptSleep?.();
+    try {
+      activeWs?.close(1000, 'shutdown');
+    } catch {
+      /* ignore */
+    }
+    setTimeout(() => process.exit(0), 3_000).unref();
   };
   process.on('SIGTERM', () => stop('SIGTERM'));
   process.on('SIGINT', () => stop('SIGINT'));
+  process.on('uncaughtException', (e) => {
+    console.error('[pf-worker] uncaught', e);
+  });
+  process.on('unhandledRejection', (e) => {
+    console.error('[pf-worker] rejection', e);
+  });
 
-  await Promise.all([wsLoop(), snapshotLoop(), purgeLoop()]);
+  await Promise.all([wsLoop(), snapshotLoop(), healthLoop(), purgeLoop()]);
   await flushIngest();
+  await writeHealth();
   console.log('[pf-worker] arrete · dernier point', lastWroteAt ? new Date(lastWroteAt).toISOString() : 'aucun');
   process.exit(0);
 }
