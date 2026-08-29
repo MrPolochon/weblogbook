@@ -422,7 +422,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
-          {CHEQUE_TYPES.includes(m.type_message) && m.cheque_montant ? (
+          {CHEQUE_TYPES.includes(m.type_message) && m.cheque_montant != null ? (
             <div className="space-y-5">
               <MessageContent className="text-slate-300 leading-relaxed" content={m.contenu} />
               <ChequeVisuel id={m.id} montant={m.cheque_montant} destinataire={currentUserIdentifiant}

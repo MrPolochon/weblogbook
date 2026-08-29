@@ -647,13 +647,16 @@ export async function envoyerChequesVol(
     }
   }
 
-  // Chèque salaire pilote
+  // Chèque salaire pilote (y compris 0 F$ si ponctualité 0 % : le vol a bien été clôturé)
+  const chequeSalairePonctualiteZero = coefficient === 0 && revBrut > 0;
   console.log(`${logRef} salaireEffectif=${salaireEffectif} (salairePlanning=${salairePlanning}, coeff=${Math.round(coefficient * 100)}%, revenuLocataireAvantSalaire=${revenuLocataireAvantSalaire})`);
-  if (salaireEffectif === 0) {
+  if (salaireEffectif === 0 && !chequeSalairePonctualiteZero) {
     console.warn(`${logRef} salaireEffectif=0 → pas de chèque salaire pilote`);
   }
-  if (salaireEffectif > 0) {
-    let contenuSalaire = `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min`;
+  if (salaireEffectif > 0 || chequeSalairePonctualiteZero) {
+    let contenuSalaire = chequeSalairePonctualiteZero
+      ? `Votre vol ${numeroVol} pour ${compagnie.nom} a été clôturé, mais le coefficient de ponctualité est de 0 % : aucun salaire n'est versé.\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min`
+      : `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min`;
     if (arriveePrevueAt) {
       contenuSalaire += `\nArrivée prévue: ${formatUtcHHMM(arriveePrevueAt)}\nArrivée réelle: ${formatUtcHHMM(dateFinVol)}\nÉcart horaire: ${ecartPonctualiteMin} min`;
     } else {
@@ -663,7 +666,9 @@ export async function envoyerChequesVol(
     if (bonusGroundSalaire > 0) {
       contenuSalaire += `\n🛬 Bonus services au sol: +${bonusGroundSalaire.toLocaleString('fr-FR')} F$ (+10%)`;
     }
-    contenuSalaire += `\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`;
+    contenuSalaire += chequeSalairePonctualiteZero
+      ? `\n\nChèque de salaire : 0 F$. L'écart par rapport à l'arrivée prévue (heure de départ UTC + durée) dépasse le seuil de ponctualité.`
+      : `\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`;
     if (plan.type_cargaison === 'marchandise_rare' && plan.type_cargaison_libelle) {
       contenuSalaire += `\n\n💎 Marchandise rare transportée : ${plan.type_cargaison_libelle}`;
     }
@@ -844,12 +849,15 @@ export async function envoyerChequesVol(
 
   revenuLocataire = Math.max(0, revenuLocataire - taxeAlliance - codeshareTotal);
 
-  // Chèque revenu compagnie
-  if (revenuLocataire > 0 && !compagnie.pdg_id) {
+  // Chèque revenu compagnie (y compris 0 F$ si ponctualité 0 % : trace visible pour le PDG)
+  const chequeRevenuPonctualiteZero = coefficient === 0 && revBrut > 0;
+  if ((revenuLocataire > 0 || chequeRevenuPonctualiteZero) && !compagnie.pdg_id) {
     console.warn(`[envoyerChequesVol] Vol ${numeroVol} : compagnie ${plan.compagnie_id} sans PDG défini — chèque revenu ${revenuLocataire.toLocaleString('fr-FR')} F$ non distribué`);
   }
-  if (revenuLocataire > 0 && compagnie.pdg_id) {
-    let contenuMessage = `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$`;
+  if ((revenuLocataire > 0 || chequeRevenuPonctualiteZero) && compagnie.pdg_id) {
+    let contenuMessage = chequeRevenuPonctualiteZero
+      ? `Le vol ${numeroVol} a été clôturé, mais le coefficient de ponctualité est de 0 % : aucun revenu n'est versé.\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$`
+      : `Le vol ${numeroVol} a été effectué avec succès !\n\nRevenu brut: ${plan.revenue_brut.toLocaleString('fr-FR')} F$`;
     if (arriveePrevueAt) {
       contenuMessage += `\nArrivée prévue: ${formatUtcHHMM(arriveePrevueAt)}\nArrivée réelle: ${formatUtcHHMM(dateFinVol)}\nÉcart horaire: ${ecartPonctualiteMin} min`;
     } else {
@@ -881,7 +889,9 @@ export async function envoyerChequesVol(
       contenuMessage += `\nCodeshare (${codesharePct}%): -${codeshareTotal.toLocaleString('fr-FR')} F$ → ${codeshareNbMembres} membre${codeshareNbMembres > 1 ? 's' : ''}`;
     }
 
-    contenuMessage += `\n\nRevenu net: ${revenuLocataire.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser le chèque ci-dessous.`;
+    contenuMessage += chequeRevenuPonctualiteZero
+      ? `\n\nRevenu net: 0 F$\n\nL'écart par rapport à l'arrivée prévue (heure de départ UTC + durée) dépasse le seuil de ponctualité.`
+      : `\n\nRevenu net: ${revenuLocataire.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser le chèque ci-dessous.`;
 
     const montantCheque = revenuLocataire + taxeAlliance + codeshareTotal;
     const metadataCheque: { taxe_alliance?: number; codeshare?: number; numero_vol?: string } = {};

@@ -39,7 +39,7 @@ export async function encaisserChequeMessage(
   if (message.cheque_encaisse) {
     return { ok: false, error: 'Ce chèque a déjà été encaissé', status: 400 };
   }
-  if (!message.cheque_montant || message.cheque_montant <= 0) {
+  if (message.cheque_montant == null || message.cheque_montant < 0) {
     return { ok: false, error: 'Montant du chèque invalide', status: 400 };
   }
 
@@ -66,6 +66,10 @@ export async function encaisserChequeMessage(
     return { ok: false, error: 'Ce chèque a déjà été encaissé', status: 400 };
   }
 
+  if (message.cheque_montant === 0) {
+    return { ok: true, montantNet: 0 };
+  }
+
   const { data: compteData, error: compteError } = await admin
     .from('felitz_comptes')
     .select('id, solde')
@@ -83,9 +87,9 @@ export async function encaisserChequeMessage(
   const numeroVol = metadata.numero_vol || message.cheque_numero_vol || '';
 
   const { data: creditOk } = await admin.rpc('crediter_compte_safe', {
-    p_compte_id: compteId,
-    p_montant: message.cheque_montant,
-  });
+      p_compte_id: compteId,
+      p_montant: message.cheque_montant,
+    });
   if (!creditOk) {
     await admin.from('messages').update({ cheque_encaisse: false, cheque_encaisse_at: null }).eq('id', message.id);
     return { ok: false, error: 'Erreur lors du crédit', status: 500 };
