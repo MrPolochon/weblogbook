@@ -42,10 +42,10 @@ _runtime: dict[str, Any] = {
     "panel_message_id": None,
     "bot_user_id": None,
 }
+_last_runtime_fingerprint: str | None = None
 
 _ack_ids: set[int] = set()
 _is_ticket_cache: dict[str, tuple[bool, float]] = {}
-_empty_content_warned: set[int] = set()
 # Idempotence locale : un même message Discord (reconnexion gateway, event
 # rejoué) ne doit pas partir deux fois vers l'API. Le site déduplique aussi.
 _handled_message_ids: set[int] = set()
@@ -104,17 +104,32 @@ async def refresh_runtime() -> None:
         _runtime["panel_channel_id"] = data.get("panel_channel_id")
         _runtime["panel_message_id"] = data.get("panel_message_id")
         _runtime["bot_user_id"] = data.get("bot_user_id")
-        log.info(
-            "Config site: guild=%s %s sections, %s tickets ouverts, staff_role=%s instructor_role=%s panel=%s/%s bot_user=%s",
-            _runtime["guild_id"],
-            len(_runtime["category_ids"]),
-            len(_runtime["open_channel_ids"]),
-            _runtime["staff_role_id"],
-            _runtime["instructor_role_id"],
-            _runtime["panel_channel_id"],
-            _runtime["panel_message_id"],
-            _runtime["bot_user_id"],
+        fingerprint = "|".join(
+            [
+                str(_runtime["guild_id"] or ""),
+                str(len(_runtime["category_ids"])),
+                str(len(_runtime["open_channel_ids"])),
+                str(_runtime["staff_role_id"] or ""),
+                str(_runtime["instructor_role_id"] or ""),
+                str(_runtime["panel_channel_id"] or ""),
+                str(_runtime["panel_message_id"] or ""),
+                str(_runtime["bot_user_id"] or ""),
+            ]
         )
+        global _last_runtime_fingerprint
+        if fingerprint != _last_runtime_fingerprint:
+            _last_runtime_fingerprint = fingerprint
+            log.info(
+                "Config site: guild=%s %s sections, %s tickets ouverts, staff_role=%s instructor_role=%s panel=%s/%s bot_user=%s",
+                _runtime["guild_id"],
+                len(_runtime["category_ids"]),
+                len(_runtime["open_channel_ids"]),
+                _runtime["staff_role_id"],
+                _runtime["instructor_role_id"],
+                _runtime["panel_channel_id"],
+                _runtime["panel_message_id"],
+                _runtime["bot_user_id"],
+            )
     else:
         log.warning("Runtime API indisponible (%s) url=%s/api/support/bot/runtime", status, WEBLOGBOOK_URL)
 
@@ -567,18 +582,20 @@ def attach_handlers(client: discord.Client) -> None:
             except discord.HTTPException:
                 log.exception("fetch_message vide channel=%s id=%s", message.channel.id, message.id)
         if not content:
-            log.warning(
-                "Message vide dans ticket channel=%s id=%s — intent Message Content probablement off",
-                message.channel.id,
-                message.id,
-            )
-            if message.channel.id not in _empty_content_warned:
-                _empty_content_warned.add(message.channel.id)
-                await _notify_channel(
-                    message.channel,
-                    "Je n'ai pas pu lire le texte de ton message (intent **Message Content** du bot). "
-                    "Un admin doit l'activer sur le portail Discord, ou un staff peut t'aider ici.",
+            # Sticker, image, embed : pas de texte à traiter. Ce n'est PAS
+            # la preuve que l'intent Message Content est éteint — les messages
+            # suivants du même salon ont souvent du contenu.
+            if message.attachments or message.stickers or message.embeds:
+                log.info(
+                    "Message média sans texte ignoré channel=%s id=%s attachments=%s stickers=%s embeds=%s",
+                    message.channel.id,
+                    message.id,
+                    len(message.attachments),
+                    len(message.stickers),
+                    len(message.embeds),
                 )
+                return
+            log.info("Message sans texte ignoré channel=%s id=%s", message.channel.id, message.id)
             return
 
         author = message.author

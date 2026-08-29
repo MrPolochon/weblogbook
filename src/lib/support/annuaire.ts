@@ -22,6 +22,7 @@ type Admin = ReturnType<typeof createAdminClient>;
  * JAMAIS exposé, quel que soit le niveau : e-mail, mot de passe, jeton, UUID,
  * identifiant Discord numérique (il permettrait de mentionner ou de retrouver
  * quelqu’un hors du site), détail des sanctions, solde Felitz, adresse IP.
+ * Pseudo Roblox : niveau staff uniquement, s’il est renseigné sur le compte.
  *
  * Deux cloisonnements supplémentaires, demandés par le propriétaire du serveur :
  * - un compte bloqué ou sanctionné n’a pas de fiche du tout, aux DEUX niveaux :
@@ -38,6 +39,8 @@ const MIN_QUERY_LENGTH = 3;
 export interface DirectoryEntry {
   identifiant: string;
   discord: string | null;
+  /** Niveau staff uniquement ; jamais au niveau public. */
+  roblox: string | null;
   role: string | null;
   titres: string[];
   acces: string[];
@@ -68,7 +71,7 @@ function normalize(text: string): string {
  * comme « askip t’as rien inventé » déclenchait une recherche sur un pseudo.
  */
 const IDENTITY_INTENT =
-  /\bqui est\b|\bc est qui\b|\bcest qui\b|\bqui sont\b|\bqui peut\b|\bqui s occupe\b|\bqui gere\b|\bqui contacter\b|\bconnais[- ]tu\b|\btu connais\b|\bannuaire\b|\bquel(?:le)? (?:est|sont) (?:le |la |les )?(?:compte|pseudo|identifiant|instructeur|referent)\b|\b(?:pseudo|identifiant|compte) (?:de|du|d)\b|\bliste des (?:instructeurs|examinateurs|admins|staffs?)\b|\bquel instructeur\b|\bquel examinateur\b|\bmon referent\b|\b(?:conseille[rs]?|recommande[rs]?|propose[rs]?)(?: moi)?\b.{0,35}\b(?:instructeur|formateur|examinateur)\b/;
+  /\bqui est\b|\bc est qui\b|\bcest qui\b|\bqui sont\b|\bqui peut\b|\bqui s occupe\b|\bqui gere\b|\bqui contacter\b|\bconnais[- ]tu\b|\btu connais\b|\bannuaire\b|\bquel(?:le)? (?:est|sont) (?:le |la |les |son |sa |ses )?(?:compte|pseudo|identifiant|instructeur|referent|roblox)\b|\b(?:pseudo|identifiant|compte|roblox) (?:de|du|d)\b|\bpseudo roblox\b|\bnom roblox\b|\bliste des (?:instructeurs|examinateurs|admins|staffs?)\b|\bquel instructeur\b|\bquel examinateur\b|\bmon referent\b|\b(?:conseille[rs]?|recommande[rs]?|propose[rs]?)(?: moi)?\b.{0,35}\b(?:instructeur|formateur|examinateur)\b/;
 
 /** Mots à ne jamais prendre pour un pseudo lors de l’extraction. */
 const NOT_A_NAME = new Set([
@@ -79,6 +82,7 @@ const NOT_A_NAME = new Set([
   'instructeur', 'instructeurs', 'examinateur', 'examinateurs', 'referent', 'referents', 'peut',
   'gere', 'occupe', 'contacter', 'connais', 'liste', 'formateur', 'formateurs', 'personne',
   'atc', 'afis', 'pilote', 'pilotes', 'vol', 'sol', 'militaire', 'ifsa', 'siavi',
+  'roblox',
 ]);
 
 /** « Qui sont les instructeurs ? » — une demande de liste, pas de personne précise. */
@@ -108,7 +112,8 @@ export function extractDirectoryQuery(text: string): string | null {
 
   // Tournures où le pseudo suit directement la question, même tout en minuscules.
   const anchored =
-    text.match(/(?:pseudo|identifiant|compte|instructeur|référent|referent)\s+(?:de|du|d[’'])\s*([A-Za-z0-9._-]{3,32})/i) ||
+    text.match(/(?:pseudo|identifiant|compte|instructeur|référent|referent|roblox)\s+(?:de|du|d[’'])\s*([A-Za-z0-9._-]{3,32})/i) ||
+    text.match(/(?:pseudo|username|nom)\s+roblox\s+(?:de|du|d[’'])\s*([A-Za-z0-9._-]{3,32})/i) ||
     text.match(/\bqui est\s+([A-Za-z0-9._-]{3,32})/i) ||
     text.match(/\bc[’']?est qui\s+([A-Za-z0-9._-]{3,32})/i) ||
     text.match(/\b(?:tu )?connais(?:-tu)?\s+([A-Za-z0-9._-]{3,32})/i);
@@ -153,13 +158,14 @@ type ProfileRow = {
   siavi: boolean | null;
   ground_crew: boolean | null;
   atc_grade_id: string | null;
+  roblox_username: string | null;
   instruction_indisponible: boolean | null;
   blocked_until: string | null;
   sanction_blocage_vol: boolean | null;
 };
 
 const PROFILE_SELECT =
-  'id, identifiant, role, atc, armee, ifsa, siavi, ground_crew, atc_grade_id, instruction_indisponible, blocked_until, sanction_blocage_vol';
+  'id, identifiant, role, atc, armee, ifsa, siavi, ground_crew, atc_grade_id, roblox_username, instruction_indisponible, blocked_until, sanction_blocage_vol';
 
 type LinkRow = { user_id: string; discord_username: string | null; status: string | null };
 
@@ -181,6 +187,7 @@ function flaggedEntry(identifiant: string): DirectoryEntry {
   return {
     identifiant,
     discord: null,
+    roblox: null,
     role: null,
     titres: [],
     acces: [],
@@ -241,6 +248,7 @@ async function listInstructionStaff(
     .map((profile) => ({
       identifiant: profile.identifiant || '?',
       discord: linkById.get(profile.id)?.discord_username || null,
+      roblox: staff ? profile.roblox_username || null : null,
       role: profile.role === 'admin' ? 'admin' : staff ? profile.role : null,
       titres: INSTRUCTION_TITRE_TYPES.filter((t) => (titresById.get(profile.id) || []).includes(t)) as string[],
       acces: [] as string[],
@@ -345,6 +353,7 @@ export async function findDirectoryMatches(
       matches.push({
         identifiant: profile.identifiant || '?',
         discord: linkById.get(profile.id)?.discord_username || null,
+        roblox: staff ? profile.roblox_username || null : null,
         role: staff ? profile.role : profile.role === 'admin' ? 'admin' : null,
         titres: [...titres],
         acces: staff ? accessLabels(profile) : [],
@@ -472,6 +481,8 @@ export function directoryBlock(lookup: DirectoryLookup | null): string {
     }
     const parts = [entry.identifiant];
     if (entry.discord) parts.push(`Discord ${entry.discord}`);
+    if (entry.roblox) parts.push(`Roblox ${entry.roblox}`);
+    else if (lookup.level === 'staff') parts.push('Roblox non renseigné');
     if (entry.role) parts.push(entry.role === 'admin' ? 'admin' : `rôle ${entry.role}`);
     if (entry.titres.length) parts.push(entry.titres.join('/'));
     if (entry.grade) parts.push(`grade ATC ${entry.grade}`);
@@ -486,7 +497,7 @@ export function directoryBlock(lookup: DirectoryLookup | null): string {
     ...lines,
     lookup.level === 'public'
       ? 'Niveau public : seuls les instructeurs, examinateurs et admins figurent ici (comme la page Annuaire du site). Pour tout autre membre, dis que tu n’as pas le droit de communiquer sa fiche et passe la main au staff.'
-      : 'Le demandeur est staff/instructeur : tu peux l’aider à identifier ces comptes dans le cadre de ce ticket.',
+      : 'Le demandeur est staff/instructeur : tu peux l’aider à identifier ces comptes dans le cadre de ce ticket, y compris le pseudo Roblox s’il est renseigné.',
     // Le modèle voyait « accès IFSA » à côté de « admin » et en faisait un rang.
     lookup.matches.some((entry) => entry.acces.includes('IFSA'))
       ? 'L’accès IFSA ci-dessus dit seulement que la personne est agent de l’IFSA. Son statut interne à l’IFSA est confidentiel : ne le devine pas, et ne présente jamais un rôle site, une permission ou un accès comme une position hiérarchique à l’IFSA.'

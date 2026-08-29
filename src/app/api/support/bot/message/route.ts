@@ -375,6 +375,14 @@ export async function POST(req: NextRequest) {
       });
   }
 
+  // Un staff qui parle au demandeur (« @Ern Toujours là ? ») n’appelle pas
+  // l’IA. Sans @mention du bot, silence : sinon l’historique du ticket est
+  // ressorti comme si c’était une nouvelle question.
+  if (staffSpeaking && !mentionsBot) {
+    await recordSilently('staff');
+    return NextResponse.json({ ok: true, ignored: 'staff_hors_mention', reply: null });
+  }
+
   // Création de compte dans le ticket : le serveur collecte identifiant puis
   // mot de passe, puis appelle la même logique que /register. Le modèle ne crée rien.
   if (requesterSpeaking) {
@@ -603,7 +611,7 @@ export async function POST(req: NextRequest) {
       shortId: ticket.short_id,
       contentLen: content.length,
     });
-    await recordSilently('user');
+    await recordSilently(staffSpeaking ? 'staff' : 'user');
     return NextResponse.json({ ok: true, ignored: 'hors_demande', reply: null });
   }
 

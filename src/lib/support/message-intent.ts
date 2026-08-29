@@ -13,8 +13,18 @@ function normalize(text: string): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[’'`]/g, ' ')
+    .replace(/<@!?&?\d+>/g, ' ')
+    .replace(/@\S+/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
+
+/**
+ * « Toujours là ? », « t’es là ? » : on ping un humain, on ne pose pas une
+ * question au bot. Le `?` seul ne doit pas relancer l’IA sur le sujet du ticket.
+ */
+const PRESENCE_CHECK =
+  /^(toujours (?:la|ici|en ligne)|(?:t es|tes|tu es|vous etes) (?:la|ici)|y a quelqu.?un|ya quelqu.?un|il y a quelqu.?un|(?:tu|vous)(?: me)? reponds?)\s*\?*$/;
 
 /** Question posée, explicitement ou par un mot interrogatif. */
 const QUESTION_MARKERS =
@@ -42,6 +52,7 @@ const MAX_CHATTER_CHARS = 140;
 export function looksLikeRequest(text: string): boolean {
   const t = normalize(text);
   if (!t) return false;
+  if (PRESENCE_CHECK.test(t)) return false;
   if (t.length > MAX_CHATTER_CHARS) return true;
   return (
     QUESTION_MARKERS.test(t) ||
