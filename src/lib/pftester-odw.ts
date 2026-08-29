@@ -1,19 +1,34 @@
 /** Tracker interne PFtesterODW — flux live filtré sur le serveur privé Mixou. */
 
-export const PF_DEFAULT_SERVER_ID = '2uMXjU8T5V';
+export const PF_DEFAULT_SERVER_ID = 'FG6JU5NY';
 export const PF_TRAFFIC_URL = 'https://api.project-flight.com/v3/traffic/fetch';
 /** Flux live par serveur, le même que PFTracker : un protobuf à chaque mise à jour. */
 export function pfTrafficServerWsUrl(serverId: string): string {
   return `wss://api.project-flight.com/v3/traffic/server/ws/${encodeURIComponent(serverId)}`;
 }
 export const PF_TILE_BASE = 'https://cdn.project-flight.com/tiles';
+/**
+ * Cache-bust Update 9.0 (29 août 2026).
+ * PFTracker sert encore `cdn.project-flight.com/tiles/{z}/{x}/{y}.webp?v=1`
+ * (mêmes octets / Last-Modified avril 2025 au 29/08 soir). On versionne
+ * nos URLs proxy pour casser le cache navigateur `immutable` et le CDN Vercel.
+ */
+export const PF_TILE_CACHE_VERSION = '20260829';
+
+export function pfTileProxyUrl(z: number, x: number, y: number): string {
+  return `/api/pftester-odw/tiles/${z}/${x}/${y}?v=${PF_TILE_CACHE_VERSION}`;
+}
 
 /** Espace carte officielle PFTracker (OrthographicView, target [120, 67.5]). */
 export const PF_MAP_W = 240;
 export const PF_MAP_H = 135;
 export const PF_MAP_CX = 120;
 export const PF_MAP_CY = 67.5;
-/** Même conversion que PFTracker : map = 120 + 0.00072 * gameX, 67.5 + 0.00072 * gameY. */
+/**
+ * Même conversion que PFTracker : map = 120 + 0.00072 * gameX, 67.5 + 0.00072 * gameY.
+ * Update 9.0 : pas recalibré — le JS public PFTracker n’expose plus 0.00072,
+ * et aucune mesure live vs tracker officiel n’a montré un décalage.
+ */
 export const PF_COORD_SCALE = 0.00072;
 /** Déplacement minimum, en unités carte, pour retenir un nouveau point de trace. */
 export const PF_TRAIL_MIN_STEP = 0.015;

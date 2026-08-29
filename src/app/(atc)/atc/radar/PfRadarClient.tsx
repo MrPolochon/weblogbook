@@ -9,6 +9,7 @@ import {
   PF_MAP_H,
   PF_MAP_W,
   pfTileUnit,
+  pfTileProxyUrl,
   altitudeToTrailColor,
 } from '@/lib/pftester-odw';
 
@@ -36,7 +37,7 @@ const MAX_VIEW_ZOOM = 64;
 const MAX_TILE_Z = 8;
 
 function tileUrl(z: number, x: number, y: number): string {
-  return `/api/pftester-odw/tiles/${z}/${x}/${y}`;
+  return pfTileProxyUrl(z, x, y);
 }
 
 function clampViewZoom(z: number): number {

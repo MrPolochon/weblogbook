@@ -16,6 +16,7 @@ import {
   gameToMap,
   isTrailGap,
   PF_TRAIL_MIN_STEP,
+  pfTileProxyUrl,
 } from '@/lib/pftester-odw';
 
 type PfHealth = {
@@ -253,7 +254,7 @@ function mergeTrailPoints(local: TrailPt[], server: TrailPt[]): TrailPt[] {
 }
 
 function tileUrl(z: number, x: number, y: number): string {
-  return `/api/pftester-odw/tiles/${z}/${x}/${y}`;
+  return pfTileProxyUrl(z, x, y);
 }
 
 function clampViewZoom(z: number): number {

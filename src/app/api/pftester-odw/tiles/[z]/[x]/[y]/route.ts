@@ -1,13 +1,16 @@
 import { NextResponse } from 'next/server';
+import { PF_TILE_CACHE_VERSION } from '@/lib/pftester-odw';
 
-/** Tuiles immuables (CDN PF `?v=1`) : cache navigateur + CDN, pas de force-dynamic. */
-export const revalidate = 86400;
-export const fetchCache = 'force-cache';
+/**
+ * Update 9.0 : plus d'`immutable` / TTL 30 j — le CDN PF régénère les tuiles
+ * au même chemin (`?v=1` officiel encore en vigueur le 29/08). Court TTL +
+ * query `?v=20260829` pour que navigateur et CDN Vercel reprennent l’origine.
+ */
+export const dynamic = 'force-dynamic';
 
 const PF_TILE_ORIGIN = 'https://cdn.project-flight.com/tiles';
 const PF_TILE_REFERER = 'https://tracker.project-flight.com/';
-const TILE_CACHE =
-  'public, max-age=86400, s-maxage=2592000, stale-while-revalidate=2592000, immutable';
+const TILE_CACHE = 'public, max-age=900, s-maxage=900, stale-while-revalidate=3600';
 
 function parseIndex(raw: string, maxDigits: number): number | null {
   if (!new RegExp(`^\\d{1,${maxDigits}}$`).test(raw)) return null;
@@ -30,15 +33,17 @@ export async function GET(
   }
 
   try {
-    const upstream = await fetch(`${PF_TILE_ORIGIN}/${z}/${x}/${y}.webp?v=1`, {
-      headers: {
-        Accept: 'image/webp,image/png,image/*;q=0.8',
-        Referer: PF_TILE_REFERER,
-        'User-Agent': 'Mozilla/5.0',
+    const upstream = await fetch(
+      `${PF_TILE_ORIGIN}/${z}/${x}/${y}.webp?v=${PF_TILE_CACHE_VERSION}`,
+      {
+        headers: {
+          Accept: 'image/webp,image/png,image/*;q=0.8',
+          Referer: PF_TILE_REFERER,
+          'User-Agent': 'Mozilla/5.0',
+        },
+        cache: 'no-store',
       },
-      cache: 'force-cache',
-      next: { revalidate: 86400 },
-    });
+    );
     if (!upstream.ok) {
       return new NextResponse('Tuile introuvable', { status: 404 });
     }
