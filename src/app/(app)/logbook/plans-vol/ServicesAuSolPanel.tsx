@@ -50,7 +50,7 @@ export default function ServicesAuSolPanel({
     const [reqRes, boardingRes, gateRes, groundRes] = await Promise.all([
       fetch(`/api/ground/service-requests?plan_vol_id=${planVolId}`),
       fetch(`/api/ground/boarding?plan_vol_id=${planVolId}`),
-      fetch(`/api/ground/gates?aeroport=${currentAeroport}`),
+      fetch(`/api/ground/gates?aeroport=${encodeURIComponent(aeroportArrivee)}`),
       fetch(`/api/ground/session?aeroport=${currentAeroport}`),
     ]);
 
@@ -70,9 +70,18 @@ export default function ServicesAuSolPanel({
       setBoarding(d.boarding ?? null);
     }
     if (gateRes.ok) {
-      const d = await gateRes.json() as { gates?: Array<{ gate_code?: string; assignment?: { assignment_type: string } | null }> };
-      const assigned = (d.gates ?? []).find(g => g.assignment?.assignment_type === 'arrivee');
-      if (assigned) setPorteArrivee(assigned.gate_code ?? null);
+      const d = await gateRes.json() as {
+        gates?: Array<{
+          gate_code?: string;
+          occupancy_type?: string | null;
+          plan_vol?: { id?: string } | null;
+          assignment?: { assignment_type: string } | null;
+        }>;
+      };
+      const assigned = (d.gates ?? []).find((g) =>
+        g.occupancy_type === 'arrivee' && g.plan_vol?.id === planVolId,
+      ) ?? (d.gates ?? []).find((g) => g.assignment?.assignment_type === 'arrivee' && g.plan_vol?.id === planVolId);
+      setPorteArrivee(assigned?.gate_code ?? null);
     }
     if (groundRes.ok) {
       const d = await groundRes.json() as { session?: { aeroport: string } | null };
@@ -82,7 +91,7 @@ export default function ServicesAuSolPanel({
       else setGroundUnavailableReason(null);
     }
     setGroundCheckDone(true);
-  }, [planVolId, currentAeroport]);
+  }, [planVolId, currentAeroport, aeroportArrivee]);
 
   useEffect(() => {
     if (!open) return;
@@ -92,6 +101,7 @@ export default function ServicesAuSolPanel({
       .channel(`pilot-service-${planVolId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ground_service_requests', filter: `plan_vol_id=eq.${planVolId}` }, () => { loadData(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'boarding_status', filter: `plan_vol_id=eq.${planVolId}` }, () => { loadData(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gate_assignments', filter: `plan_vol_id=eq.${planVolId}` }, () => { loadData(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [open, loadData]);

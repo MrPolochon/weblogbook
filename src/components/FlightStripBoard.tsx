@@ -341,7 +341,7 @@ export default function FlightStripBoard({
     const isDropAfter = dropTarget?.stripId === s.id && dropTarget.position === 'after';
 
     return (
-      <div key={s.id} className="relative" style={{ contentVisibility: 'auto', containIntrinsicSize: '0 160px' }}>
+      <div key={s.id} className="relative">
         {isDropBefore && (
           <div className={`h-1 rounded-full mx-1 mb-1 ${isDark ? 'bg-sky-400' : 'bg-sky-500'} shadow-lg shadow-sky-500/50`} />
         )}
@@ -371,13 +371,13 @@ export default function FlightStripBoard({
     return (
       <section
         key={zone}
-        className={`min-w-[340px] flex-1 flex flex-col rounded-xl border overflow-hidden transition-shadow ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
+        className={`min-w-[280px] flex-1 flex flex-col rounded-xl border min-h-0 transition-shadow ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
         onDragEnter={(e) => handleZoneDragEnter(e, zone)}
         onDragLeave={(e) => handleZoneDragLeave(e, zone)}
         onDragOver={handleZoneDragOver}
         onDrop={(e) => handleDrop(e, zone)}
       >
-        <header className={`px-3 py-1.5 flex items-center justify-between ${ZONE_HEADER[zone]}`}>
+        <header className={`px-3 py-1.5 flex items-center justify-between rounded-t-xl ${ZONE_HEADER[zone]}`}>
           <div className="flex items-center gap-2 min-w-0">
             <span className={`h-2 w-2 rounded-full ${ZONE_DOT[zone]} shadow`} />
             <div className="min-w-0">
@@ -387,7 +387,7 @@ export default function FlightStripBoard({
           </div>
           <span className="text-[11px] font-black tabular-nums bg-black/10 rounded-full px-2 py-0.5">{zs.length}</span>
         </header>
-        <div className="flex-1 p-1.5 flex flex-col gap-1.5 overflow-y-auto min-h-[140px]">
+        <div className="flex-1 p-1.5 flex flex-col gap-1.5 overflow-y-auto overflow-x-hidden min-h-[140px]">
           {zs.length === 0 ? (
             <div className={`flex-1 min-h-[88px] rounded-lg border-2 border-dashed flex items-center justify-center text-[11px] font-semibold italic ${
               isDragOver
@@ -464,7 +464,7 @@ export default function FlightStripBoard({
               {isDragOverNull ? 'Relâcher ici' : 'Aucun strip en attente d’affectation'}
             </div>
           ) : unassigned.map((s) => (
-            <div key={s.id} className="w-[min(100%,640px)]">{renderStripItem(s, null)}</div>
+            <div key={s.id} className="w-full max-w-3xl">{renderStripItem(s, null)}</div>
           ))}
         </div>
       </section>

@@ -24,6 +24,18 @@ import {
 } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import {
+  RUNWAY_CONDITIONS,
+  atisKindForPosition,
+  buildAtisPatchBody,
+  defaultTmaDraft,
+  firDisplayName,
+  firOf,
+  isAtisDraftReady,
+  tmaIntroPreview,
+  type AtisEntitlement,
+  type TmaAirportDraft,
+} from '@/lib/atis-priority';
 
 // Types alignes sur /api/atc/atis/overview
 interface ControllerInfo {
@@ -84,6 +96,8 @@ interface OverviewResponse {
     atis_code_auto_rotate: boolean;
   };
   any_broadcasting: boolean;
+  priority: AtisEntitlement | null;
+  online_atc?: { user_id: string; aeroport: string; position: string; identifiant: string | null }[];
 }
 
 interface AtisData {
@@ -120,6 +134,10 @@ const POLL_MS = 5000;
 
 type Tab = 'status' | 'config' | 'data';
 
+function draftStorageKey(userId: string, aeroport: string, position: string) {
+  return `atis-draft:${userId}:${aeroport}:${position}`;
+}
+
 export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisButtonProps) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
@@ -128,7 +146,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   // Etat panneau
   // ---------------------------------------------------------------------------
   const [isOpen, setIsOpen] = useState(false);
-  const [tab, setTab] = useState<Tab>('status');
+  const [tab, setTab] = useState<Tab>('config');
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewLastFetch, setOverviewLastFetch] = useState<number | null>(null);
@@ -151,6 +169,9 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
   // Demarrage : choix du bot cible (auto par defaut)
   const [startTargetInstance, setStartTargetInstance] = useState<number | 'auto'>('auto');
+  const [tmaDraft, setTmaDraft] = useState<TmaAirportDraft[]>([]);
+  const tmaInitRef = useRef(false);
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   // Auto-rotate code
   const [autoRotateInProgress, setAutoRotateInProgress] = useState(false);
@@ -172,17 +193,29 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     [overview]
   );
   const aeroportCode = useMemo(() => String(aeroport || '').trim().toUpperCase(), [aeroport]);
-  /** Bot en diffusion réelle pour l'aéroport de la session (même si la base est fausse). */
+  const atisKind = atisKindForPosition(position);
+  const priority = overview?.priority ?? null;
+  const canConfigure = priority?.can_configure ?? true;
+  const myFir = priority?.fir ?? firOf(aeroportCode);
+  const localRunways = useMemo(
+    () => priority?.tma_airports?.find((a) => a.icao === aeroportCode)?.runways ?? [],
+    [priority?.tma_airports, aeroportCode]
+  );
+  /** Bots en conflit réel pour CE type d'ATIS (aéroport et TMA peuvent coexister). */
   const liveBotsOnThisAirport = useMemo(() => {
-    if (!aeroportCode) return [];
     return instances.filter((i) => {
       if (!i.bot_broadcasting) return false;
-      const code = String(i.airport ?? i.aeroport ?? '')
-        .trim()
-        .toUpperCase();
-      return code === aeroportCode;
+      const liveKind = atisKindForPosition(i.position ?? '');
+      if (atisKind === 'airport') {
+        const code = String(i.airport ?? i.aeroport ?? '')
+          .trim()
+          .toUpperCase();
+        return code === aeroportCode && (liveKind === 'airport' || !i.position);
+      }
+      const liveFir = firOf(String(i.aeroport ?? i.airport ?? ''));
+      return liveKind === 'tma' && Boolean(myFir && liveFir === myFir);
     });
-  }, [instances, aeroportCode]);
+  }, [instances, aeroportCode, atisKind, myFir]);
   const botDesyncDbFalse = useMemo(
     () => instances.filter((i) => i.desync && i.bot_broadcasting && !i.db_broadcasting),
     [instances]
@@ -197,6 +230,19 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     () => instances.find((i) => i.instance_id === configInstanceId) ?? null,
     [instances, configInstanceId]
   );
+
+  const anyBotConfigured = instances.some((i) => i.config.configured);
+  const targetBotConfigured =
+    startTargetInstance === 'auto'
+      ? instances.some((i) => i.config.configured && !i.broadcasting)
+      : Boolean(instances.find((i) => i.instance_id === startTargetInstance)?.config.configured);
+  const draftReady = isAtisDraftReady(atisKind, atisData?.runway, tmaDraft);
+  const canStart =
+    !broadcasting &&
+    canConfigure &&
+    targetBotConfigured &&
+    draftReady &&
+    liveBotsOnThisAirport.length === 0;
 
   // ---------------------------------------------------------------------------
   // API helpers
@@ -275,11 +321,50 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
   useEffect(() => {
     if (isOpen && tab === 'data') {
-      fetchAtisData();
-      const itv = setInterval(fetchAtisData, POLL_MS);
+      if (broadcasting) fetchAtisData();
+      const itv = setInterval(() => {
+        if (broadcasting) fetchAtisData();
+      }, POLL_MS);
       return () => clearInterval(itv);
     }
-  }, [isOpen, tab, fetchAtisData]);
+  }, [isOpen, tab, fetchAtisData, broadcasting]);
+
+  // Brouillon local (prepare avant diffusion).
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(draftStorageKey(userId, aeroportCode, position));
+      if (raw) {
+        const parsed = JSON.parse(raw) as { atis?: AtisData; tma?: TmaAirportDraft[] };
+        if (parsed.atis) setAtisData((prev) => ({ ...prev, ...parsed.atis }));
+        if (parsed.tma?.length) {
+          setTmaDraft(parsed.tma);
+          tmaInitRef.current = true;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    setDraftHydrated(true);
+  }, [userId, aeroportCode, position]);
+
+  useEffect(() => {
+    if (!tmaInitRef.current && draftHydrated && priority?.tma_airports?.length) {
+      setTmaDraft(defaultTmaDraft(aeroportCode, priority.tma_airports));
+      tmaInitRef.current = true;
+    }
+  }, [priority?.tma_airports, aeroportCode, draftHydrated]);
+
+  useEffect(() => {
+    if (!draftHydrated) return;
+    try {
+      sessionStorage.setItem(
+        draftStorageKey(userId, aeroportCode, position),
+        JSON.stringify({ atis: atisData, tma: tmaDraft })
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [atisData, tmaDraft, userId, aeroportCode, position, draftHydrated]);
 
   // Initialise les selecteurs guild/channel quand on change d'instance configuree.
   useEffect(() => {
@@ -300,16 +385,25 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   // Actions
   // ---------------------------------------------------------------------------
   const handleStart = async () => {
-    if (broadcasting || actionLoading) return;
+    if (broadcasting || actionLoading || !canStart) return;
     setActionLoading(true);
     try {
-      const body: { aeroport: string; position: string; instance_id?: number } = {
+      const body: {
+        aeroport: string;
+        position: string;
+        instance_id?: number;
+        atis_payload?: AtisData;
+        tma_airports?: TmaAirportDraft[];
+      } = {
         aeroport,
         position,
+        atis_payload: atisData ?? {},
+        tma_airports: tmaDraft,
       };
       if (startTargetInstance !== 'auto') body.instance_id = startTargetInstance;
       await apiCall('/api/atc/atis/start', { method: 'POST', body });
       await fetchOverview();
+      await fetchAtisData();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur au démarrage');
     } finally {
@@ -335,26 +429,43 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     }
   };
 
+  const pushLivePatch = async (updates: Record<string, unknown>, tmaOverride?: TmaAirportDraft[]) => {
+    if (!broadcasting || !myInstance?.is_mine) return;
+    const payload = buildAtisPatchBody({
+      aeroport: aeroportCode,
+      kind: atisKind,
+      fir: myFir,
+      draft: { ...(atisData ?? {}), ...updates },
+      tmaAirports: tmaOverride ?? tmaDraft,
+    });
+    const data = await apiCall('/api/atc/atis/atis-data', { method: 'PATCH', body: payload });
+    setAtisData((prev) => ({ ...prev, ...updates, ...data?.data }));
+  };
+
   const handlePatch = async (updates: Record<string, unknown>) => {
+    setAtisData((prev) => ({ ...prev, ...updates }));
+    setEditing(null);
     try {
-      const data = await apiCall('/api/atc/atis/atis-data', { method: 'PATCH', body: updates });
-      setAtisData((prev) => ({ ...prev, ...data?.data }));
-      setEditing(null);
+      await pushLivePatch(updates);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
     }
   };
 
   const handleCodeChange = async (code: string) => {
+    setAtisData((prev) => (prev ? { ...prev, information_code: code } : { information_code: code }));
+    if (!broadcasting || !myInstance?.is_mine) return;
     try {
       await apiCall('/api/atc/atis/atiscode', { method: 'POST', body: { code } });
-      setAtisData((prev) => (prev ? { ...prev, information_code: code } : { information_code: code }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur');
     }
   };
 
   const handleToggleCavok = async () => {
+    const next = !atisData?.cavok;
+    setAtisData((prev) => ({ ...prev, cavok: next }));
+    if (!broadcasting || !myInstance?.is_mine) return;
     try {
       const data = await apiCall('/api/atc/atis/toggle-cavok', { method: 'POST' });
       setAtisData((prev) => ({ ...prev, cavok: data.cavok }));
@@ -364,6 +475,9 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   };
 
   const handleToggleBilingual = async () => {
+    const next = !atisData?.bilingual_mode;
+    setAtisData((prev) => ({ ...prev, bilingual_mode: next }));
+    if (!broadcasting || !myInstance?.is_mine) return;
     try {
       const data = await apiCall('/api/atc/atis/toggle-bilingual', { method: 'POST' });
       setAtisData((prev) => ({ ...prev, bilingual_mode: data.bilingual_mode }));
@@ -626,15 +740,21 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   const val = (v: string | null | undefined) => v ?? '—';
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'status', label: 'État', icon: <Server className="h-4 w-4" /> },
-    { id: 'config', label: 'Config', icon: <Settings2 className="h-4 w-4" /> },
-    { id: 'data', label: 'ATIS', icon: <Volume2 className="h-4 w-4" /> },
+    { id: 'config', label: 'Bots', icon: <Settings2 className="h-4 w-4" /> },
+    { id: 'data', label: 'Préparer', icon: <Volume2 className="h-4 w-4" /> },
+    { id: 'status', label: 'Diffuser', icon: <Server className="h-4 w-4" /> },
   ];
+
+  const canEditAtis = canConfigure && (!broadcasting || Boolean(myInstance?.is_mine));
+  const startLabel =
+    atisKind === 'tma'
+      ? `Démarrer ATIS TMA — ${firDisplayName(myFir) || aeroport}`
+      : `Démarrer ATIS — ${aeroport}`;
 
   return (
     <div
       className={`fixed left-4 bottom-4 z-50 ${bgMain} rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]`}
-      style={{ width: 'min(440px, 95vw)' }}
+      style={{ width: 'min(480px, 95vw)' }}
     >
       {/* Header */}
       <div className={`px-5 py-3 flex items-center justify-between border-b ${borderCl} flex-shrink-0`}>
@@ -718,6 +838,30 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
           </p>
         )}
 
+        {priority && !canConfigure && (
+          <div
+            className={`text-sm px-3 py-2.5 rounded-lg border flex gap-2 ${
+              isDark
+                ? 'bg-amber-500/12 border-amber-500/40 text-amber-100'
+                : 'bg-amber-500/20 border-amber-500/50 text-amber-950'
+            }`}
+          >
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+            <p>
+              <span className="font-semibold">Configuration réservée.</span>{' '}
+              {priority.reason}
+            </p>
+          </div>
+        )}
+
+        {priority && canConfigure && (
+          <p className={`text-xs ${textMuted}`}>
+            {atisKind === 'tma'
+              ? `ATIS TMA ${firDisplayName(myFir) || ''} — vous êtes prioritaire (${position}). DEP {'>'} APP {'>'} Centre.`
+              : `ATIS ${aeroportCode} — vous êtes prioritaire (${position}). TWR {'>'} Sol {'>'} DEL.`}
+          </p>
+        )}
+
         {botReachable === false && (
           <BotErrorCard
             isDark={isDark}
@@ -769,12 +913,35 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
             ))}
 
             {/* Action principale : demarrer / arreter MA session */}
-            <div className={`pt-3 border-t ${borderCl}`}>
+            <div className={`pt-3 border-t ${borderCl} space-y-2`}>
               {!broadcasting && (
                 <>
+                  <div className={`rounded-lg px-3 py-2 text-xs space-y-1 ${cardCl}`}>
+                    <p className={`font-semibold ${textValue}`}>Avant de diffuser</p>
+                    <p className={anyBotConfigured ? 'text-emerald-400' : 'text-amber-300'}>
+                      {anyBotConfigured ? '✓' : '1.'} Bot Discord configuré
+                      {!anyBotConfigured && (
+                        <button type="button" onClick={() => setTab('config')} className="ml-1 underline">
+                          (onglet Bots)
+                        </button>
+                      )}
+                    </p>
+                    <p className={draftReady ? 'text-emerald-400' : 'text-amber-300'}>
+                      {draftReady ? '✓' : '2.'} Message ATIS préparé
+                      {!draftReady && (
+                        <button type="button" onClick={() => setTab('data')} className="ml-1 underline">
+                          (onglet Préparer)
+                        </button>
+                      )}
+                    </p>
+                    <p className={canConfigure ? 'text-emerald-400' : 'text-amber-300'}>
+                      {canConfigure ? '✓' : '3.'} Priorité de poste
+                    </p>
+                  </div>
+
                   {/* Choix bot cible */}
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className={`text-xs ${textMuted}`}>Démarrer sur</span>
+                    <span className={`text-xs ${textMuted}`}>Diffuser sur</span>
                     <div className="flex gap-1">
                       <button
                         type="button"
@@ -814,16 +981,22 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
                   <button
                     onClick={handleStart}
-                    disabled={actionLoading || liveBotsOnThisAirport.length > 0}
+                    disabled={actionLoading || !canStart}
                     title={
-                      liveBotsOnThisAirport.length > 0
-                        ? `Coupez d'abord l'ATIS sur le${liveBotsOnThisAirport.length > 1 ? 's' : ''} bot ${liveBotsOnThisAirport.map((b) => b.instance_id).join(', ')} (Stop sur la carte).`
-                        : undefined
+                      !canConfigure
+                        ? priority?.reason ?? 'Priorité insuffisante'
+                        : !targetBotConfigured
+                          ? 'Configurez d’abord un bot (onglet Bots).'
+                          : !draftReady
+                            ? 'Préparez d’abord l’ATIS (onglet Préparer).'
+                            : liveBotsOnThisAirport.length > 0
+                              ? `Coupez d'abord l'ATIS sur le${liveBotsOnThisAirport.length > 1 ? 's' : ''} bot ${liveBotsOnThisAirport.map((b) => b.instance_id).join(', ')} (Stop sur la carte).`
+                              : undefined
                     }
                     className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-semibold text-base disabled:opacity-50"
                   >
                     <Play className="h-5 w-5" />
-                    Démarrer ATIS — {aeroport}
+                    {startLabel}
                   </button>
                 </>
               )}
@@ -846,7 +1019,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
           <>
             <div className={`flex items-center gap-2 ${isDark ? 'text-slate-100' : 'text-slate-100'}`}>
               <Headphones className={`h-5 w-5 ${textMuted}`} />
-              <span className="font-semibold text-base">Configuration Discord par bot</span>
+              <span className="font-semibold text-base">Bots Discord — à configurer avant de diffuser</span>
             </div>
 
             {/* Sélecteur d'instance dynamique */}
@@ -932,6 +1105,15 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
               >
                 {savingConfig ? 'Enregistrement...' : `Enregistrer config Bot ${configInstanceId}`}
               </button>
+              {anyBotConfigured && (
+                <button
+                  type="button"
+                  onClick={() => setTab('data')}
+                  className="w-full py-2 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+                >
+                  Continuer — préparer l&apos;ATIS
+                </button>
+              )}
             </div>
           </>
         )}
@@ -939,9 +1121,22 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         {/* ============ TAB : DONNEES ATIS ============ */}
         {tab === 'data' && (
           <>
-            {!broadcasting && !myInstance && (
+            <div className={`rounded-lg px-3 py-2 text-xs ${cardCl}`}>
+              {atisKind === 'tma' ? (
+                <p>
+                  <span className="font-semibold">ATIS TMA</span> — les pistes des terrains de la{' '}
+                  {firDisplayName(myFir) || 'FIR'} sont lues dans l&apos;intro. Le reste du message (vent, QNH, remarques) ne change pas.
+                </p>
+              ) : (
+                <p>
+                  <span className="font-semibold">ATIS aéroport</span> — préparez pistes et météo avant de diffuser. Un seul contrôleur par terrain (TWR {'>'} Sol {'>'} DEL).
+                </p>
+              )}
+            </div>
+
+            {!canConfigure && (
               <p className={`text-sm ${textMuted}`}>
-                Démarrez d&apos;abord un ATIS pour modifier ses données. Vous pouvez consulter les données live depuis l&apos;onglet État.
+                Vous pouvez consulter le brouillon, mais seul le contrôleur prioritaire peut le modifier.
               </p>
             )}
 
@@ -984,23 +1179,45 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 {(() => {
                   const code = myInstance?.aeroport ?? aeroport;
                   const apt = code ? AEROPORTS_PTFS.find((a) => a.code === code) : null;
+                  if (atisKind === 'tma') {
+                    return `${firDisplayName(myFir) || code} TMA`;
+                  }
                   return apt ? `${apt.code} — ${apt.nom}` : (code || val(d?.airport_name || d?.airport) || '—');
                 })()}
               </Row>
 
+              {atisKind === 'tma' && (
+                <TmaAirportsEditor
+                  airports={tmaDraft}
+                  catalog={priority?.tma_airports ?? []}
+                  primaryIcao={aeroportCode}
+                  canEdit={canEditAtis}
+                  isDark={isDark}
+                  inputCl={inputCl}
+                  cardCl={cardCl}
+                  textMuted={textMuted}
+                  textValue={textValue}
+                  code={d?.information_code ?? 'A'}
+                  onChange={(next) => {
+                    setTmaDraft(next);
+                    void pushLivePatch({}, next);
+                  }}
+                />
+              )}
+
               <Row label="Code" textMuted={textMuted} textValue={textValue}>
                 <div className="flex items-center gap-2">
                   <select
-                    value={d?.information_code ?? ''}
+                    value={d?.information_code || 'A'}
                     onChange={(e) => handleCodeChange(e.target.value)}
-                    disabled={!myInstance?.is_mine}
+                    disabled={!canEditAtis}
                     className={`px-3 py-2 rounded-lg border font-semibold ${inputCl} disabled:opacity-50`}
                   >
                     {CODE_LETTERS.map((c) => (
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
-                  {myInstance?.is_mine && (
+                  {canEditAtis && (
                     <button
                       onClick={handleToggleAutoRotate}
                       title={atisCodeAutoRotate ? 'Mode auto activé' : 'Activer la rotation auto'}
@@ -1019,6 +1236,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 </div>
               </Row>
 
+              {atisKind !== 'tma' && (
               <EditableRow
                 label="Piste"
                 editing={editing === 'runway'}
@@ -1037,16 +1255,48 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 isDark={isDark}
                 textMuted={textMuted}
                 textValue={textValue}
-                canEdit={Boolean(myInstance?.is_mine)}
+                canEdit={canEditAtis}
                 display={`${val(d?.runway)} | ${val(d?.expected_approach)} ${
                   d?.expected_runway ? `RWY ${d.expected_runway}` : ''
                 } (${val(d?.runway_condition)})`}
               >
-                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="ex: 25L/25R" value={editValues.runway ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, runway: e.target.value }))} />
+                {localRunways.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {localRunways.map((rwy) => {
+                      const selected = (editValues.runway ?? '').split(/[\s,/]+/).filter(Boolean).includes(rwy);
+                      return (
+                        <button
+                          key={rwy}
+                          type="button"
+                          onClick={() => {
+                            const parts = (editValues.runway ?? '').split(/[\s,/]+/).filter(Boolean);
+                            const next = parts.includes(rwy) ? parts.filter((p) => p !== rwy) : [...parts, rwy];
+                            setEditValues((v) => ({ ...v, runway: next.join(' ') }));
+                          }}
+                          className={`px-2 py-1 rounded-md text-xs font-semibold ${
+                            selected ? 'bg-sky-600 text-white' : isDark ? 'bg-slate-800 border border-slate-700 text-slate-200' : 'bg-slate-600 text-white'
+                          }`}
+                        >
+                          {rwy}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="ex: 25L 25R" value={editValues.runway ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, runway: e.target.value }))} />
+                <select
+                  className={`px-3 py-2 rounded-lg border ${inputCl}`}
+                  value={editValues.runway_condition ?? 'dry'}
+                  onChange={(e) => setEditValues((v) => ({ ...v, runway_condition: e.target.value }))}
+                >
+                  {RUNWAY_CONDITIONS.map((c) => (
+                    <option key={c.id} value={c.id}>{c.fr} ({c.en})</option>
+                  ))}
+                </select>
                 <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Approche prévue (anglais, ex: ILS)" value={editValues.expected_approach ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, expected_approach: e.target.value }))} />
                 <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Piste prévue (anglais, ex: 25)" value={editValues.expected_runway ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, expected_runway: e.target.value }))} />
-                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Condition" value={editValues.runway_condition ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, runway_condition: e.target.value }))} />
               </EditableRow>
+              )}
 
               <EditableRow
                 label="Vent"
@@ -1067,7 +1317,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 isDark={isDark}
                 textMuted={textMuted}
                 textValue={textValue}
-                canEdit={Boolean(myInstance?.is_mine)}
+                canEdit={canEditAtis}
                 display={val(d?.wind)}
               >
                 <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Vent" value={editValues.wind ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, wind: e.target.value }))} />
@@ -1100,7 +1350,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 isDark={isDark}
                 textMuted={textMuted}
                 textValue={textValue}
-                canEdit={Boolean(myInstance?.is_mine)}
+                canEdit={canEditAtis}
                 display={`${val(d?.qnh)} | TL ${val(d?.transition_level)}`}
               >
                 <input className={`px-3 py-2 rounded-lg border w-24 ${inputCl}`} value={editValues.qnh ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, qnh: e.target.value }))} placeholder="1013" />
@@ -1118,14 +1368,14 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 isDark={isDark}
                 textMuted={textMuted}
                 textValue={textValue}
-                canEdit={Boolean(myInstance?.is_mine)}
+                canEdit={canEditAtis}
                 display={val(d?.remarks)}
               >
                 <textarea className={`px-3 py-2 rounded-lg border w-full min-h-14 ${inputCl}`} value={editValues.remarks ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, remarks: e.target.value }))} placeholder="Remarques" />
               </EditableRow>
             </div>
 
-            {myInstance?.is_mine && (
+            {canEditAtis && (
               <div className={`flex gap-3 pt-3 border-t ${borderCl}`}>
                 <button
                   onClick={handleToggleCavok}
@@ -1155,6 +1405,15 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 </button>
               </div>
             )}
+            {!broadcasting && draftReady && canConfigure && (
+              <button
+                type="button"
+                onClick={() => setTab('status')}
+                className="w-full py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
+              >
+                Continuer — diffuser
+              </button>
+            )}
           </>
         )}
       </div>
@@ -1165,6 +1424,116 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
+
+function TmaAirportsEditor({
+  airports,
+  catalog,
+  primaryIcao,
+  canEdit,
+  isDark,
+  inputCl,
+  cardCl,
+  textMuted,
+  textValue,
+  code,
+  onChange,
+}: {
+  airports: TmaAirportDraft[];
+  catalog: { icao: string; nom: string; runways: string[] }[];
+  primaryIcao: string;
+  canEdit: boolean;
+  isDark: boolean;
+  inputCl: string;
+  cardCl: string;
+  textMuted: string;
+  textValue: string;
+  code: string;
+  onChange: (next: TmaAirportDraft[]) => void;
+}) {
+  const preview = tmaIntroPreview(code, airports);
+  const update = (icao: string, patch: Partial<TmaAirportDraft>) => {
+    onChange(airports.map((a) => (a.icao === icao ? { ...a, ...patch } : a)));
+  };
+  const toggleRwy = (icao: string, rwy: string, current: string) => {
+    const parts = current.split(/[\s,/]+/).filter(Boolean);
+    const next = parts.includes(rwy) ? parts.filter((p) => p !== rwy) : [...parts, rwy];
+    update(icao, { runways: next.join(' ') });
+  };
+
+  return (
+    <div className={`rounded-xl ${cardCl} p-3 space-y-2`}>
+      <p className={`text-sm font-semibold ${textValue}`}>Pistes en service (TMA)</p>
+      {airports.map((a) => {
+        const options = catalog.find((c) => c.icao === a.icao)?.runways ?? [];
+        const locked = a.icao === primaryIcao;
+        return (
+          <div key={a.icao} className={`rounded-lg px-2 py-2 space-y-1.5 ${isDark ? 'bg-slate-900/70' : 'bg-slate-800/50'}`}>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={a.included}
+                disabled={!canEdit || locked}
+                onChange={(e) => update(a.icao, { included: e.target.checked })}
+              />
+              <span className={textValue}>
+                {a.icao} — {a.nom}
+                {locked && <span className={`ml-1 text-[10px] ${textMuted}`}>(poste)</span>}
+              </span>
+            </label>
+            {a.included && (
+              <>
+                {options.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {options.map((rwy) => {
+                      const selected = a.runways.split(/[\s,/]+/).filter(Boolean).includes(rwy);
+                      return (
+                        <button
+                          key={rwy}
+                          type="button"
+                          disabled={!canEdit}
+                          onClick={() => toggleRwy(a.icao, rwy, a.runways)}
+                          className={`px-2 py-0.5 rounded-md text-[11px] font-semibold disabled:opacity-50 ${
+                            selected
+                              ? 'bg-sky-600 text-white'
+                              : isDark
+                                ? 'bg-slate-800 border border-slate-700 text-slate-200'
+                                : 'bg-slate-600 text-white'
+                          }`}
+                        >
+                          {rwy}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <input
+                  className={`w-full px-2 py-1.5 rounded-md border text-sm ${inputCl}`}
+                  placeholder="Pistes (ex: 25L 25R)"
+                  disabled={!canEdit}
+                  value={a.runways}
+                  onChange={(e) => update(a.icao, { runways: e.target.value })}
+                />
+                <select
+                  className={`w-full px-2 py-1.5 rounded-md border text-sm ${inputCl}`}
+                  disabled={!canEdit}
+                  value={a.condition}
+                  onChange={(e) => update(a.icao, { condition: e.target.value })}
+                >
+                  {RUNWAY_CONDITIONS.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.fr}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+          </div>
+        );
+      })}
+      <p className={`text-[11px] leading-relaxed ${textMuted}`}>{preview}</p>
+    </div>
+  );
+}
 
 function Row({
   label,
@@ -1339,6 +1708,11 @@ function InstanceCard({
             {inst.bilingual && (
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-500/30 text-emerald-200'}`}>
                 EN+FR
+              </span>
+            )}
+            {atisKindForPosition(inst.position ?? '') === 'tma' && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-violet-500/20 text-violet-300' : 'bg-violet-500/30 text-violet-200'}`}>
+                TMA
               </span>
             )}
           </div>

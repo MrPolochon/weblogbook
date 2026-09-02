@@ -66,3 +66,97 @@ export function parseAtisCall(number: string): { airport_icao: string } | null {
   if (!icao) return null;
   return { airport_icao: icao };
 }
+
+export const LOCAL_POSITION_SHORTCUTS: { code: string; position: string; short: string }[] = [
+  { code: '*15', position: 'Delivery', short: 'DEL' },
+  { code: '*16', position: 'Clairance', short: 'CLR' },
+  { code: '*17', position: 'Ground', short: 'GND' },
+  { code: '*18', position: 'Tower', short: 'TWR' },
+  { code: '*191', position: 'DEP', short: 'DEP' },
+  { code: '*192', position: 'APP', short: 'APP' },
+  { code: '*20', position: 'Center', short: 'CTR' },
+];
+
+export type ParsedDial = {
+  aeroport: string | null;
+  position: string | null;
+  isLocal: boolean;
+  isEmergency: boolean;
+  isAtis: boolean;
+  label: string | null;
+  ready: boolean;
+};
+
+/** Interprète un numéro composé (local *xx, +14, ATIS, urgence). */
+export function parseDialedNumber(num: string, localAirport?: string): ParsedDial {
+  const trimmed = num.trim();
+  if (!trimmed) {
+    return { aeroport: null, position: null, isLocal: false, isEmergency: false, isAtis: false, label: null, ready: false };
+  }
+
+  const atis = parseAtisCall(trimmed);
+  if (atis) {
+    return {
+      aeroport: atis.airport_icao,
+      position: 'ATIS',
+      isLocal: false,
+      isEmergency: false,
+      isAtis: true,
+      label: `ATIS ${atis.airport_icao}`,
+      ready: true,
+    };
+  }
+
+  if (trimmed === '911' || trimmed === '112') {
+    return {
+      aeroport: null,
+      position: 'AFIS',
+      isLocal: false,
+      isEmergency: true,
+      isAtis: false,
+      label: `Urgence AFIS (${trimmed})`,
+      ready: true,
+    };
+  }
+
+  if (trimmed.startsWith('*')) {
+    const code = trimmed.slice(1);
+    const position = CODE_TO_POSITION[code] || null;
+    return {
+      aeroport: localAirport ?? null,
+      position,
+      isLocal: true,
+      isEmergency: false,
+      isAtis: false,
+      label: position ? `${position} · local` : null,
+      ready: Boolean(position),
+    };
+  }
+
+  if (trimmed.startsWith('+14')) {
+    const rest = trimmed.slice(3);
+    const aeroCode = rest.slice(0, 4);
+    const posCode = rest.slice(4);
+    const destAeroport = aeroCode.length === 4 ? (CODE_TO_AEROPORT[aeroCode] || null) : null;
+    const position = posCode ? (CODE_TO_POSITION[posCode] || null) : null;
+    const parts = [destAeroport, position].filter(Boolean);
+    return {
+      aeroport: destAeroport,
+      position,
+      isLocal: false,
+      isEmergency: false,
+      isAtis: false,
+      label: parts.length > 0 ? parts.join(' · ') : null,
+      ready: Boolean(destAeroport && position),
+    };
+  }
+
+  return { aeroport: null, position: null, isLocal: false, isEmergency: false, isAtis: false, label: null, ready: false };
+}
+
+export function formatStationNumber(aeroport: string, position: string): string | null {
+  const a = AEROPORT_CODES[aeroport];
+  const p = POSITION_CODES[position];
+  if (!a || !p) return null;
+  return `+14${a}${p}`;
+}

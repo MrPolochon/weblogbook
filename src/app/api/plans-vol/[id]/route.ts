@@ -7,6 +7,11 @@ import { ATC_POSITIONS } from '@/lib/atc-positions';
 import { calculerUsureVol } from '@/lib/compagnie-utils';
 import { envoyerChequesVol, finaliserCloturePlan, parseStripATD } from '@/lib/plans-vol/closure';
 import { heureDepartToIso } from '@/lib/heure-depart';
+import { assignGateArrival, maybeAssignArrivalGate } from '@/lib/ground/gate-assignment';
+
+function queueArrivalGate(planId: string, opts?: { aeroportHint?: string | null; stripZone?: string | null }) {
+  void maybeAssignArrivalGate(planId, opts).catch((e) => console.warn('[gate-arrival]', e));
+}
 
 const STATUTS_OUVERTS = ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
 // Ordre de priorité pour recevoir un plan renvoyé : uniquement l’aéroport de départ
@@ -198,6 +203,10 @@ export async function PATCH(
             }
           }
         }
+      }
+
+      if (newStatut === 'en_attente_cloture') {
+        queueArrivalGate(id, { aeroportHint: plan.aeroport_arrivee });
       }
 
       return NextResponse.json({ ok: true, statut: newStatut, direct: closDirect, paiement: paiementResult, usure_appliquee: usureAppliquee });
@@ -605,6 +614,7 @@ export async function PATCH(
           strip_zone: null,
         }).eq('id', id);
         if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
+        queueArrivalGate(id, { aeroportHint: aeroport });
         return NextResponse.json({ ok: true });
       }
 
@@ -638,6 +648,7 @@ export async function PATCH(
         strip_zone: null,
       }).eq('id', id);
       if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
+      queueArrivalGate(id, { aeroportHint: sess.aeroport });
       return NextResponse.json({ ok: true });
     }
 
@@ -860,6 +871,13 @@ export async function PATCH(
         }
       }
 
+      if (!isCrash && aeroportAtc) {
+        const gateResult = await assignGateArrival(id, aeroportAtc, plan.compagnie_id);
+        if ('error' in gateResult) {
+          console.warn('[gate-arrival] atterrissage_urgence:', gateResult.error);
+        }
+      }
+
       await admin.from('plans_vol').update({
         statut: 'annule',
         cloture_at: new Date().toISOString(),
@@ -937,6 +955,9 @@ export async function PATCH(
         err = res.error;
       }
       if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
+      if (update.strip_zone === 'arrivee') {
+        queueArrivalGate(id, { stripZone: 'arrivee', aeroportHint: plan.current_holder_aeroport });
+      }
       return NextResponse.json({ ok: true });
     }
 
@@ -959,6 +980,11 @@ export async function PATCH(
             }).eq('id', s.id)
           )
       );
+      for (const s of strips) {
+        if (s.id && s.strip_zone === 'arrivee') {
+          queueArrivalGate(s.id, { stripZone: 'arrivee', aeroportHint: plan.current_holder_aeroport });
+        }
+      }
       return NextResponse.json({ ok: true });
     }
 

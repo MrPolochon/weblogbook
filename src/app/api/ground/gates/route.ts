@@ -3,28 +3,10 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { PLAN_VOL_SOL_SELECT, mapPlanVolSol, type PlanVolSol, type PlanVolSolRow } from '@/lib/ground/plans-vol';
+import { loadAirportOccupancy, STATUTS_INBOUND } from '@/lib/ground/gate-assignment';
+import type { AirportGate } from '@/lib/types';
 
-/**
- * Normalise un code de porte pour comparaison robuste.
- * Gère : casse, espaces multiples, espaces insécables Unicode (U+00A0, U+202F, etc.),
- * et caractères de contrôle invisibles.
- */
-function normalizeGateCode(s: string): string {
-  return s
-    .replace(/[\u00A0\u202F\u2009\u2007\u2008\u200B\s]+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
-
-/**
- * Extrait la partie purement numérique d'un code de porte.
- * Ex : "Gate 9" → "9", "Parking 12" → "12", "9" → "9".
- * Retourne null si aucun numéro isolé.
- */
-function extractNumeric(normalized: string): string | null {
-  const m = normalized.match(/^(?:gate|porte|parking|fato|apron)\s+(\d+)$/) ?? normalized.match(/^(\d+)$/);
-  return m ? m[1] : null;
-}
+type InboundRow = PlanVolSolRow & { current_holder_aeroport?: string | null };
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -39,7 +21,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'aeroport requis' }, { status: 400 });
   }
 
-  // Récupérer les portes configurées pour l'aéroport
   const { data: gates, error: gatesError } = await admin
     .from('airport_gates')
     .select('*')
@@ -47,72 +28,77 @@ export async function GET(request: Request) {
     .order('display_order');
 
   if (gatesError) return NextResponse.json({ error: gatesError.message }, { status: 500 });
-
   if (!gates || gates.length === 0) {
-    return NextResponse.json({ gates: [] });
+    return NextResponse.json({ gates: [], inbound: [] });
   }
 
-  // Source de vérité : plans_vol.porte (renseigné lors du dépôt du plan).
-  // La table gate_assignments peut rester pour des extensions futures (arrivées).
-  const { data: plansAvecPorte, error: plansError } = await admin
-    .from('plans_vol')
-    .select(PLAN_VOL_SOL_SELECT)
-    .eq('aeroport_depart', aeroport)
-    .not('porte', 'is', null)
-    .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
+  const typedGates = gates as AirportGate[];
+  const occupancy = await loadAirportOccupancy(admin, aeroport, typedGates);
 
-  if (plansError) {
-    console.error(`[ground/gates] Erreur requête plans_vol (aeroport=${aeroport}):`, plansError.message);
-  }
+  const occPlanIds = [...new Set([...occupancy.values()].map((o) => o.plan_vol_id).filter(Boolean))];
 
-  // Construire un map multi-clés gate_code → plan_vol pour une correspondance
-  // robuste quel que soit le format stocké dans plans_vol.porte :
-  //   - casse différente ("GATE 9" vs "Gate 9")
-  //   - espaces insécables Unicode
-  //   - format legacy purement numérique ("9" ↔ "Gate 9")
-  //   - format sans espace ("gate9" ↔ "Gate 9")
-  const planMap = new Map<string, PlanVolSol>();
+  const [{ data: inboundRows }, { data: assignedArrival }, { data: occPlanRows }] = await Promise.all([
+    admin
+      .from('plans_vol')
+      .select(`${PLAN_VOL_SOL_SELECT}, current_holder_aeroport`)
+      .eq('aeroport_arrivee', aeroport)
+      .in('statut', [...STATUTS_INBOUND, 'accepte']),
+    admin
+      .from('gate_assignments')
+      .select('plan_vol_id')
+      .eq('aeroport', aeroport)
+      .eq('assignment_type', 'arrivee')
+      .in('status', ['reserved', 'occupied']),
+    occPlanIds.length > 0
+      ? admin.from('plans_vol').select(PLAN_VOL_SOL_SELECT).in('id', occPlanIds)
+      : Promise.resolve({ data: [] as PlanVolSolRow[] }),
+  ]);
 
-  for (const row of (plansAvecPorte ?? []) as unknown as PlanVolSolRow[]) {
-    const plan = mapPlanVolSol(row);
-    if (!plan.porte) continue;
-    const norm = normalizeGateCode(plan.porte);
-    if (!norm) continue;
+  const occByPlanId = new Map(
+    ((occPlanRows ?? []) as unknown as PlanVolSolRow[]).map((row) => {
+      const mapped = mapPlanVolSol(row);
+      return [mapped.id, mapped] as const;
+    }),
+  );
 
-    // Clé normalisée principale : "gate 9"
-    planMap.set(norm, plan);
-    // Clé sans espace : "gate9"
-    planMap.set(norm.replace(/\s/g, ''), plan);
-
-    const num = extractNumeric(norm);
-    if (num) {
-      // Clé numérique seule : "9" (pour porte stockée comme "9" → retrouver "Gate 9")
-      planMap.set(num, plan);
-      // Clés avec préfixes courants : "gate 9", "parking 9", "fato 9"
-      for (const prefix of ['gate', 'parking', 'porte', 'fato']) {
-        planMap.set(`${prefix} ${num}`, plan);
-        planMap.set(`${prefix}${num}`, plan);
+  const assignedIds = new Set((assignedArrival ?? []).map((r: { plan_vol_id: string }) => r.plan_vol_id));
+  const inbound: PlanVolSol[] = ((inboundRows ?? []) as unknown as InboundRow[])
+    .filter((row) => {
+      if (assignedIds.has(row.id)) return false;
+      if (row.statut === 'accepte') {
+        return row.current_holder_aeroport === aeroport && row.aeroport_depart !== aeroport;
       }
-    }
-  }
+      return true;
+    })
+    .map(mapPlanVolSol);
 
-  const gatesWithStatus = gates.map((g: { gate_code: string }) => {
-    const norm = normalizeGateCode(g.gate_code);
-    const noSpace = norm.replace(/\s/g, '');
-
-    // Lookup multi-stratégie : normalisé → sans espace → numérique seul
-    const found =
-      planMap.get(norm) ??
-      planMap.get(noSpace) ??
-      (() => { const n = extractNumeric(norm); return n ? planMap.get(n) : undefined; })() ??
-      null;
-
+  const gatesWithStatus = typedGates.map((g) => {
+    const occ = occupancy.get(g.id) ?? null;
+    const details = occ ? occByPlanId.get(occ.plan_vol_id) : null;
     return {
       ...g,
-      plan_vol: found ?? null,
-      available: found == null,
+      available: occ == null,
+      occupancy_type: occ?.occupancy_type ?? null,
+      plan_vol: occ
+        ? {
+            id: occ.plan_vol_id,
+            callsign: details?.callsign ?? occ.numero_vol,
+            numero_vol: details?.numero_vol ?? occ.numero_vol,
+            immatriculation: details?.immatriculation ?? occ.immatriculation,
+            porte: g.gate_code,
+            statut: occ.statut,
+            aeroport_depart: occ.aeroport_depart,
+            aeroport_arrivee: occ.aeroport_arrivee,
+            type_avion: details?.type_avion ?? occ.type_avion,
+          }
+        : null,
+      assignment: occ?.occupancy_type === 'arrivee'
+        ? { assignment_type: 'arrivee', status: 'reserved', plan_vol: { numero_vol: occ.numero_vol, aeroport_depart: occ.aeroport_depart, aeroport_arrivee: occ.aeroport_arrivee } }
+        : occ?.occupancy_type === 'depart'
+          ? { assignment_type: 'depart', status: 'occupied', plan_vol: { numero_vol: occ.numero_vol, aeroport_depart: occ.aeroport_depart, aeroport_arrivee: occ.aeroport_arrivee } }
+          : null,
     };
   });
 
-  return NextResponse.json({ gates: gatesWithStatus });
+  return NextResponse.json({ gates: gatesWithStatus, inbound });
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Bot, Save } from 'lucide-react';
+import { Bot, Save, Slash } from 'lucide-react';
 import { DEFAULT_INSTRUCTOR_MOTIFS, SUPPORT_MOTIFS } from '@/lib/support/motifs';
 
 type Config = {
@@ -244,6 +244,28 @@ export default function SupportBotAdminClient() {
     }
   }
 
+  async function repairSlash() {
+    setLoading(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/support/config', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repair_slash: true }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(d.error || 'Erreur');
+        return;
+      }
+      setMsg(d.message || '/register rouvert pour les membres.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="card space-y-4 max-w-xl">
       <p className="text-sm text-slate-400">
@@ -265,9 +287,16 @@ export default function SupportBotAdminClient() {
         <p>Les messages du bot ne remettent jamais le compteur à zéro ; un message du membre ou d’un staff, si.</p>
       </div>
       <p className="text-xs text-amber-200/90 bg-amber-950/40 border border-amber-800/50 rounded-md px-3 py-2">
-        Dans le portail Discord (General Information), coller l’URL d’interactions (avec www, Discord refuse la redirection)&nbsp;:{' '}
+        <strong className="text-amber-100">/register invisible pour les membres ?</strong> Dans un ticket, Discord
+        masque les slash commands si le salon n’a pas « Utiliser les commandes d’application ». Le bouton ci-dessous
+        recollera ce droit sur tous les tickets ouverts. Pour <strong>ATC ROBOT</strong> (bot ATIS), ouvre aussi
+        Paramètres du serveur → Intégrations → ATC ROBOT → commande /register → autoriser @everyone (sinon elle
+        reste admin-only).
+      </p>
+      <p className="text-xs text-slate-400 bg-slate-900/50 border border-slate-700/60 rounded-md px-3 py-2">
+        URL d’interactions Discord (avec www)&nbsp;:{' '}
         <code className="text-[11px] break-all">https://www.mixouairlinesptfsweblogbook.com/api/support/discord/interactions</code>
-        . Public Key hex → variable Vercel <code className="text-[11px]">DISCORD_PUBLIC_KEY</code> (pas le token bot).
+        . Public Key hex → <code className="text-[11px]">DISCORD_PUBLIC_KEY</code> sur Vercel.
       </p>
       <div>
         <label className="label">Serveur Discord</label>
@@ -334,6 +363,10 @@ export default function SupportBotAdminClient() {
         <button type="button" className="btn-primary" disabled={loading} onClick={() => save(true)}>
           <Bot className="h-4 w-4 inline mr-1" />
           {loading ? 'Discord…' : 'Créer panel + sections'}
+        </button>
+        <button type="button" className="btn-secondary" disabled={loading} onClick={() => repairSlash()}>
+          <Slash className="h-4 w-4 inline mr-1" />
+          Réparer /register (tickets)
         </button>
       </div>
       {tickets.length > 0 && (

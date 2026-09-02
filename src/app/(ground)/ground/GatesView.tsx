@@ -40,11 +40,11 @@ type PlanVolOccupant = {
 
 type GateWithStatus = AirportGate & {
   available: boolean;
-  /** Renseigné quand la porte est occupée via plans_vol.porte (source principale). */
+  occupancy_type?: 'depart' | 'arrivee' | null;
+  /** Occupant actuel (départ au stand ou arrivée réservée). */
   plan_vol: PlanVolOccupant | null;
-  /** Renseigné quand la porte est occupée via l'ancienne table gate_assignments. */
   assignment: {
-    id: string;
+    id?: string;
     assignment_type: string;
     status: string;
     plan_vol: { numero_vol: string; aeroport_depart: string; aeroport_arrivee: string } | null;
@@ -80,7 +80,7 @@ export default function GatesView({ gates: initialGates, aeroport }: Props) {
   // Chargement initial
   useEffect(() => { void loadGates(); }, [loadGates]);
 
-  // Rafraîchissement automatique quand un plan de vol est soumis ou modifié
+  // Rafraîchissement automatique quand un plan de vol ou une attribution d'arrivée change
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
@@ -90,6 +90,18 @@ export default function GatesView({ gates: initialGates, aeroport }: Props) {
         schema: 'public',
         table: 'plans_vol',
         filter: `aeroport_depart=eq.${aeroport}`,
+      }, () => { void loadGates(); })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'plans_vol',
+        filter: `aeroport_arrivee=eq.${aeroport}`,
+      }, () => { void loadGates(); })
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'gate_assignments',
+        filter: `aeroport=eq.${aeroport}`,
       }, () => { void loadGates(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -151,11 +163,11 @@ export default function GatesView({ gates: initialGates, aeroport }: Props) {
                   {gate.available ? (
                     <p className="text-[10px] text-emerald-400 mt-1 font-medium">✓ Libre</p>
                   ) : gate.plan_vol ? (
-                    <p className="text-[10px] text-amber-400 mt-1 font-medium">
-                      ↑ {gate.plan_vol.numero_vol}
+                    <p className={`text-[10px] mt-1 font-medium ${gate.occupancy_type === 'arrivee' || gate.assignment?.assignment_type === 'arrivee' ? 'text-violet-400' : 'text-amber-400'}`}>
+                      {gate.occupancy_type === 'arrivee' || gate.assignment?.assignment_type === 'arrivee' ? '↓' : '↑'} {gate.plan_vol.callsign ?? gate.plan_vol.numero_vol}
                     </p>
                   ) : gate.assignment ? (
-                    <p className="text-[10px] text-amber-400 mt-1 font-medium">
+                    <p className={`text-[10px] mt-1 font-medium ${gate.assignment.assignment_type === 'arrivee' ? 'text-violet-400' : 'text-amber-400'}`}>
                       {gate.assignment.assignment_type === 'depart' ? '↑' : '↓'}{' '}
                       {gate.assignment.plan_vol?.numero_vol ?? 'Occupé'}
                     </p>

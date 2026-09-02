@@ -3,6 +3,17 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { fetchAtisBot, getAvailableBotInstance, getAllBotStatuses } from '@/lib/atis-bot-api';
+import {
+  atisKindForPosition,
+  buildAtisPatchBody,
+  firOf,
+  identifiantFromJoin,
+  isAtisDraftReady,
+  resolveAtisEntitlement,
+  type AtisDraftFields,
+  type OnlineAtcSession,
+  type TmaAirportDraft,
+} from '@/lib/atis-priority';
 
 export const dynamic = 'force-dynamic';
 // Railway peut mettre quelques secondes a repondre lors d'un redeploi. On etend
@@ -17,13 +28,16 @@ export const maxDuration = 60;
  *   - Le site peut auto-assigner le 1er bot libre, OU l'ATC peut cibler une
  *     instance precise via body.instance_id (utile si chaque bot a un canal
  *     vocal dedie, ex. "ATIS Mellor" sur Bot 1, "ATIS Refuge" sur Bot 2).
- *   - Un même aéroport ne peut être diffusé que par un seul bot à la fois.
+ *   - Un ATIS aéroport (TWR/Sol/DEL) et un ATIS TMA (DEP/APP/Centre) peuvent
+ *     coexister. Un seul contrôleur prioritaire configure chaque type.
  *   - L'ATC ne peut contrôler qu'un seul ATIS à la fois.
  *
  * Body :
  *   - aeroport (string, requis) : code ICAO
- *   - position (string, requis) : poste ATC (TWR, APP, ...)
+ *   - position (string, requis) : poste ATC (Tower, DEP, ...)
  *   - instance_id (number, optionnel) : si fourni, force le bot cible (sinon auto)
+ *   - atis_payload (object, optionnel) : brouillon préparé avant diffusion
+ *   - tma_airports (array, optionnel) : pistes TMA par aéroport
  */
 export async function POST(request: Request) {
   try {
@@ -42,17 +56,78 @@ export async function POST(request: Request) {
     if (!canAtc) return NextResponse.json({ error: 'Accès ATC requis.' }, { status: 403 });
 
     const body = await request.json();
-    const { aeroport, position, instance_id: requestedInstance } = body as {
+    const {
+      aeroport,
+      position,
+      instance_id: requestedInstance,
+      atis_payload,
+      tma_airports,
+    } = body as {
       aeroport?: string;
       position?: string;
       instance_id?: number | string;
+      atis_payload?: AtisDraftFields;
+      tma_airports?: TmaAirportDraft[];
     };
-    if (!aeroport || !position) {
-      return NextResponse.json({ error: 'aeroport et position requis' }, { status: 400 });
+    const admin = createAdminClient();
+    const { data: mySession } = await admin
+      .from('atc_sessions')
+      .select('aeroport, position')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (!mySession?.aeroport || !mySession?.position) {
+      return NextResponse.json(
+        { error: 'Mettez-vous en service avant de diffuser un ATIS.' },
+        { status: 403 }
+      );
     }
 
-    const aeroportCode = String(aeroport).toUpperCase();
-    const admin = createAdminClient();
+    const aeroportCode = String(mySession.aeroport).toUpperCase();
+    const positionName = String(mySession.position);
+    if (aeroport && String(aeroport).toUpperCase() !== aeroportCode) {
+      return NextResponse.json(
+        { error: 'L’ATIS doit correspondre à votre aéroport de session.' },
+        { status: 403 }
+      );
+    }
+    if (position && String(position) !== positionName) {
+      return NextResponse.json(
+        { error: 'L’ATIS doit correspondre à votre poste en service.' },
+        { status: 403 }
+      );
+    }
+
+    const incomingKind = atisKindForPosition(positionName);
+
+    const { data: sessionRows } = await admin
+      .from('atc_sessions')
+      .select('user_id, aeroport, position, profiles!atc_sessions_user_id_fkey(identifiant)');
+    const onlineSessions: OnlineAtcSession[] = (sessionRows ?? []).map((s) => ({
+      user_id: s.user_id as string,
+      aeroport: String(s.aeroport ?? ''),
+      position: String(s.position ?? ''),
+      identifiant: identifiantFromJoin((s as { profiles?: unknown }).profiles),
+    }));
+    const entitlement = resolveAtisEntitlement(user.id, aeroportCode, positionName, onlineSessions);
+    if (!entitlement.can_configure) {
+      return NextResponse.json(
+        { error: entitlement.reason ?? 'Un contrôleur plus prioritaire configure déjà cet ATIS.' },
+        { status: 403 }
+      );
+    }
+
+    const tmaAirports = Array.isArray(tma_airports) ? tma_airports : [];
+    if (!isAtisDraftReady(incomingKind, atis_payload?.runway, tmaAirports)) {
+      return NextResponse.json(
+        {
+          error:
+            incomingKind === 'tma'
+              ? 'Préparez d’abord l’ATIS TMA : indiquez au moins une piste en service sur un aéroport.'
+              : 'Préparez d’abord l’ATIS : renseignez la piste en service.',
+        },
+        { status: 400 }
+      );
+    }
 
     // Vérification 1 : l'utilisateur ne contrôle-t-il pas déjà un ATIS ?
     const { data: userOwned } = await admin
@@ -70,17 +145,27 @@ export async function POST(request: Request) {
       );
     }
 
-    // Vérification 2 : cet aéroport est-il déjà diffusé par un autre bot ?
-    const { data: aeroBusy } = await admin
+    // Vérification 2 : même type d'ATIS déjà diffusé (aéroport vs TMA peuvent coexister).
+    const { data: busyRows } = await admin
       .from('atis_broadcast_state')
-      .select('id, controlling_user_id')
-      .eq('aeroport', aeroportCode)
-      .eq('broadcasting', true)
-      .maybeSingle();
-    if (aeroBusy) {
+      .select('id, controlling_user_id, aeroport, position')
+      .eq('broadcasting', true);
+    const incomingFir = firOf(aeroportCode);
+    const conflict = (busyRows ?? []).find((row) => {
+      const rowKind = atisKindForPosition(String(row.position ?? ''));
+      if (rowKind !== incomingKind) return false;
+      if (incomingKind === 'airport') {
+        return String(row.aeroport ?? '').toUpperCase() === aeroportCode;
+      }
+      return Boolean(incomingFir && firOf(String(row.aeroport ?? '')) === incomingFir);
+    });
+    if (conflict) {
       return NextResponse.json(
         {
-          error: `L'ATIS de ${aeroportCode} est déjà diffusé par un autre contrôleur.`,
+          error:
+            incomingKind === 'tma'
+              ? `L'ATIS TMA ${incomingFir ?? aeroportCode} est déjà diffusé.`
+              : `L'ATIS de ${aeroportCode} est déjà diffusé par un autre contrôleur.`,
         },
         { status: 409 }
       );
@@ -89,18 +174,21 @@ export async function POST(request: Request) {
     // Vérification 3 : état réel des bots (si la DB est désynchronisée, un flux peut
     // encore être actif alors que broadcasting=false côté Supabase).
     const { instances: liveStatuses, error: liveErr } = await getAllBotStatuses();
-    if (!liveErr && liveStatuses.length > 0) {
-      const stillLive = liveStatuses.find(
-        (i) =>
-          i.broadcasting &&
-          String(i.airport ?? '')
-            .trim()
-            .toUpperCase() === aeroportCode
-      );
+    if (!liveErr && liveStatuses.length > 0 && incomingKind === 'airport') {
+      const stillLive = liveStatuses.find((i) => {
+        if (!i.broadcasting) return false;
+        const liveIcao = String(i.airport ?? '')
+          .trim()
+          .toUpperCase();
+        if (liveIcao !== aeroportCode) return false;
+        const dbRow = (busyRows ?? []).find((r) => String(r.id) === String(i.instance_id));
+        const liveKind = atisKindForPosition(String(dbRow?.position ?? ''));
+        return liveKind === 'airport' || !dbRow?.position;
+      });
       if (stillLive) {
         return NextResponse.json(
           {
-            error: `Le bot ${stillLive.instance_id} diffuse encore l’ATIS de ${stillLive.airport ?? aeroportCode} (état réel Discord). Dans le panneau ATIS, onglet État — cliquez « Stop » à droite de cette instance (pas seulement « Démarrer ») pour couper le flux, puis relancez.`,
+            error: `Le bot ${stillLive.instance_id} diffuse encore l’ATIS de ${stillLive.airport ?? aeroportCode} (état réel Discord). Dans le panneau ATIS, onglet Diffuser — cliquez « Stop » à droite de cette instance (pas seulement « Démarrer ») pour couper le flux, puis relancez.`,
           },
           { status: 409 }
         );
@@ -181,7 +269,7 @@ export async function POST(request: Request) {
         id: String(availableInstance),
         controlling_user_id: user.id,
         aeroport: aeroportCode,
-        position: String(position),
+        position: positionName,
         broadcasting: true,
         source: 'site',
         started_at: nowIso,
@@ -203,11 +291,22 @@ export async function POST(request: Request) {
       );
     }
 
-    // Patch les données ATIS de cette instance (aéroport).
+    // Patch les données ATIS de cette instance AVANT le start (config puis diffusion).
     const apt = AEROPORTS_PTFS.find((a) => a.code === aeroportCode);
+    const patchBody = buildAtisPatchBody({
+      aeroport: aeroportCode,
+      kind: incomingKind,
+      fir: entitlement.fir,
+      draft: {
+        ...(atis_payload ?? {}),
+        runway: atis_payload?.runway ?? (incomingKind === 'airport' ? undefined : atis_payload?.runway),
+      },
+      tmaAirports,
+    });
+    if (!patchBody.airport_name) patchBody.airport_name = apt?.nom ?? aeroport;
     const patchRes = await fetchAtisBot('/webhook/atis-data', {
       method: 'PATCH',
-      body: { airport: aeroportCode, airport_name: apt?.nom ?? aeroport },
+      body: patchBody,
       instanceId: availableInstance,
     });
     if (patchRes.error && patchRes.status !== 503) {

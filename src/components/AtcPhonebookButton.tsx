@@ -179,7 +179,7 @@ export default function AtcPhonebookButton({ isDark }: { isDark: boolean }) {
 
           <div className="border-t border-slate-700/50 px-3 py-2 text-[10px] text-slate-500 leading-snug bg-slate-900/40">
             {tab === 'atis' ? (
-              <>ℹ️ Click sur un aéroport — le téléphone s&apos;ouvre, le numéro est composé. Appuyez sur Call pour écouter l&apos;ATIS.</>
+              <>Cliquez un aéroport : le téléphone s&apos;ouvre, le numéro est composé. Appuyez sur Appeler pour écouter l&apos;ATIS.</>
             ) : (
               <>
                 ℹ️ Codes locaux (même aéroport) : <span className="font-mono">*15</span> Delivery,

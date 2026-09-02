@@ -1,15 +1,20 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { unlockAudioForIOS } from '@/lib/phone-sounds';
 import { speakNow } from '@/lib/tts';
-import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX } from 'lucide-react';
+import {
+  Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX,
+  Delete, Settings2, RefreshCw,
+} from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { useLiveKitCall } from '@/hooks/useLiveKitCall';
+import { cn } from '@/lib/utils';
 import {
-  CODE_TO_POSITION,
-  CODE_TO_AEROPORT,
   parseAtisCall,
+  parseDialedNumber,
+  formatStationNumber,
+  LOCAL_POSITION_SHORTCUTS,
 } from '@/lib/atc-phone-codes';
 
 type CallState =
@@ -26,6 +31,29 @@ interface AtcTelephoneProps {
   position: string;
 }
 
+const KEYPAD: string[][] = [
+  ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
+  ['*', '0', '+'],
+];
+
+function formatDuration(seconds: number) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function AudioSink({ audioRef }: { audioRef: React.Ref<HTMLDivElement | null> }) {
+  return (
+    <div
+      ref={audioRef}
+      style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }}
+      aria-hidden="true"
+    />
+  );
+}
+
 export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
@@ -36,6 +64,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const [currentCall, setCurrentCall] = useState<{ to: string; toPosition: string; callId: string } | null>(null);
   const [callDuration, setCallDuration] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState('');
+  const [dialHint, setDialHint] = useState<string | null>(null);
   const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
   const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
   const [selectedInputId, setSelectedInputId] = useState('');
@@ -44,7 +73,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const [audioDeviceError, setAudioDeviceError] = useState<string | null>(null);
   const [isMicTestActive, setIsMicTestActive] = useState(false);
   const [micTestLevel, setMicTestLevel] = useState(0);
-  
+
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const shouldPlaySoundRef = useRef(false);
@@ -53,16 +82,15 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const micTestRafRef = useRef<number | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
-  // Ã‰viter les erreurs d'hydratation
+  const ownNumber = formatStationNumber(aeroport, position);
+  const parsed = useMemo(() => parseDialedNumber(number, aeroport), [number, aeroport]);
+  const busy = callState !== 'idle' && callState !== 'dialing';
+  const localShortcuts = LOCAL_POSITION_SHORTCUTS.filter((s) => s.position !== position);
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // L'annuaire ATC dans la nav (AtcPhonebookButton) compose un numero via
-  // l'event 'atc-telephone:dial' : on ouvre le telephone, pre-remplit le
-  // dialer et on passe en 'dialing'. L'utilisateur n'a plus qu'a appuyer
-  // sur Call. Bloque si un appel est en cours pour ne pas ecraser un
-  // dialogue actif.
   useEffect(() => {
     function handleDial(e: Event) {
       const detail = (e as CustomEvent<{ number: string }>).detail;
@@ -80,6 +108,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       setIsOpen(true);
       setNumber(detail.number);
       setCallState('dialing');
+      setDialHint(null);
     }
     window.addEventListener('atc-telephone:dial', handleDial);
     return () => window.removeEventListener('atc-telephone:dial', handleDial);
@@ -88,7 +117,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const refreshAudioDevices = useCallback(async () => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
     try {
-      // Demande d'accÃ¨s micro pour obtenir les labels de pÃ©riphÃ©riques.
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach((t) => t.stop());
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -105,19 +133,18 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       setAudioDeviceError(null);
     } catch (e) {
       console.error('[ATC Phone] refreshAudioDevices error:', e);
-      setAudioDeviceError('AccÃ¨s micro refusÃ© ou pÃ©riphÃ©riques indisponibles');
+      setAudioDeviceError('Accès micro refusé ou périphériques indisponibles');
     }
   }, []);
 
   useEffect(() => {
-    refreshAudioDevices();
+    void refreshAudioDevices();
     const mediaDevices = navigator?.mediaDevices;
     if (!mediaDevices?.addEventListener) return;
     const onDeviceChange = () => { void refreshAudioDevices(); };
     mediaDevices.addEventListener('devicechange', onDeviceChange);
     return () => mediaDevices.removeEventListener('devicechange', onDeviceChange);
   }, [refreshAudioDevices]);
-
 
   const cleanupMicTestResources = useCallback(() => {
     if (micTestRafRef.current != null) {
@@ -185,7 +212,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       setIsMicTestActive(true);
     } catch (e) {
       console.error('[ATC Phone] startLocalMicTest error:', e);
-      setAudioDeviceError('Impossible de tester le micro (autorisation ou peripherique)');
+      setAudioDeviceError('Impossible de tester le micro (autorisation ou périphérique)');
       cleanupMicTestResources();
       setIsMicTestActive(false);
     }
@@ -195,7 +222,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     speakNow(message);
   }, []);
 
-  // Sons
   const playSound = useCallback((type: 'ring' | 'dial' | 'end' | 'beep' | 'connected') => {
     if (!shouldPlaySoundRef.current && type !== 'beep' && type !== 'connected') return;
     try {
@@ -204,7 +230,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
-      
+
       switch (type) {
         case 'ring':
           osc.frequency.value = 440; osc.type = 'sine';
@@ -249,7 +275,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     onConnectionStatusChange: setConnectionStatus,
   });
 
-  // Sonnerie
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (callState === 'incoming') {
@@ -266,11 +291,10 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     return () => { shouldPlaySoundRef.current = false; if (interval) clearInterval(interval); };
   }, [callState, playSound]);
 
-  // Timer appel connectÃ©
   useEffect(() => {
     if (callState === 'connected') {
       setCallDuration(0);
-      callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
+      callTimerRef.current = setInterval(() => setCallDuration((d) => d + 1), 1000);
     } else {
       if (callTimerRef.current) clearInterval(callTimerRef.current);
       setCallDuration(0);
@@ -278,7 +302,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     return () => { if (callTimerRef.current) clearInterval(callTimerRef.current); };
   }, [callState]);
 
-  // Polling appels entrants
   useEffect(() => {
     if (callState === 'idle') {
       checkIntervalRef.current = setInterval(async () => {
@@ -307,12 +330,10 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     return () => { if (checkIntervalRef.current) clearInterval(checkIntervalRef.current); };
   }, [callState, incomingCall]);
 
-
-  // Timeout 30s pour appels non connectÃ©s
   useEffect(() => {
     if (callState === 'ringing' || callState === 'connecting' || callState === 'incoming') {
       const timeout = setTimeout(async () => {
-        playMessage('DÃ©lai dÃ©passÃ©');
+        playMessage('Délai dépassé');
         await cleanupLiveKit();
         const callId = currentCall?.callId || incomingCall?.callId;
         if (callId) {
@@ -331,7 +352,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     }
   }, [callState, currentCall, incomingCall, cleanupLiveKit, playMessage]);
 
-
   const micTestActiveRef = useRef(false);
   micTestActiveRef.current = isMicTestActive;
   const prevInputIdRef = useRef(selectedInputId);
@@ -342,44 +362,43 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     void startLocalMicTest();
   }, [selectedInputId, startLocalMicTest]);
 
-  const parseNumber = (num: string) => {
-    if (num === '911' || num === '112') return { aeroport: null, position: 'AFIS', isLocal: false, isEmergency: true };
-    if (num.startsWith('*')) {
-      const code = num.substring(1);
-      return { aeroport: null, position: CODE_TO_POSITION[code] || null, isLocal: true, isEmergency: false };
-    }
-    if (num.startsWith('+14') && num.length >= 9) {
-      return {
-        aeroport: CODE_TO_AEROPORT[num.substring(3, 7)] || null,
-        position: CODE_TO_POSITION[num.substring(7)] || null,
-        isLocal: false, isEmergency: false,
-      };
-    }
-    return { aeroport: null, position: null, isLocal: false, isEmergency: false };
-  };
-
-  const handleNumberInput = (digit: string) => {
-    if (callState === 'idle' || callState === 'dialing') {
-      playSound('beep');
-      const newNumber = number + digit;
-      setNumber(newNumber);
-      if (callState === 'idle') setCallState('dialing');
-      
-      // Code secret pour reset: 159753
-      if (newNumber === '159753') {
-        resetPhone();
-        playMessage('TÃ©lÃ©phone rÃ©initialisÃ©');
+  const handleNumberInput = useCallback((digit: string) => {
+    if (callState !== 'idle' && callState !== 'dialing') return;
+    playSound('beep');
+    setDialHint(null);
+    setNumber((prev) => {
+      const next = prev + digit;
+      if (next === '159753') {
+        void (async () => {
+          try {
+            await fetch('/api/atc/telephone/hangup', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reset: true }),
+            });
+            await cleanupLiveKit();
+            setCallState('idle');
+            setNumber('');
+            setIncomingCall(null);
+            setCurrentCall(null);
+            playMessage('Téléphone réinitialisé');
+          } catch (err) { console.error('Reset error:', err); }
+        })();
+        return '';
       }
-    }
-  };
-
-  const handleDelete = () => {
-    setNumber(prev => {
-      const newNumber = prev.slice(0, -1);
-      if (newNumber.length === 0) setCallState('idle');
-      return newNumber;
+      return next;
     });
-  };
+    if (callState === 'idle') setCallState('dialing');
+  }, [callState, playSound, cleanupLiveKit, playMessage]);
+
+  const handleDelete = useCallback(() => {
+    setDialHint(null);
+    setNumber((prev) => {
+      const next = prev.slice(0, -1);
+      if (next.length === 0) setCallState('idle');
+      return next;
+    });
+  }, []);
 
   const handleAtisCall = async (airport_icao: string) => {
     setCallState('ringing');
@@ -413,7 +432,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
         return;
       }
 
-      // Lecture du texte ATIS via Web Speech API. Pas de LiveKit, pas de micro.
       const atisTextEn: string = data.atis.atis_text;
       const atisTextFr: string | null = data.atis.atis_text_fr ?? null;
       const bilingual: boolean = Boolean(data.atis.bilingual);
@@ -429,8 +447,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
         if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
           window.speechSynthesis.cancel();
 
-          // Etat partage entre les utterances : la fin du DERNIER utterance
-          // (FR si bilingue, EN sinon) declenche le retour a idle.
           const finishCall = () => {
             setCallState('idle');
             setCurrentCall(null);
@@ -450,9 +466,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
             utterFr.pitch = 1.0;
             utterFr.onend = finishCall;
             utterFr.onerror = finishCall;
-            // En bilingue : EN se termine -> on demarre FR (geres en queue par
-            // le navigateur, mais on sequence explicitement pour montrer le
-            // changement de statut a l'ATC).
             utterEn.onend = () => {
               setConnectionStatus(
                 `ATIS ${data.atis.airport_icao}${data.atis.atis_code ? ` info ${data.atis.atis_code}` : ''} (FR)`
@@ -470,7 +483,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
 
           window.speechSynthesis.speak(utterEn);
         } else {
-          playMessage(`ATIS ${airport_icao} indisponible : navigateur sans synthese vocale`);
+          playMessage(`ATIS ${airport_icao} indisponible : navigateur sans synthèse vocale`);
           setCallState('idle');
           setCurrentCall(null);
           setConnectionStatus('');
@@ -496,16 +509,17 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const handleCall = async () => {
     if (!number || callState !== 'dialing') return;
 
-    // Detection prioritaire : appel ATIS (XXXX9999). Pas de creation de row
-    // dans atc_calls, pas de LiveKit, juste lecture TTS du texte ATIS.
     const atisCall = parseAtisCall(number);
     if (atisCall) {
       await handleAtisCall(atisCall.airport_icao);
       return;
     }
 
-    const parsed = parseNumber(number);
-    if (!parsed.position) return;
+    const dest = parseDialedNumber(number, aeroport);
+    if (!dest.ready || !dest.position) {
+      setDialHint('Numéro incomplet');
+      return;
+    }
 
     setCallState('ringing');
 
@@ -514,21 +528,21 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to_aeroport: parsed.aeroport || aeroport,
-          to_position: parsed.position,
-          number: number,
-          is_emergency: parsed.isEmergency,
+          to_aeroport: dest.aeroport || aeroport,
+          to_position: dest.position,
+          number,
+          is_emergency: dest.isEmergency,
         }),
       });
 
       const data = await res.json();
-      
+
       if (!res.ok) {
         if (data.error === 'offline') playMessage('Votre correspondant est hors ligne');
         else if (data.error === 'position_offline') playMessage(data.message || 'Position non disponible');
         else if (data.error === 'no_afis') playMessage('Aucun agent AFIS disponible');
-        else if (data.error === 'cible_occupee') playMessage('Votre correspondant est dÃ©jÃ  en ligne');
-        else if (data.error === 'appel_en_cours') playMessage('Vous avez dÃ©jÃ  un appel en cours');
+        else if (data.error === 'cible_occupee') playMessage('Votre correspondant est déjà en ligne');
+        else if (data.error === 'appel_en_cours') playMessage('Vous avez déjà un appel en cours');
         else playMessage('Erreur lors de l\'appel');
         playSound('end');
         setCallState('idle');
@@ -537,14 +551,13 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       }
 
       if (data.call) {
-        setCurrentCall({ to: parsed.aeroport || aeroport, toPosition: parsed.position, callId: data.call.id });
-        
-        // Attendre rÃ©ponse
+        setCurrentCall({ to: dest.aeroport || aeroport, toPosition: dest.position, callId: data.call.id });
+
         for (let i = 0; i < 60; i++) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 500));
           const statusRes = await fetch(`/api/atc/telephone/status?callId=${data.call.id}`);
           const statusData = await statusRes.json();
-          
+
           if (statusData.status === 'connected') {
             setCallState('connecting');
             const ok = await joinLiveKitCall(data.call.id, `${aeroport}-${position}`, {
@@ -558,7 +571,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ callId: data.call.id }),
               }).catch(() => {});
-              playMessage('Connexion audio Ã©chouÃ©e');
+              playMessage('Connexion audio échouée');
               setCallState('idle');
               setCurrentCall(null);
             }
@@ -566,15 +579,15 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
           }
           if (statusData.status === 'rejected' || statusData.status === 'ended') break;
         }
-        
+
         await fetch('/api/atc/telephone/hangup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ callId: data.call.id }),
         }).catch(console.error);
-        
+
         playSound('end');
-        playMessage('Votre correspondant ne rÃ©pond pas');
+        playMessage('Votre correspondant ne répond pas');
         setCallState('idle');
         setNumber('');
         setCurrentCall(null);
@@ -591,7 +604,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     if (!incomingCall) return;
     setCallState('connecting');
     setConnectionStatus('Connexion...');
-    
+
     try {
       const res = await fetch('/api/atc/telephone/answer', {
         method: 'POST',
@@ -646,8 +659,6 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     const wasConnected = callState === 'connected';
     const wasAtisPlaying = callState === 'atis_playing';
 
-    // Cas appel ATIS : pas de LiveKit, pas de hangup serveur. Juste arreter
-    // la synthese vocale localement.
     if (wasAtisPlaying) {
       try {
         if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -673,26 +684,11 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       }).catch(console.error);
     }
     playSound('end');
-    if (wasConnected) playMessage('Appel terminÃ©');
+    if (wasConnected) playMessage('Appel terminé');
     setCallState('idle');
     setNumber('');
     setIncomingCall(null);
     setCurrentCall(null);
-  };
-
-  const resetPhone = async () => {
-    try {
-      await fetch('/api/atc/telephone/hangup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reset: true }),
-      });
-      await cleanupLiveKit();
-      setCallState('idle');
-      setNumber('');
-      setIncomingCall(null);
-      setCurrentCall(null);
-    } catch (err) { console.error('Reset error:', err); }
   };
 
   useEffect(() => () => {
@@ -700,36 +696,86 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     void cleanupLiveKit();
   }, [cleanupLiveKit, stopLocalMicTest]);
 
-  const formatDuration = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
+  useEffect(() => {
+    if (!isOpen) return;
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (e.key >= '0' && e.key <= '9') handleNumberInput(e.key);
+      else if (e.key === '*' || e.key === '+') handleNumberInput(e.key);
+      else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handleDelete();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        void handleCall();
+      } else if (e.key === 'Escape' && (callState === 'idle' || callState === 'dialing')) {
+        setIsOpen(false);
+        if (callState === 'idle') setNumber('');
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, callState, handleNumberInput, handleDelete]);
 
-  // Styles
-  const bgMain = isDark ? 'border border-slate-800/80 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-900/95' : 'bg-gradient-to-b from-slate-800 to-slate-900';
-  const textMain = isDark ? 'text-slate-100' : 'text-slate-100';
-  const screenBg = isDark ? 'bg-slate-800' : 'bg-slate-950';
-  const keyBg = isDark ? 'border border-slate-700 bg-slate-900 hover:bg-slate-800 shadow-lg shadow-slate-950/20' : 'bg-slate-700 hover:bg-slate-600 shadow-lg';
-  const keyText = isDark ? 'text-slate-100' : 'text-white';
+  const statusLabel =
+    callState === 'incoming' ? 'Appel entrant'
+      : callState === 'ringing' ? 'Appel…'
+        : callState === 'connecting' ? 'Connexion…'
+          : callState === 'connected' ? 'En ligne'
+            : callState === 'atis_playing' ? 'ATIS en lecture'
+              : 'Composer';
 
-  // Ã‰viter le rendu cÃ´tÃ© serveur pour les fonctionnalitÃ©s audio
-  if (!isMounted) {
-    return null;
-  }
+  const shell = isDark
+    ? 'border border-slate-800 bg-[#080c14]/95 text-slate-100'
+    : 'border border-slate-300 bg-white/95 text-slate-900';
+  const muted = isDark ? 'text-slate-400' : 'text-slate-500';
+  const keyClass = isDark
+    ? 'border border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800'
+    : 'border border-slate-200 bg-slate-100 text-slate-900 hover:bg-slate-200';
+  const screenClass = isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-50 border-slate-200';
+
+  if (!isMounted) return null;
+
+  const fabTone =
+    callState === 'incoming' ? (isDark ? 'border-emerald-500/70 bg-emerald-950 text-emerald-100' : 'border-emerald-400 bg-emerald-50 text-emerald-900')
+      : callState === 'connected' ? (isDark ? 'border-emerald-700/70 bg-emerald-950/80 text-emerald-100' : 'border-emerald-300 bg-emerald-50 text-emerald-900')
+        : callState === 'ringing' || callState === 'connecting' || callState === 'atis_playing'
+          ? (isDark ? 'border-sky-600/70 bg-sky-950 text-sky-100' : 'border-sky-300 bg-sky-50 text-sky-900')
+          : shell;
 
   if (!isOpen) {
     return (
       <>
-        {/* Conteneur audio: Ã©viter display:none qui bloque la lecture (cf. bug unidirectionnel) */}
-        <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
-        <button onClick={() => { unlockAudioForIOS(); setIsOpen(true); }}
-          className={`fixed bottom-4 right-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl`}>
-          <div className={`p-2 rounded-xl ${isDark ? 'bg-sky-500/15' : 'bg-sky-500/20'}`}>
-            <Phone className={`h-5 w-5 ${isDark ? 'text-sky-300' : 'text-sky-400'}`} />
-          </div>
-          <span className="font-medium">TÃ©lÃ©phone</span>
-          {callState === 'incoming' && <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-ping" />}
+        <AudioSink audioRef={audioContainerRef} />
+        <button
+          type="button"
+          onClick={() => { unlockAudioForIOS(); setIsOpen(true); }}
+          className={cn(
+            'fixed bottom-4 right-4 z-50 rounded-2xl shadow-xl px-3 py-2.5 flex items-center gap-2.5 transition-all hover:scale-[1.02]',
+            fabTone,
+          )}
+          aria-label="Ouvrir le téléphone ATC"
+        >
+          <span className={cn(
+            'relative flex h-9 w-9 items-center justify-center rounded-xl',
+            callState === 'incoming' ? 'bg-emerald-500/25' : isDark ? 'bg-sky-500/15' : 'bg-sky-100',
+          )}>
+            <Phone className={cn('h-4 w-4', callState === 'incoming' ? 'text-emerald-400' : isDark ? 'text-sky-300' : 'text-sky-600')} />
+            {callState === 'incoming' && (
+              <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-400 animate-ping" />
+            )}
+          </span>
+          <span className="text-left leading-tight">
+            <span className="block text-sm font-semibold">Téléphone</span>
+            <span className={cn('block text-[10px] font-mono uppercase tracking-wider', muted)}>
+              {callState === 'incoming' && incomingCall
+                ? `${incomingCall.from} ${incomingCall.fromPosition}`
+                : callState === 'connected'
+                  ? formatDuration(callDuration)
+                  : `${aeroport} · ${position}`}
+            </span>
+          </span>
         </button>
       </>
     );
@@ -737,204 +783,280 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
 
   return (
     <>
-    {/* Conteneur audio: Ã©viter display:none qui bloque la lecture (cf. bug unidirectionnel) */}
-    <div ref={audioContainerRef} style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true" />
-    <div className={`fixed right-4 bottom-4 z-50 ${bgMain} rounded-3xl shadow-2xl overflow-hidden transition-all duration-500`} style={{ width: '240px' }}>
-      <div className={`px-4 py-3 flex items-center justify-between border-b ${isDark ? 'border-slate-800' : 'border-slate-700'}`}>
-        <div className="flex items-center gap-2">
-          <Phone className={`h-4 w-4 ${isDark ? 'text-sky-300' : 'text-sky-400'}`} />
-          <span className={`text-sm font-semibold ${textMain}`}>TÃ©lÃ©phone ATC</span>
-        </div>
-        <button onClick={() => { setIsOpen(false); if (callState === 'idle') setNumber(''); }} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-700'}`}>
-          <X className={`h-3.5 w-3.5 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
-        </button>
-      </div>
-      
-      <div className={`mx-3 mt-3 p-3 ${screenBg} rounded-xl`}>
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[10px] text-slate-500 uppercase tracking-wider">
-            {callState === 'incoming'
-              ? 'Appel entrant'
-              : callState === 'ringing'
-                ? 'Appel...'
-                : callState === 'connecting'
-                  ? 'Connexion...'
-                  : callState === 'connected'
-                    ? 'En ligne'
-                    : callState === 'atis_playing'
-                      ? 'ATIS en lecture'
-                      : 'Composer'}
-          </span>
-          {callState === 'connected' && (
-            <div className="flex items-center gap-1">
-              {audioLevel > 0.1 ? <Volume2 className="h-3 w-3 text-emerald-400" style={{ opacity: 0.5 + audioLevel * 0.5 }} /> : <VolumeX className="h-3 w-3 text-slate-500" />}
-              <span className="text-[10px] text-emerald-400 font-mono">{formatDuration(callDuration)}</span>
+      <AudioSink audioRef={audioContainerRef} />
+      <div className={cn('fixed right-4 bottom-4 z-50 w-[272px] rounded-2xl shadow-2xl overflow-hidden', shell)}>
+        <div className={cn('px-3 py-2.5 flex items-center justify-between border-b', isDark ? 'border-slate-800' : 'border-slate-200')}>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <Phone className={cn('h-3.5 w-3.5', isDark ? 'text-sky-300' : 'text-sky-600')} />
+              <span className="text-sm font-bold">Téléphone ATC</span>
             </div>
-          )}
-        </div>
-        
-        <div className="text-center min-h-[32px] flex items-center justify-center">
-          {callState === 'incoming' && incomingCall ? (
-            <div className="animate-pulse">
-              <p className="text-lg font-bold text-emerald-400">{incomingCall.from}</p>
-              <p className="text-xs text-slate-400">{incomingCall.fromPosition}</p>
-            </div>
-          ) : callState === 'atis_playing' && currentCall ? (
-            <div>
-              <p className="text-lg font-bold text-sky-300">ATIS {currentCall.to}</p>
-              <p className="text-xs text-slate-400">Lecture en cours</p>
-            </div>
-          ) : callState === 'connected' && currentCall ? (
-            <div>
-              <p className="text-lg font-bold text-emerald-400">{currentCall.to}</p>
-              <p className="text-xs text-slate-400">{currentCall.toPosition}</p>
-            </div>
-          ) : (callState === 'ringing' || callState === 'connecting') && currentCall ? (
-            <div className="animate-pulse">
-              <p className="text-lg font-bold text-sky-400">{currentCall.to}</p>
-              <p className="text-xs text-slate-400">{currentCall.toPosition}</p>
-            </div>
-          ) : (
-            <p className={`text-2xl font-mono tracking-wider ${number ? 'text-emerald-400' : 'text-slate-600'}`}>{number || 'â€”'}</p>
-          )}
-        </div>
-        
-        {connectionStatus && (callState === 'connecting' || callState === 'ringing' || callState === 'atis_playing') && (
-          <p className="text-[10px] text-center text-sky-300 mt-1">{connectionStatus}</p>
-        )}
-        
-        {callState === 'connected' && (
-          <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-75" style={{ width: `${audioLevel * 100}%` }} />
+            <p className={cn('text-[10px] font-mono mt-0.5 truncate', muted)}>
+              {aeroport} · {position}{ownNumber ? ` · ${ownNumber}` : ''}
+            </p>
           </div>
-        )}
-        <div className="mt-2 flex items-center justify-between gap-2">
           <button
-            onClick={() => setShowAudioPanel((v) => !v)}
-            className={`px-2 py-1 rounded-md text-[10px] ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+            type="button"
+            onClick={() => { setIsOpen(false); if (callState === 'idle') setNumber(''); }}
+            className={cn('p-1.5 rounded-lg', isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-500')}
+            aria-label="Réduire le téléphone"
           >
-            Audio
-          </button>
-          <button
-            onClick={() => { void refreshAudioDevices(); }}
-            className="px-2 py-1 rounded-md text-[10px] bg-slate-700 text-slate-200 hover:bg-slate-600"
-          >
-            RafraÃ®chir
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
-        {/* Annuaires ATIS et ATC : deplaces dans la nav ATC (AtcPhonebookButton).
-            Le telephone ecoute l'event 'atc-telephone:dial' pour pre-remplir. */}
-        {showAudioPanel && (
-          <div className="mt-2 space-y-2 text-[10px]">
-            <div>
-              <p className="text-slate-400 mb-1">EntrÃ©e micro</p>
-              <select
-                value={selectedInputId}
-                onChange={(e) => setSelectedInputId(e.target.value)}
-                className="w-full rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-2 py-1"
-              >
-                {audioInputs.map((d, i) => (
-                  <option key={d.deviceId || `${d.kind}-${i}`} value={d.deviceId}>
-                    {d.label || `Microphone ${i + 1}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <button
-                onClick={() => { if (isMicTestActive) stopLocalMicTest(); else void startLocalMicTest(); }}
-                className={`w-full rounded-md px-2 py-1 text-slate-100 ${
-                  isMicTestActive ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'
-                }`}
-              >
-                {isMicTestActive ? 'ArrÃªter test micro' : 'Tester micro local'}
-              </button>
-              <div className="mt-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className={`h-full transition-all duration-75 ${isMicTestActive ? 'bg-emerald-400' : 'bg-slate-500'}`}
-                  style={{ width: `${Math.round(micTestLevel * 100)}%` }}
-                />
-              </div>
-            </div>
-            <div>
-              <p className="text-slate-400 mb-1">Sortie audio</p>
-              <select
-                value={selectedOutputId}
-                onChange={(e) => setSelectedOutputId(e.target.value)}
-                className="w-full rounded-md bg-slate-800 border border-slate-700 text-slate-100 px-2 py-1"
-              >
-                {audioOutputs.map((d, i) => (
-                  <option key={d.deviceId || `${d.kind}-${i}`} value={d.deviceId}>
-                    {d.label || `Haut-parleur ${i + 1}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {audioDeviceError && <p className="text-amber-400">{audioDeviceError}</p>}
-          </div>
-        )}
-      </div>
 
-      <div className="p-3 space-y-1.5">
-        {[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['*', '0', '+']].map((row, i) => (
-          <div key={i} className="grid grid-cols-3 gap-1.5">
-            {row.map(d => (
-              <button key={d} onClick={() => handleNumberInput(d)}
-                disabled={callState === 'connected' || callState === 'ringing' || callState === 'incoming' || callState === 'connecting' || callState === 'atis_playing'}
-                className={`h-11 ${keyBg} ${keyText} rounded-xl font-semibold text-lg transition-all active:scale-95 disabled:opacity-40`}>
-                {d}
+        <div className={cn('mx-3 mt-3 p-3 rounded-xl border', screenClass)}>
+          <div className="flex items-center justify-between mb-1">
+            <span className={cn('text-[10px] font-black uppercase tracking-[0.16em]', muted)}>
+              {statusLabel}
+            </span>
+            {callState === 'connected' && (
+              <div className="flex items-center gap-1">
+                {audioLevel > 0.1
+                  ? <Volume2 className="h-3 w-3 text-emerald-400" style={{ opacity: 0.5 + audioLevel * 0.5 }} />
+                  : <VolumeX className="h-3 w-3 text-slate-500" />}
+                <span className="text-[10px] text-emerald-400 font-mono">{formatDuration(callDuration)}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="text-center min-h-[44px] flex flex-col items-center justify-center">
+            {callState === 'incoming' && incomingCall ? (
+              <div className="animate-pulse">
+                <p className="text-lg font-black text-emerald-400 font-mono">{incomingCall.from}</p>
+                <p className={cn('text-xs', muted)}>{incomingCall.fromPosition}</p>
+              </div>
+            ) : callState === 'atis_playing' && currentCall ? (
+              <div>
+                <p className="text-lg font-black text-sky-300">ATIS {currentCall.to}</p>
+                <p className={cn('text-xs', muted)}>Lecture en cours</p>
+              </div>
+            ) : callState === 'connected' && currentCall ? (
+              <div>
+                <p className="text-lg font-black text-emerald-400 font-mono">{currentCall.to}</p>
+                <p className={cn('text-xs', muted)}>{currentCall.toPosition}</p>
+              </div>
+            ) : (callState === 'ringing' || callState === 'connecting') && currentCall ? (
+              <div className="animate-pulse">
+                <p className="text-lg font-black text-sky-400 font-mono">{currentCall.to}</p>
+                <p className={cn('text-xs', muted)}>{currentCall.toPosition}</p>
+              </div>
+            ) : (
+              <>
+                <p className={cn('text-xl font-mono tracking-wider', number ? (isDark ? 'text-emerald-300' : 'text-emerald-700') : muted)}>
+                  {number || '—'}
+                </p>
+                {parsed.label && (
+                  <p className={cn('text-[11px] mt-0.5', parsed.ready ? (isDark ? 'text-sky-300' : 'text-sky-700') : muted)}>
+                    {parsed.label}{parsed.isEmergency ? ' · urgence' : ''}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+
+          {connectionStatus && (callState === 'connecting' || callState === 'ringing' || callState === 'atis_playing') && (
+            <p className="text-[10px] text-center text-sky-400 mt-1">{connectionStatus}</p>
+          )}
+          {dialHint && <p className="text-[10px] text-center text-amber-400 mt-1">{dialHint}</p>}
+
+          {callState === 'connected' && (
+            <div className={cn('mt-2 h-1 rounded-full overflow-hidden', isDark ? 'bg-slate-800' : 'bg-slate-200')}>
+              <div className="h-full bg-emerald-400 transition-all duration-75" style={{ width: `${audioLevel * 100}%` }} />
+            </div>
+          )}
+
+          <div className="mt-2 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setShowAudioPanel((v) => !v)}
+              className={cn(
+                'flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold',
+                showAudioPanel
+                  ? (isDark ? 'bg-sky-500/20 text-sky-200' : 'bg-sky-100 text-sky-800')
+                  : (isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-700'),
+              )}
+            >
+              <Settings2 className="h-3 w-3" /> Audio
+            </button>
+            <button
+              type="button"
+              onClick={() => { void refreshAudioDevices(); }}
+              className={cn('flex items-center gap-1 px-2 py-1 rounded-md text-[10px]', isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-800')}
+            >
+              <RefreshCw className="h-3 w-3" /> Périphériques
+            </button>
+          </div>
+
+          {showAudioPanel && (
+            <div className="mt-2 space-y-2 text-[10px]">
+              <div>
+                <p className={cn('mb-1', muted)}>Entrée micro</p>
+                <select
+                  value={selectedInputId}
+                  onChange={(e) => setSelectedInputId(e.target.value)}
+                  className={cn('w-full rounded-md px-2 py-1 border', isDark ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-900')}
+                >
+                  {audioInputs.map((d, i) => (
+                    <option key={d.deviceId || `${d.kind}-${i}`} value={d.deviceId}>
+                      {d.label || `Microphone ${i + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => { if (isMicTestActive) stopLocalMicTest(); else void startLocalMicTest(); }}
+                  className={cn(
+                    'w-full rounded-md px-2 py-1 text-white',
+                    isMicTestActive ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500',
+                  )}
+                >
+                  {isMicTestActive ? 'Arrêter le test micro' : 'Tester le micro'}
+                </button>
+                <div className={cn('mt-1 h-1.5 rounded-full overflow-hidden', isDark ? 'bg-slate-800' : 'bg-slate-200')}>
+                  <div
+                    className={cn('h-full transition-all duration-75', isMicTestActive ? 'bg-emerald-400' : 'bg-slate-500')}
+                    style={{ width: `${Math.round(micTestLevel * 100)}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <p className={cn('mb-1', muted)}>Sortie audio</p>
+                <select
+                  value={selectedOutputId}
+                  onChange={(e) => setSelectedOutputId(e.target.value)}
+                  className={cn('w-full rounded-md px-2 py-1 border', isDark ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-900')}
+                >
+                  {audioOutputs.map((d, i) => (
+                    <option key={d.deviceId || `${d.kind}-${i}`} value={d.deviceId}>
+                      {d.label || `Haut-parleur ${i + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {audioDeviceError && <p className="text-amber-400">{audioDeviceError}</p>}
+            </div>
+          )}
+        </div>
+
+        {!busy && localShortcuts.length > 0 && (
+          <div className="px-3 pt-2 flex flex-wrap gap-1">
+            {localShortcuts.map((s) => (
+              <button
+                key={s.code}
+                type="button"
+                onClick={() => {
+                  unlockAudioForIOS();
+                  setNumber(s.code);
+                  setCallState('dialing');
+                  setDialHint(null);
+                }}
+                title={`${s.position} (${s.code})`}
+                className={cn(
+                  'px-1.5 py-0.5 rounded text-[9px] font-black tracking-wide border',
+                  number === s.code
+                    ? (isDark ? 'border-sky-400 bg-sky-500/20 text-sky-200' : 'border-sky-500 bg-sky-100 text-sky-800')
+                    : (isDark ? 'border-slate-800 bg-slate-900/80 text-slate-400 hover:text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-600 hover:text-slate-900'),
+                )}
+              >
+                {s.short}
               </button>
             ))}
           </div>
-        ))}
+        )}
 
-        <div className="grid grid-cols-3 gap-1.5 pt-1">
-          <button onClick={handleDelete} disabled={!number || callState !== 'dialing'}
-            className="h-11 bg-amber-500 hover:bg-amber-400 text-white rounded-xl flex items-center justify-center disabled:opacity-40 transition-all active:scale-95">
-            <X className="h-5 w-5" />
-          </button>
-          
-          {callState === 'incoming' ? (
-            <button onClick={handleAnswer}
-              className="h-11 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl flex items-center justify-center transition-all active:scale-95 animate-pulse shadow-lg shadow-emerald-500/30">
-              <Phone className="h-5 w-5" />
-            </button>
-          ) : callState === 'connected' ? (
-            <button onClick={toggleMute}
-              className={`h-11 ${isMuted ? 'bg-red-500 hover:bg-red-400' : 'bg-sky-500 hover:bg-sky-400'} text-white rounded-xl flex items-center justify-center transition-all active:scale-95`}>
-              {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-            </button>
-          ) : callState === 'atis_playing' ? (
-            <button disabled
-              className="h-11 bg-sky-500/40 text-white rounded-xl flex items-center justify-center cursor-not-allowed">
-              <Volume2 className="h-5 w-5 animate-pulse" />
-            </button>
-          ) : (
-            <button onClick={handleCall} disabled={!number || callState === 'ringing' || callState === 'connecting'}
-              className="h-11 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl flex items-center justify-center disabled:opacity-40 transition-all active:scale-95">
-              <PhoneCall className="h-5 w-5" />
-            </button>
-          )}
+        <div className="p-3 space-y-1.5">
+          {KEYPAD.map((row) => (
+            <div key={row.join('')} className="grid grid-cols-3 gap-1.5">
+              {row.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => handleNumberInput(d)}
+                  disabled={busy}
+                  className={cn('h-10 rounded-xl font-semibold text-lg transition-all active:scale-95 disabled:opacity-40', keyClass)}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          ))}
 
-          {callState === 'incoming' ? (
-            <button onClick={handleReject}
-              className="h-11 bg-red-500 hover:bg-red-400 text-white rounded-xl flex items-center justify-center transition-all active:scale-95">
-              <PhoneOff className="h-5 w-5" />
-            </button>
-          ) : callState === 'connected' || callState === 'ringing' || callState === 'connecting' || callState === 'atis_playing' ? (
-            <button onClick={handleHangup}
-              className="h-11 bg-red-500 hover:bg-red-400 text-white rounded-xl flex items-center justify-center transition-all active:scale-95">
-              <PhoneOff className="h-5 w-5" />
-            </button>
-          ) : (
-            <button onClick={() => { setIsOpen(false); setNumber(''); setCallState('idle'); }}
-              className={`h-11 ${isDark ? 'border border-slate-700 bg-slate-900 hover:bg-slate-800' : 'bg-slate-600 hover:bg-slate-500'} text-white rounded-xl flex items-center justify-center transition-all active:scale-95`}>
-              <PhoneOff className="h-5 w-5" />
-            </button>
-          )}
+          <div className="grid grid-cols-3 gap-1.5 pt-1">
+            {callState === 'incoming' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => { void handleReject(); }}
+                  className="h-11 col-span-1 bg-red-600 hover:bg-red-500 text-white rounded-xl flex items-center justify-center"
+                  aria-label="Refuser"
+                >
+                  <PhoneOff className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void handleAnswer(); }}
+                  className="h-11 col-span-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl flex items-center justify-center gap-2 animate-pulse shadow-lg shadow-emerald-500/30 font-bold text-sm"
+                >
+                  <Phone className="h-5 w-5" /> Décrocher
+                </button>
+              </>
+            ) : callState === 'connected' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  className={cn(
+                    'h-11 rounded-xl flex items-center justify-center text-white',
+                    isMuted ? 'bg-red-600 hover:bg-red-500' : 'bg-sky-600 hover:bg-sky-500',
+                  )}
+                  aria-label={isMuted ? 'Réactiver le micro' : 'Couper le micro'}
+                >
+                  {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void handleHangup(); }}
+                  className="h-11 col-span-2 bg-red-600 hover:bg-red-500 text-white rounded-xl flex items-center justify-center gap-2 font-bold text-sm"
+                >
+                  <PhoneOff className="h-5 w-5" /> Raccrocher
+                </button>
+              </>
+            ) : callState === 'atis_playing' || callState === 'ringing' || callState === 'connecting' ? (
+              <button
+                type="button"
+                onClick={() => { void handleHangup(); }}
+                className="h-11 col-span-3 bg-red-600 hover:bg-red-500 text-white rounded-xl flex items-center justify-center gap-2 font-bold text-sm"
+              >
+                <PhoneOff className="h-5 w-5" />
+                {callState === 'atis_playing' ? 'Stop ATIS' : 'Annuler'}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={!number}
+                  className="h-11 bg-amber-500 hover:bg-amber-400 text-white rounded-xl flex items-center justify-center disabled:opacity-40"
+                  aria-label="Effacer"
+                >
+                  <Delete className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void handleCall(); }}
+                  disabled={!number}
+                  className="h-11 col-span-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl flex items-center justify-center gap-2 disabled:opacity-40 font-bold text-sm"
+                >
+                  <PhoneCall className="h-5 w-5" /> Appeler
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
     </>
   );
 }

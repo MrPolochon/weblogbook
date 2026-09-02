@@ -83,10 +83,10 @@ function playErrorBeep() {
 }
 
 function InlineEdit({
-  value, field, planId, placeholder, maxLength, large, onSaved, className = '',
+  value, field, planId, placeholder, maxLength, large, wrap, onSaved, className = '',
 }: {
   value: string | null; field: EditableField; planId: string;
-  placeholder: string; maxLength?: number; onSaved?: () => void; large?: boolean; className?: string;
+  placeholder: string; maxLength?: number; onSaved?: () => void; large?: boolean; wrap?: boolean; className?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(value || '');
@@ -157,7 +157,7 @@ function InlineEdit({
 
   return (
     <div
-      className={`relative cursor-text min-h-[20px] flex items-center rounded-sm px-0.5 transition-colors ${hovered ? 'bg-sky-400/20 ring-1 ring-sky-400/70' : ''} ${error ? 'ring-1 ring-red-400 bg-red-50/30' : ''} ${className}`}
+      className={`relative cursor-text min-h-[20px] flex ${wrap ? 'items-start' : 'items-center'} rounded-sm px-0.5 transition-colors ${hovered ? 'bg-sky-400/20 ring-1 ring-sky-400/70' : ''} ${error ? 'ring-1 ring-red-400 bg-red-50/30' : ''} ${className}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={(e) => {
@@ -168,7 +168,10 @@ function InlineEdit({
       }}
       title={error ? 'Erreur de sauvegarde — cliquer pour réessayer' : undefined}
     >
-      <span className={`font-mono leading-tight truncate ${large ? 'text-[15px] font-black' : 'text-[13px] font-semibold'} ${!displayValue ? 'opacity-40' : ''}`}>
+      <span
+        title={displayValue || undefined}
+        className={`font-mono leading-tight ${wrap ? 'whitespace-normal break-words' : 'truncate'} ${large ? 'text-[15px] font-black' : 'text-[13px] font-semibold'} ${!displayValue ? 'opacity-40' : ''}`}
+      >
         {displayValue || placeholder}
       </span>
       {error && <span className="text-[8px] text-red-500 ml-0.5">!</span>}
@@ -626,7 +629,7 @@ function FlightStripImpl({
 
   return (
     <div
-      className={`w-full min-w-[520px] border ${pal.border} rounded-md shadow-sm select-none overflow-hidden ${isClotureRequested && !isDupe ? 'atc-strip-closure' : ''} ${isDupe && !isEmergency ? 'atc-strip-dupe' : ''}`}
+      className={`w-full border ${pal.border} rounded-md shadow-sm select-none ${isClotureRequested && !isDupe ? 'atc-strip-closure' : ''} ${isDupe && !isEmergency ? 'atc-strip-dupe' : ''}`}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, strip.id); }}
     >
       {sqLabel && (
@@ -750,9 +753,9 @@ function FlightStripImpl({
 
           <div className="w-[3px] bg-red-500 shrink-0" />
 
-          <div className={`w-[42%] max-w-[280px] min-w-[200px] shrink-0 ${pal.right}`}>
+          <div className={`flex-1 min-w-0 ${pal.right}`}>
             <div className={`flex border-b ${pal.sep}`}>
-              <Cell className={`w-[78px] border-r ${pal.sep}`}>
+              <Cell className={`w-[72px] shrink-0 border-r ${pal.sep}`}>
                 <div className="flex items-center justify-between mb-0.5 gap-1">
                   <Label className={`${pal.lbl} mb-0`}>SQWK</Label>
                   <span className={`text-[8px] font-black px-1 rounded leading-none ${
@@ -765,35 +768,40 @@ function FlightStripImpl({
                   {strip.code_transpondeur || '—'}
                 </span>
               </Cell>
-              <Cell className={`w-[78px] border-r ${pal.sep}`}>
+              <Cell className={`w-[72px] shrink-0 border-r ${pal.sep}`}>
                 <Label className={pal.lbl}>CLR</Label>
                 <InlineEdit value={strip.strip_note_2} field="strip_note_2" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={20} />
               </Cell>
-              <Cell className="flex-1">
+              <Cell className="flex-1 min-w-0">
                 <Label className={pal.lbl}>INFO</Label>
                 <InlineEdit value={strip.strip_note_3} field="strip_note_3" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={30} />
               </Cell>
             </div>
             <div className={`flex border-b ${pal.sep}`}>
-              <Cell className={`w-[78px] border-r ${pal.sep}`}>
-                <Label className={pal.lbl}>SID / STAR</Label>
-                <InlineEdit value={strip.strip_sid_atc || strip.sid_depart} field="strip_sid_atc" planId={strip.id} placeholder="SID" onSaved={onRefresh} maxLength={15} />
-                <InlineEdit value={strip.strip_star || strip.star_arrivee} field="strip_star" planId={strip.id} placeholder="STAR" onSaved={onRefresh} maxLength={15} />
+              <Cell className={`flex-1 min-w-0 border-r ${pal.sep}`}>
+                <Label className={pal.lbl}>SID</Label>
+                <InlineEdit value={strip.strip_sid_atc || strip.sid_depart} field="strip_sid_atc" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={24} wrap />
               </Cell>
-              <Cell className="flex-1">
+              <Cell className="flex-1 min-w-0">
+                <Label className={pal.lbl}>STAR</Label>
+                <InlineEdit value={strip.strip_star || strip.star_arrivee} field="strip_star" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={24} wrap />
+              </Cell>
+            </div>
+            <div className={`border-b ${pal.sep}`}>
+              <Cell>
                 <Label className={pal.lbl}>ROUTE</Label>
-                <InlineEdit value={strip.strip_route || strip.route_ifr} field="strip_route" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={40} large />
+                <InlineEdit value={strip.strip_route || strip.route_ifr} field="strip_route" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={80} wrap />
               </Cell>
             </div>
             <div className="flex">
-              <Cell className={`w-[78px] border-r ${pal.sep}`}>
+              <Cell className={`w-[88px] shrink-0 border-r ${pal.sep}`}>
                 <div className="flex items-center gap-1 mb-0.5">
                   <FlUnitToggle planId={strip.id} unit={strip.strip_fl_unit} onSaved={onRefresh} />
                   <Label className={`${pal.lbl} mb-0`}>ALT</Label>
                 </div>
                 <InlineEdit value={strip.strip_fl} field="strip_fl" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
               </Cell>
-              <Cell className="flex-1">
+              <Cell className="flex-1 min-w-0">
                 <Label className={pal.lbl}>STATUT</Label>
                 <span className={`text-[12px] font-black uppercase tracking-wide ${statutColor}`}>{statutLabel(statut)}</span>
               </Cell>

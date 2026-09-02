@@ -9,6 +9,7 @@ import {
   discordFetch,
   ensureSupportGuildCommands,
 } from '@/lib/support/discord-api';
+import { repairOpenTicketSlashAccess } from '@/lib/support/repair-ticket-slash';
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -52,10 +53,23 @@ export async function POST(req: NextRequest) {
   const instructorMotifsStored =
     instructor_motifs.length > 0 ? instructor_motifs : [...DEFAULT_INSTRUCTOR_MOTIFS];
   const provision = body.provision === true;
+  const repair_slash = body.repair_slash === true;
 
   if (!guild_id) {
     return NextResponse.json({ error: 'DISCORD_GUILD_ID manquant sur Vercel.' }, { status: 400 });
   }
+
+  if (repair_slash) {
+    await ensureSupportGuildCommands(guild_id, { force: true });
+    const result = await repairOpenTicketSlashAccess();
+    return NextResponse.json({
+      ok: true,
+      repaired: result.repaired,
+      failed: result.failed,
+      message: `Commandes slash resynchronisées. ${result.repaired} ticket(s) mis à jour${result.failed ? `, ${result.failed} échec(s)` : ''}.`,
+    });
+  }
+
   if (!panel_channel_id || !staff_role_id) {
     return NextResponse.json(
       { error: 'Salon du panel et rôle staff requis' },

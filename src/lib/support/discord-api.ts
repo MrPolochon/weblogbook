@@ -97,8 +97,28 @@ export async function discordListGuildRoles(guildId: string): Promise<DiscordGui
     .sort((a, b) => b.position - a.position);
 }
 
-/** Voir + écrire + historique + embeds + fichiers */
-export const DISCORD_TICKET_ALLOW = '117760';
+/**
+ * Permissions d'un membre / staff dans un salon ticket.
+ * VIEW_CHANNEL (1024) + SEND_MESSAGES (2048) + EMBED_LINKS (16384)
+ * + ATTACH_FILES (32768) + READ_MESSAGE_HISTORY (65536)
+ * + USE_APPLICATION_COMMANDS (1<<31 = 2147483648)
+ *
+ * Sans ce dernier bit, Discord masque toutes les slash commands
+ * (/register, etc.) aux membres dans le ticket — les admins les voient
+ * quand même car ils bypassent les overwrites.
+ */
+export const DISCORD_TICKET_ALLOW = '2147601408';
+
+export async function discordPutChannelOverwrite(
+  channelId: string,
+  overwriteId: string,
+  body: { type: number; allow?: string; deny?: string },
+) {
+  return discordFetch(`/channels/${channelId}/permissions/${overwriteId}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
 
 export async function discordCreateCategory(guildId: string, name: string) {
   return discordFetch(`/guilds/${guildId}/channels`, {
@@ -203,7 +223,11 @@ export const SUPPORT_GUILD_COMMANDS = [
     description: 'Créer un compte site lié à ton Discord',
     type: 1,
     dm_permission: false,
+    // null = @everyone. "0" = admins seulement (c'est ce qui cachait /register).
     default_member_permissions: null,
+    // Installation serveur uniquement, visible dans les salons de la guilde.
+    integration_types: [0],
+    contexts: [0],
   },
 ];
 

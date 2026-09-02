@@ -2,6 +2,12 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { getBotOverview, getCachedGuilds, type BotInstanceStatus } from '@/lib/atis-bot-api';
+import {
+  identifiantFromJoin,
+  resolveAtisEntitlement,
+  type AtisEntitlement,
+  type OnlineAtcSession,
+} from '@/lib/atis-priority';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,6 +94,8 @@ export interface AtisOverviewResponse {
     atis_ticker_visible: boolean;
     atis_code_auto_rotate: boolean;
   };
+  priority: AtisEntitlement | null;
+  online_atc: { user_id: string; aeroport: string; position: string; identifiant: string | null }[];
   // Champs legacy pour compat ancienne UI / ticker non migré.
   any_broadcasting: boolean;
   controlling_user_id: string | null;
@@ -310,6 +318,23 @@ export async function GET() {
     const fallback = instances.find((i) => i.broadcasting) ?? null;
     const focused = mine ?? fallback;
 
+    const [{ data: myAtcSession }, { data: allAtcSessions }] = await Promise.all([
+      admin.from('atc_sessions').select('aeroport, position').eq('user_id', user.id).maybeSingle(),
+      admin
+        .from('atc_sessions')
+        .select('user_id, aeroport, position, profiles!atc_sessions_user_id_fkey(identifiant)'),
+    ]);
+    const onlineSessions: OnlineAtcSession[] = (allAtcSessions ?? []).map((s) => ({
+      user_id: s.user_id as string,
+      aeroport: String(s.aeroport ?? ''),
+      position: String(s.position ?? ''),
+      identifiant: identifiantFromJoin((s as { profiles?: unknown }).profiles),
+    }));
+    const priority =
+      myAtcSession?.aeroport && myAtcSession?.position
+        ? resolveAtisEntitlement(user.id, String(myAtcSession.aeroport), String(myAtcSession.position), onlineSessions)
+        : null;
+
     const payload: AtisOverviewResponse = {
       instances,
       instances_count: instances.length,
@@ -325,6 +350,13 @@ export async function GET() {
         atis_ticker_visible: profile?.atis_ticker_visible ?? true,
         atis_code_auto_rotate: profile?.atis_code_auto_rotate ?? false,
       },
+      priority,
+      online_atc: onlineSessions.map((s) => ({
+        user_id: s.user_id,
+        aeroport: s.aeroport,
+        position: s.position,
+        identifiant: s.identifiant ?? null,
+      })),
       any_broadcasting: instances.some((i) => i.broadcasting),
       // Legacy fields (ancien UI / ticker).
       controlling_user_id: focused?.controlling_user_id ?? null,

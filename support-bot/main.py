@@ -213,6 +213,8 @@ GUILD_COMMANDS = [
         "type": 1,
         "dm_permission": False,
         "default_member_permissions": None,
+        "integration_types": [0],
+        "contexts": [0],
     },
 ]
 
