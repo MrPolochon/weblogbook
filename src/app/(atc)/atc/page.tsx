@@ -30,7 +30,7 @@ export default async function AtcPage() {
   const { data: session } = await supabase.from('atc_sessions').select('id, aeroport, position, started_at').eq('user_id', user.id).single();
   
   const [{ data: plansChezMoiRaw }, { data: sessionsEnService }, { data: plansEnAttente }, { data: afisEnService }, { data: dataAuto }, { data: dataOrphelinsRaw }, { data: sessionsActiveRaw }] = await Promise.all([
-    admin.from('plans_vol').select('*').eq('current_holder_user_id', user.id).is('pending_transfer_aeroport', null).in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente']).order('created_at', { ascending: false }),
+    admin.from('plans_vol').select('*').eq('current_holder_user_id', user.id).or('automonitoring.eq.false,automonitoring.is.null').is('pending_transfer_aeroport', null).in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente']).order('created_at', { ascending: false }),
     admin.from('atc_sessions').select('aeroport, position, user_id, profiles!atc_sessions_user_id_fkey(identifiant)').order('aeroport').order('position'),
     admin.from('plans_vol').select('id').in('statut', ['depose', 'en_attente']),
     admin.from('afis_sessions').select('aeroport, est_afis, user_id, profiles!afis_sessions_user_id_fkey(identifiant)').order('aeroport'),

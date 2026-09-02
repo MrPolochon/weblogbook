@@ -46,6 +46,7 @@ export async function GET() {
         compagnie:compagnies!plans_vol_compagnie_id_fkey ( code_oaci, callsign_telephonie )
       `)
       .eq('current_holder_user_id', user.id)
+      .or('automonitoring.eq.false,automonitoring.is.null')
       .is('pending_transfer_aeroport', null)
       .in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente'])
       .order('created_at', { ascending: false });
@@ -158,6 +159,7 @@ async function getStripsLegacy(userId: string, admin: ReturnType<typeof createAd
     .from('plans_vol')
     .select('*')
     .eq('current_holder_user_id', userId)
+    .or('automonitoring.eq.false,automonitoring.is.null')
     .is('pending_transfer_aeroport', null)
     .in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente'])
     .order('created_at', { ascending: false });

@@ -106,11 +106,22 @@ export default function FlightStripBoard({
     );
   }, [localStrips, query]);
 
+  const visibleZones = useMemo(
+    () => new Set<ZoneId>(isCenter ? ['sol', 'depart', 'arrivee', 'transit'] : ['sol', 'depart', 'arrivee']),
+    [isCenter],
+  );
+
   const getZone = useCallback((zone: ZoneOrNull) =>
     filtered.filter((s) => s.strip_zone === zone).sort((a, b) => a.strip_order - b.strip_order),
   [filtered]);
 
-  const unassigned = getZone(null);
+  const unassigned = useMemo(
+    () =>
+      filtered
+        .filter((s) => !s.strip_zone || !visibleZones.has(s.strip_zone as ZoneId))
+        .sort((a, b) => a.strip_order - b.strip_order),
+    [filtered, visibleZones],
+  );
   const solStrips = getZone('sol');
   const departStrips = getZone('depart');
   const arriveeStrips = getZone('arrivee');

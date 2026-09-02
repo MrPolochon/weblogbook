@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
             current_holder_position: null,
             current_holder_aeroport: null,
             automonitoring: true,
+            strip_zone: null,
           })
           .eq('id', plan_vol_id)
           .eq('current_holder_user_id', user.id);
