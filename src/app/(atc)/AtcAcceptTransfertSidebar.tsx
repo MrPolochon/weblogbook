@@ -1,16 +1,15 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback, useTransition } from 'react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { toast } from 'sonner';
+import { ArrowRightLeft, Inbox, PlaneLanding, Radio } from 'lucide-react';
 
 type PlanTransfert = { id: string; numero_vol: string };
 type PlanAccepter = { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string };
 type PlanCloture = { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string };
 
-// Sons de notification avec intensité variable
 function playNotificationSound(type: 'transfer' | 'cloture' | 'nouveau' | 'rappel', intensity: number = 1) {
   try {
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
@@ -60,7 +59,6 @@ function playNotificationSound(type: 'transfer' | 'cloture' | 'nouveau' | 'rappe
   } catch { /* audio unavailable */ }
 }
 
-// Calcule le niveau d'urgence (0-5) basé sur le temps écoulé en secondes
 function getUrgencyLevel(secondsElapsed: number): number {
   if (secondsElapsed < 30) return 0;
   if (secondsElapsed < 60) return 1;
@@ -70,15 +68,14 @@ function getUrgencyLevel(secondsElapsed: number): number {
   return 5;
 }
 
-// Intervalle de rappel sonore basé sur l'urgence (en secondes)
 function getReminderInterval(urgency: number): number {
   switch (urgency) {
-    case 0: return 0; // Pas de rappel
-    case 1: return 60; // 1 minute
-    case 2: return 30; // 30 secondes
-    case 3: return 15; // 15 secondes
-    case 4: return 10; // 10 secondes
-    default: return 5; // 5 secondes (très insistant)
+    case 0: return 0;
+    case 1: return 60;
+    case 2: return 30;
+    case 3: return 15;
+    case 4: return 10;
+    default: return 5;
   }
 }
 
@@ -126,29 +123,20 @@ export default function AtcAcceptTransfertSidebar({
   const isDark = theme === 'dark';
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(Date.now());
-  
-  // Tracker les plans activés (qui ont été affichés dans les strips)
   const [activatedPlanIds, setActivatedPlanIds] = useState<Set<string>>(new Set());
-  
-  // Tracker quand chaque élément a été vu pour la première fois
+
   const firstSeenRef = useRef<Map<string, number>>(new Map());
   const lastReminderRef = useRef<Map<string, number>>(new Map());
   const lastRappelDataRefreshRef = useRef(0);
-  
-  // Références pour détecter les nouveaux éléments
   const prevTransfertIds = useRef<Set<string>>(new Set());
   const prevAccepterIds = useRef<Set<string>>(new Set());
   const prevClotureIds = useRef<Set<string>>(new Set());
 
-  // Mettre à jour le temps courant toutes les secondes
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
+    const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Alarme continue pour les transferts : 5 bips rapides toutes les 2s
   const stopAlarmRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (plansTransfert.length > 0 && !stopAlarmRef.current) {
@@ -161,18 +149,16 @@ export default function AtcAcceptTransfertSidebar({
   }, [plansTransfert.length]);
 
   useEffect(() => {
-    const currentIds = new Set(plansTransfert.map(p => p.id));
-    plansTransfert.forEach(p => {
-      if (!prevTransfertIds.current.has(p.id)) {
-        firstSeenRef.current.set(p.id, Date.now());
-      }
+    const currentIds = new Set(plansTransfert.map((p) => p.id));
+    plansTransfert.forEach((p) => {
+      if (!prevTransfertIds.current.has(p.id)) firstSeenRef.current.set(p.id, Date.now());
     });
     prevTransfertIds.current = currentIds;
   }, [plansTransfert]);
 
   useEffect(() => {
-    const currentIds = new Set(plansAccepter.map(p => p.id));
-    plansAccepter.forEach(p => {
+    const currentIds = new Set(plansAccepter.map((p) => p.id));
+    plansAccepter.forEach((p) => {
       if (!prevAccepterIds.current.has(p.id)) {
         firstSeenRef.current.set(p.id, Date.now());
         playNotificationSound('nouveau');
@@ -182,8 +168,8 @@ export default function AtcAcceptTransfertSidebar({
   }, [plansAccepter]);
 
   useEffect(() => {
-    const currentIds = new Set(plansCloture.map(p => p.id));
-    plansCloture.forEach(p => {
+    const currentIds = new Set(plansCloture.map((p) => p.id));
+    plansCloture.forEach((p) => {
       if (!prevClotureIds.current.has(p.id)) {
         firstSeenRef.current.set(p.id, Date.now());
         playNotificationSound('cloture');
@@ -192,35 +178,28 @@ export default function AtcAcceptTransfertSidebar({
     prevClotureIds.current = currentIds;
   }, [plansCloture]);
 
-  // Calculer l'urgence maximale parmi tous les éléments
   const getMaxUrgency = useCallback(() => {
     let maxUrgency = 0;
     const allItems = [...plansTransfert, ...plansAccepter, ...plansCloture];
-    
-    allItems.forEach(item => {
+    allItems.forEach((item) => {
       const firstSeen = firstSeenRef.current.get(item.id) || currentTime;
       const elapsed = (currentTime - firstSeen) / 1000;
       const urgency = getUrgencyLevel(elapsed);
       if (urgency > maxUrgency) maxUrgency = urgency;
     });
-    
     return maxUrgency;
   }, [plansTransfert, plansAccepter, plansCloture, currentTime]);
 
-  // Jouer les rappels sonores périodiques
   useEffect(() => {
-    const allItems = [...plansAccepter, ...plansCloture]; // Les transferts ont une alarme dédiée (startTransferAlarm)
-    
-    allItems.forEach(item => {
+    const allItems = [...plansAccepter, ...plansCloture];
+    allItems.forEach((item) => {
       const firstSeen = firstSeenRef.current.get(item.id) || currentTime;
       const elapsed = (currentTime - firstSeen) / 1000;
       const urgency = getUrgencyLevel(elapsed);
       const interval = getReminderInterval(urgency);
-      
       if (interval > 0) {
         const lastReminder = lastReminderRef.current.get(item.id) || 0;
         const sinceLastReminder = (currentTime - lastReminder) / 1000;
-        
         if (sinceLastReminder >= interval) {
           const nowMs = Date.now();
           if (nowMs - lastRappelDataRefreshRef.current >= 10_000) {
@@ -234,15 +213,13 @@ export default function AtcAcceptTransfertSidebar({
     });
   }, [currentTime, plansAccepter, plansCloture, router]);
 
-  // Nettoyer les références pour les éléments supprimés
   useEffect(() => {
     const currentIds = new Set([
-      ...plansTransfert.map(p => p.id),
-      ...plansAccepter.map(p => p.id),
-      ...plansCloture.map(p => p.id),
+      ...plansTransfert.map((p) => p.id),
+      ...plansAccepter.map((p) => p.id),
+      ...plansCloture.map((p) => p.id),
     ]);
-    
-    Array.from(firstSeenRef.current.keys()).forEach(id => {
+    Array.from(firstSeenRef.current.keys()).forEach((id) => {
       if (!currentIds.has(id)) {
         firstSeenRef.current.delete(id);
         lastReminderRef.current.delete(id);
@@ -268,155 +245,131 @@ export default function AtcAcceptTransfertSidebar({
     }
   }
 
-  // Fonction pour activer un plan (le faire apparaître dans les strips)
   function handleActiverPlan(planId: string) {
-    // Ajouter aux plans activés localement
     setActivatedPlanIds((prev) => {
       const next = new Set(prev);
       next.add(planId);
       return next;
     });
-
-    // Dispatcher l'événement global pour le FlightStripBoardWrapper
-    const event = new CustomEvent('activateStrip', { detail: { planId } });
-    window.dispatchEvent(event);
+    window.dispatchEvent(new CustomEvent('activateStrip', { detail: { planId } }));
   }
 
-  // Générer les classes CSS dynamiques basées sur l'urgence
-  function getItemClass(itemId: string, baseColor: 'orange' | 'red'): string {
-    const firstSeen = firstSeenRef.current.get(itemId) || currentTime;
-    const elapsed = (currentTime - firstSeen) / 1000;
-    const urgency = getUrgencyLevel(elapsed);
-    
-    // Animation plus rapide avec l'urgence
-    const animationDuration = Math.max(0.1, 0.5 - (urgency * 0.08));
-    
-    // Taille augmente légèrement
-    const scale = 1 + (urgency * 0.02);
-    
-    // Shadow plus intense
-    const shadowIntensity = urgency * 4;
-    
-    const bgColor = baseColor === 'red' ? 'bg-red-500' : 'bg-orange-500';
-    const borderColor = baseColor === 'red' ? 'border-red-600' : 'border-orange-600';
-    const hoverBg = baseColor === 'red' ? 'hover:bg-red-600' : 'hover:bg-orange-600';
-    const hoverBorder = baseColor === 'red' ? 'hover:border-red-700' : 'hover:border-orange-700';
-    
-    return `w-full text-left truncate text-sm font-bold text-white ${bgColor} border-2 ${borderColor} rounded px-2 py-1.5 ${hoverBg} ${hoverBorder} disabled:opacity-50`
-      + ` animate-[blink_${animationDuration}s_ease-in-out_infinite]`
-      + ` transform scale-[${scale}]`
-      + ` shadow-[0_0_${shadowIntensity}px_${baseColor === 'red' ? 'rgba(239,68,68,0.8)' : 'rgba(249,115,22,0.8)'}]`;
-  }
-
-  // Format temps écoulé
   function formatElapsed(itemId: string): string {
     const firstSeen = firstSeenRef.current.get(itemId) || currentTime;
     const elapsed = Math.floor((currentTime - firstSeen) / 1000);
-    
     if (elapsed < 60) return `${elapsed}s`;
     const mins = Math.floor(elapsed / 60);
     const secs = elapsed % 60;
-    return `${mins}m${secs.toString().padStart(2, '0')}s`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
-  // Filtrer les plans encore visibles (non activés)
-  const plansAccepterVisibles = plansAccepter.filter(p => !activatedPlanIds.has(p.id));
-  
-  // Si plus rien à afficher, masquer complètement la sidebar
-  if (plansTransfert.length === 0 && plansAccepterVisibles.length === 0) return null;
+  const plansAccepterVisibles = plansAccepter.filter((p) => !activatedPlanIds.has(p.id));
+  if (plansTransfert.length === 0 && plansAccepterVisibles.length === 0 && plansCloture.length === 0) return null;
 
   const maxUrgency = getMaxUrgency();
-  
-  // Le sidebar devient plus intense avec l'urgence
-  const sidebarBorderWidth = 2 + maxUrgency;
-  const sidebarShadow = 12 + (maxUrgency * 8);
-  
-  const sidebarBg = isDark ? 'bg-orange-950' : 'bg-orange-100';
-  const sidebarTitleColor = isDark ? 'text-orange-300' : 'text-orange-900';
-  
+  const total = plansTransfert.length + plansAccepterVisibles.length + plansCloture.length;
+
+  const card = (urgent: boolean, tone: 'amber' | 'sky' | 'red') => {
+    const tones = {
+      amber: isDark ? 'bg-amber-950/80 border-amber-600/60 text-amber-100 hover:bg-amber-900' : 'bg-amber-50 border-amber-300 text-amber-950 hover:bg-amber-100',
+      sky: isDark ? 'bg-sky-950/80 border-sky-600/60 text-sky-100 hover:bg-sky-900' : 'bg-sky-50 border-sky-300 text-sky-950 hover:bg-sky-100',
+      red: isDark ? 'bg-red-950/80 border-red-600/60 text-red-100 hover:bg-red-900' : 'bg-red-50 border-red-300 text-red-950 hover:bg-red-100',
+    };
+    return `w-full text-left rounded-lg border px-2.5 py-2 transition-colors ${tones[tone]} ${urgent ? 'atc-inbox-urgent' : ''}`;
+  };
+
   return (
-    <aside 
-      className={`atc-sidebar w-52 flex-shrink-0 ${sidebarBg} py-3 px-2 flex flex-col transition-all duration-300 fixed md:static bottom-0 right-0 z-50 md:z-auto rounded-tl-xl md:rounded-none max-h-[50vh] md:max-h-none overflow-y-auto`}
-      style={{
-        borderLeft: `${sidebarBorderWidth}px solid rgb(249, 115, 22)`,
-        boxShadow: `0 0 ${sidebarShadow}px rgba(249, 115, 22, ${0.3 + (maxUrgency * 0.1)})`,
-      }}
+    <aside
+      className={`atc-sidebar w-[240px] shrink-0 flex flex-col border-l ${isDark ? 'bg-[#080c14]/95 border-slate-800' : 'bg-white/90 border-slate-300'}`}
     >
-      <p className={`text-xs font-bold uppercase tracking-wider ${sidebarTitleColor} px-2 mb-1.5`}>
-        À traiter {maxUrgency >= 3 && '⚠️'}
-      </p>
-
-
-      {/* Plans à accepter */}
-      {plansAccepterVisibles.length > 0 && (
-        <div className="mb-3">
-          <p className={`text-[10px] font-semibold ${isDark ? 'text-orange-400' : 'text-orange-800'} px-2 mb-1`}>Plans à traiter</p>
-          <ul className="space-y-1">
-            {plansAccepterVisibles.map((p) => {
-              const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
-              return (
-                <li key={p.id} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => handleActiverPlan(p.id)}
-                    className={`block ${getItemClass(p.id, 'orange')}`}
-                    title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
-                    style={{
-                      animation: `blink ${Math.max(0.15, 0.5 - (urgency * 0.08))}s ease-in-out infinite`,
-                      transform: `scale(${1 + (urgency * 0.02)})`,
-                      boxShadow: `0 0 ${urgency * 6}px rgba(249, 115, 22, 0.8)`,
-                    }}
-                  >
-                    {p.numero_vol} {p.aeroport_depart}→{p.aeroport_arrivee}
-                  </button>
-                  <span className="absolute -top-1 -right-1 text-[9px] bg-orange-700 text-white px-1 rounded">
-                    {formatElapsed(p.id)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-
-      {/* Transferts */}
-      {plansTransfert.length > 0 && (
+      <div className={`px-3 py-2.5 border-b flex items-center justify-between ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
         <div>
-          <p className={`text-[10px] font-semibold px-2 mb-1 ${isDark ? 'text-orange-400' : 'text-orange-800'}`}>Transferts</p>
-          <ul className="space-y-1">
-            {plansTransfert.map((p) => {
-              const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
-              return (
-                <li key={p.id} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => handleAcceptTransfert(p.id)}
-                    disabled={loadingId !== null}
-                    className={getItemClass(p.id, 'orange')}
-                    title="Cliquer pour accepter le transfert"
-                    style={{
-                      animation: `blink ${Math.max(0.2, 0.5 - (urgency * 0.06))}s ease-in-out infinite`,
-                      boxShadow: `0 0 ${urgency * 4}px rgba(249, 115, 22, 0.6)`,
-                    }}
-                  >
-                    {loadingId === p.id ? '…' : `↔️ ${p.numero_vol}`}
-                  </button>
-                  <span className="absolute -top-1 -right-1 text-[9px] bg-orange-700 text-white px-1 rounded">
-                    {formatElapsed(p.id)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
+          <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Inbox</p>
+          <p className={`text-xs font-bold ${maxUrgency >= 3 ? 'text-red-400' : (isDark ? 'text-slate-200' : 'text-slate-800')}`}>
+            {total} à traiter{maxUrgency >= 3 ? ' · urgent' : ''}
+          </p>
         </div>
-      )}
+        <span className={`flex h-6 min-w-6 items-center justify-center rounded-full text-[11px] font-black ${maxUrgency >= 3 ? 'bg-red-600 text-white' : (isDark ? 'bg-sky-900 text-sky-200' : 'bg-sky-100 text-sky-800')}`}>
+          {total}
+        </span>
+      </div>
 
-      <style jsx>{`
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.3; }
-        }
-      `}</style>
+      <div className="flex-1 overflow-y-auto p-2 space-y-3">
+        {plansAccepterVisibles.length > 0 && (
+          <section>
+            <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
+              <Inbox className="h-3 w-3" /> Nouveaux plans
+            </p>
+            <ul className="space-y-1.5">
+              {plansAccepterVisibles.map((p) => {
+                const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
+                return (
+                  <li key={p.id}>
+                    <button type="button" onClick={() => handleActiverPlan(p.id)} className={card(urgency >= 2, 'amber')} title="Afficher le strip">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono font-black text-sm truncate">{p.numero_vol}</span>
+                        <span className="text-[9px] font-bold tabular-nums opacity-70">{formatElapsed(p.id)}</span>
+                      </div>
+                      <p className="text-[10px] font-semibold opacity-70 mt-0.5">{p.aeroport_depart} → {p.aeroport_arrivee}</p>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        {plansTransfert.length > 0 && (
+          <section>
+            <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${isDark ? 'text-sky-400' : 'text-sky-700'}`}>
+              <ArrowRightLeft className="h-3 w-3" /> Transferts
+            </p>
+            <ul className="space-y-1.5">
+              {plansTransfert.map((p) => {
+                const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
+                return (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => handleAcceptTransfert(p.id)}
+                      disabled={loadingId !== null}
+                      className={card(urgency >= 1, 'sky')}
+                      title="Accepter le transfert"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono font-black text-sm truncate">{loadingId === p.id ? '…' : p.numero_vol}</span>
+                        <span className="text-[9px] font-bold tabular-nums opacity-70">{formatElapsed(p.id)}</span>
+                      </div>
+                      <p className="text-[10px] font-semibold opacity-70 mt-0.5 flex items-center gap-1">
+                        <Radio className="h-3 w-3" /> Prendre le contrôle
+                      </p>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        {plansCloture.length > 0 && (
+          <section>
+            <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${isDark ? 'text-red-400' : 'text-red-700'}`}>
+              <PlaneLanding className="h-3 w-3" /> Clôtures
+            </p>
+            <ul className="space-y-1.5">
+              {plansCloture.map((p) => (
+                <li key={p.id} className={card(true, 'red')}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono font-black text-sm truncate">{p.numero_vol}</span>
+                    <span className="text-[9px] font-bold tabular-nums opacity-70">{formatElapsed(p.id)}</span>
+                  </div>
+                  <p className="text-[10px] font-semibold opacity-70 mt-0.5">{p.aeroport_depart} → {p.aeroport_arrivee}</p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
     </aside>
   );
 }

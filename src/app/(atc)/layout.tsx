@@ -12,6 +12,7 @@ import AtcAtisTicker from '@/components/AtcAtisTicker';
 import InactivityLogout from '@/components/InactivityLogout';
 import AtcSessionRealtimeGuard from '@/components/AtcSessionRealtimeGuard';
 import AtcPlansRealtimeRefresh from '@/components/AtcPlansRealtimeRefresh';
+import AtcMain from '@/components/AtcMain';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,7 +81,7 @@ export default async function AtcLayout({
 
   return (
     <AtcThemeProvider>
-      <div className="min-h-dvh flex flex-col safe-x" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="h-dvh flex flex-col overflow-hidden safe-x" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <AtcSessionRealtimeGuard userId={user.id} enService={enService} />
         <AtcPlansRealtimeRefresh
           userId={user.id}
@@ -94,15 +95,15 @@ export default async function AtcLayout({
         <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} />
         <AtcAtisTicker />
         <div className="flex flex-1 w-full min-h-0">
-          <main className="flex-1 min-w-0 w-full px-4 sm:px-5 lg:px-6 py-6 overflow-x-auto">{children}</main>
+          <AtcMain>{children}</AtcMain>
           {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} />}
         </div>
         {enService && session && (
           <>
             <AtcAtisButton aeroport={session.aeroport} position={session.position} userId={user.id} />
-            <AtcTelephone 
-              aeroport={session.aeroport} 
-              position={session.position} 
+            <AtcTelephone
+              aeroport={session.aeroport}
+              position={session.position}
             />
           </>
         )}

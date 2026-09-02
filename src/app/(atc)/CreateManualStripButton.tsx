@@ -27,10 +27,10 @@ export default function CreateManualStripButton() {
     <button
       onClick={handleCreate}
       disabled={loading}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wide rounded-lg transition-colors"
     >
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FilePlus className="h-4 w-4" />}
-      {loading ? 'Création…' : 'Créer un strip'}
+      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FilePlus className="h-3.5 w-3.5" />}
+      {loading ? '…' : 'Strip'}
     </button>
   );
 }

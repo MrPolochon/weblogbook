@@ -27,20 +27,16 @@ export default function HorsServiceButton() {
 
   return (
     <div className="flex items-center gap-2">
-      <button 
-        type="button" 
-        onClick={handleClick} 
-        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 border border-red-300 transition-colors font-medium text-sm" 
+      <button
+        type="button"
+        onClick={handleClick}
+        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-950/70 text-red-200 hover:bg-red-900 border border-red-800/70 transition-colors font-bold text-[11px] uppercase tracking-wide"
         disabled={loading}
       >
-        {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Power className="h-4 w-4" />
-        )}
-        {loading ? 'Déconnexion...' : 'Hors service'}
+        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
+        {loading ? '…' : 'Hors service'}
       </button>
-      {error && <p className="text-red-600 text-sm">{error}</p>}
+      {error && <p className="text-red-400 text-xs">{error}</p>}
     </div>
   );
 }

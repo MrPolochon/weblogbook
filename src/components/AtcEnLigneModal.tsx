@@ -118,14 +118,14 @@ export default function AtcEnLigneModal({ totalAtc, sessionsEnService }: AtcEnLi
       {/* Badge cliquable */}
       <button
         onClick={handleOpen}
-        className={`text-center px-4 py-2 rounded-xl border transition-all cursor-pointer group ${
+        className={`text-center px-3 py-1.5 rounded-lg border transition-all cursor-pointer min-w-[4.5rem] ${
           isDark
-            ? 'border-emerald-500/25 bg-emerald-500/12 hover:bg-emerald-500/18 hover:border-emerald-500/40'
-            : 'bg-emerald-100 border-emerald-200 hover:bg-emerald-200 hover:border-emerald-300'
+            ? 'border-emerald-700/50 bg-emerald-950/50 hover:bg-emerald-900/60'
+            : 'bg-emerald-100 border-emerald-200 hover:bg-emerald-200'
         }`}
       >
-        <p className={`text-2xl font-bold group-hover:scale-110 transition-transform ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>{totalAtc}</p>
-        <p className={`text-xs uppercase tracking-wide ${isDark ? 'text-emerald-200/80' : 'text-emerald-700'}`}>ATC en ligne</p>
+        <p className={`text-lg font-black leading-none tabular-nums ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>{totalAtc}</p>
+        <p className={`text-[9px] uppercase tracking-wider font-bold mt-0.5 ${isDark ? 'text-emerald-400/80' : 'text-emerald-700'}`}>ATC</p>
       </button>
 
       {/* Modal */}

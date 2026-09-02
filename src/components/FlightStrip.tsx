@@ -2,8 +2,12 @@
 
 import { useState, useRef, useCallback, useEffect, memo } from 'react';
 import { createPortal } from 'react-dom';
-import { Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare, AlertTriangle, Flame, PlaneLanding, ArrowRightLeft } from 'lucide-react';
+import {
+  Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare,
+  AlertTriangle, Flame, PlaneLanding, ArrowRightLeft, MoreHorizontal,
+} from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
+import { formatCtot, getSquawkColor, getSquawkLabel, statutLabel } from '@/lib/atc-ui';
 
 export type StripData = {
   id: string;
@@ -42,8 +46,6 @@ export type StripData = {
   pilote_identifiant?: string | null;
   intentions_vol?: string | null;
   niveau_croisiere?: string | null;
-  // Heure de depart prevue saisie par le pilote au depot (TIMESTAMPTZ).
-  // Utilisee pour la cellule CTOT du strip (sinon fallback created_at).
   heure_depart_estimee?: string | null;
   instructions_atc?: string | null;
   automonitoring?: boolean;
@@ -53,48 +55,41 @@ export type StripData = {
   current_holder_user_id?: string | null;
 };
 
-type EditableField = 'strip_atd' | 'strip_rwy' | 'strip_fl' | 'strip_fl_unit' | 'strip_sid_atc' | 'strip_note_1' | 'strip_note_2' | 'strip_note_3' | 'strip_star' | 'strip_route' | 'numero_vol' | 'aeroport_depart' | 'aeroport_arrivee' | 'type_vol' | 'strip_pilote_text' | 'strip_type_wake';
+type EditableField =
+  | 'strip_atd' | 'strip_rwy' | 'strip_fl' | 'strip_fl_unit' | 'strip_sid_atc'
+  | 'strip_note_1' | 'strip_note_2' | 'strip_note_3' | 'strip_star' | 'strip_route'
+  | 'numero_vol' | 'aeroport_depart' | 'aeroport_arrivee' | 'type_vol'
+  | 'strip_pilote_text' | 'strip_type_wake';
 
-function getSquawkColor(code: string | null): string | null {
-  if (!code) return null;
-  const c = code.trim();
-  if (c === '7500') return 'hijack';
-  if (c === '7600') return 'radio';
-  if (c === '7700') return 'emergency';
-  return null;
-}
-function getSquawkLabel(code: string | null): string | null {
-  if (!code) return null;
-  const c = code.trim();
-  if (c === '7500') return 'HIJACK';
-  if (c === '7600') return 'RADIO FAIL';
-  if (c === '7700') return 'EMERGENCY';
-  return null;
-}
-function formatCtot(createdAt: string): string {
-  try { return new Date(createdAt).toISOString().slice(11, 16); }
-  catch { return '—'; }
-}
-
-/* ============================================================ */
-/*  INLINE EDIT — champ modifiable dans le strip                  */
-/*  Stratégie de persistance :                                    */
-/*   - Le texte est gardé localement après sauvegarde             */
-/*   - On ne fait PAS de router.refresh() après un edit inline    */
-/*   - Si l'API échoue, le texte reste affiché avec bordure rouge */
-/*   - Le sync serveur ne peut pas écraser une valeur locale      */
-/* ============================================================ */
 const NOT_SET = Symbol('NOT_SET');
 
+function playErrorBeep() {
+  try {
+    const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(440, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.35);
+    osc.onended = () => ctx.close();
+  } catch { /* son non dispo */ }
+}
+
 function InlineEdit({
-  value, field, planId, placeholder, maxLength, large, onSaved,
+  value, field, planId, placeholder, maxLength, large, onSaved, className = '',
 }: {
   value: string | null; field: EditableField; planId: string;
-  placeholder: string; maxLength?: number; onSaved?: () => void; large?: boolean;
+  placeholder: string; maxLength?: number; onSaved?: () => void; large?: boolean; className?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(value || '');
-  // localOverride: symbol NOT_SET = never modified locally, string = local override
   const localOverride = useRef<string | typeof NOT_SET>(NOT_SET);
   const [, forceRender] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -102,7 +97,6 @@ function InlineEdit({
   const [error, setError] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Force focus when editing starts
   useEffect(() => {
     if (editing && inputRef.current) {
       inputRef.current.focus();
@@ -110,75 +104,50 @@ function InlineEdit({
     }
   }, [editing]);
 
-  // What to display: local override if set, otherwise server value
   const hasLocal = localOverride.current !== NOT_SET;
   const displayValue = hasLocal ? (localOverride.current as string) : (value || '');
 
-  // Sync from server — only when we have NO local override
   useEffect(() => {
-    if (!editing && !saving && !hasLocal) {
-      setText(value || '');
-    }
+    if (!editing && !saving && !hasLocal) setText(value || '');
   }, [value, editing, saving, hasLocal]);
 
-  // When server catches up to our local value, clear the override
   useEffect(() => {
-    if (hasLocal && value === localOverride.current) {
-      localOverride.current = NOT_SET;
-    }
+    if (hasLocal && value === localOverride.current) localOverride.current = NOT_SET;
   }, [value, hasLocal]);
 
   const save = useCallback(async (val: string) => {
     setSaving(true);
     setError(false);
     const trimmed = val.trim();
-    // Immediately set local override so text is visible even before API responds
     localOverride.current = trimmed;
     forceRender((n) => n + 1);
-
     try {
       const res = await fetch(`/api/plans-vol/${planId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update_strip', [field]: trimmed || '' }),
       });
-      if (res.ok) {
-        onSaved?.();
-      } else {
-        const d = await res.json().catch(() => ({}));
-        console.error('Strip save error:', d.error || res.statusText);
-        setError(true);
-        // Keep localOverride — text stays visible with a red border
-      }
-    } catch (err) {
-      console.error('Strip save error:', err);
+      if (res.ok) onSaved?.();
+      else setError(true);
+    } catch {
       setError(true);
-      // Keep localOverride — text stays visible with a red border
     }
     setSaving(false);
     setEditing(false);
   }, [planId, field, onSaved]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.preventDefault(); save(text); }
-    if (e.key === 'Escape') { setEditing(false); setText(displayValue); }
-  };
-
-  const clearField = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setText('');
-    save('');
-  };
-
   if (editing) {
     return (
       <input
         ref={inputRef}
-        className={`bg-white text-slate-900 border-2 border-sky-500 rounded outline-none w-full font-mono z-10 font-bold ${large ? 'text-lg px-1.5 py-1' : 'text-base px-1 py-0.5'}`}
+        className={`bg-white text-slate-900 border border-sky-500 rounded-sm outline-none w-full font-mono font-bold ${large ? 'text-[15px] px-1 py-0.5' : 'text-[13px] px-1 py-0.5'}`}
         value={text}
         maxLength={maxLength || 20}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); save(text); }
+          if (e.key === 'Escape') { setEditing(false); setText(displayValue); }
+        }}
         onBlur={() => save(text)}
         onClick={(e) => e.stopPropagation()}
         disabled={saving}
@@ -188,7 +157,7 @@ function InlineEdit({
 
   return (
     <div
-      className={`relative cursor-text min-h-[24px] flex items-center rounded px-0.5 transition-colors ${hovered ? 'bg-white/30 ring-1 ring-sky-400' : ''} ${error ? 'ring-1 ring-red-400 bg-red-50/30' : ''}`}
+      className={`relative cursor-text min-h-[20px] flex items-center rounded-sm px-0.5 transition-colors ${hovered ? 'bg-sky-400/20 ring-1 ring-sky-400/70' : ''} ${error ? 'ring-1 ring-red-400 bg-red-50/30' : ''} ${className}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={(e) => {
@@ -199,12 +168,17 @@ function InlineEdit({
       }}
       title={error ? 'Erreur de sauvegarde — cliquer pour réessayer' : undefined}
     >
-      <span className={`font-mono leading-snug ${large ? 'text-lg font-bold' : 'text-base font-semibold'}`}>
+      <span className={`font-mono leading-tight truncate ${large ? 'text-[15px] font-black' : 'text-[13px] font-semibold'} ${!displayValue ? 'opacity-40' : ''}`}>
         {displayValue || placeholder}
       </span>
       {error && <span className="text-[8px] text-red-500 ml-0.5">!</span>}
       {hovered && displayValue && !error && (
-        <button type="button" onClick={clearField} className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 z-10 shadow" title="Effacer">
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setText(''); save(''); }}
+          className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 z-10 shadow"
+          title="Effacer"
+        >
           <Trash2 className="h-2.5 w-2.5" />
         </button>
       )}
@@ -212,9 +186,6 @@ function InlineEdit({
   );
 }
 
-/* ============================================================ */
-/*  FL / ft toggle                                                */
-/* ============================================================ */
 function FlUnitToggle({ planId, unit, onSaved }: { planId: string; unit: string | null; onSaved?: () => void }) {
   const [current, setCurrent] = useState(unit || 'FL');
   const prevRef = useRef(current);
@@ -229,33 +200,75 @@ function FlUnitToggle({ planId, unit, onSaved }: { planId: string; unit: string 
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update_strip', strip_fl_unit: next }),
       });
-      if (res.ok) {
-        onSaved?.();
-      } else {
-        setCurrent(prevRef.current);
-      }
+      if (res.ok) onSaved?.();
+      else setCurrent(prevRef.current);
     } catch {
       setCurrent(prevRef.current);
     }
   };
   return (
-    <button type="button" onClick={toggle} className="text-[11px] font-black text-sky-700 hover:text-sky-500 bg-sky-100 hover:bg-sky-200 rounded px-1.5 py-0.5 leading-none shadow-sm" title={`Basculer FL/ft`}>
+    <button type="button" onClick={toggle} className="text-[9px] font-black tracking-wide rounded px-1 py-0.5 leading-none bg-black/15 hover:bg-black/25" title="Basculer FL/ft">
       {current}
     </button>
   );
 }
 
-/* ============================================================ */
-/*  ACTION BAR                                                     */
-/* ============================================================ */
-function StripActionBar({ strip, onRefresh, onTransferRequest, onOptimisticStatut }: { strip: StripData; onRefresh?: () => void; onTransferRequest?: (stripId: string, event?: React.MouseEvent) => void; onOptimisticStatut?: (s: string) => void }) {
-  const { theme } = useAtcTheme();
-  const isDark = theme === 'dark';
+function Cell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <div className={`px-1.5 py-1 min-w-0 ${className}`}>{children}</div>;
+}
+
+function Label({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <div className={`text-[8px] font-bold uppercase tracking-[0.14em] leading-none mb-0.5 ${className}`}>{children}</div>;
+}
+
+function HoldTip({
+  pos, dark, title, children,
+}: {
+  pos: { x: number; y: number }; dark: boolean; title: string; children: React.ReactNode;
+}) {
+  const pw = 380;
+  const margin = 12;
+  const estHeight = 120;
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 800;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 600;
+  const left = Math.max(margin, Math.min(pos.x, vw - pw - margin));
+  const placeAbove = pos.y > vh / 2;
+  let top = placeAbove ? pos.y - 8 : pos.y + 28;
+  if (placeAbove && top - estHeight < margin) top = margin + estHeight;
+  else if (!placeAbove && top + estHeight > vh - margin) top = vh - margin - estHeight;
+
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed', zIndex: 2147483647, left, top,
+        transform: placeAbove ? 'translateY(-100%)' : 'none',
+        width: pw, maxWidth: '90vw', maxHeight: `${Math.min(vh - margin * 2, 400)}px`,
+        overflow: 'auto', pointerEvents: 'none',
+      }}
+      className={`rounded-lg shadow-2xl border p-3 ${dark ? 'bg-slate-900 border-sky-500 text-slate-100' : 'bg-white border-sky-400 text-slate-900'}`}
+    >
+      <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${dark ? 'text-sky-400' : 'text-sky-600'}`}>{title}</div>
+      <div className="text-sm font-medium leading-relaxed break-words whitespace-pre-wrap">{children}</div>
+    </div>,
+    document.body,
+  );
+}
+
+function StripActionBar({
+  strip, onRefresh, onTransferRequest, onOptimisticStatut, isDark,
+}: {
+  strip: StripData;
+  onRefresh?: () => void;
+  onTransferRequest?: (stripId: string, event?: React.MouseEvent) => void;
+  onOptimisticStatut?: (s: string) => void;
+  isDark: boolean;
+}) {
   const [loading, setLoading] = useState<string | null>(null);
   const [showRefuse, setShowRefuse] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showCrashConfirm, setShowCrashConfirm] = useState(false);
   const [showUrgenceConfirm, setShowUrgenceConfirm] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   const [incidentDescription, setIncidentDescription] = useState('');
   const [incidentPhoto, setIncidentPhoto] = useState<File | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -265,7 +278,6 @@ function StripActionBar({ strip, onRefresh, onTransferRequest, onOptimisticStatu
   const [showBriaLog, setShowBriaLog] = useState(false);
   const busyRef = useRef(false);
 
-  // Table de correspondance action → statut optimiste (mise à jour instantanée avant fetch)
   const OPTIMISTIC_STATUT: Record<string, string> = {
     accepter: 'accepte',
     cloture: 'cloture',
@@ -277,82 +289,33 @@ function StripActionBar({ strip, onRefresh, onTransferRequest, onOptimisticStatu
     if (busyRef.current) return;
     busyRef.current = true;
     setLoading(action);
-    // Mise à jour optimiste instantanée du statut (affichage immédiat sans attendre le fetch)
     const optimistic = OPTIMISTIC_STATUT[action];
     if (optimistic) onOptimisticStatut?.(optimistic);
     try {
-      const res = await fetch(`/api/plans-vol/${strip.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...body }) });
+      const res = await fetch(`/api/plans-vol/${strip.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ...body }),
+      });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // Annuler l'optimisme si l'action a échoué
         if (optimistic) onOptimisticStatut?.(strip.statut);
         if (res.status === 400 || res.status === 409) onRefresh?.();
         throw new Error(d.error || 'Erreur');
       }
       onRefresh?.();
     } catch (e) {
-      try {
-        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-        if (AudioContext) {
-          const ctx = new AudioContext();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain); gain.connect(ctx.destination);
-          osc.type = 'square';
-          osc.frequency.setValueAtTime(880, ctx.currentTime);
-          osc.frequency.setValueAtTime(440, ctx.currentTime + 0.1);
-          gain.gain.setValueAtTime(0.25, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-          osc.start(ctx.currentTime);
-          osc.stop(ctx.currentTime + 0.35);
-          osc.onended = () => ctx.close();
-        }
-      } catch { /* son non dispo */ }
+      playErrorBeep();
       alert(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setLoading(null);
+      busyRef.current = false;
     }
-    finally { setLoading(null); busyRef.current = false; }
   };
 
   const statut = strip.statut;
   const isAutomonitoring = strip.automonitoring;
-
-  if (showRefuse) {
-    return (
-      <div className={`px-2 py-2 border-t space-y-1 ${isDark ? 'bg-red-950 border-red-800' : 'bg-red-50 border-red-200'}`} onClick={(e) => e.stopPropagation()}>
-        <textarea autoFocus value={refuseReason} onChange={(e) => setRefuseReason(e.target.value)} placeholder="Raison du refus…" className={`w-full text-sm border rounded px-2 py-1 min-h-[36px] resize-none font-semibold ${isDark ? 'bg-slate-900 text-slate-100 border-red-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-red-300'}`} />
-        <div className="flex gap-1.5">
-          <button type="button" onClick={async () => { if (!refuseReason.trim()) { alert('Raison obligatoire'); return; } await callAction('refuser', { refusal_reason: refuseReason.trim() }); setShowRefuse(false); setRefuseReason(''); }} disabled={loading === 'refuser'} className="px-2 py-1 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 shadow-sm">{loading === 'refuser' ? '…' : 'Confirmer refus'}</button>
-          <button type="button" onClick={() => { setShowRefuse(false); setRefuseReason(''); }} className={`px-2 py-1 text-xs font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Annuler</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (showCancelConfirm) {
-    return (
-      <div className={`px-2 py-2 border-t space-y-2 ${isDark ? 'bg-orange-950 border-orange-800' : 'bg-orange-50 border-orange-200'}`} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start gap-2">
-          <div className={`p-1 rounded ${isDark ? 'bg-orange-900' : 'bg-orange-200'}`}>
-            <XCircle className={`h-4 w-4 ${isDark ? 'text-orange-300' : 'text-orange-700'}`} />
-          </div>
-          <div className="flex-1">
-            <p className={`text-sm font-bold ${isDark ? 'text-orange-200' : 'text-orange-900'}`}>Annuler le vol ?</p>
-            <p className={`text-xs ${isDark ? 'text-orange-300' : 'text-orange-700'}`}>
-              Le plan de vol <span className="font-mono font-bold">{strip.numero_vol}</span> sera définitivement supprimé.
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-1.5">
-          <button type="button" onClick={async () => { await callAction('annuler'); setShowCancelConfirm(false); }} disabled={loading === 'annuler'} className="flex-1 px-2 py-1.5 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 shadow-sm">
-            {loading === 'annuler' ? '…' : 'Confirmer l\'annulation'}
-          </button>
-          <button type="button" onClick={() => setShowCancelConfirm(false)} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
-            Retour
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const btn = 'inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold rounded-md disabled:opacity-50 shadow-sm';
 
   const resetIncident = () => { setIncidentDescription(''); setIncidentPhoto(null); };
 
@@ -372,20 +335,10 @@ function StripActionBar({ strip, onRefresh, onTransferRequest, onOptimisticStatu
       if (!res.ok) {
         if (optimistic) onOptimisticStatut?.(strip.statut);
         if (res.status === 400 || res.status === 409) onRefresh?.();
-        try {
-          const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-          if (AudioContext) {
-            const ctx = new AudioContext(); const osc = ctx.createOscillator(); const gain = ctx.createGain();
-            osc.connect(gain); gain.connect(ctx.destination); osc.type = 'square';
-            osc.frequency.setValueAtTime(880, ctx.currentTime); osc.frequency.setValueAtTime(440, ctx.currentTime + 0.1);
-            gain.gain.setValueAtTime(0.25, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-            osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.35); osc.onended = () => ctx.close();
-          }
-        } catch { /* son non dispo */ }
+        playErrorBeep();
         alert(d.error || 'Erreur');
         return;
       }
-      // Upload photo si présente
       if (incidentPhoto && d.incident_id) {
         setUploadingPhoto(true);
         try {
@@ -395,341 +348,204 @@ function StripActionBar({ strip, onRefresh, onTransferRequest, onOptimisticStatu
         } catch { /* photo non critique */ } finally { setUploadingPhoto(false); }
       }
       onRefresh?.();
-    } catch (e) { alert(e instanceof Error ? e.message : 'Erreur'); }
-    finally { setLoading(null); busyRef.current = false; }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setLoading(null);
+      busyRef.current = false;
+    }
   };
 
-  if (showCrashConfirm) {
+  if (showRefuse) {
     return (
-      <div className={`px-2 py-2 border-t space-y-2 ${isDark ? 'bg-red-950 border-red-800' : 'bg-red-50 border-red-300'}`} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start gap-2">
-          <div className={`p-1 rounded ${isDark ? 'bg-red-900' : 'bg-red-200'}`}>
-            <Flame className={`h-4 w-4 ${isDark ? 'text-red-300' : 'text-red-700'}`} />
-          </div>
-          <div className="flex-1">
-            <p className={`text-sm font-bold ${isDark ? 'text-red-200' : 'text-red-900'}`}>Signaler un CRASH ?</p>
-            <p className={`text-xs ${isDark ? 'text-red-300' : 'text-red-700'}`}>
-              L&apos;avion de <span className="font-mono font-bold">{strip.numero_vol}</span> sera <strong>bloqué</strong> en attente d&apos;examen par le staff.
-            </p>
-          </div>
-        </div>
-        <textarea
-          value={incidentDescription}
-          onChange={(e) => setIncidentDescription(e.target.value)}
-          placeholder="Description de l'incident (optionnel)..."
-          rows={2}
-          className={`w-full text-xs border rounded px-2 py-1 resize-none ${isDark ? 'bg-slate-900 text-slate-100 border-red-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-red-300 placeholder:text-slate-400'}`}
-        />
-        <label className={`flex items-center gap-2 text-xs cursor-pointer ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-          <span className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-semibold cursor-pointer ${isDark ? 'border-red-700 bg-slate-800 hover:bg-slate-700' : 'border-red-300 bg-white hover:bg-slate-50'}`}>
-            📷 {incidentPhoto ? incidentPhoto.name.slice(0, 20) : 'Ajouter une photo'}
-          </span>
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => setIncidentPhoto(e.target.files?.[0] ?? null)} />
-        </label>
+      <div className={`px-2 py-2 border-t space-y-1 ${isDark ? 'bg-red-950 border-red-800' : 'bg-red-50 border-red-200'}`} onClick={(e) => e.stopPropagation()}>
+        <textarea autoFocus value={refuseReason} onChange={(e) => setRefuseReason(e.target.value)} placeholder="Raison du refus…" className={`w-full text-sm border rounded px-2 py-1 min-h-[36px] resize-none font-semibold ${isDark ? 'bg-slate-900 text-slate-100 border-red-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-red-300'}`} />
         <div className="flex gap-1.5">
-          <button type="button" onClick={async () => { await submitIncident('crash'); setShowCrashConfirm(false); resetIncident(); }} disabled={loading === 'crash' || uploadingPhoto} className="flex-1 px-2 py-1.5 text-xs font-bold bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-50 shadow-sm">
-            {uploadingPhoto ? 'Upload photo…' : loading === 'crash' ? '…' : 'Confirmer CRASH'}
-          </button>
-          <button type="button" onClick={() => { setShowCrashConfirm(false); resetIncident(); }} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
-            Retour
-          </button>
+          <button type="button" onClick={async () => { if (!refuseReason.trim()) { alert('Raison obligatoire'); return; } await callAction('refuser', { refusal_reason: refuseReason.trim() }); setShowRefuse(false); setRefuseReason(''); }} disabled={loading === 'refuser'} className="px-2 py-1 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">{loading === 'refuser' ? '…' : 'Confirmer refus'}</button>
+          <button type="button" onClick={() => { setShowRefuse(false); setRefuseReason(''); }} className={`px-2 py-1 text-xs font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Annuler</button>
         </div>
       </div>
     );
   }
 
-  if (showUrgenceConfirm) {
+  if (showCancelConfirm) {
     return (
-      <div className={`px-2 py-2 border-t space-y-2 ${isDark ? 'bg-amber-950 border-amber-800' : 'bg-amber-50 border-amber-300'}`} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start gap-2">
-          <div className={`p-1 rounded ${isDark ? 'bg-amber-900' : 'bg-amber-200'}`}>
-            <PlaneLanding className={`h-4 w-4 ${isDark ? 'text-amber-300' : 'text-amber-700'}`} />
-          </div>
-          <div className="flex-1">
-            <p className={`text-sm font-bold ${isDark ? 'text-amber-200' : 'text-amber-900'}`}>Atterrissage d&apos;urgence ?</p>
-            <p className={`text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-              L&apos;avion de <span className="font-mono font-bold">{strip.numero_vol}</span> sera <strong>bloqué</strong> à votre aéroport en attente d&apos;examen staff.
-            </p>
-          </div>
-        </div>
-        <textarea
-          value={incidentDescription}
-          onChange={(e) => setIncidentDescription(e.target.value)}
-          placeholder="Description de l'incident (optionnel)..."
-          rows={2}
-          className={`w-full text-xs border rounded px-2 py-1 resize-none ${isDark ? 'bg-slate-900 text-slate-100 border-amber-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-amber-300 placeholder:text-slate-400'}`}
-        />
-        <label className={`flex items-center gap-2 text-xs cursor-pointer ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-          <span className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-semibold cursor-pointer ${isDark ? 'border-amber-700 bg-slate-800 hover:bg-slate-700' : 'border-amber-300 bg-white hover:bg-slate-50'}`}>
-            📷 {incidentPhoto ? incidentPhoto.name.slice(0, 20) : 'Ajouter une photo'}
-          </span>
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => setIncidentPhoto(e.target.files?.[0] ?? null)} />
-        </label>
+      <div className={`px-2 py-2 border-t space-y-2 ${isDark ? 'bg-orange-950 border-orange-800' : 'bg-orange-50 border-orange-200'}`} onClick={(e) => e.stopPropagation()}>
+        <p className={`text-sm font-bold ${isDark ? 'text-orange-200' : 'text-orange-900'}`}>Annuler {strip.numero_vol} ? Le plan sera définitivement supprimé.</p>
         <div className="flex gap-1.5">
-          <button type="button" onClick={async () => { await submitIncident('atterrissage_urgence'); setShowUrgenceConfirm(false); resetIncident(); }} disabled={loading === 'atterrissage_urgence' || uploadingPhoto} className="flex-1 px-2 py-1.5 text-xs font-bold bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 shadow-sm">
-            {uploadingPhoto ? 'Upload photo…' : loading === 'atterrissage_urgence' ? '…' : 'Confirmer atterrissage'}
-          </button>
-          <button type="button" onClick={() => { setShowUrgenceConfirm(false); resetIncident(); }} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
-            Retour
-          </button>
+          <button type="button" onClick={async () => { await callAction('annuler'); setShowCancelConfirm(false); }} disabled={loading === 'annuler'} className="flex-1 px-2 py-1.5 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">{loading === 'annuler' ? '…' : 'Confirmer l\'annulation'}</button>
+          <button type="button" onClick={() => setShowCancelConfirm(false)} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-200 text-slate-700'}`}>Retour</button>
         </div>
       </div>
     );
   }
 
-  const hasActions = (statut === 'en_attente' || statut === 'depose' || statut === 'en_attente_cloture' || statut === 'en_cours' || statut === 'accepte');
+  if (showCrashConfirm || showUrgenceConfirm) {
+    const crash = showCrashConfirm;
+    return (
+      <div className={`px-2 py-2 border-t space-y-2 ${crash ? (isDark ? 'bg-red-950 border-red-800' : 'bg-red-50 border-red-300') : (isDark ? 'bg-amber-950 border-amber-800' : 'bg-amber-50 border-amber-300')}`} onClick={(e) => e.stopPropagation()}>
+        <p className={`text-sm font-bold ${crash ? (isDark ? 'text-red-200' : 'text-red-900') : (isDark ? 'text-amber-200' : 'text-amber-900')}`}>
+          {crash ? `Signaler un CRASH pour ${strip.numero_vol} ?` : `Atterrissage d'urgence pour ${strip.numero_vol} ?`}
+        </p>
+        <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>L&apos;avion sera bloqué en attente d&apos;examen staff.</p>
+        <textarea value={incidentDescription} onChange={(e) => setIncidentDescription(e.target.value)} placeholder="Description (optionnel)…" rows={2} className={`w-full text-xs border rounded px-2 py-1 resize-none ${isDark ? 'bg-slate-900 text-slate-100 border-slate-600' : 'bg-white text-slate-800 border-slate-300'}`} />
+        <label className={`flex items-center gap-2 text-xs cursor-pointer ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+          <span className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-semibold ${isDark ? 'border-slate-600 bg-slate-800' : 'border-slate-300 bg-white'}`}>📷 {incidentPhoto ? incidentPhoto.name.slice(0, 20) : 'Photo'}</span>
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => setIncidentPhoto(e.target.files?.[0] ?? null)} />
+        </label>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={async () => {
+              await submitIncident(crash ? 'crash' : 'atterrissage_urgence');
+              setShowCrashConfirm(false);
+              setShowUrgenceConfirm(false);
+              resetIncident();
+            }}
+            disabled={loading !== null || uploadingPhoto}
+            className={`flex-1 px-2 py-1.5 text-xs font-bold text-white rounded disabled:opacity-50 ${crash ? 'bg-red-700 hover:bg-red-800' : 'bg-amber-600 hover:bg-amber-700'}`}
+          >
+            {uploadingPhoto ? 'Upload…' : loading ? '…' : crash ? 'Confirmer CRASH' : 'Confirmer urgence'}
+          </button>
+          <button type="button" onClick={() => { setShowCrashConfirm(false); setShowUrgenceConfirm(false); resetIncident(); }} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-200 text-slate-700'}`}>Retour</button>
+        </div>
+      </div>
+    );
+  }
+
+  const hasActions = statut === 'en_attente' || statut === 'depose' || statut === 'en_attente_cloture' || statut === 'en_cours' || statut === 'accepte';
   if (!hasActions) return null;
 
+  const holdTip = (setter: (v: { x: number; y: number } | null) => void) => ({
+    onMouseDown: (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      const rect = e.currentTarget.getBoundingClientRect();
+      setter({ x: rect.left, y: rect.top });
+    },
+    onMouseUp: () => setter(null),
+    onMouseLeave: () => setter(null),
+    onTouchStart: (e: React.TouchEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      const rect = e.currentTarget.getBoundingClientRect();
+      setter({ x: rect.left, y: rect.top });
+    },
+    onTouchEnd: () => setter(null),
+  });
+
   return (
-    <div className={`px-1.5 py-1 border-t ${isDark ? 'border-slate-700 bg-slate-900/80' : 'border-slate-200 bg-slate-50/80'} flex items-center gap-1 flex-wrap`} onClick={(e) => e.stopPropagation()}>
+    <div className={`px-1.5 py-1 border-t flex items-center gap-1 flex-wrap ${isDark ? 'border-white/10 bg-black/25' : 'border-black/10 bg-black/[0.04]'}`} onClick={(e) => e.stopPropagation()}>
       {strip.isManual ? (
-        <span className={`text-[11px] mr-auto flex items-center gap-1 font-bold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-          <Plane className="h-3 w-3" />
+        <span className={`text-[11px] mr-auto flex items-center gap-1 font-bold min-w-0 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+          <Plane className="h-3 w-3 shrink-0" />
           <InlineEdit value={strip.strip_pilote_text} field="strip_pilote_text" planId={strip.id} placeholder="Pilote…" maxLength={30} />
         </span>
       ) : strip.pilote_identifiant ? (
-        <span className={`text-[11px] mr-auto flex items-center gap-1 font-bold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}><Plane className="h-3 w-3" />{strip.pilote_identifiant}</span>
-      ) : null}
+        <span className={`text-[11px] mr-auto flex items-center gap-1 font-bold truncate ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+          <Plane className="h-3 w-3 shrink-0" />{strip.pilote_identifiant}
+        </span>
+      ) : <span className="mr-auto" />}
+
       {(statut === 'en_attente' || statut === 'depose') && (
         <>
-          <button type="button" onClick={() => callAction('accepter')} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 shadow-sm"><CheckCircle className="h-3.5 w-3.5" />{loading === 'accepter' ? '…' : 'Accepter'}</button>
-          <button type="button" onClick={() => setShowRefuse(true)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 shadow-sm"><XCircle className="h-3.5 w-3.5" />Refuser</button>
+          <button type="button" onClick={() => callAction('accepter')} disabled={loading !== null} className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700`}><CheckCircle className="h-3.5 w-3.5" />{loading === 'accepter' ? '…' : 'Accepter'}</button>
+          <button type="button" onClick={() => setShowRefuse(true)} disabled={loading !== null} className={`${btn} bg-red-600 text-white hover:bg-red-700`}><XCircle className="h-3.5 w-3.5" />Refuser</button>
         </>
       )}
       {statut === 'en_attente_cloture' && (
-        <button type="button" onClick={() => callAction('confirmer_cloture')} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 animate-pulse shadow-sm"><CheckCircle className="h-3.5 w-3.5" />{loading === 'confirmer_cloture' ? '…' : 'Confirmer clôture'}</button>
+        <button type="button" onClick={() => callAction('confirmer_cloture')} disabled={loading !== null} className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700 animate-pulse`}><CheckCircle className="h-3.5 w-3.5" />{loading === 'confirmer_cloture' ? '…' : 'Confirmer clôture'}</button>
       )}
       {(statut === 'en_cours' || statut === 'accepte') && !isAutomonitoring && (
-        <button type="button" onClick={() => callAction('transferer', { automonitoring: true })} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 shadow-sm"><Radio className="h-3.5 w-3.5" />{loading === 'transferer' ? '…' : 'Autosurv.'}</button>
+        <button type="button" onClick={() => callAction('transferer', { automonitoring: true })} disabled={loading !== null} className={`${btn} bg-violet-600 text-white hover:bg-violet-700`}><Radio className="h-3.5 w-3.5" />{loading === 'transferer' ? '…' : 'Autosurv.'}</button>
       )}
       {strip.current_holder_user_id && onTransferRequest && (
-        <button type="button" onClick={(e) => onTransferRequest(strip.id, e)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-sky-600 text-white rounded hover:bg-sky-700 disabled:opacity-50 shadow-sm"><ArrowRightLeft className="h-3.5 w-3.5" />Transférer</button>
+        <button type="button" onClick={(e) => onTransferRequest(strip.id, e)} disabled={loading !== null} className={`${btn} bg-sky-600 text-white hover:bg-sky-700`}><ArrowRightLeft className="h-3.5 w-3.5" />Transférer</button>
       )}
+
       {((strip.type_vol === 'VFR' && strip.intentions_vol) || (strip.type_vol === 'IFR' && strip.niveau_croisiere)) && (
         <>
-          <button
-            type="button"
-            onMouseDown={(e) => {
-              e.stopPropagation();
-              const rect = e.currentTarget.getBoundingClientRect();
-              setIntentionsPos({ x: rect.left, y: rect.top });
-            }}
-            onMouseUp={() => setIntentionsPos(null)}
-            onMouseLeave={() => setIntentionsPos(null)}
-            onTouchStart={(e) => {
-              e.stopPropagation();
-              const rect = e.currentTarget.getBoundingClientRect();
-              setIntentionsPos({ x: rect.left, y: rect.top });
-            }}
-            onTouchEnd={() => setIntentionsPos(null)}
-            className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded shadow-sm transition-colors ${
-              intentionsPos
-                ? (isDark ? 'bg-sky-500 text-white' : 'bg-sky-600 text-white')
-                : (isDark ? 'bg-sky-700 text-white hover:bg-sky-600' : 'bg-sky-500 text-white hover:bg-sky-600')
-            }`}
-          >
+          <button type="button" {...holdTip(setIntentionsPos)} className={`${btn} ${intentionsPos ? 'bg-sky-600 text-white' : (isDark ? 'bg-sky-900 text-sky-100 hover:bg-sky-800' : 'bg-sky-100 text-sky-800 hover:bg-sky-200')}`}>
             <MessageSquare className="h-3.5 w-3.5" />{strip.type_vol === 'IFR' && strip.niveau_croisiere ? 'CRZ' : 'Intentions'}
           </button>
-          {intentionsPos && createPortal(
-            (() => {
-              const pw = 380;
-              const margin = 12;
-              const estHeight = 120;
-              const vw = typeof window !== 'undefined' ? window.innerWidth : 800;
-              const vh = typeof window !== 'undefined' ? window.innerHeight : 600;
-              const left = Math.max(margin, Math.min(intentionsPos.x, vw - pw - margin));
-              const placeAbove = intentionsPos.y > vh / 2;
-              let top = placeAbove ? intentionsPos.y - 8 : intentionsPos.y + 28;
-              const transform = placeAbove ? 'translateY(-100%)' : 'none';
-              if (placeAbove && top - estHeight < margin) top = margin + estHeight;
-              else if (!placeAbove && top + estHeight > vh - margin) top = vh - margin - estHeight;
-              const intentionsText = strip.type_vol === 'IFR' && strip.niveau_croisiere
-                ? `CRZ : FL ${strip.niveau_croisiere}`
-                : (strip.intentions_vol || '');
-              return (
-            <div
-              style={{
-                position: 'fixed',
-                zIndex: 2147483647,
-                left,
-                top,
-                transform,
-                width: pw,
-                maxWidth: '90vw',
-                maxHeight: `${Math.min(vh - margin * 2, 400)}px`,
-                overflow: 'auto',
-                pointerEvents: 'none',
-              }}
-              className={`rounded-lg shadow-2xl border-2 p-4 ${
-                isDark ? 'bg-slate-800 border-sky-500 text-slate-100' : 'bg-white border-sky-400 text-slate-900'
-              }`}
-            >
-              <div className={`text-xs font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-sky-400' : 'text-sky-600'}`}>
-                {strip.type_vol === 'IFR' && strip.niveau_croisiere ? 'Niveau de croisière' : 'Intentions de vol'}
-              </div>
-              <p className="text-sm font-mono font-semibold leading-relaxed break-words whitespace-pre-wrap">{intentionsText}</p>
-            </div>
-          );
-        })(),
-            document.body,
+          {intentionsPos && (
+            <HoldTip pos={intentionsPos} dark={isDark} title={strip.type_vol === 'IFR' && strip.niveau_croisiere ? 'Niveau de croisière' : 'Intentions de vol'}>
+              {strip.type_vol === 'IFR' && strip.niveau_croisiere ? `CRZ : FL ${strip.niveau_croisiere}` : (strip.intentions_vol || '')}
+            </HoldTip>
           )}
         </>
       )}
       {strip.instructions_atc && (
         <>
-          <button
-            type="button"
-            onMouseDown={(e) => {
-              e.stopPropagation();
-              const rect = e.currentTarget.getBoundingClientRect();
-              setNoteAtcPos({ x: rect.left, y: rect.top });
-            }}
-            onMouseUp={() => setNoteAtcPos(null)}
-            onMouseLeave={() => setNoteAtcPos(null)}
-            onTouchStart={(e) => {
-              e.stopPropagation();
-              const rect = e.currentTarget.getBoundingClientRect();
-              setNoteAtcPos({ x: rect.left, y: rect.top });
-            }}
-            onTouchEnd={() => setNoteAtcPos(null)}
-            className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded shadow-sm transition-colors ${
-              noteAtcPos
-                ? (isDark ? 'bg-amber-500 text-black' : 'bg-amber-500 text-black')
-                : (isDark ? 'bg-amber-700 text-white hover:bg-amber-600' : 'bg-amber-500 text-white hover:bg-amber-600')
-            }`}
-          >
-            <AlertTriangle className="h-3.5 w-3.5" />Note pilote
+          <button type="button" {...holdTip(setNoteAtcPos)} className={`${btn} ${noteAtcPos ? 'bg-amber-500 text-black' : (isDark ? 'bg-amber-900 text-amber-100 hover:bg-amber-800' : 'bg-amber-100 text-amber-900 hover:bg-amber-200')}`}>
+            <AlertTriangle className="h-3.5 w-3.5" />Note
           </button>
-          {noteAtcPos && createPortal(
-            (() => {
-              const pw = 380;
-              const margin = 12;
-              const estHeight = 80;
-              const vw = typeof window !== 'undefined' ? window.innerWidth : 800;
-              const vh = typeof window !== 'undefined' ? window.innerHeight : 600;
-              const left = Math.max(margin, Math.min(noteAtcPos.x, vw - pw - margin));
-              const placeAbove = noteAtcPos.y > vh / 2;
-              let top = placeAbove ? noteAtcPos.y - 8 : noteAtcPos.y + 28;
-              const transform = placeAbove ? 'translateY(-100%)' : 'none';
-              if (placeAbove && top - estHeight < margin) top = margin + estHeight;
-              else if (!placeAbove && top + estHeight > vh - margin) top = vh - margin - estHeight;
-              return (
-            <div
-              style={{
-                position: 'fixed',
-                zIndex: 2147483647,
-                left,
-                top,
-                transform,
-                width: pw,
-                maxWidth: '90vw',
-                maxHeight: `${vh - margin * 2}px`,
-                overflow: 'auto',
-                pointerEvents: 'none',
-              }}
-              className={`rounded-lg shadow-2xl border-2 p-4 ${
-                isDark ? 'bg-slate-800 border-amber-500 text-slate-100' : 'bg-white border-amber-400 text-slate-900'
-              }`}
-            >
-              <div className={`text-xs font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>Note d&apos;attention du pilote</div>
-              <p className="text-base font-medium leading-relaxed break-words whitespace-pre-wrap">{strip.instructions_atc}</p>
-            </div>
-          );
-        })(),
-        document.body,
-      )}
-        </>
-      )}
-      {strip.bria_conversation && strip.bria_conversation.length > 0 && (
-        <>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setShowBriaLog(!showBriaLog); }}
-            className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-bold rounded shadow-sm transition-colors ${
-              showBriaLog
-                ? (isDark ? 'bg-amber-500 text-black' : 'bg-amber-600 text-white')
-                : (isDark ? 'bg-amber-800 text-amber-200 hover:bg-amber-700' : 'bg-amber-600 text-white hover:bg-amber-700')
-            }`}
-          >
-            <Radio className="h-3.5 w-3.5" />BRIA
-          </button>
-          {showBriaLog && createPortal(
-            <div
-              className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/60"
-              onClick={() => setShowBriaLog(false)}
-            >
-              <div
-                className={`rounded-xl shadow-2xl border-2 p-5 w-[480px] max-w-[90vw] max-h-[70vh] overflow-y-auto ${
-                  isDark ? 'bg-slate-800 border-amber-600 text-slate-100' : 'bg-white border-amber-400 text-slate-900'
-                }`}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className={`text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-                  <Radio className="h-4 w-4" /> Historique BRIA
-                </div>
-                <div className="space-y-2">
-                  {strip.bria_conversation.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.role === 'bria' ? 'justify-start' : 'justify-end'}`}>
-                      <div className={`max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-line ${
-                        msg.role === 'bria'
-                          ? (isDark ? 'bg-amber-900/50 border border-amber-700/40 text-amber-100' : 'bg-amber-50 border border-amber-200 text-amber-900')
-                          : (isDark ? 'bg-sky-900/50 border border-sky-700/40 text-sky-100' : 'bg-sky-50 border border-sky-200 text-sky-900')
-                      }`}>
-                        <span className={`text-xs font-bold block mb-0.5 ${
-                          msg.role === 'bria' ? (isDark ? 'text-amber-400' : 'text-amber-600') : (isDark ? 'text-sky-400' : 'text-sky-600')
-                        }`}>{msg.role === 'bria' ? 'BRIA' : 'Pilote'}</span>
-                        {msg.text}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowBriaLog(false)}
-                  className={`mt-4 w-full py-2 text-xs font-bold rounded-lg ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
-                >
-                  Fermer
-                </button>
-              </div>
-            </div>,
-            document.body,
+          {noteAtcPos && (
+            <HoldTip pos={noteAtcPos} dark={isDark} title="Note d'attention du pilote">{strip.instructions_atc}</HoldTip>
           )}
         </>
       )}
-      {(statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
-        <>
-          <button type="button" onClick={() => setShowCrashConfirm(true)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-50 shadow-sm"><Flame className="h-3.5 w-3.5" />CRASH</button>
-          <button type="button" onClick={() => setShowUrgenceConfirm(true)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-amber-600 text-white rounded hover:bg-amber-700 disabled:opacity-50 shadow-sm"><PlaneLanding className="h-3.5 w-3.5" />Urgence</button>
-        </>
-      )}
-      {(statut === 'en_attente' || statut === 'depose' || statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
-        <button type="button" onClick={() => setShowCancelConfirm(true)} disabled={loading !== null} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50 shadow-sm"><XCircle className="h-3.5 w-3.5" />Annuler vol</button>
+
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setShowMore((v) => !v)}
+          className={`${btn} ${isDark ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-white/80 text-slate-700 hover:bg-white'}`}
+          title="Plus d'actions"
+        >
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </button>
+        {showMore && (
+          <div className={`absolute right-0 bottom-full mb-1 z-20 min-w-[160px] rounded-lg border shadow-xl py-1 ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
+            {strip.bria_conversation && strip.bria_conversation.length > 0 && (
+              <button type="button" onClick={() => { setShowBriaLog(true); setShowMore(false); }} className={`w-full text-left px-3 py-1.5 text-xs font-semibold flex items-center gap-2 ${isDark ? 'hover:bg-slate-800 text-amber-200' : 'hover:bg-slate-50 text-amber-800'}`}>
+                <Radio className="h-3.5 w-3.5" /> Historique BRIA
+              </button>
+            )}
+            {(statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
+              <>
+                <button type="button" onClick={() => { setShowCrashConfirm(true); setShowMore(false); }} className={`w-full text-left px-3 py-1.5 text-xs font-semibold flex items-center gap-2 ${isDark ? 'hover:bg-slate-800 text-red-300' : 'hover:bg-red-50 text-red-700'}`}>
+                  <Flame className="h-3.5 w-3.5" /> CRASH
+                </button>
+                <button type="button" onClick={() => { setShowUrgenceConfirm(true); setShowMore(false); }} className={`w-full text-left px-3 py-1.5 text-xs font-semibold flex items-center gap-2 ${isDark ? 'hover:bg-slate-800 text-amber-300' : 'hover:bg-amber-50 text-amber-800'}`}>
+                  <PlaneLanding className="h-3.5 w-3.5" /> Urgence
+                </button>
+              </>
+            )}
+            <button type="button" onClick={() => { setShowCancelConfirm(true); setShowMore(false); }} className={`w-full text-left px-3 py-1.5 text-xs font-semibold flex items-center gap-2 ${isDark ? 'hover:bg-slate-800 text-orange-300' : 'hover:bg-orange-50 text-orange-800'}`}>
+              <XCircle className="h-3.5 w-3.5" /> Annuler le vol
+            </button>
+          </div>
+        )}
+      </div>
+
+      {showBriaLog && createPortal(
+        <div className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/60" onClick={() => setShowBriaLog(false)}>
+          <div className={`rounded-xl shadow-2xl border p-5 w-[480px] max-w-[90vw] max-h-[70vh] overflow-y-auto ${isDark ? 'bg-slate-900 border-amber-700 text-slate-100' : 'bg-white border-amber-400 text-slate-900'}`} onClick={(e) => e.stopPropagation()}>
+            <div className={`text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+              <Radio className="h-4 w-4" /> Historique BRIA
+            </div>
+            <div className="space-y-2">
+              {(strip.bria_conversation || []).map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === 'bria' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-line ${
+                    msg.role === 'bria'
+                      ? (isDark ? 'bg-amber-900/50 border border-amber-700/40 text-amber-100' : 'bg-amber-50 border border-amber-200 text-amber-900')
+                      : (isDark ? 'bg-sky-900/50 border border-sky-700/40 text-sky-100' : 'bg-sky-50 border border-sky-200 text-sky-900')
+                  }`}>
+                    <span className={`text-xs font-bold block mb-0.5 ${msg.role === 'bria' ? (isDark ? 'text-amber-400' : 'text-amber-600') : (isDark ? 'text-sky-400' : 'text-sky-600')}`}>{msg.role === 'bria' ? 'BRIA' : 'Pilote'}</span>
+                    {msg.text}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => setShowBriaLog(false)} className={`mt-4 w-full py-2 text-xs font-bold rounded-lg ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>Fermer</button>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
 }
 
-/* ============================================================ */
-/*  Cellule du strip (wrapper simplifié) — padding augmenté pour lisibilité */
-/* ============================================================ */
-function Cell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`px-2 py-1.5 ${className}`}>{children}</div>;
-}
-
-/* ============================================================ */
-/*  STRIP COMPONENT — conforme au format ATC standard              */
-/* ============================================================ */
-/*
-  Reference layout (7 data columns):
-  ┌──────┬──────────┬──────┬─────────╫──────────┬──────────┬──────────┐
-  │ ATD  │ TYPE/W   │  1   │  NOTE   ║ SQUAWK   │ CLR REV  │ INFO     │
-  ├──────┼──────────┴──────┼─────────╫──────────┼──────────┴──────────┤
-  │ ADES │ CALLSIGN       │  ADEP   ║ SID      │  (type vol)         │
-  ├──────┼──────────┬──────┴─────────╫──────────┼─────────────────────┤
-  │ RWY  │ CTOT     │ TAIL          ║ FL xxx   │ STATUT              │
-  └──────┴──────────┴───────────────╨──────────┴─────────────────────┘
-  ⠿ drag handle on the left
-*/
 function FlightStripImpl({
   strip, onRefresh, onContextMenu, onTransferRequest,
 }: {
@@ -740,45 +556,30 @@ function FlightStripImpl({
 }) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
-
-  // Statut local pour mise à jour optimiste instantanée (avant le retour du fetch)
   const [optimisticStatut, setOptimisticStatut] = useState<string | null>(null);
   useEffect(() => { setOptimisticStatut(null); }, [strip.statut]);
   const statut = optimisticStatut ?? strip.statut;
-
   const isClotureRequested = statut === 'en_attente_cloture';
-  
-  // Son de notification pour demande de clôture
+
   useEffect(() => {
     if (!isClotureRequested) return;
-    
-    // Jouer le son une seule fois au montage
-    const playClotureSound = () => {
-      try {
-        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-        if (!AudioContext) return;
-        
-        const ctx = new AudioContext();
-        const oscillator = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(ctx.destination);
-        
-        oscillator.frequency.value = 400;
-        gainNode.gain.value = 0.3;
-        oscillator.start();
-        setTimeout(() => { oscillator.frequency.value = 500; }, 200);
-        setTimeout(() => { oscillator.frequency.value = 400; }, 400);
-        setTimeout(() => { oscillator.stop(); ctx.close(); }, 600);
-      } catch (e) {
-        console.warn('Audio not available:', e);
-      }
-    };
-    
-    playClotureSound();
+    try {
+      const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      oscillator.frequency.value = 400;
+      gainNode.gain.value = 0.3;
+      oscillator.start();
+      setTimeout(() => { oscillator.frequency.value = 500; }, 200);
+      setTimeout(() => { oscillator.frequency.value = 400; }, 400);
+      setTimeout(() => { oscillator.stop(); ctx.close(); }, 600);
+    } catch { /* audio */ }
   }, [isClotureRequested]);
-  
+
   const sqColor = getSquawkColor(strip.code_transpondeur);
   const sqLabel = getSquawkLabel(strip.code_transpondeur);
   const isEmergency = !!sqColor;
@@ -788,317 +589,229 @@ function FlightStripImpl({
   const squawkMismatch = strip.squawk_attendu && strip.code_transpondeur && strip.code_transpondeur !== strip.squawk_attendu;
   const noSquawk = strip.squawk_attendu && !strip.code_transpondeur;
 
-  // ── Couleurs : DUPE Mode C écrase tout sauf urgence ──
-  const lightBorder = isEmergency
-    ? (sqColor === 'hijack' ? 'border-red-700' : sqColor === 'radio' ? 'border-amber-600' : 'border-red-600')
-    : isDupe ? 'border-red-600'
-    : isClotureRequested ? 'border-red-500'
-    : isManual ? 'border-[#7b8fbc]' : 'border-[#8fbc8f]';
-  const lightLeftBg = isEmergency
-    ? (sqColor === 'hijack' ? 'bg-red-100' : sqColor === 'radio' ? 'bg-amber-100' : 'bg-red-100')
-    : isDupe ? 'bg-slate-200'
-    : isClotureRequested ? 'bg-red-50'
-    : isManual ? 'bg-[#d5ddef]' : 'bg-[#d5ecd5]';
-  const lightRightBg = isEmergency
-    ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200')
-    : isDupe ? 'bg-slate-300'
-    : isClotureRequested ? 'bg-red-100'
-    : isManual ? 'bg-[#e8dff5]' : 'bg-[#f5f0c8]';
-  const lightTopBg = isEmergency
-    ? (sqColor === 'hijack' ? 'bg-red-200' : sqColor === 'radio' ? 'bg-amber-200' : 'bg-red-200')
-    : isDupe ? 'bg-slate-300'
-    : isClotureRequested ? 'bg-red-100'
-    : isManual ? 'bg-[#c5d0e5]' : 'bg-[#c5dcc5]';
-  const lightSep = isEmergency ? 'border-red-300' : isDupe ? 'border-slate-400' : isClotureRequested ? 'border-red-300' : isManual ? 'border-[#7b8fbc]' : 'border-[#8fbc8f]';
-  const lightTxt = isDupe ? 'text-slate-400' : 'text-slate-900';
-  const lightLbl = isDupe ? 'text-slate-400' : 'text-slate-600';
+  const pal = (() => {
+    if (isEmergency) {
+      const hijack = sqColor === 'hijack';
+      const radio = sqColor === 'radio';
+      return isDark
+        ? { border: hijack || !radio ? 'border-red-500' : 'border-amber-500', left: radio ? 'bg-amber-950' : 'bg-red-950', right: radio ? 'bg-amber-900' : 'bg-red-900', top: radio ? 'bg-amber-900' : 'bg-red-900', sep: radio ? 'border-amber-800' : 'border-red-800', txt: 'text-slate-100', lbl: 'text-red-200/70', tab: radio ? 'bg-amber-500' : 'bg-red-600' }
+        : { border: hijack || !radio ? 'border-red-700' : 'border-amber-600', left: radio ? 'bg-amber-100' : 'bg-red-100', right: radio ? 'bg-amber-200' : 'bg-red-200', top: radio ? 'bg-amber-200' : 'bg-red-200', sep: radio ? 'border-amber-300' : 'border-red-300', txt: 'text-slate-900', lbl: 'text-red-800/70', tab: radio ? 'bg-amber-500' : 'bg-red-600' };
+    }
+    if (isDupe) {
+      return isDark
+        ? { border: 'border-red-500', left: 'bg-slate-800', right: 'bg-slate-700', top: 'bg-slate-700', sep: 'border-slate-500', txt: 'text-slate-500', lbl: 'text-slate-500', tab: 'bg-red-700' }
+        : { border: 'border-red-600', left: 'bg-slate-200', right: 'bg-slate-300', top: 'bg-slate-300', sep: 'border-slate-400', txt: 'text-slate-400', lbl: 'text-slate-400', tab: 'bg-red-600' };
+    }
+    if (isClotureRequested) {
+      return isDark
+        ? { border: 'border-red-500', left: 'bg-red-950', right: 'bg-red-900', top: 'bg-red-900', sep: 'border-red-800', txt: 'text-slate-100', lbl: 'text-red-200/70', tab: 'bg-red-600' }
+        : { border: 'border-red-500', left: 'bg-red-50', right: 'bg-red-100', top: 'bg-red-100', sep: 'border-red-300', txt: 'text-slate-900', lbl: 'text-red-800/70', tab: 'bg-red-600' };
+    }
+    if (isManual) {
+      return isDark
+        ? { border: 'border-indigo-500/70', left: 'bg-indigo-950', right: 'bg-indigo-900', top: 'bg-indigo-900', sep: 'border-indigo-800', txt: 'text-slate-100', lbl: 'text-indigo-200/70', tab: 'bg-indigo-500' }
+        : { border: 'border-[#6d7eab]', left: 'bg-[#d8e0f0]', right: 'bg-[#ece4f7]', top: 'bg-[#c9d3e8]', sep: 'border-[#8b9bc4]', txt: 'text-slate-900', lbl: 'text-slate-600', tab: 'bg-indigo-500' };
+    }
+    return isDark
+      ? { border: 'border-emerald-700/80', left: 'bg-[#0d2418]', right: 'bg-[#2a2410]', top: 'bg-[#12301f]', sep: 'border-emerald-800/80', txt: 'text-slate-100', lbl: 'text-emerald-200/60', tab: statut === 'en_cours' ? 'bg-sky-500' : statut === 'accepte' ? 'bg-emerald-500' : 'bg-amber-500' }
+      : { border: 'border-[#6f9a6f]', left: 'bg-[#d7ecd7]', right: 'bg-[#f3ecc4]', top: 'bg-[#c5dcc5]', sep: 'border-[#8fbc8f]', txt: 'text-slate-900', lbl: 'text-slate-600', tab: statut === 'en_cours' ? 'bg-sky-600' : statut === 'accepte' ? 'bg-emerald-600' : 'bg-amber-500' };
+  })();
 
-  const darkBorder = isEmergency
-    ? (sqColor === 'hijack' ? 'border-red-500' : sqColor === 'radio' ? 'border-amber-500' : 'border-red-500')
-    : isDupe ? 'border-red-500'
-    : isClotureRequested ? 'border-red-500'
-    : isManual ? 'border-indigo-600' : 'border-emerald-600';
-  const darkLeftBg = isEmergency
-    ? (sqColor === 'hijack' ? 'bg-red-950' : sqColor === 'radio' ? 'bg-amber-950' : 'bg-red-950')
-    : isDupe ? 'bg-slate-800'
-    : isClotureRequested ? 'bg-red-950'
-    : isManual ? 'bg-indigo-950' : 'bg-emerald-950';
-  const darkRightBg = isEmergency
-    ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900')
-    : isDupe ? 'bg-slate-700'
-    : isClotureRequested ? 'bg-red-900'
-    : isManual ? 'bg-indigo-800' : 'bg-amber-900';
-  const darkTopBg = isEmergency
-    ? (sqColor === 'hijack' ? 'bg-red-900' : sqColor === 'radio' ? 'bg-amber-900' : 'bg-red-900')
-    : isDupe ? 'bg-slate-700'
-    : isClotureRequested ? 'bg-red-900'
-    : isManual ? 'bg-indigo-900' : 'bg-emerald-900';
-  const darkSep = isEmergency ? 'border-red-700' : isDupe ? 'border-slate-500' : isClotureRequested ? 'border-red-700' : isManual ? 'border-indigo-700' : 'border-emerald-700';
-  const darkTxt = isDupe ? 'text-slate-500' : 'text-slate-100';
-  const darkLbl = isDupe ? 'text-slate-500' : 'text-slate-200';
-
-  const border = isDark ? darkBorder : lightBorder;
-  const leftBg = isDark ? darkLeftBg : lightLeftBg;
-  const rightBg = isDark ? darkRightBg : lightRightBg;
-  const topBg = isDark ? darkTopBg : lightTopBg;
-  const sep = isDark ? darkSep : lightSep;
-  const txt = isDark ? darkTxt : lightTxt;
-  const lbl = isDark ? darkLbl : lightLbl;
+  const statutColor =
+    statut === 'en_cours' ? (isDark ? 'text-sky-300' : 'text-sky-800') :
+    statut === 'en_attente_cloture' ? (isDark ? 'text-orange-300' : 'text-orange-800') :
+    statut === 'accepte' ? (isDark ? 'text-emerald-300' : 'text-emerald-800') :
+    (statut === 'depose' || statut === 'en_attente') ? (isDark ? 'text-amber-300' : 'text-amber-800') :
+    statut === 'automonitoring' ? (isDark ? 'text-violet-300' : 'text-violet-800') : pal.txt;
 
   return (
     <div
-          className={`w-[720px] flex-shrink-0 border ${border} rounded shadow-sm select-none overflow-hidden`}
+      className={`w-full min-w-[520px] border ${pal.border} rounded-md shadow-sm select-none overflow-hidden ${isClotureRequested && !isDupe ? 'atc-strip-closure' : ''} ${isDupe && !isEmergency ? 'atc-strip-dupe' : ''}`}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, strip.id); }}
-      style={
-        isDupe && !isEmergency
-          ? { animation: 'glitch-strip 0.4s steps(2) infinite', boxShadow: '0 0 14px rgba(239, 68, 68, 0.5)', filter: 'saturate(0) brightness(0.85)' }
-          : isClotureRequested
-            ? { animation: 'pulse-red 1.5s ease-in-out infinite', boxShadow: '0 0 20px rgba(239, 68, 68, 0.6)' }
-            : undefined
-      }
     >
-      {/* Emergency banner */}
-      {sqLabel && <div className={`text-center text-sm font-black tracking-[0.3em] py-1 animate-pulse ${isDark ? 'bg-red-600 text-white' : 'bg-black text-white'}`}>{sqLabel}</div>}
-
-      {/* DUPE banner — transpondeur Mode C en doublon */}
+      {sqLabel && (
+        <div className={`text-center text-[11px] font-black tracking-[0.32em] py-0.5 animate-pulse ${isDark ? 'bg-red-600 text-white' : 'bg-black text-white'}`}>{sqLabel}</div>
+      )}
       {isDupe && !isEmergency && (
-        <div className="text-center text-sm font-black tracking-[0.4em] py-1 bg-red-700 text-white" style={{ animation: 'glitch-text 0.3s steps(1) infinite' }}>
-          ⚡ DUPE SQUAWK — MODE C ⚡
+        <div className="atc-strip-dupe-banner text-center text-[11px] font-black tracking-[0.28em] py-0.5 bg-red-700 text-white">
+          DUPE SQUAWK — MODE C
         </div>
       )}
-
-      {/* Closure request banner */}
       {isClotureRequested && !isDupe && (
-        <div className="text-center text-sm font-bold py-1 bg-red-600 text-white animate-pulse">
-          🛬 DEMANDE DE CLÔTURE
+        <div className="text-center text-[11px] font-bold py-0.5 bg-red-600 text-white animate-pulse">
+          DEMANDE DE CLÔTURE
         </div>
       )}
       {(squawkMismatch || noSquawk) && !sqLabel && !isDupe && (
-        <div className={`text-center text-xs font-bold py-1 ${isDark ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black'}`}>
-          {noSquawk ? '⚠ PAS DE TRANSPONDEUR' : `⚠ SQUAWK INCORRECT (attendu: ${strip.squawk_attendu})`}
+        <div className={`text-center text-[10px] font-bold py-0.5 ${isDark ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black'}`}>
+          {noSquawk ? 'PAS DE TRANSPONDEUR' : `SQUAWK INCORRECT (attendu : ${strip.squawk_attendu})`}
         </div>
       )}
 
       <div className="flex">
-        {/* ═══ DRAG HANDLE ═══ */}
+        <div className={`w-6 shrink-0 flex items-center justify-center ${pal.tab}`}>
+          <span className="text-[9px] font-black tracking-widest text-white" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+            {isManual ? 'MAN' : (strip.type_vol || 'IFR')}
+          </span>
+        </div>
         <div
           data-drag-handle="true"
-          className={`w-5 flex items-center justify-center cursor-grab active:cursor-grabbing ${topBg} border-r ${sep} shrink-0`}
+          className={`w-4 flex items-center justify-center cursor-grab active:cursor-grabbing ${pal.top} border-r ${pal.sep} shrink-0`}
         >
-          <GripVertical className={`h-3.5 w-3.5 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
+          <GripVertical className={`h-3.5 w-3.5 ${isDark ? 'text-white/40' : 'text-black/30'}`} />
         </div>
 
-        {/* ═══ STRIP BODY ═══ */}
-        <div className="flex-1 flex">
-          {/* ─── LEFT SECTION (4 cols) ─── */}
+        <div className="flex-1 min-w-0 flex">
           <div className="flex-1 min-w-0">
-            {/* ROW 1 */}
-            <div className={`flex ${topBg} border-b ${sep}`}>
-              <Cell className={`w-[70px] border-r ${sep}`}>
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>ATD</div>
-                <InlineEdit value={strip.strip_atd} field="strip_atd" planId={strip.id} placeholder="14h24 ou 1424" onSaved={onRefresh} maxLength={5} large />
+            <div className={`flex ${pal.top} border-b ${pal.sep}`}>
+              <Cell className={`w-[64px] border-r ${pal.sep}`}>
+                <Label className={pal.lbl}>ATD</Label>
+                <InlineEdit value={strip.strip_atd} field="strip_atd" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
               </Cell>
-              <Cell className={`w-[100px] border-r ${sep}`}>
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>TYPE/W</div>
+              <Cell className={`w-[92px] border-r ${pal.sep}`}>
+                <Label className={pal.lbl}>TYPE / W</Label>
                 {isManual ? (
                   <InlineEdit value={strip.strip_type_wake} field="strip_type_wake" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={10} large />
                 ) : (
-                  <span className={`text-base font-mono font-bold ${txt}`}>{strip.type_wake}</span>
+                  <span className={`text-[15px] font-mono font-black ${pal.txt}`}>{strip.type_wake}</span>
                 )}
-                {/* Code équipement ICAO Item 10b (surveillance) */}
                 {!isManual && (
-                  <span className={`text-[9px] font-black font-mono tracking-widest leading-none mt-0.5 block ${
-                    modeTranspondeur === 'S'
-                      ? (isDark ? 'text-sky-400/80' : 'text-sky-600/80')
-                      : (isDark ? 'text-slate-500' : 'text-slate-500')
-                  }`}>
+                  <span className={`text-[9px] font-black font-mono tracking-widest leading-none mt-0.5 block ${modeTranspondeur === 'S' ? (isDark ? 'text-sky-400/80' : 'text-sky-700') : pal.lbl}`}>
                     {modeTranspondeur === 'S' ? '/S' : modeTranspondeur === 'A' ? '/A' : '/C'}
                   </span>
                 )}
               </Cell>
-              <Cell className={`w-[50px] border-r ${sep} text-center`}>
+              <Cell className={`w-[44px] border-r ${pal.sep} text-center`}>
                 {isManual ? (
                   <>
-                    <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>TYPE</div>
+                    <Label className={pal.lbl}>TYPE</Label>
                     <InlineEdit value={strip.type_vol} field="type_vol" planId={strip.id} placeholder="VFR" onSaved={onRefresh} maxLength={3} />
                   </>
                 ) : (
                   <>
-                    <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>{strip.type_vol}</div>
-                    <span className={`text-sm font-mono font-bold ${txt}`}>1</span>
+                    <Label className={pal.lbl}>{strip.type_vol}</Label>
+                    <span className={`text-sm font-mono font-black ${pal.txt}`}>1</span>
                   </>
                 )}
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>NOTE</div>
+                <Label className={pal.lbl}>NOTE</Label>
                 <InlineEdit value={strip.strip_note_1} field="strip_note_1" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={20} />
               </Cell>
             </div>
-            {/* ROW 2 */}
-            <div className={`flex ${leftBg} border-b ${sep}`}>
-              <Cell className={`w-[70px] border-r ${sep}`}>
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>ADES</div>
+
+            <div className={`flex ${pal.left} border-b ${pal.sep}`}>
+              <Cell className={`w-[64px] border-r ${pal.sep}`}>
+                <Label className={pal.lbl}>ADES</Label>
                 {isManual ? (
                   <InlineEdit value={strip.aeroport_arrivee} field="aeroport_arrivee" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={4} large />
                 ) : (
-                  <span className={`text-lg font-mono font-black ${txt} leading-tight`}>{strip.aeroport_arrivee}</span>
+                  <span className={`text-lg font-mono font-black ${pal.txt} leading-tight`}>{strip.aeroport_arrivee}</span>
                 )}
               </Cell>
-              <Cell className={`w-[150px] border-r ${sep}`}>
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>CALLSIGN</div>
+              <Cell className={`min-w-[140px] flex-1 border-r ${pal.sep}`}>
+                <Label className={pal.lbl}>CALLSIGN</Label>
                 {isManual ? (
                   <InlineEdit value={strip.numero_vol} field="numero_vol" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={10} large />
                 ) : (
                   <div className="flex flex-col">
-                    <span className={`text-xl font-mono font-black tracking-wide ${txt} leading-tight`}>{strip.numero_vol}</span>
+                    <span className={`text-xl font-mono font-black tracking-wide ${pal.txt} leading-none`}>{strip.numero_vol}</span>
                     {strip.callsign_telephonie && (
-                      <span className={`text-[11px] font-semibold ${lbl} leading-tight mt-0.5 tracking-wider`}>{strip.callsign_telephonie}</span>
+                      <span className={`text-[10px] font-semibold ${pal.lbl} leading-tight mt-0.5 tracking-wider`}>{strip.callsign_telephonie}</span>
                     )}
                   </div>
                 )}
               </Cell>
-              <Cell className="flex-1">
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>ADEP</div>
-                <div className="flex flex-col gap-0.5">
-                  {isManual ? (
-                    <InlineEdit value={strip.aeroport_depart} field="aeroport_depart" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={4} large />
-                  ) : (
-                    <span className={`text-base font-mono font-bold ${txt}`}>{strip.aeroport_depart}</span>
-                  )}
-                  
-                </div>
+              <Cell className="w-[88px]">
+                <Label className={pal.lbl}>ADEP</Label>
+                {isManual ? (
+                  <InlineEdit value={strip.aeroport_depart} field="aeroport_depart" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={4} large />
+                ) : (
+                  <span className={`text-base font-mono font-black ${pal.txt}`}>{strip.aeroport_depart}</span>
+                )}
               </Cell>
             </div>
-            {/* ROW 3 */}
-            <div className={`flex ${leftBg}`}>
-              <Cell className={`w-[70px] border-r ${sep}`}>
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>RWY</div>
+
+            <div className={`flex ${pal.left}`}>
+              <Cell className={`w-[64px] border-r ${pal.sep}`}>
+                <Label className={pal.lbl}>RWY</Label>
                 <InlineEdit value={strip.strip_rwy} field="strip_rwy" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
               </Cell>
-              <Cell className={`w-[100px] border-r ${sep}`}>
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>CTOT</div>
-                <span className={`text-base font-mono font-bold ${txt}`}>{formatCtot(strip.heure_depart_estimee || strip.created_at)}</span>
+              <Cell className={`w-[92px] border-r ${pal.sep}`}>
+                <Label className={pal.lbl}>CTOT</Label>
+                <span className={`text-[15px] font-mono font-black tabular-nums ${pal.txt}`}>{formatCtot(strip.heure_depart_estimee || strip.created_at)}</span>
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>TAIL</div>
-                <span className={`text-base font-mono font-bold ${txt}`}>{strip.immatriculation || '—'}</span>
+                <Label className={pal.lbl}>TAIL</Label>
+                <span className={`text-[13px] font-mono font-bold ${pal.txt}`}>{strip.immatriculation || '—'}</span>
               </Cell>
             </div>
-            
           </div>
 
-          {/* ─── RED DIVIDER ─── */}
           <div className="w-[3px] bg-red-500 shrink-0" />
 
-          {/* ─── RIGHT SECTION — CLEARANCE (3 cols) ─── */}
-          <div className={`w-[280px] shrink-0 ${rightBg}`}>
-            {/* ROW 1 */}
-            <div className={`flex border-b ${sep}`}>
-              <Cell className={`w-[90px] border-r ${sep}`}>
+          <div className={`w-[42%] max-w-[280px] min-w-[200px] shrink-0 ${pal.right}`}>
+            <div className={`flex border-b ${pal.sep}`}>
+              <Cell className={`w-[78px] border-r ${pal.sep}`}>
                 <div className="flex items-center justify-between mb-0.5 gap-1">
-                  <span className={`text-xs ${lbl} leading-none font-semibold`}>SQUAWK</span>
-                  <span className={`text-[9px] font-black px-1 py-0.5 rounded leading-none ${
+                  <Label className={`${pal.lbl} mb-0`}>SQWK</Label>
+                  <span className={`text-[8px] font-black px-1 rounded leading-none ${
                     modeTranspondeur === 'S'
-                      ? (isDark ? 'bg-sky-700 text-sky-200' : 'bg-sky-200 text-sky-800')
-                      : modeTranspondeur === 'A'
-                        ? (isDark ? 'bg-slate-600 text-slate-300' : 'bg-slate-300 text-slate-700')
-                        : isDupe
-                          ? 'bg-red-700 text-white'
-                          : (isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-700')
-                  }`}>
-                    {modeTranspondeur}
-                  </span>
+                      ? (isDark ? 'bg-sky-700 text-sky-100' : 'bg-sky-200 text-sky-800')
+                      : isDupe ? 'bg-red-700 text-white' : (isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-700')
+                  }`}>{modeTranspondeur}</span>
                 </div>
-                <span className={`text-base font-mono font-black ${isDupe ? (isDark ? 'text-slate-600' : 'text-slate-400') : txt}`}>
+                <span className={`text-[15px] font-mono font-black tabular-nums ${isDupe ? (isDark ? 'text-slate-600' : 'text-slate-400') : pal.txt}`}>
                   {strip.code_transpondeur || '—'}
                 </span>
               </Cell>
-              <Cell className={`w-[90px] border-r ${sep}`}>
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>CLR REV</div>
+              <Cell className={`w-[78px] border-r ${pal.sep}`}>
+                <Label className={pal.lbl}>CLR</Label>
                 <InlineEdit value={strip.strip_note_2} field="strip_note_2" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={20} />
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>INFO</div>
+                <Label className={pal.lbl}>INFO</Label>
                 <InlineEdit value={strip.strip_note_3} field="strip_note_3" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={30} />
               </Cell>
             </div>
-            {/* ROW 2 */}
-            <div className={`flex border-b ${sep}`}>
-              <Cell className={`w-[90px] border-r ${sep}`}>
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>SID/STAR</div>
-                <div className="flex flex-col gap-0.5">
-                  <InlineEdit value={strip.strip_sid_atc || strip.sid_depart} field="strip_sid_atc" planId={strip.id} placeholder="SID" onSaved={onRefresh} maxLength={15} large />
-                  <InlineEdit value={strip.strip_star || strip.star_arrivee} field="strip_star" planId={strip.id} placeholder="STAR" onSaved={onRefresh} maxLength={15} large />
-                </div>
+            <div className={`flex border-b ${pal.sep}`}>
+              <Cell className={`w-[78px] border-r ${pal.sep}`}>
+                <Label className={pal.lbl}>SID / STAR</Label>
+                <InlineEdit value={strip.strip_sid_atc || strip.sid_depart} field="strip_sid_atc" planId={strip.id} placeholder="SID" onSaved={onRefresh} maxLength={15} />
+                <InlineEdit value={strip.strip_star || strip.star_arrivee} field="strip_star" planId={strip.id} placeholder="STAR" onSaved={onRefresh} maxLength={15} />
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>ROUTE</div>
+                <Label className={pal.lbl}>ROUTE</Label>
                 <InlineEdit value={strip.strip_route || strip.route_ifr} field="strip_route" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={40} large />
               </Cell>
             </div>
-            {/* ROW 3 */}
             <div className="flex">
-              <Cell className={`w-[90px] border-r ${sep}`}>
+              <Cell className={`w-[78px] border-r ${pal.sep}`}>
                 <div className="flex items-center gap-1 mb-0.5">
                   <FlUnitToggle planId={strip.id} unit={strip.strip_fl_unit} onSaved={onRefresh} />
-                  <span className={`text-xs ${lbl} font-semibold`}>ALT</span>
+                  <Label className={`${pal.lbl} mb-0`}>ALT</Label>
                 </div>
                 <InlineEdit value={strip.strip_fl} field="strip_fl" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
               </Cell>
               <Cell className="flex-1">
-                <div className={`text-xs ${lbl} leading-none font-semibold mb-0.5`}>STATUT</div>
-                <span className={`text-sm font-bold uppercase ${
-                  statut === 'en_cours' ? (isDark ? 'text-sky-300' : 'text-sky-700') :
-                  statut === 'en_attente_cloture' ? (isDark ? 'text-orange-300' : 'text-orange-700') :
-                  statut === 'accepte' ? (isDark ? 'text-emerald-300' : 'text-emerald-700') :
-                  (statut === 'depose' || statut === 'en_attente') ? (isDark ? 'text-amber-300' : 'text-amber-700') : 
-                  statut === 'automonitoring' ? (isDark ? 'text-purple-300' : 'text-purple-700') : txt
-                }`}>
-                  {statut === 'en_cours' ? 'EN VOL' :
-                   statut === 'en_attente_cloture' ? 'CLÔTURE' :
-                   statut === 'accepte' ? 'ACCEPTÉ' :
-                   statut === 'depose' ? 'DÉPOSÉ' :
-                   statut === 'en_attente' ? 'EN ATTENTE' :
-                   statut === 'automonitoring' ? 'AUTOSURV.' :
-                   statut}
-                </span>
+                <Label className={pal.lbl}>STATUT</Label>
+                <span className={`text-[12px] font-black uppercase tracking-wide ${statutColor}`}>{statutLabel(statut)}</span>
               </Cell>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ACTION BAR */}
-      <StripActionBar strip={{ ...strip, statut }} onRefresh={onRefresh} onTransferRequest={onTransferRequest} onOptimisticStatut={setOptimisticStatut} />
-      
-      {/* Animations CSS */}
-      {(isClotureRequested || isDupe) && (
-        <style jsx>{`
-          @keyframes pulse-red {
-            0%, 100% { border-color: rgb(185, 28, 28); box-shadow: 0 0 20px rgba(239,68,68,0.6); }
-            50% { border-color: rgb(239, 68, 68); box-shadow: 0 0 30px rgba(239,68,68,0.9); }
-          }
-          @keyframes glitch-strip {
-            0%   { transform: translate(0,0); }
-            25%  { transform: translate(-2px, 1px); }
-            50%  { transform: translate(2px,-1px); }
-            75%  { transform: translate(-1px, 2px); }
-            100% { transform: translate(0,0); }
-          }
-          @keyframes glitch-text {
-            0%   { letter-spacing: 0.4em; opacity: 1; }
-            50%  { letter-spacing: 0.5em; opacity: 0.7; color: #ff4444; }
-            100% { letter-spacing: 0.4em; opacity: 1; }
-          }
-        `}</style>
-      )}
+      <StripActionBar
+        strip={{ ...strip, statut }}
+        onRefresh={onRefresh}
+        onTransferRequest={onTransferRequest}
+        onOptimisticStatut={setOptimisticStatut}
+        isDark={isDark}
+      />
     </div>
   );
 }
 
-// React.memo : évite les re-renders inutiles des strips lors d'un drag
-// (changements de dropTarget/draggedId dans le parent FlightStripBoard).
-// Tant que l'objet `strip` garde la même référence et que les callbacks
-// parents sont stables (useCallback), le composant ne re-render pas.
 const FlightStrip = memo(FlightStripImpl);
 export default FlightStrip;

@@ -89,11 +89,11 @@ export default function SeMettreEnServiceForm({ accessContext, airportOptions }:
     <form onSubmit={handleSubmit} className="space-y-4">
       {!accessContext.bypass && accessContext.userGrade && (
         <div className="space-y-1">
-          <p className="text-sm text-slate-500">
-          Votre grade : <span className="font-medium text-slate-300">{accessContext.userGrade.nom}</span>
+          <p className="text-sm text-slate-400">
+            Grade : <span className="font-semibold text-slate-200">{accessContext.userGrade.nom}</span>
           </p>
           <p className="text-xs text-slate-500">
-            Les aéroports et positions indisponibles sont masqués ou désactivés selon vos règles de grade.
+            Les aéroports et positions indisponibles sont masqués selon vos règles de grade.
           </p>
         </div>
       )}
@@ -101,7 +101,7 @@ export default function SeMettreEnServiceForm({ accessContext, airportOptions }:
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="label flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-sky-600" />
+            <MapPin className="h-4 w-4 text-sky-400" />
             Aéroport
           </label>
           <select
@@ -121,7 +121,7 @@ export default function SeMettreEnServiceForm({ accessContext, airportOptions }:
         </div>
         <div>
           <label className="label flex items-center gap-2">
-            <Radio className="h-4 w-4 text-emerald-600" />
+            <Radio className="h-4 w-4 text-emerald-400" />
             Position
           </label>
           <select
@@ -139,7 +139,7 @@ export default function SeMettreEnServiceForm({ accessContext, airportOptions }:
             ))}
           </select>
           {aeroport && positionOptions.every((p) => !p.allowed) && (
-            <p className="text-amber-600 text-xs mt-1">
+            <p className="text-amber-400 text-xs mt-1">
               Aucune position disponible sur {aeroport} pour votre grade.
             </p>
           )}
@@ -147,18 +147,18 @@ export default function SeMettreEnServiceForm({ accessContext, airportOptions }:
       </div>
 
       {!hasAnyAirport && !accessContext.bypass && (
-        <p className="text-amber-600 text-sm">Aucun aéroport disponible pour votre grade actuel.</p>
+        <p className="text-amber-400 text-sm">Aucun aéroport disponible pour votre grade actuel.</p>
       )}
 
       {error && (
-        <div className="p-3 rounded-lg bg-red-100 border border-red-300">
-          <p className="text-red-700 text-sm">{error}</p>
+        <div className="p-3 rounded-lg bg-red-950/60 border border-red-800">
+          <p className="text-red-300 text-sm">{error}</p>
         </div>
       )}
 
       <button
         type="submit"
-        className="btn-primary flex items-center justify-center gap-2"
+        className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold px-4 py-2.5 w-full sm:w-auto"
         disabled={loading || !aeroport || !position || !hasAnyAirport}
       >
         {loading ? (
@@ -169,7 +169,7 @@ export default function SeMettreEnServiceForm({ accessContext, airportOptions }:
         ) : (
           <>
             <Radio className="h-4 w-4" />
-            Se mettre en service
+            Ouvrir la console
           </>
         )}
       </button>

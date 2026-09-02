@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import Link from 'next/link';
-import { Radio, Plane, Clock, MapPin, AlertTriangle, Activity, Flame } from 'lucide-react';
+import { Radio, Plane, Clock, MapPin, Flame } from 'lucide-react';
 import CreateManualStripButton from '../CreateManualStripButton';
 import SeMettreEnServiceForm from '../SeMettreEnServiceForm';
 import HorsServiceButton from '../HorsServiceButton';
@@ -235,205 +234,164 @@ export default async function AtcPage() {
 
   const totalAtcEnService = sessionsEnService?.length || 0;
   const totalPlansEnAttente = plansEnAttente?.length || 0;
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/85 to-slate-950/95 shadow-[0_22px_42px_rgba(2,6,23,0.36),inset_0_1px_0_rgba(255,255,255,0.06)]">
-        <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-60" />
-        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
-        <div className="pointer-events-none absolute -left-16 -bottom-16 h-56 w-56 rounded-full bg-sky-500/10 blur-3xl" />
-        <div className="relative z-10 flex items-center justify-between flex-wrap gap-4 p-5 sm:p-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/20">
-              <Radio className="h-7 w-7 text-emerald-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-50 tracking-tight">Centre de contrôle</h1>
-              <p className="text-sm text-slate-400 mt-0.5">Interface de contrôle aérien</p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <AtcEnLigneModal
-              totalAtc={totalAtcEnService}
-              sessionsEnService={sessionsEnServiceSafe.map(s => ({
-                aeroport: s.aeroport,
-                position: s.position,
-                user_id: s.user_id,
-                identifiant: (s.profiles as { identifiant?: string } | null)?.identifiant || '—'
-              }))}
-            />
-            <PlansEnAttenteModal totalPlans={totalPlansEnAttente} />
-          </div>
-        </div>
+  const networkPanel = (
+    <section className="rounded-xl border border-slate-700/40 bg-slate-950/30 overflow-hidden shrink-0">
+      <div className="px-3 py-2 flex items-center gap-2 border-b border-slate-700/40">
+        <MapPin className="h-3.5 w-3.5 text-sky-400" />
+        <h2 className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-300">Réseau en ligne</h2>
+        <span className="ml-auto text-[11px] font-bold tabular-nums text-slate-500">{totalAtcEnService} ATC</span>
       </div>
-
-      {/* Statut de service */}
-      {!session ? (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
-          <div className="flex items-start gap-4">
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 shrink-0">
-              <AlertTriangle className="h-6 w-6 text-amber-400" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-slate-100 mb-1">Hors service</h2>
-              <p className="text-slate-400 text-sm mb-4">
-                Vous n&apos;êtes pas en service. Sélectionnez un aéroport et une position pour commencer à contrôler.
-              </p>
-              <SeMettreEnServiceForm accessContext={accessContext} airportOptions={airportOptions} />
-            </div>
-          </div>
-        </div>
+      {Object.keys(byAeroport).length === 0 && afisEnServiceSafe.length === 0 ? (
+        <p className="px-3 py-4 text-xs text-slate-500 italic">Aucune position en service</p>
       ) : (
-        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                  <Radio className="h-6 w-6 text-emerald-400" />
-                </div>
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-900 animate-pulse" />
+        <div className="p-2 flex gap-2 overflow-x-auto">
+          {Object.entries(byAeroport).map(([apt, controllers]) => (
+            <div key={`atc-${apt}`} className="min-w-[160px] rounded-lg border border-emerald-800/40 bg-emerald-950/30 px-2.5 py-2">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-sm font-black font-mono text-emerald-300">{apt}</span>
+              </div>
+              <div className="space-y-1">
+                {controllers.map((c, idx) => {
+                  const freq = vhfFreqMap.get(`${apt}-${c.position}`);
+                  return (
+                    <div key={`${apt}-${c.position}-${idx}`} className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="font-semibold text-emerald-200/80">{c.position}</span>
+                      {freq && <span className="font-mono text-emerald-400/70">{freq}</span>}
+                      <span className="text-slate-500 ml-auto truncate">{c.identifiant}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          {afisEnServiceSafe.map((sess, idx) => (
+            <div
+              key={`afis-${sess.aeroport}-${idx}`}
+              className={`min-w-[160px] rounded-lg border px-2.5 py-2 ${sess.est_afis ? 'border-red-800/40 bg-red-950/30' : 'border-amber-800/40 bg-amber-950/30'}`}
+            >
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Flame className={`h-3.5 w-3.5 ${sess.est_afis ? 'text-red-400' : 'text-amber-400'}`} />
+                <span className={`text-sm font-black font-mono ${sess.est_afis ? 'text-red-300' : 'text-amber-300'}`}>{sess.aeroport}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] gap-2">
+                <span className={sess.est_afis ? 'text-red-300/80' : 'text-amber-300/80'}>{sess.est_afis ? 'AFIS' : 'Pompier'}</span>
+                {sess.est_afis && vhfFreqMap.get(`${sess.aeroport}-AFIS`) && (
+                  <span className="font-mono text-red-400/70">{vhfFreqMap.get(`${sess.aeroport}-AFIS`)}</span>
+                )}
+                <span className="text-slate-500 ml-auto truncate">
+                  {(sess.profiles as { identifiant?: string } | null)?.identifiant || '—'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+
+  if (!session) {
+    return (
+      <div className="flex-1 min-h-0 overflow-auto space-y-4 pb-4">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.7fr)] items-start">
+          <div className="rounded-2xl border border-slate-700/50 bg-slate-950/40 p-5 sm:p-7">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/25">
+                <Radio className="h-5 w-5 text-amber-300" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xl font-bold text-emerald-300 font-mono">{session.aeroport}</span>
-                  <span className="text-slate-600">—</span>
-                  <span className="text-lg font-semibold text-slate-200">{session.position}</span>
-                </div>
-                <p className="text-sm text-slate-400 flex items-center gap-1 mt-0.5">
-                  <Clock className="h-3.5 w-3.5" />
-                  En service depuis {formatDistanceToNow(new Date(session.started_at), { locale: fr })}
-                </p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-400/80">Hors service</p>
+                <h1 className="text-xl font-black text-slate-50">Prise de position</h1>
               </div>
             </div>
-            <HorsServiceButton />
+            <p className="text-sm text-slate-400 mb-5">
+              Choisissez un aéroport et une position pour ouvrir la console strips.
+            </p>
+            <SeMettreEnServiceForm accessContext={accessContext} airportOptions={airportOptions} />
+          </div>
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-slate-700/50 bg-slate-950/40 p-4 flex gap-3">
+              <AtcEnLigneModal
+                totalAtc={totalAtcEnService}
+                sessionsEnService={sessionsEnServiceSafe.map((s) => ({
+                  aeroport: s.aeroport,
+                  position: s.position,
+                  user_id: s.user_id,
+                  identifiant: (s.profiles as { identifiant?: string } | null)?.identifiant || '—',
+                }))}
+              />
+              <PlansEnAttenteModal totalPlans={totalPlansEnAttente} />
+            </div>
+            {networkPanel}
           </div>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {/* Flight Strips Board */}
-      {session && (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-              <Activity className="h-5 w-5 text-sky-400" />
-              Trafic sous contrôle
-              {(plansChezMoi?.length || 0) > 0 && (
-                <span className="text-xs font-medium text-slate-500 bg-slate-800/70 px-2 py-0.5 rounded-full">
-                  {plansChezMoi.length}
-                </span>
-              )}
-            </h2>
-            <div className="flex items-center gap-3">
-              <CreateManualStripButton />
-            </div>
-          </div>
-
-          {!plansChezMoi || plansChezMoi.length === 0 ? (
-            <div className="card text-center py-10 border-slate-700/40">
-              <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-slate-800/60 border border-slate-700/60 mb-3 mx-auto">
-                <Plane className="h-7 w-7 text-slate-500" />
-              </div>
-              <p className="text-slate-400 font-medium">Aucun plan de vol sous votre contrôle</p>
-              <p className="text-slate-500 text-sm mt-1">Les nouveaux plans apparaîtront ici automatiquement</p>
-            </div>
-          ) : (
-            <FlightStripBoardWrapper
-              allStrips={plansChezMoi}
-              plansATraiter={plansChezMoi.filter(s => ['depose', 'en_attente'].includes(s.statut)).map(s => s.id)}
-              atcPosition={session.position}
-              atcAeroport={session.aeroport}
-              onlineSessions={sessionsEnServiceSafe.map(s => ({ aeroport: s.aeroport, position: s.position, user_id: s.user_id }))}
-            />
+  return (
+    <div className="atc-console">
+      <div className="flex items-center gap-2 flex-wrap shrink-0">
+        <div className="flex items-center gap-2 mr-auto min-w-0">
+          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Console</span>
+          <span className="font-mono font-black text-emerald-300">{session.aeroport}</span>
+          <span className="text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded bg-slate-800 text-slate-200">{session.position}</span>
+          <span className="hidden sm:inline-flex text-[11px] text-slate-500 items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {formatDistanceToNow(new Date(session.started_at), { locale: fr })}
+          </span>
+          {(plansChezMoi?.length || 0) > 0 && (
+            <span className="text-[11px] font-bold tabular-nums rounded-full bg-sky-950 text-sky-200 px-2 py-0.5">
+              {plansChezMoi.length} vol{plansChezMoi.length > 1 ? 's' : ''}
+            </span>
           )}
-
-          <div className="mt-3">
-            <AtcNonControlesPanel
-              plansAuto={plansAuto}
-              plansOrphelins={plansOrphelins}
-              sessionAeroport={session.aeroport}
-              sessionPosition={session.position}
-            />
-          </div>
         </div>
-      )}
-
-      {/* Positions en service (ATC + AFIS) */}
-      <div className="card border-slate-700/40">
-        <h2 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
-          <MapPin className="h-4 w-4 text-sky-400" />
-          Positions en service
-        </h2>
-
-        {Object.keys(byAeroport).length === 0 && afisEnServiceSafe.length === 0 ? (
-          <div className="text-center py-8">
-            <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-slate-800/60 border border-slate-700/60 mb-3 mx-auto">
-              <Radio className="h-6 w-6 text-slate-600" />
-            </div>
-            <p className="text-slate-500">Aucune position en service</p>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {/* Contrôleurs ATC */}
-            {Object.entries(byAeroport).map(([apt, controllers]) => (
-              <div
-                key={`atc-${apt}`}
-                className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20 hover:border-emerald-500/35 transition-colors"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <Radio className="h-4 w-4 text-emerald-400" />
-                  <span className="text-base font-bold text-emerald-300 font-mono">{apt}</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-auto" />
-                </div>
-                <div className="space-y-1.5">
-                  {controllers.map((c, idx) => {
-                    const freq = vhfFreqMap.get(`${apt}-${c.position}`);
-                    return (
-                      <div key={`${apt}-${c.position}-${idx}`} className="flex items-center justify-between text-xs gap-2">
-                        <span className="text-emerald-300/80 font-medium">{c.position}</span>
-                        {freq && (
-                          <span className="text-emerald-400/60 font-mono">{freq}</span>
-                        )}
-                        <span className="text-slate-500 ml-auto">{c.identifiant}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-
-            {/* Agents AFIS */}
-            {afisEnServiceSafe.map((sess, idx) => (
-              <div
-                key={`afis-${sess.aeroport}-${idx}`}
-                className={`p-3 rounded-xl border transition-colors ${sess.est_afis ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/35' : 'bg-amber-500/5 border-amber-500/20 hover:border-amber-500/35'}`}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <Flame className={`h-4 w-4 ${sess.est_afis ? 'text-red-400' : 'text-amber-400'}`} />
-                  <span className={`text-base font-bold font-mono ${sess.est_afis ? 'text-red-300' : 'text-amber-300'}`}>{sess.aeroport}</span>
-                  <span className={`w-2 h-2 rounded-full ml-auto ${sess.est_afis ? 'bg-red-500 animate-pulse' : 'bg-amber-500'}`} />
-                </div>
-                <div className="flex items-center justify-between text-xs gap-2">
-                  <span className={`font-medium ${sess.est_afis ? 'text-red-300/80' : 'text-amber-300/80'}`}>
-                    {sess.est_afis ? 'AFIS' : 'Pompier seul'}
-                  </span>
-                  {sess.est_afis && vhfFreqMap.get(`${sess.aeroport}-AFIS`) && (
-                    <span className={`font-mono ${sess.est_afis ? 'text-red-400/60' : 'text-amber-400/60'}`}>
-                      {vhfFreqMap.get(`${sess.aeroport}-AFIS`)}
-                    </span>
-                  )}
-                  <span className="text-slate-500 ml-auto">
-                    {(sess.profiles as { identifiant?: string } | null)?.identifiant || '—'}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <AtcEnLigneModal
+          totalAtc={totalAtcEnService}
+          sessionsEnService={sessionsEnServiceSafe.map((s) => ({
+            aeroport: s.aeroport,
+            position: s.position,
+            user_id: s.user_id,
+            identifiant: (s.profiles as { identifiant?: string } | null)?.identifiant || '—',
+          }))}
+        />
+        <PlansEnAttenteModal totalPlans={totalPlansEnAttente} />
+        <CreateManualStripButton />
+        <HorsServiceButton />
       </div>
 
-      {/* Panel slide-out Gestion Parkings */}
-      <AtcGestionParkingsPanel aeroport={session?.aeroport ?? null} />
+      <div className="flex-1 min-h-0 flex flex-col gap-2">
+        {!plansChezMoi || plansChezMoi.length === 0 ? (
+          <div className="flex-1 rounded-xl border border-dashed border-slate-600/60 bg-slate-950/20 flex flex-col items-center justify-center text-center px-6">
+            <div className="h-12 w-12 rounded-xl bg-slate-800/70 border border-slate-700 flex items-center justify-center mb-3">
+              <Plane className="h-6 w-6 text-slate-500" />
+            </div>
+            <p className="text-slate-300 font-semibold">Aucun strip sous contrôle</p>
+            <p className="text-slate-500 text-sm mt-1">Les nouveaux plans arrivent dans l&apos;inbox à droite, ou créez un strip manuel.</p>
+          </div>
+        ) : (
+          <div className="flex-1 min-h-0">
+            <FlightStripBoardWrapper
+              allStrips={plansChezMoi}
+              plansATraiter={plansChezMoi.filter((s) => ['depose', 'en_attente'].includes(s.statut)).map((s) => s.id)}
+              atcPosition={session.position}
+              atcAeroport={session.aeroport}
+              onlineSessions={sessionsEnServiceSafe.map((s) => ({ aeroport: s.aeroport, position: s.position, user_id: s.user_id }))}
+            />
+          </div>
+        )}
+
+        <AtcNonControlesPanel
+          plansAuto={plansAuto}
+          plansOrphelins={plansOrphelins}
+          sessionAeroport={session.aeroport}
+          sessionPosition={session.position}
+        />
+        {networkPanel}
+      </div>
+
+      <AtcGestionParkingsPanel aeroport={session.aeroport} />
     </div>
   );
 }
+

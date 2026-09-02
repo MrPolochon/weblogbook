@@ -160,10 +160,10 @@ export default function PlansEnAttenteModal({ totalPlans, initialPlans = [] }: P
       {/* Badge cliquable */}
       <button
         onClick={handleOpen}
-        className="text-center px-4 py-2 rounded-lg bg-amber-100 border border-amber-200 hover:bg-amber-200 hover:border-amber-300 transition-all cursor-pointer group"
+        className="text-center px-3 py-1.5 rounded-lg bg-amber-950/50 border border-amber-700/50 hover:bg-amber-900/60 transition-all cursor-pointer group min-w-[4.5rem]"
       >
-        <p className="text-2xl font-bold text-amber-600 group-hover:scale-110 transition-transform">{totalPlans}</p>
-        <p className="text-xs text-amber-700 uppercase tracking-wide">Plans en attente</p>
+        <p className="text-lg font-black text-amber-300 leading-none tabular-nums">{totalPlans}</p>
+        <p className="text-[9px] text-amber-400/80 uppercase tracking-wider font-bold mt-0.5">Plans</p>
       </button>
 
       {/* Modal */}

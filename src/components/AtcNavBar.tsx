@@ -3,12 +3,16 @@
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Radio, LayoutDashboard, LogOut, FileText, BookOpen, User, ScrollText, Mail, Moon, Sun, ChevronDown, Menu, Flame, Landmark, Radar } from 'lucide-react';
+import {
+  Radio, LayoutDashboard, LogOut, FileText, User, ScrollText, Mail, Moon, Sun,
+  ChevronDown, Menu, Flame, Landmark, Radar, BookOpen,
+} from 'lucide-react';
 import AtcPhonebookButton from '@/components/AtcPhonebookButton';
 import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useRef, useTransition } from 'react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
+import { formatElapsedClock } from '@/lib/atc-ui';
 
 function AtcSessionCompte({ aeroport, position, startedAt, isDark }: { aeroport: string; position: string; startedAt: string; isDark: boolean }) {
   const [now, setNow] = useState(() => new Date());
@@ -16,26 +20,22 @@ function AtcSessionCompte({ aeroport, position, startedAt, isDark }: { aeroport:
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
-  const elapsedSec = (now.getTime() - new Date(startedAt).getTime()) / 1000;
-  const h = Math.floor(elapsedSec / 3600);
-  const m = Math.floor((elapsedSec % 3600) / 60);
-  const temps = h > 0 ? `${h}h ${m}min` : `${m}min`;
-  const utc = now.toISOString().substring(11, 19) + ' UTC';
-
-  const badgeClass = isDark
-    ? 'rounded-xl border border-slate-700/80 bg-slate-900/70 px-2.5 py-1 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
-    : 'rounded-xl border border-slate-200 bg-slate-100 px-2.5 py-1 text-slate-800';
-  const timeBadgeClass = isDark
-    ? 'rounded-xl border border-sky-900/70 bg-sky-950/80 px-2.5 py-1 text-sky-200 shadow-[0_0_0_1px_rgba(56,189,248,0.06)]'
-    : 'rounded-xl border border-sky-200 bg-sky-100 px-2.5 py-1 text-sky-800';
+  const utc = now.toISOString().substring(11, 19) + 'Z';
 
   return (
-    <div className="flex items-center gap-3 text-sm font-semibold whitespace-nowrap flex-shrink-0">
-      <span className={badgeClass}>{aeroport}</span>
-      <span className={badgeClass}>{position}</span>
+    <div className={cn(
+      'flex items-center gap-2 rounded-xl border px-2 py-1 font-semibold whitespace-nowrap',
+      isDark ? 'border-emerald-800/60 bg-emerald-950/50' : 'border-emerald-300/80 bg-emerald-50/90',
+    )}>
+      <span className="relative flex h-2 w-2">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+      </span>
+      <span className={cn('font-mono text-sm font-black tracking-wide', isDark ? 'text-emerald-200' : 'text-emerald-800')}>{aeroport}</span>
+      <span className={cn('text-[10px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded', isDark ? 'bg-slate-900 text-slate-200' : 'bg-white text-slate-700')}>{position}</span>
       <AtcPhonebookButton isDark={isDark} />
-      <span className={timeBadgeClass}>{temps}</span>
-      <span className={cn(badgeClass, 'tabular-nums')}>{utc}</span>
+      <span className={cn('font-mono text-xs tabular-nums', isDark ? 'text-sky-200' : 'text-sky-800')}>{formatElapsedClock(startedAt, now)}</span>
+      <span className={cn('font-mono text-xs tabular-nums hidden lg:inline', isDark ? 'text-slate-400' : 'text-slate-500')}>{utc}</span>
     </div>
   );
 }
@@ -68,9 +68,7 @@ export default function AtcNavBar({
     function handleClickOutside(event: MouseEvent) {
       const targetNode = event.target as Node | null;
       const containsTarget = menuRef.current ? !!targetNode && menuRef.current.contains(targetNode) : false;
-      if (menuRef.current && !containsTarget) {
-        setAtcMenuOpen(false);
-      }
+      if (menuRef.current && !containsTarget) setAtcMenuOpen(false);
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -83,9 +81,7 @@ export default function AtcNavBar({
         return;
       }
       const rect = triggerRef.current.getBoundingClientRect();
-      const top = Math.round(rect.bottom + 4);
-      const left = Math.round(rect.left);
-      setDropdownStyle({ position: 'fixed', top, left, zIndex: 70 });
+      setDropdownStyle({ position: 'fixed', top: Math.round(rect.bottom + 4), left: Math.round(rect.left), zIndex: 70 });
     }
     updateDropdownPosition();
     if (!atcMenuOpen) return;
@@ -105,7 +101,7 @@ export default function AtcNavBar({
   }
 
   const atcMenuItems = [
-    { href: '/atc', label: 'Tableau de bord', icon: Radio, badge: 0 },
+    { href: '/atc', label: 'Console', icon: Radio, badge: 0 },
     { href: '/atc/documents', label: 'Documents', icon: FileText, badge: 0 },
     { href: '/atc/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount },
     { href: '/atc/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0 },
@@ -113,60 +109,53 @@ export default function AtcNavBar({
 
   const isAtcMenuActive = pathname === '/atc' || pathname.startsWith('/atc/documents') || pathname.startsWith('/atc/messagerie');
 
-  const linkBase = 'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold tracking-[0.01em] transition-all whitespace-nowrap flex-shrink-0 border';
-  const linkActive = isDark ? 'atc-link-active border-sky-800/60 bg-sky-950/70 text-sky-200 shadow-[0_8px_18px_rgba(2,6,23,0.24)]' : 'atc-link-active border-sky-200 bg-sky-100 text-sky-800';
+  const linkBase = 'flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold tracking-wide transition-all whitespace-nowrap flex-shrink-0 border';
+  const linkActive = isDark
+    ? 'atc-link-active border-sky-700/50 bg-sky-950/80 text-sky-200'
+    : 'atc-link-active border-sky-300 bg-sky-100 text-sky-900';
   const linkInactive = isDark
-    ? 'border-slate-700/45 bg-slate-950/45 text-slate-200 hover:border-slate-500/45 hover:bg-slate-800/78 hover:text-white'
-    : 'border-slate-200/70 bg-white/65 text-slate-700 hover:border-sky-300 hover:bg-sky-50 hover:text-slate-900';
+    ? 'border-transparent bg-transparent text-slate-300 hover:border-slate-700 hover:bg-slate-800/80 hover:text-white'
+    : 'border-transparent bg-transparent text-slate-700 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900';
 
   const headerBg = isDark
-    ? 'bg-slate-950/86 border-slate-700/45 shadow-[0_20px_40px_rgba(2,6,23,0.45)]'
-    : 'bg-white/92 border-slate-300/85 shadow-[0_14px_28px_rgba(15,23,42,0.08)]';
+    ? 'bg-[#05080e]/95 border-slate-800/80'
+    : 'bg-white/90 border-slate-300/80';
 
   const dropdownBg = isDark
-    ? 'bg-slate-900/95 border-slate-600/45 shadow-[0_24px_52px_rgba(2,6,23,0.52)] backdrop-blur-xl'
-    : 'bg-white/98 border-slate-300 shadow-[0_18px_34px_rgba(15,23,42,0.1)]';
+    ? 'bg-slate-950/98 border-slate-700 shadow-2xl backdrop-blur-xl'
+    : 'bg-white/98 border-slate-200 shadow-xl';
 
-  const dropdownItemActive = isDark
-    ? 'bg-slate-800 text-sky-200'
-    : 'bg-sky-100 text-sky-800';
-
-  const dropdownItemInactive = isDark
-    ? 'text-slate-300 hover:bg-slate-800/80 hover:text-slate-100'
-    : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900';
+  const dropdownItemActive = isDark ? 'bg-sky-950 text-sky-200' : 'bg-sky-100 text-sky-900';
+  const dropdownItemInactive = isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-100';
 
   return (
-    <header className={cn("atc-header sticky top-0 z-50 border-b backdrop-blur-xl", headerBg)}>
-      <div className="mx-auto flex max-w-screen-2xl items-center justify-between gap-3 px-4 sm:px-5 xl:px-6 sm:gap-5 flex-wrap sm:flex-nowrap py-2 sm:py-0 sm:h-[4.5rem]">
-        <nav className="flex flex-nowrap items-center gap-3 overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
-          {/* Menu déroulant ATC */}
+    <header className={cn('atc-header sticky top-0 z-50 border-b backdrop-blur-xl', headerBg)}>
+      <div className="flex items-center justify-between gap-3 px-3 sm:px-4 h-14">
+        <nav className="flex items-center gap-1.5 min-w-0">
+          <Link href="/atc" className="hidden sm:flex items-center gap-2 pr-2 mr-1 border-r border-slate-700/30 shrink-0">
+            <span className={cn('flex h-8 w-8 items-center justify-center rounded-lg', isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-700')}>
+              <Radio className="h-4 w-4" />
+            </span>
+            <span className={cn('text-[11px] font-black tracking-[0.18em]', isDark ? 'text-slate-200' : 'text-slate-800')}>ATC</span>
+          </Link>
+
           <div className="relative" ref={menuRef}>
             <button
               ref={triggerRef}
-              onPointerDown={() => {
-                setAtcMenuOpen((prev) => !prev);
-              }}
-              className={cn(
-                'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium transition-all relative flex-shrink-0 border',
-                isAtcMenuActive ? linkActive : linkInactive
-              )}
+              onPointerDown={() => setAtcMenuOpen((prev) => !prev)}
+              className={cn(linkBase, isAtcMenuActive ? linkActive : linkInactive, 'relative')}
             >
-              <Menu className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden md:inline">Menu ATC</span>
-              <span className="md:hidden">Menu</span>
-              <ChevronDown className={cn('h-4 w-4 transition-transform flex-shrink-0', atcMenuOpen && 'rotate-180')} />
+              <Menu className="h-4 w-4" />
+              <span className="hidden md:inline">Menu</span>
+              <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', atcMenuOpen && 'rotate-180')} />
               {messagesNonLusCount > 0 && (
-                <span
-                  className="absolute -top-0.5 -right-0.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white ring-2 ring-current"
-                  title={`${messagesNonLusCount} message(s) non lu(s)`}
-                >
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
                   {messagesNonLusCount > 99 ? '99+' : messagesNonLusCount}
                 </span>
               )}
             </button>
-            
             {atcMenuOpen && (
-              <div style={dropdownStyle ?? undefined} className={cn("fixed w-56 rounded-2xl border p-1.5 z-50", dropdownBg)}>
+              <div style={dropdownStyle ?? undefined} className={cn('fixed w-56 rounded-xl border p-1 z-50', dropdownBg)}>
                 {atcMenuItems.map((item) => {
                   const Icon = item.icon;
                   return (
@@ -175,16 +164,16 @@ export default function AtcNavBar({
                       href={item.href}
                       onClick={() => setAtcMenuOpen(false)}
                       className={cn(
-                        'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
+                        'flex items-center gap-3 px-3 py-2 text-sm rounded-lg',
                         pathname === item.href || (item.href !== '/atc' && pathname.startsWith(item.href))
                           ? dropdownItemActive
-                          : dropdownItemInactive
+                          : dropdownItemInactive,
                       )}
                     >
-                      <Icon className="h-4 w-4 flex-shrink-0" />
+                      <Icon className="h-4 w-4" />
                       {item.label}
                       {item.badge > 0 && (
-                        <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white">
+                        <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">
                           {item.badge > 99 ? '99+' : item.badge}
                         </span>
                       )}
@@ -196,153 +185,102 @@ export default function AtcNavBar({
           </div>
 
           <Link href="/atc/notams" className={cn(linkBase, pathname.startsWith('/atc/notams') ? linkActive : linkInactive)}>
-            <ScrollText className="h-4 w-4 flex-shrink-0" />
-            NOTAMs
+            <ScrollText className="h-4 w-4" />
+            <span className="hidden sm:inline">NOTAM</span>
           </Link>
           {isAdmin && (
-            <Link href="/atc/radar" className={cn(linkBase, 'gap-1.5', pathname.startsWith('/atc/radar') ? linkActive : (isDark ? 'text-emerald-300 hover:bg-emerald-900/30' : 'text-emerald-700 hover:bg-emerald-100'))}>
-              <Radar className="h-4 w-4 flex-shrink-0" />
+            <Link href="/atc/radar" className={cn(linkBase, pathname.startsWith('/atc/radar') ? linkActive : (isDark ? 'text-emerald-300 hover:bg-emerald-950' : 'text-emerald-700 hover:bg-emerald-50'))}>
+              <Radar className="h-4 w-4" />
               <span className="hidden sm:inline">Radar</span>
             </Link>
           )}
           {isAdmin && (
             <Link href="/atc/admin" className={cn(linkBase, pathname.startsWith('/atc/admin') ? linkActive : linkInactive)}>
-              <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Admin ATC</span>
-              <span className="sm:hidden">Admin</span>
+              <LayoutDashboard className="h-4 w-4" />
+              <span className="hidden sm:inline">Admin</span>
             </Link>
           )}
         </nav>
-        <div className="hidden md:flex justify-center min-w-0 flex-shrink-0">
+
+        <div className="hidden md:flex justify-center min-w-0">
           {sessionInfo && (
             <AtcSessionCompte aeroport={sessionInfo.aeroport} position={sessionInfo.position} startedAt={sessionInfo.started_at} isDark={isDark} />
           )}
         </div>
-        <div className="flex justify-end items-center gap-3 flex-shrink-0">
-          {/* Bouton mode sombre/clair (desktop) */}
+
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
             onClick={toggleTheme}
-            className={cn(
-              'p-2.5 rounded-lg transition-colors hidden sm:inline-flex',
-              isDark 
-                ? 'bg-slate-700 text-amber-400 hover:bg-slate-600' 
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            )}
-            title={isDark ? 'Passer en mode jour' : 'Passer en mode nuit'}
+            className={cn('p-2 rounded-lg hidden sm:inline-flex', isDark ? 'text-amber-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100')}
+            title={isDark ? 'Mode jour' : 'Mode nuit'}
           >
             {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
-          
           {gradeNom && (
-            <span className={cn(
-              "hidden sm:inline whitespace-nowrap text-sm font-medium px-2 py-1 rounded",
-              isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-100 text-slate-600'
-            )} title="Votre grade ATC">
+            <span className={cn('hidden lg:inline text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md', isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600')}>
               {gradeNom}
             </span>
           )}
-          <div className="hidden sm:flex items-center gap-3">
-            <Link href="/atc/compte" className={cn(linkBase, 'gap-1.5', pathname === '/atc/compte' ? linkActive : linkInactive)} title="Mon compte">
-              <User className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">Mon compte</span>
-              <span className="sm:hidden">Compte</span>
+          <div className="hidden sm:flex items-center gap-1">
+            <Link href="/atc/compte" className={cn(linkBase, pathname === '/atc/compte' ? linkActive : linkInactive)} title="Mon compte">
+              <User className="h-4 w-4" />
             </Link>
-            <Link href="/carte-atc" className={cn(linkBase, 'gap-1.5', isDark ? 'text-emerald-300 hover:bg-emerald-900/30' : 'text-emerald-700 hover:bg-emerald-100')} title="Carte œil du web (ODW : œil du web)">
-              <Radio className="h-4 w-4 flex-shrink-0" />
-              <span className="hidden sm:inline">ODW</span>
+            <Link href="/carte-atc" className={cn(linkBase, isDark ? 'text-emerald-300 hover:bg-emerald-950' : 'text-emerald-700 hover:bg-emerald-50')} title="Carte œil du web">
+              <span className="text-[11px] font-black tracking-widest">ODW</span>
             </Link>
             {isAdmin && (
-              <AdminSpaceSelector triggerClassName={cn(linkBase, 'gap-1.5', isDark ? 'border-purple-800/40 text-purple-300 hover:bg-purple-900/30' : 'border-purple-300/50 text-purple-700 hover:bg-purple-50')} />
+              <AdminSpaceSelector triggerClassName={cn(linkBase, isDark ? 'text-purple-300 hover:bg-purple-950' : 'text-purple-700 hover:bg-purple-50')} />
             )}
             {!enService && (
-              <button type="button" onClick={handleLogout} className={cn(linkBase, isDark ? 'text-slate-300 hover:bg-slate-700 hover:text-red-400' : 'text-slate-700 hover:bg-slate-100 hover:text-red-600')}>
-                <LogOut className="h-4 w-4 flex-shrink-0" />
-                Déconnexion
+              <button type="button" onClick={handleLogout} className={cn(linkBase, isDark ? 'text-slate-300 hover:text-red-400' : 'text-slate-700 hover:text-red-600')}>
+                <LogOut className="h-4 w-4" />
               </button>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => setAccountMenuOpen((prev) => !prev)}
+            className={cn('sm:hidden p-2 rounded-lg', isDark ? 'text-slate-300' : 'text-slate-700')}
+            aria-label="Menu compte"
+          >
+            <ChevronDown className={cn('h-5 w-5 transition-transform', accountMenuOpen && 'rotate-180')} />
+          </button>
         </div>
       </div>
 
-      <div className="sm:hidden px-5 pb-3">
-        <button
-          type="button"
-          onClick={() => setAccountMenuOpen((prev) => !prev)}
-          className={cn(
-            'w-full flex items-center justify-center rounded-lg px-3 py-2 border',
-            isDark ? 'bg-slate-800/60 text-slate-300 border-slate-700/60' : 'bg-slate-100 text-slate-700 border-slate-300'
-          )}
-          aria-label="Ouvrir le menu compte"
-        >
-          <ChevronDown className={cn('h-5 w-5 transition-transform', accountMenuOpen && 'rotate-180')} />
-        </button>
+      {sessionInfo && (
+        <div className="md:hidden px-3 pb-2">
+          <AtcSessionCompte aeroport={sessionInfo.aeroport} position={sessionInfo.position} startedAt={sessionInfo.started_at} isDark={isDark} />
+        </div>
+      )}
 
-        {accountMenuOpen && (
-          <div className="mt-2 grid gap-2">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className={cn(
-                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors border',
-                isDark
-                  ? 'bg-slate-800/60 text-amber-300 border-slate-700/60 hover:bg-slate-700'
-                  : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
-              )}
-            >
-              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-              {isDark ? 'Mode jour' : 'Mode nuit'}
+      {accountMenuOpen && (
+        <div className="sm:hidden px-3 pb-3 grid gap-1.5">
+          <button type="button" onClick={toggleTheme} className={cn('flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium', isDark ? 'bg-slate-800 text-amber-300' : 'bg-slate-100 text-slate-700')}>
+            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {isDark ? 'Mode jour' : 'Mode nuit'}
+          </button>
+          <Link href="/atc/compte" className={cn('flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium', linkInactive)}>
+            <User className="h-4 w-4" /> Mon compte
+          </Link>
+          {isAdmin && (
+            <>
+              <Link href="/siavi" className={cn('flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium', isDark ? 'bg-red-950 text-red-300' : 'bg-red-100 text-red-700')}>
+                <Flame className="h-4 w-4" /> Espace SIAVI
+              </Link>
+              <Link href="/logbook" className={cn('flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium', linkInactive)}>
+                <BookOpen className="h-4 w-4" /> Espace pilotes
+              </Link>
+            </>
+          )}
+          {!enService && (
+            <button type="button" onClick={handleLogout} className={cn('flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium', isDark ? 'text-slate-300' : 'text-slate-700')}>
+              <LogOut className="h-4 w-4" /> Déconnexion
             </button>
-            <Link
-              href="/atc/compte"
-              className={cn(
-                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                pathname === '/atc/compte' ? linkActive : linkInactive
-              )}
-            >
-              <User className="h-4 w-4" />
-              Mon compte
-            </Link>
-            {isAdmin && (
-              <>
-                <Link
-                  href="/siavi"
-                  className={cn(
-                    'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    isDark ? 'bg-red-900/60 text-red-300 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'
-                  )}
-                >
-                  <Flame className="h-4 w-4" />
-                  Espace SIAVI
-                </Link>
-                <Link
-                  href="/logbook"
-                  className={cn(
-                    'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    linkInactive
-                  )}
-                >
-                  <BookOpen className="h-4 w-4" />
-                  Espace pilotes
-                </Link>
-              </>
-            )}
-            {!enService && (
-              <button
-                type="button"
-                onClick={handleLogout}
-                className={cn(
-                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                  isDark ? 'bg-slate-800/60 text-slate-300 hover:bg-slate-700 hover:text-red-300' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-red-600'
-                )}
-              >
-                <LogOut className="h-4 w-4" />
-                Déconnexion
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </header>
   );
 }
