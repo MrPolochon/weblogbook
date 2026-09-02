@@ -34,6 +34,7 @@ import {
   isAtisDraftReady,
   tmaIntroPreview,
   type AtisEntitlement,
+  type AtisKind,
   type TmaAirportDraft,
 } from '@/lib/atis-priority';
 
@@ -138,6 +139,62 @@ function draftStorageKey(userId: string, aeroport: string, position: string) {
   return `atis-draft:${userId}:${aeroport}:${position}`;
 }
 
+function atisFingerprint(data: AtisData | null, tma: TmaAirportDraft[], kind: AtisKind): string {
+  return JSON.stringify({
+    code: data?.information_code ?? '',
+    runway: data?.runway ?? '',
+    expected_approach: data?.expected_approach ?? '',
+    expected_runway: data?.expected_runway ?? '',
+    runway_condition: data?.runway_condition ?? '',
+    wind: data?.wind ?? '',
+    visibility: data?.visibility ?? '',
+    sky_condition: data?.sky_condition ?? '',
+    temperature: data?.temperature ?? '',
+    dewpoint: data?.dewpoint ?? '',
+    qnh: data?.qnh ?? '',
+    transition_level: data?.transition_level ?? '',
+    remarks: data?.remarks ?? '',
+    cavok: Boolean(data?.cavok),
+    bilingual: Boolean(data?.bilingual_mode),
+    tma:
+      kind === 'tma'
+        ? tma.map((a) => ({
+            icao: a.icao,
+            included: a.included,
+            runways: a.runways,
+            condition: a.condition,
+          }))
+        : [],
+  });
+}
+
+function applyPendingEdits(
+  data: AtisData | null,
+  editing: string | null,
+  editValues: Record<string, string>
+): AtisData {
+  const next: AtisData = { ...(data ?? {}) };
+  if (editing === 'runway') {
+    next.runway = editValues.runway || undefined;
+    next.expected_approach = editValues.expected_approach || undefined;
+    next.expected_runway = editValues.expected_runway || undefined;
+    next.runway_condition = editValues.runway_condition || undefined;
+  }
+  if (editing === 'weather') {
+    next.wind = editValues.wind || undefined;
+    next.visibility = editValues.visibility || undefined;
+    next.sky_condition = editValues.sky_condition || undefined;
+    next.temperature = editValues.temperature || undefined;
+    next.dewpoint = editValues.dewpoint || undefined;
+  }
+  if (editing === 'qnh') {
+    next.qnh = editValues.qnh || undefined;
+    next.transition_level = editValues.transition_level || undefined;
+  }
+  if (editing === 'remarks') next.remarks = editValues.remarks || undefined;
+  return next;
+}
+
 export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisButtonProps) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
@@ -172,6 +229,8 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   const [tmaDraft, setTmaDraft] = useState<TmaAirportDraft[]>([]);
   const tmaInitRef = useRef(false);
   const [draftHydrated, setDraftHydrated] = useState(false);
+  const [publishedKey, setPublishedKey] = useState<string | null>(null);
+  const snapshotInitRef = useRef(false);
 
   // Auto-rotate code
   const [autoRotateInProgress, setAutoRotateInProgress] = useState(false);
@@ -237,6 +296,15 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       ? instances.some((i) => i.config.configured && !i.broadcasting)
       : Boolean(instances.find((i) => i.instance_id === startTargetInstance)?.config.configured);
   const draftReady = isAtisDraftReady(atisKind, atisData?.runway, tmaDraft);
+  const draftFingerprint = useMemo(
+    () => atisFingerprint(atisData, tmaDraft, atisKind),
+    [atisData, tmaDraft, atisKind]
+  );
+  const atisDirty = Boolean(
+    broadcasting &&
+      myInstance?.is_mine &&
+      (editing !== null || (publishedKey !== null && draftFingerprint !== publishedKey))
+  );
   const canStart =
     !broadcasting &&
     canConfigure &&
@@ -298,11 +366,17 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       const data = await res.json();
       if (res.ok && !data?.error) {
         setAtisData(data);
+        if (!snapshotInitRef.current) {
+          snapshotInitRef.current = true;
+          setPublishedKey(atisFingerprint(data, tmaDraft, atisKind));
+        }
+        return data as AtisData;
       }
     } catch {
       /* ignore */
     }
-  }, []);
+    return null;
+  }, [tmaDraft, atisKind]);
 
   // ---------------------------------------------------------------------------
   // Polling
@@ -321,13 +395,13 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
   useEffect(() => {
     if (isOpen && tab === 'data') {
-      if (broadcasting) fetchAtisData();
+      if (broadcasting && !atisDirty) void fetchAtisData();
       const itv = setInterval(() => {
-        if (broadcasting) fetchAtisData();
+        if (broadcasting && !atisDirty) void fetchAtisData();
       }, POLL_MS);
       return () => clearInterval(itv);
     }
-  }, [isOpen, tab, fetchAtisData, broadcasting]);
+  }, [isOpen, tab, fetchAtisData, broadcasting, atisDirty]);
 
   // Brouillon local (prepare avant diffusion).
   useEffect(() => {
@@ -381,6 +455,13 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     fetchChannels(selectedGuildId);
   }, [selectedGuildId, fetchChannels]);
 
+  useEffect(() => {
+    if (!broadcasting) {
+      snapshotInitRef.current = false;
+      setPublishedKey(null);
+    }
+  }, [broadcasting]);
+
   // ---------------------------------------------------------------------------
   // Actions
   // ---------------------------------------------------------------------------
@@ -403,7 +484,9 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       if (startTargetInstance !== 'auto') body.instance_id = startTargetInstance;
       await apiCall('/api/atc/atis/start', { method: 'POST', body });
       await fetchOverview();
-      await fetchAtisData();
+      const live = await fetchAtisData();
+      snapshotInitRef.current = true;
+      setPublishedKey(atisFingerprint(live ?? atisData, tmaDraft, atisKind));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur au démarrage');
     } finally {
@@ -421,6 +504,8 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         method: 'POST',
         body: Object.keys(body).length ? body : undefined,
       });
+      snapshotInitRef.current = false;
+      setPublishedKey(null);
       await fetchOverview();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Erreur à l'arrêt");
@@ -445,6 +530,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   const handlePatch = async (updates: Record<string, unknown>) => {
     setAtisData((prev) => ({ ...prev, ...updates }));
     setEditing(null);
+    if (broadcasting && myInstance?.is_mine) return;
     try {
       await pushLivePatch(updates);
     } catch (e) {
@@ -452,38 +538,51 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     }
   };
 
-  const handleCodeChange = async (code: string) => {
+  const handleApplyAtis = async () => {
+    if (actionLoading || !broadcasting || !myInstance?.is_mine) return;
+    setActionLoading(true);
+    try {
+      const pending = applyPendingEdits(atisData, editing, editValues);
+      if (editing) {
+        setAtisData(pending);
+        setEditing(null);
+      }
+      const payload = buildAtisPatchBody({
+        aeroport: aeroportCode,
+        kind: atisKind,
+        fir: myFir,
+        draft: pending,
+        tmaAirports: tmaDraft,
+      });
+      payload.bilingual_mode = Boolean(pending.bilingual_mode);
+      payload.information_code = pending.information_code || 'A';
+      const data = await apiCall('/api/atc/atis/replay', { method: 'POST', body: payload });
+      const merged: AtisData = {
+        ...pending,
+        ...(data?.data ?? {}),
+        bilingual_mode: data?.bilingual_mode ?? pending.bilingual_mode,
+      };
+      if (pending.information_code) merged.information_code = pending.information_code;
+      setAtisData(merged);
+      setPublishedKey(atisFingerprint(merged, tmaDraft, atisKind));
+      if (data?.warning) setError(String(data.warning));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur lors de la mise à jour ATIS');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCodeChange = (code: string) => {
     setAtisData((prev) => (prev ? { ...prev, information_code: code } : { information_code: code }));
-    if (!broadcasting || !myInstance?.is_mine) return;
-    try {
-      await apiCall('/api/atc/atis/atiscode', { method: 'POST', body: { code } });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
-    }
   };
 
-  const handleToggleCavok = async () => {
-    const next = !atisData?.cavok;
-    setAtisData((prev) => ({ ...prev, cavok: next }));
-    if (!broadcasting || !myInstance?.is_mine) return;
-    try {
-      const data = await apiCall('/api/atc/atis/toggle-cavok', { method: 'POST' });
-      setAtisData((prev) => ({ ...prev, cavok: data.cavok }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
-    }
+  const handleToggleCavok = () => {
+    setAtisData((prev) => ({ ...prev, cavok: !prev?.cavok }));
   };
 
-  const handleToggleBilingual = async () => {
-    const next = !atisData?.bilingual_mode;
-    setAtisData((prev) => ({ ...prev, bilingual_mode: next }));
-    if (!broadcasting || !myInstance?.is_mine) return;
-    try {
-      const data = await apiCall('/api/atc/atis/toggle-bilingual', { method: 'POST' });
-      setAtisData((prev) => ({ ...prev, bilingual_mode: data.bilingual_mode }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
-    }
+  const handleToggleBilingual = () => {
+    setAtisData((prev) => ({ ...prev, bilingual_mode: !prev?.bilingual_mode }));
   };
 
   const handleToggleAutoRotate = async () => {
@@ -1001,14 +1100,27 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 </>
               )}
               {broadcasting && (
-                <button
-                  onClick={() => handleStop()}
-                  disabled={actionLoading}
-                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-red-500 hover:bg-red-400 text-white font-semibold text-base disabled:opacity-50"
-                >
-                  <Square className="h-5 w-5" />
-                  Arrêter mon ATIS{isFromDiscord ? ' (Discord)' : ''}
-                </button>
+                <>
+                  {myInstance?.is_mine && atisDirty && canConfigure && (
+                    <button
+                      type="button"
+                      onClick={() => void handleApplyAtis()}
+                      disabled={actionLoading}
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-semibold text-base disabled:opacity-50"
+                    >
+                      <Pencil className="h-5 w-5" />
+                      {actionLoading ? 'Mise à jour…' : 'Modifier ATIS'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleStop()}
+                    disabled={actionLoading}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-red-500 hover:bg-red-400 text-white font-semibold text-base disabled:opacity-50"
+                  >
+                    <Square className="h-5 w-5" />
+                    Arrêter mon ATIS{isFromDiscord ? ' (Discord)' : ''}
+                  </button>
+                </>
               )}
             </div>
           </>
@@ -1200,6 +1312,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                   code={d?.information_code ?? 'A'}
                   onChange={(next) => {
                     setTmaDraft(next);
+                    if (broadcasting && myInstance?.is_mine) return;
                     void pushLivePatch({}, next);
                   }}
                 />
@@ -1412,6 +1525,17 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 className="w-full py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white"
               >
                 Continuer — diffuser
+              </button>
+            )}
+            {broadcasting && myInstance?.is_mine && atisDirty && canConfigure && (
+              <button
+                type="button"
+                onClick={() => void handleApplyAtis()}
+                disabled={actionLoading}
+                className="w-full py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Pencil className="h-4 w-4" />
+                {actionLoading ? 'Mise à jour…' : 'Modifier ATIS'}
               </button>
             )}
           </>

@@ -65,11 +65,19 @@ export async function POST(request: Request) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+
+    let force = false;
+    try {
+      const body = await request.json();
+      force = Boolean(body?.force);
+    } catch {
+      /* body vide : déconnexion normale */
+    }
 
     const admin = createAdminClient();
     // Les vols déjà en autosurveillance ne bloquent pas la fin de service
@@ -90,7 +98,49 @@ export async function DELETE() {
       .eq('current_holder_user_id', user.id)
       .or('automonitoring.eq.false,automonitoring.is.null')
       .in('statut', ['depose', 'en_attente', 'en_cours', 'accepte', 'en_attente_cloture']);
-    if ((count ?? 0) > 0) return NextResponse.json({ error: 'Vous avez encore des plans de vol sous votre contrôle. Mettez-les en autosurveillance, transférez-les ou clôturez-les avant de vous mettre hors service.' }, { status: 400 });
+
+    if ((count ?? 0) > 0 && !force) {
+      return NextResponse.json(
+        {
+          error:
+            'Vous avez encore des plans de vol sous votre contrôle. Mettez-les en autosurveillance, transférez-les ou clôturez-les avant de vous mettre hors service.',
+          code: 'FLIGHTS_HELD',
+          count,
+        },
+        { status: 409 }
+      );
+    }
+
+    if (force) {
+      await admin
+        .from('plans_vol')
+        .update({
+          current_holder_user_id: null,
+          current_holder_position: null,
+          current_holder_aeroport: null,
+          pending_transfer_aeroport: null,
+          pending_transfer_position: null,
+          pending_transfer_at: null,
+          automonitoring: true,
+          strip_zone: null,
+        })
+        .eq('current_holder_user_id', user.id)
+        .in('statut', ['accepte', 'en_cours', 'en_attente_cloture']);
+
+      await admin
+        .from('plans_vol')
+        .update({
+          current_holder_user_id: null,
+          current_holder_position: null,
+          current_holder_aeroport: null,
+          pending_transfer_aeroport: null,
+          pending_transfer_position: null,
+          pending_transfer_at: null,
+          strip_zone: null,
+        })
+        .eq('current_holder_user_id', user.id)
+        .in('statut', ['depose', 'en_attente']);
+    }
 
     const { data: session } = await supabase.from('atc_sessions').select('id, started_at, aeroport, position').eq('user_id', user.id).single();
     if (!session) return NextResponse.json({ error: 'Aucune session active.' }, { status: 400 });

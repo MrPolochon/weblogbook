@@ -11,6 +11,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
  *   - /webhook/available         -> 1ère instance non broadcasting
  *   - /webhook/overview          -> status-all + guilds + meta en 1 call
  *   - /webhook/health            -> diagnostic complet (uptime, version, etc.)
+ *   - /webhook/replay            -> coupe le TTS en cours et relit le dernier message
  */
 
 const getBotUrl = () => process.env.ATIS_WEBHOOK_URL?.replace(/\/$/, '');
