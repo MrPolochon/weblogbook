@@ -44,10 +44,10 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function AudioSink({ audioRef }: { audioRef: React.Ref<HTMLDivElement | null> }) {
+function AudioSink({ onRef }: { onRef: (el: HTMLDivElement | null) => void }) {
   return (
     <div
-      ref={audioRef}
+      ref={onRef}
       style={{ position: 'absolute', left: -9999, width: 1, height: 1, overflow: 'hidden' }}
       aria-hidden="true"
     />
@@ -747,7 +747,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   if (!isOpen) {
     return (
       <>
-        <AudioSink audioRef={audioContainerRef} />
+        <AudioSink onRef={(el) => { audioContainerRef.current = el; }} />
         <button
           type="button"
           onClick={() => { unlockAudioForIOS(); setIsOpen(true); }}
@@ -783,7 +783,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
 
   return (
     <>
-      <AudioSink audioRef={audioContainerRef} />
+      <AudioSink onRef={(el) => { audioContainerRef.current = el; }} />
       <div className={cn('fixed right-4 bottom-4 z-50 w-[272px] rounded-2xl shadow-2xl overflow-hidden', shell)}>
         <div className={cn('px-3 py-2.5 flex items-center justify-between border-b', isDark ? 'border-slate-800' : 'border-slate-200')}>
           <div className="min-w-0">
