@@ -39,18 +39,32 @@ const SERVER_TO_PERF: Record<string, string> = {
   'boeing 737-700': 'Boeing 737',
   'boeing 747': 'Boeing 747',
   'boeing 747 cargo': 'Boeing 747',
-  'boeing 757': 'Boeing 737',
-  'boeing 757 cargo': 'Boeing 737',
-  'boeing 767': 'Boeing 787',
-  'boeing 767 cargo': 'Boeing 787',
   'boeing 777': 'Boeing 777',
   'boeing 777 cargo': 'Boeing 777',
   'boeing 787': 'Boeing 787',
   'embraer e190': 'Embraer E190',
   'embraer e195': 'Embraer E190',
-  'bombardier crj700': 'Embraer E190',
-  'bombardier q400': 'ATR-72',
 };
+
+/** Types trop éloignés d’un type PTFS pour un proxy fiable (pas de 757→737, 767→787, CRJ/Q400). */
+const DISTANT_PROXY_KEYS = new Set([
+  'boeing 757',
+  'boeing 757 cargo',
+  'boeing 767',
+  'boeing 767 cargo',
+  'bombardier crj700',
+  'bombardier q400',
+]);
+
+export type PerfMappingInfo = {
+  perfType: string | null;
+  mapped: boolean;
+  refused: boolean;
+};
+
+function isDistantProxyKey(value: string): boolean {
+  return DISTANT_PROXY_KEYS.has(value);
+}
 
 /**
  * Retourne le type PTFS (clé des données de performance) à partir du nom d'avion du serveur.
@@ -61,17 +75,20 @@ export function getPerfTypeFromServerNom(serverNom: string): string | null {
 }
 
 /** Mapping serveur → type PTFS, avec indication si c’est un équivalent (pas le type exact). */
-export function getPerfMappingInfo(serverNom: string): { perfType: string | null; mapped: boolean } {
-  if (!serverNom || !serverNom.trim()) return { perfType: null, mapped: false };
+export function getPerfMappingInfo(serverNom: string): PerfMappingInfo {
+  if (!serverNom || !serverNom.trim()) return { perfType: null, mapped: false, refused: false };
   const normalized = serverNom.trim();
-  if (getAircraftData(normalized)) return { perfType: normalized, mapped: false };
+  if (getAircraftData(normalized)) return { perfType: normalized, mapped: false, refused: false };
   const key = normalized.toLowerCase();
-  if (SERVER_TO_PERF[key]) return { perfType: SERVER_TO_PERF[key], mapped: SERVER_TO_PERF[key].toLowerCase() !== key };
   const base = key.replace(/\s*[-–]\s*\w+$/, '').replace(/\s*(neo|max|er|lr|xl)\s*$/i, '').trim();
-  if (SERVER_TO_PERF[base]) return { perfType: SERVER_TO_PERF[base], mapped: true };
   const family = key.replace(/\s*[-–]\s*\d+.*$/, '').trim();
-  if (SERVER_TO_PERF[family]) return { perfType: SERVER_TO_PERF[family], mapped: true };
-  return { perfType: null, mapped: false };
+  if (isDistantProxyKey(key) || isDistantProxyKey(base) || isDistantProxyKey(family)) {
+    return { perfType: null, mapped: false, refused: true };
+  }
+  if (SERVER_TO_PERF[key]) return { perfType: SERVER_TO_PERF[key], mapped: SERVER_TO_PERF[key].toLowerCase() !== key, refused: false };
+  if (SERVER_TO_PERF[base]) return { perfType: SERVER_TO_PERF[base], mapped: true, refused: false };
+  if (SERVER_TO_PERF[family]) return { perfType: SERVER_TO_PERF[family], mapped: true, refused: false };
+  return { perfType: null, mapped: false, refused: false };
 }
 
 export function getSupportedPerfTypes(): readonly string[] {

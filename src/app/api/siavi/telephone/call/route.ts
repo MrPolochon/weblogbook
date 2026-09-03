@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { cleanupExpiredCallsForUser } from '@/lib/atc-phone/cleanup-expired-calls';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -18,22 +19,7 @@ export async function POST(request: Request) {
     const numberDialed = number || `${to_aeroport}-${to_position}`;
 
     const admin = createAdminClient();
-
-    // Nettoyer les appels expirés de l'utilisateur (ringing > 60s ou connected > 10min)
-    const sixtySecondsAgo = new Date(Date.now() - 60000).toISOString();
-    const tenMinutesAgo = new Date(Date.now() - 600000).toISOString();
-    
-    await admin.from('atc_calls')
-      .update({ status: 'ended', ended_at: new Date().toISOString() })
-      .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
-      .eq('status', 'ringing')
-      .lt('started_at', sixtySecondsAgo);
-    
-    await admin.from('atc_calls')
-      .update({ status: 'ended', ended_at: new Date().toISOString() })
-      .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
-      .eq('status', 'connected')
-      .lt('started_at', tenMinutesAgo);
+    await cleanupExpiredCallsForUser(admin, user.id);
 
     // Vérifier pas d'appel en cours (après nettoyage)
     const { data: existing } = await admin.from('atc_calls')

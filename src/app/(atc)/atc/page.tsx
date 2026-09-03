@@ -378,7 +378,12 @@ export default async function AtcPage() {
               plansATraiter={plansChezMoi.filter((s) => ['depose', 'en_attente'].includes(s.statut)).map((s) => s.id)}
               atcPosition={session.position}
               atcAeroport={session.aeroport}
-              onlineSessions={sessionsEnServiceSafe.map((s) => ({ aeroport: s.aeroport, position: s.position, user_id: s.user_id }))}
+              onlineSessions={[
+                ...sessionsEnServiceSafe.map((s) => ({ aeroport: s.aeroport, position: s.position, user_id: s.user_id })),
+                ...afisEnServiceSafe
+                  .filter((s) => s.est_afis)
+                  .map((s) => ({ aeroport: s.aeroport, position: 'AFIS', user_id: s.user_id })),
+              ]}
             />
           </div>
         )}

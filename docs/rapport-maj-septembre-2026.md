@@ -78,8 +78,12 @@ Téléphone ATC/SIAVI : toujours deux UIs (hook `useLiveKitCall` déjà partagé
 - Marché : cron `/api/cron/marche` (15 min) ; plus de `regenerer_*` à chaque SSR ; alerte si regen absente/stale ; client cargo orphelin supprimé.
 - IFSA : listes 200 + compteurs SQL ; onglet persisté en session.
 - Dépôt : wizard 4 étapes (appareil / route / détails / soumission).
-- Téléphone : `usePhoneAudioDevices` + codes SIAVI unifiés.
+- Téléphone : `usePhoneAudioDevices` + codes SIAVI unifiés ; cleanup appels expirés partagé (`cleanupExpiredCallsForUser`).
 - Storage orphelins : incidents + images flotte ; rate limit scan.
+- Perf PTFS : proxies trop éloignés refusés (757/767/CRJ/Q400).
+- Marketplace : soldes compagnies en une requête (plus de N+1 Felitz).
+- IFSA : onglets avion + autorisations extraits (`IfsaAvionTab`, `IfsaAutorisationsTab`).
+- Transfert ATC → AFIS : `transferer` / `accepter_transfert` + hiérarchie Ground/Tower + acceptation SIAVI.
 
 **PF-ODW** : le worker Railway (`pf-worker`) est la source de vérité des tracks ; le cron Vercel `/api/cron/pf-odw-tracks` est un filet, pas une 2e ingestion parallèle à activer sans décision.
 

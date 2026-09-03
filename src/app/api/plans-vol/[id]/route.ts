@@ -589,23 +589,59 @@ export async function PATCH(
       }
 
       const aeroport = String(body.aeroport || '').toUpperCase();
-      const position = body.position;
+      const position = String(body.position || '');
       if (!aeroport || !position) return NextResponse.json({ error: 'Aeroport et position requis (ou automonitoring: true).' }, { status: 400 });
       if (!CODES_OACI_VALIDES.has(aeroport)) return NextResponse.json({ error: 'Aeroport invalide.' }, { status: 400 });
-      if (!(ATC_POSITIONS as readonly string[]).includes(String(position))) return NextResponse.json({ error: 'Position invalide.' }, { status: 400 });
+      const isAfisTarget = position === 'AFIS';
+      if (!isAfisTarget && !(ATC_POSITIONS as readonly string[]).includes(position)) {
+        return NextResponse.json({ error: 'Position invalide.' }, { status: 400 });
+      }
       if (plan.pending_transfer_aeroport != null) return NextResponse.json({ error: 'Un transfert est déjà en attente. Attendez l\'acceptation par la position cible.' }, { status: 400 });
 
-      const { data: sess } = await admin.from('atc_sessions').select('user_id').eq('aeroport', aeroport).eq('position', String(position)).single();
+      if (isAfisTarget) {
+        const { data: afisOnline } = await admin.from('afis_sessions')
+          .select('user_id')
+          .eq('aeroport', aeroport)
+          .eq('est_afis', true);
+        if (!afisOnline?.length) {
+          return NextResponse.json({ error: 'Aucun AFIS en ligne à cet aéroport.' }, { status: 400 });
+        }
+        const selfAfis = afisOnline.find((s) => s.user_id === user.id);
+        if (selfAfis) {
+          const { error: err } = await admin.from('plans_vol').update({
+            current_holder_user_id: null,
+            current_holder_position: null,
+            current_holder_aeroport: null,
+            automonitoring: true,
+            current_afis_user_id: user.id,
+            pending_transfer_aeroport: null,
+            pending_transfer_position: null,
+            pending_transfer_at: null,
+            strip_zone: null,
+          }).eq('id', id);
+          if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
+          return NextResponse.json({ ok: true });
+        }
+        const { error: err } = await admin.from('plans_vol').update({
+          pending_transfer_aeroport: aeroport,
+          pending_transfer_position: 'AFIS',
+          pending_transfer_at: new Date().toISOString(),
+        }).eq('id', id);
+        if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
+        return NextResponse.json({ ok: true });
+      }
+
+      const { data: sess } = await admin.from('atc_sessions').select('user_id').eq('aeroport', aeroport).eq('position', position).single();
       if (!sess?.user_id) return NextResponse.json({ error: 'Aucun ATC en ligne a cette position pour cet aeroport.' }, { status: 400 });
 
       // Si l'ATC transfère vers LUI-MÊME (sa propre session), prendre directement le plan
       if (sess.user_id === user.id) {
         // Enregistrer que cet ATC a contrôlé ce vol
-        await enregistrerControleATC(admin, id, user.id, aeroport, String(position));
+        await enregistrerControleATC(admin, id, user.id, aeroport, position);
         
         const { error: err } = await admin.from('plans_vol').update({
           current_holder_user_id: user.id,
-          current_holder_position: String(position),
+          current_holder_position: position,
           current_holder_aeroport: aeroport,
           automonitoring: false,
           pending_transfer_aeroport: null,
@@ -621,7 +657,7 @@ export async function PATCH(
       // Sinon, envoyer une demande de transfert
       const { error: err } = await admin.from('plans_vol').update({
         pending_transfer_aeroport: aeroport,
-        pending_transfer_position: String(position),
+        pending_transfer_position: position,
         pending_transfer_at: new Date().toISOString(),
       }).eq('id', id);
       if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
@@ -629,6 +665,32 @@ export async function PATCH(
     }
 
     if (action === 'accepter_transfert') {
+      if (plan.pending_transfer_position === 'AFIS') {
+        const { data: afisSess } = await supabase.from('afis_sessions')
+          .select('aeroport, est_afis')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (!afisSess?.est_afis) {
+          return NextResponse.json({ error: 'Mettez-vous en service AFIS pour accepter ce transfert.' }, { status: 403 });
+        }
+        if (!plan.pending_transfer_aeroport || plan.pending_transfer_aeroport !== afisSess.aeroport) {
+          return NextResponse.json({ error: 'Ce transfert ne vous est pas destine.' }, { status: 403 });
+        }
+        const { error: err } = await admin.from('plans_vol').update({
+          current_holder_user_id: null,
+          current_holder_position: null,
+          current_holder_aeroport: null,
+          automonitoring: true,
+          current_afis_user_id: user.id,
+          pending_transfer_aeroport: null,
+          pending_transfer_position: null,
+          pending_transfer_at: null,
+          strip_zone: null,
+        }).eq('id', id);
+        if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
+        return NextResponse.json({ ok: true });
+      }
+
       const { data: sess } = await supabase.from('atc_sessions').select('aeroport, position').eq('user_id', user.id).single();
       if (!sess) return NextResponse.json({ error: 'Mettez-vous en service pour accepter un transfert.' }, { status: 403 });
       if (!plan.pending_transfer_aeroport || plan.pending_transfer_position !== sess.position || plan.pending_transfer_aeroport !== sess.aeroport)

@@ -2,9 +2,9 @@ export type StripZoneId = 'sol' | 'depart' | 'arrivee' | 'transit';
 
 export const TRANSFER_HIERARCHY: Record<string, string[]> = {
   Delivery: ['Ground'],
-  Ground: ['Delivery', 'Clairance', 'Tower'],
+  Ground: ['Delivery', 'Clairance', 'Tower', 'AFIS'],
   Clairance: ['Ground'],
-  Tower: ['Ground', 'APP', 'DEP'],
+  Tower: ['Ground', 'APP', 'DEP', 'AFIS'],
   APP: ['Tower', 'Center'],
   DEP: ['Tower', 'Center'],
   Center: ['APP', 'DEP'],

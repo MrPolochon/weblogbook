@@ -149,7 +149,11 @@ export default function PerfPtfsClient() {
     setToNoDataMessage(null);
     if (!toPerfType) {
       setToResult(null);
-      setToNoDataMessage(`Données de performance non disponibles pour « ${toAircraft} ». Types avec données PTFS : ${supportedList}.`);
+      setToNoDataMessage(
+        toMap.refused
+          ? `Pas de données PTFS fiables pour « ${toAircraft} » (type trop éloigné d’un équivalent). Types avec données : ${supportedList}.`
+          : `Données de performance non disponibles pour « ${toAircraft} ». Types avec données PTFS : ${supportedList}.`,
+      );
       return;
     }
     const flaps = parseFlaps(toFlaps);
@@ -167,7 +171,11 @@ export default function PerfPtfsClient() {
     setLdgNoDataMessage(null);
     if (!ldgPerfType) {
       setLdgResult(null);
-      setLdgNoDataMessage(`Données de performance non disponibles pour « ${ldgAircraft} ». Types avec données PTFS : ${supportedList}.`);
+      setLdgNoDataMessage(
+        ldgMap.refused
+          ? `Pas de données PTFS fiables pour « ${ldgAircraft} » (type trop éloigné d’un équivalent). Types avec données : ${supportedList}.`
+          : `Données de performance non disponibles pour « ${ldgAircraft} ». Types avec données PTFS : ${supportedList}.`,
+      );
       return;
     }
     const flaps = parseFlaps(ldgFlaps);

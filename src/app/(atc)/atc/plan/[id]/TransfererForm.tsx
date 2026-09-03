@@ -86,7 +86,7 @@ export default function TransfererForm({ planId, aeroportSession = '', allowAuto
           <label className="block text-sm font-medium text-slate-800 mb-0.5">Position</label>
           <select className="input min-w-[130px]" value={position} onChange={(e) => setPosition(e.target.value)} required>
             <option value="">— Choisir —</option>
-            {ATC_POSITIONS.map((p) => (
+            {[...ATC_POSITIONS, 'AFIS'].map((p) => (
               <option key={p} value={p}>{p}</option>
             ))}
           </select>

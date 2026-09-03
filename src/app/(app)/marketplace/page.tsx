@@ -30,18 +30,23 @@ export default async function MarketplacePage() {
     .select('id, nom')
     .eq('pdg_id', user.id);
 
-  // Soldes des compagnies
+  // Soldes des compagnies (une requête, plus un N+1 par PDG)
   let compagniesWithSolde: Array<{ id: string; nom: string; solde: number }> = [];
   if (compagniesPdg && compagniesPdg.length > 0) {
-    compagniesWithSolde = await Promise.all(compagniesPdg.map(async (c) => {
-      const { data: compte } = await admin.from('felitz_comptes')
-        .select('solde')
-        .eq('compagnie_id', c.id)
-        .eq('type', 'entreprise')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      return { ...c, solde: Number(compte?.solde ?? 0) };
+    const compagnieIds = compagniesPdg.map((c) => c.id);
+    const { data: comptesCie } = await admin.from('felitz_comptes')
+      .select('compagnie_id, solde, created_at')
+      .in('compagnie_id', compagnieIds)
+      .eq('type', 'entreprise')
+      .order('created_at', { ascending: true });
+    const soldeByCie = new Map<string, number>();
+    for (const row of comptesCie ?? []) {
+      if (!row.compagnie_id || soldeByCie.has(row.compagnie_id)) continue;
+      soldeByCie.set(row.compagnie_id, Number(row.solde ?? 0));
+    }
+    compagniesWithSolde = compagniesPdg.map((c) => ({
+      ...c,
+      solde: soldeByCie.get(c.id) ?? 0,
     }));
   }
 

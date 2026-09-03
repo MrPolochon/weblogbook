@@ -612,7 +612,7 @@ function TransferDialog({
             <label className={`text-[10px] font-black uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Position</label>
             <select className={`mt-1 w-full border rounded-lg px-3 py-2 text-sm font-semibold ${isDark ? 'bg-slate-900 border-slate-700 text-slate-100' : 'bg-white border-slate-300 text-slate-900'}`} value={position} onChange={(e) => setPosition(e.target.value)} disabled={autoSurv}>
               <option value="">— Sélectionner —</option>
-              {['Delivery', 'Clairance', 'Ground', 'Tower', 'APP', 'DEP', 'Center'].map((p) => <option key={p} value={p}>{p}</option>)}
+              {['Delivery', 'Clairance', 'Ground', 'Tower', 'APP', 'DEP', 'Center', 'AFIS'].map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
           <label className={`flex items-center gap-2 text-sm font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>

@@ -9,6 +9,7 @@ import SiaviTelephone from './SiaviTelephone';
 import InactivityLogout from '@/components/InactivityLogout';
 import { getPendingMedevacReport } from '@/lib/siavi/pending-report';
 import PendingReportGuard from './PendingReportGuard';
+import SiaviAcceptTransfertButton from './SiaviAcceptTransfertButton';
 export default async function SiaviLayout({
   children,
 }: {
@@ -47,9 +48,10 @@ export default async function SiaviLayout({
   // Plans en autosurveillance et plans surveillés par cet AFIS
   let plansAuto: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansSurveilles: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
+  let plansTransfertAfis: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   
-  if (enService && estAfis) {
-    const [{ data: dataAuto }, { data: dataSurveilles }] = await Promise.all([
+  if (enService && estAfis && session) {
+    const [{ data: dataAuto }, { data: dataSurveilles }, { data: dataTransfert }] = await Promise.all([
       admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee')
         .eq('automonitoring', true)
         .is('current_afis_user_id', null)
@@ -57,9 +59,13 @@ export default async function SiaviLayout({
       admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee')
         .eq('current_afis_user_id', user.id)
         .in('statut', ['accepte', 'en_cours', 'en_attente_cloture']),
+      admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee')
+        .eq('pending_transfer_aeroport', session.aeroport)
+        .eq('pending_transfer_position', 'AFIS'),
     ]);
     plansAuto = dataAuto ?? [];
     plansSurveilles = dataSurveilles ?? [];
+    plansTransfertAfis = dataTransfert ?? [];
   }
 
   return (
@@ -80,6 +86,23 @@ export default async function SiaviLayout({
       />
       {enService && estAfis && (
         <div className="md:hidden border-b border-red-800 bg-[#3a0f18] px-3 py-2 space-y-2">
+          {plansTransfertAfis.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                Transferts ATC · {plansTransfertAfis.length}
+              </p>
+              <div className="flex gap-2 overflow-x-auto">
+                {plansTransfertAfis.map((p) => (
+                  <div key={p.id} className="shrink-0 flex items-center gap-1.5 rounded-lg border border-amber-700 bg-amber-950 px-2 py-1">
+                    <Link href={`/siavi/plan/${p.id}`} className="text-xs font-semibold text-amber-100">
+                      {p.numero_vol}
+                    </Link>
+                    <SiaviAcceptTransfertButton planId={p.id} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <p className="text-[10px] font-black uppercase tracking-wider text-red-300">
             Non surveillés · {plansAuto.length}
           </p>
@@ -103,6 +126,28 @@ export default async function SiaviLayout({
       <div className="flex flex-1 w-full min-h-0">
         {enService && estAfis && (
           <aside className="w-52 flex-shrink-0 border-r border-red-400/30 bg-gradient-to-b from-red-950/50 to-red-950/30 py-4 px-3 hidden md:flex flex-col backdrop-blur-sm">
+            {plansTransfertAfis.length > 0 && (
+              <div className="mb-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-amber-400 px-2 mb-2 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                  Transferts ATC
+                </p>
+                <ul className="space-y-1">
+                  {plansTransfertAfis.map((p) => (
+                    <li key={p.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 bg-amber-500/10">
+                      <Link
+                        href={`/siavi/plan/${p.id}`}
+                        className="flex-1 min-w-0 truncate text-sm font-medium text-amber-100 hover:text-white"
+                        title={`${p.numero_vol} ${p.aeroport_depart} → ${p.aeroport_arrivee}`}
+                      >
+                        {p.numero_vol}
+                      </Link>
+                      <SiaviAcceptTransfertButton planId={p.id} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="mb-4">
               <p className="text-xs font-bold uppercase tracking-wider text-red-400 px-2 mb-2 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>

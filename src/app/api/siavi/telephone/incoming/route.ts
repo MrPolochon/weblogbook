@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { cleanupExpiredCallsForUser } from '@/lib/atc-phone/cleanup-expired-calls';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -15,22 +16,7 @@ export async function GET() {
     if (!session) return NextResponse.json({ call: null });
 
     const admin = createAdminClient();
-
-    // Nettoyer les anciens appels expirés de l'utilisateur (ringing > 60s, connected > 10min)
-    const thirtySecondsAgo = new Date(Date.now() - 60000).toISOString();
-    const tenMinutesAgo = new Date(Date.now() - 600000).toISOString();
-    
-    await admin.from('atc_calls')
-      .update({ status: 'ended', ended_at: new Date().toISOString() })
-      .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
-      .eq('status', 'ringing')
-      .lt('started_at', thirtySecondsAgo);
-    
-    await admin.from('atc_calls')
-      .update({ status: 'ended', ended_at: new Date().toISOString() })
-      .or(`from_user_id.eq.${user.id},to_user_id.eq.${user.id}`)
-      .eq('status', 'connected')
-      .lt('started_at', tenMinutesAgo);
+    await cleanupExpiredCallsForUser(admin, user.id);
 
     // Chercher un appel entrant pour cet AFIS (appel direct)
     const { data: call } = await admin.from('atc_calls')
