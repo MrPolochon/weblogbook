@@ -181,19 +181,13 @@ export default function DepotPlanVolForm({
     selectedCompagnieId ? (avionsParCompagnie[selectedCompagnieId] || []) : [],
     [selectedCompagnieId, avionsParCompagnie]
   );
-  // Pour les vols ferry, on peut inclure les avions à 0% d'usure et on n'exige pas qu'ils soient à l'aéroport de départ
-  // Car le but du vol ferry est justement de ramener un avion bloqué/à 0% vers un hub
-  const avionsDisponibles = useMemo(() => vol_ferry 
-    ? avionsCompagnie.filter(a => 
-        isAvionCompagnieAuSol(a.statut) // Avion au sol (débloqué)
-      )
-    : avionsCompagnie.filter(a => 
-        isAvionCompagnieAuSol(a.statut) && 
-        a.usure_percent > 0 &&
-        (!aeroport_depart || a.aeroport_actuel === aeroport_depart.toUpperCase())
-      ),
-    [vol_ferry, avionsCompagnie, aeroport_depart]
+  // Flotte : tous les avions au sol (ferry : y compris 0 %). Le départ est la position de l’avion, pas un filtre préalable.
+  const avionsDisponibles = useMemo(() => vol_ferry
+    ? avionsCompagnie.filter((a) => isAvionCompagnieAuSol(a.statut))
+    : avionsCompagnie.filter((a) => isAvionCompagnieAuSol(a.statut) && a.usure_percent > 0),
+    [vol_ferry, avionsCompagnie]
   );
+  const departVerrouilleParAvion = Boolean((vol_commercial || vol_ferry) && compagnie_avion_id);
   
   // Get selected aircraft info
   const selectedInventaire = inventairePersonnel.find(i => i.id === inventaire_avion_id);
@@ -560,11 +554,12 @@ export default function DepotPlanVolForm({
   const wizardCanAdvance = (n: number) => {
     if (n <= 1) return true;
     if (n === 2) {
-      if (vol_commercial || vol_ferry) return Boolean(compagnie_avion_id);
-      return Boolean(inventaire_avion_id || armee_avion_id);
+      const avionOk = (vol_commercial || vol_ferry)
+        ? Boolean(compagnie_avion_id)
+        : Boolean(inventaire_avion_id || armee_avion_id);
+      return avionOk && Boolean(aeroport_depart.trim() && aeroport_arrivee.trim());
     }
-    if (n === 3) return Boolean(aeroport_depart.trim() && aeroport_arrivee.trim());
-    if (n === 4) {
+    if (n === 3) {
       if (!numero_vol.trim() || !temps_prev_min) return false;
       if (type_vol === 'VFR') return Boolean(intentions_vol.trim());
       if (type_vol === 'IFR') return Boolean(sid_depart.trim() && star_arrivee.trim());
@@ -977,7 +972,9 @@ export default function DepotPlanVolForm({
             step={2}
             icon={<Plane className="h-4 w-4" />}
             label={vol_ferry ? 'Avion à déplacer' : 'Appareil de la flotte'}
-            subtitle={vol_ferry ? "L'aéroport de départ sera la position actuelle de l'avion" : `Sélectionner un appareil à ${aeroport_depart?.toUpperCase() || '...'}`}
+            subtitle={vol_ferry
+              ? "L'aéroport de départ sera la position actuelle de l'avion"
+              : 'Choisissez un avion : le départ est sa position actuelle, puis la destination'}
             accent={vol_ferry ? 'amber' : 'sky'}
             badge={selectedAvionIndiv ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-emerald-300">
@@ -994,12 +991,13 @@ export default function DepotPlanVolForm({
                 value={compagnie_avion_id} 
                 onChange={(e) => {
                   setCompagnieAvionId(e.target.value);
-                  setFieldErrors(p => ({ ...p, compagnie_avion_id: '' }));
-                  // Pour les vols ferry, définir automatiquement l'aéroport de départ
-                  if (vol_ferry && e.target.value) {
-                    const avionSelect = avionsCompagnie.find(a => a.id === e.target.value);
+                  setFieldErrors((p) => ({ ...p, compagnie_avion_id: '', aeroport_depart: '', porte: '' }));
+                  if (e.target.value) {
+                    const avionSelect = avionsCompagnie.find((a) => a.id === e.target.value);
                     if (avionSelect) {
                       setAeroportDepart(avionSelect.aeroport_actuel);
+                      setPorte('');
+                      setAHasGates(null);
                     }
                   }
                 }}
@@ -1016,12 +1014,9 @@ export default function DepotPlanVolForm({
                   );
                 })}
               </select>
-              {!vol_ferry && aeroport_depart && avionsDisponibles.length === 0 && avionsCompagnie.length > 0 && (
+              {!vol_ferry && avionsDisponibles.length === 0 && avionsCompagnie.length > 0 && (
                 <p className="text-amber-400 text-sm mt-2">
-                  Aucun avion disponible à {aeroport_depart.toUpperCase()}. 
-                  {avionsCompagnie.filter(a => isAvionCompagnieAuSol(a.statut) && a.usure_percent > 0).length > 0 && (
-                    <span> Avions ailleurs : {avionsCompagnie.filter(a => isAvionCompagnieAuSol(a.statut) && a.usure_percent > 0).map(a => `${a.immatriculation} (${a.aeroport_actuel})`).join(', ')}</span>
-                  )}
+                  Aucun avion au sol avec une usure &gt; 0. Les appareils en vol ou à 0 % ne peuvent pas déposer un plan commercial.
                 </p>
               )}
               {/* Mini-fiche aéronef sélectionné */}
@@ -1412,18 +1407,18 @@ export default function DepotPlanVolForm({
         </section>
       )}
 
-      </>)}
-      {wizardStep === 2 && (<>
-      {/* ===== Section : Route — départ → arrivée avec visuel ===== */}
+      {/* ===== Section : Route — départ → arrivée (même étape que l'appareil) ===== */}
       <section className="card-glow stagger-enter">
         <SectionHeader
-          step={2}
+          step={3}
           icon={<Route className="h-4 w-4" />}
           label="Route"
           subtitle={
             missionLocked
               ? 'Mission armée : liaison et durée verrouillées sur la mission'
-              : 'Départ et arrivée — le même OACI est autorisé (vol local VFR ou IFR, ex. IRFD → IRFD)'
+              : departVerrouilleParAvion
+                ? 'Le départ est la position de l’avion — choisissez la destination'
+                : 'Départ et arrivée — le même OACI est autorisé (vol local VFR ou IFR, ex. IRFD → IRFD)'
           }
           accent="sky"
         />
@@ -1451,7 +1446,7 @@ export default function DepotPlanVolForm({
               value={aeroport_depart}
               onChange={(e) => { setAeroportDepart(e.target.value); setFieldErrors(p => ({ ...p, aeroport_depart: '', porte: '' })); setPorte(''); setAHasGates(null); }}
               required
-              disabled={missionLocked}
+              disabled={missionLocked || departVerrouilleParAvion}
             >
               <option value="">— Choisir —</option>
               {AEROPORTS_VOL_CIVIL.map((a) => (
@@ -1462,6 +1457,11 @@ export default function DepotPlanVolForm({
               <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
                 <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
                 {fieldErrors.aeroport_depart}
+              </p>
+            )}
+            {departVerrouilleParAvion && aeroport_depart && (
+              <p className="mt-1.5 text-[11px] text-sky-300/80">
+                Départ fixé à {aeroport_depart} (position actuelle de l’avion).
               </p>
             )}
           </div>
@@ -1502,11 +1502,11 @@ export default function DepotPlanVolForm({
       </section>
 
       </>)}
-      {wizardStep === 3 && (<>
+      {wizardStep === 2 && (<>
       {/* ===== Section : Détails du vol ===== */}
       <section className="card-glow stagger-enter">
         <SectionHeader
-          step={3}
+          step={2}
           icon={<FileText className="h-4 w-4" />}
           label="Détails du vol"
           subtitle="Numéro, porte et durée prévue"
@@ -1925,7 +1925,7 @@ export default function DepotPlanVolForm({
       </section>
 
       </>)}
-      {wizardStep === 4 && (<>
+      {wizardStep === 3 && (<>
       {/* Confirmation vol sans ATC */}
       {showNoAtcConfirm && (
         <div className="relative overflow-hidden rounded-2xl border-2 border-amber-500/60 bg-gradient-to-br from-amber-950/60 via-slate-900/70 to-slate-950/70 p-5 space-y-3 animate-zoom-bounce">
@@ -2021,7 +2021,7 @@ export default function DepotPlanVolForm({
         >
           Précédent
         </button>
-        {wizardStep < 4 && (
+        {wizardStep < 3 && (
           <button
             type="button"
             onClick={() => {
@@ -2029,7 +2029,7 @@ export default function DepotPlanVolForm({
                 toast.error('Complétez cette étape avant de continuer.');
                 return;
               }
-              setWizardStep((s) => Math.min(4, s + 1));
+              setWizardStep((s) => Math.min(3, s + 1));
             }}
             className="btn-primary"
           >
@@ -2066,9 +2066,9 @@ function WizardNav({
   onStep: (n: number) => void;
   canAdvance: (n: number) => boolean;
 }) {
-  const labels = ['Appareil', 'Route', 'Détails', 'Soumission'];
+  const labels = ['Appareil & route', 'Détails', 'Soumission'];
   return (
-    <ol className="grid grid-cols-4 gap-2">
+    <ol className="grid grid-cols-3 gap-2">
       {labels.map((label, i) => {
         const n = i + 1;
         const unlocked = n <= step || canAdvance(n);

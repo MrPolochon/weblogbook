@@ -180,9 +180,13 @@ body.atc-dark.atc-normal-bg {
 
 /* Header ATC mode sombre */
 body.atc-dark .atc-header {
-  background: rgba(5, 8, 14, 0.94) !important;
-  border-color: rgba(51, 65, 85, 0.55) !important;
+  background: #05080e !important;
+  border-color: #1e293b !important;
   box-shadow: 0 1px 0 rgba(148, 163, 184, 0.08), 0 14px 36px rgba(0, 0, 0, 0.38) !important;
+}
+body.atc-dark .atc-menu-dropdown {
+  background: #0b1220 !important;
+  border-color: #334155 !important;
 }
 body.atc-dark .atc-header a:hover,
 body.atc-dark .atc-header button:hover {

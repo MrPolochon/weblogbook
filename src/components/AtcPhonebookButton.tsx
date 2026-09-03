@@ -14,8 +14,7 @@ import { AEROPORT_CODES, POSITION_CODES } from '@/lib/atc-phone-codes';
  * dans le layout) ecoute cet event, s'ouvre, pre-remplit le dialer et
  * passe en 'dialing'. L'utilisateur n'a plus qu'a appuyer sur Call.
  *
- * Le bouton flottant Telephone bottom-right reste disponible pour les
- * appels manuels classiques.
+ * Le téléphone ATC (barre de navigation) écoute cet event.
  */
 export default function AtcPhonebookButton({ isDark }: { isDark: boolean }) {
   const [open, setOpen] = useState(false);

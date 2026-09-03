@@ -78,16 +78,11 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const shouldPlaySoundRef = useRef(false);
-  const [isMounted, setIsMounted] = useState(false);
 
   const ownNumber = formatStationNumber(aeroport, position);
   const parsed = useMemo(() => parseDialedNumber(number, aeroport), [number, aeroport]);
   const busy = callState !== 'idle' && callState !== 'dialing';
   const localShortcuts = LOCAL_POSITION_SHORTCUTS.filter((s) => s.position !== position);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
 
   useEffect(() => {
     function handleDial(e: Event) {
@@ -630,56 +625,58 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     : 'border border-slate-200 bg-slate-100 text-slate-900 hover:bg-slate-200';
   const screenClass = isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-50 border-slate-200';
 
-  if (!isMounted) return null;
+  const navTone =
+    callState === 'incoming'
+      ? (isDark ? 'border-emerald-500/70 bg-emerald-950/80 text-emerald-100' : 'border-emerald-400 bg-emerald-50 text-emerald-900')
+      : callState === 'connected'
+        ? (isDark ? 'border-emerald-700/70 bg-emerald-950/70 text-emerald-100' : 'border-emerald-300 bg-emerald-50 text-emerald-900')
+        : isOpen || callState === 'ringing' || callState === 'connecting' || callState === 'atis_playing'
+          ? (isDark ? 'border-sky-700/50 bg-sky-950/80 text-sky-200' : 'border-sky-300 bg-sky-100 text-sky-900')
+          : (isDark ? 'border-transparent text-slate-300 hover:border-slate-700 hover:bg-slate-800/80 hover:text-white' : 'border-transparent text-slate-700 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900');
 
-  const fabTone =
-    callState === 'incoming' ? (isDark ? 'border-emerald-500/70 bg-emerald-950 text-emerald-100' : 'border-emerald-400 bg-emerald-50 text-emerald-900')
-      : callState === 'connected' ? (isDark ? 'border-emerald-700/70 bg-emerald-950/80 text-emerald-100' : 'border-emerald-300 bg-emerald-50 text-emerald-900')
-        : callState === 'ringing' || callState === 'connecting' || callState === 'atis_playing'
-          ? (isDark ? 'border-sky-600/70 bg-sky-950 text-sky-100' : 'border-sky-300 bg-sky-50 text-sky-900')
-          : shell;
-
-  if (!isOpen) {
-    return (
-      <>
-        <AudioSink onRef={(el) => { audioContainerRef.current = el; }} />
-        <button
-          type="button"
-          onClick={() => { unlockAudioForIOS(); setIsOpen(true); }}
-          className={cn(
-            'fixed bottom-4 right-4 z-50 rounded-2xl shadow-xl px-3 py-2.5 flex items-center gap-2.5 transition-all hover:scale-[1.02]',
-            fabTone,
-          )}
-          aria-label="Ouvrir le téléphone ATC"
-        >
-          <span className={cn(
-            'relative flex h-9 w-9 items-center justify-center rounded-xl',
-            callState === 'incoming' ? 'bg-emerald-500/25' : isDark ? 'bg-sky-500/15' : 'bg-sky-100',
-          )}>
-            <Phone className={cn('h-4 w-4', callState === 'incoming' ? 'text-emerald-400' : isDark ? 'text-sky-300' : 'text-sky-600')} />
-            {callState === 'incoming' && (
-              <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-emerald-400 animate-ping" />
-            )}
-          </span>
-          <span className="text-left leading-tight">
-            <span className="block text-sm font-semibold">Téléphone</span>
-            <span className={cn('block text-[10px] font-mono uppercase tracking-wider', muted)}>
-              {callState === 'incoming' && incomingCall
-                ? `${incomingCall.from} ${incomingCall.fromPosition}`
-                : callState === 'connected'
-                  ? formatDuration(callDuration)
-                  : `${aeroport} · ${position}`}
-            </span>
-          </span>
-        </button>
-      </>
-    );
-  }
+  const statusHint =
+    callState === 'incoming' && incomingCall
+      ? `${incomingCall.from}`
+      : callState === 'connected'
+        ? formatDuration(callDuration)
+        : callState === 'atis_playing'
+          ? 'ATIS'
+          : callState === 'ringing' || callState === 'connecting'
+            ? '…'
+            : null;
 
   return (
     <>
       <AudioSink onRef={(el) => { audioContainerRef.current = el; }} />
-      <div className={cn('fixed right-4 bottom-4 z-50 w-[272px] rounded-2xl shadow-2xl overflow-hidden', shell)}>
+      <button
+        type="button"
+        onClick={() => {
+          unlockAudioForIOS();
+          setIsOpen((open) => !open);
+        }}
+        className={cn(
+          'relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold tracking-wide transition-all whitespace-nowrap flex-shrink-0 border',
+          navTone,
+        )}
+        aria-label="Téléphone ATC"
+        aria-expanded={isOpen}
+        title={statusHint ? `Téléphone — ${statusHint}` : `Téléphone — ${aeroport} ${position}`}
+      >
+        <span className="relative">
+          <Phone className={cn('h-4 w-4', callState === 'incoming' ? 'text-emerald-400' : undefined)} />
+          {callState === 'incoming' && (
+            <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+          )}
+        </span>
+        <span className="hidden sm:inline">Tél.</span>
+        {statusHint && (
+          <span className={cn('hidden md:inline font-mono text-[10px] uppercase tracking-wider', muted)}>
+            {statusHint}
+          </span>
+        )}
+      </button>
+      {isOpen && (
+      <div className={cn('fixed right-3 top-[3.75rem] z-[60] w-[272px] rounded-2xl shadow-2xl overflow-hidden', shell)}>
         <div className={cn('px-3 py-2.5 flex items-center justify-between border-b', isDark ? 'border-slate-800' : 'border-slate-200')}>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
@@ -952,6 +949,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
           </div>
         </div>
       </div>
+      )}
     </>
   );
 }

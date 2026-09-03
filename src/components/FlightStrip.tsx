@@ -161,6 +161,7 @@ function InlineEdit({
 
   return (
     <div
+      data-no-drag="true"
       className={`relative cursor-text min-h-[20px] flex ${wrap ? 'items-start' : 'items-center'} rounded-sm px-0.5 transition-colors ${hovered ? 'bg-sky-400/20 ring-1 ring-sky-400/70' : ''} ${error ? 'ring-1 ring-red-400 bg-red-50/30' : ''} ${className}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -440,7 +441,7 @@ function StripActionBar({
   });
 
   return (
-    <div className={`px-1.5 py-1 border-t flex items-center gap-1 flex-wrap ${isDark ? 'border-white/10 bg-black/25' : 'border-black/10 bg-black/[0.04]'}`} onClick={(e) => e.stopPropagation()}>
+    <div data-no-drag="true" className={`px-1.5 py-1 border-t flex items-center gap-1 flex-wrap ${isDark ? 'border-white/10 bg-black/25' : 'border-black/10 bg-black/[0.04]'}`} onClick={(e) => e.stopPropagation()}>
       {strip.isManual ? (
         <span className={`text-[11px] mr-auto flex items-center gap-1 font-bold min-w-0 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
           <Plane className="h-3 w-3 shrink-0" />
@@ -633,7 +634,7 @@ function FlightStripImpl({
 
   return (
     <div
-      className={`w-full border ${pal.border} rounded-md shadow-sm select-none ${isClotureRequested && !isDupe ? 'atc-strip-closure' : ''} ${isDupe && !isEmergency ? 'atc-strip-dupe' : ''}`}
+      className={`w-full min-w-[460px] overflow-hidden border ${pal.border} rounded-md shadow-sm select-none ${isClotureRequested && !isDupe ? 'atc-strip-closure' : ''} ${isDupe && !isEmergency ? 'atc-strip-dupe' : ''}`}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, strip.id); }}
     >
       {sqLabel && (
@@ -666,26 +667,31 @@ function FlightStripImpl({
       )}
 
       <div className="flex">
-        <div className={`w-6 shrink-0 flex items-center justify-center ${pal.tab}`}>
-          <span className="text-[9px] font-black tracking-widest text-white" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+        <div
+          data-drag-handle="true"
+          title="Glisser le strip"
+          className={`w-6 shrink-0 flex items-center justify-center cursor-grab active:cursor-grabbing ${pal.tab}`}
+        >
+          <span className="text-[9px] font-black tracking-widest text-white pointer-events-none" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
             {isManual ? 'MAN' : (strip.type_vol || 'IFR')}
           </span>
         </div>
         <div
           data-drag-handle="true"
-          className={`w-4 flex items-center justify-center cursor-grab active:cursor-grabbing ${pal.top} border-r ${pal.sep} shrink-0`}
+          title="Glisser le strip"
+          className={`w-6 flex items-center justify-center cursor-grab active:cursor-grabbing ${pal.top} border-r ${pal.sep} shrink-0`}
         >
-          <GripVertical className={`h-3.5 w-3.5 ${isDark ? 'text-white/40' : 'text-black/30'}`} />
+          <GripVertical className={`h-4 w-4 pointer-events-none ${isDark ? 'text-white/55' : 'text-black/40'}`} />
         </div>
 
         <div className="flex-1 min-w-0 flex">
-          <div className="flex-1 min-w-0">
-            <div className={`flex ${pal.top} border-b ${pal.sep}`}>
-              <Cell className={`w-[64px] border-r ${pal.sep}`}>
+          <div className="min-w-[260px] flex-1">
+            <div className={`grid grid-cols-[64px_92px_44px_minmax(0,1fr)] ${pal.top} border-b ${pal.sep}`}>
+              <Cell className={`border-r ${pal.sep}`}>
                 <Label className={pal.lbl}>ATD</Label>
                 <InlineEdit value={strip.strip_atd} field="strip_atd" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
               </Cell>
-              <Cell className={`w-[92px] border-r ${pal.sep}`}>
+              <Cell className={`border-r ${pal.sep}`}>
                 <Label className={pal.lbl}>TYPE / W</Label>
                 {isManual ? (
                   <InlineEdit value={strip.strip_type_wake} field="strip_type_wake" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={10} large />
@@ -698,7 +704,7 @@ function FlightStripImpl({
                   </span>
                 )}
               </Cell>
-              <Cell className={`w-[44px] border-r ${pal.sep} text-center`}>
+              <Cell className={`border-r ${pal.sep} text-center`}>
                 {isManual ? (
                   <>
                     <Label className={pal.lbl}>TYPE</Label>
@@ -711,14 +717,14 @@ function FlightStripImpl({
                   </>
                 )}
               </Cell>
-              <Cell className="flex-1">
+              <Cell>
                 <Label className={pal.lbl}>NOTE</Label>
                 <InlineEdit value={strip.strip_note_1} field="strip_note_1" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={20} />
               </Cell>
             </div>
 
-            <div className={`flex ${pal.left} border-b ${pal.sep}`}>
-              <Cell className={`w-[64px] border-r ${pal.sep}`}>
+            <div className={`grid grid-cols-[64px_minmax(0,1fr)_88px] ${pal.left} border-b ${pal.sep}`}>
+              <Cell className={`border-r ${pal.sep}`}>
                 <Label className={pal.lbl}>ADES</Label>
                 {isManual ? (
                   <InlineEdit value={strip.aeroport_arrivee} field="aeroport_arrivee" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={4} large />
@@ -726,20 +732,20 @@ function FlightStripImpl({
                   <span className={`text-lg font-mono font-black ${pal.txt} leading-tight`}>{strip.aeroport_arrivee}</span>
                 )}
               </Cell>
-              <Cell className={`min-w-[140px] flex-1 border-r ${pal.sep}`}>
+              <Cell className={`border-r ${pal.sep}`}>
                 <Label className={pal.lbl}>CALLSIGN</Label>
                 {isManual ? (
                   <InlineEdit value={strip.numero_vol} field="numero_vol" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={10} large />
                 ) : (
-                  <div className="flex flex-col">
-                    <span className={`text-xl font-mono font-black tracking-wide ${pal.txt} leading-none`}>{strip.numero_vol}</span>
+                  <div className="flex flex-col min-w-0">
+                    <span className={`text-xl font-mono font-black tracking-wide ${pal.txt} leading-none truncate`}>{strip.numero_vol}</span>
                     {strip.callsign_telephonie && (
-                      <span className={`text-[10px] font-semibold ${pal.lbl} leading-tight mt-0.5 tracking-wider`}>{strip.callsign_telephonie}</span>
+                      <span className={`text-[10px] font-semibold ${pal.lbl} leading-tight mt-0.5 tracking-wider truncate`}>{strip.callsign_telephonie}</span>
                     )}
                   </div>
                 )}
               </Cell>
-              <Cell className="w-[88px]">
+              <Cell>
                 <Label className={pal.lbl}>ADEP</Label>
                 {isManual ? (
                   <InlineEdit value={strip.aeroport_depart} field="aeroport_depart" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={4} large />
@@ -749,27 +755,27 @@ function FlightStripImpl({
               </Cell>
             </div>
 
-            <div className={`flex ${pal.left}`}>
-              <Cell className={`w-[64px] border-r ${pal.sep}`}>
+            <div className={`grid grid-cols-[64px_92px_minmax(0,1fr)] ${pal.left}`}>
+              <Cell className={`border-r ${pal.sep}`}>
                 <Label className={pal.lbl}>RWY</Label>
                 <InlineEdit value={strip.strip_rwy} field="strip_rwy" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
               </Cell>
-              <Cell className={`w-[92px] border-r ${pal.sep}`}>
+              <Cell className={`border-r ${pal.sep}`}>
                 <Label className={pal.lbl}>CTOT</Label>
                 <span className={`text-[15px] font-mono font-black tabular-nums ${pal.txt}`}>{formatCtot(strip.heure_depart_estimee || strip.created_at)}</span>
               </Cell>
-              <Cell className="flex-1">
+              <Cell>
                 <Label className={pal.lbl}>TAIL</Label>
-                <span className={`text-[13px] font-mono font-bold ${pal.txt}`}>{strip.immatriculation || '—'}</span>
+                <span className={`text-[13px] font-mono font-bold ${pal.txt} truncate`}>{strip.immatriculation || '—'}</span>
               </Cell>
             </div>
           </div>
 
           <div className="w-[3px] bg-red-500 shrink-0" />
 
-          <div className={`flex-1 min-w-0 ${pal.right}`}>
-            <div className={`flex border-b ${pal.sep}`}>
-              <Cell className={`w-[72px] shrink-0 border-r ${pal.sep}`}>
+          <div className={`min-w-[188px] flex-1 ${pal.right}`}>
+            <div className={`grid grid-cols-[72px_72px_minmax(0,1fr)] border-b ${pal.sep}`}>
+              <Cell className={`border-r ${pal.sep}`}>
                 <div className="flex items-center justify-between mb-0.5 gap-1">
                   <Label className={`${pal.lbl} mb-0`}>SQWK</Label>
                   <span className={`text-[8px] font-black px-1 rounded leading-none ${
@@ -782,21 +788,21 @@ function FlightStripImpl({
                   {strip.code_transpondeur || '—'}
                 </span>
               </Cell>
-              <Cell className={`w-[72px] shrink-0 border-r ${pal.sep}`}>
+              <Cell className={`border-r ${pal.sep}`}>
                 <Label className={pal.lbl}>CLR</Label>
                 <InlineEdit value={strip.strip_note_2} field="strip_note_2" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={20} />
               </Cell>
-              <Cell className="flex-1 min-w-0">
+              <Cell className="min-w-0">
                 <Label className={pal.lbl}>INFO</Label>
                 <InlineEdit value={strip.strip_note_3} field="strip_note_3" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={30} />
               </Cell>
             </div>
-            <div className={`flex border-b ${pal.sep}`}>
-              <Cell className={`flex-1 min-w-0 border-r ${pal.sep}`}>
+            <div className={`grid grid-cols-2 border-b ${pal.sep}`}>
+              <Cell className={`min-w-0 border-r ${pal.sep}`}>
                 <Label className={pal.lbl}>SID</Label>
                 <InlineEdit value={strip.strip_sid_atc || strip.sid_depart} field="strip_sid_atc" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={24} wrap />
               </Cell>
-              <Cell className="flex-1 min-w-0">
+              <Cell className="min-w-0">
                 <Label className={pal.lbl}>STAR</Label>
                 <InlineEdit value={strip.strip_star || strip.star_arrivee} field="strip_star" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={24} wrap />
               </Cell>
@@ -807,15 +813,15 @@ function FlightStripImpl({
                 <InlineEdit value={strip.strip_route || strip.route_ifr} field="strip_route" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={80} wrap />
               </Cell>
             </div>
-            <div className="flex">
-              <Cell className={`w-[88px] shrink-0 border-r ${pal.sep}`}>
+            <div className="grid grid-cols-[88px_minmax(0,1fr)]">
+              <Cell className={`border-r ${pal.sep}`}>
                 <div className="flex items-center gap-1 mb-0.5">
                   <FlUnitToggle planId={strip.id} unit={strip.strip_fl_unit} onSaved={onRefresh} />
                   <Label className={`${pal.lbl} mb-0`}>ALT</Label>
                 </div>
                 <InlineEdit value={strip.strip_fl} field="strip_fl" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
               </Cell>
-              <Cell className="flex-1 min-w-0">
+              <Cell className="min-w-0">
                 <Label className={pal.lbl}>STATUT</Label>
                 <span className={`text-[12px] font-black uppercase tracking-wide ${statutColor}`}>{statutLabel(statut)}</span>
               </Cell>

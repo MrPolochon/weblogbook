@@ -77,7 +77,7 @@ Téléphone ATC/SIAVI : toujours deux UIs (hook `useLiveKitCall` déjà partagé
 - WebAuthn : fallback `mixouairlinesptfsweblogbook.com`.
 - Marché : cron `/api/cron/marche` (15 min) ; plus de `regenerer_*` à chaque SSR ; alerte si regen absente/stale ; client cargo orphelin supprimé.
 - IFSA : listes 200 + compteurs SQL ; onglet persisté en session.
-- Dépôt : wizard 4 étapes (appareil / route / détails / soumission).
+- Dépôt : wizard 3 étapes (appareil & route / détails / soumission) — départ = position de l’avion.
 - Téléphone : `usePhoneAudioDevices` + codes SIAVI unifiés ; cleanup appels expirés partagé (`cleanupExpiredCallsForUser`).
 - Storage orphelins : incidents + images flotte ; rate limit scan.
 - Perf PTFS : proxies trop éloignés refusés (757/767/CRJ/Q400).

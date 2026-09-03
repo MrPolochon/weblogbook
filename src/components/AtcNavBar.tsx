@@ -8,6 +8,8 @@ import {
   ChevronDown, Menu, Flame, Landmark, Radar, BookOpen, Plus,
 } from 'lucide-react';
 import AtcPhonebookButton from '@/components/AtcPhonebookButton';
+import AtcTelephone from '@/components/AtcTelephone';
+import AtcAtisButton from '@/components/AtcAtisButton';
 import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useRef, useTransition } from 'react';
@@ -46,12 +48,14 @@ export default function AtcNavBar({
   gradeNom,
   sessionInfo,
   messagesNonLusCount = 0,
+  userId,
 }: {
   isAdmin: boolean;
   enService: boolean;
   gradeNom?: string | null;
   sessionInfo?: { aeroport: string; position: string; started_at: string } | null;
   messagesNonLusCount?: number;
+  userId?: string;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -119,18 +123,18 @@ export default function AtcNavBar({
     : 'border-transparent bg-transparent text-slate-700 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900';
 
   const headerBg = isDark
-    ? 'bg-[#05080e]/95 border-slate-800/80'
-    : 'bg-white/90 border-slate-300/80';
+    ? 'bg-[#05080e] border-slate-800'
+    : 'bg-white border-slate-300';
 
   const dropdownBg = isDark
-    ? 'bg-slate-950/98 border-slate-700 shadow-2xl backdrop-blur-xl'
-    : 'bg-white/98 border-slate-200 shadow-xl';
+    ? 'bg-[#0b1220] border-slate-700 shadow-2xl'
+    : 'bg-white border-slate-200 shadow-xl';
 
   const dropdownItemActive = isDark ? 'bg-sky-950 text-sky-200' : 'bg-sky-100 text-sky-900';
   const dropdownItemInactive = isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-100';
 
   return (
-    <header className={cn('atc-header sticky top-0 z-50 border-b backdrop-blur-xl', headerBg)}>
+    <header className={cn('atc-header sticky top-0 z-50 border-b', headerBg)}>
       <div className="flex items-center justify-between gap-3 px-3 sm:px-4 h-14">
         <nav className="flex items-center gap-1.5 min-w-0">
           <Link href="/atc" className="hidden sm:flex items-center gap-2 pr-2 mr-1 border-r border-slate-700/30 shrink-0">
@@ -156,7 +160,7 @@ export default function AtcNavBar({
               )}
             </button>
             {atcMenuOpen && (
-              <div style={dropdownStyle ?? undefined} className={cn('fixed w-56 rounded-xl border p-1 z-50', dropdownBg)}>
+              <div style={dropdownStyle ?? undefined} className={cn('atc-menu-dropdown fixed w-56 rounded-xl border p-1 z-[80]', dropdownBg)}>
                 {atcMenuItems.map((item) => {
                   const Icon = item.icon;
                   return (
@@ -189,6 +193,12 @@ export default function AtcNavBar({
             <ScrollText className="h-4 w-4" />
             <span className="hidden sm:inline">NOTAM</span>
           </Link>
+          {sessionInfo && userId && (
+            <>
+              <AtcAtisButton aeroport={sessionInfo.aeroport} position={sessionInfo.position} userId={userId} />
+              <AtcTelephone aeroport={sessionInfo.aeroport} position={sessionInfo.position} />
+            </>
+          )}
           {isAdmin && (
             <Link href="/atc/radar" className={cn(linkBase, pathname.startsWith('/atc/radar') ? linkActive : (isDark ? 'text-emerald-300 hover:bg-emerald-950' : 'text-emerald-700 hover:bg-emerald-50'))}>
               <Radar className="h-4 w-4" />

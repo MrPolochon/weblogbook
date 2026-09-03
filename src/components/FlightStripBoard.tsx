@@ -72,6 +72,27 @@ export default function FlightStripBoard({
 
   const [localStrips, setLocalStrips] = useState<StripData[]>(strips);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const draggedIdRef = useRef<string | null>(null);
+  const pendingMoves = useRef<Map<string, { zone: ZoneOrNull; order: number; at: number }>>(new Map());
+  const dropTargetRef = useRef<{ zone: ZoneOrNull; stripId?: string; position?: 'before' | 'after' } | null>(null);
+
+  const applyPending = useCallback((incoming: StripData[]) => {
+    const now = Date.now();
+    return incoming.map((s) => {
+      const p = pendingMoves.current.get(s.id);
+      if (!p) return s;
+      if (now - p.at > 8_000) {
+        pendingMoves.current.delete(s.id);
+        return s;
+      }
+      if ((s.strip_zone ?? null) === p.zone && s.strip_order === p.order) {
+        pendingMoves.current.delete(s.id);
+        return s;
+      }
+      return { ...s, strip_zone: p.zone, strip_order: p.order };
+    });
+  }, []);
+
   const stripsSignature = useMemo(
     () => strips.map((s) =>
       `${s.id}:${s.strip_zone ?? 'null'}:${s.strip_order}:${s.statut}:${s.code_transpondeur ?? ''}:${s.mode_transpondeur ?? ''}`,
@@ -79,21 +100,27 @@ export default function FlightStripBoard({
     [strips],
   );
   useEffect(() => {
-    if (draggedId) {
-      setLocalStrips((prev) => strips.map((s) => {
-        if (s.id === draggedId) {
+    setLocalStrips((prev) => {
+      const next = applyPending(strips);
+      if (draggedIdRef.current) {
+        return next.map((s) => {
+          if (s.id !== draggedIdRef.current) return s;
           const local = prev.find((l) => l.id === s.id);
-          if (local) return { ...s, strip_zone: local.strip_zone, strip_order: local.strip_order };
-        }
-        return s;
-      }));
-    } else {
-      setLocalStrips(strips);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stripsSignature]);
+          if (!local) return s;
+          return { ...s, strip_zone: local.strip_zone, strip_order: local.strip_order };
+        });
+      }
+      return next;
+    });
+  }, [stripsSignature, applyPending, strips]);
 
-  const [dropTarget, setDropTarget] = useState<{ zone: ZoneOrNull; stripId?: string; position?: 'before' | 'after' } | null>(null);
+  type DropHint = { zone: ZoneOrNull; stripId?: string; position?: 'before' | 'after' };
+  const [dropTarget, setDropTarget] = useState<DropHint | null>(null);
+  const setDrop = useCallback((next: DropHint | null | ((prev: DropHint | null) => DropHint | null)) => {
+    const value = typeof next === 'function' ? next(dropTargetRef.current) : next;
+    dropTargetRef.current = value;
+    setDropTarget(value);
+  }, []);
   const dragCounters = useRef<Map<string, number>>(new Map());
 
   const filtered = useMemo(() => {
@@ -140,19 +167,26 @@ export default function FlightStripBoard({
   }, []);
 
   const handleDragStart = useCallback((e: React.DragEvent, stripId: string) => {
+    const from = e.target as HTMLElement | null;
+    if (from?.closest('button, input, select, textarea, a, [contenteditable="true"], [data-no-drag]')) {
+      e.preventDefault();
+      return;
+    }
+    draggedIdRef.current = stripId;
     setDraggedId(stripId);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', stripId);
     if (e.dataTransfer.setDragImage && e.currentTarget instanceof HTMLElement) {
-      e.dataTransfer.setDragImage(e.currentTarget, e.currentTarget.offsetWidth / 2, 20);
+      e.dataTransfer.setDragImage(e.currentTarget, Math.min(80, e.currentTarget.offsetWidth / 4), 16);
     }
   }, []);
 
   const handleDragEnd = useCallback(() => {
+    draggedIdRef.current = null;
     setDraggedId(null);
-    setDropTarget(null);
+    setDrop(null);
     dragCounters.current.clear();
-  }, []);
+  }, [setDrop]);
 
   const dropInZone = useCallback(async (stripId: string, zone: ZoneOrNull) => {
     const zoneStrips = localStrips.filter((s) => s.strip_zone === zone);
@@ -162,18 +196,21 @@ export default function FlightStripBoard({
     if (zone && !isRecommendedZone(atcPosition, zone)) {
       toast.message(`Phase inhabituelle pour ${atcPosition ?? 'cette position'} — strip déplacé quand même.`);
     }
+    const nextOrder = maxOrder + 1;
+    pendingMoves.current.set(stripId, { zone, order: nextOrder, at: Date.now() });
     const prevStrips = localStrips;
     setLocalStrips((prev) =>
-      prev.map((s) => s.id === stripId ? { ...s, strip_zone: zone, strip_order: maxOrder + 1 } : s),
+      prev.map((s) => s.id === stripId ? { ...s, strip_zone: zone, strip_order: nextOrder } : s),
     );
     try {
       const res = await fetch(`/api/plans-vol/${stripId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_strip', strip_zone: zone, strip_order: maxOrder + 1 }),
+        body: JSON.stringify({ action: 'update_strip', strip_zone: zone, strip_order: nextOrder }),
       });
       if (!res.ok) throw new Error('Erreur API');
     } catch {
+      pendingMoves.current.delete(stripId);
       setLocalStrips(prevStrips);
       onRefresh?.();
     }
@@ -192,6 +229,9 @@ export default function FlightStripBoard({
     reordered.splice(insertIdx, 0, { ...srcStrip, strip_zone: zone, strip_order: 0 });
     const batch = reordered.map((s, i) => ({ id: s.id, strip_zone: zone, strip_order: i }));
     const prevStrips = localStrips;
+    for (const [i, s] of reordered.entries()) {
+      pendingMoves.current.set(s.id, { zone, order: i, at: Date.now() });
+    }
     setLocalStrips(localStrips.map((s) => {
       const idx = reordered.findIndex((r) => r.id === s.id);
       if (idx >= 0) return { ...s, strip_zone: zone, strip_order: idx };
@@ -205,6 +245,7 @@ export default function FlightStripBoard({
       });
       if (!res.ok) throw new Error('Erreur API');
     } catch {
+      for (const s of reordered) pendingMoves.current.delete(s.id);
       setLocalStrips(prevStrips);
       onRefresh?.();
     }
@@ -213,17 +254,21 @@ export default function FlightStripBoard({
   const handleDrop = useCallback(async (e: React.DragEvent, zone: ZoneOrNull, targetStripId?: string, position?: 'before' | 'after') => {
     e.preventDefault();
     e.stopPropagation();
-    const stripId = e.dataTransfer.getData('text/plain') || draggedId;
+    const stripId = e.dataTransfer.getData('text/plain') || draggedIdRef.current || draggedId;
+    const hint = dropTargetRef.current;
+    const nearId = targetStripId ?? (hint?.zone === zone ? hint.stripId : undefined);
+    const nearPos = position ?? (hint?.zone === zone ? hint.position : undefined);
+    draggedIdRef.current = null;
     setDraggedId(null);
-    setDropTarget(null);
+    setDrop(null);
     dragCounters.current.clear();
     if (!stripId) return;
-    if (targetStripId && position) {
-      await dropNearStrip(stripId, targetStripId, zone, position);
+    if (nearId && nearPos && nearId !== stripId) {
+      await dropNearStrip(stripId, nearId, zone, nearPos);
     } else {
       await dropInZone(stripId, zone);
     }
-  }, [draggedId, dropInZone, dropNearStrip]);
+  }, [draggedId, dropInZone, dropNearStrip, setDrop]);
 
   const zoneKey = (zone: ZoneOrNull) => zone ?? '__null';
 
@@ -232,8 +277,8 @@ export default function FlightStripBoard({
     const key = zoneKey(zone);
     const count = (dragCounters.current.get(key) || 0) + 1;
     dragCounters.current.set(key, count);
-    if (count === 1) setDropTarget({ zone });
-  }, []);
+    if (count === 1) setDrop({ zone });
+  }, [setDrop]);
 
   const handleZoneDragLeave = useCallback((e: React.DragEvent, zone: ZoneOrNull) => {
     e.preventDefault();
@@ -242,9 +287,9 @@ export default function FlightStripBoard({
     dragCounters.current.set(key, Math.max(0, count));
     if (count <= 0) {
       dragCounters.current.delete(key);
-      setDropTarget((prev) => prev?.zone === zone && !prev.stripId ? null : prev);
+      setDrop((prev) => (prev?.zone === zone && !prev.stripId ? null : prev));
     }
-  }, []);
+  }, [setDrop]);
 
   const handleZoneDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -259,11 +304,11 @@ export default function FlightStripBoard({
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const mouseY = e.clientY - rect.top;
     const pos: 'before' | 'after' = mouseY < rect.height / 2 ? 'before' : 'after';
-    setDropTarget((prev) => {
-      if (prev?.stripId === targetId && prev.position === pos) return prev;
+    setDrop((prev) => {
+      if (prev?.stripId === targetId && prev.position === pos && prev.zone === zone) return prev;
       return { zone, stripId: targetId, position: pos };
     });
-  }, [draggedId]);
+  }, [draggedId, setDrop]);
 
   const refresh = useCallback(() => onRefresh?.(), [onRefresh]);
 
@@ -364,7 +409,7 @@ export default function FlightStripBoard({
           onDragStart={(e) => handleDragStart(e, s.id)}
           onDragEnd={handleDragEnd}
           onDragOver={(e) => handleStripDragOver(e, s.id, zone)}
-          onDrop={(e) => handleDrop(e, zone, s.id, dropTarget?.stripId === s.id ? dropTarget.position : 'after')}
+          onDrop={(e) => handleDrop(e, zone, s.id, dropTargetRef.current?.stripId === s.id ? dropTargetRef.current.position : 'after')}
           className={`transition-opacity duration-150 ${isBeingDragged ? 'opacity-30' : 'opacity-100'} cursor-grab active:cursor-grabbing`}
         >
           <FlightStrip strip={s} onRefresh={refresh} onContextMenu={handleStripRightClickWithDouble} onTransferRequest={handleTransferClick} />
@@ -385,7 +430,7 @@ export default function FlightStripBoard({
     return (
       <section
         key={zone}
-        className={`min-w-[280px] flex-1 flex flex-col rounded-xl border min-h-0 transition-shadow ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
+        className={`min-w-[460px] flex-1 flex flex-col rounded-xl border min-h-0 transition-shadow ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
         onDragEnter={(e) => handleZoneDragEnter(e, zone)}
         onDragLeave={(e) => handleZoneDragLeave(e, zone)}
         onDragOver={handleZoneDragOver}
@@ -401,7 +446,7 @@ export default function FlightStripBoard({
           </div>
           <span className="text-[11px] font-black tabular-nums bg-black/10 rounded-full px-2 py-0.5">{zs.length}</span>
         </header>
-        <div className="flex-1 p-1.5 flex flex-col gap-1.5 overflow-y-auto overflow-x-hidden min-h-[140px]">
+        <div className="flex-1 p-1.5 flex flex-col gap-1.5 overflow-y-auto overflow-x-auto min-h-[140px]">
           {zs.length === 0 ? (
             <div className={`flex-1 min-h-[88px] rounded-lg border-2 border-dashed flex items-center justify-center text-[11px] font-semibold italic ${
               isDragOver
@@ -482,7 +527,7 @@ export default function FlightStripBoard({
               {isDragOverNull ? 'Relâcher ici' : 'Aucun strip en attente d’affectation'}
             </div>
           ) : unassigned.map((s) => (
-            <div key={s.id} className="w-full max-w-3xl">{renderStripItem(s, null)}</div>
+            <div key={s.id} className="w-full max-w-[460px]">{renderStripItem(s, null)}</div>
           ))}
         </div>
       </section>

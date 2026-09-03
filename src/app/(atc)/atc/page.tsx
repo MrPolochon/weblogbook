@@ -297,7 +297,7 @@ export default async function AtcPage() {
     return (
       <div className="flex-1 min-h-0 overflow-auto space-y-4 pb-4">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.7fr)] items-start">
-          <div className="rounded-2xl border border-slate-700/50 bg-slate-950/40 p-5 sm:p-7">
+          <div className="rounded-2xl border border-slate-700 bg-[#0b1220] p-5 sm:p-7">
             <div className="flex items-center gap-3 mb-5">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/25">
                 <Radio className="h-5 w-5 text-amber-300" />
@@ -313,7 +313,7 @@ export default async function AtcPage() {
             <SeMettreEnServiceForm accessContext={accessContext} airportOptions={airportOptions} />
           </div>
           <div className="space-y-3">
-            <div className="rounded-2xl border border-slate-700/50 bg-slate-950/40 p-4 flex gap-3">
+            <div className="rounded-2xl border border-slate-700 bg-[#0b1220] p-4 flex gap-3">
               <AtcEnLigneModal
                 totalAtc={totalAtcEnService}
                 sessionsEnService={sessionsEnServiceSafe.map((s) => ({

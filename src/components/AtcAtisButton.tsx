@@ -771,66 +771,59 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     ? 'border border-slate-800 bg-slate-950/60'
     : 'border border-slate-600/40 bg-slate-700/40';
 
-  // ---------------------------------------------------------------------------
-  // Bouton flottant ferme
-  // ---------------------------------------------------------------------------
-  if (!isOpen) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className={`fixed bottom-4 left-4 z-50 ${bgMain} ${textMain} rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3 transition-all duration-300 hover:scale-105 hover:shadow-2xl ${
-          anyBroadcasting ? 'ring-2 ring-red-500' : ''
-        }`}
-        title={
-          broadcasting
-            ? 'ATIS en cours — Cliquer pour gérer'
-            : anyBroadcasting
-              ? `ATIS actif (${instances.filter((i) => i.broadcasting).length}/${instances.length}) — Cliquer pour voir`
-              : 'Panneau ATIS'
-        }
-      >
-        <div
-          className={`p-2 rounded-xl ${
+  const navAtisTone = broadcasting
+    ? (isDark ? 'border-red-600/60 bg-red-950/70 text-red-100' : 'border-red-400 bg-red-50 text-red-900')
+    : anyBroadcasting
+      ? (isDark ? 'border-amber-600/50 bg-amber-950/60 text-amber-100' : 'border-amber-400 bg-amber-50 text-amber-900')
+      : isOpen
+        ? (isDark ? 'border-sky-700/50 bg-sky-950/80 text-sky-200' : 'border-sky-300 bg-sky-100 text-sky-900')
+        : (isDark ? 'border-transparent text-slate-300 hover:border-slate-700 hover:bg-slate-800/80 hover:text-white' : 'border-transparent text-slate-700 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900');
+
+  const atisTrigger = (
+    <button
+      type="button"
+      onClick={() => setIsOpen((open) => !open)}
+      className={`relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold tracking-wide transition-all whitespace-nowrap flex-shrink-0 border ${navAtisTone}`}
+      title={
+        broadcasting
+          ? 'ATIS en cours — Cliquer pour gérer'
+          : anyBroadcasting
+            ? `ATIS actif (${instances.filter((i) => i.broadcasting).length}/${instances.length}) — Cliquer pour voir`
+            : 'Panneau ATIS'
+      }
+      aria-expanded={isOpen}
+      aria-label="Panneau ATIS"
+    >
+      <span className="relative">
+        <Radio
+          className={`h-4 w-4 ${
             broadcasting
-              ? 'bg-red-500/30'
+              ? 'text-red-400'
               : anyBroadcasting
-                ? 'bg-amber-500/25'
-                : isDark
-                  ? 'bg-amber-500/15'
-                  : 'bg-amber-500/20'
+                ? (isDark ? 'text-amber-300' : 'text-amber-600')
+                : (isDark ? 'text-amber-300' : 'text-amber-600')
           }`}
-        >
-          <Radio
-            className={`h-5 w-5 ${
-              broadcasting
-                ? 'text-red-500'
-                : anyBroadcasting
-                  ? 'text-amber-300'
-                  : isDark
-                    ? 'text-amber-300'
-                    : 'text-amber-400'
-            }`}
-          />
-        </div>
-        <span className="font-medium">ATIS</span>
+        />
         {anyBroadcasting && (
-          <span className="flex items-center gap-1.5 text-xs">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-            </span>
-            {broadcasting ? 'En direct' : `${instances.filter((i) => i.broadcasting).length}/${instances.length}`}
-            {broadcasting &&
-              (isFromDiscord ? (
-                <MessageCircle className="h-3 w-3 ml-0.5 opacity-70" />
-              ) : (
-                <Monitor className="h-3 w-3 ml-0.5 opacity-70" />
-              ))}
-          </span>
+          <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500 animate-ping" />
         )}
-      </button>
-    );
-  }
+      </span>
+      <span className="hidden sm:inline">ATIS</span>
+      {anyBroadcasting && (
+        <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider">
+          {broadcasting ? 'Live' : `${instances.filter((i) => i.broadcasting).length}`}
+          {broadcasting &&
+            (isFromDiscord ? (
+              <MessageCircle className="h-3 w-3 opacity-70" />
+            ) : (
+              <Monitor className="h-3 w-3 opacity-70" />
+            ))}
+        </span>
+      )}
+    </button>
+  );
+
+  if (!isOpen) return atisTrigger;
 
   // ---------------------------------------------------------------------------
   // Panneau ouvert
@@ -851,8 +844,10 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       : `Démarrer ATIS — ${aeroport}`;
 
   return (
+    <>
+    {atisTrigger}
     <div
-      className={`fixed left-4 bottom-4 z-50 ${bgMain} rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]`}
+      className={`fixed left-3 top-[3.75rem] z-[60] ${bgMain} rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[min(88vh,calc(100dvh-4.5rem))]`}
       style={{ width: 'min(480px, 95vw)' }}
     >
       {/* Header */}
@@ -1542,6 +1537,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         )}
       </div>
     </div>
+    </>
   );
 }
 
