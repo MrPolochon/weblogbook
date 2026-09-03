@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, memo } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, memo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Trash2, GripVertical, CheckCircle, XCircle, Radio, Plane, MessageSquare,
@@ -65,7 +65,34 @@ type EditableField =
   | 'numero_vol' | 'aeroport_depart' | 'aeroport_arrivee' | 'type_vol'
   | 'strip_pilote_text' | 'strip_type_wake';
 
-const NOT_SET = Symbol('NOT_SET');
+/**
+ * Le strip a une géométrie figée : cette largeur est le plancher, et les bays
+ * de FlightStripBoard s'y adaptent pour qu'aucune colonne ne soit jamais rognée.
+ */
+export const STRIP_MIN_WIDTH = 360;
+
+/** Hauteurs de lignes. Fixées pour que la structure ne bouge jamais. */
+const LANE_H = 16;
+const ROW_ID_H = 34;
+const ROW_RTE_H = 30;
+const ROW_CLR_H = 28;
+const ROW_NOTE_H = 30;
+const ROW_FULL_H = 34;
+const BAR_H = 29;
+const LABEL_H = 10;
+
+/** Hauteur utile d'une valeur dans une cellule de hauteur `rowH`. */
+const valueH = (rowH: number) => rowH - LABEL_H - 4;
+
+/** Largeur d'avance moyenne d'un glyphe monospace, en fraction de la taille de police. */
+const MONO_ADVANCE = 0.62;
+
+const FLIGHT_RULES = ['IFR', 'VFR', 'SVFR', 'MEDEVAC'];
+
+type Pal = {
+  border: string; head: string; left: string; right: string; sep: string;
+  txt: string; lbl: string; tab: string; ghost: string;
+};
 
 function playErrorBeep() {
   try {
@@ -86,110 +113,264 @@ function playErrorBeep() {
   } catch { /* son non dispo */ }
 }
 
-function InlineEdit({
-  value, field, planId, placeholder, maxLength, large, wrap, onSaved, className = '',
-}: {
-  value: string | null; field: EditableField; planId: string;
-  placeholder: string; maxLength?: number; onSaved?: () => void; large?: boolean; wrap?: boolean; className?: string;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(value || '');
-  const localOverride = useRef<string | typeof NOT_SET>(NOT_SET);
-  const [, forceRender] = useState(0);
-  const [saving, setSaving] = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const [error, setError] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+/** Largeur réelle d'un élément, suivie en direct. */
+function useBoxWidth<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [width, setWidth] = useState(0);
 
   useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+    const el = ref.current;
+    if (!el) return;
+    const apply = (w: number) => setWidth((prev) => (Math.abs(prev - w) > 0.5 ? w : prev));
+    apply(el.clientWidth);
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (typeof w === 'number') apply(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return [ref, width] as const;
+}
+
+/**
+ * Taille de police et nombre de lignes qui font tenir `text` dans une boîte de
+ * `width` × `height`. La police étant monospace, l'encombrement est calculable :
+ * pas de mesure itérative, donc aucun reflow ni saut de mise en page.
+ *
+ * On teste chaque nombre de lignes autorisé et on garde le plus lisible : un
+ * texte court reste en grand sur une ligne, un texte long se replie.
+ */
+function fitBlock(
+  text: string, width: number, height: number, maxLines: number, max: number, min: number,
+): { size: number; lines: number } {
+  if (!width || !text) return { size: max, lines: 1 };
+
+  let best = { size: 0, lines: 1 };
+  for (let lines = 1; lines <= maxLines; lines++) {
+    const byWidth = (width * lines * 0.97) / (MONO_ADVANCE * text.length);
+    const byHeight = (height / lines) * 0.84;
+    const size = Math.min(max, byWidth, byHeight);
+    if (size > best.size) best = { size, lines };
+  }
+  return { size: Math.max(min, best.size), lines: best.lines };
+}
+
+/** Valeur non modifiable, toujours entièrement lisible dans sa cellule. */
+function FitValue({
+  text, placeholder = '—', max, min = 6, lines = 1, height, tone, pal, bold = true,
+}: {
+  text: string | null | undefined;
+  placeholder?: string;
+  max: number;
+  min?: number;
+  lines?: number;
+  height: number;
+  tone?: string;
+  pal: Pal;
+  bold?: boolean;
+}) {
+  const [ref, width] = useBoxWidth<HTMLDivElement>();
+  const filled = (text ?? '').trim();
+  const shown = filled || placeholder;
+  const fit = fitBlock(shown, width, height, lines, max, min);
+
+  return (
+    <div ref={ref} className="w-full overflow-hidden" style={{ height }}>
+      <span
+        title={filled || undefined}
+        className={`block break-all font-mono ${bold ? 'font-black' : 'font-bold'} ${filled ? (tone ?? pal.txt) : pal.ghost}`}
+        style={{ fontSize: `${fit.size}px`, lineHeight: `${height / fit.lines}px` }}
+      >
+        {shown}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Valeur éditable. L'input est superposé en absolu sur la valeur : la cellule
+ * garde exactement la même taille en lecture, en saisie et en erreur.
+ * Les écritures sont sérialisées par champ, la dernière frappe gagne toujours.
+ */
+function EditValue({
+  value, field, planId, placeholder = '—', maxLength, max, min = 6, lines = 1,
+  height, onSaved, pal, tone,
+}: {
+  value: string | null | undefined;
+  field: EditableField;
+  planId: string;
+  placeholder?: string;
+  maxLength: number;
+  max: number;
+  min?: number;
+  lines?: number;
+  height: number;
+  onSaved?: () => void;
+  pal: Pal;
+  tone?: string;
+}) {
+  const [ref, width] = useBoxWidth<HTMLDivElement>();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [optimistic, setOptimistic] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const inflight = useRef(false);
+  const queued = useRef<string | null>(null);
+  const committed = useRef(false);
+
+  const server = (value ?? '').trim();
+  const current = optimistic ?? server;
+
+  // Dès que le serveur renvoie la valeur écrite, on relâche l'affichage optimiste.
+  useEffect(() => {
+    if (optimistic !== null && server === optimistic) setOptimistic(null);
+  }, [server, optimistic]);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
     }
   }, [editing]);
 
-  const hasLocal = localOverride.current !== NOT_SET;
-  const displayValue = hasLocal ? (localOverride.current as string) : (value || '');
-
-  useEffect(() => {
-    if (!editing && !saving && !hasLocal) setText(value || '');
-  }, [value, editing, saving, hasLocal]);
-
-  useEffect(() => {
-    if (hasLocal && value === localOverride.current) localOverride.current = NOT_SET;
-  }, [value, hasLocal]);
-
-  const save = useCallback(async (val: string) => {
-    setSaving(true);
-    setError(false);
-    const trimmed = val.trim();
-    localOverride.current = trimmed;
-    forceRender((n) => n + 1);
-    try {
-      const res = await fetch(`/api/plans-vol/${planId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'update_strip', [field]: trimmed || '' }),
-      });
-      if (res.ok) onSaved?.();
-      else setError(true);
-    } catch {
-      setError(true);
+  const push = useCallback(async (next: string) => {
+    if (inflight.current) {
+      queued.current = next;
+      return;
     }
-    setSaving(false);
-    setEditing(false);
+    inflight.current = true;
+    setSaving(true);
+    let payload: string | null = next;
+    try {
+      while (payload !== null) {
+        const res = await fetch(`/api/plans-vol/${planId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'update_strip', [field]: payload }),
+        });
+        if (!res.ok) {
+          setFailed(true);
+          return;
+        }
+        setFailed(false);
+        payload = queued.current;
+        queued.current = null;
+      }
+      onSaved?.();
+    } catch {
+      setFailed(true);
+    } finally {
+      queued.current = null;
+      inflight.current = false;
+      setSaving(false);
+    }
   }, [planId, field, onSaved]);
 
-  if (editing) {
-    return (
-      <input
-        ref={inputRef}
-        className={`bg-white text-slate-900 border border-sky-500 rounded-sm outline-none w-full font-mono font-bold ${large ? 'text-[15px] px-1 py-0.5' : 'text-[13px] px-1 py-0.5'}`}
-        value={text}
-        maxLength={maxLength || 20}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); save(text); }
-          if (e.key === 'Escape') { setEditing(false); setText(displayValue); }
-        }}
-        onBlur={() => save(text)}
-        onClick={(e) => e.stopPropagation()}
-        disabled={saving}
-      />
-    );
-  }
+  const commit = useCallback((raw: string) => {
+    if (committed.current) return;
+    committed.current = true;
+    setEditing(false);
+    const next = raw.trim().slice(0, maxLength);
+    if (next === current && !failed) return;
+    setOptimistic(next);
+    void push(next);
+  }, [current, failed, maxLength, push]);
+
+  const openEditor = useCallback(() => {
+    committed.current = false;
+    setDraft(current);
+    setEditing(true);
+  }, [current]);
+
+  const clear = useCallback(() => {
+    committed.current = true;
+    setOptimistic('');
+    void push('');
+  }, [push]);
+
+  const shown = current || placeholder;
+  const fit = fitBlock(shown, width, height, lines, max, min);
 
   return (
     <div
+      ref={ref}
       data-no-drag="true"
-      className={`relative cursor-text min-h-[20px] flex ${wrap ? 'items-start' : 'items-center'} rounded-sm px-0.5 transition-colors ${hovered ? 'bg-sky-400/20 ring-1 ring-sky-400/70' : ''} ${error ? 'ring-1 ring-red-400 bg-red-50/30' : ''} ${className}`}
+      className="relative w-full cursor-text overflow-hidden"
+      style={{ height }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onClick={(e) => {
-        e.stopPropagation();
-        setEditing(true);
-        setText(displayValue);
-        setError(false);
-      }}
-      title={error ? 'Erreur de sauvegarde — cliquer pour réessayer' : undefined}
+      onClick={(e) => { e.stopPropagation(); if (!editing) openEditor(); }}
+      title={failed ? 'Non enregistré — cliquer pour réessayer' : (current || undefined)}
     >
       <span
-        title={displayValue || undefined}
-        className={`font-mono leading-tight ${wrap ? 'whitespace-normal break-words' : 'truncate'} ${large ? 'text-[15px] font-black' : 'text-[13px] font-semibold'} ${!displayValue ? 'opacity-40' : ''}`}
+        className={`block break-all font-mono font-black ${current ? (tone ?? pal.txt) : pal.ghost}`}
+        style={{ fontSize: `${fit.size}px`, lineHeight: `${height / fit.lines}px` }}
       >
-        {displayValue || placeholder}
+        {shown}
       </span>
-      {error && <span className="text-[8px] text-red-500 ml-0.5">!</span>}
-      {hovered && displayValue && !error && (
+
+      {/* Repères d'état : superposés, donc sans effet sur la géométrie. */}
+      {failed && <span className="pointer-events-none absolute inset-0 rounded-[2px] ring-1 ring-red-500" />}
+      {saving && !failed && <span className="pointer-events-none absolute bottom-0 right-0 h-1 w-1 rounded-full bg-sky-400" />}
+
+      {hovered && !editing && current && (
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); setText(''); save(''); }}
-          className="absolute -top-1 -right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600 z-10 shadow"
+          onClick={(e) => { e.stopPropagation(); clear(); }}
+          className="absolute right-0 top-0 flex h-3.5 w-3.5 items-center justify-center rounded-sm bg-red-600 text-white shadow"
           title="Effacer"
         >
-          <Trash2 className="h-2.5 w-2.5" />
+          <Trash2 className="h-2 w-2" />
         </button>
       )}
+
+      {editing && (
+        <input
+          ref={inputRef}
+          value={draft}
+          maxLength={maxLength}
+          onChange={(e) => setDraft(e.target.value)}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onBlur={() => commit(draft)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') { e.preventDefault(); commit(draft); }
+            if (e.key === 'Escape') { e.preventDefault(); committed.current = true; setEditing(false); }
+          }}
+          className="absolute inset-0 w-full rounded-[2px] border border-[#0ea5e9] bg-[#ffffff] px-1 font-mono text-[12px] font-bold text-[#0f172a] outline-none"
+        />
+      )}
+    </div>
+  );
+}
+
+/** Cellule : label figé sur une ligne, valeur en dessous, hauteur constante. */
+function Cell({
+  label, pal, rowH, className = '', right, children,
+}: {
+  label: string;
+  pal: Pal;
+  rowH: number;
+  className?: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`relative min-w-0 overflow-hidden px-1 pt-[2px] ${className}`} style={{ height: rowH }}>
+      <div className="flex items-center justify-between gap-1" style={{ height: LABEL_H }}>
+        <span className={`block truncate text-[8px] font-black uppercase leading-none tracking-[0.08em] ${pal.lbl}`}>
+          {label}
+        </span>
+        {right}
+      </div>
+      {children}
     </div>
   );
 }
@@ -197,6 +378,9 @@ function InlineEdit({
 function FlUnitToggle({ planId, unit, onSaved }: { planId: string; unit: string | null; onSaved?: () => void }) {
   const [current, setCurrent] = useState(unit || 'FL');
   const prevRef = useRef(current);
+
+  useEffect(() => { if (unit) setCurrent(unit); }, [unit]);
+
   const toggle = async (e: React.MouseEvent) => {
     e.stopPropagation();
     const prev = current;
@@ -214,19 +398,19 @@ function FlUnitToggle({ planId, unit, onSaved }: { planId: string; unit: string 
       setCurrent(prevRef.current);
     }
   };
+
   return (
-    <button type="button" onClick={toggle} className="text-[9px] font-black tracking-wide rounded px-1 py-0.5 leading-none bg-black/15 hover:bg-black/25" title="Basculer FL/ft">
+    <button
+      type="button"
+      data-no-drag="true"
+      onClick={toggle}
+      className="shrink-0 rounded bg-black/20 px-1 text-[8px] font-black leading-none hover:bg-black/35"
+      style={{ height: LABEL_H }}
+      title="Basculer FL / ft"
+    >
       {current}
     </button>
   );
-}
-
-function Cell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`px-1.5 py-1 min-w-0 ${className}`}>{children}</div>;
-}
-
-function Label({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`text-[8px] font-bold uppercase tracking-[0.14em] leading-none mb-0.5 ${className}`}>{children}</div>;
 }
 
 function HoldTip({
@@ -253,23 +437,59 @@ function HoldTip({
         width: pw, maxWidth: '90vw', maxHeight: `${Math.min(vh - margin * 2, 400)}px`,
         overflow: 'auto', pointerEvents: 'none',
       }}
-      className={`rounded-lg shadow-2xl border p-3 ${dark ? 'bg-slate-900 border-sky-500 text-slate-100' : 'bg-white border-sky-400 text-slate-900'}`}
+      className={`rounded-lg border p-3 shadow-2xl ${dark ? 'border-sky-500 bg-slate-900 text-slate-100' : 'border-sky-400 bg-white text-slate-900'}`}
     >
-      <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${dark ? 'text-sky-400' : 'text-sky-600'}`}>{title}</div>
-      <div className="text-sm font-medium leading-relaxed break-words whitespace-pre-wrap">{children}</div>
+      <div className={`mb-1 text-[10px] font-bold uppercase tracking-wider ${dark ? 'text-sky-400' : 'text-sky-600'}`}>{title}</div>
+      <div className="whitespace-pre-wrap break-words text-sm font-medium leading-relaxed">{children}</div>
+    </div>,
+    document.body,
+  );
+}
+
+/** Boîte de dialogue en portail : les confirmations ne déforment plus le strip. */
+function StripModal({
+  isDark, tone, title, children, onClose,
+}: {
+  isDark: boolean;
+  tone: 'red' | 'orange' | 'amber';
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  const frame = isDark
+    ? { red: 'border-red-700 bg-[#180a0c]', orange: 'border-orange-700 bg-[#181008]', amber: 'border-amber-700 bg-[#181206]' }
+    : { red: 'border-red-300 bg-white', orange: 'border-orange-300 bg-white', amber: 'border-amber-300 bg-white' };
+  const heading = isDark
+    ? { red: 'text-red-300', orange: 'text-orange-300', amber: 'text-amber-300' }
+    : { red: 'text-red-700', orange: 'text-orange-700', amber: 'text-amber-700' };
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[2147483646] flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div
+        className={`w-full max-w-sm rounded-xl border p-4 shadow-2xl ${frame[tone]}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className={`mb-3 text-sm font-black uppercase tracking-wider ${heading[tone]}`}>{title}</p>
+        {children}
+      </div>
     </div>,
     document.body,
   );
 }
 
 function StripActionBar({
-  strip, onRefresh, onTransferRequest, onOptimisticStatut, isDark,
+  strip, onRefresh, onTransferRequest, onOptimisticStatut, isDark, pal,
 }: {
   strip: StripData;
   onRefresh?: () => void;
   onTransferRequest?: (stripId: string, event?: React.MouseEvent) => void;
   onOptimisticStatut?: (s: string) => void;
   isDark: boolean;
+  pal: Pal;
 }) {
   const [loading, setLoading] = useState<string | null>(null);
   const [showRefuse, setShowRefuse] = useState(false);
@@ -323,7 +543,7 @@ function StripActionBar({
 
   const statut = strip.statut;
   const isAutomonitoring = strip.automonitoring;
-  const btn = 'inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold rounded-md disabled:opacity-50 shadow-sm';
+  const btn = 'inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[11px] font-bold shadow-sm disabled:opacity-50';
 
   const resetIncident = () => { setIncidentDescription(''); setIncidentPhoto(null); };
 
@@ -331,8 +551,6 @@ function StripActionBar({
     if (busyRef.current) return;
     busyRef.current = true;
     setLoading(actionType);
-    const optimistic = OPTIMISTIC_STATUT[actionType];
-    if (optimistic) onOptimisticStatut?.(optimistic);
     try {
       const res = await fetch(`/api/plans-vol/${strip.id}`, {
         method: 'PATCH',
@@ -341,7 +559,6 @@ function StripActionBar({
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (optimistic) onOptimisticStatut?.(strip.statut);
         if (res.status === 400 || res.status === 409) onRefresh?.();
         playErrorBeep();
         toast.error(d.error || 'Erreur');
@@ -364,65 +581,7 @@ function StripActionBar({
     }
   };
 
-  if (showRefuse) {
-    return (
-      <div className={`px-2 py-2 border-t space-y-1 ${isDark ? 'bg-red-950 border-red-800' : 'bg-red-50 border-red-200'}`} onClick={(e) => e.stopPropagation()}>
-        <textarea autoFocus value={refuseReason} onChange={(e) => setRefuseReason(e.target.value)} placeholder="Raison du refus…" className={`w-full text-sm border rounded px-2 py-1 min-h-[36px] resize-none font-semibold ${isDark ? 'bg-slate-900 text-slate-100 border-red-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-red-300'}`} />
-        <div className="flex gap-1.5">
-          <button type="button" onClick={async () => { if (!refuseReason.trim()) { toast.error('Raison obligatoire'); return; } await callAction('refuser', { refusal_reason: refuseReason.trim() }); setShowRefuse(false); setRefuseReason(''); }} disabled={loading === 'refuser'} className="px-2 py-1 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">{loading === 'refuser' ? '…' : 'Confirmer refus'}</button>
-          <button type="button" onClick={() => { setShowRefuse(false); setRefuseReason(''); }} className={`px-2 py-1 text-xs font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Annuler</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (showCancelConfirm) {
-    return (
-      <div className={`px-2 py-2 border-t space-y-2 ${isDark ? 'bg-orange-950 border-orange-800' : 'bg-orange-50 border-orange-200'}`} onClick={(e) => e.stopPropagation()}>
-        <p className={`text-sm font-bold ${isDark ? 'text-orange-200' : 'text-orange-900'}`}>Annuler {strip.numero_vol} ? Le plan sera définitivement supprimé.</p>
-        <div className="flex gap-1.5">
-          <button type="button" onClick={async () => { await callAction('annuler'); setShowCancelConfirm(false); }} disabled={loading === 'annuler'} className="flex-1 px-2 py-1.5 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">{loading === 'annuler' ? '…' : 'Confirmer l\'annulation'}</button>
-          <button type="button" onClick={() => setShowCancelConfirm(false)} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-200 text-slate-700'}`}>Retour</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (showCrashConfirm || showUrgenceConfirm) {
-    const crash = showCrashConfirm;
-    return (
-      <div className={`px-2 py-2 border-t space-y-2 ${crash ? (isDark ? 'bg-red-950 border-red-800' : 'bg-red-50 border-red-300') : (isDark ? 'bg-amber-950 border-amber-800' : 'bg-amber-50 border-amber-300')}`} onClick={(e) => e.stopPropagation()}>
-        <p className={`text-sm font-bold ${crash ? (isDark ? 'text-red-200' : 'text-red-900') : (isDark ? 'text-amber-200' : 'text-amber-900')}`}>
-          {crash ? `Signaler un CRASH pour ${strip.numero_vol} ?` : `Atterrissage d'urgence pour ${strip.numero_vol} ?`}
-        </p>
-        <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>L&apos;avion sera bloqué en attente d&apos;examen staff.</p>
-        <textarea value={incidentDescription} onChange={(e) => setIncidentDescription(e.target.value)} placeholder="Description (optionnel)…" rows={2} className={`w-full text-xs border rounded px-2 py-1 resize-none ${isDark ? 'bg-slate-900 text-slate-100 border-slate-600' : 'bg-white text-slate-800 border-slate-300'}`} />
-        <label className={`flex items-center gap-2 text-xs cursor-pointer ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-          <span className={`shrink-0 px-2 py-0.5 rounded border text-[10px] font-semibold ${isDark ? 'border-slate-600 bg-slate-800' : 'border-slate-300 bg-white'}`}>📷 {incidentPhoto ? incidentPhoto.name.slice(0, 20) : 'Photo'}</span>
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => setIncidentPhoto(e.target.files?.[0] ?? null)} />
-        </label>
-        <div className="flex gap-1.5">
-          <button
-            type="button"
-            onClick={async () => {
-              await submitIncident(crash ? 'crash' : 'atterrissage_urgence');
-              setShowCrashConfirm(false);
-              setShowUrgenceConfirm(false);
-              resetIncident();
-            }}
-            disabled={loading !== null || uploadingPhoto}
-            className={`flex-1 px-2 py-1.5 text-xs font-bold text-white rounded disabled:opacity-50 ${crash ? 'bg-red-700 hover:bg-red-800' : 'bg-amber-600 hover:bg-amber-700'}`}
-          >
-            {uploadingPhoto ? 'Upload…' : loading ? '…' : crash ? 'Confirmer CRASH' : 'Confirmer urgence'}
-          </button>
-          <button type="button" onClick={() => { setShowCrashConfirm(false); setShowUrgenceConfirm(false); resetIncident(); }} className={`px-3 py-1.5 text-xs font-bold rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-200 text-slate-700'}`}>Retour</button>
-        </div>
-      </div>
-    );
-  }
-
   const hasActions = statut === 'en_attente' || statut === 'depose' || statut === 'en_attente_cloture' || statut === 'en_cours' || statut === 'accepte';
-  if (!hasActions) return null;
 
   const holdTip = (setter: (v: { x: number; y: number } | null) => void) => ({
     onMouseDown: (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -440,33 +599,56 @@ function StripActionBar({
     onTouchEnd: () => setter(null),
   });
 
+  const modalBtn = 'flex-1 rounded-lg px-2 py-2 text-xs font-bold text-white disabled:opacity-50';
+  const modalCancel = `rounded-lg px-3 py-2 text-xs font-bold ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-slate-200 text-slate-700'}`;
+  const modalArea = `w-full resize-none rounded border px-2 py-1 text-xs ${isDark ? 'border-slate-600 bg-slate-900 text-slate-100' : 'border-slate-300 bg-white text-slate-800'}`;
+
   return (
-    <div data-no-drag="true" className={`px-1.5 py-1 border-t flex items-center gap-1 flex-wrap ${isDark ? 'border-white/10 bg-black/25' : 'border-black/10 bg-black/[0.04]'}`} onClick={(e) => e.stopPropagation()}>
+    <div
+      data-no-drag="true"
+      className={`flex items-center gap-1 overflow-x-auto border-t px-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${isDark ? 'border-white/10 bg-black/30' : 'border-black/10 bg-black/[0.05]'}`}
+      style={{ height: BAR_H }}
+      onClick={(e) => e.stopPropagation()}
+    >
       {strip.isManual ? (
-        <span className={`text-[11px] mr-auto flex items-center gap-1 font-bold min-w-0 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+        <div className={`mr-auto flex min-w-0 shrink-0 items-center gap-1 ${pal.lbl}`} style={{ width: 104 }}>
           <Plane className="h-3 w-3 shrink-0" />
-          <InlineEdit value={strip.strip_pilote_text} field="strip_pilote_text" planId={strip.id} placeholder="Pilote…" maxLength={30} />
-        </span>
+          <EditValue
+            value={strip.strip_pilote_text} field="strip_pilote_text" planId={strip.id}
+            placeholder="Pilote…" maxLength={30} max={11} height={14} pal={pal} onSaved={onRefresh}
+          />
+        </div>
       ) : strip.pilote_identifiant ? (
-        <span className={`text-[11px] mr-auto flex items-center gap-1 font-bold truncate ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-          <Plane className="h-3 w-3 shrink-0" />{strip.pilote_identifiant}
+        <span className={`mr-auto flex min-w-0 shrink items-center gap-1 truncate text-[11px] font-bold ${pal.lbl}`}>
+          <Plane className="h-3 w-3 shrink-0" />
+          <span className="truncate">{strip.pilote_identifiant}</span>
         </span>
       ) : <span className="mr-auto" />}
 
-      {(statut === 'en_attente' || statut === 'depose') && (
+      {hasActions && (statut === 'en_attente' || statut === 'depose') && (
         <>
-          <button type="button" onClick={() => callAction('accepter')} disabled={loading !== null} className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700`}><CheckCircle className="h-3.5 w-3.5" />{loading === 'accepter' ? '…' : 'Accepter'}</button>
-          <button type="button" onClick={() => setShowRefuse(true)} disabled={loading !== null} className={`${btn} bg-red-600 text-white hover:bg-red-700`}><XCircle className="h-3.5 w-3.5" />Refuser</button>
+          <button type="button" onClick={() => callAction('accepter')} disabled={loading !== null} className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700`}>
+            <CheckCircle className="h-3.5 w-3.5" />{loading === 'accepter' ? '…' : 'Accepter'}
+          </button>
+          <button type="button" onClick={() => setShowRefuse(true)} disabled={loading !== null} className={`${btn} bg-red-600 text-white hover:bg-red-700`}>
+            <XCircle className="h-3.5 w-3.5" />Refuser
+          </button>
         </>
       )}
       {statut === 'en_attente_cloture' && (
-        <button type="button" onClick={() => callAction('confirmer_cloture')} disabled={loading !== null} className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700 animate-pulse`}><CheckCircle className="h-3.5 w-3.5" />{loading === 'confirmer_cloture' ? '…' : 'Confirmer clôture'}</button>
+        <button type="button" onClick={() => callAction('confirmer_cloture')} disabled={loading !== null} className={`${btn} animate-pulse bg-emerald-600 text-white hover:bg-emerald-700`}>
+          <CheckCircle className="h-3.5 w-3.5" />{loading === 'confirmer_cloture' ? '…' : 'Clôture'}
+        </button>
       )}
       {(statut === 'en_cours' || statut === 'accepte') && !isAutomonitoring && (
-        <button type="button" onClick={() => callAction('transferer', { automonitoring: true })} disabled={loading !== null} className={`${btn} bg-violet-600 text-white hover:bg-violet-700`}><Radio className="h-3.5 w-3.5" />{loading === 'transferer' ? '…' : 'Autosurv.'}</button>
+        <button type="button" onClick={() => callAction('transferer', { automonitoring: true })} disabled={loading !== null} className={`${btn} bg-violet-600 text-white hover:bg-violet-700`}>
+          <Radio className="h-3.5 w-3.5" />{loading === 'transferer' ? '…' : 'Autosurv.'}
+        </button>
       )}
       {strip.current_holder_user_id && onTransferRequest && (
-        <button type="button" onClick={(e) => onTransferRequest(strip.id, e)} disabled={loading !== null} className={`${btn} bg-sky-600 text-white hover:bg-sky-700`}><ArrowRightLeft className="h-3.5 w-3.5" />Transférer</button>
+        <button type="button" onClick={(e) => onTransferRequest(strip.id, e)} disabled={loading !== null} className={`${btn} bg-sky-600 text-white hover:bg-sky-700`}>
+          <ArrowRightLeft className="h-3.5 w-3.5" />Transférer
+        </button>
       )}
 
       {((strip.type_vol === 'VFR' && strip.intentions_vol) || (strip.type_vol === 'IFR' && strip.niveau_croisiere)) && (
@@ -492,65 +674,166 @@ function StripActionBar({
         </>
       )}
 
-      <div className="relative">
+      <div className={`relative shrink-0 ${hasActions ? '' : 'hidden'}`}>
         <button
           type="button"
           onClick={() => setShowMore((v) => !v)}
-          className={`${btn} ${isDark ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-white/80 text-slate-700 hover:bg-white'}`}
+          className={`${btn} ${isDark ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
           title="Plus d'actions"
         >
           <MoreHorizontal className="h-3.5 w-3.5" />
         </button>
         {showMore && (
-          <div className={`absolute right-0 bottom-full mb-1 z-20 min-w-[160px] rounded-lg border shadow-xl py-1 ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
-            {strip.bria_conversation && strip.bria_conversation.length > 0 && (
-              <button type="button" onClick={() => { setShowBriaLog(true); setShowMore(false); }} className={`w-full text-left px-3 py-1.5 text-xs font-semibold flex items-center gap-2 ${isDark ? 'hover:bg-slate-800 text-amber-200' : 'hover:bg-slate-50 text-amber-800'}`}>
-                <Radio className="h-3.5 w-3.5" /> Historique BRIA
+          <>
+            <div className="fixed inset-0 z-[60]" onClick={() => setShowMore(false)} />
+            <div className={`absolute bottom-full right-0 z-[61] mb-1 min-w-[168px] rounded-lg border py-1 shadow-xl ${isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'}`}>
+              {strip.bria_conversation && strip.bria_conversation.length > 0 && (
+                <button type="button" onClick={() => { setShowBriaLog(true); setShowMore(false); }} className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-semibold ${isDark ? 'text-amber-200 hover:bg-slate-800' : 'text-amber-800 hover:bg-slate-50'}`}>
+                  <Radio className="h-3.5 w-3.5" /> Historique BRIA
+                </button>
+              )}
+              {(statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
+                <>
+                  <button type="button" onClick={() => { setShowCrashConfirm(true); setShowMore(false); }} className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-semibold ${isDark ? 'text-red-300 hover:bg-slate-800' : 'text-red-700 hover:bg-red-50'}`}>
+                    <Flame className="h-3.5 w-3.5" /> CRASH
+                  </button>
+                  <button type="button" onClick={() => { setShowUrgenceConfirm(true); setShowMore(false); }} className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-semibold ${isDark ? 'text-amber-300 hover:bg-slate-800' : 'text-amber-800 hover:bg-amber-50'}`}>
+                    <PlaneLanding className="h-3.5 w-3.5" /> Urgence
+                  </button>
+                </>
+              )}
+              <button type="button" onClick={() => { setShowCancelConfirm(true); setShowMore(false); }} className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-semibold ${isDark ? 'text-orange-300 hover:bg-slate-800' : 'text-orange-800 hover:bg-orange-50'}`}>
+                <XCircle className="h-3.5 w-3.5" /> Annuler le vol
               </button>
-            )}
-            {(statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
-              <>
-                <button type="button" onClick={() => { setShowCrashConfirm(true); setShowMore(false); }} className={`w-full text-left px-3 py-1.5 text-xs font-semibold flex items-center gap-2 ${isDark ? 'hover:bg-slate-800 text-red-300' : 'hover:bg-red-50 text-red-700'}`}>
-                  <Flame className="h-3.5 w-3.5" /> CRASH
-                </button>
-                <button type="button" onClick={() => { setShowUrgenceConfirm(true); setShowMore(false); }} className={`w-full text-left px-3 py-1.5 text-xs font-semibold flex items-center gap-2 ${isDark ? 'hover:bg-slate-800 text-amber-300' : 'hover:bg-amber-50 text-amber-800'}`}>
-                  <PlaneLanding className="h-3.5 w-3.5" /> Urgence
-                </button>
-              </>
-            )}
-            <button type="button" onClick={() => { setShowCancelConfirm(true); setShowMore(false); }} className={`w-full text-left px-3 py-1.5 text-xs font-semibold flex items-center gap-2 ${isDark ? 'hover:bg-slate-800 text-orange-300' : 'hover:bg-orange-50 text-orange-800'}`}>
-              <XCircle className="h-3.5 w-3.5" /> Annuler le vol
-            </button>
-          </div>
+            </div>
+          </>
         )}
       </div>
 
+      {showRefuse && (
+        <StripModal isDark={isDark} tone="red" title={`Refuser ${strip.numero_vol}`} onClose={() => { setShowRefuse(false); setRefuseReason(''); }}>
+          <textarea
+            autoFocus rows={3} value={refuseReason} onChange={(e) => setRefuseReason(e.target.value)}
+            placeholder="Raison du refus…" className={modalArea}
+          />
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                if (!refuseReason.trim()) { toast.error('Raison obligatoire'); return; }
+                await callAction('refuser', { refusal_reason: refuseReason.trim() });
+                setShowRefuse(false); setRefuseReason('');
+              }}
+              disabled={loading === 'refuser'}
+              className={`${modalBtn} bg-red-600 hover:bg-red-700`}
+            >
+              {loading === 'refuser' ? '…' : 'Confirmer le refus'}
+            </button>
+            <button type="button" onClick={() => { setShowRefuse(false); setRefuseReason(''); }} className={modalCancel}>Retour</button>
+          </div>
+        </StripModal>
+      )}
+
+      {showCancelConfirm && (
+        <StripModal isDark={isDark} tone="orange" title={`Annuler ${strip.numero_vol}`} onClose={() => setShowCancelConfirm(false)}>
+          <p className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+            Le plan de vol sera définitivement supprimé.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={async () => { await callAction('annuler'); setShowCancelConfirm(false); }}
+              disabled={loading === 'annuler'}
+              className={`${modalBtn} bg-red-600 hover:bg-red-700`}
+            >
+              {loading === 'annuler' ? '…' : "Confirmer l'annulation"}
+            </button>
+            <button type="button" onClick={() => setShowCancelConfirm(false)} className={modalCancel}>Retour</button>
+          </div>
+        </StripModal>
+      )}
+
+      {(showCrashConfirm || showUrgenceConfirm) && (
+        <StripModal
+          isDark={isDark}
+          tone={showCrashConfirm ? 'red' : 'amber'}
+          title={showCrashConfirm ? `Crash — ${strip.numero_vol}` : `Atterrissage d'urgence — ${strip.numero_vol}`}
+          onClose={() => { setShowCrashConfirm(false); setShowUrgenceConfirm(false); resetIncident(); }}
+        >
+          <p className={`mb-2 text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+            L&apos;avion sera bloqué en attente d&apos;examen staff.
+          </p>
+          <textarea
+            rows={3} value={incidentDescription} onChange={(e) => setIncidentDescription(e.target.value)}
+            placeholder="Description (optionnel)…" className={modalArea}
+          />
+          <label className={`mt-2 flex cursor-pointer items-center gap-2 text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+            <span className={`shrink-0 rounded border px-2 py-0.5 text-[10px] font-semibold ${isDark ? 'border-slate-600 bg-slate-800' : 'border-slate-300 bg-white'}`}>
+              Photo {incidentPhoto ? `· ${incidentPhoto.name.slice(0, 18)}` : ''}
+            </span>
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => setIncidentPhoto(e.target.files?.[0] ?? null)} />
+          </label>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                const crash = showCrashConfirm;
+                await submitIncident(crash ? 'crash' : 'atterrissage_urgence');
+                setShowCrashConfirm(false); setShowUrgenceConfirm(false); resetIncident();
+              }}
+              disabled={loading !== null || uploadingPhoto}
+              className={`${modalBtn} ${showCrashConfirm ? 'bg-red-700 hover:bg-red-800' : 'bg-amber-600 hover:bg-amber-700'}`}
+            >
+              {uploadingPhoto ? 'Upload…' : loading ? '…' : showCrashConfirm ? 'Confirmer le crash' : "Confirmer l'urgence"}
+            </button>
+            <button type="button" onClick={() => { setShowCrashConfirm(false); setShowUrgenceConfirm(false); resetIncident(); }} className={modalCancel}>Retour</button>
+          </div>
+        </StripModal>
+      )}
+
       {showBriaLog && createPortal(
-        <div className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/60" onClick={() => setShowBriaLog(false)}>
-          <div className={`rounded-xl shadow-2xl border p-5 w-[480px] max-w-[90vw] max-h-[70vh] overflow-y-auto ${isDark ? 'bg-slate-900 border-amber-700 text-slate-100' : 'bg-white border-amber-400 text-slate-900'}`} onClick={(e) => e.stopPropagation()}>
-            <div className={`text-xs font-bold uppercase tracking-wider mb-3 flex items-center gap-2 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+        <div className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/70 p-4" onClick={() => setShowBriaLog(false)}>
+          <div className={`max-h-[70vh] w-[480px] max-w-[90vw] overflow-y-auto rounded-xl border p-5 shadow-2xl ${isDark ? 'border-amber-700 bg-slate-900 text-slate-100' : 'border-amber-400 bg-white text-slate-900'}`} onClick={(e) => e.stopPropagation()}>
+            <div className={`mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
               <Radio className="h-4 w-4" /> Historique BRIA
             </div>
             <div className="space-y-2">
               {(strip.bria_conversation || []).map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'bria' ? 'justify-start' : 'justify-end'}`}>
-                  <div className={`max-w-[85%] rounded-lg px-3 py-2 text-xs whitespace-pre-line ${
+                  <div className={`max-w-[85%] whitespace-pre-line rounded-lg px-3 py-2 text-xs ${
                     msg.role === 'bria'
-                      ? (isDark ? 'bg-amber-900/50 border border-amber-700/40 text-amber-100' : 'bg-amber-50 border border-amber-200 text-amber-900')
-                      : (isDark ? 'bg-sky-900/50 border border-sky-700/40 text-sky-100' : 'bg-sky-50 border border-sky-200 text-sky-900')
+                      ? (isDark ? 'border border-amber-700/40 bg-amber-900/50 text-amber-100' : 'border border-amber-200 bg-amber-50 text-amber-900')
+                      : (isDark ? 'border border-sky-700/40 bg-sky-900/50 text-sky-100' : 'border border-sky-200 bg-sky-50 text-sky-900')
                   }`}>
-                    <span className={`text-xs font-bold block mb-0.5 ${msg.role === 'bria' ? (isDark ? 'text-amber-400' : 'text-amber-600') : (isDark ? 'text-sky-400' : 'text-sky-600')}`}>{msg.role === 'bria' ? 'BRIA' : 'Pilote'}</span>
+                    <span className={`mb-0.5 block text-xs font-bold ${msg.role === 'bria' ? (isDark ? 'text-amber-400' : 'text-amber-600') : (isDark ? 'text-sky-400' : 'text-sky-600')}`}>
+                      {msg.role === 'bria' ? 'BRIA' : 'Pilote'}
+                    </span>
                     {msg.text}
                   </div>
                 </div>
               ))}
             </div>
-            <button type="button" onClick={() => setShowBriaLog(false)} className={`mt-4 w-full py-2 text-xs font-bold rounded-lg ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>Fermer</button>
+            <button type="button" onClick={() => setShowBriaLog(false)} className={`mt-4 w-full rounded-lg py-2 text-xs font-bold ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}>
+              Fermer
+            </button>
           </div>
         </div>,
         document.body,
       )}
     </div>
+  );
+}
+
+/** Pastille d'état dans la bande supérieure. Hauteur figée, jamais de retour à la ligne. */
+function Chip({ tone, children, pulse, title }: { tone: string; children: React.ReactNode; pulse?: boolean; title?: string }) {
+  return (
+    <span
+      title={title}
+      className={`inline-flex shrink-0 items-center gap-0.5 rounded px-1 text-[8px] font-black uppercase leading-none tracking-[0.1em] ${tone} ${pulse ? 'animate-pulse' : ''}`}
+      style={{ height: LANE_H - 4 }}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -594,238 +877,235 @@ function FlightStripImpl({
   const isManual = strip.isManual ?? false;
   const isDupe = strip.isDupe ?? false;
   const modeTranspondeur = (strip.mode_transpondeur || 'C').toUpperCase();
-  const squawkMismatch = strip.squawk_attendu && strip.code_transpondeur && strip.code_transpondeur !== strip.squawk_attendu;
-  const noSquawk = strip.squawk_attendu && !strip.code_transpondeur;
+  const squawkMismatch = Boolean(strip.squawk_attendu && strip.code_transpondeur && strip.code_transpondeur !== strip.squawk_attendu);
+  const noSquawk = Boolean(strip.squawk_attendu && !strip.code_transpondeur);
+  const isMedevac = Boolean(strip.siavi_avion_id) || /medevac/i.test(strip.type_vol || '');
 
-  const pal = (() => {
+  /**
+   * Toutes les couleurs sont données en valeurs explicites : `globals.css`
+   * réécrit `.text-slate-600` → `.text-slate-900` en `!important` sous
+   * `body.atc-dark`, ce qui repeignait le texte du strip en clair sur un fond
+   * clair (donc invisible) dès que le thème et la classe du body divergeaient.
+   */
+  const pal: Pal = useMemo(() => {
     if (isEmergency) {
-      const hijack = sqColor === 'hijack';
       const radio = sqColor === 'radio';
       return isDark
-        ? { border: hijack || !radio ? 'border-red-500' : 'border-amber-500', left: radio ? 'bg-amber-950' : 'bg-red-950', right: radio ? 'bg-amber-900' : 'bg-red-900', top: radio ? 'bg-amber-900' : 'bg-red-900', sep: radio ? 'border-amber-800' : 'border-red-800', txt: 'text-slate-100', lbl: 'text-red-200/70', tab: radio ? 'bg-amber-500' : 'bg-red-600' }
-        : { border: hijack || !radio ? 'border-red-700' : 'border-amber-600', left: radio ? 'bg-amber-100' : 'bg-red-100', right: radio ? 'bg-amber-200' : 'bg-red-200', top: radio ? 'bg-amber-200' : 'bg-red-200', sep: radio ? 'border-amber-300' : 'border-red-300', txt: 'text-slate-900', lbl: 'text-red-800/70', tab: radio ? 'bg-amber-500' : 'bg-red-600' };
+        ? { border: radio ? 'border-[#f59e0b]' : 'border-[#ef4444]', head: radio ? 'bg-[#3a2a06]' : 'bg-[#3a0d0d]', left: radio ? 'bg-[#241c06]' : 'bg-[#260a0a]', right: radio ? 'bg-[#2e2408]' : 'bg-[#301010]', sep: radio ? 'border-[#78350f]' : 'border-[#7f1d1d]', txt: 'text-[#f8fafc]', lbl: 'text-[#fca5a5]', tab: radio ? 'bg-[#f59e0b]' : 'bg-[#dc2626]', ghost: 'text-[#7f4a4a]' }
+        : { border: radio ? 'border-[#d97706]' : 'border-[#b91c1c]', head: radio ? 'bg-[#fde68a]' : 'bg-[#fecaca]', left: radio ? 'bg-[#fffbeb]' : 'bg-[#fef2f2]', right: radio ? 'bg-[#fef3c7]' : 'bg-[#fee2e2]', sep: radio ? 'border-[#fbbf24]' : 'border-[#fca5a5]', txt: 'text-[#0f172a]', lbl: 'text-[#7f1d1d]', tab: radio ? 'bg-[#f59e0b]' : 'bg-[#dc2626]', ghost: 'text-[#c98b8b]' };
     }
     if (isDupe) {
       return isDark
-        ? { border: 'border-red-500', left: 'bg-slate-800', right: 'bg-slate-700', top: 'bg-slate-700', sep: 'border-slate-500', txt: 'text-slate-500', lbl: 'text-slate-500', tab: 'bg-red-700' }
-        : { border: 'border-red-600', left: 'bg-slate-200', right: 'bg-slate-300', top: 'bg-slate-300', sep: 'border-slate-400', txt: 'text-slate-400', lbl: 'text-slate-400', tab: 'bg-red-600' };
+        ? { border: 'border-[#ef4444]', head: 'bg-[#1c2028]', left: 'bg-[#171a21]', right: 'bg-[#1c2028]', sep: 'border-[#475569]', txt: 'text-[#94a3b8]', lbl: 'text-[#64748b]', tab: 'bg-[#b91c1c]', ghost: 'text-[#475569]' }
+        : { border: 'border-[#dc2626]', head: 'bg-[#cbd5e1]', left: 'bg-[#f1f5f9]', right: 'bg-[#e2e8f0]', sep: 'border-[#94a3b8]', txt: 'text-[#64748b]', lbl: 'text-[#64748b]', tab: 'bg-[#dc2626]', ghost: 'text-[#94a3b8]' };
     }
     if (isClotureRequested) {
       return isDark
-        ? { border: 'border-red-500', left: 'bg-red-950', right: 'bg-red-900', top: 'bg-red-900', sep: 'border-red-800', txt: 'text-slate-100', lbl: 'text-red-200/70', tab: 'bg-red-600' }
-        : { border: 'border-red-500', left: 'bg-red-50', right: 'bg-red-100', top: 'bg-red-100', sep: 'border-red-300', txt: 'text-slate-900', lbl: 'text-red-800/70', tab: 'bg-red-600' };
+        ? { border: 'border-[#ef4444]', head: 'bg-[#3a0f13]', left: 'bg-[#240a0d]', right: 'bg-[#2c0d11]', sep: 'border-[#7f1d1d]', txt: 'text-[#f8fafc]', lbl: 'text-[#fca5a5]', tab: 'bg-[#dc2626]', ghost: 'text-[#7f4a4a]' }
+        : { border: 'border-[#ef4444]', head: 'bg-[#fecaca]', left: 'bg-[#fef2f2]', right: 'bg-[#fee2e2]', sep: 'border-[#fca5a5]', txt: 'text-[#0f172a]', lbl: 'text-[#7f1d1d]', tab: 'bg-[#dc2626]', ghost: 'text-[#c98b8b]' };
     }
     if (isManual) {
       return isDark
-        ? { border: 'border-indigo-500/70', left: 'bg-indigo-950', right: 'bg-indigo-900', top: 'bg-indigo-900', sep: 'border-indigo-800', txt: 'text-slate-100', lbl: 'text-indigo-200/70', tab: 'bg-indigo-500' }
-        : { border: 'border-[#6d7eab]', left: 'bg-[#d8e0f0]', right: 'bg-[#ece4f7]', top: 'bg-[#c9d3e8]', sep: 'border-[#8b9bc4]', txt: 'text-slate-900', lbl: 'text-slate-600', tab: 'bg-indigo-500' };
+        ? { border: 'border-[#4f46e5]', head: 'bg-[#221d4d]', left: 'bg-[#191540]', right: 'bg-[#1f1a4a]', sep: 'border-[#3730a3]', txt: 'text-[#f8fafc]', lbl: 'text-[#c7d2fe]', tab: 'bg-[#6366f1]', ghost: 'text-[#6b6ba8]' }
+        : { border: 'border-[#6d7eab]', head: 'bg-[#c9d3e8]', left: 'bg-[#e6ebf6]', right: 'bg-[#eee9f8]', sep: 'border-[#8b9bc4]', txt: 'text-[#0f172a]', lbl: 'text-[#475569]', tab: 'bg-[#6366f1]', ghost: 'text-[#94a3b8]' };
     }
     return isDark
-      ? { border: 'border-emerald-700/80', left: 'bg-[#0d2418]', right: 'bg-[#2a2410]', top: 'bg-[#12301f]', sep: 'border-emerald-800/80', txt: 'text-slate-100', lbl: 'text-emerald-200/60', tab: statut === 'en_cours' ? 'bg-sky-500' : statut === 'accepte' ? 'bg-emerald-500' : 'bg-amber-500' }
-      : { border: 'border-[#6f9a6f]', left: 'bg-[#d7ecd7]', right: 'bg-[#f3ecc4]', top: 'bg-[#c5dcc5]', sep: 'border-[#8fbc8f]', txt: 'text-slate-900', lbl: 'text-slate-600', tab: statut === 'en_cours' ? 'bg-sky-600' : statut === 'accepte' ? 'bg-emerald-600' : 'bg-amber-500' };
-  })();
+      ? { border: 'border-[#047857]', head: 'bg-[#123021]', left: 'bg-[#0c2116]', right: 'bg-[#1e1c0d]', sep: 'border-[#064e3b]', txt: 'text-[#f8fafc]', lbl: 'text-[#a7f3d0]', tab: statut === 'en_cours' ? 'bg-[#0ea5e9]' : statut === 'accepte' ? 'bg-[#10b981]' : 'bg-[#f59e0b]', ghost: 'text-[#4d7a63]' }
+      : { border: 'border-[#6f9a6f]', head: 'bg-[#c5dcc5]', left: 'bg-[#e2f2e2]', right: 'bg-[#f6f1d4]', sep: 'border-[#8fbc8f]', txt: 'text-[#0f172a]', lbl: 'text-[#475569]', tab: statut === 'en_cours' ? 'bg-[#0284c7]' : statut === 'accepte' ? 'bg-[#059669]' : 'bg-[#f59e0b]', ghost: 'text-[#94a3b8]' };
+  }, [isEmergency, sqColor, isDupe, isClotureRequested, isManual, isDark, statut]);
 
-  const statutColor =
-    statut === 'en_cours' ? (isDark ? 'text-sky-300' : 'text-sky-800') :
-    statut === 'en_attente_cloture' ? (isDark ? 'text-orange-300' : 'text-orange-800') :
-    statut === 'accepte' ? (isDark ? 'text-emerald-300' : 'text-emerald-800') :
-    (statut === 'depose' || statut === 'en_attente') ? (isDark ? 'text-amber-300' : 'text-amber-800') :
-    statut === 'automonitoring' ? (isDark ? 'text-violet-300' : 'text-violet-800') : pal.txt;
+  const statutTone =
+    statut === 'en_cours' ? (isDark ? 'bg-[#075985] text-[#e0f2fe]' : 'bg-[#bae6fd] text-[#0c4a6e]') :
+    statut === 'en_attente_cloture' ? 'bg-[#dc2626] text-[#ffffff]' :
+    statut === 'accepte' ? (isDark ? 'bg-[#065f46] text-[#d1fae5]' : 'bg-[#a7f3d0] text-[#064e3b]') :
+    (statut === 'depose' || statut === 'en_attente') ? (isDark ? 'bg-[#78350f] text-[#fef3c7]' : 'bg-[#fde68a] text-[#78350f]') :
+    statut === 'automonitoring' ? (isDark ? 'bg-[#4c1d95] text-[#ede9fe]' : 'bg-[#ddd6fe] text-[#4c1d95]') :
+    (isDark ? 'bg-[#1e293b] text-[#e2e8f0]' : 'bg-[#e2e8f0] text-[#1e293b]');
+
+  const autoTone = isDark ? 'bg-[#4c1d95] text-[#ede9fe]' : 'bg-[#ddd6fe] text-[#4c1d95]';
+
+  const cycleRule = async () => {
+    if (!isManual) return;
+    const idx = FLIGHT_RULES.indexOf((strip.type_vol || 'IFR').toUpperCase());
+    const next = FLIGHT_RULES[(idx + 1) % FLIGHT_RULES.length];
+    try {
+      const res = await fetch(`/api/plans-vol/${strip.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_strip', type_vol: next }),
+      });
+      if (res.ok) onRefresh?.();
+    } catch { /* le prochain refresh resynchronisera */ }
+  };
+
+  const sep = `border-r ${pal.sep}`;
 
   return (
     <div
-      className={`w-full min-w-[460px] overflow-hidden border ${pal.border} rounded-md shadow-sm select-none ${isClotureRequested && !isDupe ? 'atc-strip-closure' : ''} ${isDupe && !isEmergency ? 'atc-strip-dupe' : ''}`}
+      className={`w-full overflow-hidden rounded-md border shadow-sm select-none ${pal.border} ${isClotureRequested && !isDupe ? 'atc-strip-closure' : ''} ${isDupe && !isEmergency ? 'atc-strip-dupe' : ''}`}
+      style={{ minWidth: STRIP_MIN_WIDTH }}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, strip.id); }}
     >
-      {sqLabel && (
-        <div className={`text-center text-[11px] font-black tracking-[0.32em] py-0.5 animate-pulse ${isDark ? 'bg-red-600 text-white' : 'bg-black text-white'}`}>{sqLabel}</div>
-      )}
-      {isDupe && !isEmergency && (
-        <div className="atc-strip-dupe-banner text-center text-[11px] font-black tracking-[0.28em] py-0.5 bg-red-700 text-white">
-          DUPE SQUAWK — MODE C
-        </div>
-      )}
-      {isClotureRequested && !isDupe && (
-        <div className="text-center text-[11px] font-bold py-0.5 bg-red-600 text-white animate-pulse">
-          DEMANDE DE CLÔTURE
-        </div>
-      )}
-      {(squawkMismatch || noSquawk) && !sqLabel && !isDupe && (
-        <div className={`text-center text-[10px] font-bold py-0.5 ${isDark ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black'}`}>
-          {noSquawk ? 'PAS DE TRANSPONDEUR' : `SQUAWK INCORRECT (attendu : ${strip.squawk_attendu})`}
-        </div>
-      )}
-      {strip.pending_transfer_aeroport && (
-        <div className="text-center text-[10px] font-black tracking-widest py-0.5 bg-amber-600 text-black">
-          OUTBOUND → {strip.pending_transfer_position || 'ATC'} {strip.pending_transfer_aeroport}
-        </div>
-      )}
-      {(strip.siavi_avion_id || /medevac/i.test(strip.type_vol || '')) && (
-        <div className="text-center text-[10px] font-black tracking-[0.28em] py-0.5 bg-red-700 text-white">
-          MEDEVAC
-        </div>
-      )}
-
       <div className="flex">
+        {/* Onglet vertical : règle de vol. Cliquable sur les strips manuels. */}
         <div
           data-drag-handle="true"
-          title="Glisser le strip"
-          className={`w-6 shrink-0 flex items-center justify-center cursor-grab active:cursor-grabbing ${pal.tab}`}
+          onClick={isManual ? (e) => { e.stopPropagation(); void cycleRule(); } : undefined}
+          title={isManual ? 'Glisser le strip · clic = changer la règle de vol' : 'Glisser le strip'}
+          className={`flex w-[18px] shrink-0 items-center justify-center ${pal.tab} ${isManual ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}`}
         >
-          <span className="text-[9px] font-black tracking-widest text-white pointer-events-none" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
-            {isManual ? 'MAN' : (strip.type_vol || 'IFR')}
+          <span
+            className="pointer-events-none whitespace-nowrap text-[8px] font-black tracking-[0.14em] text-white"
+            style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+          >
+            {(strip.type_vol || 'IFR').toUpperCase().slice(0, 7)}
           </span>
         </div>
+
+        {/* Poignée de déplacement */}
         <div
           data-drag-handle="true"
           title="Glisser le strip"
-          className={`w-6 flex items-center justify-center cursor-grab active:cursor-grabbing ${pal.top} border-r ${pal.sep} shrink-0`}
+          className={`flex w-[18px] shrink-0 cursor-grab items-center justify-center active:cursor-grabbing ${pal.head} ${sep}`}
         >
-          <GripVertical className={`h-4 w-4 pointer-events-none ${isDark ? 'text-white/55' : 'text-black/40'}`} />
+          <GripVertical className={`pointer-events-none h-4 w-4 ${isDark ? 'text-white/50' : 'text-black/35'}`} />
         </div>
 
-        <div className="flex-1 min-w-0 flex">
-          <div className="min-w-[260px] flex-1">
-            <div className={`grid grid-cols-[64px_92px_44px_minmax(0,1fr)] ${pal.top} border-b ${pal.sep}`}>
-              <Cell className={`border-r ${pal.sep}`}>
-                <Label className={pal.lbl}>ATD</Label>
-                <InlineEdit value={strip.strip_atd} field="strip_atd" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
-              </Cell>
-              <Cell className={`border-r ${pal.sep}`}>
-                <Label className={pal.lbl}>TYPE / W</Label>
-                {isManual ? (
-                  <InlineEdit value={strip.strip_type_wake} field="strip_type_wake" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={10} large />
-                ) : (
-                  <span className={`text-[15px] font-mono font-black ${pal.txt}`}>{strip.type_wake}</span>
-                )}
-                {!isManual && (
-                  <span className={`text-[9px] font-black font-mono tracking-widest leading-none mt-0.5 block ${modeTranspondeur === 'S' ? (isDark ? 'text-sky-400/80' : 'text-sky-700') : pal.lbl}`}>
-                    {modeTranspondeur === 'S' ? '/S' : modeTranspondeur === 'A' ? '/A' : '/C'}
-                  </span>
-                )}
-              </Cell>
-              <Cell className={`border-r ${pal.sep} text-center`}>
-                {isManual ? (
-                  <>
-                    <Label className={pal.lbl}>TYPE</Label>
-                    <InlineEdit value={strip.type_vol} field="type_vol" planId={strip.id} placeholder="VFR" onSaved={onRefresh} maxLength={3} />
-                  </>
-                ) : (
-                  <>
-                    <Label className={pal.lbl}>{strip.type_vol}</Label>
-                    <span className={`text-sm font-mono font-black ${pal.txt}`}>1</span>
-                  </>
-                )}
-              </Cell>
-              <Cell>
-                <Label className={pal.lbl}>NOTE</Label>
-                <InlineEdit value={strip.strip_note_1} field="strip_note_1" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={20} />
-              </Cell>
-            </div>
-
-            <div className={`grid grid-cols-[64px_minmax(0,1fr)_88px] ${pal.left} border-b ${pal.sep}`}>
-              <Cell className={`border-r ${pal.sep}`}>
-                <Label className={pal.lbl}>ADES</Label>
-                {isManual ? (
-                  <InlineEdit value={strip.aeroport_arrivee} field="aeroport_arrivee" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={4} large />
-                ) : (
-                  <span className={`text-lg font-mono font-black ${pal.txt} leading-tight`}>{strip.aeroport_arrivee}</span>
-                )}
-              </Cell>
-              <Cell className={`border-r ${pal.sep}`}>
-                <Label className={pal.lbl}>CALLSIGN</Label>
-                {isManual ? (
-                  <InlineEdit value={strip.numero_vol} field="numero_vol" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={10} large />
-                ) : (
-                  <div className="flex flex-col min-w-0">
-                    <span className={`text-xl font-mono font-black tracking-wide ${pal.txt} leading-none truncate`}>{strip.numero_vol}</span>
-                    {strip.callsign_telephonie && (
-                      <span className={`text-[10px] font-semibold ${pal.lbl} leading-tight mt-0.5 tracking-wider truncate`}>{strip.callsign_telephonie}</span>
-                    )}
-                  </div>
-                )}
-              </Cell>
-              <Cell>
-                <Label className={pal.lbl}>ADEP</Label>
-                {isManual ? (
-                  <InlineEdit value={strip.aeroport_depart} field="aeroport_depart" planId={strip.id} placeholder="????" onSaved={onRefresh} maxLength={4} large />
-                ) : (
-                  <span className={`text-base font-mono font-black ${pal.txt}`}>{strip.aeroport_depart}</span>
-                )}
-              </Cell>
-            </div>
-
-            <div className={`grid grid-cols-[64px_92px_minmax(0,1fr)] ${pal.left}`}>
-              <Cell className={`border-r ${pal.sep}`}>
-                <Label className={pal.lbl}>RWY</Label>
-                <InlineEdit value={strip.strip_rwy} field="strip_rwy" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
-              </Cell>
-              <Cell className={`border-r ${pal.sep}`}>
-                <Label className={pal.lbl}>CTOT</Label>
-                <span className={`text-[15px] font-mono font-black tabular-nums ${pal.txt}`}>{formatCtot(strip.heure_depart_estimee || strip.created_at)}</span>
-              </Cell>
-              <Cell>
-                <Label className={pal.lbl}>TAIL</Label>
-                <span className={`text-[13px] font-mono font-bold ${pal.txt} truncate`}>{strip.immatriculation || '—'}</span>
-              </Cell>
-            </div>
+        <div className="min-w-0 flex-1">
+          {/* Bande d'état : hauteur figée, pastilles jamais repliées */}
+          <div
+            className={`flex items-center gap-1 overflow-x-auto border-b px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${pal.head} ${pal.sep}`}
+            style={{ height: LANE_H }}
+          >
+            <Chip tone={statutTone} title={`Statut : ${statutLabel(statut)}`}>{statutLabel(statut)}</Chip>
+            {sqLabel && <Chip tone="bg-[#dc2626] text-[#ffffff]" pulse title={`Squawk d'urgence ${strip.code_transpondeur}`}>{sqLabel}</Chip>}
+            {isClotureRequested && !isDupe && <Chip tone="bg-[#dc2626] text-[#ffffff]" pulse title="Le pilote demande la clôture">Clôture</Chip>}
+            {isDupe && <Chip tone="bg-[#b91c1c] text-[#ffffff]" pulse title="Deux vols au même squawk en mode C">Dupe</Chip>}
+            {noSquawk && !sqLabel && <Chip tone="bg-[#f59e0b] text-[#000000]" title="Aucun code transpondeur affiché">No sqwk</Chip>}
+            {squawkMismatch && !sqLabel && <Chip tone="bg-[#f59e0b] text-[#000000]" title={`Attendu : ${strip.squawk_attendu}`}>Sqwk ≠</Chip>}
+            {strip.pending_transfer_aeroport && (
+              <Chip tone="bg-[#d97706] text-[#000000]" title={`Transfert sortant vers ${strip.pending_transfer_position || 'ATC'} ${strip.pending_transfer_aeroport}`}>
+                → {strip.pending_transfer_position || 'ATC'} {strip.pending_transfer_aeroport}
+              </Chip>
+            )}
+            {isMedevac && <Chip tone="bg-[#b91c1c] text-[#ffffff]" title="Mission MEDEVAC">Medevac</Chip>}
+            {strip.automonitoring && <Chip tone={autoTone} title="Vol en autosurveillance">Auto</Chip>}
           </div>
 
-          <div className="w-[3px] bg-red-500 shrink-0" />
+          {/* Identification */}
+          <div
+            className={`grid border-b ${pal.head} ${pal.sep}`}
+            style={{ gridTemplateColumns: '2fr 1.15fr 1fr' }}
+          >
+            <Cell label="Callsign" pal={pal} rowH={ROW_ID_H} className={sep}>
+              {isManual ? (
+                <EditValue
+                  value={strip.numero_vol} field="numero_vol" planId={strip.id} placeholder="????"
+                  maxLength={10} max={19} height={valueH(ROW_ID_H)} pal={pal} onSaved={onRefresh}
+                />
+              ) : (
+                <FitValue
+                  text={strip.callsign_telephonie ? `${strip.numero_vol} ${strip.callsign_telephonie}` : strip.numero_vol}
+                  max={19} height={valueH(ROW_ID_H)} pal={pal}
+                />
+              )}
+            </Cell>
+            <Cell label={`Type / ${modeTranspondeur}`} pal={pal} rowH={ROW_ID_H} className={sep}>
+              {isManual ? (
+                <EditValue
+                  value={strip.strip_type_wake} field="strip_type_wake" planId={strip.id} placeholder="—"
+                  maxLength={10} max={15} height={valueH(ROW_ID_H)} pal={pal} onSaved={onRefresh}
+                />
+              ) : (
+                <FitValue text={strip.type_wake} max={15} height={valueH(ROW_ID_H)} pal={pal} />
+              )}
+            </Cell>
+            <Cell label="Sqwk" pal={pal} rowH={ROW_ID_H}>
+              <FitValue
+                text={strip.code_transpondeur} max={15} height={valueH(ROW_ID_H)} pal={pal}
+                tone={isEmergency ? (isDark ? 'text-[#fca5a5]' : 'text-[#b91c1c]') : undefined}
+              />
+            </Cell>
+          </div>
 
-          <div className={`min-w-[188px] flex-1 ${pal.right}`}>
-            <div className={`grid grid-cols-[72px_72px_minmax(0,1fr)] border-b ${pal.sep}`}>
-              <Cell className={`border-r ${pal.sep}`}>
-                <div className="flex items-center justify-between mb-0.5 gap-1">
-                  <Label className={`${pal.lbl} mb-0`}>SQWK</Label>
-                  <span className={`text-[8px] font-black px-1 rounded leading-none ${
-                    modeTranspondeur === 'S'
-                      ? (isDark ? 'bg-sky-700 text-sky-100' : 'bg-sky-200 text-sky-800')
-                      : isDupe ? 'bg-red-700 text-white' : (isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-700')
-                  }`}>{modeTranspondeur}</span>
-                </div>
-                <span className={`text-[15px] font-mono font-black tabular-nums ${isDupe ? (isDark ? 'text-slate-600' : 'text-slate-400') : pal.txt}`}>
-                  {strip.code_transpondeur || '—'}
-                </span>
-              </Cell>
-              <Cell className={`border-r ${pal.sep}`}>
-                <Label className={pal.lbl}>CLR</Label>
-                <InlineEdit value={strip.strip_note_2} field="strip_note_2" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={20} />
-              </Cell>
-              <Cell className="min-w-0">
-                <Label className={pal.lbl}>INFO</Label>
-                <InlineEdit value={strip.strip_note_3} field="strip_note_3" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={30} />
-              </Cell>
-            </div>
-            <div className={`grid grid-cols-2 border-b ${pal.sep}`}>
-              <Cell className={`min-w-0 border-r ${pal.sep}`}>
-                <Label className={pal.lbl}>SID</Label>
-                <InlineEdit value={strip.strip_sid_atc || strip.sid_depart} field="strip_sid_atc" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={24} wrap />
-              </Cell>
-              <Cell className="min-w-0">
-                <Label className={pal.lbl}>STAR</Label>
-                <InlineEdit value={strip.strip_star || strip.star_arrivee} field="strip_star" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={24} wrap />
-              </Cell>
-            </div>
-            <div className={`border-b ${pal.sep}`}>
-              <Cell>
-                <Label className={pal.lbl}>ROUTE</Label>
-                <InlineEdit value={strip.strip_route || strip.route_ifr} field="strip_route" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={80} wrap />
-              </Cell>
-            </div>
-            <div className="grid grid-cols-[88px_minmax(0,1fr)]">
-              <Cell className={`border-r ${pal.sep}`}>
-                <div className="flex items-center gap-1 mb-0.5">
-                  <FlUnitToggle planId={strip.id} unit={strip.strip_fl_unit} onSaved={onRefresh} />
-                  <Label className={`${pal.lbl} mb-0`}>ALT</Label>
-                </div>
-                <InlineEdit value={strip.strip_fl} field="strip_fl" planId={strip.id} placeholder="—" onSaved={onRefresh} maxLength={5} large />
-              </Cell>
-              <Cell className="min-w-0">
-                <Label className={pal.lbl}>STATUT</Label>
-                <span className={`text-[12px] font-black uppercase tracking-wide ${statutColor}`}>{statutLabel(statut)}</span>
-              </Cell>
-            </div>
+          {/* Route sol */}
+          <div
+            className={`grid border-b ${pal.left} ${pal.sep}`}
+            style={{ gridTemplateColumns: '1fr 1fr 0.85fr 0.95fr 0.95fr' }}
+          >
+            <Cell label="ADEP" pal={pal} rowH={ROW_RTE_H} className={sep}>
+              {isManual ? (
+                <EditValue value={strip.aeroport_depart} field="aeroport_depart" planId={strip.id} placeholder="????" maxLength={4} max={15} height={valueH(ROW_RTE_H)} pal={pal} onSaved={onRefresh} />
+              ) : (
+                <FitValue text={strip.aeroport_depart} max={15} height={valueH(ROW_RTE_H)} pal={pal} />
+              )}
+            </Cell>
+            <Cell label="ADES" pal={pal} rowH={ROW_RTE_H} className={sep}>
+              {isManual ? (
+                <EditValue value={strip.aeroport_arrivee} field="aeroport_arrivee" planId={strip.id} placeholder="????" maxLength={4} max={15} height={valueH(ROW_RTE_H)} pal={pal} onSaved={onRefresh} />
+              ) : (
+                <FitValue text={strip.aeroport_arrivee} max={15} height={valueH(ROW_RTE_H)} pal={pal} />
+              )}
+            </Cell>
+            <Cell label="RWY" pal={pal} rowH={ROW_RTE_H} className={sep}>
+              <EditValue value={strip.strip_rwy} field="strip_rwy" planId={strip.id} maxLength={5} max={15} height={valueH(ROW_RTE_H)} pal={pal} onSaved={onRefresh} />
+            </Cell>
+            <Cell label="ATD" pal={pal} rowH={ROW_RTE_H} className={sep}>
+              <EditValue value={strip.strip_atd} field="strip_atd" planId={strip.id} maxLength={5} max={15} height={valueH(ROW_RTE_H)} pal={pal} onSaved={onRefresh} />
+            </Cell>
+            <Cell label="CTOT" pal={pal} rowH={ROW_RTE_H}>
+              <FitValue text={formatCtot(strip.heure_depart_estimee || strip.created_at)} max={15} height={valueH(ROW_RTE_H)} pal={pal} />
+            </Cell>
+          </div>
+
+          {/* Clairance verticale et procédures */}
+          <div
+            className={`grid border-b ${pal.right} ${pal.sep}`}
+            style={{ gridTemplateColumns: '1fr 1.5fr 1.5fr' }}
+          >
+            <Cell
+              label="Alt"
+              pal={pal}
+              rowH={ROW_CLR_H}
+              className={sep}
+              right={<FlUnitToggle planId={strip.id} unit={strip.strip_fl_unit} onSaved={onRefresh} />}
+            >
+              <EditValue value={strip.strip_fl} field="strip_fl" planId={strip.id} maxLength={5} max={14} height={valueH(ROW_CLR_H)} pal={pal} onSaved={onRefresh} />
+            </Cell>
+            <Cell label="SID" pal={pal} rowH={ROW_CLR_H} className={sep}>
+              <EditValue value={strip.strip_sid_atc || strip.sid_depart} field="strip_sid_atc" planId={strip.id} maxLength={24} max={13} height={valueH(ROW_CLR_H)} pal={pal} onSaved={onRefresh} />
+            </Cell>
+            <Cell label="STAR" pal={pal} rowH={ROW_CLR_H}>
+              <EditValue value={strip.strip_star || strip.star_arrivee} field="strip_star" planId={strip.id} maxLength={24} max={13} height={valueH(ROW_CLR_H)} pal={pal} onSaved={onRefresh} />
+            </Cell>
+          </div>
+
+          {/* Annotations contrôleur */}
+          <div
+            className={`grid border-b ${pal.right} ${pal.sep}`}
+            style={{ gridTemplateColumns: '1fr 1fr 1.4fr' }}
+          >
+            <Cell label="CLR" pal={pal} rowH={ROW_NOTE_H} className={sep}>
+              <EditValue value={strip.strip_note_2} field="strip_note_2" planId={strip.id} maxLength={20} max={13} lines={2} height={valueH(ROW_NOTE_H)} pal={pal} onSaved={onRefresh} />
+            </Cell>
+            <Cell label="Note" pal={pal} rowH={ROW_NOTE_H} className={sep}>
+              <EditValue value={strip.strip_note_1} field="strip_note_1" planId={strip.id} maxLength={20} max={13} lines={2} height={valueH(ROW_NOTE_H)} pal={pal} onSaved={onRefresh} />
+            </Cell>
+            <Cell label="Info" pal={pal} rowH={ROW_NOTE_H}>
+              <EditValue value={strip.strip_note_3} field="strip_note_3" planId={strip.id} maxLength={30} max={13} lines={2} height={valueH(ROW_NOTE_H)} pal={pal} onSaved={onRefresh} />
+            </Cell>
+          </div>
+
+          {/* Route et immatriculation */}
+          <div className={`grid ${pal.right}`} style={{ gridTemplateColumns: '1fr 0.42fr' }}>
+            <Cell label="Route" pal={pal} rowH={ROW_FULL_H} className={sep}>
+              <EditValue
+                value={strip.strip_route || strip.route_ifr} field="strip_route" planId={strip.id}
+                maxLength={80} max={12} lines={2} height={valueH(ROW_FULL_H)} pal={pal} onSaved={onRefresh}
+              />
+            </Cell>
+            <Cell label="Tail" pal={pal} rowH={ROW_FULL_H}>
+              <FitValue text={strip.immatriculation} max={12} height={valueH(ROW_FULL_H)} pal={pal} bold={false} />
+            </Cell>
           </div>
         </div>
       </div>
@@ -836,6 +1116,7 @@ function FlightStripImpl({
         onTransferRequest={onTransferRequest}
         onOptimisticStatut={setOptimisticStatut}
         isDark={isDark}
+        pal={pal}
       />
     </div>
   );

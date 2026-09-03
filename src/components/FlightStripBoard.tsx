@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import FlightStrip, { type StripData } from './FlightStrip';
+import FlightStrip, { STRIP_MIN_WIDTH, type StripData } from './FlightStrip';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { AIRPORT_TO_FIR } from '@/lib/cartography-data';
@@ -55,6 +55,13 @@ const ZONE_DOT: Record<ZoneId, string> = {
   arrivee: 'bg-emerald-400',
   transit: 'bg-violet-400',
 };
+
+/**
+ * Largeur minimale d'une bay : celle du strip, plus le padding interne (2 × 6 px)
+ * et les bordures (2 × 1 px). Sans cette marge, la dernière colonne du strip
+ * était rognée.
+ */
+const BAY_MIN_WIDTH = STRIP_MIN_WIDTH + 14;
 
 export default function FlightStripBoard({
   strips, atcPosition, atcAeroport, onlineSessions, onRefresh,
@@ -118,10 +125,15 @@ export default function FlightStripBoard({
   const [dropTarget, setDropTarget] = useState<DropHint | null>(null);
   const setDrop = useCallback((next: DropHint | null | ((prev: DropHint | null) => DropHint | null)) => {
     const value = typeof next === 'function' ? next(dropTargetRef.current) : next;
+    const prev = dropTargetRef.current;
+    if (
+      prev?.zone === value?.zone &&
+      prev?.stripId === value?.stripId &&
+      prev?.position === value?.position
+    ) return;
     dropTargetRef.current = value;
     setDropTarget(value);
   }, []);
-  const dragCounters = useRef<Map<string, number>>(new Map());
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -185,7 +197,6 @@ export default function FlightStripBoard({
     draggedIdRef.current = null;
     setDraggedId(null);
     setDrop(null);
-    dragCounters.current.clear();
   }, [setDrop]);
 
   const dropInZone = useCallback(async (stripId: string, zone: ZoneOrNull) => {
@@ -261,7 +272,6 @@ export default function FlightStripBoard({
     draggedIdRef.current = null;
     setDraggedId(null);
     setDrop(null);
-    dragCounters.current.clear();
     if (!stripId) return;
     if (nearId && nearPos && nearId !== stripId) {
       await dropNearStrip(stripId, nearId, zone, nearPos);
@@ -270,44 +280,28 @@ export default function FlightStripBoard({
     }
   }, [draggedId, dropInZone, dropNearStrip, setDrop]);
 
-  const zoneKey = (zone: ZoneOrNull) => zone ?? '__null';
-
-  const handleZoneDragEnter = useCallback((e: React.DragEvent, zone: ZoneOrNull) => {
-    e.preventDefault();
-    const key = zoneKey(zone);
-    const count = (dragCounters.current.get(key) || 0) + 1;
-    dragCounters.current.set(key, count);
-    if (count === 1) setDrop({ zone });
-  }, [setDrop]);
-
-  const handleZoneDragLeave = useCallback((e: React.DragEvent, zone: ZoneOrNull) => {
-    e.preventDefault();
-    const key = zoneKey(zone);
-    const count = (dragCounters.current.get(key) || 0) - 1;
-    dragCounters.current.set(key, Math.max(0, count));
-    if (count <= 0) {
-      dragCounters.current.delete(key);
-      setDrop((prev) => (prev?.zone === zone && !prev.stripId ? null : prev));
-    }
-  }, [setDrop]);
-
-  const handleZoneDragOver = useCallback((e: React.DragEvent) => {
+  /**
+   * L'indice de dépôt est recalculé à chaque `dragover`, jamais accumulé sur des
+   * paires enter/leave : traverser les enfants d'une bay ne peut plus le
+   * désynchroniser ni faire disparaître la cible.
+   */
+  const handleZoneDragOver = useCallback((e: React.DragEvent, zone: ZoneOrNull) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-  }, []);
+    setDrop({ zone });
+  }, [setDrop]);
 
   const handleStripDragOver = useCallback((e: React.DragEvent, targetId: string, zone: ZoneOrNull) => {
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
-    if (targetId === draggedId) return;
+    if (targetId === (draggedIdRef.current ?? draggedId)) {
+      setDrop({ zone });
+      return;
+    }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const mouseY = e.clientY - rect.top;
-    const pos: 'before' | 'after' = mouseY < rect.height / 2 ? 'before' : 'after';
-    setDrop((prev) => {
-      if (prev?.stripId === targetId && prev.position === pos && prev.zone === zone) return prev;
-      return { zone, stripId: targetId, position: pos };
-    });
+    const pos: 'before' | 'after' = e.clientY - rect.top < rect.height / 2 ? 'before' : 'after';
+    setDrop({ zone, stripId: targetId, position: pos });
   }, [draggedId, setDrop]);
 
   const refresh = useCallback(() => onRefresh?.(), [onRefresh]);
@@ -399,10 +393,13 @@ export default function FlightStripBoard({
     const isDropBefore = dropTarget?.stripId === s.id && dropTarget.position === 'before';
     const isDropAfter = dropTarget?.stripId === s.id && dropTarget.position === 'after';
 
+    const marker = isDark ? 'bg-sky-400' : 'bg-sky-500';
+
     return (
-      <div key={s.id} className="relative">
+      <div key={s.id} className="relative min-w-0">
+        {/* Repères de dépôt en absolu : insérer un strip ne décale plus la pile. */}
         {isDropBefore && (
-          <div className={`h-1 rounded-full mx-1 mb-1 ${isDark ? 'bg-sky-400' : 'bg-sky-500'} shadow-lg shadow-sky-500/50`} />
+          <div className={`pointer-events-none absolute -top-1 left-1 right-1 z-10 h-1 rounded-full shadow-lg shadow-sky-500/50 ${marker}`} />
         )}
         <div
           draggable
@@ -410,12 +407,12 @@ export default function FlightStripBoard({
           onDragEnd={handleDragEnd}
           onDragOver={(e) => handleStripDragOver(e, s.id, zone)}
           onDrop={(e) => handleDrop(e, zone, s.id, dropTargetRef.current?.stripId === s.id ? dropTargetRef.current.position : 'after')}
-          className={`transition-opacity duration-150 ${isBeingDragged ? 'opacity-30' : 'opacity-100'} cursor-grab active:cursor-grabbing`}
+          className={`min-w-0 cursor-grab transition-opacity duration-150 active:cursor-grabbing ${isBeingDragged ? 'opacity-40' : 'opacity-100'}`}
         >
           <FlightStrip strip={s} onRefresh={refresh} onContextMenu={handleStripRightClickWithDouble} onTransferRequest={handleTransferClick} />
         </div>
         {isDropAfter && (
-          <div className={`h-1 rounded-full mx-1 mt-1 ${isDark ? 'bg-sky-400' : 'bg-sky-500'} shadow-lg shadow-sky-500/50`} />
+          <div className={`pointer-events-none absolute -bottom-1 left-1 right-1 z-10 h-1 rounded-full shadow-lg shadow-sky-500/50 ${marker}`} />
         )}
       </div>
     );
@@ -430,10 +427,9 @@ export default function FlightStripBoard({
     return (
       <section
         key={zone}
-        className={`min-w-[460px] flex-1 flex flex-col rounded-xl border min-h-0 transition-shadow ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
-        onDragEnter={(e) => handleZoneDragEnter(e, zone)}
-        onDragLeave={(e) => handleZoneDragLeave(e, zone)}
-        onDragOver={handleZoneDragOver}
+        style={{ minWidth: BAY_MIN_WIDTH }}
+        className={`flex min-h-0 flex-1 flex-col rounded-xl border transition-shadow ${isDragOver ? ZONE_DROP[zone] : ZONE_COLORS[zone]}`}
+        onDragOver={(e) => handleZoneDragOver(e, zone)}
         onDrop={(e) => handleDrop(e, zone)}
       >
         <header className={`px-3 py-1.5 flex items-center justify-between rounded-t-xl ${ZONE_HEADER[zone]}`}>
@@ -446,7 +442,7 @@ export default function FlightStripBoard({
           </div>
           <span className="text-[11px] font-black tabular-nums bg-black/10 rounded-full px-2 py-0.5">{zs.length}</span>
         </header>
-        <div className="flex-1 p-1.5 flex flex-col gap-1.5 overflow-y-auto overflow-x-auto min-h-[140px]">
+        <div className="flex min-h-[140px] flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden p-1.5">
           {zs.length === 0 ? (
             <div className={`flex-1 min-h-[88px] rounded-lg border-2 border-dashed flex items-center justify-center text-[11px] font-semibold italic ${
               isDragOver
@@ -508,27 +504,26 @@ export default function FlightStripBoard({
             ? (isDark ? 'ring-2 ring-slate-400 bg-slate-800/80' : 'ring-2 ring-slate-400 bg-slate-100/80')
             : (isDark ? 'border-slate-700 bg-slate-950/40' : 'border-slate-300/80 bg-white/40')
         }`}
-        onDragEnter={(e) => handleZoneDragEnter(e, null)}
-        onDragLeave={(e) => handleZoneDragLeave(e, null)}
-        onDragOver={handleZoneDragOver}
+        onDragOver={(e) => handleZoneDragOver(e, null)}
         onDrop={(e) => handleDrop(e, null)}
       >
         <header className={`px-3 py-1.5 flex items-center justify-between ${isDark ? 'bg-slate-800 text-slate-100' : 'bg-slate-200/90 text-slate-800'}`}>
           <p className="text-[11px] font-black uppercase tracking-[0.16em]">File d&apos;attente</p>
           <span className="text-[11px] font-black tabular-nums">{unassigned.length}</span>
         </header>
-        <div className="p-1.5 flex flex-wrap gap-1.5 content-start max-h-44 overflow-y-auto">
+        <div
+          className="grid max-h-52 gap-1.5 overflow-y-auto p-1.5"
+          style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${STRIP_MIN_WIDTH}px, 1fr))` }}
+        >
           {unassigned.length === 0 ? (
-            <div className={`w-full text-center py-4 rounded-lg border-2 border-dashed text-[11px] font-semibold italic ${
+            <div style={{ gridColumn: '1 / -1' }} className={`rounded-lg border-2 border-dashed py-4 text-center text-[11px] font-semibold italic ${
               isDragOverNull
-                ? (isDark ? 'border-sky-400 text-sky-200 bg-sky-950/40' : 'border-sky-400 text-sky-700 bg-sky-50')
-                : (isDark ? 'border-transparent text-slate-500' : 'border-transparent text-slate-500')
+                ? (isDark ? 'border-sky-400 bg-sky-950/40 text-sky-200' : 'border-sky-400 bg-sky-50 text-sky-700')
+                : 'border-transparent text-slate-500'
             }`}>
               {isDragOverNull ? 'Relâcher ici' : 'Aucun strip en attente d’affectation'}
             </div>
-          ) : unassigned.map((s) => (
-            <div key={s.id} className="w-full max-w-[460px]">{renderStripItem(s, null)}</div>
-          ))}
+          ) : unassigned.map((s) => renderStripItem(s, null))}
         </div>
       </section>
 
