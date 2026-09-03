@@ -4,12 +4,15 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback, useTransition } from 'react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { toast } from 'sonner';
-import { ArrowRightLeft, Inbox, PlaneLanding, Radio } from 'lucide-react';
+import { ArrowRightLeft, Inbox, MapPin, PlaneLanding, Radio } from 'lucide-react';
 
 type PlanTransfert = { id: string; numero_vol: string };
 type PlanAccepter = { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string };
 type PlanCloture = { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string };
 type PlanOutbound = { id: string; numero_vol: string; pending_transfer_aeroport: string | null; pending_transfer_position: string | null };
+type ReseauAtc = { aeroport: string; position: string; identifiant: string };
+type ReseauAfis = { aeroport: string; est_afis: boolean; identifiant: string };
+type DockTab = 'nouveaux' | 'handoffs' | 'clotures' | 'reseau';
 
 function playNotificationSound(type: 'transfer' | 'cloture' | 'nouveau' | 'rappel', intensity: number = 1) {
   try {
@@ -114,11 +117,15 @@ export default function AtcAcceptTransfertSidebar({
   plansAccepter,
   plansCloture,
   plansOutbound = [],
+  reseauAtc = [],
+  reseauAfis = [],
 }: {
   plansTransfert: PlanTransfert[];
   plansAccepter: PlanAccepter[];
   plansCloture: PlanCloture[];
   plansOutbound?: PlanOutbound[];
+  reseauAtc?: ReseauAtc[];
+  reseauAfis?: ReseauAfis[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -127,6 +134,7 @@ export default function AtcAcceptTransfertSidebar({
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [activatedPlanIds, setActivatedPlanIds] = useState<Set<string>>(new Set());
+  const [tab, setTab] = useState<DockTab | null>(null);
 
   const firstSeenRef = useRef<Map<string, number>>(new Map());
   const lastReminderRef = useRef<Map<string, number>>(new Map());
@@ -305,10 +313,21 @@ export default function AtcAcceptTransfertSidebar({
   }
 
   const plansAccepterVisibles = plansAccepter.filter((p) => !activatedPlanIds.has(p.id));
-  if (plansTransfert.length === 0 && plansAccepterVisibles.length === 0 && plansCloture.length === 0 && plansOutbound.length === 0) return null;
 
   const maxUrgency = getMaxUrgency();
   const total = plansTransfert.length + plansAccepterVisibles.length + plansCloture.length + plansOutbound.length;
+  const handoffsCount = plansTransfert.length + plansOutbound.length;
+  const activeTab: DockTab = tab
+    ?? (plansAccepterVisibles.length > 0 ? 'nouveaux'
+      : handoffsCount > 0 ? 'handoffs'
+      : plansCloture.length > 0 ? 'clotures'
+      : 'reseau');
+
+  const reseauByApt = reseauAtc.reduce<Record<string, ReseauAtc[]>>((acc, s) => {
+    if (!acc[s.aeroport]) acc[s.aeroport] = [];
+    acc[s.aeroport].push(s);
+    return acc;
+  }, {});
 
   const card = (urgent: boolean, tone: 'amber' | 'sky' | 'red') => {
     const tones = {
@@ -325,7 +344,7 @@ export default function AtcAcceptTransfertSidebar({
     >
       <div className={`px-3 py-2.5 border-b flex items-center justify-between ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
         <div>
-          <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Inbox</p>
+          <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Dock</p>
           <p className={`text-xs font-bold ${maxUrgency >= 3 ? 'text-red-400' : (isDark ? 'text-slate-200' : 'text-slate-800')}`}>
             {total} à traiter{maxUrgency >= 3 ? ' · urgent' : ''}
           </p>
@@ -335,116 +354,187 @@ export default function AtcAcceptTransfertSidebar({
         </span>
       </div>
 
+      <div className={`grid grid-cols-4 border-b ${isDark ? 'border-slate-800' : 'border-slate-200'}`}>
+        {([
+          { id: 'nouveaux' as const, label: 'Nouv.', count: plansAccepterVisibles.length, Icon: Inbox },
+          { id: 'handoffs' as const, label: 'Xfer', count: handoffsCount, Icon: ArrowRightLeft },
+          { id: 'clotures' as const, label: 'Clôt.', count: plansCloture.length, Icon: PlaneLanding },
+          { id: 'reseau' as const, label: 'Réseau', count: reseauAtc.length + reseauAfis.length, Icon: MapPin },
+        ]).map(({ id, label, count, Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            className={`flex flex-col items-center gap-0.5 py-1.5 text-[9px] font-black uppercase tracking-wide ${
+              activeTab === id
+                ? (isDark ? 'bg-slate-800 text-sky-200' : 'bg-sky-50 text-sky-800')
+                : (isDark ? 'text-slate-400 hover:bg-slate-900' : 'text-slate-500 hover:bg-slate-50')
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {label}
+            {count > 0 && <span className="tabular-nums opacity-80">{count}</span>}
+          </button>
+        ))}
+      </div>
+
       <div className="flex-1 overflow-y-auto p-2 space-y-3">
-        {plansAccepterVisibles.length > 0 && (
+        {activeTab === 'nouveaux' && (
           <section>
-            <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
-              <Inbox className="h-3 w-3" /> Nouveaux plans
-            </p>
-            <ul className="space-y-1.5">
-              {plansAccepterVisibles.map((p) => {
-                const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
-                return (
-                  <li key={p.id}>
-                    <button type="button" onClick={() => handleActiverPlan(p.id)} className={card(urgency >= 2, 'amber')} title="Afficher le strip">
+            {plansAccepterVisibles.length === 0 ? (
+              <p className={`text-[11px] italic px-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Aucun nouveau plan.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {plansAccepterVisibles.map((p) => {
+                  const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
+                  return (
+                    <li key={p.id}>
+                      <button type="button" onClick={() => handleActiverPlan(p.id)} className={card(urgency >= 2, 'amber')} title="Afficher le strip">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono font-black text-sm truncate">{p.numero_vol}</span>
+                          <span className="text-[9px] font-bold tabular-nums opacity-70">{formatElapsed(p.id)}</span>
+                        </div>
+                        <p className="text-[10px] font-semibold opacity-70 mt-0.5">{p.aeroport_depart} → {p.aeroport_arrivee}</p>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'handoffs' && (
+          <>
+            {plansTransfert.length > 0 && (
+              <section>
+                <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${isDark ? 'text-sky-400' : 'text-sky-700'}`}>
+                  <ArrowRightLeft className="h-3 w-3" /> Entrants
+                </p>
+                <ul className="space-y-1.5">
+                  {plansTransfert.map((p) => {
+                    const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
+                    return (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onClick={() => handleAcceptTransfert(p.id)}
+                          disabled={loadingId !== null}
+                          className={card(urgency >= 1, 'sky')}
+                          title="Accepter le transfert"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono font-black text-sm truncate">{loadingId === p.id ? '…' : p.numero_vol}</span>
+                            <span className="text-[9px] font-bold tabular-nums opacity-70">{formatElapsed(p.id)}</span>
+                          </div>
+                          <p className="text-[10px] font-semibold opacity-70 mt-0.5 flex items-center gap-1">
+                            <Radio className="h-3 w-3" /> Prendre le contrôle
+                          </p>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
+            {plansOutbound.length > 0 && (
+              <section>
+                <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
+                  <ArrowRightLeft className="h-3 w-3" /> Sortants
+                </p>
+                <ul className="space-y-1.5">
+                  {plansOutbound.map((p) => (
+                    <li key={p.id} className={card(false, 'amber')}>
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-mono font-black text-sm truncate">{p.numero_vol}</span>
                         <span className="text-[9px] font-bold tabular-nums opacity-70">{formatElapsed(p.id)}</span>
                       </div>
-                      <p className="text-[10px] font-semibold opacity-70 mt-0.5">{p.aeroport_depart} → {p.aeroport_arrivee}</p>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
+                      <p className="text-[10px] font-semibold opacity-70 mt-0.5">
+                        → {p.pending_transfer_position} {p.pending_transfer_aeroport}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleAnnulerTransfert(p.id)}
+                        disabled={loadingId !== null}
+                        className="mt-1.5 text-[10px] font-bold uppercase tracking-wide underline"
+                      >
+                        {loadingId === p.id ? '…' : 'Annuler'}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {handoffsCount === 0 && (
+              <p className={`text-[11px] italic px-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Aucun transfert en cours.</p>
+            )}
+          </>
         )}
 
-        {plansTransfert.length > 0 && (
+        {activeTab === 'clotures' && (
           <section>
-            <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${isDark ? 'text-sky-400' : 'text-sky-700'}`}>
-              <ArrowRightLeft className="h-3 w-3" /> Transferts
-            </p>
-            <ul className="space-y-1.5">
-              {plansTransfert.map((p) => {
-                const urgency = getUrgencyLevel((currentTime - (firstSeenRef.current.get(p.id) || currentTime)) / 1000);
-                return (
-                  <li key={p.id}>
+            {plansCloture.length === 0 ? (
+              <p className={`text-[11px] italic px-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Aucune clôture en attente.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {plansCloture.map((p) => (
+                  <li key={p.id} className={card(true, 'red')}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono font-black text-sm truncate">{p.numero_vol}</span>
+                      <span className="text-[9px] font-bold tabular-nums opacity-70">{formatElapsed(p.id)}</span>
+                    </div>
+                    <p className="text-[10px] font-semibold opacity-70 mt-0.5">{p.aeroport_depart} → {p.aeroport_arrivee}</p>
                     <button
                       type="button"
-                      onClick={() => handleAcceptTransfert(p.id)}
+                      onClick={() => handleConfirmerCloture(p.id)}
                       disabled={loadingId !== null}
-                      className={card(urgency >= 1, 'sky')}
-                      title="Accepter le transfert"
+                      className="mt-1.5 w-full rounded bg-red-600 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white hover:bg-red-500 disabled:opacity-50"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono font-black text-sm truncate">{loadingId === p.id ? '…' : p.numero_vol}</span>
-                        <span className="text-[9px] font-bold tabular-nums opacity-70">{formatElapsed(p.id)}</span>
-                      </div>
-                      <p className="text-[10px] font-semibold opacity-70 mt-0.5 flex items-center gap-1">
-                        <Radio className="h-3 w-3" /> Prendre le contrôle
-                      </p>
+                      {loadingId === p.id ? '…' : 'Confirmer'}
                     </button>
                   </li>
-                );
-              })}
-            </ul>
+                ))}
+              </ul>
+            )}
           </section>
         )}
 
-        {plansOutbound.length > 0 && (
-          <section>
-            <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
-              <ArrowRightLeft className="h-3 w-3" /> Sortants
-            </p>
-            <ul className="space-y-1.5">
-              {plansOutbound.map((p) => (
-                <li key={p.id} className={card(false, 'amber')}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono font-black text-sm truncate">{p.numero_vol}</span>
-                    <span className="text-[9px] font-bold tabular-nums opacity-70">{formatElapsed(p.id)}</span>
+        {activeTab === 'reseau' && (
+          <section className="space-y-2">
+            {Object.keys(reseauByApt).length === 0 && reseauAfis.length === 0 ? (
+              <p className={`text-[11px] italic px-1 ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>Aucune position en service.</p>
+            ) : (
+              <>
+                {Object.entries(reseauByApt).map(([apt, controllers]) => (
+                  <div key={apt} className={`rounded-lg border px-2 py-1.5 ${isDark ? 'border-emerald-800 bg-emerald-950' : 'border-emerald-200 bg-emerald-50'}`}>
+                    <p className={`font-mono font-black text-xs mb-1 ${isDark ? 'text-emerald-300' : 'text-emerald-800'}`}>{apt}</p>
+                    <ul className="space-y-0.5">
+                      {controllers.map((c, idx) => (
+                        <li key={`${apt}-${c.position}-${idx}`} className={`flex justify-between gap-2 text-[10px] ${isDark ? 'text-emerald-100/80' : 'text-emerald-900'}`}>
+                          <span className="font-semibold">{c.position}</span>
+                          <span className="truncate opacity-70">{c.identifiant}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <p className="text-[10px] font-semibold opacity-70 mt-0.5">
-                    → {p.pending_transfer_position} {p.pending_transfer_aeroport}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => handleAnnulerTransfert(p.id)}
-                    disabled={loadingId !== null}
-                    className="mt-1.5 text-[10px] font-bold uppercase tracking-wide underline"
+                ))}
+                {reseauAfis.map((sess, idx) => (
+                  <div
+                    key={`afis-${sess.aeroport}-${idx}`}
+                    className={`rounded-lg border px-2 py-1.5 ${
+                      sess.est_afis
+                        ? (isDark ? 'border-red-800 bg-red-950' : 'border-red-200 bg-red-50')
+                        : (isDark ? 'border-amber-800 bg-amber-950' : 'border-amber-200 bg-amber-50')
+                    }`}
                   >
-                    {loadingId === p.id ? '…' : 'Annuler'}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {plansCloture.length > 0 && (
-          <section>
-            <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${isDark ? 'text-red-400' : 'text-red-700'}`}>
-              <PlaneLanding className="h-3 w-3" /> Clôtures
-            </p>
-            <ul className="space-y-1.5">
-              {plansCloture.map((p) => (
-                <li key={p.id} className={card(true, 'red')}>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono font-black text-sm truncate">{p.numero_vol}</span>
-                    <span className="text-[9px] font-bold tabular-nums opacity-70">{formatElapsed(p.id)}</span>
+                    <p className={`font-mono font-black text-xs ${sess.est_afis ? (isDark ? 'text-red-300' : 'text-red-800') : (isDark ? 'text-amber-300' : 'text-amber-800')}`}>
+                      {sess.aeroport} · {sess.est_afis ? 'AFIS' : 'Pompier'}
+                    </p>
+                    <p className={`text-[10px] truncate ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{sess.identifiant}</p>
                   </div>
-                  <p className="text-[10px] font-semibold opacity-70 mt-0.5">{p.aeroport_depart} → {p.aeroport_arrivee}</p>
-                  <button
-                    type="button"
-                    onClick={() => handleConfirmerCloture(p.id)}
-                    disabled={loadingId !== null}
-                    className="mt-1.5 w-full rounded bg-red-600 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white hover:bg-red-500 disabled:opacity-50"
-                  >
-                    {loadingId === p.id ? '…' : 'Confirmer'}
-                  </button>
-                </li>
-              ))}
-            </ul>
+                ))}
+              </>
+            )}
           </section>
         )}
       </div>

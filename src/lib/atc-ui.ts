@@ -10,6 +10,29 @@ export const TRANSFER_HIERARCHY: Record<string, string[]> = {
   Center: ['APP', 'DEP'],
 };
 
+/** Phases habituelles par position (avertissement soft, pas de blocage). */
+export const POSITION_RECOMMENDED_ZONES: Record<string, StripZoneId[]> = {
+  Delivery: ['sol'],
+  Clairance: ['sol'],
+  Ground: ['sol'],
+  Tower: ['sol', 'depart', 'arrivee'],
+  APP: ['arrivee'],
+  DEP: ['depart'],
+  Center: ['sol', 'depart', 'arrivee', 'transit'],
+};
+
+export function getVisibleZones(atcPosition?: string): StripZoneId[] {
+  const base: StripZoneId[] = ['sol', 'depart', 'arrivee'];
+  return atcPosition === 'Center' ? [...base, 'transit'] : base;
+}
+
+export function isRecommendedZone(atcPosition: string | undefined, zone: StripZoneId | null): boolean {
+  if (!zone || !atcPosition) return true;
+  const rec = POSITION_RECOMMENDED_ZONES[atcPosition];
+  if (!rec) return true;
+  return rec.includes(zone);
+}
+
 export const ZONE_LABELS: Record<StripZoneId, string> = {
   sol: 'Sol',
   depart: 'Départ',

@@ -154,7 +154,10 @@ DROP FUNCTION IF EXISTS public.debiter_avec_trace(UUID, BIGINT, TEXT, TEXT);
 DROP FUNCTION IF EXISTS public.crediter_avec_trace(UUID, BIGINT, TEXT, TEXT);
 
 
--- Permissions : exécutables par les rôles habituels
-GRANT EXECUTE ON FUNCTION public.debiter_avec_trace(UUID, BIGINT, TEXT) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.crediter_avec_trace(UUID, BIGINT, TEXT) TO anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.virer_avec_trace(UUID, UUID, BIGINT, TEXT, TEXT) TO anon, authenticated, service_role;
+-- Uniquement service_role (appels via createAdminClient). Jamais anon/authenticated.
+REVOKE ALL ON FUNCTION public.debiter_avec_trace(UUID, BIGINT, TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.crediter_avec_trace(UUID, BIGINT, TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.virer_avec_trace(UUID, UUID, BIGINT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.debiter_avec_trace(UUID, BIGINT, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.crediter_avec_trace(UUID, BIGINT, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.virer_avec_trace(UUID, UUID, BIGINT, TEXT, TEXT) TO service_role;

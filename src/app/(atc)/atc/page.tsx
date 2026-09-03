@@ -358,7 +358,6 @@ export default async function AtcPage() {
             identifiant: (s.profiles as { identifiant?: string } | null)?.identifiant || '—',
           }))}
         />
-        <PlansEnAttenteModal totalPlans={totalPlansEnAttente} />
         <CreateManualStripButton />
         <HorsServiceButton />
       </div>
@@ -390,7 +389,6 @@ export default async function AtcPage() {
           sessionAeroport={session.aeroport}
           sessionPosition={session.position}
         />
-        {networkPanel}
       </div>
 
       <AtcGestionParkingsPanel aeroport={session.aeroport} />

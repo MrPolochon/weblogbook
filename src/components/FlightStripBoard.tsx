@@ -6,7 +6,8 @@ import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { AIRPORT_TO_FIR } from '@/lib/cartography-data';
 import type { OnlineSession } from './FlightStripBoardWrapper';
-import { TRANSFER_HIERARCHY, ZONE_HINTS, ZONE_LABELS, type StripZoneId } from '@/lib/atc-ui';
+import { toast } from 'sonner';
+import { TRANSFER_HIERARCHY, ZONE_HINTS, ZONE_LABELS, getVisibleZones, isRecommendedZone, type StripZoneId } from '@/lib/atc-ui';
 import { Search, ArrowRightLeft, Radio, X } from 'lucide-react';
 
 type ZoneId = StripZoneId;
@@ -66,7 +67,6 @@ export default function FlightStripBoard({
 }) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
-  const isCenter = atcPosition === 'Center';
   const [transferDialog, setTransferDialog] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
@@ -107,8 +107,8 @@ export default function FlightStripBoard({
   }, [localStrips, query]);
 
   const visibleZones = useMemo(
-    () => new Set<ZoneId>(isCenter ? ['sol', 'depart', 'arrivee', 'transit'] : ['sol', 'depart', 'arrivee']),
-    [isCenter],
+    () => new Set<ZoneId>(getVisibleZones(atcPosition)),
+    [atcPosition],
   );
 
   const getZone = useCallback((zone: ZoneOrNull) =>
@@ -159,6 +159,9 @@ export default function FlightStripBoard({
     const maxOrder = zoneStrips.reduce((max, s) => Math.max(max, s.strip_order), -1);
     const srcStrip = localStrips.find((s) => s.id === stripId);
     if (!srcStrip) return;
+    if (zone && !isRecommendedZone(atcPosition, zone)) {
+      toast.message(`Phase inhabituelle pour ${atcPosition ?? 'cette position'} — strip déplacé quand même.`);
+    }
     const prevStrips = localStrips;
     setLocalStrips((prev) =>
       prev.map((s) => s.id === stripId ? { ...s, strip_zone: zone, strip_order: maxOrder + 1 } : s),
@@ -174,7 +177,7 @@ export default function FlightStripBoard({
       setLocalStrips(prevStrips);
       onRefresh?.();
     }
-  }, [localStrips, onRefresh]);
+  }, [localStrips, onRefresh, atcPosition]);
 
   const dropNearStrip = useCallback(async (stripId: string, targetId: string, zone: ZoneOrNull, position: 'before' | 'after') => {
     if (stripId === targetId) return;
@@ -413,12 +416,16 @@ export default function FlightStripBoard({
     );
   };
 
-  const bays: Array<{ id: ZoneId; strips: StripData[] }> = [
-    { id: 'sol', strips: solStrips },
-    { id: 'depart', strips: departStrips },
-    ...(isCenter ? [{ id: 'transit' as ZoneId, strips: transitStrips }] : []),
-    { id: 'arrivee', strips: arriveeStrips },
-  ];
+  const zoneStripsById: Record<ZoneId, StripData[]> = {
+    sol: solStrips,
+    depart: departStrips,
+    arrivee: arriveeStrips,
+    transit: transitStrips,
+  };
+  const bays: Array<{ id: ZoneId; strips: StripData[] }> = getVisibleZones(atcPosition).map((id) => ({
+    id,
+    strips: zoneStripsById[id],
+  }));
 
   const isDragOverNull = !!draggedId && dropTarget?.zone === null;
 

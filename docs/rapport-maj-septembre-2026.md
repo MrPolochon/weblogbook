@@ -57,7 +57,7 @@
 - Lien `/atc/creer-plan` dans le menu.
 - Cron `/api/cron/atc-transferts` : expiration 90 s (plus le « 1 minute » fictif).
 
-Non livré dans cette vague (trop large, à reprendre) : bays strictement liés à la position, dock 4 onglets unique, migration `strip_zone`.
+Suite livrée : dock 4 onglets (Nouveaux / Handoffs / Clôtures / Réseau), modal plans hors service seulement, avertissement soft si bay hors phase. Bays PLAN/CLRD/HOLD dédiés par position : non (colonnes sol/départ/arrivée conservées).
 
 ## Vague 5b — SIAVI / IFSA
 
@@ -71,16 +71,22 @@ Téléphone ATC/SIAVI : toujours deux UIs (hook `useLiveKitCall` déjà partagé
 - Tokens `--surface-0/1/2` opaques.
 - AeroSchool retiré du bandeau desktop (reste dans le menu Infos).
 - Hub admin : lien Radar beta.
-- Rate limit : `verify-superadmin`, POST `plans-vol`.
+- Rate limit : `verify-superadmin`, POST `plans-vol`, export logbook, POST recrutement.
+- Classement : RPC `get_classement_pilotes()` (plus de plafond 10k vols).
 - Discord : plus de fail-open si le bot est down (dernier état connu).
 - WebAuthn : fallback `mixouairlinesptfsweblogbook.com`.
 
 ---
 
-## SQL à exécuter
+## SQL appliqué en prod (2 sept. 2026)
 
-1. `supabase/update_septembre_2026.sql` — table `bria_cooldowns`.
-2. Vérifier en prod (sans big-bang) : `add_statut_annule_plans_vol.sql`, `fix_pay_siavi_*.sql`, `add_felitz_atomic_helpers.sql`, pack Ground Crew, `OPTIMISATION_INDEX.sql`.
-3. Enum `cheque_salaire_atc` si absent.
+- `bria_cooldowns` créée + RLS (aucune policy utilisateur).
+- `pay_siavi_taxes` / `pay_siavi_intervention` : plus de crédit direct (chèque seulement).
+- Helpers Felitz `debiter/crediter/virer_avec_trace` : déjà présents ; **EXECUTE retiré à `anon` / `authenticated`** (service_role seulement).
+- Pack Ground Crew : tables déjà présentes.
+- `plans_vol.statut` : `annule` déjà accepté (plus `planifie_suivant` / `en_pause`) — **script `add_statut_annule` non réappliqué** (il aurait retiré ces valeurs).
+- `type_message` est du `text` (pas d’enum) : `cheque_salaire_atc` utilisable sans ALTER TYPE.
+- Index `OPTIMISATION_INDEX.sql` (IF NOT EXISTS).
+- RPC `get_classement_pilotes()` (`supabase/add_classement_rpc.sql`).
 
 Voir aussi [septembre-2026-suggestions.md](septembre-2026-suggestions.md).

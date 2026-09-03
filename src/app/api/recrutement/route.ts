@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
+import { rateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,6 +59,10 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+    const rl = rateLimit(`recrutement-post:${user.id}`, 10, 60_000);
+    if (!rl.allowed) {
+      return NextResponse.json({ error: 'Trop d’invitations. Réessayez dans une minute.' }, { status: 429 });
+    }
 
     const body = await req.json();
     const { compagnie_id, pilote_id, message_invitation } = body;

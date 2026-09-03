@@ -23,127 +23,56 @@ type PiloteStat = {
   photoUrl: string | null;
 };
 
+type ClassementRow = {
+  id: string;
+  identifiant: string;
+  total_minutes: number | string;
+  nb_vols: number | string;
+  nb_licences: number | string;
+  nb_aeroports: number | string;
+  nb_types_avion: number | string;
+  nb_vols_ifr: number | string;
+  nb_vols_vfr: number | string;
+  nb_vols_instruction: number | string;
+  nb_vols_militaires: number | string;
+  longest_flight: number | string;
+  solde: number | string;
+  nb_avions: number | string;
+  member_since: string;
+};
+
 export default async function ClassementPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
   const admin = createAdminClient();
-
-  const [profilesRes, volsRes, equipageRes, licencesRes, comptesRes, inventaireRes] = await Promise.all([
-    admin.from('profiles').select('id, identifiant, heures_initiales_minutes, created_at').not('identifiant', 'is', null),
-    // Uniquement les vols VALIDÉS — même source que le logbook pour cohérence.
-    // On n'ajoute pas plans_vol en doublon (un vol clôturé ET enregistré serait compté 2x).
-    admin.from('vols').select('id, pilote_id, copilote_id, instructeur_id, chef_escadron_id, duree_minutes, type_vol, aeroport_depart, aeroport_arrivee, type_avion_id').eq('statut', 'validé').limit(10000),
-    admin.from('vols_equipage_militaire').select('vol_id, profile_id'),
-    admin.from('licences_qualifications').select('user_id'),
-    admin.from('felitz_comptes').select('proprietaire_id, solde').eq('type', 'personnel'),
-    admin.from('inventaire_avions').select('proprietaire_id'),
-  ]);
-
-  const profiles = profilesRes.data || [];
-  const volsAnciens = volsRes.data || [];
-  const equipageData = equipageRes.data || [];
-  const licences = licencesRes.data || [];
-  const comptes = comptesRes.data || [];
-  const inventaire = inventaireRes.data || [];
-
-  type VolNormalise = { id: string; duree_minutes: number; type_vol: string; aeroport_depart: string; aeroport_arrivee: string; type_avion_id: string | null };
-
-  // Dedup helper: attribute each vol to a user only once
-  const volsByUser = new Map<string, VolNormalise[]>();
-  const userVolIds = new Map<string, Set<string>>();
-
-  function addVolToUser(userId: string, vol: VolNormalise) {
-    if (!userId) return;
-    let seen = userVolIds.get(userId);
-    if (!seen) { seen = new Set(); userVolIds.set(userId, seen); }
-    if (seen.has(vol.id)) return;
-    seen.add(vol.id);
-    let arr = volsByUser.get(userId);
-    if (!arr) { arr = []; volsByUser.set(userId, arr); }
-    arr.push(vol);
+  const { data: rows, error } = await admin.rpc('get_classement_pilotes');
+  if (error) {
+    console.error('get_classement_pilotes', error);
   }
 
-  // Build equipage map: vol_id → profile_ids
-  const equipageByVol = new Map<string, string[]>();
-  for (const eq of equipageData) {
-    let arr = equipageByVol.get(eq.vol_id);
-    if (!arr) { arr = []; equipageByVol.set(eq.vol_id, arr); }
-    arr.push(eq.profile_id);
-  }
+  const raw = (rows ?? []) as ClassementRow[];
+  const photosByUser = await getUserPhotosMap(admin, raw.map((p) => p.id));
 
-  // Attribute old vols to ALL participants (pilote, copilote, instructeur, chef escadron, équipage mil.)
-  for (const v of volsAnciens) {
-    const vol: VolNormalise = {
-      id: v.id,
-      duree_minutes: v.duree_minutes || 0,
-      type_vol: v.type_vol,
-      aeroport_depart: v.aeroport_depart,
-      aeroport_arrivee: v.aeroport_arrivee,
-      type_avion_id: v.type_avion_id,
-    };
-    if (v.pilote_id) addVolToUser(v.pilote_id, vol);
-    if (v.copilote_id) addVolToUser(v.copilote_id, vol);
-    if (v.instructeur_id) addVolToUser(v.instructeur_id, vol);
-    if (v.chef_escadron_id) addVolToUser(v.chef_escadron_id, vol);
-    const crew = equipageByVol.get(v.id);
-    if (crew) for (const pid of crew) addVolToUser(pid, vol);
-  }
-
-  const licencesByUser = new Map<string, number>();
-  for (const l of licences) {
-    licencesByUser.set(l.user_id, (licencesByUser.get(l.user_id) || 0) + 1);
-  }
-
-  const soldeByUser = new Map<string, number>();
-  for (const c of comptes) {
-    if (c.proprietaire_id) soldeByUser.set(c.proprietaire_id, c.solde || 0);
-  }
-
-  const avionsByUser = new Map<string, number>();
-  for (const a of inventaire) {
-    avionsByUser.set(a.proprietaire_id, (avionsByUser.get(a.proprietaire_id) || 0) + 1);
-  }
-
-  const photosByUser = await getUserPhotosMap(admin, profiles.map(p => p.id));
-
-  const pilotes: PiloteStat[] = profiles.map(p => {
-    const userVols = volsByUser.get(p.id) || [];
-    const totalMinutes = (p.heures_initiales_minutes || 0) + userVols.reduce((s, v) => s + (v.duree_minutes || 0), 0);
-    const aeroports = new Set<string>();
-    const typesAvion = new Set<string>();
-    let longest = 0;
-    let ifr = 0, vfr = 0, instr = 0, mil = 0;
-    for (const v of userVols) {
-      if (v.aeroport_depart) aeroports.add(v.aeroport_depart);
-      if (v.aeroport_arrivee) aeroports.add(v.aeroport_arrivee);
-      if (v.type_avion_id) typesAvion.add(v.type_avion_id);
-      if (v.duree_minutes > longest) longest = v.duree_minutes;
-      if (v.type_vol === 'IFR') ifr++;
-      else if (v.type_vol === 'VFR') vfr++;
-      if (v.type_vol === 'Instruction') instr++;
-      if (v.type_vol === 'Vol militaire') mil++;
-    }
-    return {
-      id: p.id,
-      identifiant: p.identifiant,
-      totalMinutes,
-      nbVols: userVols.length,
-      nbLicences: licencesByUser.get(p.id) || 0,
-      nbAeroports: aeroports.size,
-      nbTypesAvion: typesAvion.size,
-      nbVolsIFR: ifr,
-      nbVolsVFR: vfr,
-      nbVolsInstruction: instr,
-      nbVolsMilitaires: mil,
-      longestFlight: longest,
-      solde: soldeByUser.get(p.id) || 0,
-      nbAvions: avionsByUser.get(p.id) || 0,
-      memberSince: p.created_at,
-      photoUrl: photosByUser.get(p.id) ?? null,
-    };
-  });
+  const pilotes: PiloteStat[] = raw.map((p) => ({
+    id: p.id,
+    identifiant: p.identifiant,
+    totalMinutes: Number(p.total_minutes) || 0,
+    nbVols: Number(p.nb_vols) || 0,
+    nbLicences: Number(p.nb_licences) || 0,
+    nbAeroports: Number(p.nb_aeroports) || 0,
+    nbTypesAvion: Number(p.nb_types_avion) || 0,
+    nbVolsIFR: Number(p.nb_vols_ifr) || 0,
+    nbVolsVFR: Number(p.nb_vols_vfr) || 0,
+    nbVolsInstruction: Number(p.nb_vols_instruction) || 0,
+    nbVolsMilitaires: Number(p.nb_vols_militaires) || 0,
+    longestFlight: Number(p.longest_flight) || 0,
+    solde: Number(p.solde) || 0,
+    nbAvions: Number(p.nb_avions) || 0,
+    memberSince: p.member_since,
+    photoUrl: photosByUser.get(p.id) ?? null,
+  }));
 
   return <ClassementClient pilotes={pilotes} currentUserId={user.id} />;
 }

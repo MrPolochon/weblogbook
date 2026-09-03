@@ -12,13 +12,6 @@ alter table public.bria_cooldowns enable row level security;
 
 -- Accès uniquement via service role (API Next). Aucune policy utilisateur.
 
--- Vérifications à lancer à la main (ne pas appliquer en aveugle) :
---   select unnest(enum_range(NULL::messages_type_message_enum));
---   -- si l’enum existe : ALTER TYPE ... ADD VALUE IF NOT EXISTS 'cheque_salaire_atc';
---   -- scripts déjà documentés comme CRITIQUES :
---   --   supabase/add_statut_annule_plans_vol.sql
---   --   supabase/fix_pay_siavi_taxes.sql
---   --   supabase/fix_pay_siavi_intervention.sql
---   --   supabase/add_felitz_atomic_helpers.sql
---   --   supabase/OPTIMISATION_INDEX.sql
---   --   pack Ground Crew (add_ground_crew*.sql)
+-- Inventaire prod (2 sept. 2026) : type_message = text (pas d’enum).
+-- add_statut_annule_plans_vol.sql : NE PAS réappliquer (perdrait planifie_suivant / en_pause).
+-- Compléments appliqués : fix_pay_siavi_*.sql, OPTIMISATION_INDEX.sql, add_classement_rpc.sql.

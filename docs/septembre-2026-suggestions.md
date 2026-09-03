@@ -4,10 +4,9 @@ Pistes volontairement **non** livrées ce mois-ci, pour ne pas casser la console
 
 ## Console ATC (suite)
 
-- Bays par position (Delivery PLAN/CLRD, Ground RAMP/TAXI, Tower HOLD/DEP/ARR, etc.) + soft warning hors phase.
-- Dock droit unique (Nouveaux / Handoffs / Clôtures / Réseau) et retrait de la file basse + modal en session.
-- Hiérarchie de transfert AFIS / Clairance complète.
-- Mode strip compact vs standard.
+- Bays dédiées par position (Delivery PLAN/CLRD, Ground RAMP/TAXI, etc.) — aujourd’hui : mêmes colonnes + toast hors phase.
+- Retrait de la file basse strips + mode compact/standard.
+- Hiérarchie de transfert AFIS complète.
 
 ## Dépôt / IFSA / téléphone
 
@@ -17,7 +16,6 @@ Pistes volontairement **non** livrées ce mois-ci, pour ne pas casser la console
 
 ## Perfs / data
 
-- Classement : agréger les 10k vols en SQL (RPC) au lieu de tout charger en mémoire.
 - Marché cargo : `/marche-cargo` redirige encore vers passagers ; `MarcheCargoClient` est mort — relivrer ou supprimer.
 - RPC `regenerer_*` marché à chaque SSR → cron + alerte si RPC absente.
 - Storage orphelins : étendre au-delà de `cartes-identite` + `documents`.
@@ -25,8 +23,6 @@ Pistes volontairement **non** livrées ce mois-ci, pour ne pas casser la console
 
 ## Sécurité / ops
 
-- Rate limit POST messages déjà en place ; ajouter `logbook/export` et `recrutement` si abus.
 - RLS : terminer `docs/rls-audit.md` + `fix_supabase_linter_permissive_rls_policies.sql`.
 - Double ingestion PF-ODW (Railway vs cron Vercel) : une seule source de vérité.
-- `env.example.txt` : documenter `CRON_SECRET`, LLM support, PF, bot.
 - Dossier `supabase/migrations/` réellement utilisé par la CLI (aujourd’hui ~184 scripts manuels).

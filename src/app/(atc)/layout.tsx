@@ -60,6 +60,8 @@ export default async function AtcLayout({
   let plansAccepter: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansCloture: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansOutbound: { id: string; numero_vol: string; pending_transfer_aeroport: string | null; pending_transfer_position: string | null }[] = [];
+  let reseauAtc: { aeroport: string; position: string; identifiant: string }[] = [];
+  let reseauAfis: { aeroport: string; est_afis: boolean; identifiant: string }[] = [];
   if (enService && session) {
     try {
       const admin = createAdminClient();
@@ -67,16 +69,36 @@ export default async function AtcLayout({
       // Note: les plans en autosurveillance et orphelins sont désormais affichés
       // sous le tableau de strips dans la page ATC (composant AtcNonControlesPanel),
       // donc pas besoin de les charger ici.
-      const [{ data: dataAccept }, { data: dataPlansAccepter }, { data: dataCloture }, { data: dataOutbound }] = await Promise.all([
+      const [{ data: dataAccept }, { data: dataPlansAccepter }, { data: dataCloture }, { data: dataOutbound }, { data: dataSessions }, { data: dataAfis }] = await Promise.all([
         admin.from('plans_vol').select('id, numero_vol').eq('pending_transfer_aeroport', session.aeroport).eq('pending_transfer_position', session.position),
         admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).in('statut', ['depose', 'en_attente']),
         admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).eq('statut', 'en_attente_cloture'),
         admin.from('plans_vol').select('id, numero_vol, pending_transfer_aeroport, pending_transfer_position').eq('current_holder_user_id', user.id).not('pending_transfer_aeroport', 'is', null),
+        admin.from('atc_sessions').select('aeroport, position, profiles!atc_sessions_user_id_fkey(identifiant)').order('aeroport').order('position'),
+        admin.from('afis_sessions').select('aeroport, est_afis, profiles!afis_sessions_user_id_fkey(identifiant)').order('aeroport'),
       ]);
       plansAAccepter = dataAccept ?? [];
       plansAccepter = dataPlansAccepter ?? [];
       plansCloture = dataCloture ?? [];
       plansOutbound = dataOutbound ?? [];
+      reseauAtc = (dataSessions ?? []).map((s) => {
+        const profileData = s.profiles;
+        const profile = profileData ? (Array.isArray(profileData) ? profileData[0] : profileData) : null;
+        return {
+          aeroport: s.aeroport,
+          position: s.position,
+          identifiant: (profile as { identifiant?: string } | null)?.identifiant || '—',
+        };
+      });
+      reseauAfis = (dataAfis ?? []).map((s) => {
+        const profileData = s.profiles;
+        const profile = profileData ? (Array.isArray(profileData) ? profileData[0] : profileData) : null;
+        return {
+          aeroport: s.aeroport,
+          est_afis: Boolean(s.est_afis),
+          identifiant: (profile as { identifiant?: string } | null)?.identifiant || '—',
+        };
+      });
     } catch {
       // createAdminClient ou tables manquantes
     }
@@ -99,7 +121,16 @@ export default async function AtcLayout({
         <AtcAtisTicker />
         <div className="flex flex-1 w-full min-h-0">
           <AtcMain>{children}</AtcMain>
-          {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} plansOutbound={plansOutbound} />}
+          {enService && (
+            <AtcAcceptTransfertSidebar
+              plansTransfert={plansAAccepter}
+              plansAccepter={plansAccepter}
+              plansCloture={plansCloture}
+              plansOutbound={plansOutbound}
+              reseauAtc={reseauAtc}
+              reseauAfis={reseauAfis}
+            />
+          )}
         </div>
         {enService && session && (
           <>
