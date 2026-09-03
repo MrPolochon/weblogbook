@@ -11,16 +11,24 @@ export default async function MarchePage() {
 
   const admin = createAdminClient();
 
-  // Régénérer passagers et cargo en parallèle
-  await Promise.all([
-    (async () => { try { await admin.rpc('regenerer_passagers_aeroport'); } catch { /* rpc unavailable */ } })(),
-    (async () => { try { await admin.rpc('regenerer_cargo_aeroport'); } catch { /* rpc unavailable */ } })(),
-  ]);
-
-  const [{ data: passagersData }, { data: cargoData }] = await Promise.all([
+  const [{ data: passagersData, error: passagersError }, { data: cargoData, error: cargoError }] = await Promise.all([
     admin.from('aeroport_passagers').select('code_oaci, passagers_disponibles, passagers_max, derniere_regeneration'),
     admin.from('aeroport_cargo').select('code_oaci, cargo_disponible, cargo_max, derniere_regeneration'),
   ]);
+
+  const lastRegenIso = [...(passagersData ?? []), ...(cargoData ?? [])]
+    .map((r) => ('derniere_regeneration' in r ? r.derniere_regeneration : null))
+    .filter((v): v is string => Boolean(v))
+    .sort()
+    .at(-1) ?? null;
+  const lastRegenMs = lastRegenIso ? new Date(lastRegenIso).getTime() : 0;
+  const alerteMarche = passagersError || cargoError
+    ? 'Impossible de lire le marché (vue ou table absente).'
+    : !lastRegenIso
+      ? 'Aucune régénération enregistrée — le cron /api/cron/marche ou les RPC regenerer_* sont peut-être absents.'
+      : Date.now() - lastRegenMs > 2 * 60 * 60 * 1000
+        ? 'Dernière régénération il y a plus de 2 h — vérifier le cron marché.'
+        : null;
 
   const passagersAeroports = AEROPORTS_VOL_CIVIL.map(a => {
     const p = passagersData?.find(x => x.code_oaci === a.code);
@@ -44,5 +52,5 @@ export default async function MarchePage() {
     };
   });
 
-  return <MarcheClient passagersAeroports={passagersAeroports} cargoAeroports={cargoAeroports} />;
+  return <MarcheClient passagersAeroports={passagersAeroports} cargoAeroports={cargoAeroports} alerteMarche={alerteMarche} />;
 }

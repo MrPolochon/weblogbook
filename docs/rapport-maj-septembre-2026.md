@@ -75,6 +75,13 @@ Téléphone ATC/SIAVI : toujours deux UIs (hook `useLiveKitCall` déjà partagé
 - Classement : RPC `get_classement_pilotes()` (plus de plafond 10k vols).
 - Discord : plus de fail-open si le bot est down (dernier état connu).
 - WebAuthn : fallback `mixouairlinesptfsweblogbook.com`.
+- Marché : cron `/api/cron/marche` (15 min) ; plus de `regenerer_*` à chaque SSR ; alerte si regen absente/stale ; client cargo orphelin supprimé.
+- IFSA : listes 200 + compteurs SQL ; onglet persisté en session.
+- Dépôt : wizard 4 étapes (appareil / route / détails / soumission).
+- Téléphone : `usePhoneAudioDevices` + codes SIAVI unifiés.
+- Storage orphelins : incidents + images flotte ; rate limit scan.
+
+**PF-ODW** : le worker Railway (`pf-worker`) est la source de vérité des tracks ; le cron Vercel `/api/cron/pf-odw-tracks` est un filet, pas une 2e ingestion parallèle à activer sans décision.
 
 ---
 

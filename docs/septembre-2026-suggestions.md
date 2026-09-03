@@ -10,19 +10,15 @@ Pistes volontairement **non** livrées ce mois-ci, pour ne pas casser la console
 
 ## Dépôt / IFSA / téléphone
 
-- Wizard dépôt en 4 étapes (avion → route → charge → soumission) sans réécrire les 2300 lignes d’un coup.
-- Extraire `IfsaClient.tsx` par onglet ; pagination au-delà de 50.
-- Shell UI commun ATC / SIAVI téléphone (12 routes API miroir).
+- Extraire `IfsaClient.tsx` par fichier d’onglet (listes + pagination OK, monolithe ~2900 lignes encore là).
+- Shell UI commun ATC / SIAVI téléphone (hook audio partagé ; 12 routes API encore en miroir).
 
 ## Perfs / data
 
-- Marché cargo : `/marche-cargo` redirige encore vers passagers ; `MarcheCargoClient` est mort — relivrer ou supprimer.
-- RPC `regenerer_*` marché à chaque SSR → cron + alerte si RPC absente.
-- Storage orphelins : étendre au-delà de `cartes-identite` + `documents`.
 - Catalogue perf PTFS : types orphelins (refuser le proxy trop éloigné plutôt que mapper 757→737).
+- Storage orphelins : buckets hors `cartes-identite` / `documents` si d’autres apparaissent.
 
 ## Sécurité / ops
 
 - RLS : terminer `docs/rls-audit.md` + `fix_supabase_linter_permissive_rls_policies.sql`.
-- Double ingestion PF-ODW (Railway vs cron Vercel) : une seule source de vérité.
 - Dossier `supabase/migrations/` réellement utilisé par la CLI (aujourd’hui ~184 scripts manuels).

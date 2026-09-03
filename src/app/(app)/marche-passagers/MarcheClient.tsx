@@ -36,9 +36,10 @@ type TabId = 'passagers' | 'cargo';
 interface Props {
   passagersAeroports: PassagerAeroport[];
   cargoAeroports: CargoAeroport[];
+  alerteMarche?: string | null;
 }
 
-export default function MarcheClient({ passagersAeroports, cargoAeroports }: Props) {
+export default function MarcheClient({ passagersAeroports, cargoAeroports, alerteMarche }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('passagers');
 
   const totalPax = passagersAeroports.reduce((s, a) => s + a.passagers_disponibles, 0);
@@ -54,6 +55,11 @@ export default function MarcheClient({ passagersAeroports, cargoAeroports }: Pro
 
   return (
     <div className="space-y-6 animate-page-reveal">
+      {alerteMarche && (
+        <div className="rounded-xl border border-amber-600 bg-amber-950 px-4 py-3 text-sm text-amber-100">
+          {alerteMarche}
+        </div>
+      )}
       {/* HUD Header */}
       <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/85 to-slate-950/95 shadow-[0_22px_42px_rgba(2,6,23,0.36),inset_0_1px_0_rgba(255,255,255,0.06)]">
         <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-60" />

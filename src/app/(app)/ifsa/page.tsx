@@ -32,6 +32,13 @@ export default async function IfsaPage() {
     { data: employes },
     { data: agentsIfsa },
     { count: autorisationsEnAttenteCount },
+    { count: signalementsNouveauCount },
+    { count: signalementsExamenCount },
+    { count: enquetesOuvertesCount },
+    { count: sanctionsActivesCount },
+    { count: signalementsTotalCount },
+    { count: enquetesTotalCount },
+    { count: sanctionsTotalCount },
   ] = await Promise.all([
     admin.from('ifsa_signalements')
       .select(`
@@ -42,7 +49,7 @@ export default async function IfsaPage() {
         traite_par:profiles!traite_par_id(id, identifiant)
       `)
       .order('created_at', { ascending: false })
-      .limit(50),
+      .limit(200),
 
     admin.from('ifsa_enquetes')
       .select(`
@@ -53,7 +60,7 @@ export default async function IfsaPage() {
         ouvert_par:profiles!ouvert_par_id(id, identifiant)
       `)
       .order('created_at', { ascending: false })
-      .limit(50),
+      .limit(200),
 
     admin.from('ifsa_sanctions')
       .select(`
@@ -64,7 +71,7 @@ export default async function IfsaPage() {
         cleared_by:profiles!cleared_by_id(id, identifiant)
       `)
       .order('created_at', { ascending: false })
-      .limit(50),
+      .limit(200),
 
     admin.from('profiles')
       .select('id, identifiant, role')
@@ -86,6 +93,13 @@ export default async function IfsaPage() {
     admin.from('autorisations_exploitation')
       .select('id', { count: 'exact', head: true })
       .eq('statut', 'en_attente'),
+    admin.from('ifsa_signalements').select('id', { count: 'exact', head: true }).eq('statut', 'nouveau'),
+    admin.from('ifsa_signalements').select('id', { count: 'exact', head: true }).eq('statut', 'en_examen'),
+    admin.from('ifsa_enquetes').select('id', { count: 'exact', head: true }).in('statut', ['ouverte', 'en_cours']),
+    admin.from('ifsa_sanctions').select('id', { count: 'exact', head: true }).eq('actif', true),
+    admin.from('ifsa_signalements').select('id', { count: 'exact', head: true }),
+    admin.from('ifsa_enquetes').select('id', { count: 'exact', head: true }),
+    admin.from('ifsa_sanctions').select('id', { count: 'exact', head: true }),
   ]);
 
   const pilotesEnCompagnie = new Set((employes || []).map((e) => e.pilote_id));
@@ -113,10 +127,14 @@ export default async function IfsaPage() {
   const signalementsList = signalements || [];
   const enquetesList = enquetes || [];
   const sanctionsList = sanctions || [];
-  const signalementsNouveaux = signalementsList.filter(s => s.statut === 'nouveau').length;
-  const signalementsEnExamen = signalementsList.filter(s => s.statut === 'en_examen').length;
-  const enquetesOuvertes = enquetesList.filter(e => e.statut === 'ouverte' || e.statut === 'en_cours').length;
-  const sanctionsActives = sanctionsList.filter(s => s.actif).length;
+  const signalementsNouveaux = signalementsNouveauCount ?? signalementsList.filter(s => s.statut === 'nouveau').length;
+  const signalementsEnExamen = signalementsExamenCount ?? signalementsList.filter(s => s.statut === 'en_examen').length;
+  const enquetesOuvertes = enquetesOuvertesCount ?? enquetesList.filter(e => e.statut === 'ouverte' || e.statut === 'en_cours').length;
+  const sanctionsActives = sanctionsActivesCount ?? sanctionsList.filter(s => s.actif).length;
+  const listesTronquees =
+    (signalementsTotalCount ?? 0) > signalementsList.length
+    || (enquetesTotalCount ?? 0) > enquetesList.length
+    || (sanctionsTotalCount ?? 0) > sanctionsList.length;
   const amendesNonPayees = sanctionsList.filter(s => s.actif && s.type_sanction === 'amende' && !s.amende_payee).length;
   const autorisationsCount = autorisationsEnAttenteCount || 0;
   const totalAlerts = signalementsNouveaux + autorisationsCount + amendesNonPayees;
@@ -138,7 +156,7 @@ export default async function IfsaPage() {
     {
       key: 'enquetes',
       label: 'Enquêtes ouvertes',
-      sublabel: `${enquetesList.length} au total`,
+      sublabel: `${enquetesTotalCount ?? enquetesList.length} au total`,
       value: enquetesOuvertes,
       icon: FileSearch,
       colorRing: 'from-purple-500/10 to-purple-600/5 border-purple-500/20',
@@ -320,6 +338,13 @@ export default async function IfsaPage() {
           Gérer les licences →
         </Link>
       </div>
+
+      {listesTronquees && (
+        <p className="text-xs text-amber-200/90 rounded-lg border border-amber-600 bg-amber-950 px-3 py-2">
+          Listes limitées aux 200 dossiers les plus récents
+          ({signalementsTotalCount ?? 0} signalements, {enquetesTotalCount ?? 0} enquêtes, {sanctionsTotalCount ?? 0} sanctions au total).
+        </p>
+      )}
 
       <IfsaClient
         signalements={signalementsList.map(s => ({

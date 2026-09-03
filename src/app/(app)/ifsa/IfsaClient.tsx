@@ -201,12 +201,25 @@ const PRIORITES = {
   urgente: { label: 'Urgente', color: 'text-red-400' }
 };
 
+const IFSA_TABS = ['signalements', 'enquetes', 'sanctions', 'donnees', 'autorisations', 'avion'] as const;
+type IfsaTab = (typeof IFSA_TABS)[number];
+
 export default function IfsaClient({ signalements, enquetes, sanctions, pilotes, compagnies, compagniesAvecPilotes, pilotesChomage, agentsIfsa }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [activeTab, setActiveTab] = useState<'signalements' | 'enquetes' | 'sanctions' | 'donnees' | 'autorisations' | 'avion'>('signalements');
+  const [activeTab, setActiveTab] = useState<IfsaTab>('signalements');
   const [loading, setLoading] = useState(false);
   const [dataError, setDataError] = useState('');
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem('ifsa-tab');
+    if (saved && (IFSA_TABS as readonly string[]).includes(saved)) {
+      setActiveTab(saved as IfsaTab);
+    }
+  }, []);
+  useEffect(() => {
+    sessionStorage.setItem('ifsa-tab', activeTab);
+  }, [activeTab]);
 
   // Filtres pour les listes
   const [signalementSearch, setSignalementSearch] = useState('');
@@ -378,6 +391,10 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       setLoadingAutorisations(false);
     }
   }
+
+  useEffect(() => {
+    if (activeTab === 'autorisations') void loadAutorisationsExploit();
+  }, [activeTab]);
 
   async function handleTraiterAutorisation(id: string, action: 'approuver' | 'refuser' | 'revoquer') {
     setLoading(true);

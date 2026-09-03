@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { rateLimit } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -83,6 +84,8 @@ async function collectReferencedPaths(
     admin.from('entreprises_reparation').select('logo_url'),
     admin.from('document_files').select('storage_path'),
     admin.from('instruction_notes_archives').select('storage_bucket, storage_path'),
+    admin.from('incidents_vol').select('images_urls'),
+    admin.from('compagnie_avions').select('avion_image_url'),
   ]);
 
   const addCarte = (v: string | null | undefined) => {
@@ -125,6 +128,16 @@ async function collectReferencedPaths(
       else if (r.storage_bucket === 'cartes-identite') cartesIdentite.add(r.storage_path);
     }
   }
+  // 6 - photos incidents
+  if (queries[6].status === 'fulfilled') {
+    for (const r of (queries[6].value.data || []) as Array<{ images_urls: string[] | null }>) {
+      for (const url of r.images_urls || []) addCarte(url);
+    }
+  }
+  // 7 - images flotte
+  if (queries[7].status === 'fulfilled') {
+    for (const r of (queries[7].value.data || []) as Array<{ avion_image_url: string | null }>) addCarte(r.avion_image_url);
+  }
 
   return { cartesIdentite, documents };
 }
@@ -142,6 +155,10 @@ async function requireAdmin() {
 export async function GET() {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
+  const rl = rateLimit(`storage-orphans:${auth.user.id}`, 6, 60_000);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Trop de scans. Réessayez dans une minute.' }, { status: 429 });
+  }
 
   const admin = createAdminClient();
   const referenced = await collectReferencedPaths(admin);

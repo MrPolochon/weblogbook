@@ -160,6 +160,7 @@ export default function DepotPlanVolForm({
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showBria, setShowBria] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
   /** null = en chargement, true = portes existent, false = aucune porte configurée */
   const [aHasGates, setAHasGates] = useState<boolean | null>(null);
 
@@ -556,6 +557,22 @@ export default function DepotPlanVolForm({
     return total > 0 ? Math.round((done / total) * 100) : 0;
   }, [aeroport_depart, aeroport_arrivee, numero_vol, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee, vol_commercial, vol_ferry, compagnie_avion_id]);
 
+  const wizardCanAdvance = (n: number) => {
+    if (n <= 1) return true;
+    if (n === 2) {
+      if (vol_commercial || vol_ferry) return Boolean(compagnie_avion_id);
+      return Boolean(inventaire_avion_id || armee_avion_id);
+    }
+    if (n === 3) return Boolean(aeroport_depart.trim() && aeroport_arrivee.trim());
+    if (n === 4) {
+      if (!numero_vol.trim() || !temps_prev_min) return false;
+      if (type_vol === 'VFR') return Boolean(intentions_vol.trim());
+      if (type_vol === 'IFR') return Boolean(sid_depart.trim() && star_arrivee.trim());
+      return true;
+    }
+    return true;
+  };
+
   const checklistItems = useMemo(() => {
     const items: { label: string; ok: boolean }[] = [
       { label: 'Aéroport de départ', ok: Boolean(aeroport_depart?.trim()) },
@@ -857,6 +874,8 @@ export default function DepotPlanVolForm({
     <ProgressBar percent={progressPct} />
 
     <form onSubmit={handleSubmit} className="space-y-5 w-full">
+      <WizardNav step={wizardStep} onStep={setWizardStep} canAdvance={wizardCanAdvance} />
+      {wizardStep === 1 && (<>
       {/* ===== Section : Type de mission (carte cockpit) ===== */}
       {compagniesDisponibles.length > 0 && (
         <section className="card-glow stagger-enter">
@@ -1393,10 +1412,12 @@ export default function DepotPlanVolForm({
         </section>
       )}
 
+      </>)}
+      {wizardStep === 2 && (<>
       {/* ===== Section : Route — départ → arrivée avec visuel ===== */}
       <section className="card-glow stagger-enter">
         <SectionHeader
-          step={3}
+          step={2}
           icon={<Route className="h-4 w-4" />}
           label="Route"
           subtitle={
@@ -1480,10 +1501,12 @@ export default function DepotPlanVolForm({
         <NotamsAirportWarning aeroportDepart={aeroport_depart} aeroportArrivee={aeroport_arrivee} />
       </section>
 
+      </>)}
+      {wizardStep === 3 && (<>
       {/* ===== Section : Détails du vol ===== */}
       <section className="card-glow stagger-enter">
         <SectionHeader
-          step={4}
+          step={3}
           icon={<FileText className="h-4 w-4" />}
           label="Détails du vol"
           subtitle="Numéro, porte et durée prévue"
@@ -1901,6 +1924,8 @@ export default function DepotPlanVolForm({
         </div>
       </section>
 
+      </>)}
+      {wizardStep === 4 && (<>
       {/* Confirmation vol sans ATC */}
       {showNoAtcConfirm && (
         <div className="relative overflow-hidden rounded-2xl border-2 border-amber-500/60 bg-gradient-to-br from-amber-950/60 via-slate-900/70 to-slate-950/70 p-5 space-y-3 animate-zoom-bounce">
@@ -1986,6 +2011,32 @@ export default function DepotPlanVolForm({
           ))
         }
       />
+      </>)}
+      <div className="flex items-center justify-between gap-3 pt-1">
+        <button
+          type="button"
+          disabled={wizardStep === 1}
+          onClick={() => setWizardStep((s) => Math.max(1, s - 1))}
+          className="btn-secondary disabled:opacity-40"
+        >
+          Précédent
+        </button>
+        {wizardStep < 4 && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!wizardCanAdvance(wizardStep + 1)) {
+                toast.error('Complétez cette étape avant de continuer.');
+                return;
+              }
+              setWizardStep((s) => Math.min(4, s + 1));
+            }}
+            className="btn-primary"
+          >
+            Suivant
+          </button>
+        )}
+      </div>
     </form>
     </>
   );
@@ -2005,6 +2056,45 @@ const ACCENT_CLASSES: Record<AccentColor, { ring: string; text: string; bg: stri
   slate:   { ring: 'ring-slate-400/40',   text: 'text-slate-200',   bg: 'bg-slate-500/15',   border: 'border-slate-500/40',   glow: 'shadow-[0_0_24px_rgba(148,163,184,0.18)]' },
   rose:    { ring: 'ring-rose-400/40',    text: 'text-rose-300',    bg: 'bg-rose-500/15',    border: 'border-rose-500/40',    glow: 'shadow-[0_0_24px_rgba(251,113,133,0.25)]' },
 };
+
+function WizardNav({
+  step,
+  onStep,
+  canAdvance,
+}: {
+  step: number;
+  onStep: (n: number) => void;
+  canAdvance: (n: number) => boolean;
+}) {
+  const labels = ['Appareil', 'Route', 'Détails', 'Soumission'];
+  return (
+    <ol className="grid grid-cols-4 gap-2">
+      {labels.map((label, i) => {
+        const n = i + 1;
+        const unlocked = n <= step || canAdvance(n);
+        return (
+          <li key={n}>
+            <button
+              type="button"
+              disabled={!unlocked}
+              onClick={() => unlocked && onStep(n)}
+              className={`w-full rounded-lg border px-2 py-2 text-left ${
+                n === step
+                  ? 'border-sky-500 bg-sky-950 text-sky-100'
+                  : unlocked
+                    ? 'border-slate-700 bg-slate-900 text-slate-200'
+                    : 'border-slate-800 bg-slate-950 text-slate-500'
+              }`}
+            >
+              <span className="block text-[10px] font-black uppercase tracking-widest opacity-70">Étape {n}</span>
+              <span className="block text-xs font-bold">{label}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 /** Header de section : icône colorée + titre + sous-titre + numéro d'étape */
 function SectionHeader({
