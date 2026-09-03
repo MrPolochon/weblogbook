@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { canAccessSiavi } from '@/lib/siavi/permissions';
 
 export async function GET(
   _request: Request,
@@ -15,13 +16,9 @@ export async function GET(
 
     const admin = createAdminClient();
 
-    const { data: profile } = await admin.from('profiles')
-      .select('role, siavi, ifsa')
-      .eq('id', user.id)
-      .single();
-
-    const canView = profile?.role === 'admin' || profile?.siavi || profile?.role === 'siavi' || profile?.ifsa;
-    if (!canView) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+    if (!(await canAccessSiavi(admin, user.id))) {
+      return NextResponse.json({ error: 'Espace SIAVI en cours de maintenance.' }, { status: 503 });
+    }
 
     const { data: rapport, error } = await admin.from('siavi_rapports_medevac')
       .select(`

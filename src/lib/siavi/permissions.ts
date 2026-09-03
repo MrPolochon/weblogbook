@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { SIAVI_SPACE_MAINTENANCE } from '@/lib/siavi/space-status';
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -38,6 +39,7 @@ export async function canAccessSiavi(
     .single();
 
   if (!profile) return false;
+  if (SIAVI_SPACE_MAINTENANCE) return profile.role === 'admin';
   return profile.role === 'admin' || profile.role === 'siavi' || Boolean(profile.siavi);
 }
 

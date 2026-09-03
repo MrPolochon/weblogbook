@@ -8,6 +8,7 @@ import AdminModeBg from '@/components/AdminModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import InactivityLogout from '@/components/InactivityLogout';
 import { getPendingMedevacReport } from '@/lib/siavi/pending-report';
+import { SIAVI_SPACE_MAINTENANCE } from '@/lib/siavi/space-status';
 
 export default async function AppLayout({
   children,
@@ -31,7 +32,7 @@ export default async function AppLayout({
 
   // Rapport MEDEVAC obligatoire : rediriger vers le formulaire si un vol clôturé n'a pas de rapport
   const isSiavi = profile?.role === 'admin' || profile?.role === 'siavi' || Boolean(profile?.siavi);
-  if (isSiavi) {
+  if (isSiavi && !SIAVI_SPACE_MAINTENANCE) {
     const pendingPlanId = await getPendingMedevacReport(admin, uid);
     if (pendingPlanId) {
       redirect(`/siavi/rapports/nouveau?plan=${pendingPlanId}`);

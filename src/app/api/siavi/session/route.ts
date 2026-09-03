@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
+import { canAccessSiavi } from '@/lib/siavi/permissions';
 
 // Aéroports exclusivement SIAVI
 const AEROPORTS_SIAVI_EXCLUSIFS = new Set(['IBTH', 'IJAF', 'IBAR', 'IHEN', 'IDCS', 'ILKL', 'ISCM']);
@@ -13,9 +14,10 @@ export async function POST(request: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role, siavi').eq('id', user.id).single();
-    const canSiavi = profile?.role === 'admin' || profile?.role === 'siavi' || Boolean(profile?.siavi);
-    if (!canSiavi) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+    const adminGate = createAdminClient();
+    if (!(await canAccessSiavi(adminGate, user.id))) {
+      return NextResponse.json({ error: 'Espace SIAVI en cours de maintenance.' }, { status: 503 });
+    }
 
     const body = await request.json();
     const { aeroport } = body;

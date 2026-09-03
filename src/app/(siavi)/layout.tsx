@@ -10,6 +10,8 @@ import InactivityLogout from '@/components/InactivityLogout';
 import { getPendingMedevacReport } from '@/lib/siavi/pending-report';
 import PendingReportGuard from './PendingReportGuard';
 import SiaviAcceptTransfertButton from './SiaviAcceptTransfertButton';
+import SiaviMaintenanceNotice from './SiaviMaintenanceNotice';
+import { SIAVI_SPACE_MAINTENANCE } from '@/lib/siavi/space-status';
 export default async function SiaviLayout({
   children,
 }: {
@@ -26,6 +28,14 @@ export default async function SiaviLayout({
     .single();
 
   const isAdmin = profile?.role === 'admin';
+  if (SIAVI_SPACE_MAINTENANCE && !isAdmin) {
+    return (
+      <div className="min-h-dvh flex flex-col">
+        <SiaviModeBg isAdmin={false} />
+        <SiaviMaintenanceNotice />
+      </div>
+    );
+  }
   const canAccessSiavi = isAdmin || profile?.role === 'siavi' || Boolean(profile?.siavi);
   if (!canAccessSiavi) redirect('/logbook');
 

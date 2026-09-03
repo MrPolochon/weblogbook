@@ -11,14 +11,9 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const admin = createAdminClient();
-
-    const { data: profile } = await admin.from('profiles')
-      .select('role, siavi, ifsa')
-      .eq('id', user.id)
-      .single();
-
-    const canView = profile?.role === 'admin' || profile?.siavi || profile?.role === 'siavi' || profile?.ifsa;
-    if (!canView) return NextResponse.json({ error: 'Accès refusé' }, { status: 403 });
+    if (!(await canAccessSiavi(admin, user.id))) {
+      return NextResponse.json({ error: 'Espace SIAVI en cours de maintenance.' }, { status: 503 });
+    }
 
     const { data, error } = await admin.from('siavi_rapports_medevac')
       .select(`

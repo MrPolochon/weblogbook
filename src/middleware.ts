@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { isStaleRefreshToken } from '@/lib/auth/session-error';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isDiscordLinkRequired, isTemporaryDiscordSanctionActive, type DiscordLinkStatus } from '@/lib/discord-link';
+import { SIAVI_SPACE_MAINTENANCE } from '@/lib/siavi/space-status';
 
 function copyCookies(from: NextResponse, to: NextResponse) {
   from.cookies.getAll().forEach((cookie) => to.cookies.set(cookie));
@@ -216,6 +217,25 @@ export async function middleware(request: NextRequest) {
       url.pathname = '/login';
       url.searchParams.set('message', 'admin_only');
       return copyCookies(response, NextResponse.redirect(url));
+    }
+  }
+
+  if (SIAVI_SPACE_MAINTENANCE && pathname.startsWith('/api/siavi')) {
+    let siaviRole: string | null = null;
+    if (discordResult) {
+      siaviRole =
+        ((discordResult as [{ data: { role?: string } | null }, unknown])[0]?.data as { role?: string } | null)?.role ?? null;
+    } else {
+      try {
+        const { data: p } = await admin.from('profiles').select('role').eq('id', user.id).single();
+        siaviRole = p?.role ?? null;
+      } catch { /* ignore */ }
+    }
+    if (siaviRole !== 'admin') {
+      return NextResponse.json(
+        { error: 'Espace SIAVI en cours de maintenance.' },
+        { status: 503 },
+      );
     }
   }
 
