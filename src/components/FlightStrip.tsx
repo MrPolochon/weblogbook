@@ -496,7 +496,8 @@ function StripActionBar({
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showCrashConfirm, setShowCrashConfirm] = useState(false);
   const [showUrgenceConfirm, setShowUrgenceConfirm] = useState(false);
-  const [showMore, setShowMore] = useState(false);
+  const [morePos, setMorePos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
   const [incidentDescription, setIncidentDescription] = useState('');
   const [incidentPhoto, setIncidentPhoto] = useState<File | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -582,6 +583,34 @@ function StripActionBar({
   };
 
   const hasActions = statut === 'en_attente' || statut === 'depose' || statut === 'en_attente_cloture' || statut === 'en_cours' || statut === 'accepte';
+
+  /**
+   * Le menu est rendu en portail : la barre d'actions défile en X, ce qui
+   * découpe tout élément absolu débordant de sa boîte — le menu était donc
+   * bien monté, mais invisible.
+   */
+  const MENU_W = 176;
+  const openMore = () => {
+    const rect = moreBtnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const left = Math.max(8, Math.min(rect.right - MENU_W, window.innerWidth - MENU_W - 8));
+    setMorePos(
+      rect.top > 220
+        ? { left, bottom: window.innerHeight - rect.top + 4 }
+        : { left, top: rect.bottom + 4 },
+    );
+  };
+
+  useEffect(() => {
+    if (!morePos) return;
+    const close = () => setMorePos(null);
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [morePos]);
 
   const holdTip = (setter: (v: { x: number; y: number } | null) => void) => ({
     onMouseDown: (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -674,39 +703,44 @@ function StripActionBar({
         </>
       )}
 
-      <div className={`relative shrink-0 ${hasActions ? '' : 'hidden'}`}>
+      <div className={`shrink-0 ${hasActions ? '' : 'hidden'}`}>
         <button
+          ref={moreBtnRef}
           type="button"
-          onClick={() => setShowMore((v) => !v)}
+          onClick={() => (morePos ? setMorePos(null) : openMore())}
           className={`${btn} ${isDark ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
           title="Plus d'actions"
         >
           <MoreHorizontal className="h-3.5 w-3.5" />
         </button>
-        {showMore && (
+        {morePos && createPortal(
           <>
-            <div className="fixed inset-0 z-[60]" onClick={() => setShowMore(false)} />
-            <div className={`absolute bottom-full right-0 z-[61] mb-1 min-w-[168px] rounded-lg border py-1 shadow-xl ${isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'}`}>
+            <div className="fixed inset-0 z-[2147483644]" onClick={() => setMorePos(null)} />
+            <div
+              style={{ position: 'fixed', left: morePos.left, top: morePos.top, bottom: morePos.bottom, width: MENU_W, zIndex: 2147483645 }}
+              className={`rounded-lg border py-1 shadow-2xl ${isDark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-white'}`}
+            >
               {strip.bria_conversation && strip.bria_conversation.length > 0 && (
-                <button type="button" onClick={() => { setShowBriaLog(true); setShowMore(false); }} className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-semibold ${isDark ? 'text-amber-200 hover:bg-slate-800' : 'text-amber-800 hover:bg-slate-50'}`}>
+                <button type="button" onClick={() => { setShowBriaLog(true); setMorePos(null); }} className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-semibold ${isDark ? 'text-amber-200 hover:bg-slate-800' : 'text-amber-800 hover:bg-slate-50'}`}>
                   <Radio className="h-3.5 w-3.5" /> Historique BRIA
                 </button>
               )}
               {(statut === 'en_cours' || statut === 'accepte' || statut === 'en_attente_cloture') && (
                 <>
-                  <button type="button" onClick={() => { setShowCrashConfirm(true); setShowMore(false); }} className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-semibold ${isDark ? 'text-red-300 hover:bg-slate-800' : 'text-red-700 hover:bg-red-50'}`}>
+                  <button type="button" onClick={() => { setShowCrashConfirm(true); setMorePos(null); }} className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-semibold ${isDark ? 'text-red-300 hover:bg-slate-800' : 'text-red-700 hover:bg-red-50'}`}>
                     <Flame className="h-3.5 w-3.5" /> CRASH
                   </button>
-                  <button type="button" onClick={() => { setShowUrgenceConfirm(true); setShowMore(false); }} className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-semibold ${isDark ? 'text-amber-300 hover:bg-slate-800' : 'text-amber-800 hover:bg-amber-50'}`}>
+                  <button type="button" onClick={() => { setShowUrgenceConfirm(true); setMorePos(null); }} className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-semibold ${isDark ? 'text-amber-300 hover:bg-slate-800' : 'text-amber-800 hover:bg-amber-50'}`}>
                     <PlaneLanding className="h-3.5 w-3.5" /> Urgence
                   </button>
                 </>
               )}
-              <button type="button" onClick={() => { setShowCancelConfirm(true); setShowMore(false); }} className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-semibold ${isDark ? 'text-orange-300 hover:bg-slate-800' : 'text-orange-800 hover:bg-orange-50'}`}>
+              <button type="button" onClick={() => { setShowCancelConfirm(true); setMorePos(null); }} className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs font-semibold ${isDark ? 'text-orange-300 hover:bg-slate-800' : 'text-orange-800 hover:bg-orange-50'}`}>
                 <XCircle className="h-3.5 w-3.5" /> Annuler le vol
               </button>
             </div>
-          </>
+          </>,
+          document.body,
         )}
       </div>
 
